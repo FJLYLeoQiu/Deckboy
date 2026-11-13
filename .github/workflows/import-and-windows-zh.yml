@@ -113,8 +113,15 @@ jobs:
           )"
           fi
 
-          # Non-force push only. Fail if the remote tip has diverged.
-          git push --ff-only origin HEAD:main
+          # Default git push already refuses non-fast-forward updates.
+          # Do not pass --ff-only to git push: the hosted-runner git 2.56
+          # does not accept that option on `git push` (it is a merge/pull flag).
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "Refusing to push: origin/main is not an ancestor of HEAD"
+            git log --oneline --decorate -8
+            exit 1
+          fi
+          git push origin HEAD:main
 
           sha="$(git rev-parse HEAD)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
