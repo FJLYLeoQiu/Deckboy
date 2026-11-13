@@ -1,0 +1,273 @@
+# Bootstrap + official-path Windows packaging for the unofficial
+# Simplified Chinese localization of Deckboy.
+#
+# Manual trigger only. Never creates a GitHub Release, never pushes tags,
+# never force-pushes, never changes repository visibility.
+# Uses the standard GitHub-hosted ubuntu-latest and windows-2022 runners
+# (not larger or paid runners).
+#
+# Import: public-clone Utopian-Academy/Deckboy at 5da84439, merge that
+# history into this repository's bootstrap history with a normal merge,
+# then apply the localization patch and non-force push to main.
+# Official upstream workflows are held aside during that push so the
+# official "Publish Release" job cannot run. They stay in git history.
+name: Import upstream and Windows zh-Hans package (private, no release)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: import-and-windows-zh
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: Import upstream history and localization
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.result.outputs.sha }}
+      imported: ${{ steps.result.outputs.imported }}
+    steps:
+      - name: Checkout bootstrap
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Merge public upstream history and apply localization
+        id: result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          UPSTREAM_URL="https://github.com/Utopian-Academy/Deckboy.git"
+          UPSTREAM_SHA="5da84439b112bca9461d20b71f0e46e4e4b733aa"
+          PATCH="patches/zh-hans-localization.patch"
+
+          test -f "$PATCH"
+          git checkout main
+
+          echo "Fetching public upstream $UPSTREAM_SHA (no tags)"
+          git fetch --no-tags "$UPSTREAM_URL" "$UPSTREAM_SHA"
+
+          if git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD; then
+            echo "Upstream commit is already an ancestor of HEAD; skip merge."
+          else
+            git merge --allow-unrelated-histories --no-ff --no-edit -m "$(cat <<'MSG'
+          Merge upstream Deckboy 0.99.427 into bootstrap history
+
+          Upstream: https://github.com/Utopian-Academy/Deckboy
+          Version: 0.99.427
+          Commit: 5da84439b112bca9461d20b71f0e46e4e4b733aa
+
+          Normal merge of unrelated histories; no force push; no tags.
+          Unofficial localization repository. Not an official release.
+          MSG
+          )" "$UPSTREAM_SHA"
+          fi
+
+          # Keep official workflow files in history, but do not leave them
+          # under .github/workflows on the tip of main during this push, so
+          # this import cannot start official CI or the tag-only release job.
+          mkdir -p docs/upstream-github-workflows
+          moved=0
+          for wf in build.yml badges.yml flatpak.yml; do
+            if [ -f ".github/workflows/$wf" ]; then
+              git mv ".github/workflows/$wf" "docs/upstream-github-workflows/$wf"
+              moved=1
+            fi
+          done
+          if [ "$moved" -eq 1 ]; then
+            git commit -m "$(cat <<'MSG'
+          Hold official GitHub workflows aside during import
+
+          Files remain in git history and under docs/upstream-github-workflows.
+          They are not deleted. This avoids auto-running official CI or the
+          Publish Release job (which only runs on v* tags). [skip ci]
+          MSG
+          )"
+          fi
+
+          if [ -f NOTICE.md ] && grep -q "unofficial Simplified Chinese localization" NOTICE.md; then
+            echo "Localization files already present; skip patch."
+          else
+            git apply --index "$PATCH"
+            git commit -m "$(cat <<'MSG'
+          Add unofficial Simplified Chinese localization
+
+          Based on Utopian-Academy/Deckboy 0.99.427
+          (commit 5da84439b112bca9461d20b71f0e46e4e4b733aa).
+
+          This repository is an unofficial localized derivative. It retains
+          the original GNU GPL-3.0 license file and the copyright of Deckboy
+          Contributors. It is not an official release.
+
+          新增非官方简体中文本地化，保留原许可证与作者署名。详见 NOTICE.md.
+          MSG
+          )"
+          fi
+
+          # Non-force push only. Fail if the remote tip has diverged.
+          git push --ff-only origin HEAD:main
+
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "imported=true" >> "$GITHUB_OUTPUT"
+          echo "Imported tip $sha"
+          git log --oneline --decorate -8
+          git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD
+          test -f LICENSE
+          test -f data/lang/zh-Hans.tsv
+          test -f NOTICE.md
+
+  windows-zh-package:
+    name: Windows x64 package (MSVC, official path)
+    needs: import
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.import.outputs.sha }}
+
+      - name: Install vcpkg
+        id: vcpkg-setup
+        run: |
+          foreach ($try in 1..4) { git clone --depth 1 https://github.com/microsoft/vcpkg.git; if ($LASTEXITCODE -eq 0) { break }; if ($try -eq 4) { throw "git clone failed 4 times" }; Start-Sleep -Seconds (15 * $try) }
+          .\vcpkg\bootstrap-vcpkg.bat
+          git -C vcpkg rev-parse HEAD | ForEach-Object { "revision=$_" >> $env:GITHUB_OUTPUT }
+
+      - name: Cache vcpkg binaries
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-all-${{ steps.vcpkg-setup.outputs.revision }}-sdl3-webview2-ffmpeg
+          restore-keys: |
+            vcpkg-${{ runner.os }}-all-
+            vcpkg-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: .\vcpkg\vcpkg install sdl3:x64-windows sdl3-ttf[harfbuzz]:x64-windows
+
+      - name: Build libltc
+        shell: pwsh
+        run: pwsh tools/build_libltc_windows.ps1 -OutDir build/Release
+
+      - name: Install feature dependencies
+        run: .\vcpkg\vcpkg install rtmidi:x64-windows spout2:x64-windows webview2:x64-windows "ffmpeg[avcodec,avformat,avfilter,swscale,swresample]:x64-windows"
+
+      - name: Save completed vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DENABLE_MIDI=ON -DENABLE_SPOUT=ON -DENABLE_WEBVIEW=ON -DDECKBOY_REQUIRE_INPROC_DECODE=ON
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release 2>&1 | tee build.log
+
+      - name: Self-check
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--self-check" -Wait -NoNewWindow -PassThru `
+                 -RedirectStandardOutput self-check.txt
+          Get-Content self-check.txt
+          if ($p.ExitCode -ne 0) { throw "self-check failed ($($p.ExitCode))" }
+          if (Select-String -Path self-check.txt -Pattern 'right-to-left hidden' -Quiet) {
+            throw "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz."
+          }
+
+      - name: Smoke tests
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--smoke" -Wait -NoNewWindow -PassThru
+          if ($p.ExitCode -ne 0) { throw "smoke tests failed ($($p.ExitCode))" }
+
+      - name: Install ffmpeg and Inno Setup
+        run: choco install ffmpeg-full innosetup -y --no-progress
+
+      - name: Package portable zip and installer
+        shell: pwsh
+        run: |
+          $pairs = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib" -Recurse `
+                     -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+                   Where-Object { Test-Path (Join-Path $_.DirectoryName "ffprobe.exe") }
+          if (-not $pairs) { throw "no real ffmpeg.exe/ffprobe.exe pair found to bundle" }
+          $real = $null
+          foreach ($candidate in $pairs) {
+            $encoders = & $candidate.FullName -hide_banner -encoders 2>&1 | Out-String
+            if ($encoders -match "(?m)^\s*\S+\s+hap\s") {
+              $real = $candidate
+              Write-Host "  $($candidate.DirectoryName) has the hap encoder"
+              break
+            }
+            Write-Host "  $($candidate.DirectoryName) cannot encode hap; looking further"
+          }
+          if (-not $real) { $real = $pairs | Select-Object -First 1 }
+          $ffmpeg = $real.DirectoryName
+          Write-Host "bundling ffmpeg from $ffmpeg"
+          .\tools\package_windows_installer.ps1 -FfmpegDir $ffmpeg -BuildDir "build\Release"
+
+      - name: The packaged build must actually run, and must include zh-Hans
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\Deckboy-[0-9]*.zip | Select-Object -First 1
+          if (-not $zip) { throw "no portable zip in dist/" }
+          Write-Host ("portable zip: {0}  {1} bytes" -f $zip.Name, $zip.Length)
+          Get-ChildItem dist\Deckboy-*.zip, dist\Deckboy-*-setup.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host ("artifact: {0}  {1} bytes" -f $_.Name, $_.Length) }
+          Expand-Archive -Path $zip.FullName -DestinationPath dist\unpack -Force
+          $exe = Get-ChildItem dist\unpack -Recurse -Filter Deckboy.exe | Select-Object -First 1
+          if (-not $exe) { throw "Deckboy.exe missing from the zip" }
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
+          $machineName = switch ($machine) { 0x8664 { 'AMD64 (x64)' } 0x14c { 'i386' } default { "0x{0:X}" -f $machine } }
+          Write-Host ("Deckboy.exe PE Machine: {0} ({1})  size={2}" -f $machine, $machineName, $exe.Length)
+          if ($machine -ne 0x8664) { throw "expected x64 PE (0x8664), got $machineName" }
+          $zh = Get-ChildItem dist\unpack -Recurse -Filter zh-Hans.tsv | Select-Object -First 1
+          if (-not $zh) { throw "data/lang/zh-Hans.tsv missing from the package" }
+          Write-Host ("zh-Hans.tsv: {0}  {1} bytes" -f $zh.FullName, $zh.Length)
+          $selfCheck = (Start-Process -FilePath $exe.FullName `
+                          -ArgumentList "--self-check" `
+                          -Wait -NoNewWindow -PassThru `
+                          -RedirectStandardOutput dist\packaged-self-check.txt).ExitCode
+          Get-Content dist\packaged-self-check.txt
+          $smoke = (Start-Process -FilePath $exe.FullName `
+                      -ArgumentList "--smoke" `
+                      -Wait -NoNewWindow -PassThru).ExitCode
+          Write-Host "packaged self-check exit: $selfCheck   smoke exit: $smoke"
+          if ($selfCheck -ne 0 -or $smoke -ne 0) {
+            throw "the packaged build did not run (self-check $selfCheck, smoke $smoke)"
+          }
+
+      - name: Upload Windows packages (private artifact, no release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-windows-zh-hans-packages
+          path: |
+            dist/Deckboy-*.zip
+            dist/Deckboy-*-setup.exe
+            dist/packaged-self-check.txt
+            self-check.txt
+            build.log
+          if-no-files-found: error
+          retention-days: 14
