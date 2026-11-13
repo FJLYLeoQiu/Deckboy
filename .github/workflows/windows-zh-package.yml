@@ -1,0 +1,161 @@
+# Unofficial, private, non-release Windows x64 packaging for the
+# Simplified Chinese localization. This follows the official
+# windows-build (features=all) path in .github/workflows/build.yml:
+# MSVC on windows-2022, vcpkg, libltc, ffmpeg-full, package_windows_installer.ps1.
+#
+# Manual trigger only. It never creates a GitHub Release, never changes
+# repository visibility, and uses the standard GitHub-hosted windows-2022
+# runner (not a larger or paid runner).
+name: Windows zh-Hans package (private, no release)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  windows-zh-package:
+    name: Windows x64 package (MSVC, official path)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg
+        id: vcpkg-setup
+        run: |
+          foreach ($try in 1..4) { git clone --depth 1 https://github.com/microsoft/vcpkg.git; if ($LASTEXITCODE -eq 0) { break }; if ($try -eq 4) { throw "git clone failed 4 times" }; Start-Sleep -Seconds (15 * $try) }
+          .\vcpkg\bootstrap-vcpkg.bat
+          git -C vcpkg rev-parse HEAD | ForEach-Object { "revision=$_" >> $env:GITHUB_OUTPUT }
+
+      - name: Cache vcpkg binaries
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-all-${{ steps.vcpkg-setup.outputs.revision }}-sdl3-webview2-ffmpeg
+          restore-keys: |
+            vcpkg-${{ runner.os }}-all-
+            vcpkg-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: .\vcpkg\vcpkg install sdl3:x64-windows sdl3-ttf[harfbuzz]:x64-windows
+
+      - name: Build libltc
+        shell: pwsh
+        run: pwsh tools/build_libltc_windows.ps1 -OutDir build/Release
+
+      - name: Install feature dependencies
+        run: .\vcpkg\vcpkg install rtmidi:x64-windows spout2:x64-windows webview2:x64-windows "ffmpeg[avcodec,avformat,avfilter,swscale,swresample]:x64-windows"
+
+      - name: Save completed vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DENABLE_MIDI=ON -DENABLE_SPOUT=ON -DENABLE_WEBVIEW=ON -DDECKBOY_REQUIRE_INPROC_DECODE=ON
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release 2>&1 | tee build.log
+
+      - name: Self-check
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--self-check" -Wait -NoNewWindow -PassThru `
+                 -RedirectStandardOutput self-check.txt
+          Get-Content self-check.txt
+          if ($p.ExitCode -ne 0) { throw "self-check failed ($($p.ExitCode))" }
+          if (Select-String -Path self-check.txt -Pattern 'right-to-left hidden' -Quiet) {
+            throw "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz."
+          }
+
+      - name: Smoke tests
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--smoke" -Wait -NoNewWindow -PassThru
+          if ($p.ExitCode -ne 0) { throw "smoke tests failed ($($p.ExitCode))" }
+
+      - name: Install ffmpeg and Inno Setup
+        run: choco install ffmpeg-full innosetup -y --no-progress
+
+      - name: Package portable zip and installer
+        shell: pwsh
+        run: |
+          $pairs = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib" -Recurse `
+                     -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+                   Where-Object { Test-Path (Join-Path $_.DirectoryName "ffprobe.exe") }
+          if (-not $pairs) { throw "no real ffmpeg.exe/ffprobe.exe pair found to bundle" }
+          $real = $null
+          foreach ($candidate in $pairs) {
+            $encoders = & $candidate.FullName -hide_banner -encoders 2>&1 | Out-String
+            if ($encoders -match "(?m)^\s*\S+\s+hap\s") {
+              $real = $candidate
+              Write-Host "  $($candidate.DirectoryName) has the hap encoder"
+              break
+            }
+            Write-Host "  $($candidate.DirectoryName) cannot encode hap; looking further"
+          }
+          if (-not $real) { $real = $pairs | Select-Object -First 1 }
+          $ffmpeg = $real.DirectoryName
+          Write-Host "bundling ffmpeg from $ffmpeg"
+          .\tools\package_windows_installer.ps1 -FfmpegDir $ffmpeg -BuildDir "build\Release"
+
+      - name: The packaged build must actually run, and must include zh-Hans
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\Deckboy-[0-9]*.zip | Select-Object -First 1
+          if (-not $zip) { throw "no portable zip in dist/" }
+          Write-Host ("portable zip: {0}  {1} bytes" -f $zip.Name, $zip.Length)
+          Get-ChildItem dist\Deckboy-*.zip, dist\Deckboy-*-setup.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host ("artifact: {0}  {1} bytes" -f $_.Name, $_.Length) }
+          Expand-Archive -Path $zip.FullName -DestinationPath dist\unpack -Force
+          $exe = Get-ChildItem dist\unpack -Recurse -Filter Deckboy.exe | Select-Object -First 1
+          if (-not $exe) { throw "Deckboy.exe missing from the zip" }
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          # PE COFF Machine at offset after PE signature
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
+          $machineName = switch ($machine) { 0x8664 { 'AMD64 (x64)' } 0x14c { 'i386' } default { "0x{0:X}" -f $machine } }
+          Write-Host ("Deckboy.exe PE Machine: {0} ({1})  size={2}" -f $machine, $machineName, $exe.Length)
+          if ($machine -ne 0x8664) { throw "expected x64 PE (0x8664), got $machineName" }
+          $zh = Get-ChildItem dist\unpack -Recurse -Filter zh-Hans.tsv | Select-Object -First 1
+          if (-not $zh) { throw "data/lang/zh-Hans.tsv missing from the package" }
+          Write-Host ("zh-Hans.tsv: {0}  {1} bytes" -f $zh.FullName, $zh.Length)
+          $selfCheck = (Start-Process -FilePath $exe.FullName `
+                          -ArgumentList "--self-check" `
+                          -Wait -NoNewWindow -PassThru `
+                          -RedirectStandardOutput dist\packaged-self-check.txt).ExitCode
+          Get-Content dist\packaged-self-check.txt
+          $smoke = (Start-Process -FilePath $exe.FullName `
+                      -ArgumentList "--smoke" `
+                      -Wait -NoNewWindow -PassThru).ExitCode
+          Write-Host "packaged self-check exit: $selfCheck   smoke exit: $smoke"
+          if ($selfCheck -ne 0 -or $smoke -ne 0) {
+            throw "the packaged build did not run (self-check $selfCheck, smoke $smoke)"
+          }
+
+      - name: Upload Windows packages (private artifact, no release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-windows-zh-hans-packages
+          path: |
+            dist/Deckboy-*.zip
+            dist/Deckboy-*-setup.exe
+            dist/packaged-self-check.txt
+            self-check.txt
+            build.log
+          if-no-files-found: error
+          retention-days: 14

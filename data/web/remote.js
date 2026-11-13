@@ -4,6 +4,118 @@
 (() => {
   const el = id => document.getElementById(id);
   const KEY = 'deckboy-phone-key';
+  // Compact Chinese UI when the operator asked for it or the phone is already
+  // in Simplified Chinese. Control verbs stay English, as they do on the desk:
+  // TAKE, STOP, GO, REC, LIVE, BLACKOUT, DASH.
+  const ZH = {
+    'PHONE CONTROL': '手机控制',
+    'PASSPHRASE': '口令',
+    'CONNECT': '连接',
+    'Or scan <b>SCAN TO PAIR</b> on the desk (Settings &gt; Network &gt; PHONE &amp; TABLET) and this connects by itself.':
+      '也可扫描控制台上的 <b>SCAN TO PAIR</b>（设置 &gt; 网络 &gt; PHONE &amp; TABLET），本页会自动连接。',
+    'LOCK': '锁定',
+    'STANDBY: ': '预备：',
+    'FADER': '推子',
+    'CUES ': 'CUE ',
+    'TAP: STANDBY · HOLD: TAKE NOW': '点按：预备 · 按住：立即 TAKE',
+    'DASH ': 'DASH ',
+    'HOLD A BUTTON TO CHANGE IT': '按住按钮可修改',
+    'NAME': '名称',
+    'DOES': '动作',
+    'SAVE': '保存',
+    'REMOVE': '移除',
+    'CANCEL': '取消',
+    'TRACKER ': '跟踪表 ',
+    'NEXT: ': '下一个：',
+    'BACK': '返回',
+    'NEXT': '下一个',
+    'SHOW ': '演出 ',
+    'HOLD BLACKOUT AND REC': '按住 BLACKOUT 和 REC',
+    'TEST CARD': '测试卡',
+    'Connecting...': '正在连接...',
+    "Locked. Scan the desk's code or enter the passphrase.": '已锁定。请扫描控制台上的码或输入口令。',
+    'Nothing live': '没有正在播出的内容',
+    'Not started': '尚未开始',
+    'LINK OK': '已连接',
+    'NO LINK': '无连接',
+    'Pause': '暂停',
+    'Play': '播放',
+    'Previous cue': '上一个 cue',
+    'Next cue': '下一个 cue',
+    'Rerack': '回到起点',
+    'Play or pause': '播放或暂停',
+    'Add a DASH button': '添加 DASH 按钮',
+    'Lock this phone': '锁定此手机'
+  };
+  const useZh = (() => {
+    try {
+      const q = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
+      if (q === 'en' || q === 'en-us' || q === 'en-gb') return false;
+      if (q === 'zh' || q === 'zh-hans' || q === 'zh-cn' || q === 'zh-sg') return true;
+      if (q.startsWith('zh-hant') || q === 'zh-tw' || q === 'zh-hk' || q === 'zh-mo') return false;
+      const nav = (navigator.language || '').toLowerCase();
+      if (nav.startsWith('zh-hant') || nav.startsWith('zh-tw') || nav.startsWith('zh-hk') || nav.startsWith('zh-mo')) return false;
+      return nav.startsWith('zh');
+    } catch { return false; }
+  })();
+  const t = (en) => (useZh && ZH[en]) ? ZH[en] : en;
+  function applyStaticZh() {
+    if (!useZh) return;
+    document.documentElement.lang = 'zh-Hans';
+    const sub = document.querySelector('#login .sub');
+    if (sub) sub.textContent = t('PHONE CONTROL');
+    const pinLabel = document.querySelector('label[for="pin"]');
+    if (pinLabel) pinLabel.textContent = t('PASSPHRASE');
+    const connect = document.querySelector('#pin-form button.big');
+    if (connect) connect.textContent = t('CONNECT');
+    const hint = document.querySelector('#login p.hint');
+    if (hint) hint.innerHTML = t('Or scan <b>SCAN TO PAIR</b> on the desk (Settings &gt; Network &gt; PHONE &amp; TABLET) and this connects by itself.');
+    const lock = document.getElementById('lock');
+    if (lock) { lock.textContent = t('LOCK'); lock.setAttribute('aria-label', t('Lock this phone')); }
+    const standby = document.querySelector('.now-next');
+    if (standby && standby.childNodes[0]) standby.childNodes[0].textContent = t('STANDBY: ');
+    const faderLabel = document.querySelector('label[for="fader"]');
+    if (faderLabel) faderLabel.textContent = t('FADER');
+    const cueLabel = document.querySelector('p.label');
+    // labels in order: CUES, DASH, (optional TRACKER), SHOW — rewritten below more carefully
+    document.querySelectorAll('p.label').forEach((p) => {
+      const raw = p.innerHTML;
+      if (raw.includes('CUES')) {
+        p.innerHTML = t('CUES ') + '<span class="dim">' + t('TAP: STANDBY · HOLD: TAKE NOW') + '</span>';
+      } else if (raw.includes('DASH') && raw.includes('HOLD A BUTTON')) {
+        p.innerHTML = t('DASH ') + '<span class="dim">' + t('HOLD A BUTTON TO CHANGE IT') + '</span>';
+      } else if (raw.includes('SHOW')) {
+        p.innerHTML = t('SHOW ') + '<span class="dim">' + t('HOLD BLACKOUT AND REC') + '</span>';
+      }
+    });
+    const nameL = document.querySelector('label[for="dash-label"]');
+    if (nameL) nameL.textContent = t('NAME');
+    const doesL = document.querySelector('label[for="dash-action"]');
+    if (doesL) doesL.textContent = t('DOES');
+    const saveB = document.querySelector('#dash-edit button.on');
+    if (saveB) saveB.textContent = t('SAVE');
+    const remB = document.getElementById('dash-clear');
+    if (remB) remB.textContent = t('REMOVE');
+    const canB = document.getElementById('dash-cancel');
+    if (canB) canB.textContent = t('CANCEL');
+    const trkNext = document.querySelector('#tracker-block .now-next');
+    if (trkNext && trkNext.childNodes[0]) trkNext.childNodes[0].textContent = t('NEXT: ');
+    const backB = document.querySelector('[data-tracker="BACK"]');
+    if (backB) backB.textContent = t('BACK');
+    const prevB = document.querySelector('[data-verb="PREV"]');
+    if (prevB) prevB.textContent = t('BACK');
+    const nextB = document.querySelector('[data-verb="NEXT"]');
+    if (nextB) nextB.textContent = t('NEXT');
+    const testB = document.getElementById('testcard');
+    if (testB) testB.textContent = t('TEST CARD');
+    const rerack = document.querySelector('[data-verb="RERACK"]');
+    if (rerack) rerack.setAttribute('aria-label', t('Rerack'));
+    const skipb = document.querySelector('[data-verb="SKIPBACK"]');
+    if (skipb) skipb.setAttribute('aria-label', t('Previous cue'));
+    const skip = document.querySelector('[data-verb="SKIP"]');
+    if (skip) skip.setAttribute('aria-label', t('Next cue'));
+  }
+
   let pin = '', key = '', state = null, busy = false, connected = false, generation = 0;
   let deckIndex = 0, chipShape = '', cueShape = '', dashShape = '', outShape = '';
   let faderHeld = false, faderTimer = 0, editing = 0;
@@ -150,12 +262,12 @@
       const status = String(deck.status || '').toUpperCase();
       say('now-status', status);
       say('now-time', deck.length > 0 ? `${clock(deck.elapsed)} / ${clock(deck.length)}` : (live ? clock(deck.elapsed) : ''));
-      say('now-name', live ? live.name || `Cue ${live.index}` : 'Nothing live');
+      say('now-name', live ? live.name || `Cue ${live.index}` : t('Nothing live'));
       el('now-bar').style.width = deck.length > 0 ? `${Math.min(100, 100 * deck.elapsed / deck.length)}%` : '0';
       say('now-next', next ? next.name || `Cue ${next.index}` : '-');
       const playing = status.includes('PLAY') && !status.includes('PAUSE');
       say('playpause', playing ? 'II' : '>');
-      el('playpause').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      el('playpause').setAttribute('aria-label', playing ? t('Pause') : t('Play'));
       if (!faderHeld) { el('fader').value = String(deck.volume ?? 100); say('fader-value', `${deck.volume ?? 100}%`); }
       const shape = JSON.stringify([deck.index, deck.cues]);
       if (shape !== cueShape) { el('cues').replaceChildren(...deck.cues.map(cueRow)); cueShape = shape; }
@@ -173,7 +285,7 @@
     if (tracker.steps) {
       const names = tracker.names || [];
       say('trk-count', `STEP ${tracker.step || '-'} / ${tracker.steps}${tracker.playing ? ' - PLAYING' : ''}`);
-      say('trk-name', tracker.step ? names[tracker.step - 1] || `Step ${tracker.step}` : 'Not started');
+      say('trk-name', tracker.step ? names[tracker.step - 1] || `Step ${tracker.step}` : t('Not started'));
       say('trk-next', names[tracker.step] !== undefined ? names[tracker.step] || `Step ${tracker.step + 1}` : '-');
       say('trk-play', tracker.playing ? 'STOP' : 'PLAY');
     }
@@ -189,7 +301,7 @@
         return b;
       });
       const add = document.createElement('button');
-      add.textContent = '+'; add.setAttribute('aria-label', 'Add a DASH button');
+      add.textContent = '+'; add.setAttribute('aria-label', t('Add a DASH button'));
       add.addEventListener('click', () => {
         const all = state.dash || [];
         const free = all.find(s => !s.command);
@@ -220,7 +332,7 @@
       b.classList.toggle('on', !!(o && o.on));
     }
     el('anywhere').hidden = !state.anywhere;
-    say('anywhere', state.anywhere ? `From anywhere (Tailscale): ${state.anywhere}` : '');
+    say('anywhere', state.anywhere ? (useZh ? `任意位置访问（Tailscale）：${state.anywhere}` : `From anywhere (Tailscale): ${state.anywhere}`) : '');
     enable();
   }
 
@@ -239,7 +351,7 @@
       const wasConnected = connected;
       state = next; connected = true;
       el('login').hidden = true; el('controls').hidden = false;
-      say('link', 'LINK OK');
+      say('link', t('LINK OK'));
       if (!wasConnected) buzz('ok');
       draw();
     } catch (error) {
@@ -247,7 +359,7 @@
       if (error.status === 401 && key) { key = ''; store.set(''); showLogin(error.message.replace(/^ERR remote: /, '')); return; }
       if (error.status === 401 || error.status === 403) { showLogin(error.message.replace(/^ERR remote: /, '')); pin = ''; return; }
       if (connected) buzz('error');
-      connected = false; say('link', 'NO LINK'); enable();
+      connected = false; say('link', t('NO LINK')); enable();
     }
   }
 
@@ -287,11 +399,11 @@
     event.preventDefault();
     if (!el('pin').value) return;
     pin = el('pin').value; key = ''; el('pin').value = ''; ++generation;
-    say('login-status', 'Connecting...'); await refresh();
+    say('login-status', t('Connecting...')); await refresh();
   });
   el('lock').addEventListener('click', () => {
     pin = ''; key = ''; store.set(''); ++generation; connected = false; state = null;
-    say('result', ''); showLogin('Locked. Scan the desk\'s code or enter the passphrase.');
+    say('result', ''); showLogin(t("Locked. Scan the desk's code or enter the passphrase."));
   });
   el('go').addEventListener('click', () => { buzz('go'); send(`DECK ${deckIndex} GO`); });
   for (const b of document.querySelectorAll('[data-verb]')) {
@@ -342,6 +454,8 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && (pin || key)) refresh(); });
 
+  applyStaticZh();
+
   // PAIRING: the desk's QR carries a one-time code in the address's #part,
   // which never leaves the phone except to this one request. Trade it for a
   // key of this phone's own, keep that, and wipe the code from the address.
@@ -362,7 +476,7 @@
     } else {
       key = store.get();
     }
-    if (key) { say('login-status', 'Connecting...'); await refresh(); }
+    if (key) { say('login-status', t('Connecting...')); await refresh(); }
     setTimeout(poll, 750);
   })();
 })();

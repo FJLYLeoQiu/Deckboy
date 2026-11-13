@@ -1,5 +1,9 @@
 # Deckboy 🎬
 
+[English](README.md) · [简体中文](README.zh-Hans.md) · [中文使用说明](docs/zh-Hans/使用说明.md)
+
+> **Unofficial Simplified Chinese localization** of [Utopian-Academy/Deckboy](https://github.com/Utopian-Academy/Deckboy) 0.99.427 (`5da84439b112bca9461d20b71f0e46e4e4b733aa`). Not an official release. Same GNU GPL v3 license; original authors retain copyright. See [NOTICE.md](NOTICE.md).
+
 <div align="center">
 
 [![Download](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FUtopian-Academy%2FDeckboy%2Fbadges%2Fversion.json%3Frefresh%3D0.99.427-current&cacheSeconds=300&label=download&color=blue&logo=github)](https://github.com/Utopian-Academy/Deckboy/releases/latest)
