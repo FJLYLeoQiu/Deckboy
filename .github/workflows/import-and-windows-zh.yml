@@ -113,6 +113,33 @@ jobs:
           )"
           fi
 
+          # GITHUB_TOKEN cannot create or update workflow files (GitHub App
+          # "workflows" permission). Official and extra workflows stay in
+          # history and under docs/upstream-github-workflows; they are not
+          # deleted. Restore later via the sanctioned GitHub connector.
+          mkdir -p docs/upstream-github-workflows
+          moved=0
+          shopt -s nullglob
+          for wf in .github/workflows/*.yml .github/workflows/*.yaml; do
+            base="$(basename "$wf")"
+            if [ "$base" != "import-and-windows-zh.yml" ]; then
+              git mv "$wf" "docs/upstream-github-workflows/$base"
+              moved=1
+            fi
+          done
+          shopt -u nullglob
+          if [ "$moved" -eq 1 ]; then
+            git commit -m "$(cat <<'MSG'
+          Hold extra GitHub workflow files aside before push
+
+          GITHUB_TOKEN cannot create or update files under .github/workflows.
+          These files remain in git history and docs/upstream-github-workflows.
+          They are not deleted. Official CI / Publish Release will not run from
+          this tip. Restore later with the GitHub connector and [skip ci].
+          MSG
+          )"
+          fi
+
           # Default git push already refuses non-fast-forward updates.
           # Do not pass --ff-only to git push: the hosted-runner git 2.56
           # does not accept that option on `git push` (it is a merge/pull flag).
