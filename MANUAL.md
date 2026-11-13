@@ -1,0 +1,3872 @@
+# Deckboy — User Manual
+
+> dot-matrix cue deck
+
+Deckboy is a cue deck for live events. It plays video, stills, live sources and
+generated patterns from a keyboard-driven playlist, and sends the result to
+fullscreen displays, SRT, RTMP, Blackmagic SDI, SMPTE ST 2110 and Spout — the
+same programme to more than one of them at a time — and to NDI. A Stream Deck, Bitfocus
+Companion, OSC, MIDI, MIDI Show Control from a lighting desk, Art-Net or LTC
+timecode can drive it.
+
+Windows, macOS and Linux run the same core and open the same show file, so the
+spare machine in the flight case runs it too. It is a native application on
+SDL3 decoding in process through FFmpeg, and on Windows hardware-decoded frames
+stay on the GPU and are composited there.
+
+---
+
+## Contents
+
+1. [Concepts](#1-concepts)
+2. [Running Deckboy](#2-running-deckboy)
+3. [Startup](#3-startup)
+4. [Interface Layout](#4-interface-layout)
+5. [Cue Types](#5-cue-types)
+6. [Importing & Adding Cues](#6-importing--adding-cues)
+6a. [Slide Decks, Presenter View & Prompter](#6a-slide-decks-presenter-view--prompter)
+7. [The Cue Inspector](#7-the-cue-inspector)
+8. [Transport](#8-transport)
+9. [Playlists, Loop, Shuffle & Cue Endings](#9-playlists-loop-shuffle--cue-endings)
+9a. [The Running Order: Standby, Waits & Continue](#9a-the-running-order-standby-waits--continue)
+9b. [Show-Control Cues](#9b-show-control-cues)
+10. [Transitions](#10-transitions)
+11. [Multi-Deck Operation](#11-multi-deck-operation)
+11a. [The Dashboard & The Master Tracker](#11a-the-dashboard--the-master-tracker)
+12. [Outputs & Routing](#12-outputs--routing)
+13. [Recording](#13-recording)
+14. [Per-Cue Effects](#14-per-cue-effects)
+14a. [The Code Source](#14a-the-code-source)
+15. [Output Geometry: AOI, Warp, Edge Blend](#15-output-geometry-aoi-warp-edge-blend)
+16. [Lower Thirds & Picture in Picture](#16-lower-thirds--picture-in-picture)
+17. [Audio](#17-audio)
+18. [Test Patterns](#18-test-patterns)
+18a. [Picture Scopes](#18a-picture-scopes)
+18b. [Sound Scopes](#18b-sound-scopes)
+19. [Timecode & Chase](#19-timecode--chase)
+20. [Show Files, Bundling & Missing Media](#20-show-files-bundling--missing-media)
+21. [Themes](#21-themes)
+21a. [Languages](#21a-languages)
+22. [Remote Control](#22-remote-control)
+23. [Reliability & Soak Testing](#23-reliability--soak-testing)
+24. [Keyboard Reference](#24-keyboard-reference)
+25. [Command-Line Flags](#25-command-line-flags)
+
+---
+
+## 1. Concepts
+
+- **Cue** — one playable item (a video, image, pattern, live source, overlay,
+  composite, or audio file) with its own trim, fades, geometry, and audio trim.
+- **Deck** — an ordered playlist of cues with its own transport, loop and
+  shuffle mode, and default cue behaviour. A show starts with one and can have
+  up to 16. VJ mode mixes two into one programme, and from v0.99.373 each
+  output can show a different deck.
+- **Output** — a destination with its own window/compositor: a fullscreen
+  display, a DeckLink/Spout/NDI sender, a network stream, or a presenter or
+  prompter screen. Every output shows the programme (or, for presenter and
+  prompter, a view of it), so one show can drive several outputs at once.
+- **Program** and **Preview** — the program monitor shows what is live on the
+  focused deck. The cue list selection is what you are *about* to take.
+
+The operating loop is: select a cue → **Take** it (Enter) → it goes live on the
+deck's output(s), honouring its fade/transition → it ends per its end action
+(stop, hold, loop, or auto-advance to the next cue).
+
+---
+
+## 2. Running Deckboy
+
+Install from the release for your platform, or unpack the portable build and
+run it in place. Both carry everything they need. Deckboy finds its `data/`
+directory by walking up from the executable, so keep the two together.
+
+To build from source, follow the repository's README.
+
+Three dependencies are loaded only when you use the feature that wants them,
+and absent ones cost nothing: the Blackmagic DeckLink driver for DeckLink, Spout
+for texture sharing, and WebView2 for browser cues.
+
+**NDI needs the NDI runtime on the machine, not in the download.** NDI input
+and output are in every published build; what they load at run time is the
+runtime that comes with **NDI Tools**, which is free from the same people who
+make NDI. Install that and NDI sources appear; leave it out and Deckboy says
+NDI is unavailable rather than failing quietly. `--self-check` reports what it
+found: `ndi-sdk: headers detected` means NDI is in the build. The NDI *tally
+trigger* works whether or not the runtime is there.
+
+---
+
+## 3. Startup
+
+Deckboy opens on a startup card — the wordmark, the version, and a boot log
+while the backends come up. **Enter** dismisses it.
+
+It then reopens the last show. To open a different one instead, pass it on the
+command line or set `DECKBOY_PROJECT`; `DECKBOY_THEME` forces a colourway.
+Either of those skips the startup card as well.
+
+Longer show opens display a block progress indicator and percentage.
+
+### Learn the basics
+
+A guided tour of the first show anyone runs, in nine steps: turn the output on,
+bring in a clip, take it live, line up the next cue, crossfade to it, clear the
+screen with BLACK, save, and where to go next. Two teachers take turns:
+Dr. Pixel and Professor Video.
+
+Start it from the startup screen (**LEARN THE BASICS**, or the **L** key), or
+at any time from **MENU → LEARN THE BASICS**, at the right-hand end of the tabs.
+
+- **It runs in a practice show.** Your show is saved first and reopened when the
+  tour ends, with its outputs and BLACK put back as they were. The practice
+  show is `tutorial-practice.deckboy` in Deckboy's settings folder.
+- **It waits for you.** Each step dims the window except for the one control it
+  is about, and moves on only when you have used it: an output that is on, a
+  cue in the playlist, a take, a crossfade that ran, a save you made. Autosave
+  does not count as saving.
+- **SHOW ME** does the step for you. Step 3 lends you a Swirl if you have no
+  clip to hand. **SKIP** passes a step; **EXIT** or **Esc** leaves.
+- **It picks up where you stopped.** Leave half way and the next LEARN THE
+  BASICS starts at the same step.
+- **It fits your screens.** With two or more, the practice show's picture goes
+  on a screen the desk is not on, and Dr. Pixel names it. With one, the
+  picture fills the desk's screen, and a key or a click gives the desk back
+  with the picture in a small window. With mirrored screens, he says how to
+  set them to extend. Plug a screen in during the tour and the picture moves
+  onto it; pull one out, or mirror them, and he says so and gives the desk
+  back.
+
+The window output is switched on from **MENU → Video Outputs → OUTPUT OFF**
+(it then reads OUTPUT ON). During the tour, MENU opens on that page.
+
+Over the network: `TUTORIAL [START|SHOWME|SKIP|EXIT|STATUS]` (a bare `TUTORIAL`
+starts it; `STATUS` replies with the step and what Dr. Pixel is saying), and
+`STARTUP SHOW` brings up the startup screen.
+
+#### Part two: the lessons
+
+When the basics end, the **lesson list** opens, and you choose whom to follow:
+**Dr. Pixel** into running the show, or **Prof. Video** into the signal. The
+choice is not final; the list remembers it, and a tab switches. It is always at
+**MENU → LESSONS**, beside LEARN THE BASICS.
+
+| Lesson | Teacher | What you do | The show |
+|--------|---------|-------------|----------|
+| Effects, oscillators and colour | Prof. Video | an effect, a ~ on its knob, a colour from the picker | the art school crit, with Mr. Salty |
+| Patterns, synths and Draw | Prof. Video | a test pattern, the video synth, a second playlist as a layer, a Draw cue drawn on and saved as a still | the telestrator booth, with Coach Marv |
+| Masks | Prof. Video | a heart from the library, a pen path, invert, feather | The Signal Files: redact the saucer photo |
+| Warp, blend and slices | Prof. Video | a corner pin, two soft edges, the Screens window, three slices | the haunted lighthouse, with Keeper Rook |
+| Transitions | Prof. Video | an iris and a shatter, each with a time | the space-opera trailer, with Optimus Primetime |
+| Sound | Prof. Video | an audio effect, a bend, and where the patch lives | the robot DJs, with Deft Funk |
+| Reading the scopes | Prof. Video | an output on, the waveform, the vectorscope, false colour | The Signal Files: is the glow a craft? |
+| Out of the building | Prof. Video | the Devices page, and NDI where this computer has it | (a plain lesson) |
+| Motion: Bug Swat | Prof. Video | the game (see Motion) | a handheld, and bugs |
+| GO from anywhere | Dr. Pixel | a cue number, GOTO (Ctrl+G), a hotkey from TRIGGERS, where Companion, MIDI and OSC connect | the game show, with Donna Wheel |
+| Words on screen | Dr. Pixel | a layer, a Lower Third with a name on it, a title card with a key-green backdrop | the kaiju weather report, with June O'Neil |
+| Keeping time | Dr. Pixel | a stage timer counting down, held, and a presenter view | a grand day out, with Wallis and Grommet |
+| Two playlists and TAKE ALL | Dr. Pixel | a second playlist as a layer, and TAKE ALL changing both on one beat | the magic show, with Turnip Top |
+| When it goes wrong | Dr. Pixel | BLACK and back, PANIC, and getting the show back | the cooking show, with Chef Bork |
+| Taking it on the road | Dr. Pixel | CHECK a show, fix what it finds, BUNDLE it with its media | (a plain lesson) |
+| Presets | Dr. Pixel | a DASH button that captures a look, a different look, one press to get it back | (a plain lesson) |
+| The multiview | Dr. Pixel | MULTI, a window showing NEXT, a clock, a layout, tally | mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley |
+
+Each lesson works like the basics: its own practice show (your show is saved
+first and comes back as it was), a step that waits for you to do the thing,
+SHOW ME, SKIP, Esc, and it picks up where you stopped. A finished lesson is
+ticked DONE in the list. In a lesson with no show, the desk's own face drops
+into a corner now and then with something to say.
+
+Over the network: `LESSONS [OPEN|CLOSE|START <id>|TRACK PIXEL|VIDEO|LIST]`; the
+ids are `effects`, `draw`, `masks`, `warp`, `transitions`, `scopes`, `sound`, `outside`, `bugswat`, `layers`, `go`, `words`, `timers`, `presets`, `wrong`, `road` and `multiview`. A running lesson is
+driven with the `TUTORIAL` verbs.
+
+Deckboy refuses to start twice, so a stray double-click cannot take a second
+copy of the show live. `--allow-multi-instance` lifts that, for debugging.
+
+### Your defaults
+
+**NEW** starts from factory settings until you give it your own. Set a show up
+the way you like to work and press **Settings → System → DEFAULTS → SAVE AS MY
+DEFAULTS**. Every new show then starts exactly like it, without the cues: the
+theme, language, sounds and UI scale, the network and phone, audio, recording
+and captions, the outputs and their screens, the decks with their routing and
+fades, the DASH buttons and the fixture patch. Tracker steps and presets stay
+behind, since they name cues.
+
+The card shows when they were saved. **FORGET MY DEFAULTS** (press it twice)
+makes NEW start from factory settings again. Nothing on this card changes the
+show that is open: saving copies its setup, and forgetting deletes the copy.
+The defaults are kept on this computer, never in a show file, so passing a show
+on does not pass on your setup. Over the network: `DEFAULTS [STATUS] | SAVE |
+FORGET` (`RESET` still works), and `NEWSHOW` does what NEW does, sent twice
+within 2.5 seconds when something is live or unsaved.
+
+---
+
+## 4. Interface Layout
+
+The control window is split into:
+
+- **Toolbar** (top): `NEW`, `OPEN`, `SAVE`, `BUNDLE`, and — only when media is
+  missing — a red `RELINK` button; loop/shuffle mode toggles; the master
+  volume fader; and fullscreen / blackout controls.
+- **Playlist column** (left): the focused deck's cue list. Each row shows cue
+  number, type, name, duration/end action, a colour-tag chip, and quick action
+  icons (fade in/out, loop, hold, audio). The live cue, the queued next cue,
+  and the selection are highlighted distinctly.
+- **Timeline & transport** (centre): the program monitor, the video/audio
+  lanes with the playhead and in/out trim, and the transport buttons.
+- **Cue Inspector** (right): every setting for the selected cue, in collapsible
+  sections.
+- **Monitors window** (separate): per-output preview and routing.
+
+Timeline loading uses filmstrip and audio-meter animations. Critters accompany
+imports, slide rendering, loudness analysis and updates (checking, downloading
+and installing), each job bringing one of twelve animals, each moving in its
+own way; file conversion keeps its mascot and measured progress bars.
+
+Two dividers rebalance the layout. The vertical splitter sits between the
+program area and the inspector. The horizontal grip sits in the gap under the
+program monitor: drag it up to shrink the preview and grow the timeline lanes,
+down to give the height back.
+
+---
+
+## 5. Cue Types
+
+| Type | Source |
+|------|--------|
+| **Video** | A video file (any FFmpeg-readable container/codec, incl. HAP, ProRes, H.264/265 hardware-decoded) |
+| **Image** | A still (held for a set duration or until taken away) |
+| **Pattern** | A generated test pattern (see §18) |
+| **Browser** | A live web page, rendered inside the programme rather than in a browser window on your desktop |
+| **Window / Screen** | A window on this machine, or a whole screen. A window arrives at full resolution whatever the display scaling is set to, follows the window as it moves and resizes, and is not interrupted by anything in front of it |
+| **Camera** | A capture device |
+| **Syphon / Spout** | A shared GPU texture from another app, through Spout on Windows. Syphon receive on macOS is not built yet |
+| **Stream (SRT)** | A live network input — `cue.path` is the full URL (`srt://`, `rtmp://`, `rtsp://`, `udp://`) |
+| **NDI Source** | An NDI receive input — `ndi://SOURCE_NAME` |
+| **DeckLink Source** | A Blackmagic card's SDI or HDMI input, captured through the DeckLink SDK rather than through FFmpeg |
+| **Lower Third** | A name and a role over another playlist, in 52 looks (§16) |
+| **Audio** | An audio-only file with a waveform lane |
+| **Mic** | A live microphone or line input, played through the deck with its fades, routing and audio effects (see Mic cue under §17) |
+| **Tone** | A generated audio test tone, with optional on-screen diagnostics — and, with a chip selected, a playable 2A03 or FDS voice driven from MIDI or the computer keyboard |
+| **Timer** | A stage/speaker countdown with its own clock, thresholds, chimes and messages. Set its **backdrop** to **transparent** and use **GEOMETRY** to put the clock in a corner of the programme as a layer |
+| **Video Synth** | Generated picture — oscillators, feedback, glitch stack, text mode, sprite sets |
+| **Code** | A live-coded picture: an expression evaluated per pixel, edited while it runs (see §14a). It is a Pattern cue underneath, so anything true of patterns is true of it |
+
+These cues play nothing themselves. They act on other cues, or send a message
+to other equipment, when they are taken (*v0.99.373 and later.*; see §9b):
+
+| Type | What it does on GO |
+|------|--------------------|
+| **Target** | Starts, stops, pauses, resumes, loads, arms or disarms another cue |
+| **Fade** | Ramps a deck's picture, a deck's volume, the master dimmer, or the active cue's brightness/contrast/saturation/hue, to a level over time |
+| **Master** | Fires an assigned cue on each of several decks at once |
+| **MIDI** | Sends a note, control change, program change, MIDI Show Control GO / STOP / RESUME, or raw bytes |
+| **Network** | Sends an OSC message, a UDP datagram or a line of TCP |
+| **Timecode** | Starts, stops or jams the LTC generator |
+| **DMX** | Sets lights from the fixture patch by name (level and colour, each with an LFO), or channel levels by hand, over Art-Net or sACN with a fade time |
+| **Script** | Runs lines of Deckboy's own control protocol |
+
+All of them are on the `SOURCE` menu.
+
+---
+
+## 6. Importing & Adding Cues
+
+- **Import media:** press `I` or `Import`, or drag files onto the window.
+  Metadata is probed asynchronously (`probing…` shows on the row until done).
+- **Add a source cue:** the SOURCE menu has four parts. LIVE PICTURE adds a
+  window, camera, Syphon/Spout, browser, stream or NDI source. MADE BY DECKBOY
+  adds everything Deckboy makes itself: Fireside, Portal, Swirl, Moire, Video Synth,
+  Code, Text, Lower Third, Stage Timer and the 2A03 and FDS synths. TEST
+  SIGNALS adds a test pattern or a test tone, and CUES THAT DO THINGS adds the
+  cues that act on the show rather than putting a picture up.
+- **Add a pattern:** press `P` or use the PATTERN menu for the test cards and
+  charts.
+
+New cues inherit the deck's playlist defaults (fade lengths, loop, pause
+behaviour, audio-enabled). Reorder by dragging; multi-select with Shift/Ctrl;
+copy/paste cue settings with `Ctrl+C` / `Ctrl+V`.
+
+### Browsing for media without the file dialog
+
+**SOURCE → Browse media...** opens a list of the current folder right in the
+window: directories first, then anything Deckboy can play. Choosing a folder
+goes into it, `..` goes back up, and choosing a file adds it to the focused
+playlist and **stays where it is**, so adding six clips is six clicks rather
+than six trips through a dialog.
+
+**Type to filter.** On a folder of two hundred episodes this is the whole
+feature — start typing any part of the name.
+
+It opens where it last looked, remembered with the show. If it has never been
+used it starts wherever the playlist's own media came from.
+
+Over the wire: `BROWSE`, or `BROWSE <folder>`.
+
+### A playlist that fills itself
+
+**Settings → System → WATCH FOLDER** points the focused playlist at a folder.
+Anything playable dropped in there becomes a cue, by itself, while the show is
+running — which is what you want when somebody keeps putting new VTs on the
+NAS during rehearsal.
+
+Each playlist can watch its own folder, so the VT drop and the stings can be
+different places. The card names the playlist it is about; switch playlists
+with the tabs and set another.
+
+Three things it deliberately does:
+
+- **It waits for the copy to finish.** A large file appears in the folder the
+  moment the copy starts, and a cue built from a half-written file fails on
+  air. Nothing is taken until its size has stopped changing, which costs a
+  couple of seconds and removes the whole problem.
+- **It never takes the same file twice**, including across reopening the show.
+- **Deleting a cue is final.** Removing something from the playlist does not
+  bring it back on the next scan; you deleting it was a decision.
+
+Over the wire: `WATCH` to see what is being watched and whether the scan is
+running, `WATCH <deck> <folder>` to set one, `WATCH <deck> OFF` to stop.
+
+---
+
+## 6a. Slide Decks, Presenter View & Prompter
+
+A talk is a show like any other, and Deckboy runs one without a second
+application on the machine. A deck imports as cues, the speaker gets their own
+screen, and the reader gets a prompter — all three out of the one show file.
+
+### Importing a deck
+
+A PDF imports as **one image cue per page**, rasterised once at import and never
+touched again. That is the point rather than a shortcut: nothing in a live show
+should depend on a document renderer being fast, being installed, or deciding to
+reflow a page halfway through the keynote. Once the pages are stills they behave
+like every other cue — they take, they fade, they carry effects, they crossfade
+to the next one — and a presenter's clicker walks them with Page Down.
+
+Each platform uses the renderer it already has, so nothing is bundled:
+
+| Platform | Engine | Also used by |
+|---|---|---|
+| Windows | `Windows.Data.Pdf` | Edge |
+| macOS | CoreGraphics `CGPDFDocument` | Preview |
+| Linux | `pdftoppm`, from `poppler-utils` | the desktop's own PDF viewer |
+
+Linux is the one platform where this is a separate tool, and therefore the one
+where it has to be installed; Deckboy says so plainly if it is missing rather
+than refusing the file without a reason.
+
+Pages are rendered to a fixed **target width**, chosen for the largest output
+the application supports rather than the output currently configured. The three
+engines measure a page in three different units, so the same "2x" would produce
+a different raster on each platform, and an operator may change the output after
+importing anyway. The same deck therefore imports identically on every machine.
+
+While a deck converts and renders, a busy critter animates beside the page-progress
+display. The caption reports conversion first, then the slide count as pages
+finish rendering.
+
+### PowerPoint, Keynote and OpenDocument
+
+`.pptx`, `.ppt`, `.key` and `.odp` are not rasterised directly. Deckboy asks
+whatever already owns the format on that machine to export a PDF, then
+rasterises that:
+
+| Platform | Preference order |
+|---|---|
+| Windows | PowerPoint itself, then LibreOffice |
+| macOS | Keynote for `.key`, then LibreOffice, then PowerPoint if present |
+| Linux | LibreOffice |
+
+The format's owner goes first because it is the authority on its own format. A
+half-right renderer that puts a slide's type in the wrong place is worse on a
+show day than an honest refusal, so where none of them is installed the operator
+is told which one to install.
+
+**Exporting to PDF flattens builds and drops transitions.** That is a property
+of the export, not of Deckboy, and no PDF-based route avoids it: a PowerPoint
+deck that animates arrives as static slides. Keynote can export one page per
+build stage, and those come through as one cue per stage, which is usually what
+an operator wants. For a PowerPoint deck that genuinely has to animate, capture
+it live with a **window-source cue** instead and drive it in PowerPoint.
+
+**Speaker notes** are read out of a `.pptx` — the file is a ZIP with the notes
+as XML inside — one entry per slide, so they arrive attached to the cue that
+shows the slide.
+
+### Presenter view
+
+Presenter view is an **output type**, not a window: it is assigned to a display
+the way a programme output is, so the speaker's laptop screen or the confidence
+monitor at the lectern is simply another output of the show.
+
+Four layouts:
+
+| Layout | Shape |
+|---|---|
+| `wide` | current large, previous and next stacked beside it, notes below |
+| `filmstrip` | previous / current / next across the top, notes large below |
+| `notes` | notes dominate, the three pictures on a thin strip above |
+| `custom` | wherever the operator put the panels |
+
+The three named layouts **reflow**: switch a panel off and the others take its
+room. A custom layout does not, because it is an arrangement somebody chose and
+rearranging it under them would be a bug rather than a courtesy.
+
+Every panel can be switched off independently — live picture, previous, next,
+notes, clock and timers. Turning the three pictures off gives the notes the
+whole screen, which is what somebody reading a long script from a lectern
+actually wants. **Notes share** scales how much of the screen the notes take
+relative to the pictures, on top of whatever the chosen layout already thinks is
+sensible, and **notes scale** sets the type size — `1.0` is the size the rest of
+the interface uses, and the default is `1.4`, because notes are read from a
+lectern rather than from a desk. Background, ink and accent are set as hex
+colours, since a presenter screen is often somebody else's laptop in somebody
+else's room and "make it readable in here" is a real request.
+
+Panel positions in a custom layout are stored as **fractions** of the area
+between the header and the footer, so a layout arranged on a 1080 laptop is the
+same shape on the 4K screen it ends up on.
+
+### Note builds
+
+A cue's notes split on a line that is exactly `---`, and the presenter advances
+through those parts **without changing the slide** — so a long note is read at
+the speaker's pace instead of arriving all at once.
+
+There is an option to make the ordinary NEXT action spend the remaining builds
+before it advances the cue, which is how a slide clicker behaves in every other
+deck a presenter has used. It is off by default, because it changes what the
+transport does.
+
+### Prompter
+
+The prompter is the talent's screen, and it is a different job from the
+presenter's: one person reading out loud under a piece of glass.
+
+- **The script.** Left empty, the prompter follows the live cue's notes, which
+  is what a deck-driven show wants. A filled-in script is for a talk with no
+  slides, or one whose slides are somebody else's problem.
+- **Mirroring.** On by default horizontally, because a teleprompter's glass
+  reverses the picture on its way to the reader. Vertical mirroring exists as
+  well, since the beamsplitter can sit above or below the lens.
+- **Pace** is set in **lines per minute** rather than pixels per second — a pace
+  belongs to the reader, and it has to mean the same thing when the type size or
+  the screen changes. The default is 140.
+- **The reading line** sits a fraction of the way down the screen (0.42 by
+  default) and the text scrolls up *through* it, so the words being spoken are
+  always in the same place. That is the whole ergonomic point of a prompter, and
+  the line itself can be drawn or hidden.
+- Type is much larger than a presenter's — the default scale is 2.6 — and
+  background, ink and accent are hex colours as above.
+
+Whether the prompter is running is saved with the show, so a talk reopens armed
+the way it was left.
+
+---
+
+## 7. The Cue Inspector
+
+The inspector edits the selected cue in collapsible sections. Most numeric rows
+have `−`/`+` steppers, are drag-to-scrub, and click-to-type an exact value.
+
+Sections start **folded**, except the one that is the cue's own: TONE on a
+tone, PLAYBACK on a clip, DRAW on a drawing. Click a section's header to open
+or fold it; it then stays that way for the rest of the session, on every cue
+you select. The MASK and DRAW buttons on the monitor open their sections.
+
+- **PLAYBACK** — loop & loop count, hold last frame, pause at start, playback
+  speed (0.25–4×, pitch-corrected audio), lock to screen (below), fade
+  in/out, in/out trim, pause points, end action, goto target,
+  next-transition toggle.
+- **AUDIO** — per-cue gain, pan, mono, independent audio fades, loudness
+  normalize, and output-pair routing (see §17).
+- **GEOMETRY** — scale mode (fit/fill/stretch/unscaled), scale, offset, crop,
+  rotation, and colour controls (brightness/contrast/saturation/hue).
+- **KEY** — chroma key colour, tolerance, and softness.
+- Metadata — cue number, name, colour tag, notes.
+
+Values apply live where possible (fades, audio trim, geometry) without
+reloading the decode.
+
+### Lock to screen
+
+A clip a hair off the screen's rate (59.94 fps on a 60 Hz screen, 60 on 59.94,
+23.976 on 24 Hz, 29.97 on 60) drifts against the screen, so every so often
+(about every 17 seconds at 59.94 on 60) one frame stays up a refresh too long,
+or one is dropped, to keep time. Turn on **lock to screen** in a video cue's
+PLAYBACK section, or send `LOCKSCREEN on`, and that cue plays at the screen's
+own rate instead, up to 0.2% faster or slower, so its cadence never breaks:
+at 59.94 on 60, every frame is shown exactly once. The sound follows, as on a
+tape machine: 0.1% is 1.7 cents sharp or flat, and the most, 0.2%, is 3.5
+cents. Recordings and streams of the cue get the same sound the room hears.
+
+- It locks a few seconds after the take, once the picture is in step with the
+  sound card's clock.
+- A screen further off than 0.2%, a cue at a playback speed other than 1×,
+  and a fade cue changing the cue's speed all leave it at its own rate, as
+  with the lock off.
+- A refresh the output itself misses is still a dropped frame. The lock keeps
+  the clip in time with the screen; it cannot make a slow output faster.
+- `LOCKSCREEN [on|off]` sets it on the selected cues; with no word it toggles.
+  `STATUS` reports `screen_lock=`, the speed the cue is playing at (1.00000
+  when it is not locked), and `cadence_skips=` and `cadence_holds=`, the
+  frames dropped and the frames held a refresh longer to keep time. Unlocked,
+  a clip faster than the screen drops frames and a slower one holds them;
+  locked, the only drops left are refreshes the output missed.
+
+The geometry **mode** row's left and right buttons step backwards and forwards through
+Fit, Fill, Stretch and Unscaled. **Link aspect** makes a width change scale
+the height by the same proportion, and vice versa.
+
+Geometry is also available over the remote protocol:
+
+| Command | Value |
+|---------|-------|
+| `SCALE <factor>` | Sets both scale factors to 0.25–4 |
+| `SCALEX <factor>`, `SCALEY <factor>` | Sets one factor to 0.25–4; honors Link aspect |
+| `WIDTH <px>`, `HEIGHT <px>` | Rendered size on the playlist's output, before rotation; honors Link aspect |
+| `SCALEMODE <mode>` | `fit`, `fill`, `stretch`, or `unscaled` |
+| `OFFSET <x> <y>`, `OFFSETX <x>`, `OFFSETY <y>` | Offset from the centre in pixels, −1000000 to 1000000; positive is right/down |
+| `ROTATION <degrees>` | −180 to 180 degrees |
+| `CROP <left> <right> <top> <bottom>` | Percent removed from each source edge, 0–90 per edge |
+| `CROPLEFT <n>`, `CROPRIGHT <n>`, `CROPTOP <n>`, `CROPBOTTOM <n>` | One edge's crop percentage |
+
+Omit the value to read the selected cue. `SCALE` answers with the X and Y
+factors, `OFFSET` with X and Y pixels, and `CROP` with left, right, top and
+bottom percentages. Setters apply to selected cues that support geometry and
+answer `OK` with the value, cue count and skipped count. Queries on a cue
+without geometry answer `ERR`. An invalid value, a size requiring a factor
+outside 0.25–4 on either axis, or opposing crop edges totalling more than 95%
+answers `ERR` without applying the edit. `SET geometry_aspect_link 0` or `1`
+sets the inspector's Link aspect switch.
+
+`SYNTH ADD` adds and selects a Video Synth cue in the focused playlist, ready
+to edit with `SYNTH SHAPE`, `SYNTH MIRROR`, and `SYNTH PALETTE`.
+
+---
+
+## 8. Transport
+
+| Action | Key |
+|--------|-----|
+| Take selected cue live | `Enter` |
+| Play / Pause | `Space` |
+| Stop active cue | `S` |
+| Rerack (rewind to first frame, hold) | `Ctrl+R` |
+| Skip ±10 s | `Left` / `Right` |
+| Skip to start / end | `Home` / `End` |
+| Set in / out point at playhead | `Ctrl+I` / `Ctrl+O` |
+
+Click or drag the timeline lanes to seek. When a cue has audio, the video
+position slaves to the audio device clock, so long-form and variable-frame-rate
+playback stay in sync.
+
+---
+
+## 9. Playlists, Loop, Shuffle & Cue Endings
+
+Each cue's **end action** decides what happens when it finishes:
+
+- **Stop** — go to black (or hold, if hold-last-frame is set).
+- **Loop** — repeat (respecting the loop count, 0 = infinite).
+- **Hold** — freeze on the last frame.
+- **Auto-Next** — advance to the next playable cue.
+- **Goto** — jump to a specific cue number.
+
+Deck modes (toolbar toggles):
+
+- **Loop playlist** — after the last cue, wrap to the first.
+- **Shuffle** — auto-advance picks a random other cue. The shuffle generator is
+  seeded from a real entropy source at launch, so the order differs every run.
+
+Missing cues are skipped on auto-advance so a single missing file can't stop
+the show (see §20).
+
+---
+
+## 9a. The Running Order: Standby, Waits & Continue
+
+*v0.99.373 and later.*
+
+Everything in this chapter defaults to what Deckboy always did, so a show made
+before it behaves exactly as before: no waits, nothing follows anything, and GO
+takes the selected cue. The controls are in the inspector's **SEQUENCE**
+section, on every cue type.
+
+### Standby
+
+The **standby** is the cue GO will fire, kept apart from the selection. The
+selection is where you are looking: what the inspector shows and what the
+arrow keys move. The standby is the running order: what happens next. Keeping
+them apart means clicking a cue to check it during a show does not change what
+the next GO does.
+
+Set it with the **standby** row (it reads `THIS CUE` on the cue that has it).
+While a standby is set, **Space is GO**: it takes the standby cue and moves the
+standby down to the next armed cue. At the end of the list the standby clears
+rather than wrapping to the top, so the last GO cannot restart the show. With
+no standby set, Enter and Space work as they always have.
+
+### Pre-wait, post-wait and continue
+
+- **pre-wait** — how long after GO this cue starts.
+- **continue** — whether the next cue goes by itself, and from when:
+  - **off** — the operator fires the next one.
+  - **from start** — the post-wait is counted from when this cue *starts*, so a
+    sequence is laid out in time from a single GO.
+  - **from end** — the post-wait is counted from when this cue *finishes*, for
+    "and then the next thing", however long this one took.
+- **post-wait** — the delay before the continue fires.
+
+A continue is about the next cue and fires whether or not this cue has ended.
+That is what makes it different from the **Auto-Next** end action in §9, which
+is about what this cue does when its media runs out.
+
+### Armed
+
+A cue that is not **armed** stays in the list with all its settings, does
+nothing, and is stepped over by GO and by the standby. The row is washed out so
+the list shows it. Disarm a cue to skip it tonight without deleting it.
+
+### Audition and preload
+
+- **audition** plays the selected cue to the control window's preview only.
+  The outputs keep what they have. Use it to check a cue during a show without
+  the room seeing it.
+- **preload** racks the selected cue on its deck, paused and held off the
+  outputs, with decoding already running, so taking it starts with no spin-up.
+
+### Triggers: what fires a cue besides GO
+
+Every cue has a **TRIGGERS** section in the inspector. Each row is another way
+to fire that cue, and every one of them goes through the same take as GO, on
+the cue's own deck, without moving the operator's focus. A cue that is not
+armed ignores all of them.
+
+- **key** — click the row, then press **F1–F10**, **F12** or a **number-pad**
+  key. That key fires the cue from anywhere on the desk. Click the row again
+  to clear it. The other keys already drive the desk, so they cannot be
+  claimed.
+- **MIDI note** — type a note number, or type `LEARN` and play the note. A
+  cue's own note comes first. A note that no cue and no MIDI map row claims
+  keeps its old meaning: note *N* goes to cue *N+1* on the focused deck.
+- **OSC** — an address sent to Deckboy's OSC port, for example `/intro`.
+  Upper or lower case, with or without the leading slash.
+- **time of day** — fires at that time on this computer's clock, every day.
+- **timecode** — fires when incoming timecode passes that point.
+
+One key, note or address can belong to several cues, on several decks, and
+fires them all together.
+
+Over the control port, with the cue selected:
+
+```
+TRIGGER KEY F5
+TRIGGER MIDI 60
+TRIGGER OSC /intro
+TRIGGER AT 19:30
+TRIGGER KEY OFF
+```
+
+### The MIDI map
+
+Any MIDI key, pad, knob, fader, pitch wheel, aftertouch or program change,
+and any OSC address, can run any command: the same lines a DASH button or
+Companion sends. Open it from **Settings > Audio > MIDI CONTROL > OPEN THE
+MAP**.
+
+Each row says four things: what comes in, what it runs, what it runs on, and
+its value now. The dot at the left lights while that row's message is
+arriving. A row outlined in the theme's warning colour shares its message
+with another row, or with a cue's own TRIGGERS note; both answer.
+
+- **+ ADD** makes a row, and **LEARN** makes one from the next thing you
+  move or press. A new row stays **OFF** until it has a command, which is
+  asked for straight away, so learning a knob never changes the show by
+  itself.
+- **READY-MADE...** adds rows for a KORG nanoKONTROL2, a Novation Launch
+  Control XL (factory template 1), an AKAI APC mini mk2 or an AKAI APC40 mkII
+  (generic mode), in their factory layouts. Strips 1–8 are playlists 1–8. A
+  built-in row on one of the same controls (CC 7 is a fader on most of these)
+  is switched off, and the toast says so.
+
+Choose a row to edit it, in three steps:
+
+1. **What comes in** — the message (click it to learn again), the channel,
+   the port, and how to read it:
+   - **knob 0-127** — 64 is the exact centre.
+   - **endless encoder** — one step left or right per message; *auto* reads
+     the two common kinds.
+   - **14-bit** — a fader that sends CC *n* and CC *n+32*.
+   - **press**, **hold** (fires only once held for the time you set, for
+     PANIC and the like), **press + release** (two commands, for momentary
+     things).
+   - **play** — a range of keys, for the synths (below).
+2. **What it runs** — the command. In it, `{value}` is the knob's number,
+   `{note}` the key and `{velocity}` how hard it was played. A knob maps
+   **From** and **To**, through a **Centre** if you give one: SPEED with
+   from 0.25, centre 1 and to 4 puts 1.0x exactly at the knob's middle.
+   **Pickup** keeps a knob from jumping a value changed elsewhere: it does
+   nothing until it reaches the current value. The test line shows the last
+   value and what it became.
+3. **What it runs on** — the desk; the selected cue; what is on air in a
+   playlist; or one named cue. A command aimed at a cue never moves the
+   desk's focus or selection. **Saved with** says whether the row belongs to
+   **this computer** (where the controller is plugged in) or to **the show**
+   (it travels with the show file). Both maps answer at once.
+
+Out of the box the map holds three **built in** rows, today's fixed behaviour,
+which can be changed or deleted like any other: a note takes the cue one above
+its number (only when nothing else answers that note), CC 7 is the master
+volume, and CC 20 the selected clip's speed, with 1.0x at the knob's centre.
+
+**The controller's lights.** A row sends its state back to the controller it
+came from, and only to that one: a pad is lit while its cue is on air, a
+playlist's TAKE or STOP while something there is on air, BLACKOUT while
+blacked out; a knob's ring follows its value. The lights follow whatever
+changed the show, the mouse included.
+
+**Playing the synths.** A **play** row (or the *MIDI plays the synth* switch)
+plays every synth on air: the sound synth or a hosted instrument, and any
+video synth. On the video synth a key's pitch sets the pattern's size (an
+octave up doubles it; middle C is the size as set) and its velocity blooms
+the feedback; letting go returns it.
+
+**Any control on screen.** The **~** on any control has MIDI shapes:
+**midi-note** (the last key's pitch, C2 to C6, held after you let go),
+**midi-velocity**, **midi-cc** and **aftertouch**, on any channel or one.
+Put midi-note on Chladni's mode and every key plays a different figure.
+Chladni also has a **LISTENS** switch: its mode follows **audio-pitch**, the
+pitch of the focused playlist's sound (C2 to C6, held through silence), so the
+plate takes the shape of the note being played. Any control's **~** can follow
+audio-pitch too.
+
+The MIDI and OSC monitor names the row that matched, what it was aimed at, or
+why nothing happened ("nothing mapped to CC 30", "pickup: it is 2.50, the
+knob is at 1.00", "released at 0.3 s, nothing done").
+
+Over the control port:
+
+| Command | Does |
+|---------|------|
+| `MIDIMAP` | Every row of both maps, as JSON |
+| `MIDIMAP ADD COMPUTER\|SHOW src=cc \| num=16 \| cmd=SPEED {value} \| from=0.25 \| centre=1 \| to=4` | Adds a row |
+| `MIDIMAP SET COMPUTER\|SHOW <row> <fields>` · `MIDIMAP REMOVE COMPUTER\|SHOW <row>` | Changes or removes one |
+| `MIDIMAP CLEAR COMPUTER\|SHOW` · `MIDIMAP RESET` | Empties a map; puts this computer's back to the built-in rows |
+| `MIDIMAP LEARN` · `MIDIMAP LEARNED` | Learns the next message; reads it back as fields |
+| `MIDIMAP PRESET [nanokontrol2\|launchcontrolxl\|apcminimk2\|apc40mk2]` | Adds a ready-made map |
+| `MIDIMAP FEEDBACK` | What the controller's lights were last told |
+| `MIDIIN NOTE\|NOTEOFF\|CC\|PITCH\|PRESSURE\|KEYPRESSURE\|PROGRAM ... [CH n]` · `MIDIIN OSC <address> [n]` | What a controller would send, from this computer |
+
+Fields: `src` (note, cc, pitch, program, pressure, polypressure, osc), `ch`,
+`num`, `to_num`, `osc`, `port`, `read` (knob, encoder, fine, press, hold,
+pressrelease, play), `hold`, `enc`, `cmd`, `release`, `from`, `centre`, `to`,
+`dec`, `pickup`, `target` (desk, selected, onair, cue), `playlist`, `cue`,
+`on`, `feedback`, `led_on`, `led_off`.
+
+### CHECK: everything wrong, before doors
+
+When a show has problems, a **CHECK** button beside `RELINK` shows how many.
+Click it for the whole list; pick a line to go straight to that cue (or to
+the dashboard, for a tracker step). It finds:
+
+- media that is missing
+- a goto that points at a cue that no longer exists
+- a master or target cue whose destination has gone, or that names a deck
+  that does not exist
+- a MIDI cue with nothing to send, a DMX cue with no channels or with a
+  channel list that cannot be read, and a script cue with no lines
+- a network cue with no host, a host that is not an IPv4 address, or an OSC
+  address that does not start with `/`
+- a tracker step that fires nothing, or names a deck or cue that has gone
+- a playlist set to a sound device that is not connected to this computer
+- a plugin a cue uses that is not installed on this computer
+
+The last two are about the machine rather than the show, which is what a
+touring show meets in a new room. Over the control port, `CHECK` lists the
+problems and `CHECK <n>` goes to one.
+
+---
+
+## 9b. Show-Control Cues
+
+*v0.99.373 and later.*
+
+These cues carry no media. Each one does its job when it is taken, which means
+it can be fired by GO, by the standby, by a continue, by a master cue or by
+another controller. Every one has a **fire** (or **send**) row in the inspector
+to try it without taking the cue. Add them from the `SOURCE` menu.
+
+### Target cue
+
+Acts on another cue: **Start**, **Stop**, **Pause**, **Resume**, **Load**
+(stand it by without firing it), **Arm** or **Disarm**. Pick the **deck** and
+the **cue**. Stop, pause and resume act only when the named cue is the one on
+air, so a target cannot stop something else by mistake.
+
+Or on every deck at once: **Stop all**, **Pause all** or **Resume all** stop,
+pause or resume everything that is playing, each deck the way its own STOP,
+pause or play would (a cue with a fade-out fades). These need no deck or cue,
+and are the same as `STOPALL`, `PAUSEALL` and `RESUMEALL` over the control
+port.
+
+### Memo cue
+
+A note in the running order: "cue the band", "wait for the house lights". GO
+reaching a memo shows its note to the operator and changes nothing else. The
+picture and sound on air carry on. Write the note on the **says** row, or
+`MEMOCUE <text>` over the control port.
+
+### Devamp
+
+A cue on loop plays round and round until something stops it. **Devamp** lets
+it finish the pass it is on and then end as if it had never looped, so its
+end action and any continue happen on the beat instead of being cut. A target
+cue can do it to another cue (**does → Devamp**), or `DEVAMP [<deck>]` over the
+control port.
+
+### Fade cue
+
+Ramps a level over time: a deck's **opacity**, a deck's **volume**, the
+**master dimmer**, or the active cue's own **brightness**, **contrast**,
+**saturation** or **hue**. Set where it ends (**to**), how long it takes
+(**over**; zero is a snap), and the **curve**: linear, ease in, ease out or
+S-curve. Turn on **then stop** to stop the deck when the ramp lands, which is
+the usual "take it down and stop it". Turn on **restore at end** to put back
+what the fade started from once it lands (after the stop, if there is one): a
+deck taken out is left ready for its next cue, an effect swelled up lets go,
+and the show keeps the values it had. Without it, the level stays where the
+ramp leaves it.
+
+It can also ramp a knob of an effect: **an effect's knob** (the picture's
+effects) or **an audio effect's knob**. Pick the **effect** by its place in the
+stack, 1 being the first, and the **knob**: its amount, or A to D. The effect is
+looked for on the cue the deck is playing when the fade fires, so one fade cue
+works on whichever cue is up. If that cue has no effect at that place, the fade
+says so and moves nothing. Like the colour targets, a knob fade moves the
+playing cue's own knob, and the knob stays where the fade left it.
+
+**Speed, like tape** ramps the deck's speed from 0.25x to 4x with the pitch
+following, so a ramp to 0.25x sounds like a record slowing down; the picture
+slows with it. Set **to** in x (1x is the cue's own speed). The next cue taken
+on that deck starts at its own speed again. Recordings and streams carry the
+same sound, and it works through ASIO too.
+
+### Master cue
+
+Fires an assigned cue on each of several decks at once. For each deck, pick
+the cue to fire, or bypass that deck. A master cannot fire another master.
+
+### MIDI cue
+
+Sends a **note**, a **control change**, a **program change**, **MIDI Show
+Control** GO, STOP or RESUME, or your own **bytes** in hex (for example
+`90 3C 7F`). Choose the output **port**. If a named port is missing, Deckboy
+reports it rather than sending to whatever port it finds. **channel** counts
+1–16, as a desk does. For MSC, set the **device** (127 addresses every device
+on the line) and the **cue number** on the other desk, for example `12.5`.
+
+### Network cue
+
+Sends **OSC**, a **UDP** datagram or a line of **TCP** to an IPv4 address and
+port. OSC and UDP are fire and forget. TCP has to connect, so it runs off the
+show thread and GO never waits for it. Hostnames are refused on purpose: a DNS
+lookup can block, and GO must not.
+
+### Timecode cue
+
+Starts the LTC generator, stops it, or **jams** it to a time, so the cue list
+can run a timecode sequence (see §19).
+
+### DMX cue
+
+Sends channel levels with a **fade** time, over **Art-Net** or **sACN**
+(ANSI E1.31): pick the **network** the rig listens to. Write the levels as
+`channel=level`, separated by commas, with ranges allowed:
+`1=255, 10-14=64`. Channels count from 1. Set the **universe** (Art-Net port
+address 0–32767; sACN universe 1–63999) and the destination: an IPv4 address,
+or `255.255.255.255` to broadcast (sACN then sends to the universe's multicast
+group, 239.255.x.y, on port 5568). `DMXCUE PROTOCOL ARTNET|SACN` sets it
+remotely. **blackout** zeroes every channel on every
+universe the session has touched. Deckboy is not a lighting console: this is
+for house lights and practicals, not a rig.
+
+**The fixture patch.** `Settings → Network → FIXTURES` names the lights once:
+a row each with its name, type, universe and first address, then **FIND**
+(full white for two seconds, so you can see which light it is) and **X**
+(remove it from the patch and from every DMX cue). **ADD FIXTURE** adds a
+dimmer at the next free address. An address that overlaps another fixture
+shows red. The types are **Dimmer** (1 channel), **RGB** (3), **RGBW** (4: the
+white in a colour goes to the white emitter), **RGBA** (4: amber and warm use
+the amber emitter), **Dimmer + RGB** (4) and **Dimmer + temperature** (2:
+warm is the low end, white the high end). Moving heads are not in the patch.
+
+A DMX cue's **set by** switches between **BY FIXTURE** and **CHANNELS**.
+BY FIXTURE has a row for every patched fixture: its level in % (click the
+value to send it, or to **leave** it where the last cue put it), and on a
+colour fixture its **colour**: white, warm, red, amber, green, cyan, blue or
+magenta. Both carry a **~** LFO with the usual shape, rate, depth and tempo
+controls. A level LFO swings around the level you set; a colour LFO moves
+round the colour wheel, its depth being how far. An LFO starts once the cue's
+fade has landed and keeps running until a later cue sets that fixture or
+**blackout**. A cue can carry fixtures and hand-written channels together;
+the channels go last, so one can override a fixture. A cue that names a
+fixture no longer in the patch says so and sends nothing. The fixtures go out
+on their own universes, with the cue's network, destination and fade.
+
+**Dip on video roll.** Each fixture's **on video roll** setting is **LEAVE**,
+or a level to dip to: **OFF**, 10, 20, 30 or 50%. With **VIDEO DIP: ON**, a
+video cue playing on a deck that Output 1 shows fades those fixtures down to
+their dip level over the **FADE** time, and when the video ends, is stopped
+or gives way to a cue that is not a video, they fade back to exactly where
+they were, LFOs included. The dip is a ceiling: a fixture already below it is
+left alone, and a DMX cue fired during the roll still lands. Blackout ends
+the dip.
+
+| Command | Does |
+|---------|------|
+| `FIXTURE LIST` | The patch, with any overlaps |
+| `FIXTURE ADD <name> dimmer\|rgb\|rgbw\|rgba\|drgb\|dcct <universe> [<address>]` | Patches a fixture (the next free address if none is given) |
+| `FIXTURE FIND <name>` · `FIXTURE REMOVE <name>` | Flashes it, or removes it |
+| `FIXTURE DIP <name> <%>\|LEAVE` | What it does on a video roll |
+| `VIDEODIP [ON\|OFF]` · `VIDEODIP FADE <seconds>` | The video-roll dip, and its state |
+| `DMXCUE FIXTURE <name> <level%>\|LEAVE [<colour>]` | Sets a fixture in the selected DMX cue |
+| `DMXCUE LFO <name> LEVEL\|COLOUR ON\|OFF [<Hz>] [<depth%>]` | Its oscillators |
+| `DMXCUE LEVELS <universe> [<first>] [<count>] [SACN]` | The levels going out right now |
+
+### Script cue
+
+Runs lines of Deckboy's own control protocol (§22), one command per line, with
+`#` for comments. One script cue can fire a master, send MIDI, jam timecode and
+ping a media server. Scripts can run other script cues, up to four deep, and
+then Deckboy stops and says so rather than looping forever.
+
+---
+
+## 10. Transitions
+
+Cue-to-cue transitions are set at the deck level and can be overridden per
+cue. There are **sixteen** styles:
+
+| Style | Token | What happens |
+|-------|-------|--------------|
+| Cut | `cut` | Instant |
+| Crossfade | `crossfade` | Alpha blend over the transition time |
+| Dip to black | `dipblack` | Down to black, then up |
+| Dip to white | `dipwhite` | The same through white — a flash rather than a breath |
+| Push left / right / up / down | `pushleft` … | The incoming cue shoves the outgoing one off the raster |
+| Wipe left / right / up / down | `wipeleft` … | A hard edge travels across, revealing the incoming cue |
+| Iris | `iris` | The incoming cue opens from the centre |
+| Portal | `portal` | The Portal's blobs melt open through the old picture, with the neon rim on every edge, until the new cue is all that is left |
+| Shatter | `shatter`, `gems`, `glass` | The old picture as a dropped pane: shards fly off in waves, turning and catching the light, and take their corner of the picture with them |
+| Clouds | `clouds`, `smoke` | Weather rises through the frame and eats the old picture where it is thickest, with a bright fringe at the edge. Nothing about it is a circle or a straight line |
+| Ghastly | `ghastly`, `ghost` | The colour drains towards a cold blue-grey, the picture smears upward, and wisps rise and eat it from below |
+
+A **push** moves both pictures; a **wipe** moves only the boundary. They look
+alike in a still and nothing alike in motion.
+
+The last four are built a frame at a time on the CPU rather than drawn with
+rectangles, so they cost more than a wipe does — and they are the ones that
+read as something rather than as a shape moving. All four start on the last
+frame of the outgoing cue and end on the incoming one exactly;
+`tools/check_transitions.py` holds them to that on every build, because a
+transition that finishes still holding a shard of the old cue is one that has
+to be cut out of a show.
+
+Set the deck default in the playlist settings; override on a cue in its
+PLAYBACK section. Over the wire, `TRANSITIONSTYLE <token>` sets the style and
+`TRANSITION <seconds>` sets the time. The incoming cue's fade-in is the visible ramp on the output
+path. `next xfade` on a cue toggles whether a transition is used when
+auto-advancing into the next cue.
+
+**A cue that is playing keeps playing through the transition out of it.** The
+incoming cue blends over the outgoing one's moving picture, in every style, and
+the outgoing sound fades out over the same time. A cue that has already reached
+its end, or is paused, holds its last picture for the blend instead -- that is
+the cue as it was left. The outgoing cue plays on for video and audio files
+without a grade or picture effects, on ASIO as on any other device; anything
+else holds its last picture as before. Recordings and streams take the incoming
+cue's sound from the moment of the take; the room hears the outgoing one fade.
+The playlist fader, volume fades, and monitor/room mutes apply to both the
+incoming and outgoing cues throughout the transition, including on ASIO.
+
+---
+
+## 11. Multi-Deck Operation
+
+A show starts with **one deck** and can have up to **16**. VJ mode, below, mixes
+two of them into a single programme with a crossfader. From v0.99.373 **each
+output can show a different deck**: choose the deck on the output's card in
+`Settings → Video Outputs` (§12). While a show has more than one deck, the
+window is titled **Super Deckboy**. The focused deck is the one the keyboard and
+transport act on, and selecting a deck also moves the focused output to the one
+that deck plays on.
+
+Two decks cover the great majority of shows: a programme, and something held
+ready behind it.
+
+**Adding and removing.** **+** beside the deck tabs adds one. To remove one,
+click the **to Out 1** tag at the top of its playlist and choose **- remove**,
+or focus it and press the **-** beside **+** twice (the first press turns it
+red and names it). Any deck can go, not only the last: the ones after it move
+up a place, and every other deck keeps playing through it. Outputs follow the
+decks they showed. **Ctrl+Z** puts it back where it was. Over the network:
+`DECKADD` and `DECKREMOVE [<n>]`.
+
+The cue area shows several columns when each has enough width. In a smaller
+window it shows the focused deck at full width, with tabs to switch decks.
+Compact rows reserve space for the cue name and timer; use the inspector or
+shortcuts for the actions hidden from those narrower rows.
+
+### VJ mode
+
+A toggle. Off, Deckboy is a cue deck and every show behaves exactly as it always
+has. On, **two decks run at once and a crossfader decides what the audience
+sees** — and it is impossible to enter by accident: the whole window is edged in
+a colour used nowhere else, breathing on the beat, and a bar across the program
+column carries the controls.
+
+- **Crossfader** between deck A and deck B, folded into the opacity each deck
+  already had — so a deck faded down or mid cue-fade stays faded down.
+- **Blend**: the BLEND button sets the blend of the layer the crossfader brings
+  in (see *Layer blend modes* below for the 40 modes). On a dissolve both decks
+  fade (they are drawn over black, so holding A up until B covered it would be a
+  wipe); on the others the base stays at full and only the incoming deck rides
+  the fader.
+- **Tap tempo**, averaged over recent taps rather than the last interval —
+  nobody taps evenly. Taps more than two seconds apart start again.
+- **Quantised takes** hold until the next beat. The point of tempo in a video
+  mixer is not that anything moves by itself, it is that **what you do lands on
+  the music**.
+- Both playlists are on screen side by side, each headed with which side of the
+  crossfader it is, and A, the mix, and B each get their own monitor — a
+  crossfader you cannot see both sides of is a blind control.
+
+`VJ ON|OFF | MIX <0-1> | BLEND [mode] | TAP | BPM <n> | CLOCK <on|off> |
+QUANTISE <on|off> | DECKS <a> <b> | STATUS` over the wire, because a fader is
+the one control nobody wants to reach for with a mouse.
+
+### Layer blend modes
+
+A playlist that is a layer on an output has a **blend**: how its picture
+combines with everything under it. It applies all the time, with or without the
+crossfader, so a layer can multiply, key or colour the playlists below it for a
+whole show. The base has no blend; it is what the layers blend with.
+
+To set it, click the output tag at the top of the layer's playlist, then
+**blend: ...** under that output. The blend picker lists every mode under its
+heading. A click sets the mode and keeps the picker open, so you can try modes
+on the live output. Over the wire, with the layer's playlist focused:
+`VIDEO OUTPUT LAYERBLEND <mode>`, `NEXT`, or `LIST`.
+
+| Heading | Modes |
+|---|---|
+| MIX | dissolve (the ordinary layer), average |
+| LIGHTEN | add, screen, lighten, dodge, ember |
+| DARKEN | multiply, darken, burn, linear-burn, infiltrate |
+| CONTRAST | overlay, soft-light, hard-light, vivid-light, linear-light, pin-light, hard-mix |
+| COMPARE | difference, exclusion, subtract, undercut, divide |
+| COLOUR | hue, saturation, colour, luminosity |
+| KEY | luma-key (the layer's dark parts are keyed out), luma-key-inv (its bright parts), stencil (the layers below show only where this one is bright) |
+| CHANNEL | take-red, take-green, take-blue: one channel from the layer, the other two from below |
+| WACKY | xor (the bits of both pictures exclusive-ored), wraparound (adds, and wraps past white to black), solarise (negative wherever the layer is bright), hue-spin (turns the colours below round the wheel by the layer's brightness), thermal (the difference on a heat camera's palette), crush (posterises what is below, harder where the layer is dark) |
+
+The layer's opacity, its fades and the crossfader all set how much of the blend
+you see. At 0 the picture below is untouched.
+
+Most modes combine the two pictures on the processor, pixel by pixel, which
+costs about as much as a picture effect on a frame the size of the layer. add,
+screen, multiply, lighten, undercut, infiltrate and ember use the graphics card
+where the renderer can, and the processor where it cannot (SDL's software
+renderer). A processor mode is not HDR yet: on an HDR output it clips highlights
+to SDR white.
+
+---
+
+## 11a. The Dashboard & The Master Tracker
+
+**Ctrl+D** (or **DASH** on the bottom bar) opens the dashboard. Two tabs at
+its top right, **TILES** and **TRACKER**, switch the view; the lit one is open.
+Tiles are where a show is laid out, and the tracker is the same page seen as a
+grid.
+
+### Sequences: several commands on one tile
+
+A tile runs one command, or a **sequence**: several commands in order, with
+waits between them. Write it as `SEQ` followed by the steps, separated by `;`:
+
+    SEQ DMXCUE FIRE wash ; DECK 1 TAKE 1 ; WAIT 2.5 ; DECK 3 TAKE 1 ; WAIT GO ; DECK 2 TAKE 2
+
+- Each step is any command Deckboy takes over the remote (see §22).
+- `WAIT 2.5` pauses for that many seconds.
+- `WAIT GO` holds until the same tile is pressed again.
+
+While it runs, the tile reads **STEP 3/6** and fills along its bottom edge, or
+**PRESS FOR GO** at a `WAIT GO`. Pressing the tile while it runs **stops** it.
+A sequence cannot start another sequence. Companion's `DASH <n>` runs a
+sequence tile exactly as a press does, and `SEQ` on its own lists what is
+running; `SEQ STOP` stops every sequence.
+
+### TAKE ALL
+
+With more than one playlist, the bottom bar's TRANSPORT group gains **TAKE
+ALL**: the selected cue on every playlist goes live at once (the same as
+**Ctrl+Enter**, or `ALLTAKE` over the remote). For a fixed combination of cues,
+a tracker step does the same with each playlist's cue chosen in advance.
+
+The tracker is the **multi-output timeline**. Rows are **steps**; columns are
+**playlists**; each cell is the cue that step fires on that playlist. One step
+fires a cue on every playlist **at once**, so "video wall to the logo, stage
+screen to the speaker's slide, foldback to the countdown" is one GO instead of
+three.
+
+A step is not a new kind of thing — it is a **Master cue**, and the tracker only
+finds them. Every Master cue in the show becomes a row, in playlist then cue
+order. That means a step lives on one of the playlists, and the tracker marks
+that column *(step lives here)* rather than offering a cell that could never do
+anything.
+
+| Column | What it is |
+|--------|------------|
+| Step | The Master cue's name and number. Click to fire it on every playlist now. Right-click to rename, move or delete |
+| LEN | How long the step holds when the sequence runs. The countdown is drawn through this cell while PLAY is going |
+| One per playlist | What this step fires there. `--` means it does nothing on that playlist, which is normal — most steps touch one or two |
+
+Across the top:
+
+- **< BACK** and **GO >** fire the previous and next step. These are also what a
+  presenter's slide clicker sends: **Page Up / Page Down** drive the tracker
+  while the dashboard is open, or always if **CLICKER** is on.
+- **PLAY** runs the sequence unattended: each step holds for its LEN, then the
+  next one fires. **STOP** halts it.
+- **LOOP** wraps from the last step back to the first instead of stopping.
+- The status line says where the sequence stands — `step 3 of 11 - next in 4.2s`.
+
+An empty tracker offers a **+ a first step** row rather than just saying it is
+empty.
+
+`TRACKER GO|NEXT | BACK|PREV | PLAY | STOP | STEP <n> | LOOP [on|off] |
+CLICKER [on|off] | STATUS` over the wire (`SEQUENCE` is the same verb), so the
+whole show flow can hang off one Stream Deck key.
+
+**The pattern view.** The tracker opens as a pattern, the way a music
+tracker reads: hex row numbers down the left, one fixed-width cell per
+playlist, and the play bar held in the middle while the rows scroll through
+it. A cell reads `C04 G  --` (take cue 4), `--- F  20` (fade out over two
+seconds), `--- -- --` (nothing on that playlist), or `(M)` on the playlist a
+step lives on. A jumping step shows `J` and the row it jumps to. Each column
+header carries **M** and **S** (mute, solo), the output that playlist feeds and
+its level. **SECTIONS** on the right lists the sections and lights the one
+playing; click one to put the cursor there, **+ section** names the section
+the cursor's row starts. **CLASSIC VIEW** goes back to the grid above, and
+**PATTERN** on that grid comes back here.
+
+The pattern view is driven from the keyboard:
+
+| Key | What it does |
+|-----|--------------|
+| Arrows | Move the cursor (the wheel moves it too) |
+| Enter | Fire the cursor's row |
+| Space | PLAY / STOP |
+| Page Down / Page Up | GO / BACK, as the clicker does |
+| F9 / F10 | Mute / solo the cursor's column |
+| 0-9 | Type a cue number into the cell (on a fade, volume or opacity cell, its value) |
+| S F V O | Make the cell stop, fade out, set volume, set opacity |
+| Del | Clear the cell |
+| Ins | Insert a step after the cursor's row |
+
+Everything that changes a cell needs **EDIT** on, so a stray key during a show
+cannot restage it; with EDIT on, the cursor turns red. While the pattern is
+open it has F9, F10 and the digits, so a cue hotkey on those keys waits until
+the dashboard closes.
+
+**What a cell can do.** Besides taking a cue, a cell can act on its playlist:
+
+| Cell | What the step does there |
+|------|--------------------------|
+| A cue | Takes it |
+| **STOP** | Stops the playlist (dark, reracked) |
+| **FADE** *n* | Fades picture and sound out over *n* tenths of a second, stops, and puts the levels back for the next cue |
+| **VOLUME** *n* | Sets the playlist's volume to *n*% |
+| **OPACITY** *n* | Sets the playlist's opacity to *n*% |
+
+A column can be **muted** (the tracker fires nothing on it) or **soloed** (only
+soloed columns fire), which is how a step is rehearsed on one screen without
+touching the others. A step can **jump**: after it, GO goes to the row it names
+instead of the next one, so a loop of steps holds until the operator moves on.
+A step can also start a named **section**.
+
+`TRACKER SET <step> <playlist> <cue>|NONE|STOP|FADE <tenths>|VOLUME <%>|OPACITY <%>`,
+`TRACKER MUTE|SOLO <playlist> [on|off]`, `TRACKER JUMP <step> <row>|NONE`,
+`TRACKER SECTION <step> <name>|NONE` and `TRACKER VIEW PATTERN|CLASSIC`.
+
+**The multiview on a screen.** **MULTI** on the programme monitor shows every
+window you have arranged: the programme, each playlist, labels and level
+meters. An output whose **Shows** is **MULTIVIEW** puts that same arrangement
+on a display, sized for the display, and a stream or the Web Monitor can carry
+it by choosing that output as its **Source**.
+
+**Choosing what a window shows.** Every window has a **...** button in its
+corner, and an empty window says **+ CHOOSE WHAT IT SHOWS**; clicking either
+opens the window's menu (a right-click does too). A window can show the
+programme, a playlist, what one output carries (by that output, so it stays
+right when another output is removed), the **next cue** (what GO plays on the
+focused playlist, with its still when the playlist has one), or the **time of
+day**. The same menu turns on safe areas, a level meter and the name, adds and
+removes windows, and picks the **layout**: an even grid, one big window with
+the rest beside it, one big on top, or two big on top. The big ones are the
+first one or two windows.
+
+A window that is on air has a red border: the programme, a playlist that is
+playing on a running output, or a running output. The next cue's window has a
+green one.
+
+Over the wire: `MULTIVIEW WINDOW <n> PROGRAMME|DECK<n>|OUTPUT<n>|NEXT|CLOCK|EMPTY`
+and `MULTIVIEW LAYOUT GRID|BIG|BIGTOP|TWOTOP`.
+
+---
+
+## 12. Outputs & Routing
+
+Outputs are managed in the Monitors window and `Settings → Video Outputs`. A
+show can drive several at once, each with its own settings. From v0.99.373 each
+output has a **Source deck**, the deck whose picture it carries, and
+**ADD OUTPUT** on the Video Outputs card adds one and lets you choose its deck.
+Before that, every output carried the first deck. To check a network can carry
+the outputs you plan to send over it, AV Tools Pro's free [AVoIP bandwidth
+calculator](https://avtoolspro.com/bandwidth-calculator) works it out before
+the show. Each output is one of:
+
+- **Window** — a fullscreen (or windowed) display. Toggle the output window
+  with `N`, fullscreen with `F`. Fullscreen recovery automatically re-raises a
+  program output that gets minimised or lost, with strike-based backoff.
+- **Stream** — push SRT/RTMP to a URL. It can run while the programme is
+  recorded.
+- **Presenter** — the speaker's screen: live slide, previous, next, notes and
+  clock ([Presenter view](#presenter-view)).
+- **Prompter** — the talent's scrolling script ([Prompter](#prompter)).
+- **DeckLink** — SDI/HDMI out via a Blackmagic card.
+- **Spout** (Windows) — share the output as a GPU texture to another app. Syphon
+  on macOS is not built yet.
+- **NDI** — network video send, optionally with a separate key/alpha source.
+  Needs the NDI runtime on the machine (see *Running Deckboy*).
+
+Per output you can set alpha, delay, colour space, orientation (0/90/180/270),
+a test card, and a time overlay. `Blackout` (`B`) dims all outputs; panic
+profiles give a one-key safe state.
+
+#### Test card
+
+**Settings > Video Outputs > TEST CARD** puts a test card on the chosen output,
+in place of its picture; **CARD ON ALL** puts one on every screen. Decks keep
+playing underneath and nothing in the show changes, so turning it off is
+straight back to programme. A recording keeps recording programme, and the card
+is never saved with the show.
+
+The card is drawn at the raster the output really sends, never scaled, and
+answers what you walk up to a screen to check:
+
+- **1:1 mapping:** 1-pixel checkers and line gratings in every corner read as
+  flat grey when nothing scales them, and as moire or mush when something does.
+  The info box says `1:1` or `SCALED to WxH`.
+- **Shape and edges:** a circle that must look round, a 1-pixel border and an
+  arrow at the middle of each edge whose tip must touch the glass, and the
+  93% action-safe and 90% title-safe boxes.
+- **Levels:** 75% colour bars, an 11-step grey scale and PLUGE (black, 2%, 4%,
+  white: set brightness so 2% just disappears and 4% just shows). On an HDR
+  output, labelled patches at 203, 400, 600, 1000 and 2000 nits.
+- **Motion and sync:** a bar sweeps the motion lane every four seconds, ten
+  phase blocks step one per frame and a counter counts frames at the screen's
+  refresh. Every output runs from one clock, so screens in step show the same
+  bar position, block and count; on a canvas the bar travels from panel to
+  panel and a panel out of step makes it jump.
+- **Blend and warp:** dashed orange lines where this output's edge blend
+  begins, and the grid bends with the warp.
+- **Which screen is this:** the output's number, large, with its name, raster,
+  refresh, destinations (window, NDI, DeckLink, Spout, ST 2110, stream), SDR or
+  HDR, and the measured frame rate with any hitches.
+
+**EXPORT CARD** writes the moving card as H.264 files (BT.709, 30 seconds,
+60 fps) into a folder you choose, for players, switchers and LED processors that
+stay after the laptop goes. With a canvas, one render is cut into a file per
+output plus one of the whole canvas, so the files play back as one wall.
+`OUTPUT TESTCARD EXPORT [seconds] [WxH] [<n>fps] [folder]` sets the length,
+a custom size and the rate; files are SDR.
+
+Remote: `OUTPUT TESTCARD ON|OFF|TOGGLE` (the focused output; `OUTPUT SELECT n`
+first) and `OUTPUT TESTCARD ALL [ON|OFF]`; OSC `/testcard`.
+
+**CLEAR** immediately stops every deck, cancels queued takes and fades, clears
+held pictures and overlays, and disarms every output. Use it when the desk
+must go dark and silent immediately.
+
+### Screens at different refresh rates
+
+On Windows, the desktop is drawn at one refresh rate, usually your main
+screen's. An output on a screen that runs at a different rate is shown at the
+desktop's rate, not its own: a 59.94 Hz projector, LED processor or capture
+device beside a 60 Hz desk monitor, or a 50 Hz screen beside a 60 Hz one. That
+screen then has to drop or repeat a frame every so often to keep up, about
+every 15 seconds at 59.94 beside 60, and more often the further apart the two
+rates are. On a Mac every screen keeps its own rate and this does not happen.
+
+Deckboy tells you when it is happening: a warning names the output, the rate
+it is being shown at, its screen's own rate and how often a frame is dropped or
+repeated. `STATUS` reports it for every output: `paced_hz=` is the rate the
+output's frames are actually shown at, `target_hz=` is its screen's own rate,
+and `compositor_hz=` is the rate Windows draws the desktop at.
+
+Until Deckboy can drive such a screen at its own rate (it is on the roadmap),
+put the screens on the same refresh rate:
+
+- **Change the main screen's rate.** In Windows, Settings > System > Display,
+  choose the main screen, then Advanced display > Choose a refresh rate, and
+  pick the output screen's rate: 59.94 Hz for a 59.94 Hz projector, for
+  example. Most monitors offer 59.94 Hz.
+- **Or change the output's screen.** If the projector or processor takes 60 Hz,
+  run it at 60. Deckboy can set it for you: `VIDEO HZ 60` over the control
+  port, or the refresh rate in the video settings.
+
+[Lock to screen](#lock-to-screen) does not help on such a screen: it plays a
+cue at the rate its output is shown at, and that is the desktop's rate, not the
+screen's.
+
+### MediaMTX: one router for the room
+
+[MediaMTX](https://github.com/bluenviron/mediamtx) is a free media router.
+Phones, cameras, OBS and other computers publish streams into it, and anyone
+can watch any of them: in a browser, in vMix, in a recorder. Deckboy works
+with it in both directions. It needs MediaMTX running with its API switched
+on (`api: true` in `mediamtx.yml`), on this computer or another one
+(`MEDIAMTX HOST <address>`).
+
+- **In** — `SOURCE → MediaMTX Stream` lists what the router is carrying, live
+  ones marked. Pick one and it becomes a stream cue that reads it over SRT.
+- **Out** — `MEDIAMTX PUBLISH [name]` sends the focused output's programme to
+  the router, which then serves it to any number of viewers without Deckboy
+  encoding once per viewer. Deckboy says where to watch it:
+  `http://<host>:8888/<name>` in any browser.
+
+`MEDIAMTX` on its own lists the streams. `MEDIAMTX ADD <name>` makes the cue.
+
+SDI output uses scheduled video and stereo 48 kHz audio. SDR routes use
+limited-range BT.709 in eight-bit UYVY or ten-bit v210. An HDR output on a
+ten-bit DeckLink route uses Rec.2020 with PQ or HLG metadata; this path has
+not yet been tested on a DeckLink card. Key and fill stay SDR. HDR10 and HLG
+sources are converted automatically for SDR outputs; see **HDR video** below
+for the floating-point HDR output path and its platform requirements.
+Physical SDI timing and colour still need validation on the intended card and
+receiver. The ST 2110 sender uses software packet pacing and software PTP;
+facility timing and interoperability need measurement on the intended network.
+
+### NMOS: finding a registry
+
+In `Settings → Video Outputs → Devices`, turn **NMOS** on to publish the
+ST 2110 senders through AMWA IS-04 and control them through IS-05. Enable
+**REMOTE ON** in the Network settings so the registry can reach the node.
+**LOCAL ONLY** binds the Node and Connection APIs to loopback, so nothing on
+the network could open what Deckboy would publish. It turns off automatic
+discovery, with the status **NMOS: discovery needs the remote network
+allowed**, and it holds back a typed registry too, with the status **NMOS: NOT
+registering - network is LOCAL ONLY**.
+
+Leave **Registry** blank for automatic discovery on the local IPv4 network.
+Deckboy queries `_nmos-register._tcp.local` and the older
+`_nmos-registration._tcp.local` over mDNS (UDP 5353). It accepts registries
+advertising IS-04 **v1.3**, **HTTP**, and `api_auth=false`. The lowest TXT
+`pri` wins; equal priorities are chosen randomly. Priorities 100 and above
+are for development and are used only when no compatible lower-priority
+registry is available.
+
+The registry control shows **typed: URL** or **found: host:port (mDNS)**.
+The status line separately confirms registration and heartbeats. If a
+discovered registry stops responding, Deckboy discovers again and tries another, avoiding
+the failed endpoint for 30 seconds. A registry that forgets the node is
+registered with again. With no compatible registry, discovery keeps retrying
+and the Node API remains available.
+
+A typed URL, such as `http://192.168.1.50:8010`, always takes precedence;
+clear it to return to discovery. Discovered addresses are runtime information
+and are not saved into the show. `NMOS STATUS` replies with the effective
+`registry=` URL and `registry_source=typed|mdns|searching|none`; `none` means
+discovery is inactive and no registry is selected. `NMOS REGISTRY`
+with no URL clears the manual setting. Click the status line to copy the Node
+API URL (default port 3210).
+
+Discovery requires mDNS traffic to be allowed on the local link. It does not
+cross routed subnets; use a manual URL there. Unicast DNS-SD, IPv6, HTTPS,
+authorization and peer-to-peer Node advertisements are not supported.
+
+---
+
+### HDR video
+
+**On an SDR output** (every output, unless you turn HDR on below), HDR10 and
+HLG video is converted for it: the HDR reference white (203 nits, ITU-R
+BT.2408) becomes SDR white, brighter highlights ease into white instead of
+clipping, and BT.2020 colours are converted to BT.709. 75% colour bars made in
+HDR come out as ordinary 75% bars.
+
+**An HDR output** sends the display HDR. **Settings > Video Outputs > Screen >
+HDR** (or `OUTPUT HDR ON` for the focused output) gives a window output a linear, floating-point picture and an HDR
+(scRGB) connection to its screen:
+
+- SDR material -- slides, graphics, ordinary video -- sits at **203 nits**,
+  BT.2408's reference white, whatever the operating system's own SDR
+  brightness slider says. **SDR material at** (or `OUTPUT HDR WHITE <nits>`,
+  80-500) moves it.
+- HDR video keeps its highlights at their own brightness: 1000 nits in the
+  file is 1000 nits sent. The display shows what it can and clips the rest.
+- **ST 2110** from an HDR output carries HDR: 10-bit 4:2:2 in the output's
+  signal, declared in the SDP as `TCS=PQ` or `TCS=HLG`, `colorimetry=BT2100`.
+- **SDI** (a DeckLink on a 10-bit route) carries HDR too, tagged Rec.2020 and
+  PQ or HLG. This has not yet been tested on a DeckLink card. Key and fill stay
+  SDR.
+- **NDI** and the Web Monitor still receive SDR from that output: SDR material
+  exactly, HDR highlights clipped at white. Sending HDR over NDI needs NDI's
+  separately licensed Advanced SDK, which Deckboy does not use. The scopes read the HDR
+  picture itself, in nits (see Picture Scopes).
+- **Recording** an HDR output (the recording mirrors it, as it does Output 1
+  by default) records HDR10: HEVC Main10, BT.2020, PQ, with the highlights
+  at their own brightness. ProRes and DNxHR HQX stay ProRes and DNxHR, 10-bit
+  and tagged with the output's PQ or HLG signal. HEVC uses a working hardware
+  10-bit encoder when available (NVENC, Quick Sync or AMF), with software
+  encoding as a fallback. On Windows, conversion for the encoder runs on the
+  GPU. 4K60 was measured on an RTX 4070; throughput depends on the machine,
+  codec, effects and output configuration.
+- **HDR signal** (or `OUTPUT HDR SIGNAL PQ|HLG`) chooses how that output's
+  HDR leaves as a signal. **PQ** (HDR10) is absolute: a nit in the picture is
+  a nit in the file. **HLG** (BT.2100 hybrid log-gamma, what live broadcast
+  mostly carries) is relative to a 1000-nit display: SDR material at 203 nits
+  lands on 75%, the BT.2408 reference, and anything at 1000 nits or more on
+  100%. A recording follows the signal of the HDR output it records, and is
+  tagged HLG (`arib-std-b67`) with no HDR10 metadata, which HLG does not use.
+  The output's own screen is the same either way.
+- **Streaming** an HDR output over SRT or RTMP (a stream output that mirrors
+  it) sends HDR too: HEVC Main10, BT.2020, in the output's signal. Over RTMP
+  that is enhanced RTMP, so the server must accept HEVC. The Web Monitor
+  always stays SDR H.264, because that is what a browser plays.
+
+**AUTO** (the HDR row steps OFF, AUTO, ON; or `OUTPUT HDR AUTO`) runs the output
+HDR when the screen it is on is in HDR and SDR when it is not, and follows the
+screen: switch Windows HDR on or off, or move the output to another screen, and
+within two seconds the output is rebuilt to match. A recording has no screen of
+its own, so AUTO leaves it SDR; it still records HDR10 when the output it
+mirrors is running HDR.
+
+#### Graphics over an HDR feed
+
+The broadcast job: an HDR feed comes in, graphics go over it, and it leaves as
+HDR.
+
+1. Add the feed as a stream cue (**SOURCE → Stream Cue**, or `STREAM ADD
+   srt://host:port`) and set its **HDR input** in the inspector to what the
+   feed carries: **PQ** (HDR10) or **HLG**. A stream is never probed -- it may
+   not exist until it connects -- so Deckboy cannot tell by itself.
+2. Turn **HDR** on for the output, and set its **HDR signal** to what the far
+   end wants.
+3. Put the graphics on a second playlist layered over the first (§11). They
+   sit at 203 nits, BT.2408's graphics white.
+4. Send it out: ST 2110 on this output, or a stream or recording output that
+   mirrors it, carries HDR (above). SDI does too, untested on a card so far.
+   NDI does not.
+
+Measured end to end on Windows with a ladder of greys from 0.5 to 4000 nits as
+the feed and a white graphic over it: every grey arrives within one code of
+what was sent, the graphic's white lands on exactly the 203-nit code, and the
+stream runs 60 fps at 4K and at 1080p, PQ and HLG. On Windows the conversion
+for the encoder runs on the GPU and the encoder is the machine's hardware HEVC
+10-bit one where there is one (NVENC, Quick Sync, AMF). On macOS and Linux an
+HDR feed is converted to SDR on the way in, as an HDR file is there.
+
+The **HDR** row, and `OUTPUT HDR STATUS`, say whether the output is really running HDR (a renderer
+or display that cannot falls back to SDR, with a warning) and the display's own
+SDR white level and headroom. `--devices` lists which displays are in HDR.
+
+Windows (Direct3D 11) is where this has been measured. On macOS and Linux an
+HDR output asks SDL's GPU renderer for the same, untested so far.
+
+## 13. Recording
+
+The program output can be written to a file while the show runs. `RECORD` sits
+on the button bar in the OUTPUT group (DASH and MENU sit beside it, in
+DESK); it pulses while armed and shows the
+running file size. Recordings land in `Settings → Recording → Destination`,
+which is deliberately separate from the encode queue's output folder.
+
+**The recording is its own standard.** Raster and rate are set independently of
+the programme, and both default to *following the input* — a recording should
+look like what went in unless you say otherwise. Ask for something smaller and
+the composite is scaled on the GPU before it is read back, so a 1080 recording
+off a 4K programme moves a quarter of the bytes.
+
+Rates are exact where broadcast says they are exact: 23.976 is 24000/1001, and
+the file carries it that way.
+
+**Timecode.** Start at a value, at time of day, or at zero. Drop-frame,
+non-drop, or auto — auto picks DF at 29.97 and 59.94 and NDF everywhere else,
+which is the correct answer. Drop-frame skips two timecode *numbers* a minute
+(except every tenth minute) so the count keeps pace with the wall clock; it
+never drops a picture.
+
+**Codecs.** H.264 and HEVC for a viewing copy; ProRes (LT, 422, HQ, 4444) and
+DNxHR (LB, SQ, HQ, HQX) for delivery, written to `.mov` at the right pixel
+format.
+
+**Segmentation.** Roll to a new file every N minutes or N megabytes. A 3.8 GB
+ceiling always applies, so a FAT32 card cannot silently truncate a take.
+
+**If it cannot keep up, it says so.** The file must contain exactly
+`rate × elapsed` frames — an encoder stamps by arrival order, so a shortfall
+does not slow the file down, it *shortens* it. Deckboy counts what is owed,
+repeats the last picture to cover a gap, and raises `RECORDING DROPPING FRAMES`
+on the output health state, as a toast, and in the show log if it falls behind.
+A recording that runs short will never look healthy.
+
+**On stop**, a fragmented recording is remuxed into a normal MP4. A power cut
+therefore leaves a playable file, and a clean stop leaves a tidy one.
+
+**Platform note.** The frame leaves the GPU asynchronously on every platform:
+Windows through a D3D11 staging ring, macOS and Linux through SDL_GPU's texture
+download (Metal and Vulkan underneath), which is why output windows there ask
+for the `gpu` renderer. Set `DECKBOY_OUTPUT_RENDERER=<driver>` to override that
+choice if a driver misbehaves.
+
+Whether a given machine sustains 4K60 then comes down to its decoder and
+encoder, not to the recording path — and the dropped-frame alarm will say so if
+it does not.
+
+Over the wire: `RECORD [on|off|toggle]`, `RECFORMAT <WxH|program> [fps|program]`,
+`RECCODEC <token>`, `RECTC <hh:mm:ss:ff|timeofday> [df|ndf|auto]`,
+`RECSEGMENT <minutes> [megabytes]`.
+
+---
+
+## 14. Per-Cue Effects
+
+Each cue carries an ordered **effect stack**, built in the inspector's EFFECTS
+section and saved with the show. Effects run in the order you arrange them, and
+order is part of the effect — posterise then invert is not invert then
+posterise. Each row has the amount (nudge, drag to scrub, hold shift for fine,
+or click the value to type an exact number), the effect's own parameters
+underneath, and a row for changing the effect, moving it up or down, and
+removing it. **copy chain** / **paste chain** move a whole look between cues
+without dragging geometry, fades or crop along with it.
+
+Effects work on **every kind of cue** — video, stills, patterns, cameras, NDI,
+streams and the code source. Everything costs nothing at amount zero, and
+**bypass** is not the same as amount zero: turning an effect down loses the
+setting you spent time on, bypass takes it out of the chain and gives it back.
+
+### The stack
+
+| Effect | What it does |
+|--------|--------------|
+| levels | The levels tool: midtones (gamma), black point, white point and lift. First in the effect list, and it arrives doing nothing until you move a slider |
+| curves | An S-curve for contrast (or flatten it), on all channels or red, green or blue alone, with a shadow lift and a highlight roll-off that never move pure black or white |
+| colour | Turns every colour round the wheel, tints toward one colour, or washes out toward black and white. Arrives doing nothing, like levels and curves |
+| colour replace | One band of colours becomes another and keeps its shading: a red shirt turns blue and keeps its folds. Choose the colour, how wide a band, what it becomes, and how softly the band ends |
+| blur, sharpen | Blur evenly, or as a streak along an angle, like movement. Sharpen lifts the edges, with a radius and a threshold that leaves grain and noise alone |
+| glow | The bright parts bloom outward over the picture; choose how much glows and how far |
+| mirror | Flips across, upside down or both, or folds one half onto the other: right onto left, left onto right, bottom onto top, top onto bottom, or one corner into all four. The fold can sit off-centre |
+| mosaic | Tiles in the picture's own colours, with a gap between them and corners rounded off all the way to dots, like an LED wall |
+| edges | Outlines, on black or over the picture, in a colour you pick (white to start) or in the picture's own colours |
+| luma key | Takes out the dark (and, if you like, the bright), so the playlist beneath shows through: graphics or flames made on black. Works with the chroma key |
+| strobe | Flashes to any colour you pick (white to start), darkened as far as black, from half a flash to ten a second; it arrives at about two. Faster than three a second can bring on seizures in people with photosensitive epilepsy, so warn the audience before using it. Keeps time with the show's clock, so preview and output flash together |
+| invert, posterise, solarise, threshold | Level shaping, each with a pivot and a channel skew |
+| vignette, scanlines, grain | The classic framing and texture set |
+| RGB split | Channel offset with an angle |
+| temporal dither | See below |
+| pixel sort, block glitch, datamosh | Glitch: sorted runs, torn bands, and real codec smear |
+| polar warp, luma displace, ripple, kaleidoscope | Geometry |
+| lightspeed | Relativistic aberration: field-of-view compression and Doppler shift |
+| dye advect, reaction bloom | Fluid: curl-noise advection, and Gray–Scott growth |
+| caustics | Refraction *and* the light gathering — see below |
+| feedback | A controlled camera-into-monitor loop |
+| feedback bloom | The same loop, but the echo turns colour and is warped on every pass, so both compound: iridescent trails that melt. Bounded the same way feedback is |
+| motion puppet | Driven by another clip's movement |
+| slit scan | One open slit crosses the frame, smearing a long moment across it. Narrow is a scanner; wide is barely an effect |
+| motion mosh | Holds the previous frame and the smear between them, so a held cue smears into itself instead of sitting still |
+| ferrofluid | The highlights lift away from the surface into spikes, as iron filings do in a field |
+| shatter | The picture breaks into shards that slide and turn. Small is frosted glass; large is a dropped plate |
+| edge ignite | Edges catch and burn, the flame guttering frame to frame. Low sets the whole picture alight, high only the hardest lines |
+| relight | Brightness is treated as height and lit from the side, with the light walking around the frame |
+| depth split | Brightness is read as nearness and the two eyes disagree, with a slow rock that makes the depth read without glasses |
+| schlieren, chladni, wavefront, crystallise, night eyes, grain flow | See below |
+
+There are **52** of them; the basics (levels, curves, colour and the nine
+from colour replace to strobe) come first in the list. Timed one at a time at 1080p on a laptop processor,
+the heaviest measured — wavefront — takes about three-quarters of a 60fps frame,
+and most take under half. `--effect-bench <token> [WxH]` reports what any of
+them costs on your own machine and at your own raster.
+
+### Picking a colour
+
+Every effect row that takes a colour has a **colour chip** beside it: colour's
+tint colour, colour replace's *from* and *to*, strobe's *flash to* and the edges
+line. Click the chip to open the picker beside the inspector:
+
+- **PICK FROM SCREEN** takes a colour from anywhere on any screen: another
+  app's window, a web page, a photo, a logo, or one of Deckboy's own outputs.
+  A magnifier follows the pointer and shows the pixel it will take; click to
+  take it, press Enter for the pixel under the pointer, use the arrow keys to
+  move one pixel, or press Esc to cancel. On a Mac it is the system's own
+  magnifier (macOS 10.15 and later), and on Wayland the desktop's.
+- The **hue** strip, and **hex**, **R G B** and **hue deg**: click any of them
+  to type a value.
+- **Find a named colour** takes any of the 148 CSS colour names (crimson,
+  rebeccapurple), a RAL Classic number or name (RAL 3020, 3020, traffic red),
+  or a name from your own tables.
+- **Recent and in this show** keeps the colours you have just picked and the
+  ones the show already uses.
+
+Colour and colour replace use the colour's **hue** only: the picture keeps its
+own shading, which is the point of them, so a dark navy and a bright sky blue
+pick the same blue. The slider and its LFO keep working on that hue. A grey has
+no hue, and the picker says so instead of guessing. Strobe and edges use the
+**whole** colour.
+
+**Your own colours: a brand palette, Pantone.** Deckboy does not ship Pantone's
+values, which are licensed. If you have them (from Pantone Connect, a
+supplier's swatch book, or your brand guidelines), put a `.csv` or `.txt` file
+in Deckboy's **colours** folder. Where that is depends on how Deckboy was
+installed (a portable copy keeps it beside its own files), so click **find a
+named colour**: the box names the folder on your machine, and opening the
+picker creates it. One colour a line, a name and a hex in either order, split
+by a comma, a semicolon or a tab:
+
+```
+PANTONE 186 C,#C8102E
+PANTONE 2945 C,#004C97
+Brand red,#E4002B
+```
+
+Then type `186 C`, `pantone 186c` or `brand red`. A header line, or any line
+with no hex in it, is skipped, so a table saved from a spreadsheet works as it
+is. The folder is read each time the picker opens.
+
+Over the network, `FX COLOUR <n> #rrggbb` sets an effect's colour, and
+`FX COLOUR <n> <A-D> #rrggbb` sets a hue slot from a colour.
+
+### The six that are not in anything else
+
+**Schlieren** is the instrument physicists photograph air with. You cannot see
+a shockwave or the heat off a road, but light bent by a density gradient can be
+passed or blocked by a knife edge at the focus, which turns an invisible
+gradient into brightness. Here the picture is the density field. Rotating the
+knife changes *which features exist at all* — gradients along the edge miss it
+entirely — and that is what makes it read as an instrument rather than a filter.
+
+**Chladni** is the shape a sound makes. Sand on a bowed metal plate runs away
+from everything that is moving and piles up on the lines standing still. Your
+picture is the sand. The two mode numbers are the note: whole numbers give the
+clean classical figures, and between them the plate is being driven at a
+frequency it does not want.
+
+**Wavefront** solves the actual wave equation, seeded from the picture's own
+brightness — so unlike every sine-based ripple it has *inertia*. Waves leave
+their source and keep going, pass through each other and interfere, and reflect
+off the edges of the frame and come back.
+
+**Crystallise** is grain growth, not a mosaic. Crystals nucleate at scattered
+points and grow until they collide, so the cell a pixel lands in is the one
+whose seed reached it first — and because the seeds grow at *different speeds*
+the result is the irregular shard structure of a polished metal section rather
+than a honeycomb. Each grain gets a facet normal, so the light catches it.
+
+**Night eyes** is your own retina. Rods are fast and colour-blind, cones are
+slow and need light, so in the dark the brightness runs at full speed and the
+**colour lags behind it**: move something and it goes grey as it moves, its
+colour catching up a moment later. The purkinje control is the other half — as
+the rods take over, sensitivity slides toward blue, which is the real reason
+night looks blue.
+
+**Grain flow** smears the picture along its own grain. The direction comes from
+the structure tensor — the direction in which each neighbourhood changes least,
+which is *along* a feature rather than across it — so strokes run along a hair,
+around a jaw, down the length of a shadow. Flat areas are left alone; turn
+"across the grain" up and it combs the picture apart instead.
+
+### How many effects is too many
+
+A cue holds up to **twelve** effects, but the count is the wrong thing to
+watch: a dozen cheap ones are free and four expensive ones at 4K are not. So
+the EFFECTS section shows what the chain **actually costs per frame**, measured
+on your machine at your raster, once the cue has been live. A 60fps frame is
+16.7ms; over that, it says so.
+
+If you do go over, nothing breaks and nothing drifts. **Audio is the master
+clock**, so sound continues in real time and the picture slaves to it — you
+lose frames, not sync, and the show stays where it should be. The output fps
+counter (toggle it on the output bar) and `output_fps` in a `STATUS` reply both
+show it happening.
+
+Cheapest ways back under budget, in order: drop the output raster (almost
+everything here scales with pixel count), bypass rather than delete while you
+find the culprit, and check the expensive ones first — `--effect-bench <token>
+3840x2160` will tell you what any of them costs on your hardware.
+
+### An LFO on any parameter
+
+Every parameter — and the effect's amount — has a **`~`** at the right of its
+row. Switch it on and that parameter moves on its own, with shape, rate and
+depth on the line underneath.
+
+- **Shapes**: sine, triangle, saw, ramp, square, and sample-and-hold (one random
+  value per cycle, held — and repeatable, so the same moment of the show always
+  gives the same value); **drawn**, a cycle you sketch; **audio**, which follows
+  the playlist's sound; and **motion**, **motion-x** and **motion-y**, which
+  follow a camera (below).
+- **Locked to the tempo** or free-running. Locked, the cycle is measured in
+  beats and follows the VJ tap tempo, so what moves is on the music.
+- The swing is **centred on the value you set**, so switching an LFO on never
+  jumps the picture — it starts from where the parameter already was and
+  averages back to it.
+
+`FX LFO <n> <A-E> on|off|shape|rate|depth|phase|sync|beats|zone [value]` does the
+same over the wire, where `E` is the amount.
+
+### Motion: a camera moves the controls
+
+A camera can drive any control that has a **`~`**. Deckboy compares each frame
+of the camera's picture with the one before, ignores the small differences
+that are just noise, and turns what changed into three numbers: **how much**
+is moving, and **where**, across and down.
+
+Switch it on in **Settings → Audio → MOTION CONTROL**. **Reads** picks the
+camera: one of its own, opened small and silent and never shown on an output,
+or the picture a playlist is already playing, so a camera that is also in the
+show is never opened twice. While Motion is on, an amber **MOTION** chip sits
+beside MASK on the monitor; click it to come back to the card. The picture
+on the card shows what moved, in white, with a ring where it is centred.
+**Sensitivity** sets how big a change counts; **rise** and **fall** smooth the
+reading, fast up and slow down by default; **mirror** flips left and right so
+the camera behaves like a mirror.
+
+Then, on any **`~`**, choose a shape:
+
+- **motion**: stillness leaves the control where you set it, and movement
+  pushes it up by as much as the depth, like the audio shape;
+- **motion-x** and **motion-y**: where the movement is, centred on the value
+  you set, so a hand left of centre lowers it and right of centre raises it.
+
+**Octopus mode**: drag on the card's picture to draw up to eight **zones**,
+and click a zone to remove it. On a Motion `~`, the middle cell picks what it
+follows: the whole picture, or one zone. So one hand can drive one control
+and the other hand another.
+
+A **tone cue** has a `~` on its **level** and its sine **freq**: put level on
+motion and freq on motion-x, each on its own zone, and you have a theremin.
+
+Over the wire: `MOTION ON|OFF`, `MOTION SOURCE CAMERA [name]|DECK <n>`,
+`MOTION CAMERAS`, `MOTION SENSITIVITY <%>|RISE <s>|FALL <s>|MIRROR ON|OFF`,
+`MOTION ZONE ADD <x> <y> <w> <h>|REMOVE <n>|CLEAR` (zones in percentages of the picture),
+`MOTION LEVEL` (each reading as amount@x,y), and
+`TONECUE LFO FREQ|LEVEL <setting> [value]`. An oscillator's `ZONE 0-8` picks
+what it follows, 0 being the whole picture.
+
+#### Bug Swat: learn Motion by playing it
+
+**PLAY BUG SWAT** at the bottom of MOTION CONTROL starts a little handheld game
+over the desk. Bugs crawl toward the cue list and you swat them by waving at
+the camera. There are five rounds, and each one starts by asking for one Motion
+control:
+
+| Round | Bug | What it asks for |
+|-------|-----|------------------|
+| 1 | NullPointer | Motion on, reading a camera |
+| 2 | Race Condition | two zones, one for each hand |
+| 3 | Off By One | sensitivity at 5%, for a small, faint movement |
+| 4 | Memory Leak | a longer fall, so separate sweeps join into one held reading |
+| 5 | Heisenbug | a tone cue with **motion-x** on its pitch, to find the bug by ear |
+
+SELECT opens MOTION CONTROL to set the control yourself; **SHOW ME** sets it
+for you. START plays the round once the control is set. Each bug can only be
+fixed with its round's control set right.
+
+The game runs in a practice show. Your show is saved first and comes back as
+it was when you leave (Esc). The high score is kept on this computer. With no
+camera, round 1's SHOW ME puts a waving paw on a playlist and Motion reads
+that. Over the wire: `BUGSWAT [START|SHOWME|SKIP|PLAY|EXIT|STATUS]`.
+
+### Two worth trying on their own
+
+**Temporal dither** quantises hard to a tiny palette but advances the dither
+pattern every frame, so at 60Hz your eye integrates shades that are not in the
+palette at all — and it freezes into a visible checkerboard the moment you pause
+the deck. The still and the moving image are deliberately different pictures.
+
+**Caustics** computes what water does to the *light*, not just how it bends the
+picture. Where neighbouring rays are pushed together the brightness piles up,
+and those bright filaments are the moving net you see on the floor of a pool.
+Displacement alone is a wobble; the focusing is what the eye reads as water.
+
+### Motion trails
+
+**Motion trails** is the "melter" from an old Max patch: where the picture
+moves it is drawn fresh, and where it is still it holds what was there. So a
+moving thing leaves itself behind.
+
+- **sensitivity**: how much a part of the picture must change to count as
+  moving;
+- **let go**: how fast the still parts catch up with the live picture. At the
+  left they never do;
+- **blocks**: how coarse the grid that notices movement is, from fine to big
+  melting blocks;
+- **trail**: what a moving thing leaves. **Light** (the left third) keeps the
+  brighter of old and new, so light paints trails; **melt** (the middle) is
+  the patch's own look; **dark** (the right third) keeps the darker.
+
+It works on movement, so a still picture passes through unchanged. Try it on a
+camera, or on a playlist whose picture moves.
+
+### Motion puppet
+
+**Motion puppet** drives this cue's pixels with a *different* clip's movement.
+Choose a driver in the EFFECTS section: that clip is decoded only for the
+per-macroblock motion vectors its codec already measured — its pictures are
+never shown — and those vectors displace this cue. A camera feed can be
+puppeteered by a crowd scene.
+
+Its **memory** and **spring** decide how the displacement accumulates: memory is
+how much each frame's motion adds to what is already there, spring how fast it
+returns to rest. Both are needed — memory alone runs away, a return alone never
+builds. At memory 0 it follows a single frame's vectors, which is what it did
+before it had the control.
+
+A driver is only as good as its motion. `Deckboy --motion-probe <file>` reports
+what a clip offers before you commit to it: a mostly static clip moves a couple
+of percent of its cells and will do nothing visible, while something with
+whole-frame movement moves half of them and is violent. A keyframe carries no
+vectors at all, so the picture is briefly left alone — that is the codec, not
+a fault.
+
+---
+
+## 14a. The Code Source
+
+**SOURCE → Code (live expression)** makes a cue whose picture *is* an
+expression, evaluated once per pixel and edited while it runs.
+
+    sin(x*8+t)*0.5+0.5, sin(y*8+t*1.3)*0.5+0.5, sin((x+y)*8-t)*0.5+0.5
+
+One expression, or three separated by commas for red, green and blue. The
+values available are `x` `y` (0-1 across the frame), `cx` `cy` (-1..1 from the
+centre), `r` (distance from the centre), `a` (angle) and `t` (seconds), with
+`sin cos tan abs floor fract sqrt min max mod pow atan2 step clamp mix length
+smoothstep sign exp log atan if noise` and `pi` to build from.
+
+**Name a value and reuse it.** Any line before the last one names something,
+and the lines below it can read that name. A distance used three times is then
+computed once:
+
+    d = length(cx, cy);
+    fall = exp(-d*d*4);
+    fall, fall*0.7, fall*0.35
+
+**A fourth expression is alpha, and that makes the source a *shape*.** With
+three expressions the cue fills the frame, the way it always has. With four,
+the last one says how opaque each pixel is — so the cue draws *over* whatever
+is beneath it. Put one on a layer above a camera and it is an overlay, not a
+background:
+
+    d = length(cx, cy);
+    1, 0.9, 0.3, smoothstep(0.42, 0.38, d)
+
+That is a soft-edged amber disc over the picture, and nothing else.
+
+`noise(x, y)` is a smooth random field, for the shapes algebra cannot reach.
+Stack a few at doubling frequencies and you have cloud:
+
+    f = noise(x*4+t*0.06, y*4) + noise(x*9, y*9)*0.5 + noise(x*18, y*18)*0.25;
+    f/1.75, f/1.75, 1, smoothstep(0.55, 0.75, f/1.75)
+
+The cue inspector's **CODE** section opens the editor. It is syntax coloured —
+functions, values, numbers, brackets, operators and the commas that split the
+channels each have their own colour, and **a name the compiler will refuse is
+red while you type it**. Click into the text to place the cursor; click any
+value or function to insert it (a function arrives with its brackets and the
+cursor already inside). Twenty-one worked examples are one click each — the
+last five (**gem**, **gem cluster**, **flash**, **cloud**, **ghast**) are
+shapes with alpha, meant to sit over a picture — and a friend in the corner
+tells you what the name under your pointer does.
+
+**A compile error holds the last good picture.** The error appears in the editor
+while that picture stays on air. Someone editing
+live is mid-keystroke most of the time.
+
+The CODE inspector's **render width** and **render height** set the source's
+own pixel count. Click either value to type an exact size, or use its −/+ controls.
+For example, a 1920×1080 source evaluates at 1080p even on a 4K output; geometry
+sets its placement on that output separately.
+
+Division by zero, mod by zero and the square root of a negative are all bounded
+rather than producing infinities, because an operator typing at speed will
+produce all three.
+
+Not GLSL, deliberately: Deckboy draws through SDL_Renderer, whose backend is
+D3D11, D3D12, Metal or OpenGL depending on the machine, and accepting GLSL at
+runtime everywhere would mean bundling a shader compiler to run arithmetic that
+fits in a few hundred lines. It is evaluated on the CPU, which is viable for
+the same reason the effect stack is: the frame splits across cores.
+
+`CODE GET | CODE SET <expression> | CODE EDIT` over the wire.
+
+Two command-line tools go with it, neither of which needs a window or a GPU:
+`--code-dump "<expression>" out.ppm [WxH] [seconds]` renders one frame (or
+`@file` to read the expression from a file, which avoids arguing with a shell
+about semicolons), and reports how much of the frame the shape covers.
+`--code-check` asserts the language itself against expected values.
+
+### When the picture stutters
+
+`AVJUMP` over the control port counts two different faults that look alike
+from the operator's chair:
+
+- **stalls** — the picture not moving when it should. This is "it stuttered".
+- **jumps** — the playhead moving by something other than elapsed time, with
+  takes, seeks, loop wraps and resumes excused. This is "it froze and then
+  sped up to catch up".
+
+```
+AVJUMP RESET      start counting
+AVJUMP            deck1 stalls=1/worst0.140/last0.140 jumps=0/worst0.000/last0.000
+```
+
+`worst` and `last` are in seconds, signed: negative means the playhead fell
+behind and was pulled forward. A handful of tiny values over a long show is
+the audio-master correction doing its job. Anything you can see is worth
+reporting, with the clip and the machine.
+
+### Key and fill, for a downstream keyer
+
+A broadcast keyer wants two signals: the **fill**, which is the picture, and
+the **key**, a greyscale matte saying how opaque the fill is at each point.
+Send a lower third that way and the vision mixer downstream lays it over its
+own programme with real soft edges. It is how graphics reach air in a gallery.
+
+**Settings → Video Outputs → Devices → KEY+FILL**, with a second DeckLink
+card picked as **Key out**. The fill leaves on the output's own device and the
+key on that one.
+
+Turning it on **changes what the output is**. The composite is built over
+transparency instead of black, so the alpha channel becomes a real matte —
+and everything sampled from that output sees it, including the preview and
+any recording. An output in key+fill is a graphic with holes in it, not a
+picture.
+
+The fill is sent **premultiplied** (colour × alpha), which is what hardware
+keyers expect. Unmultiplied fill is the reason a lower third comes back with
+a bright halo round every soft edge, and it looks almost right until it is on
+air.
+
+With key+fill on and no **Key out** device chosen, only the fill goes out —
+Deckboy says so when you turn it on, because a premultiplied picture on black
+also looks almost right.
+
+Over the wire: `DECKLINK KEYFILL ON|OFF|TOGGLE [device]`, `DECKLINK KEYDEVICE <n>`.
+
+### Panels built for a vMix rig
+
+**Settings → Network → vMix API** makes Deckboy answer the two APIs vMix
+speaks: the HTTP one on **8088** and the text protocol on **8099**. Those are
+vMix's own ports, so a Stream Deck plugin, Companion module, touch panel or
+show-control system already set up for a vMix rig drives Deckboy with nothing
+changed and nothing written.
+
+How the two desks line up:
+
+| vMix | Deckboy |
+|------|---------|
+| Input | a **cue**, numbered straight through every playlist in order |
+| Active | the live cue of the focused playlist |
+| Preview | the selected cue of the focused playlist |
+| Mix *n* | playlist *n*. vMix has four; Deckboy reports all of its own, and a panel that only knows mix1–mix4 reads the first four |
+
+Inputs are cues rather than playlists because a panel's tally light wants to
+say *this clip is on air*, which is what every vMix surface is built around.
+
+**HTTP:** `GET /api` returns the state document. `GET /api?Function=Cut`, and
+so on, does the thing and returns the same document.
+
+**TCP:** `TALLY`, `FUNCTION`, `XML`, `XMLTEXT`, `SUBSCRIBE`, `UNSUBSCRIBE`,
+`ACTS`, `VERSION`, `QUIT`. `SUBSCRIBE TALLY` pushes a new tally string
+whenever it changes, which is what a panel should use instead of polling.
+
+Functions understood: Cut, Fade, Play, Pause, Stop, PreviewInput,
+ActiveInput, FadeToBlack, StartRecording, StopRecording, SetMasterVolume,
+SetVolume, NextItem, PreviousItem, Restart.
+
+**A Function this desk has no equivalent for is refused** — 404 over HTTP,
+`FUNCTION ER` over TCP. vMix itself answers success to a Function that
+failed; Deckboy does not, because a surface reporting that a cue was taken
+when it was not is how a show goes dark with every light green.
+
+**There is no password on it**, and like the control port it binds to
+localhost unless **Listen on** is set to all interfaces. vMix's own HTTP API
+offers BasicAuth and this does not yet. On a venue or hotel network, put
+Deckboy behind a firewall rule.
+
+Over the wire: `VMIX`, `VMIX ON|OFF|TOGGLE`, `VMIX PORTS <http> <tcp>`.
+
+### Caption formats
+
+Captions load from **SubRip** (`.srt`), **WebVTT** (`.vtt`), **SCC**
+(`.scc`) and **TTML/DFXP** (`.ttml`, `.dfxp`) — whichever a job arrives in.
+
+SCC is the broadcast one: not text with timestamps but the CEA-608 byte pairs
+an encoder would put on line 21, written as hex against drop-frame timecode.
+Deckboy decodes it, including the distinction between drop-frame and non-drop
+— the two differ by 3.6 seconds an hour, which is a caption on the wrong shot.
+
+`SUBTITLE CONVERT <path>` writes the cue's captions out again as `.srt` or
+`.vtt`, so moving between formats needs nothing else installed.
+
+### Captions made on this computer
+
+A clip with no captions can get some without anything leaving the machine.
+Select a video or audio cue with sound and open **CAPTIONS** in the inspector:
+
+- **captions** shows what the cue has (a file beside the media, a track inside
+  it, or none) and whether they are on. Click it to show or hide them.
+- **language** chooses the speech model: **English**, **any language** (it
+  works out which), or the slower, more accurate version of either. Each is a
+  one-time download (142 MB, or 466 MB for the accurate pair), saved with the
+  show.
+- **make captions here** listens to the cue and writes the words out as
+  `<name>.auto.srt` beside the media, then attaches them to the cue, switched
+  on. A file you made by hand is never overwritten. If the media's folder
+  cannot be written to, the file goes in Deckboy's own captions folder instead.
+
+The listening is done by whisper.cpp, which comes with Deckboy and runs on
+this computer. (A build without it says **engine not installed** on the row;
+putting `whisper-cli` beside Deckboy is all it needs.) The first time, it
+needs the chosen speech model. The row says how big it is, and the first
+press only asks; press again to fetch it. On Windows the installer offers the
+models as ticks (English is ticked) and fetches the ticked ones during the
+install. The macOS and Linux downloads already carry the English model.
+**Speech models** in Settings > Audio > LIVE CAPTIONS shows each model, lit when
+it is on this computer; click one to fetch it. After that, nothing is
+downloaded and nothing is sent anywhere. Captions are drawn on the output
+at a size that suits the output's height, on a dark box fitted to the line.
+
+`CAPTIONS [STATUS | ON | OFF | GENERATE]` does the same over the control port.
+
+### Live captions
+
+What is being said, on screen, as it is said: a speaker at a microphone, a
+deck's programme, or everything an output plays. Turn it on in
+**Settings > Audio > LIVE CAPTIONS**:
+
+| Row | Does |
+|-----|------|
+| **Live captions** | On or off. The first time, it asks before the one-time model download, as above |
+| **Listen to** | The live input, a deck's programme, or an output's mix. Click to step through them |
+| **Language** | The same speech model as captions made from a file |
+| **Show on** | Which outputs carry the captions. They are part of the output's picture, so its recording, stream, NDI, SDI and Web Monitor carry them too |
+| **Lines** / **Position** / **Size** | One to three rolling lines, along the bottom or the top, 75-150% of the cue-caption size |
+| **Keep a transcript (.srt)** | Everything shown, with times, in Deckboy's `captions` folder |
+
+Words appear about two seconds after they are said. The newest are grey
+until the engine is sure of them, then white: a word at the edge of what it
+has heard is often wrong ("queue" for "cue") until the next second arrives.
+After six seconds of silence the captions clear. The status line under the
+card says whether it is listening and how far behind the words are, with a
+bar that moves when it hears sound.
+
+The listening is done by `deckboy-listen`, which comes with Deckboy, runs on
+this computer and holds the speech model. It is a separate program: if it
+stops, the captions stop and the show does not, and Deckboy starts it again.
+Nothing is sent anywhere.
+
+| Command | Does |
+|---------|------|
+| `CAPTIONS LIVE ON` · `OFF` · `STATUS` | Turns live captions on or off, or says how they are |
+| `CAPTIONS LIVE TEXT` | What is on screen now: the sure words, `\|`, then the unsure ones |
+| `CAPTIONS SOURCE INPUT` · `DECK <n>` · `OUTPUT <n>` | What they listen to |
+| `CAPTIONS SHOW <output> ON\|OFF` | Whether an output carries them |
+| `CAPTIONS LINES <1-3>` · `POSITION TOP\|BOTTOM` · `SIZE <50-200>` · `TRANSCRIPT ON\|OFF` | The rest of the card |
+
+### Text mode
+
+Available two ways: as the video synth's own mode, and as the **TEXT MODE**
+effect, which puts the same character grid on any cue at all -- a clip, a
+capture card, a camera, a browser cue or a still. Adding the effect gives the
+cue its own TEXT MODE section in the inspector with the same rows the synth
+has, and the effect's four parameters (columns, corruption, glyph set, ink)
+ride on top of them so the useful ones are on faders and can take an LFO.
+Its amount is a MIX rather than a switch: at 1.0 the grid replaces the
+picture, and part way it sits over the original.
+
+The video synth can render as a character grid instead of as pixels, with a
+16-colour indexed palette and its own corruption. Alongside the built-in glyph
+sets, two settings make the field yours:
+
+- **custom glyphs** — the characters the picture is built from, darkest first.
+  Two characters gives binary rain; a word gives that word as texture;
+  box-drawing pieces read as a schematic. Empty uses the chosen glyph set.
+- **phrases** — words separated by `|`, one showing at a time, landing
+  somewhere new each time it moves. **phrase hold** is how long each one stays;
+  zero hides them without losing the list.
+
+The corruption still overwrites a phrase when it lands on that row, which is
+the intent: a terminal that can be corrupted can be corrupted mid-sentence.
+
+`ASCII ON|OFF|TOGGLE | ASCII GLYPHS <chars> | ASCII PHRASES <a|b|c> |
+ASCII HOLD <seconds>` over the wire; `GLYPHS` and `PHRASES` with no argument
+clear them.
+
+### Masks
+
+A mask cuts the picture to a shape. Each show keeps its own **library** of
+masks, and a mask can be put in four places:
+
+- **on a cue**: it lies over the cue's own picture and goes wherever the cue
+  plays, so a heart-shaped clip stays heart-shaped;
+- **on a playlist** on one output: it cuts that layer only;
+- **on an output**: it cuts the whole finished picture to black (and to
+  transparent on a key signal). Set it from the cue inspector, or from
+  **Output mask** in Settings → Video Outputs → Matte & Overlay, which needs
+  no cue selected;
+- **in the matte slot** (Settings → Video Outputs → Matte & Overlay, after the
+  aspect ratios): it paints black where it cuts, at the matte's opacity, under
+  the house overlay.
+
+One mask can sit in several places at once, and an edit reaches all of them.
+
+**In the inspector**, every cue has a **MASK** section. **mask on** chooses the
+place (this cue, this playlist on the focused output, all of that output, or
+its matte). **mask** opens the library: pick a mask, **none**, or start a new
+one from a shape: circle, ellipse, heart, star, rectangle, rounded rect,
+triangle or hexagon. Below that come **invert**, **feather** (edge softness),
+**grow** (pushes the edge out or in), **opacity** (how hard it cuts), **x**,
+**y**, **scale** and **rotation**. Click a value to type it, drag to scrub it,
+and use the **~** chip to put it on an oscillator. **add shape** puts another
+library shape into the mask; **new paths** says whether the next shape or pen
+path adds or subtracts. **export** saves a greyscale PNG matte (white keeps) at
+the output's size, or the paths as SVG for Illustrator.
+
+**import an SVG...**, at the foot of the mask list, makes a mask from a drawing:
+its paths, rectangles, circles, ellipses and polygons, curves and arcs kept as
+curves, under any transform. The drawing's frame (its viewBox) becomes the
+picture's, so a shape drawn on a 1920x1080 artboard covers the same part of any
+output. On a full-frame background rectangle, shapes in the background's colour
+cut and the rest add, and a white background inverts the mask, which is how
+**export** writes one, so an export comes back as it went. With no background,
+every filled shape adds. Outlines with no fill, and anything inside
+`<defs>`, are left out.
+
+**On the monitor**, the **MASK** button beside WARP shows the mask's points over
+the programme. With **move points**, drag a point or its handles (hold Alt to
+move one handle alone), click the outline to add a point, and Alt- or
+Shift-click a point, or press Delete, to remove it. With the **pen** (press P),
+click for a corner, drag for a curve, and click the yellow first point (or press
+Enter) to close the path. When an oscillator is moving the mask, a dashed line
+shows where it is cutting now, and the points show it as set.
+
+Over the wire: `MASK LIST | SHAPES | INFO <id> | NEW [shape] [name] |
+SHAPE <id> <shape> [SUB] | PATH <id> [SUB] x,y ... |
+SET <id> INVERT|FEATHER|GROW|OPACITY|X|Y|SCALE|ROTATION <value> |
+LFO <id> <param> ON|OFF [Hz] [depth %] |
+ASSIGN <id|NONE> CUE|LAYER <output> <playlist>|OUTPUT <n>|MATTE <n> |
+EXPORT <id> <file.png|.svg> [WxH] | IMPORT <file.svg> [name] | CLEAR | DELETE | RENAME`.
+Positions and sizes are percentages, and rotation is in degrees. A value outside
+the range is refused, not clamped. `EXPORT` and `IMPORT` are accepted only from
+this computer.
+
+### Draw
+
+**SOURCE → MADE BY DECKBOY → Draw** adds a cue you draw on. It is
+transparent outside the ink, so it sits on a layer over another playlist like
+Portal does. With a Draw cue selected, **DRAW** appears beside MASK on the
+programme monitor: switch it on and drag on the picture. Esc stops drawing.
+A pen tablet's pressure makes the line thinner where you press lightly, on
+all three platforms.
+
+The **DRAW** section in the inspector has:
+
+- **the tools**: brush, eraser, line, box, oval, and fill (the whole frame).
+  A line, box or oval shows as an outline while you drag and is drawn when
+  you let go;
+- **the colours**: eight on the palette, and **#** for any other, typed as
+  `#rrggbb` or a name;
+- **size** (as a percentage of the picture's height) and **opacity**, each
+  with a **~**, so the brush can swell and fade as you draw;
+- **frames**: **+ frame** adds one after this one, **- frame** takes this one
+  out, and **onion** shows the frame before, faintly, while you draw;
+- **plays**: **still** holds the frame you are on; **flipbook** plays the
+  frames in turn at **fps**; **replay** draws the first frame stroke by stroke,
+  the way it was drawn, then holds it for **hold** seconds and starts again.
+  A long pause between strokes replays as a short one;
+- **undo stroke** and **clear frame**;
+- **save still**: the frame as a PNG with transparency, added to the playlist
+  as an image cue; **save animation**: the flipbook or replay as a ProRes 4444
+  video with transparency, added as a video cue. Both go in a `drawings`
+  folder beside the show, so a bundled show carries them.
+
+The brush belongs to the show, so it stays in your hand from one Draw cue to
+the next. The drawing is kept as strokes, not pixels, so it is sharp at any
+output size and small in the show file.
+
+Over the wire: `DRAW [EDITOR ON|OFF]`, `DRAW TOOL brush|erase|line|box|oval|fill`,
+`DRAW COLOUR <#rrggbb|name|1-8>`, `DRAW SIZE <%>`, `DRAW OPACITY <%>`,
+`DRAW STROKE x,y[,pressure] ...` (percentages), `DRAW UNDO|CLEAR`,
+`DRAW FRAME ADD|DELETE|NEXT|PREV|<n>`, `DRAW ONION ON|OFF`,
+`DRAW PLAYBACK still|flipbook|replay`, `DRAW FPS <n>`, `DRAW HOLD <s>` and
+`DRAW SAVE STILL|ANIMATION [file]` (from this computer only).
+
+---
+
+## 15. Output Geometry: AOI, Warp, Edge Blend
+
+Applied per output (not per cue):
+
+- **Area of Interest (AOI)** — send just part of the picture: a region for
+  each display in a multi-display slice, or one LED tile. In **Settings >
+  Video Outputs > Geometry** type its width, height and position in pixels
+  (for example 256 x 256). **FILL** stretches the region to the output's
+  full size. **PIXEL FOR PIXEL, TOP-LEFT** puts it at the output's top-left
+  corner at its real size, which is what an LED processor mapping a tile
+  expects. Over the control port, `OUTPUT AOI 256x256 0 0` and
+  `OUTPUT AOI MODE PIXEL`.
+- **Warp** — corner-pin the output (drag the four corners; `Shift+drag` snaps
+  to a grid). Copy/paste warp with `Ctrl+Shift+C` / `Ctrl+Shift+V`.
+- **Edge blend** — fade each edge where two projectors overlap (below).
+
+Laying out a wall before the show: AV Tools Pro's free [video wall
+builder](https://avtoolspro.com/videowall-builder) and [LED pixel pitch
+calculator](https://avtoolspro.com/dvled-calculator) size the displays and
+tiles that the areas of interest then slice the picture across.
+
+Press **WARP** on the programme monitor's header to edit, or open **Settings >
+Video Outputs > Geometry > WARP**. A banner across the picture says what the
+handles are moving: the whole programme on this output, or one layer's pin.
+
+While the editor is open on the output's warp, the monitor follows the selected
+output, including when several outputs show the same playlist. It shows the picture
+as that output window presents it: warped, and with its area of interest,
+rotation and edge blend. The handles sit on the picture's own corners, so a
+dragged corner takes the picture's corner with it. Close the editor and the
+monitor goes back to the programme, unwarped. A layer's pin is edited over
+the unwarped programme, where its handles belong.
+
+### Blending two projectors
+
+When one picture is too big for one projector, or a lens cannot reach the
+corners of a table, two projectors share it and overlap in the middle. Each
+needs its own output: Output 1 is the left projector, Output 2 the right.
+
+Planning where they hang? The free [projector brightness and throw
+calculator](https://avtoolspro.com/projector-calculator) from AV Tools Pro
+works out the throw distance and how bright each projector needs to be.
+
+1. Point both at the surface with their pictures overlapping, and line each
+   up with its own warp (corner pin, and the grid for lens bend).
+2. Focus Output 1 and open **Settings > Video Outputs > Geometry**. In the
+   **EDGE BLEND** card, press **+** on **Pair overlap**. Output 1 now shows
+   the left part of the picture and Output 2 the right, with the strip in the
+   middle on both, and each fades out across it. Keep pressing **+** or
+   **-** until the strip on the surface is exactly where the two pictures
+   overlap (8 pixels a press).
+3. Show a flat grey and look at the seam. If it is darker or brighter than
+   the rest, step **Projector gamma** (2.2 suits most projectors; some are
+   2.4). The right gamma makes the seam disappear.
+4. Show black and look again. Where the two overlap, both projectors' black
+   adds up and the seam glows grey. Step **Black lift** up until the rest of
+   the picture matches it.
+
+**Curve** is **PROJECTOR** for a new output: the fade is shaped in light,
+the way two projectors actually add up, so the seam is as bright as the rest.
+**LINEAR** is the old straight fade, which leaves a dark band in the middle
+of a real overlap; shows made before 0.99.416 keep it until you change it.
+
+On an HDR output the gamma is not used: the picture is already in light, so
+the curve is applied as it is.
+
+Over the control port, with Output 1 focused:
+```
+VIDEO BLEND PAIR 2 240        (Output 2 on the right, 240 px of overlap)
+VIDEO BLEND GAMMA 2.4
+VIDEO BLEND LIFT 3            (percent)
+VIDEO BLEND CURVE PROJECTOR   (or LINEAR)
+```
+PAIR sets both outputs' areas and blends from one number, so the two always
+agree. The overlap is in the output's own pixels.
+
+### Bending the picture: grid warp
+
+Four corners line a projector up with a flat screen. For a surface that is not
+flat — a curved wall, a column, a cyclorama — press **GRID** in the warp
+toolbar. Each press steps the grid: **3x3**, **4x4**, **5x5**, **7x7**, **9x9**,
+then off. Small square handles appear between the corners; drag any of them and
+the picture bends through that point. The corners are still the corner pins, so
+an alignment you already have carries straight over, and changing the grid's
+size keeps the shape you have made.
+
+**SMOOTH** curves the picture through the points, which is right for a curved
+surface. **STRAIGHT** joins them with straight lines, for a fold over a corner
+or an edge. **RESET** flattens the grid without changing its size. Copy/paste
+and saved warp presets carry the grid with them.
+
+Dragging is not the only way. **Click a handle** to select it, and its X and
+Y appear in the warp toolbar: click either to type an exact value, or use the
+**arrow keys** to move it one pixel at a time (**Shift** for ten). Each move
+can be undone.
+
+Over the control port, with the output focused:
+
+```
+WARP GRID 5               (or WARP GRID 5 3 for 5 across, 3 down)
+WARP GRID SMOOTH          (or STRAIGHT)
+WARP POINT 3 2 40 -20     (column 3, row 2: 40px right, 20px up)
+WARP GRID OFF
+```
+
+Points are counted from 1 at the top left, and the nudge is in output pixels
+from where the corner pin alone would put that point.
+
+### Mapping a layer onto a surface
+
+The output's warp lines a projector up with its screen. A **layer's pin** puts
+one playlist onto a surface *within* that screen — a flat, a box, a tilted
+board — which is what mapping several objects from one projector means. The two
+compose: the layer is pinned first, then the output's correction goes over the
+whole picture.
+
+Focus a playlist that is a layer on the output and press **WARP** on the
+programme monitor: the four handles are that layer's corners, sitting on its
+picture wherever the cue's own size and offset put it. Drag them onto the
+surface; the first drag switches the pin on. The toolbar's **EDIT** button
+switches the handles between that layer and the output's own warp, and
+**RESET** takes the pin off.
+
+**PERSP / LINEAR** sets how the picture fills the quad. **Perspective** keeps
+a flat surface's straight lines straight and its far end properly smaller,
+which is what a real board looks like from the projector. **Linear** fills it
+as two flat triangles, which folds along the diagonal on a steep surface. A new
+pin starts in perspective; a show saved before the choice existed opens in
+linear, which is what it drew.
+
+Over the control port, with the layer's playlist focused:
+
+```
+VIDEO OUTPUT LAYERWARP 0.08 0.30 -0.04 0.04 -0.04 -0.04 0.08 -0.30
+VIDEO OUTPUT LAYERWARP MODE perspective
+VIDEO OUTPUT LAYERWARP OFF
+```
+
+The eight numbers are offsets from each corner, clockwise from the top left, as
+fractions of the layer's picture — so a pin still fits after the layer is moved
+or resized.
+
+### Slices: pieces of the picture on an output
+
+An output normally shows one picture: its area of interest, warp and edge
+blend. **Slices** let it show several pieces instead, as Resolume's Advanced
+Output does. A wide picture can be split across three projectors, or one
+projector can light a row of separate surfaces.
+
+A slice has:
+
+- a **crop**: which part of the programme it takes. Its **source** can be the
+  programme, or a single playlist on its own;
+- a **place**: where on the output it lands;
+- **corner pins**, in perspective or linear, and a **mesh** of 3 × 3 to 9 × 9
+  points for a surface that is not flat;
+- **soft edges** on each side, for where two projectors overlap;
+- a **mask**, a turn of the crop (**turn in**) and of the placed picture
+  (**turn out**), **flip** across or down, and **opacity**.
+
+Its across, down, turn and opacity each take an oscillator. Up to 16 slices go
+on an output. Like the warp, slices shape what the output's window shows; a
+recording, stream or NDI sender of that output carries the programme as it is.
+
+**The Screens window.** **Settings → Video Outputs → Geometry → SLICES** opens
+it. Across the top is a tab for each output, then **+ SLICE**, **- SLICE**,
+**CORNERS: SIZE / PIN** and **CLOSE**. On the left are this output's slices,
+each with an on switch.
+
+- **INPUT** shows the programme with each slice's crop drawn on it. Drag a
+  crop to move it, or a corner to size it.
+- **OUTPUT** shows each slice where it lands, drawn the way the projector
+  will draw it. Drag a slice to move it. Its corners size it, or pin it with
+  **CORNERS: PIN**. With a mesh on, drag its points to bend it.
+- The selected slice's numbers and switches run down the right. Across,
+  down, turn and opacity end in a **~**: switch it on and the slice's
+  oscillator opens under it (shape, rate and depth), as on any other control.
+
+A second slice arrives as the right half of everything, which is where a
+split across two screens starts.
+
+The window has three tabs: **SLICES** (above), **MULTIVIEW** and **LED MAP**.
+
+- **MULTIVIEW** arranges the multiview: a layout on the left and the feeds
+  under it, the windows in the middle (red for what is on air, green for
+  what is next, an empty one asking for a feed), and the chosen window's
+  label, audio meter and safe areas on the right. Click a window, then a
+  feed. It is the arrangement the desk's MULTI monitor and any output set to
+  MULTIVIEW show.
+- **LED MAP** draws the output's LED tiles over its picture, numbered in
+  reading order as the Panel Map numbers them. The tile size starts at the
+  Panel Map cue on air (or 128) and steps here. **ONE PER ROW**,
+  **ONE PER COLUMN** and **ONE PER TILE** replace the output's slices with one
+  per strip or tile, each cropped and placed exactly where it was, so the wall
+  looks the same until you move one to where that strip or tile really is.
+  An output takes 16 slices, so a bigger wall goes by rows or columns.
+
+Over the wire: `SLICE` lists the focused output's slices; `SLICE ADD [name]`,
+`SLICE REMOVE <n>` and `SLICE CLEAR`; then `SLICE <n>` with
+`CROP x y w h` or `PLACE x y w h` (percentages),
+`CORNER TL|TR|BR|BL dx dy`, `EDGE L|R|T|B <%>`, `MASK <id>|NONE`,
+`SOURCE PROGRAMME|DECK <n>`, `ROTATE IN|OUT <degrees>`, `FLIP H|V ON|OFF`,
+`OPACITY <%>`, `LFO X|Y|ROTATION|OPACITY ...`, `GRID cols rows|OFF`,
+`GRID POINT col row dx dy`, `ON|OFF`, `LINEAR|PERSPECTIVE` or `NAME <text>`.
+`SCREENS ON|OFF` opens and closes the window.
+
+Per-*cue* geometry (scale/crop/rotation/offset/keying/colour) lives in the cue
+inspector instead (§7).
+
+---
+
+## 16. Lower Thirds & Picture in Picture
+
+A Lower Third, an inset, a second picture beside the first: all of these are a
+**second playlist layered over the first** on the same output (§11, §12). Each
+layer has its own size, position and corner pin, so an inset is a playlist
+scaled down and placed, and a side-by-side is two of them.
+
+Shows made before 0.99.397 may contain older **PiP** or **composite** cues.
+They still load, play and save exactly as before; new ones are no longer made,
+because a layered playlist does the same job with a whole running order behind
+it instead of one fixed box. Overlays from those older cues clear with `U`.
+
+### Lower thirds
+
+**SOURCE → Lower third** makes a Lower Third: a text cue whose first line is
+the name and second the role, drawn over a transparent frame so it sits on a
+layer over another playlist. Its inspector section sets how it looks and moves.
+
+**A colour to key out.** Text, Lower Third, image and timer cues have a
+**backdrop** row: **none** (transparent, the default), **black**, key
+**green** (#00b140), key **blue** (#0047bb), or the colour chip for any colour,
+typed or picked from the screen. The colour fills the whole layer behind the
+cue, so a vision mixer or a downstream keyer can take it out. Over the network:
+`BACKDROP #00b140`, `BACKDROP transparent`.
+
+| Look | What it is |
+|------|------------|
+| Bar | One solid bar, an accent down its leading edge |
+| Boxes | The name in a box, the role in a smaller one under it |
+| Line | No box: the words over a thick accent rule |
+| Tag | An accent tab for the name, the role beside it |
+| Glass | A translucent band across the frame, a thin accent line on top |
+| Arcade | The name in the pixel face over the role in mono, in a bordered box with a hard drop shadow. Once it is in, it keeps a slow bob and tilt, so it looks alive for as long as it is up |
+| Split | A news-style Lower Third: the name on an accent block, the role on a strip under it |
+| Card | A pale card with soft corners and a shadow, an accent dot at the name |
+| Hairline | No box: a fine accent rule over the words, with a square at its start |
+| Sparkle | The bar, with stars that twinkle round it for as long as it is up |
+| Neon | A dark sign with a glowing accent tube that flickers on |
+| Comic | Tilted, with a heavy black outline and a halftone shadow |
+| Scroll | Parchment with rolled ends, in ink. It unrolls as it comes in and rolls up as it goes |
+
+The 39 additional looks each have their own entrance, which reverses on OUT:
+
+| Look | Material | Entrance and life |
+|------|----------|-------------------|
+| Bulletin | Branded angular news bar | Header extends, then the role strip follows; holds still |
+| Dateline | Branded rail with three signal marks | Rail builds in segments and draws the baseline; holds still |
+| Sideline | Branded sports plate with diagonal cuts | Three slashes arrive in sequence as the plate slides into place; holds still |
+| Scoreboard | Amber letters on charcoal split-flap cells | Letters fold open one after another across a dark seam; holds still |
+| Podium | Gold medal beside a branded plate | Medal grows as the plate rises onto its gold base; holds still |
+| Pennant | Pointed burgundy cloth with gold edging and a gold mast | Unfurls from the mast; the cloth keeps waving |
+| Ribbon | Crimson ribbon with gold stitching and folded tails | Unfurls from the centre; holds still |
+| Ledger | Cream account paper with green rules and ink | Page slides in as the rules draw across; holds still |
+| Dossier | Manila folder with an inset paper label | Folder slides up and straightens as the label emerges; holds still |
+| Index | White ruled card with a red top rule | Card slides in and squares up; holds still |
+| Bracket | Open focus corners around the words | Corners close in from outside and the words appear; holds still |
+| Crosshair | Open reticle with mint and accent arcs | Reticle sweeps in and turns; arcs keep rotating slowly |
+| Caption | Separate black backing for each line | Name strip reveals first, then the role; holds still |
+| Credit | Open centred words between fine gold rules | Rules draw from the centre as the words rise; holds still |
+| Theatre | Deep red velvet and a gold frame | Pleated curtains part across the words; holds still |
+| Placard | Black sign with a yellow rim and corner fixings | Drops and swings to rest; holds still |
+| Rail | Open accent track with white stops | Track draws out with a travelling endpoint; holds still |
+| Survey | Pale survey plate, compass needle and ruler ticks | Compass draws around the needle and the words reveal; holds still |
+| Tab | Branded clipped tab and a second strip | Tab drops in before the role strip extends; holds still |
+| Ticket | Cream ticket, red barcode stub and perforated edges | Slides and rotates into place; holds still |
+| Capsule | Rounded branded shell with a fine accent rim | Extends sideways from a circle before the words appear; holds still |
+| Film | Black film stock with open sprocket holes | Threads sideways as the words reveal; sprockets keep rolling |
+| Stacked | Cream card over coral and teal sheets | Loose sheets gather beneath the words; holds still |
+| Flag | Accent cloth on a pale mast | Unfurls from the mast; the trailing edge keeps waving |
+| Terminal | Green phosphor on black with faint scanlines | Types the name a character at a time; block cursor keeps blinking |
+| Window | Grey bevelled desktop window with a navy title bar | Expanding outline rectangles resolve into the window; holds still |
+| Diskette | Square clipped-corner floppy, metal shutter and white label | Shutter opens while a nameplate slides out from behind the icon; holds still |
+| Cassette | Dark cassette shell, cream label and two reels | Slides up and settles level; both reels keep turning |
+| Cartridge | Grey ridged plastic, sticker label and gold contacts | Drops into place with a short settling bounce; holds still |
+| Blueprint | White drafting ink on blue with a faint grid | Dimension lines and words draw out from the centre; holds still |
+| Circuit | Green circuit board with gold traces | Traces power up before the words reveal; pulses keep travelling along them |
+| Equalizer | Dark audio panel with green, amber and red meter segments | Meters rise with the words; follows the programme host's audio level and idles gently in silence |
+| Dotmatrix | Amber LED lettering on a dark sign | Letters reveal across the dot field; holds still |
+| Stamp | Red ink on a pale card with a distressed double border | Thumps down from large with a short shake; holds still |
+| Sticky | Yellow adhesive note with a curled corner and shadow | Drops and sways to rest; holds still |
+| Notebook | Ruled paper with a red margin and metal spiral rings | Swings open beside the rings as the words appear; holds still |
+| Sketch | Pencil strokes and red underlining on off-white paper | Border and underline draw on with the words; holds still |
+| Confetti | Purple pill with coral, gold, teal and cream paper pieces | Pops up with a burst that falls and clears the words; holds still |
+| Marquee | Dark sign ringed with warm round bulbs | Bulbs light around the frame in order; lights keep chasing |
+
+The picker lists the clean looks first and the playful ones after.
+
+Branded looks use the operator's **bar** and **accent** colours. Themed looks
+bring their own paper, cloth, metal, plastic or illuminated palette; the accent
+is a highlight where it suits the material. The fixed colour list is ink,
+paper, red, orange, yellow, green, blue, violet, deckboy and forest.
+**Forest behind a yellow accent** is Arcade's own pair.
+
+Each look also takes a cut, fade, slide from either side, rise, wipe, grow,
+typewriter or pop. A cut is immediate at cue time zero and on OUT, regardless
+of the in and out times, including the look's own entrance.
+Size runs from half to double. The added looks shrink long lines with their
+whole graphic to keep them inside the frame.
+
+**Wiggle** adds Arcade's slow bob and tilt to any look while it is up; Arcade
+always keeps its original wiggle. The inspector row and
+`TEXTCUE WIGGLE ON|OFF|TOGGLE` set the saved option. All motion follows the cue
+clock, including pauses and seeks. Equalizer follows the programme output's
+host playlist before device volume, so a silent graphics playlist still follows
+the programme's sound. Its meters idle when that host is paused or stopped.
+
+Arabic and Persian names lay out from the right, including the look's border,
+tab or icon. Terminal, Scoreboard, Dotmatrix and the typewriter move reveal
+from that reading edge while keeping letters joined.
+
+Over the control port, with the lower third selected:
+
+```
+LOWERTHIRD
+TEXTCUE TITLE Name Surname
+TEXTCUE SUB Title or role
+TEXTCUE LOOK arcade
+TEXTCUE BAR forest
+TEXTCUE ACCENT yellow
+TEXTCUE SCALE 1.6
+TEXTCUE IN pop
+TAKE
+```
+
+`TEXTCUE OUT` plays the way out on whichever lower third is on air.
+`LOWERTEXT` and `LOWERSUB` set the two lines as well.
+
+---
+
+## 17. Audio
+
+Video, audio, and browser cues play through the focused deck's selected audio
+device (`Settings → AUDIO OUTPUT`). UI click sounds use a separate device so
+they never touch the programme bus.
+
+### Per-cue audio (inspector → AUDIO)
+
+| Control | Range | Notes |
+|---------|-------|-------|
+| Gain | −40 … +40 dB | Live trim in the audio thread |
+| Pan | full L … full R | Constant-power balance; snaps to centre |
+| Mono | on/off | Downmix for mono sources / mono PA |
+| Track | 1 … n | Shown when the file has more than one sound track: a second language, a commentary, a clean feed. Changing it on the live cue switches straight away, from where it is (`AUDIOTRACK [NEXT\|<n>]`) |
+| Audio fade in / out | follow / none / seconds | `follow` tracks the visual fade; set a length to duck audio independently |
+| Normalize (R128) | button | Measures file loudness and sets gain for the selected −16, −23 or −24 LUFS target; subsequent mixing and limiting can change delivered loudness |
+| Outs | pair 1-2 … 7-8 | Output pair on a multichannel device (below) |
+
+The **deck fader** is a deck-level level on top of each cue's gain (the master
+fader in the header rides on top of everything). The effective audio-fade ramp
+is drawn over every waveform view — the timeline audio lane, the program strip,
+and both inspector thumbs — so what you see is what plays.
+
+Choose the normalization **target** before measuring the selected files. The
+programme footer reports integrated loudness (**I**, LUFS) and reconstructed
+true peak (**TP**, dBTP) for the active output audio path. Output audio has a
+true-peak guard after mixing, with a −1.1 dBTP ceiling setting. These meters
+support delivery checks; verify the final recording with a calibrated loudness
+analyser before claiming compliance with a broadcast specification.
+
+### Per-cue audio effects (inspector → AUDIO FX)
+
+Each cue carries an ordered chain of up to **eight** audio effects, arranged
+like the picture effects and saved with the show. It runs per sample on the
+audio thread, between the cue's gain and the deck limiter.
+
+**Amount always means "more of this, less of the original."** Dry/wet for the
+shaping effects, gain reduction for the dynamics, and a *send* for the delay and
+the reverb — a delay treated as dry/wet would play silence on a cue shorter than
+its own delay time.
+
+| Effect | What it does |
+|--------|--------------|
+| High pass, Low pass | Corner-frequency filters |
+| Tilt EQ | One control from dark to bright, pivoting in the middle |
+| EQ band | One parametric band: frequency, gain, width, and a shape that makes it a bell or either shelf. It arrives **flat**, the way a band on any desk does, so adding one changes nothing until you move the gain. Stack three or four for a full strip — the order is the order you drag them into |
+| Compressor | Threshold, ratio, attack, release. The backward-compatible ratio is 1:1 — a compressor that does not compress — so a cue saved before the control existed still sounds the way it did |
+| Gate | Shuts the tail off below a threshold |
+| Delay | A send, with time and feedback |
+| Reverb | A send, with size and damping |
+| Width | Narrows or widens the stereo image |
+| Binaural | Places the source around the listener's head |
+
+#### Sample rate
+
+**Settings → Audio → Sample rate** picks what the whole desk runs at:
+**44100, 48000, 88200, 96000 or 192000 Hz**.
+
+**48000 is the default and usually the right answer** — every film and
+broadcast file carries 48k audio, so it is the one rate that costs no
+conversion on the common path. The others are there for a desk wired into a
+music rig that runs at something else, where converting twice to meet it is
+worse than simply running there.
+
+Everything follows the setting: the output device, the decoder's resampler,
+every filter corner and delay length in the cue audio chain, and the video
+clock (which counts frames of audio the device has played).
+
+**It cannot be changed while a cue is playing.** Changing it reopens every
+deck's device, and that is a gap in the sound.
+
+Source files at any rate still play at any setting — they are resampled on
+decode, as they always were.
+
+Over the wire: `SAMPLERATE`, `SAMPLERATE <hz>`.
+
+### Your own plugins
+
+Deckboy hosts **VST3** effects and instruments, so a reverb you already own or
+the channel strip your mix is built around can sit in the same chain as
+Deckboy's own effects, in whatever order you put them — a gate before your
+reverb is a different sound from a reverb before your gate.
+
+Add a **Plugin** effect and pick from what is installed on the machine. The row
+names the plugin, and the four rows beneath it carry that plugin's own first
+four automatable controls, under the plugin's names for them. Everything else
+the plugin was set to is saved with the show and comes back with it.
+
+Plugins are opened when the cue is prepared, never between two buffers, and each
+one runs against a time budget: a plugin that cannot keep up with the block it
+was handed is taken out of the chain and the operator is told, rather than
+clicking through the PA. A show that opens on a machine missing one of its
+plugins keeps the slot, the settings and the name, and says which plugin it
+cannot find.
+
+`--plugins` lists what the machine has and the folders searched — run it before
+believing "Deckboy cannot see my reverb". `--plugin-chain-check` runs one in a
+real chain and measures that it, and its controls, change the sound.
+
+Deckboy's releases host VST3. VST2 is not included: Steinberg withdrew that SDK
+in 2018 and licenses it to no new host. The source carries an optional VST2
+backend for anyone who holds a licence of their own and builds it themselves.
+
+**Instruments can be played.** An instrument in a cue's chain receives notes
+from the computer keyboard, from a MIDI keyboard, and from a controller over the
+network — the same three ways Deckboy plays its own chip synth. Put a Plugin
+effect on a tone cue, choose an instrument, and the keyboard plays it.
+
+Companion: `AUDIOFX <slot> PLUGIN <name>`, and `TONECUE` to make the cue to put
+it on.
+
+#### The five that need the deck
+
+A hosted plug-in receives a buffer of samples and nothing else. That is not a
+limitation anyone chose; it is what the interface *is*. Deckboy holds the
+picture and the sound in one object, so five of its own effects can read the
+frame they are playing under — which nothing hosted in a mixing desk can do.
+
+| Effect | What it reads |
+|--------|---------------|
+| **Picture** | The cue's own video drives the filter: the shot itself becomes the control signal |
+| **Placement** | Where the picture sits on the raster is where the sound sits in the room — move the shot, the sound moves with it |
+| **Seam** | The approaching end of the cue resolves the tail, so the outgoing sound lands *with* the cut instead of being chopped by it |
+| **Frame lock** | Granular stutter quantised to the video frame period rather than to a tempo you guessed |
+| **Suspend** | A held cue keeps its room tone instead of stopping dead |
+
+Every one of them has a neutral setting that passes audio through unchanged, and
+when a cue cannot supply what an effect needs — an audio-only cue has no picture
+— the inspector row says so rather than passing through in silence.
+
+`--audio-fx-check` runs the whole chain headlessly and reports what each effect
+does to a known signal. Its first run found four real faults, including a delay
+whose output was silence.
+
+### A/V delay offset
+
+`Settings → AUDIO OUTPUT → A/V delay` holds all audio back 0–1000 ms before the
+device, to line Deckboy up with a lagging display or PA DSP. Video anchors to
+the undelayed timeline so the offset is a real skew at the output.
+
+### Multichannel output routing
+
+`Settings → AUDIO OUTPUT → Outs` opens the deck device with 2, 4, 6 or 8
+channels, and from v0.99.373 with 16, 32 or 64, and from v0.99.399 with 128, which is
+what makes a Dante Virtual Soundcard, a MADI card or a large ASIO interface
+worth having. How much network a Dante or AES67 channel count needs: AV Tools
+Pro's free [audio calculator](https://avtoolspro.com/audio-calculator).
+Each cue routes its processed stereo onto a pair of those outs via the
+inspector's **outs** row (1-2, 3-4, 5-6, 7-8) — e.g. programme to the PA on
+1-2, click to monitors on 3-4. The pipeline stays stereo end to end; expansion
+happens at the final write with silence on unused outs. On a device with fewer
+physical outputs, SDL folds extra pairs down, so you can prep on a laptop and
+route at the venue.
+
+Companion: `AUDIOGAIN`, `AUDIOPAN`, `AUDIOMONO`, `AUDIONORM`, `AUDIOOUTS`.
+
+### The crosspoint matrix
+
+*v0.99.373 and later.*
+
+For routing a pair cannot express, the inspector's **MATRIX** section sets, per
+cue, how much of its left and right reaches each channel of the audio device.
+Click **routing** to open the matrix, starting from the pair the cue already
+uses. Each cell steps through off, full, −3, −6 and −12 dB. Two sources sent to
+one channel add together, so a mono fold-down is just both sources onto the same
+out. The matrix reaches every channel the device was opened with (see **Outs**
+above). A cue with no matrix routes exactly as it always did. `MATRIX` over the
+remote protocol does the same. On a playlist in the patch (below), the matrix's
+columns are the named outputs instead of channel numbers.
+
+### Named outputs and the patch
+
+*v0.99.422 and later.*
+
+`Settings → Audio → OUTPUTS` names the channels of your interfaces once: **FOH**
+on 1-2, **SUB** on 3, **PRESS FEED** on 5-6. Each name is a **PAIR** or **ONE**
+channel on an interface, starting at a channel (**−** and **+** move it a pair at
+a time). **+ ADD AN OUTPUT** adds the next pair on the interface the focused
+playlist plays to. Click a name to rename it; **x** removes it.
+
+`Settings → Audio → PATCH` sends playlists to the names: a row per playlist, a
+column per name. A crosspoint is a level in dB, or off. Click it to walk off, 0,
+−3, −6 and −12; drag it sideways for any level from −48 to +6 (hold Shift for
+finer steps).
+
+- A playlist with a crosspoint plays where the patch says, on every interface
+  its names are on. Its own **Output device** and **Outs** wait until it leaves
+  the patch. A playlist with no crosspoint plays to its own device, as before.
+- A one-channel name takes the left and the right at half each, so a sound in
+  the middle arrives at the level it has on a pair.
+- A name whose interface is not there, or which sits past the interface's last
+  channel, is marked **unpatched** with the reason, and its column is in the
+  warning colour. Its sound goes nowhere else.
+- Through the system's audio, a name can sit on the first eight channels of an
+  interface. Through ASIO, choose **ASIO: <driver>** as the interface and a name
+  can sit on any of the driver's channels (**ASIO outs**); names on other
+  interfaces are unpatched, and say so, while ASIO plays the show.
+- The headphone monitor hears the playlist in stereo, whatever the patch does.
+- A cue's own **MATRIX** on a playlist in the patch sends to the names, and
+  decides where that cue goes. Opened, it starts from the playlist's
+  crosspoints.
+
+Moving the show to another interface means changing the names here, not the
+playlists or the cues. Over the network: `OUTPUTS`, `PATCH`, and
+`MATRIX SET <1|2> <output> [L|R] <0-100>`.
+
+### Output effects and the limiter
+
+*v0.99.422 and later.*
+
+`Settings → Audio → OUTPUT EFFECTS` puts a chain on the device the focused
+playlist plays to. Everything the show sends there is mixed first (every
+playlist on that device and every extra send to it), and the chain works on
+the mix.
+
+- **+ ADD AN EFFECT** adds up to four of **high pass**, **low pass**, **tilt**,
+  **compressor** and **width**, in the order added. Each row shows its main
+  setting in its own units (80 Hz, darker 2.0 dB, −20 dBFS at 4:1, 120% wide);
+  **−** and **+** move it a step an engineer would (a sixth of an octave, half a
+  decibel, one decibel, ten percent), and **x** removes it. Everything else
+  about each effect keeps the value it arrives with.
+- **Limiter** comes last: the mix cannot pass the **Ceiling**, −1 dBFS unless
+  you set another, from −40 to 0 in half-decibel steps. It looks 1.5 ms ahead,
+  so a peak is already caught when it arrives, and lets go over about 120 ms.
+  Both channels get the same gain, so the stereo image does not move.
+  **Limiting** shows how much it is taking off.
+- **BYPASS ALL** takes the whole chain out, the limiter included, to hear the
+  difference. It shows in the warning colour while it does; press it again to
+  put the chain back.
+
+The headphone monitor, the desk's own sounds and LTC stay out of it. Under ASIO
+the show's sound goes to the driver, which these do not reach yet. Adding the
+first effect, or turning the limiter on, is a device change for the playlists
+on that device: whatever is playing carries on. Over the network,
+`OUTPUTFX [ADD hpf|lpf|tilt|comp|width | SET <n> <0-100> | REMOVE <n> | BYPASS
+ON|OFF | CLEAR] [DEVICE <name>]` edits the chain and reports it with the peak
+leaving the device, and `LIMITER [ON|OFF] [CEILING <dB>] [DEVICE <name>]`
+does the limiter.
+
+### Audio input
+
+`Settings → AUDIO INPUT` opens a microphone or line input by device, with gain,
+a clip indicator, mono folding, and a recording bitrate. Routed to the programme
+it reaches both the stream and the recording, so a presenter's mic or a desk
+feed can be laid against the playback.
+
+### Mic cue
+
+A **Mic cue** plays a live input through a deck, like any other audio cue: the
+deck's speakers and output pair, the deck fader and master, the cue's fades and
+its AUDIO FX chain, and the peak limiter. Add one with `SOURCE > LIVE SOUND >
+Mic / line input`. It takes the input chosen in Settings until you pick another.
+
+- **The row** shows **LIVE** where a length would be, with the input's level
+  along its foot, so a dead or unplugged mic shows before GO.
+- **Inspector → MIC**: **input** steps through the inputs this computer has
+  ("Settings input" follows Settings → AUDIO INPUT). **channel** is **MONO L**
+  (the left input in both speakers, mic 1 on most interfaces), **MONO R**, or
+  **STEREO** for a line source. **gain** is digital gain, -40 to +40 dB: set
+  the interface's own preamp first. **level** is the meter, green up to
+  -18 dBFS, amber to -6, red above, with a white tick at -18. **CLIP** lights
+  when the input reached full scale at this gain, and stays lit until clicked.
+  The last line says whether the cue is live, and the input-to-speaker delay
+  Deckboy estimates from the two devices' buffers.
+- **GO** opens it into the deck with its fade in (0.5 s on a new cue). Nothing
+  reaches the speakers until GO; a racked mic cue is metered, not heard.
+- **STOP** fades it out over its fade out (1 s on a new cue), then stops the
+  deck. A second STOP while it fades cuts it at once.
+- The input is read straight from the device in small blocks, not through
+  FFmpeg. Measured on Windows: an estimated 34 ms from input to speaker.
+- **Music is safe.** The input and the speakers each keep their own clock, and
+  no two agree exactly, so the sound between them slowly piles up or runs dry.
+  Deckboy resamples the input by a hair to follow the speakers' clock, so it
+  never has to drop or repeat a moment of sound. The pitch moves by less than a
+  hundredth of a semitone. It learns a mic's clock in about twenty seconds and
+  remembers it for the next take. Tested at ten times a real device's error,
+  fast and slow, with no click.
+- The first time a mic cue goes live on the default speakers, Deckboy warns
+  once that a mic into the same room's speakers can feed back. It does not
+  stop you.
+- An input that is not there is reported on the cue, never swapped for another
+  one.
+- The Settings input is separate and keeps its own job (the stream, the
+  recording and live captions).
+
+| Command | Does |
+|---------|------|
+| `MIC` | The selected mic cue: input, level, channel, gain, delay, the clock correction (`drift_ppm`), how often the speakers ran dry (`underruns`) and blocks let go (`dropped`), status |
+| `MIC ADD [<device>\|TEST]` | Adds a mic cue (`TEST`: a built-in 1 kHz / 500 Hz test signal) |
+| `MIC LIST` | The inputs this computer has |
+| `MIC INPUT SETTINGS\|TEST\|<device>` | The selected mic cue's input |
+| `MIC CHANNEL L\|R\|STEREO` | Which part of the input it plays |
+| `MIC GAIN <dB>` | Its gain, -40 to 40 |
+
+### ASIO
+
+On Windows, an ASIO interface can be opened directly for cue audio, with a
+real-time callback and a ring buffer. A device whose sample rate does not match
+the material is converted rather than refused.
+
+---
+
+## 18. Test Patterns
+
+Pattern cues generate their pixels live and auto-scale to the selected output
+raster and refresh rate (unless the project overrides it). All motion is slow,
+smooth, and diagonal; full-frame solid colours have no motion option.
+
+Fireside, Portal, Swirl and Moire are drawn the same way but are set dressing rather
+than test cards, so they are added from SOURCE > MADE BY DECKBOY, and their
+inspector says "made by Deckboy" in place of a pattern picker.
+
+- **Fireside** — a hearth that burns, for a fireside chat. Set dressing rather
+  than a test card: an arched stone fireplace with a mantel, sconces, andirons
+  and embers riding the draught. The fire is simulated rather than looped, so
+  it never repeats and adds nothing to the download. It is always animated.
+- **Swirl** — a slow spiral of melting pixel greens with a yellow crest, the
+  look of Deckboy's own trailer. Set dressing for a holding screen or a backdrop
+  behind a lower third, generated live without a video loop. Its inspector
+  controls:
+  - **palette** — classic green, fire, ice, neon or mono, and **colour**, one
+    turn around the hue wheel (0 or 100% leaves the palette as it is);
+  - **bands** — 2 to 8 colour steps, from stark to smooth;
+  - **speed** — −3 to 3: 0 holds the field, negative runs it backwards;
+  - **twist** — 0–4, from a flowing field to tight spirals;
+  - **flow** — 0–3, from still ripples to boiling;
+  - **zoom** — 0.25–4, the size of the spirals;
+  - **centre x / centre y** — where the eye of the swirl sits;
+  - **pixels** — 64–960 horizontal cells.
+
+  Changes apply while it plays and are saved with the cue; a Swirl made before
+  these controls looks exactly as it did. Over the wire: `SWIRL [STATUS]` and
+  `SWIRL SPEED|TWIST|PIXELS|COLOUR|ZOOM|FLOW|CENTREX|CENTREY|BANDS|PALETTE <n>`
+  (`COLOR` and `CENTERX`/`CENTERY` are also accepted; PALETTE is 0 classic,
+  1 fire, 2 ice, 3 neon, 4 mono).
+- **Moire** — fine rainbow bands with grey zebra stripes, so fine that they
+  beat against the screen's pixels and throw up rings and crosses of their own.
+  It is drawn at the output's own resolution, one band pixel to one screen
+  pixel, so a 4K screen shows more bands rather than fatter ones; that is also
+  why the programme monitor, which shows it small, looks busier than the
+  screen. Its inspector controls:
+  - **shape** — zone (concentric rings), twin (two centres), flow (islands and
+    crosses in a bent field), saddle, ripple or shear;
+  - **density** — how many bands: 50% is the design, 0 a quarter as many,
+    100% four times as many;
+  - **speed** — how fast the bands move; 0 holds the field still;
+  - **warp** — how far the field bends;
+  - **turn** — the field's rotation round its centre, in degrees;
+  - **centre x / centre y** — where that centre sits;
+  - **grey** — the share of each band drawn as grey stripes (not shown on the
+    rainbow palette, which has none);
+  - **hue** — turns the colours round the wheel (not shown on mono);
+  - **palette** — rainbow + grey, rainbow, theme, or mono. **Theme** takes the
+    desk theme's colours at the moment it is picked and keeps them, so the cue
+    looks the same on a desk wearing another theme.
+
+  Every number has a **~**: the same oscillator as an effect parameter (shape,
+  rate, depth, tempo sync, a drawn curve), running on the show's one LFO clock.
+  Speed on an oscillator speeds the bands up and slows them down smoothly
+  rather than jumping. Over the wire: `MOIRE [STATUS]`,
+  `MOIRE SHAPE <0-5>`, `MOIRE PALETTE <0-3>`,
+  `MOIRE DENSITY|SPEED|WARP|GREY|CENTREX|CENTREY <0-100>`,
+  `MOIRE TURN|HUE <0-360>`, and `MOIRE LFO <control> ON|OFF|SHAPE|RATE|DEPTH|PHASE|SYNC [value]`.
+- **Pocket Test** — a PM5544-style test card with a bouncing scene-porthole
+  ball, a sync beacon, and an audio sync pop at the top of each second (use it
+  to dial the A/V delay offset).
+- **Test Bars** — motion diagnostics: saturated bars, a bouncing rainbow
+  diagonal for tearing, a dissolving checker patch that provokes scaler and
+  deinterlace artefacts, a sliding grey block for judder, and a clock.
+- **Test Clock** — the sync and latency card. A large seconds counter over a
+  frame counter, plus exact timecode in the corner: put it up and photograph two
+  screens (or a screen and a downstream recorder) to see whether they agree. The
+  circle is drawn from a true pixel radius, so it reads as an egg the moment a
+  stretch mode or pixel aspect is wrong, and the scrolling hue band gives
+  sub-second phase between captures a few frames apart.
+- **Frame Count** — every frame carries its own number, so a dropped frame is a
+  gap in a sequence rather than a judgement about whether the motion looked
+  smooth. Photograph it at both ends of a chain and the difference is the
+  latency, in frames, with no stopwatch involved. There is an **emoji** variant
+  for when the far end is a phone camera and small digits will not survive it.
+- **SMPTE 75% colour bars**, **crosshatch**, **checkerboard**, and full-frame
+  **white, black, red, green and blue**.
+
+The engineering set (*v0.99.373 and later.*), the same patterns the site's LED page generates:
+
+- **Panel Map** — every LED tile numbered, with its pixel origin printed inside
+  it. Set **tile w** and **tile h** to the wall's real panel size (click the
+  number to type it), because a 168px panel mapped as 128 puts every label in
+  the wrong place.
+- **Moire 1:1** — shows at once whether anything in the chain is scaling.
+- **Dark Detail** (0–12%) and **PLUGE** — black level.
+- **Uniformity** — flat fields for colour shift and dead or dim tiles.
+- **Banding Ramps** — the chain's real bit depth.
+- **Safe Areas** — 90%, 80% and thirds.
+- **Boresight** — projector and camera alignment.
+- **Greyscale Steps** — gamma.
+- **Convergence** — a fine grid for colour registration.
+- **Multiburst** — bandwidth and sharpness.
+- **Critters** — pixel critters bloom from a single pixel, grow, hold and
+  shrink back, overlapping forever, in Game Boy greens. Each is drawn only at a
+  whole-number scale of its sprite, so every edge is pixel-exact at every size:
+  anything soft or shimmering on the screen was added after Deckboy.
+- **Window 10%** and **Window 50%** — peak brightness at low and mid picture
+  level.
+
+Pocket Test comes in four times of day — **day, sunset, night and storm** — for
+checking that a display's picture processing is not crushing shadows or clipping
+highlights at one end of its range.
+
+Most of the static cards also have a **(motion)** variant. Motion is the point:
+a still card cannot show you tearing, judder, or a deinterlacer making things
+up, and those are the faults that only appear once the picture moves.
+
+---
+
+## 18a. Picture Scopes
+
+The **PROGRAM** button in the programme monitor's header switches it to
+**SCOPES** (the scopes fill the monitor) and **BOTH** (the picture, with the
+waveform and vectorscope beside it). Click any scope to show it alone; click
+it again to go back. `SCOPES` does the same from a controller.
+
+**What is measured** is the programme output's own finished frame, at its
+full raster: the same frame NDI, DeckLink, ST 2110 and the Web Monitor send,
+not the desk's scaled-down preview. Every pixel is counted. The programme is
+the first window output, the one the audience sees, whichever output you are
+editing. **SOURCE**, beside FREEZE, steps through PROGRAMME and each output in
+turn to measure a different one. The scopes appear once that output is
+armed. They measure every new picture once, so they follow the source: a
+25 fps clip is analysed at its 25 fps cadence and a 59.94 fps clip at 59.94, on
+any output refresh rate, and a still picture once. The footer says how fast
+the scopes are going, the source's frame rate and the output's refresh
+(**LIVE 25.0/s src 25.00 fps out 60.00 Hz**). If the computer cannot measure
+every picture, the footer says so (**41.3 of 59.9/s**); it never skips
+pictures silently. On Windows the graphics card does the measuring, on the
+output's own frame, so a 4K 60 fps output is measured on every picture with
+little load on the processor. Its readings are the processor's, exactly. The
+processor still measures the SDI and ST 2110 signal, the HDR picture, and on
+macOS and Linux.
+
+**On an HDR output** the scopes measure the HDR picture, not the SDR copy
+the other routes carry, so highlights are not clipped. It is read as PQ
+BT.2020, 16-bit. The waveform and parade are marked in nits (1, 10, 100, 1k,
+4k, 10k) on the left and in PQ % on the right, with a dashed **SDR** line
+where SDR material sits (203 nits unless **SDR material at** says
+otherwise). The footer gives the picture's **peak** in nits in place of the
+R 103 verdict, which is an SDR rule. A 4K HDR frame takes longer to read back
+and measure, so the scopes update about six times a second there (measured on
+a 32-thread PC). An HDR
+output that is also sending SDI or ST 2110 is measured as that SDR wire
+signal, because that is what goes down the cable.
+
+| Scope | Shows |
+|-------|-------|
+| **Diamond** | R'G'B' gamut: blue against green above, red against green below, meeting at black. A trace outside either diamond is a colour that will clip |
+| **Waveform** | Luma (Y'), in % on the left and mV on the right (0-700 mV) |
+| **RGB parade** | R', G' and B' side by side, on the same scale |
+| **Vectorscope** | Chroma, with boxes at the 75% bar targets, crosses at 100%, and the skin-tone line |
+| **Histogram** | Luma, with the share of the picture at 0% and at 100% |
+| **False colour** | The picture itself, each pixel painted by its level in the Rec 709 bands camera crews read on ARRI monitors: purple crushed, blue just above black, green 18% grey, pink a stop over (skin), yellow nearly clipped, red clipped, and the picture's own grey between them. **FALSE COLOUR** in the footer, or `SCOPES BIG falsecolour` |
+
+The footer names the output, its raster and matrix, how often the scopes
+update, and the **EBU R 103** verdict: the share of the picture outside the
+preferred range, raw on every update and filtered (the recommended spatial
+filter, which ignores single-pixel overshoots) every two seconds. It turns red
+when more than 1% of the picture is out of range. **FREEZE** holds the scopes
+on the current frame.
+
+**Which signal.** When the output is sending SDI (DeckLink) or ST 2110, the
+scopes measure what goes down that wire: BT.709 Y'CbCr 4:2:2 at the depth the
+sender opened (8 or 10-bit), made by the same encoder the output uses, and
+rebuilt to R'G'B' the way a scope downstream sees it. Otherwise they measure
+the 8-bit R'G'B' frame that NDI, the window and the Web Monitor carry. The
+footer says which, for example `SDI YCbCr 4:2:2 10-bit`. On SDI and ST 2110
+the matrix is always BT.709, because that is what is sent, so
+`SCOPES MATRIX 2020` applies only to the R'G'B' frame.
+
+**What R 103 can find.** An 8-bit R'G'B' frame cannot leave gamut, so on those
+outputs the verdict is always OK. In 4:2:2, each pair of pixels shares one
+chroma sample, so at a sharp, saturated edge one pixel carries its
+neighbour's colour and the rebuilt R'G'B' overshoots. The raw figure counts
+those pixels. The filtered verdict uses R 103's spatial filter, which is
+designed to ignore single-pixel overshoots like these, so a normal picture
+stays legal. Measured: 75% bars cut mid-pair overshoot by about 2.7%, inside
+R 103's 5% margin; red against black on alternate columns reads 50% raw out
+of gamut and legal once filtered.
+
+| Command | Does |
+|---------|------|
+| `SCOPES PROGRAM` · `SCOPES SCOPES` · `SCOPES BOTH` · `SCOPES TOGGLE` | Switches the monitor |
+| `SCOPES BIG waveform\|parade\|vector\|diamond\|histogram\|falsecolour\|sound\|OFF` | Shows one scope alone |
+| `SCOPES FREEZE [ON\|OFF]` | Holds or releases the reading |
+| `SCOPES MATRIX 709\|2020` | The matrix for luma and chroma |
+| `SCOPES SOURCE PROGRAMME\|<n>` | Measures the programme (the default) or output n |
+| `SCOPES STATS` | The numbers behind the scopes, as text |
+
+## 18b. Sound Scopes
+
+**SOUND**, in the scopes footer beside FALSE COLOUR, fills the scopes with
+three readings of the focused playlist's sound: the same stereo the VU meter
+reads, so no output has to be armed. They start when the panel opens and stop
+when it closes.
+
+- **PHASE** is a goniometer: mid (M) up, side (S) across, left and right on
+  the diagonals. Mono is a vertical line, one channel wired backwards a
+  horizontal one, and a wide mix a blob. It is scaled to its own recent peak,
+  so quiet sound fills it too. **CORRELATION** under it runs from -1 to +1
+  over the last 85 ms and settles over about a third of a second: near +1 is
+  safe to fold to mono, near 0 is wide or unrelated, and below 0 (red) is
+  sound that a mono feed will lose.
+- **SPECTRUM** is in third octaves, 25 Hz to 20 kHz, in dBFS, where a sine
+  reads its own level (a -18 dBFS tone shows -18). The two channels are added
+  by power, so out-of-phase sound still shows. Bars fall at 20 dB a second and
+  each band's peak holds for two. The 25 and 31.5 Hz bands are coarse.
+- **LOUDNESS EBU R 128**: **M** (momentary, 400 ms), **S** (short-term, 3 s)
+  and **I** (integrated, gated, since the panel opened or **RESET**), on the
+  EBU +9 scale with a mark at the -23 LUFS target and the distance from it in
+  LU. **TRUE PEAK** is the highest since then, read between the samples
+  (4x, ITU-R BS.1770), and turns red above -1 dBTP. While nothing plays the
+  meter hears silence: M and S fall away, and the gate keeps silence out of I.
+
+The loudness meter is the one recordings and streams already use: their own
+integrated loudness and true peak show under the VU meter. `--smoke` checks it
+against EBU Tech 3341's first test (a stereo 1 kHz sine at -23 dBFS reads
+-23.0 LUFS), and `tools/check_sound_scopes.py` reads a tone cue through the
+panel.
+
+| Command | Does |
+|---------|------|
+| `SCOPES BIG sound` | Shows the sound scopes |
+| `SCOPES SOUND` | The readings: playlist, sounding, correlation, M, S, I, true peak, loudest band |
+| `SCOPES SOUND RESET` | Starts the integrated loudness and true peak again |
+
+## 19. Timecode & Chase
+
+Each deck can **chase** incoming timecode (follow an external master),
+**run/generate** timecode, and **trigger** cues at set SMPTE times. MTC and LTC
+ingest are available as integration backends (`Settings → Network`). Set the
+deck's frame rate and freewheel behaviour in the timecode controls.
+
+---
+
+## 20. Show Files, Bundling & Missing Media
+
+Shows are `.deckboy` files (plain text, tab-delimited).
+
+| Action | Key |
+|--------|-----|
+| New show | `Ctrl+N` |
+| Open | `Ctrl+O` |
+| Save | `Ctrl+S` |
+| Export bundle | `Ctrl+Shift+E` |
+
+`BUNDLE` (or `Ctrl+Shift+E`) exports the show plus a copy of every media file
+into a portable folder. Deckboy also autosaves with dirty tracking. The default
+show is `data/default.deckboy`; override with `DECKBOY_PROJECT`.
+
+**The first SAVE asks where.** A new show autosaves to the default show file
+until you give it a name of its own: the first `SAVE` (or `Ctrl+S`) opens the
+save dialog, and every `SAVE` after that writes straight back to the file you
+chose. `SAVE AS` (`Ctrl+Shift+S`) always asks.
+
+**Autosave and recovery.** Edits autosave after a short delay. If the show file
+is briefly busy, Deckboy retries the replacement. If saving still fails, a
+warning appears and the show stays unsaved while Deckboy retries every two
+seconds. Closing waits for pending edits to save, even before the autosave
+delay expires. If that save fails, the desk stays open; retry `SAVE` or use
+`SAVE AS` (`Ctrl+Shift+S`) to choose another location.
+
+When a complete `.deckboy.saving` copy is newer than the saved show (or the
+saved show is missing), opening the show offers **RECOVER** and **KEEP SAVED**.
+`Enter` recovers the copy with outputs disarmed and keeps the original show
+filename for future saves. `Escape` keeps the saved show. The recovery copy
+stays on disk until your next save replaces it; saving waits for your choice.
+Shows that could not be fully read, and shows running in soak mode, remain
+excluded from automatic saving, including on quit.
+
+**NEW asks twice while you are live, or before a show has been saved.**
+Starting an empty show empties both decks and disarms every output, so if an
+output is armed, a deck is running, or the show has cues but has never been
+saved under its own name, the first `NEW` (or `Ctrl+N`) only arms the warning
+banner — press it again within 2.5 seconds to go through. Otherwise it goes
+straight through. A show you have saved stays on disk, and `Ctrl+Z` brings back
+whichever show you were on (with outputs left disarmed, so you re-arm them
+yourself).
+
+### Missing media & relink
+
+On open, Deckboy scans every file-backed cue. Missing files get a red
+**MISSING** badge in the cue list, and a red **RELINK n** button appears in the
+toolbar (only while something is missing). `RELINK` first re-checks the disk (a
+re-mounted drive clears the warning), then opens a folder picker and repoints
+missing cues to same-named files found under that folder — an exact file-size
+match wins when several share a name.
+
+Missing media is also caught at showtime: taking a cue whose file has vanished
+is refused with a `MEDIA MISSING` toast (the output holds), and auto-advance
+skips missing cues instead of cascading to black.
+
+---
+
+## 21. Themes
+
+Deckboy ships many console-inspired colourways (`Settings → theme`), from the
+default **gameboy** green through famicom, super-famicom, gamecube, n64,
+virtual-boy, metroid, and more. **haze** is a slow, deep-green theme for a dark
+room, with smoke curls and drifting wax of its own.
+
+**Terminal / OLED themes.** Some dark themes render as a true-black terminal:
+OLED-black backgrounds and tiles with phosphor-bright text and per-theme
+accents (e.g. **dark** = green, **virtual-boy** = red). These use extra theme
+roles, all of which fall back to older roles so existing themes are unchanged:
+
+| Role | Purpose | Falls back to |
+|------|---------|---------------|
+| `screen_fg` | Primary on-body text ink (labels, hints, titles) | `screen_deep` |
+| `screen_fg_soft` | Secondary on-tile text (cue-row subtext) | `screen_dark` |
+| `screen_tile` | Interactive tile fill (buttons, idle rows) | `screen_light` |
+
+Readability is a data contract: every theme must pass
+`tools/audit_theme_contrast.ps1`, which checks each ink/fill pair the UI draws
+against a WCAG-style minimum. Edit the theme, not the renderer, and re-run the
+audit.
+
+---
+
+### Creatures
+
+Some themes have things living in them. They occupy the empty part of the
+playlist below your last cue: a moth that drifts toward the program monitor,
+fireflies that breathe, fish, a crab that scuttles and stops, a cat asleep in
+the corner.
+
+They never sit over a control, and **they disappear the moment any output goes
+live** — during a show the only thing moving should be the show. They come back
+when the outputs go down.
+
+Twenty-nine themes have their own cast, most of them two species. **Game Boy
+and the plain dark terminal deliberately have none** — the signature look and
+the theme a fresh install lands on stay perfectly still, so if you want a
+machine that does not move, pick one of those. `Settings → CREATURES` turns
+them off, and only appears when the theme you are using has any.
+
+**Writing your own.** Add lines to a theme's `theme.txt`:
+
+    creature	firefly	4
+    creature	cat	1
+
+The species are `moth`, `crab`, `fish`, `firefly`, `cat`, `snail`, `spider`,
+`mouse`, `frog`, `jellyfish`, `bird`, `wisp` (a curl of smoke) and `lava` (a
+slow blob of warm wax), up to twelve of
+each. A species this build does not know is ignored rather than refused, so a
+theme written for a later version still loads.
+
+---
+
+## 21a. Languages
+
+`Settings → Language` puts the whole desk into another language at once, with
+no restart. Thirty-seven languages ship with Deckboy, among them Arabic,
+Persian, Turkish, Kurdish, Kabyle and Tamazight, Chinese in both scripts,
+Japanese, Korean, Hindi and Zulu, along with a few constructed
+languages and six cyphers. The **Help!** button beside the
+picker is always in English and always brings English back, so a language you
+cannot read never leaves you stuck.
+
+The cyphers rewrite the desk rather than translate it, and what the show
+itself says stays as you wrote it: lower thirds, text cues, a presenter's
+notes and the prompter's script are never reworded or scrambled.
+**Alienese II** draws the desk in the symbols of the second alien alphabet,
+from a font Deckboy carries, and leaves numbers as they are so a timecode
+still reads.
+
+A language marked **(unreviewed)** in the picker has not yet been read by a
+native speaker. Some cover part of the desk on purpose, only the words their
+writer was sure of: the rest reads in English, or for Kabyle and Tamazight in
+French. Corrections and additions are very welcome: each language is one
+plain-text file in `data/lang`.
+
+**Right to left.** Arabic, Persian and Kurdish (Sorani) read right to left, with their letters joined and shaped as each script writes them. Every
+label is laid out with the Unicode bidirectional algorithm, so a number, a
+port or an English word inside it keeps its own direction, and a label that
+starts with a product name still reads from the right. The controls stay where they are in every
+language, so an operator who learned the desk in one language can work it in
+another.
+
+**Every script, on any desk.** Text is drawn in the script it was written in,
+whatever language the desk is in: a cue named in Japanese, an Arabic lower
+third or a Persian file name all read on an English desk. Deckboy draws the
+characters its own fonts lack from fonts the computer already has, chosen for
+the interface language, so Chinese characters take a Chinese face on a
+Chinese desk and a Japanese face on a Japanese one. It carries Noto Sans
+Arabic and Noto Sans Tifinagh itself, so Arabic, Persian, Kurdish and
+Tamazight read on every machine, and its own Liberation faces draw the
+letters of Kabyle. `--self-check` lists the fonts it found and the scripts this
+computer can draw.
+
+**On air.** Lower thirds, text cues and Deckboy Mini's subtitles follow the
+direction of their text. An Arabic or Persian Lower Third is laid out from the
+right inside its box, the typewriter reveal types from the right, and a
+wobble moves whole words in scripts whose letters join, so they stay joined.
+
+**From a controller.** `LANGUAGE` answers the current language, and
+`LANGUAGE <code>` changes it: `en`, or the name of any file in `data/lang`
+without its `.tsv`, such as `ar`, `fa` or `zh-Hans`.
+
+**Writing a language.** A catalogue starts with a few header lines and then
+holds one `English<TAB>translation` pair per line:
+
+    #name فارسی
+    #english Persian
+    #rtl 1
+    #unverified
+    SAVE	ذخیره
+
+`#name` is the language's own name and `#english` its English one. `#rtl 1`
+makes it right to left, and `#unverified` shows **(unreviewed)** in the picker
+until a speaker has checked it. A line left out, or left empty, falls through
+to English, so a half-finished catalogue gives you a half-translated desk with
+nothing missing -- or, with `#fallback fr`, to French, as Kabyle and Tamazight
+do. Text in a script the bundled faces lack is drawn from the computer's own
+fonts; `#font` names a face to draw the whole desk in instead, first found
+wins, looked for in `data/fonts` and then among the system fonts.
+
+---
+
+## 22. Remote Control
+
+All remote inputs normalise to plain-text commands.
+
+- **Companion** — port **5510** by default. Use the Deckboy module in
+  `companion-module-utopianacademy-deckboy/`: as well as sending commands it polls Deckboy's
+  state, so Stream Deck keys show cue tally, transport colour, output health and
+  a countdown. The module is built on `@companion-module/base` 2.x and
+  **requires Companion 5**; Companion 4.2 and earlier cannot load it, so stay
+  on the module from an earlier Deckboy release until you have upgraded.
+  A one-way *Generic TCP/UDP* mapping is still available in
+  `docs/streamdeck/` for setups that can't install a module.
+  **Deckboy listens on localhost only until Settings → Network → REMOTE is on** —
+  leave it off and only Companion on the same machine can connect.
+
+### Who may control Deckboy from another machine
+
+With **Listen on** set to all interfaces, Companion, OSC, OSC Query, the
+HyperDeck emulation and the vMix API answer only this computer and the
+machines in **Settings → Network → Trusted controllers**. (The phone remote
+has its own door: a paired key or the passphrase.) Entries are IPv4 addresses or
+ranges such as `192.168.1.0/24`, comma separated. Anyone else is refused, and
+a warning names the address. **Last refused** shows the most recent one with
+an **ALLOW** button, which adds it to the list. Every refusal is written to
+the show log as `CONTROL-REFUSED`.
+
+**Companion passphrase** adds a second lock for Companion TCP: a client on
+another machine must send `AUTH <passphrase>` before anything else is
+answered, including `STATUS`. The Deckboy Companion module sends it for you
+when its **Passphrase** field is filled in. Five wrong passphrases end the
+connection. HyperDeck and vMix clients cannot send a passphrase, so for them
+the trusted list is the lock.
+
+Some commands work only from this computer, whoever else is trusted: the
+test inputs (`CLICK`, `HOVER`, `PRESS`, `KEY`, `SCROLL`, `SCROLLBAR`, `DROPTEST`, `TESTTHROW`),
+anything that writes a file at a path it is given (`UISNAP`, `OUTSNAP`,
+`SUBTITLE CONVERT`), a `BROWSER` cue opening a `file:` address, and the
+commands that change who is trusted or who may watch and drive the show
+(`TRUST`, `COMPANIONPASS`, `WEBMONITOR SHARE`, `WEBMONITOR PIN`,
+`WEBMONITOR CONTROL`). A `DASH` button or script cue sent from another
+machine cannot carry them either.
+
+| Command | Does |
+|---------|------|
+| `TRUST <address or a.b.c.d/bits>` | Adds a machine or range (8 to 32 bits) |
+| `TRUST LAST` | Adds the machine refused most recently |
+| `TRUST REMOVE <entry>` · `TRUST LIST` · `TRUST CLEAR` | Edits or shows the list |
+| `COMPANIONPASS <passphrase>` · `COMPANIONPASS OFF` | Sets or clears the Companion passphrase (8+ characters) |
+- **OSC** — messages/bundles on the same port, plus an OSC Query HTTP endpoint
+  and mirrored `/deckboy/state` feedback.
+- **MIDI** — on Windows, macOS and Linux. Turn **MIDI input** on in
+  Settings and pick the port. What each key and knob does is the **MIDI
+  map** (see "The MIDI map"): out of the box a note takes the cue one above
+  its number in the focused playlist, CC 7 is master volume and CC 20 the
+  selected clip's speed. MIDI Machine Control PLAY / STOP / PAUSE / LOCATE
+  drive the transport.
+- **MIDI Show Control** — how a lighting desk fires the video. The desk sends
+  **GO** with a cue number and Deckboy takes the cue with that number; a GO
+  with no number takes the next cue, which is how a desk runs a straight
+  rundown. MSC cue numbers are text, so `12.4.1` and `A` both work. **LOAD**
+  selects a cue without firing it, **STOP** stops, **RESUME** continues,
+  **RESET** reracks the current cue to its first frame, and **ALL_OFF** is
+  the panic button: every output off, playback stopped. Set
+  **MSC device id** under the MIDI settings to match the desk's patch for
+  this machine, or **127** to answer the all-call. Any other ID must match
+  exactly, so Deckboy never acts on a GO meant for another device. Every
+  message is written to the show log, so "did the desk's GO reach this
+  machine?" always has an answer.
+- **HyperDeck** — Deckboy answers the HyperDeck protocol for decks that speak
+  it.
+- **Tally / triggers** — TSL tally out, ATEM and NDI-metadata triggers,
+  Art-Net channel map, NMC sync.
+
+Commands are case-insensitive. There are **over 260 of them**, and rather than
+list them here — where they would go stale — **send `HELP` over the socket and
+Deckboy prints the protocol it is actually running.** That reply is generated
+from the same code that handles the commands, so it cannot drift.
+
+Examples: `TAKE`, `STOP`, `VOLUME 75`, `AUDIOGAIN -6`, `AUDIOOUTS 2`,
+`AUDIO NEXT`, `TRANSITIONSTYLE wipeleft`, `NOTESTEP NEXT`, `FX ADD ripple`.
+
+The running order has verbs too (*v0.99.373 and later.*): `STANDBY <n>`, `STANDBY NEXT`,
+`STANDBY CLEAR`, `PREWAIT <s>`, `POSTWAIT <s>`,
+`CONTINUE OFF|AUTO|FOLLOW`, `ARM`, `DISARM`, `AUDITION`, `AUDITION OFF`,
+`PRELOAD`, `PRELOAD OFF`, and `CHECK` (with `CHECK <n>` to jump to a problem).
+`STOPALL`, `PAUSEALL` and `RESUMEALL` act on every deck at once. `GOGUARD <ms>|OFF`
+sets the **double-GO guard** (Settings → System → SHOW FLOW): a second GO on the
+same deck within that time is ignored and answered with an `ERR`, so a bounced
+clicker or a nervous double tap cannot skip a cue. It is off unless you set it.
+Each show-control cue type has its own verb (`TARGET`, `FADE`, `MIDICUE`,
+`NETCUE`, `TCCUE`, `DMXCUE`, `SCRIPTCUE`); `HELP` lists their arguments.
+
+**Every command answers.** You get `OK <VERB>`, `ERR unknown command: <VERB>`,
+or `ERR <VERB>: <reason>` — so a controller can tell a typo from a refusal from
+a success, and a verb that was understood but could not act says why. Nothing is
+silently swallowed and nothing is silently clamped into range: an out-of-range
+value is an error, because a clamp is what makes a units mistake invisible.
+
+Toggle adapters in `Settings → Network`.
+
+### Watching outputs in a browser
+
+**Settings → Network → Web Monitor** shows programme picture and stereo sound
+in compatible laptop, tablet, phone and TV browsers. Turn it on
+and the card prints the address to open, such as `http://192.168.1.20:8090/`.
+That page opens the programme player directly. It follows the programme
+output, including its layer stack, and buffers roughly three seconds to
+absorb network jitter; encoding and the receiving device add further delay.
+This is a confidence view rather than a low-latency production return.
+
+- **Who can see it** starts at **THIS COMPUTER**. Switch it to **THE NETWORK**
+  for other devices on the same network to open it.
+- **Passphrase** asks every viewer to authenticate before showing anything.
+  Network sharing requires at least 8 characters; letters and symbols are
+  allowed, so it does not need to be a numeric PIN.
+- **Shows** names the picture the monitor carries. Choose it on the Web
+  Monitor's own output in **Video Outputs**, under **Source**: the programme,
+  the multiview, a presenter view or any other output. Clicking **Shows**
+  goes straight there.
+- **Mode** is **WITH SOUND** (programme picture and sound, buffered about four
+  seconds) or **LOW LATENCY** (picture only, no buffer, the quickest view).
+  With sound, every viewer aims at the same wall-clock moment, so screens
+  watching together stay in step to within a few milliseconds, provided their
+  clocks are set by the network, as phones and most computers are.
+- **Connections at once** limits how many browser requests are served
+  together, 1-64 (default 8). A viewer holds a connection only while it
+  fetches the playlist or a half-second fragment, so eight serves roughly ten
+  to twenty phones. Bandwidth is the larger limit: about 6 Mbit/s per viewer
+  at 1080p, so choose 720p for a crowd on Wi-Fi.
+- **QR CODE** shows the address as a large QR code, for a phone camera to
+  open without typing. It carries the address only, never the passphrase, so a
+  photo of the screen does not open the monitor. It needs **THE NETWORK**: a
+  monitor on **THIS COMPUTER** has no address a phone can reach. Click or press
+  Esc to put it away.
+- **Maximum quality** sets the shared programme stream to 720p, 1080p
+  (default), 1440p, or 2160p. Higher settings need more encoder capacity and
+  network bandwidth; choose 720p on a busy or slow Wi-Fi network.
+- Sound is always included in the programme stream. Browsers start muted;
+  press **SOUND ON** to listen. Turn Web Monitor off to stop its encoder.
+- **PAUSE**, **BACK 10 S** and **LIVE** (v0.99.422 and later): pause the
+  picture or go back up to two minutes, to look again at something that just
+  happened, then **LIVE** to rejoin the programme in step with every other
+  screen. While you are behind, LIVE says by how much (**GO LIVE -0:12**). The
+  desk keeps the two minutes in memory: about 60 MB a minute at 1080p and 225
+  MB at 2160p. **OPEN STREAM** stays the live stream for other players.
+- **FULL SCREEN** expands the player. Controls fit portrait and landscape
+  screens and accept keyboard or TV-remote arrow navigation. **RECONNECT**
+  restarts playback without changing the sound setting.
+- The player needs H.264/AAC playback with native HLS or Media Source
+  Extensions. Its HLS player is bundled locally; no internet connection is
+  needed. **OPEN STREAM** provides the playlist for a compatible HLS player.
+  TV browser support depends on the model and firmware.
+- Network mode listens only on the selected private Ethernet/Wi-Fi address,
+  and serves at most the **Connections at once** limit. HTTP is unencrypted;
+  use a trusted LAN or a VPN you control, and do not forward this port to the
+  public internet.
+- `/outputs` opens the individual output thumbnails. Click one for a full
+  window view. Picture-only thumbnails run at up to 20 frames a second and
+  about 960 pixels wide; they are captured only while somebody watches.
+- For a production feed, use an NDI, SRT or SDI output.
+
+Over the network: `WEBMONITOR` (the address), `WEBMONITOR ON|OFF`,
+`WEBMONITOR SHARE ON|OFF`, `WEBMONITOR SOURCE PROGRAMME|<output>`,
+`WEBMONITOR LATENCY LOW|NORMAL`, `WEBMONITOR CLIENTS <n>`,
+`WEBMONITOR QR [ON|OFF]` (the QR code on the desk),
+`WEBMONITOR PORT <n>`, `WEBMONITOR PIN <pin>|OFF`.
+
+### Phone and tablet control
+
+A phone or tablet becomes a controller for the whole desk, on one screen with
+no modes: the decks and their transport, the cue list, DASH, the tracker,
+blackout, the test card, outputs and recording. It has its own card,
+**Settings → Network → PHONE & TABLET**, and works whether the Web Monitor is
+on or off.
+
+1. Set an **8-character or longer passphrase** (shared with the Web Monitor) and
+   turn **Phone control** on. The card shows the address, for example
+   `http://192.168.1.20:8090/remote`.
+2. Press **SCAN TO PAIR** and point the phone's camera at the code. The phone
+   opens Deckboy and connects with no typing. The code works once, for two
+   minutes; the phone keeps a key of its own and opens connected from then on,
+   including from the same code scanned again.
+   Without a camera, open the address and type the passphrase instead.
+
+The screen, top to bottom:
+
+- **Deck buttons**, with more than one deck: which deck the page drives.
+- **Now playing**: the deck's state, time and progress, the live cue and what
+  is on standby.
+- **TAKE**, then the transport: **|<** rerack, **<<** previous cue,
+  play/pause, **STOP**, **>>** next cue, **-10S** / **+10S**, and **BACK** /
+  **NEXT** to move the selection.
+- **FADER**: the deck's level.
+- **CUES**: a compact list with each cue's length. Tap a cue to put it on
+  standby (TAKE plays it); hold one to take it at once.
+- **DASH**: the desk's buttons; tap to fire. Hold a button to change its name
+  or what it does, or to remove it, and press **+** to add one. A button can
+  do anything else on this screen, so editing one cannot reach further.
+- **TRACKER**, when the show has tracker steps: the step, the next one,
+  **BACK**, **GO** and **PLAY** / **STOP**.
+- **SHOW**: **BLACKOUT** and **REC** fire after a half-second hold, so a pocket
+  cannot press them; **TEST CARD** and each output toggle with a tap.
+- The page wears the desk's theme and Deckboy's pixel face, and shows each
+  command's `OK` or `ERR`. Commands are never retried by themselves.
+- **Haptics**: the phone taps on every press, double-taps when the desk
+  confirms, rises while a held button arms, and buzzes three times when a
+  command is refused or the link drops. Android phones vibrate; an iPhone gives
+  a single tick (Safari has no vibration). Turn it off in the card.
+- **LOCK** forgets this phone's key and passphrase; it needs the code or the
+  passphrase again.
+
+**Paired phones** shows how many are paired; **FORGET ALL** removes every one.
+Keys are kept on this computer, never in the show file, so a show passed on
+does not let anyone else's phone in. Changing the passphrase does not unpair
+phones; FORGET ALL does.
+
+Phone control listens on this computer's private Ethernet/Wi-Fi address;
+turning it off takes it off the network unless the Web Monitor is shared. HTTP
+is unencrypted, so use a trusted private network and never forward the port to
+the public internet.
+
+#### From anywhere, with Tailscale
+
+To reach the desk from outside the building, install
+[Tailscale](https://tailscale.com) on this computer and on the phone, signed in
+to the same account. Deckboy sees it within a few seconds and also listens on
+this computer's Tailscale address; **From anywhere** on the card shows that
+address, and clicking it shows a pairing code for it. Tailscale encrypts the
+link and decides which devices may reach it, and nothing is opened to the
+internet. The phone pairs, and works, exactly as on the local network.
+
+`PHONE ON|OFF|STATUS`, `PHONE HAPTICS ON|OFF`, `PHONE PAIR [ANYWHERE]` (shows
+the code, and answers with its address) and `PHONE FORGET`, all from this
+computer only. `WEBMONITOR CONTROL ON|OFF` still works.
+
+---
+
+## 23. Reliability & Soak Testing
+
+- **Decode watchdog** — a wedged decode reracks the deck dark and toasts the
+  operator rather than hanging the show; if the file is gone it reports
+  `MEDIA LOST` and raises the RELINK state.
+- **Fullscreen recovery** — a program output that is minimised or lost is
+  automatically re-raised, with strike-based backoff to avoid loops.
+- **`--soak [minutes]`** — a long-run stability harness. It loops the loaded
+  show (or synthesized patterns) through the real app loop and logs RSS,
+  decode-stall, and missing-media counters once a minute to stdout and
+  `deckboy-soak.log`, then quits. It never writes the looped state back to the
+  show file. Default 24 h; e.g. `Deckboy.exe --soak 720` for a 12-hour run on
+  show hardware.
+
+---
+
+## 24. Keyboard Reference
+
+This table is generated from the list the app itself draws on **Ctrl+/**, and
+`tools/audit_shortcuts.py` fails the build if the two ever disagree.
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Take selected cue live |
+| `Space` | Play / Pause |
+| `.` / `,` | Skip to next / previous cue |
+| `PgDn` / `PgUp` | Take next / previous with the transition, even from an output |
+| `S` | Stop active cue |
+| `Ctrl+Enter` | Take on every deck at once |
+| `Ctrl+Space` | Play / Pause every deck |
+| `Ctrl+Shift+Space` | Stop every deck |
+| `Ctrl+R` | Rerack (rewind to start) |
+| `Up` / `Down` | Navigate cue list |
+| `Ctrl+A` | Select every cue in the focused playlist |
+| `Left` / `Right` | Skip back/forward 10s |
+| `Home` / `End` | Skip to start/end |
+| `I` | Import media files |
+| `Ctrl+I` | Set in point at playhead |
+| `Ctrl+O` | Set out point at playhead |
+| `Delete` / `Bksp` | Delete selected cue(s) |
+| `Ctrl+C` | Copy selected cue settings |
+| `Ctrl+V` | Paste cue settings to selection |
+| `Ctrl+Shift+C` | Copy focused warp settings |
+| `Ctrl+Shift+V` | Paste focused warp settings |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
+| `Ctrl+G` | GOTO cue number |
+| `Ctrl+F` | Find cue by name/number |
+| `Ctrl+Shift+F` | Find the next match |
+| `Ctrl+Shift+R` | Renumber cues |
+| `Ctrl+S` | Save project |
+| `Ctrl+Shift+S` | Save project as... |
+| `Ctrl+Shift+E` | Export bundled project |
+| `O` | Open project |
+| `Ctrl+N` | New project |
+| `L` | Toggle loop |
+| `E` | Toggle hold (pause at end) |
+| `X` | Cycle end action |
+| `K` | Cycle color tag |
+| `J` | Jump to the live cue |
+| `B` | Blackout - instant, playback continues |
+| `C` | Clear instantly - stop all decks, disarm output |
+| `U` | Clear overlays |
+| `N` | Toggle NDI send |
+| `F` | Toggle fullscreen output |
+| `F11` | Fullscreen the control window |
+| `Shift+B` | Add browser cue |
+| `P` | Add pattern cue |
+| `A` / `D` | Cycle audio device / display |
+| `T` | Run timecode |
+| `Shift+O` | Toggle time overlay |
+| `[` / `]` | Shorten / lengthen fade |
+| `Esc` | Desk, then clear output, then quit |
+| `Ctrl+Q` | Quit (asks first) |
+| `Ctrl+D` | Dashboard: tiles and the master tracker |
+| `Ctrl+` / `` | This shortcut overlay |
+| `Ctrl+,` | Preferences |
+| `+` / `-` | Volume up/down |
+| `Shift+drag` | Snap warp corners to grid |
+
+---
+## 25. Command-Line Flags
+
+Deckboy runs with no arguments. These are for the times it does not do what you
+expect, or you want to prove it will before the doors open.
+
+### Before a show
+
+```
+Deckboy.exe --devices               # every audio device, display, MIDI port and render driver
+                                    #   the machine can actually see, with real rates and names
+Deckboy.exe --self-check            # dependencies and backend wiring
+Deckboy.exe --smoke                 # automated smoke test (exit 0 = pass)
+Deckboy.exe --soak [minutes]        # long-run stability harness; logs memory and stalls
+Deckboy.exe --version               # the version this binary reports
+Deckboy.exe --check-update          # ask whether a newer release exists
+```
+
+`--devices` is the one to run first when somebody reports no sound, the wrong
+controller or a soft picture. It separates a Deckboy fault from a machine that
+cannot see its own hardware, and it spells device names the way a show file has
+to.
+
+### Opening something directly
+
+```
+Deckboy.exe show.deckboy            # open a show, skipping the splash
+Deckboy.exe --import FILE           # import a file at launch, skipping the splash
+Deckboy.exe --settings [tab[.subtab]]   # open the settings modal at a given tab
+Deckboy.exe --code-editor           # open the code editor at boot
+```
+
+### When something will not play
+
+```
+Deckboy.exe --no-hw-decode          # decode in software: the A/B for the hardware path
+Deckboy.exe --no-inproc-decode      # use the FFmpeg subprocess path instead of in-process
+Deckboy.exe --decode-bench FILE [seconds] [cli]   # decode rate, and GPU vs CPU frame counts
+Deckboy.exe --motion-probe FILE [frames]          # is this clip usable as a motion driver?
+Deckboy.exe --hap-probe FILE        # report a HAP file's variant and chunking
+Deckboy.exe --pdf-probe FILE        # page count and raster of a PDF before importing it
+Deckboy.exe --pptx-notes FILE       # the speaker notes a PowerPoint deck would import
+Deckboy.exe --sync-pop-test         # verify the audio-sync beacon path
+```
+
+If a clip plays with `--no-hw-decode` and not without it, the fault is the
+hardware decoder on that machine, not the file.
+
+### Proving what a look costs
+
+```
+Deckboy.exe --effect-bench TOKEN[:amount[:a[:b]]] [WxH] [frames]  # what one effect costs
+Deckboy.exe --effect-dump TOKEN IN.ppm OUT.ppm [frame] [passes]   # one effect, headless
+Deckboy.exe --pattern-dump ID OUT.ppm [WxH] [t]                   # one pattern, headless
+Deckboy.exe --audio-fx-check        # run the audio chain against a known signal
+```
+
+`--effect-dump` renders without a window, so two builds can be compared frame
+for frame and byte for byte.
+
+### Other
+
+```
+Deckboy.exe --allow-multi-instance  # bypass the single-instance lock
+Deckboy.exe --inspector-scroll PX   # scroll the inspector at boot (a big number means the bottom)
+Deckboy.exe --ui-size WIDTH HEIGHT  # control-window size for UI checks (960..7680 by 540..4320)
+Deckboy.exe --settings-scroll PX    # scroll the tab opened with --settings for UI checks
+Deckboy.exe --help                  # the list this section is drawn from
+```
+
+### Environment
+
+| Variable | Effect |
+|----------|--------|
+| `DECKBOY_PROJECT` | Open a specific show |
+| `DECKBOY_STATE_DIR` | Where Deckboy writes: the show, the last-opened pointer, logs, converted media |
+| `DECKBOY_ROOT` | Where Deckboy reads `data/` from — themes, fonts, sounds |
+| `DECKBOY_THEME` | Force a colourway |
+| `DECKBOY_COMPANION_PORT` | The control port (see §22) |
+| `DECKBOY_NO_HW_DECODE` | As `--no-hw-decode` |
+| `DECKBOY_OUTPUT_RENDERER` | Choose the output window's renderer: `gpu`, `direct3d11`, `metal`, `opengl` |
+| `DECKBOY_EGRESS_READBACK=sync` | Force the plain synchronous recording readback |
+| `DECKBOY_EGRESS_BENCH=1` | Print per-frame readback costs |
+| `DECKBOY_UI_PROFILE=1` | UI timing and watchdog logs |
+
+`DECKBOY_ROOT` and `DECKBOY_STATE_DIR` together give a completely isolated
+instance, which is how to try something out without touching the show on the
+machine.
+
+### Deckboy Mini
+
+`deckboy-mini` is a one-deck player that ships beside Deckboy, for a screen
+nobody has to run: a foyer loop, a backstage monitor, a kiosk that starts with
+the computer. It plays through the same engine as the desk, so anything the
+desk plays from a file, Mini plays the same way.
+
+```
+deckboy-mini ~/Videos                         # a folder plays in name order
+deckboy-mini clip.mp4 logo.png --loop        # files play in the order given
+deckboy-mini loop.mp4 --display 2 --hold      # second display, hold the last frame
+deckboy-mini show.m3u8                        # a playlist saved from Mini (W)
+```
+
+**Started with nothing** -- double-clicked, or run with no files named -- Mini
+opens in a window with an empty list and says how to give it something: drop
+videos, pictures or a folder on the window, or press A in the terminal and type a
+path. The first thing it is given starts playing, as the first file on the
+command line would.
+
+**On Windows, in PowerShell, start it as `.\deckboy-mini`** from its folder.
+PowerShell does not run a program from the folder it is in by its bare name, so
+`deckboy-mini clip.mp4` there answers "not recognized" -- the `.\` is all it
+wants. In Command Prompt either form works, and dragging files onto
+`deckboy-mini.exe` opens Mini with them.
+
+**Where it is.** On Windows it is `deckboy-mini.exe` beside `Deckboy.exe`; on macOS it is inside
+the app, at `Deckboy.app/Contents/MacOS/deckboy-mini`. On Linux the portable
+download has `./deckboy-mini` beside `./deckboy`, the AppImage runs it as
+`Deckboy.AppImage mini <clips>`, and the Flatpak as
+`flatpak run --command=deckboy-mini io.github.utopian_academy.Deckboy <clips>`.
+
+**On a Raspberry Pi**, Mini plays through the board's own video decoder, so a
+1080p H.264 film plays at its full frame rate on a Raspberry Pi 3. There is
+no Pi download yet: build Mini on the Pi itself with
+`./tools/linux_build.sh --mini`, which builds Mini alone, as many compiles at
+once as the memory allows, and fits in a Pi 3 where the whole desk does not.
+
+| Option | Effect |
+|--------|--------|
+| `--display N` | Output on display N (1 is the first). Default 1 |
+| `--window` | A window instead of fullscreen |
+| `--loop` | Start again after the last cue |
+| `--hold` | Hold the last frame after the last cue (otherwise black) |
+| `--paused` | Load the first cue without playing it |
+| `--still S` | Seconds each still stays up. Default 5 |
+| `--volume P` | Volume, 0-100 |
+| `--port N` | Remote control port. Default 5510, the desk's |
+| `--remote` | Accept remote control from the network, not only this machine |
+| `--plain` | Plain log lines instead of the status panel |
+| `--overlay` | Start with the status bar shown on the output |
+| `--watch DIR` | Add new files that arrive in DIR, each once it has finished copying |
+
+**Keys** work in the terminal Mini runs in, so the whole show can be run from
+the keyboard there, over SSH included; the same keys work in the output window.
+
+| Key | Does |
+|-----|------|
+| Space | Go: play or pause, or take the selected cue |
+| Up / Down | Pick a cue in the list |
+| Enter | Take the picked cue, or the number just typed |
+| 0-9 then Enter | Take that cue by number |
+| Right / Left | Take the next / previous cue |
+| `[` / `]` | Seek back / forward 10 seconds |
+| `-` / `+` | Volume down / up |
+| S, B, L | Stop, blackout, loop |
+| H, F | The status bar on the output, fullscreen |
+| A | Add files: Tab completes the path |
+| `:` | The command line: any remote command, Up recalls the last |
+| `?` | The keys, in the panel: five pages (show, editing, output and sound, playing a file, running order), `?` steps on |
+| Q Q | Quit (twice, so one stray key cannot end a show) |
+
+**Editing the list**, in the terminal:
+
+| Key | Does |
+|-----|------|
+| `<` / `>` | Move the picked cue up / down. The cue on air stays on air |
+| X X | Remove the picked cue (twice, like Q) |
+| R | Rename it |
+| T | How long a still stays up |
+| Shift+L | Loop this cue on its own (L loops the whole list) |
+| W | Save the list as a playlist |
+| O | Open a playlist, a file or a folder in place of the list |
+| Shift+W | Watch a folder, on and off. The first time, it asks which |
+
+**Output and sound:**
+
+| Key | Does |
+|-----|------|
+| D | Move the output to the next display |
+| V | Output on / off. The sound carries on, so a screen can go dark under music |
+| P | Next sound device. What is playing carries on from where it was |
+
+**Playing a file**, the things a media player does, with mpv's keys where
+they do not clash with the show's:
+
+| Key | Does |
+|-----|------|
+| `,` / `.` | One frame back / on (pauses) |
+| `{` / `}` | One second back / on (`[` / `]` are ten) |
+| `(` / `)` | Slower / faster, 0.25x to 4x, for every cue until changed |
+| M | Mute (the volume is kept) |
+| K | A-B loop: first press sets A, second sets B and loops, third clears |
+| J | Subtitles: cycles the tracks, then off |
+| `#` | The file's next sound track |
+
+**The running order:**
+
+| Key | Does |
+|-----|------|
+| `/` | Find a cue by name: type any words from it and the list narrows to the matches, best first. Enter takes the picked one, Esc leaves the list as it was |
+| N | Play the picked cue next, ahead of the list. Press it on more cues to queue them in order; N again takes one off |
+| E | Stop when the cue on air ends, instead of going on. It clears itself once it has |
+| C | The clock counts down (time left) or up (time gone) |
+| Z | Shuffle: every cue plays once before any plays again |
+| G | Crossfade between cues: off, half a second, one or two seconds |
+
+**The NEXT line** in the panel always says what will happen when the cue on air ends:
+the next cue, a queued one, "a shuffled cue", or that Mini will stop. While
+they are on, SHUF, LAST (E) and XF (G) show beside LOOP.
+
+**Subtitles** are found the way a media player finds them: any caption file
+beside the clip with the same name (`talk.srt`, `talk.en.vtt`; SRT, WebVTT,
+SCC and TTML all read), and subtitle tracks inside the file itself, which are
+read in the background so the picture never waits for them. They are drawn
+low and centred, white with a black edge.
+
+**Playlists** are extended M3U8 files, so any player that reads a playlist reads
+Mini's, and a person can read them too. Mini also opens plain M3U and PLS
+playlists from other players; a list opened from a `.pls` is saved beside it as
+`.m3u8`, never over it. Mini's own settings (a cue's loop, a
+still's time) ride in `#DECKBOY:` lines other players skip, and paths are
+written relative to the playlist when the media sits under its folder, so a
+show folder copies to another machine whole. The panel's title shows the
+playlist's name, with `*` while there are unsaved changes, and Q Q says so
+before quitting.
+
+Files or a folder dropped on the output are added to the end of the list too.
+
+**A watch folder** fills the list by itself, the way the desk's WATCH FOLDER
+fills a playlist, and it is the same code. Start Mini with `--watch DIR`, or
+press Shift+W and type the folder. Every new clip, still or sound that lands in
+it goes on the end of the list, several at once in name order, and the panel
+says how many arrived. A file still being copied is left alone until its size
+and time have held still for a scan, so a large clip is never taken
+half-written. The folder is looked at every two and a half seconds, and not
+inside its subfolders. Files already in the list are not added again, and if
+the list was empty, the first arrival starts playing (unless `--paused`).
+Shift+W turns the watch off and on again; `--watch` on its own, with no files,
+starts Mini empty and waiting.
+
+**The status bar** is for a screen with nobody at a terminal: H (or Tab)
+shows a slim bar across the bottom of the output, in the same greens, with
+what is playing, the time, a progress line and what is next. It is off until
+you ask for it, because the output is what the room sees.
+
+**Remote control** speaks the desk's protocol (§22) on the desk's port, and
+Mini is deck 1: `GO`, `TAKE [n]`, `SELECT n`, `NEXT`, `PREV`, `PLAY`,
+`PAUSE`, `STOP`, `SEEK`, `VOLUME`, `LOOP`, `BLACKOUT`, `OVERLAY`, `STATUS`
+and `QUIT`, plus `ADD <file or folder>` to put more on the end of the list,
+each answered `OK` or `ERR` with the reason. The keys above are commands too:
+`MOVE n to`, `REMOVE n`, `RENAME n name`, `STILL n seconds`, `CUELOOP n`,
+`SAVE [file]`, `OPEN file`, `DISPLAYS`, `DISPLAY n|NEXT`, `OUTPUT ON|OFF`,
+`AUDIO LIST|NEXT|DEFAULT|<name>`, `SPEED 0.25-4`, `MUTE`, `FRAME [BACK]`,
+`ABLOOP [a b|OFF]`, `SUBS [ON|OFF]`, `AUDIOTRACK n|NEXT`, and for the running
+order `FIND words`, `QUEUE [n|CLEAR]`, `ENDAFTER ON|OFF`, `SHUFFLE ON|OFF`,
+`CLOCK REMAINING|ELAPSED` and `CROSSFADE seconds`, and `WATCH [folder|ON|OFF]`
+(`WATCH` alone reports the folder and what it has seen and taken). `STATUS` comes back in the desk's
+format, so the Companion module drives Mini like a one-deck Deckboy. Send
+`HELP` for the list.
+
+**In a terminal** Mini shows a status panel in Game Boy greens: what is
+playing, how far through, what is next, the volume, the link, and a strip of
+text that moves with the sound, with the last few events beneath it. Run as a
+service or with its output sent to a file, it writes one plain line per event
+instead, which is what a log wants; `--plain` and the `NO_COLOR` convention
+choose the same.

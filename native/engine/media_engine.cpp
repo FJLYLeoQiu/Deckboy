@@ -1,0 +1,15769 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Deckboy Contributors
+// This file is part of Deckboy, a cue deck for live events.
+// See LICENSE for details.
+
+// ============================================================================
+// media_engine.cpp — Implementation of the core playback engine.
+//
+// This is the largest and most critical implementation file. Key sections:
+//
+//   stopAll / loadCue:     lifecycle management, cue loading pipeline
+//   refreshActiveCueRuntime: hot-update runtime params without reloading
+//   play / pause / stop:   transport state transitions
+//   seek:                  position jumping (restarts decode from new offset)
+//   update:                per-frame tick — pops frames from decode queue,
+//                          checks pause points, detects end-of-playback
+//   render:                draws the current frame + transition overlay
+//   startDecoderThreads:   launches ffmpeg video + audio subprocesses with
+//                          piped stdout; spawns reader threads
+//   buildPatternFrame:     procedural test pattern generation (static)
+//   buildPocketTest:       animated pixel art scene generation (static)
+//
+// Threading:
+//   Video decode thread reads raw RGBA from ffmpeg → pushes to frameQueue_
+//   Audio decode thread reads raw PCM from ffmpeg → queues to SDL audio
+//   Main thread calls update() to pop frames, render() to blit them
+//   frameMutex_ protects frameQueue_ between decode and main threads
+//
+// Transition system:
+//   When loadCue() is called with transitionSeconds > 0, the outgoing cue's
+//   current frame is snapshot to transitionTexture_. During the transition
+//   period, render() alpha-blends between the snapshot and the incoming cue's
+//   live frames. For DipBlack, both fade independently to/from black.
+// ============================================================================
+
+#include "engine/media_engine.hpp"
+#include "engine/stage_timings.hpp"
+#if defined(__linux__) && DECKBOY_INPROC_DECODE
+#include "engine/drm_prime_import.hpp"
+void deckboy::engine::DrmPrimeImporterDeleter::operator()(DrmPrimeImporter* importer) const {
+  delete importer;
+}
+#endif
+
+#include "core/sdl_compat.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
+#include "core/code_source.hpp"
+#include "core/critter_card.hpp"
+#include <ctime>
+#include "core/fs.hpp"
+#include <map>
+#include <fstream>
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <vector>
+#include <cstdlib>
+#include <cstring>
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+#include "core/cue_effects.hpp"     // detail::parallelRows
+#include "core/cue_helpers.hpp"       // isSourceCueKind, resolvedCueEndAction
+#include "core/io_utils.hpp"          // readExact, readSome (pipe I/O)
+#include "core/pattern_helpers.hpp"   // normalizePatternTypeId, patternTypeIsAnimated
+#include "core/paths.hpp"             // dataDir, for the bundled face
+#include "render/text_shaper.hpp"     // frame text: bidi, fallback faces, one baseline
+#include "core/pixel_effects.hpp"     // applyChromaKeyToPixels, applyColorControlsToPixels
+#include "core/subprocess.hpp"        // spawnProcess, ChildProcess
+#include "core/hdr_to_sdr.hpp"        // an HDR stream's own SDR conversion
+#include "core/utils.hpp"             // trim, splitLines, formatTimecode
+// Native Terrarium sim (pattern://terrarium, pattern://terrarium-pico).
+// The sim itself is vendored untouched under extras/upstream/; the namespace
+// wrapper and the RGBA renderer are Deckboy's. See extras/upstream/UPSTREAM.md.
+#include "extras/terrarium_render_rgba.hpp"
+#include "platform/capture_backend.hpp" // source capture for camera/window cues
+
+#include <memory>
+#include <mutex>
+
+#ifndef _WIN32
+#include <unistd.h>                   // POSIX read() (used by io_utils on non-Windows)
+#endif
+
+using deckboy::core::utils::trim;
+using deckboy::core::utils::splitLines;
+
+namespace {
+
+constexpr double kPatternMotionLoopSeconds = 4.0;
+constexpr double kTau = 6.28318530717958647692;
+
+double normalizedLoopProgress(double wallSeconds, double loopSeconds) {
+  if (loopSeconds <= 0.0) {
+    return 0.0;
+  }
+  double wrapped = std::fmod(wallSeconds, loopSeconds);
+  if (wrapped < 0.0) {
+    wrapped += loopSeconds;
+  }
+  return wrapped / loopSeconds;
+}
+
+int phaseFromProgress(double progress, int period) {
+  if (period <= 0) {
+    return 0;
+  }
+  double wrapped = progress - std::floor(progress);
+  return static_cast<int>(std::floor(wrapped * static_cast<double>(period))) % period;
+}
+
+std::atomic<bool> g_inprocDecodeDisabled {false};
+// Latched immediately before SDL_Quit(); after that no engine may call SDL.
+std::atomic<bool> g_sdlTornDown {false};
+
+// ---------------------------------------------------------------------------
+// buildTerrariumFrame — Stateful pattern source for pattern://terrarium.
+//
+// One shared world per process (deliberate: every deck and preview shows THE
+// terrarium, and its ecosystem persists across cue reloads for the whole
+// show). Ticks at the sim's native 9 TPS off the wall clock; the expensive
+// 1600x896 re-render only happens when the sim actually stepped. Guarded by
+// a mutex because pattern builds can come from preview paths too.
+// ---------------------------------------------------------------------------
+void buildTerrariumFrame(DecodedFrame& frame, double wallSeconds, int cellPx) {
+  static std::mutex mutex;
+  static terra::World world;
+  static terra::Rng rng {0xDECB0Fu};
+  static std::string banner;
+  static int tick = 0;
+  static double lastStepSeconds = -1.0;
+  static bool seeded = false;
+  // Cached per cell size: the two patterns share ONE world (that is the point —
+  // pico and the full-size view are the same terrarium seen at two scales) but
+  // they rasterise to different rasters, so they cannot share a pixel buffer.
+  static std::vector<std::uint8_t> cached[2];
+  static float cachedAnimT[2] = {-1.0f, -1.0f};
+  const int cacheSlot = (cellPx <= 1) ? 0 : 1;
+
+  std::lock_guard<std::mutex> lock(mutex);
+  constexpr double kStepSeconds = 1.0 / 9.0;  // DEFAULT_TPS
+  bool dirty = false;
+  if (!seeded) {
+    terra::seedWorld(world, rng, terra::MEADOW);
+    // Warm the ecosystem up (~13 sim-seconds) so the first TAKE shows a
+    // grown, lived-in world instead of freshly raked dirt.
+    for (int i = 0; i < 120; ++i) {
+      terra::step(world, rng, banner, tick);
+      ++tick;
+    }
+    seeded = true;
+    lastStepSeconds = wallSeconds;
+    dirty = true;
+  }
+  int steps = 0;
+  while (wallSeconds - lastStepSeconds >= kStepSeconds && steps < 5) {
+    terra::step(world, rng, banner, tick);
+    ++tick;
+    lastStepSeconds += kStepSeconds;
+    ++steps;
+    dirty = true;
+  }
+  if (wallSeconds - lastStepSeconds >= kStepSeconds) {
+    lastStepSeconds = wallSeconds;  // fell far behind — drop the backlog
+  }
+  // Surf, motes and fireflies move on wall-clock time, not on sim ticks — the
+  // sim only steps at 9 TPS, so animating from `tick` alone makes the water
+  // lurch. Re-render when the sim stepped OR when animT has moved enough to be
+  // worth a frame (~12 fps, matching the Pi panel's repaint rate).
+  const float animT = static_cast<float>(wallSeconds);
+  const bool animMoved = cachedAnimT[cacheSlot] < 0.0f ||
+                         (animT - cachedAnimT[cacheSlot]) >= (1.0f / 12.0f);
+  if (dirty || animMoved || cached[cacheSlot].empty()) {
+    terra::renderWorldRgba(world, tick, animT, cellPx, cached[cacheSlot]);
+    cachedAnimT[cacheSlot] = animT;
+  }
+  frame.width = terra::frameWidthForCellPx(cellPx);
+  frame.height = terra::frameHeightForCellPx(cellPx);
+  frame.format = FramePixelFormat::RGBA32;
+  frame.pixels = cached[cacheSlot];
+}
+
+} // namespace
+
+// Process-wide break-glass: force the ffmpeg CLI pipe path for new decodes
+// (--no-inproc-decode). Static so the operator flag reaches every engine.
+void MediaEngine::setInprocDecodeDisabled(bool disabled) {
+  g_inprocDecodeDisabled.store(disabled);
+}
+
+bool MediaEngine::inprocDecodeDisabled() {
+  return g_inprocDecodeDisabled.load();
+}
+
+// Set once, just before SDL_Quit(). See the header for why this exists.
+void MediaEngine::setSdlTornDown(bool tornDown) {
+  g_sdlTornDown.store(tornDown);
+}
+
+bool MediaEngine::sdlTornDown() {
+  return g_sdlTornDown.load();
+}
+
+// Destructor ensures all decode threads are joined and subprocesses killed.
+MediaEngine::~MediaEngine() {
+  stopAll();
+  // After SDL_Quit SDL has destroyed every stream itself.
+  if (tapConverter_ && !sdlTornDown()) {
+    SDL_DestroyAudioStream(tapConverter_);
+  }
+  tapConverter_ = nullptr;
+  for (std::FILE*& file : patchCaptureFiles_) {
+    if (file) std::fclose(file);
+    file = nullptr;
+  }
+#if defined(__linux__) && DECKBOY_INPROC_DECODE
+  // The importer frees SDL and GL objects; after SDL_Quit there is nothing
+  // left to free them into, so they are let go with the process.
+  if (drmImporter_ && sdlTornDown()) {
+    (void)drmImporter_.release();
+  }
+#endif
+}
+
+// Full reset: kill all subprocesses, join all threads, release all textures,
+// clear audio queue, and reset all state to defaults. Called by destructor
+// and when the deck is cleared (no cue loaded).
+void MediaEngine::stopAll() {
+  stopDecoderThreads();
+  // Native captures too -- they run on their own threads and
+  // stopDecoderThreads knows nothing about them.
+  stopDeckLinkCapture();
+  stopNdiCapture();
+  stopSpoutCapture();
+  isBrowserCapturing_ = false;
+  isSourceCapturing_ = false;
+  clearVisualOnReachedEnd_ = false;
+  suppressFadeInForCurrentCue_ = false;
+  suppressVisualFadeOutForCurrentCue_ = false;
+  clearTexture();
+  clearTransitionTexture();
+  clearAudio();
+  state_ = TransportState::Stopped;
+  currentPosition_ = 0.0;
+  duration_ = 0.0;
+  cueInPointSeconds_ = 0.0;
+  cueOutPointSeconds_ = 0.0;
+  activeCue_ = nullptr;
+  activeCueSnapshot_.reset();
+  syncAudioFadeParams();
+  frameRate_ = 0.0;
+  lastRenderedFrameIndex_ = static_cast<std::uint64_t>(-1);
+  // The serial is deliberately NOT reset here either -- see loadCue.
+  displayFrame_.reset();
+  resetMediaFpsTelemetry();
+}
+
+// ---------------------------------------------------------------------------
+// loadCue — Load a new cue for playback, optionally with a transition.
+//
+// This is the main entry point for starting playback of any cue type.
+// It handles the full lifecycle:
+//   1. Compute outgoing cue's fade gain (for transition blending)
+//   2. Stop current decode threads and begin transition animation
+//   3. Copy all per-cue parameters (geometry, effects, timing) from the Cue
+//   4. Dispatch to the appropriate loader based on CueKind:
+//      - Image:       loadStillFrame() → async single-frame decode
+//      - Pattern:     loadPatternFrame() → CPU-generated pixels
+//      - Source:      loadSourceFrame() → capture backend
+//      - Browser/L3:  initStillTimer() → wait for browser frames
+//      - Video/Audio: startDecoderThreads() → ffmpeg pipeline
+//   5. Set transport state (Playing if autoplay, Paused otherwise)
+//
+// The suppressFadeIn flag is set when a cue is loaded mid-transition
+// (e.g. auto-advancing) to avoid a double fade-in effect.
+// ---------------------------------------------------------------------------
+void MediaEngine::loadCue(const Cue* cue, bool autoplay, double transitionSeconds,
+                           TransitionStyle transitionStyle, bool suppressFadeIn) {
+  devampRequested_ = false;   // a devamp belonged to the cue it was aimed at
+  drawClock_ = 0.0;           // a drawing replays from its start at every TAKE
+  drawClockWall_ = -1.0;
+  loopPassesPlayed_ = 0;      // and so do the repeats it has played
+  liveOutgoing_ = false;      // a held frame from here on is this engine's own, frozen
+  float outgoingGain = transitionSourceGainForLoadCue(activeCue_, state_, visualFadeGainAt(position()));
+  outgoingCueSnapshot_ = activeCueSnapshot_;
+  stopDecoderThreads();
+  beginTransition(transitionSeconds, transitionStyle, outgoingGain);
+  clearTexture();
+  clearAudio();
+  // A new cue starts at its own speed: a fade that slowed the last one down
+  // belonged to that one. So does lock-to-screen's trim: the new cue finds
+  // its own, or none.
+  tapeSpeed_ = 1.0;
+  userTapeSpeed_ = 1.0;
+  screenLockTrim_ = 1.0;
+  resetScreenLock();
+  tapeSpeedAudio_.store(1.0, std::memory_order_relaxed);
+  applyTapeRatio();
+  // With the audio goes the picture OF the audio, or the incoming cue's
+  // visualiser draws the outgoing cue's sound until its own arrives.
+  clearScopeSamples();
+  // Own a snapshot of the cue. The caller's pointer typically aims into
+  // Deck::cues, which the UI mutates freely (import push_back reallocates,
+  // delete shifts) while decode threads and the render path still read the
+  // active cue. Copy it and repoint the local param at the owned storage so
+  // nothing below can capture the caller's pointer.
+  if (cue) {
+    activeCueSnapshot_ = *cue;
+    activeCue_ = &*activeCueSnapshot_;
+    cue = activeCue_;
+  } else {
+    activeCueSnapshot_.reset();
+    activeCue_ = nullptr;
+  }
+  outputScaleX_ = cue ? cue->outputScaleX : 1.0f;
+  outputScaleY_ = cue ? cue->outputScaleY : 1.0f;
+  scaleMode_ = cue ? cue->scaleMode : ScaleMode::Fit;
+  outputOffsetX_ = cue ? cue->outputOffsetX : 0.0f;
+  outputOffsetY_ = cue ? cue->outputOffsetY : 0.0f;
+  outputRotationDegrees_ = cue ? cue->outputRotationDegrees : 0.0f;
+  cropLeft_ = cue ? cue->cropLeft : 0.0f;
+  cropRight_ = cue ? cue->cropRight : 0.0f;
+  cropTop_ = cue ? cue->cropTop : 0.0f;
+  cropBottom_ = cue ? cue->cropBottom : 0.0f;
+  chromaKeyEnabled_ = cue ? cue->chromaKeyEnabled : false;
+  chromaKeyColor_ = cue ? cue->chromaKeyColor : SDL_Color {0, 255, 0, 255};
+  chromaKeyTolerance_ = cue ? cue->chromaKeyTolerance : 60.0f;
+  chromaKeySoftness_ = cue ? cue->chromaKeySoftness : 20.0f;
+  brightness_ = cue ? std::clamp(cue->brightness, 0.0f, 2.0f) : 1.0f;
+  contrast_ = cue ? std::clamp(cue->contrast, 0.0f, 2.0f) : 1.0f;
+  saturation_ = cue ? std::clamp(cue->saturation, 0.0f, 2.0f) : 1.0f;
+  hueShift_ = cue ? std::clamp(cue->hueShift, -180.0f, 180.0f) : 0.0f;
+  pausePoints_   = cue ? cue->pausePoints   : std::vector<double>{};
+  nextPausePointIdx_ = 0;
+  playbackSpeed_ = cue ? std::clamp(cue->playbackSpeed, 0.25, 4.0) : 1.0;
+  // Hand the outgoing picture to the holder rather than dropping it; see
+  // heldFrame_. This is what stops the black frame between two cues.
+  if (displayFrame_.has_value()) {
+    heldFrame_ = std::move(displayFrame_);
+    heldFrameSince_ = std::chrono::steady_clock::now();
+    // What the operator asked for, so the compositor can honour it. Kept here
+    // rather than read from the cue later: by the time the blend runs, the cue
+    // being replaced is gone.
+    outgoingSeconds_ = std::clamp(transitionSeconds, 0.0, 10.0);
+    outgoingStyle_ = transitionStyle;
+  }
+  displayFrame_.reset();
+  currentPosition_ = 0.0;
+  pausedPosition_ = 0.0;
+  playbackStartPosition_ = 0.0;
+  cueTakenAt_ = std::chrono::steady_clock::now();
+  duration_ = cue ? cue->duration : 0.0;
+  cueInPointSeconds_ = 0.0;
+  cueOutPointSeconds_ = cue ? cue->duration : 0.0;
+  frameRate_ = cue && cue->kind == CueKind::Video && cue->fps > 1.0 ? cue->fps : 30.0;
+  lastRenderedFrameIndex_ = static_cast<std::uint64_t>(-1);
+  // THE SERIAL IS NOT RESET, AND THAT IS THE WHOLE OF A SERIOUS BUG.
+  //
+  // It is the IDENTITY of the picture on screen: the compositor caches the
+  // texture it uploaded per deck, keyed on this index plus the cue, and skips
+  // re-uploading when both still match. Restarting the count at every take
+  // made the first frame of every still cue index 1 -- and that collided,
+  // because of what happens in between:
+  //
+  //   1. the take hands the outgoing picture to heldFrame_ and clears the
+  //      display, then starts an ASYNCHRONOUS decode of the new still;
+  //   2. the very next rendered frame asks for a picture and is given the HELD
+  //      one -- the outgoing cue's -- because the new one has not arrived yet.
+  //      The compositor uploads it and records it under the INCOMING cue's key;
+  //   3. the still finishes decoding and becomes frame index 1;
+  //   4. the compositor compares: same cue key, same index 1. Nothing to do.
+  //
+  // So the output went on showing the PREVIOUS cue, permanently, with the
+  // header, the notes, the dots and both timers correct beside it. It needs a
+  // predecessor, so the first take of a fresh instance looked right; taking the
+  // same cue twice looked right; and video hid it entirely, because decoded
+  // frames keep counting up and the next one breaks the tie. Two sessions
+  // chased it as a presenter-view fault for an afternoon.
+  //
+  // A monotonic counter cannot collide, so step 4 sees a new index and
+  // uploads. Nothing wants it to restart: every user of it is asking "is this
+  // the same picture as last time", and across a take the answer must be no.
+  resetMediaFpsTelemetry();
+  decoderEof_ = false;
+  reachedEnd_ = false;
+  playedToEnd_ = false;
+  clearVisualOnReachedEnd_ = false;
+  // Per-cue fadeInSeconds/fadeOutSeconds apply uniformly to all cue kinds via
+  // `currentVisualFadeGain()` → bridge texture alpha in `renderDeckLayerIntoOutput`.
+  // Previously this branched on cue kind to avoid "double-fading" the crossfade
+  // in `MediaEngine::render()`, but that render path is dead for output purposes
+  // (see v0.76.4 DEVNOTE) — so the suppression just silently killed video-cue
+  // fades on the actual output window. Honor the caller's suppressFadeIn hint
+  // only; loop suppression is re-asserted in `handlePlaybackEnd`.
+  suppressFadeInForCurrentCue_ = suppressFadeIn;
+  suppressVisualFadeOutForCurrentCue_ = false;
+
+  if (!cue) {
+    state_ = TransportState::Stopped;
+    return;
+  }
+
+  if (cue->kind == CueKind::Image) {
+    loadStillFrame(*cue);
+    initStillTimer(*cue, autoplay);
+    return;
+  }
+
+  // A TEXT CUE IS DRAWN BY THE OUTPUTS, never decoded -- but it moves on this
+  // engine's clock, so the clock has to RUN.
+  //
+  // There was no branch for it here. It fell through to startDecoderThreads
+  // with an empty path, which failed, and the deck sat Stopped at position 0
+  // for as long as the cue was up. The outputs draw a text cue whether or not
+  // its engine plays, so the card still appeared -- and every animation it
+  // has froze on its first frame: FADE IN stayed at nothing, TYPEWRITER typed
+  // no letters, SCROLL sat below the frame. A still's timer would not do
+  // either: with no duration it holds Paused at 0 for the same reason.
+  //
+  // Playing with no duration is a clock with no end, which is what a card
+  // that "holds until it is taken off" means. A duration, if one is set, ends
+  // it like any still.
+  if (cue->kind == CueKind::Text) {
+    duration_ = cue->stillDurationSeconds > 0.0 ? cue->stillDurationSeconds : 0.0;
+    currentPosition_ = 0.0;
+    pausedPosition_ = 0.0;
+    playbackStartPosition_ = 0.0;
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+    return;
+  }
+
+  if (cue->kind == CueKind::Pattern) {
+    loadPatternFrame(*cue);
+    initStillTimer(*cue, autoplay);
+    return;
+  }
+
+  // Generated cues that produce their own content from the update loop. Both
+  // of these had NO branch here, so taking one fell through to the file-decode
+  // path with a "tone://" or "vsynth://" path that cannot decode. The video
+  // synth appeared to work because its frames come from the update loop
+  // regardless, but the TONE never played a sample -- which is exactly what
+  // the operator reported.
+  //
+  // Like Timer: duration 0 so the transport holds them on air indefinitely
+  // rather than auto-advancing the playlist out from under a live signal.
+  if (cue->kind == CueKind::Tone || cue->kind == CueKind::VideoSynth) {
+    // A STING ENDS BY ITSELF, which no other generated waveform here does.
+    // Its length IS its duration, so it sits in a playlist like a clip: it
+    // finishes, and whatever the cue's end action says then happens.
+    stingElapsed_ = 0.0;
+    stingPhase_ = 0.0;
+    if (cue->kind == CueKind::Tone && cue->tone.waveform == ToneWaveform::Sting) {
+      duration_ = std::clamp(cue->tone.stingSeconds, 0.05, 10.0);
+      currentPosition_ = 0.0;
+      pausedPosition_ = 0.0;
+      playbackStartPosition_ = 0.0;
+      playbackClockStart_ = std::chrono::steady_clock::now();
+      state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+      if (audioStream_) {
+        setOutputPaused(!autoplay);
+      }
+      rebuildToneFrame(*cue);
+      return;
+    }
+    duration_ = 0.0;
+    currentPosition_ = 0.0;
+    pausedPosition_ = 0.0;
+    playbackStartPosition_ = 0.0;
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    // PLAYING when taken, unlike the timer: a tone or a synth is generating
+    // continuously and the operator expects sound the moment it goes live.
+    // The timer holds paused because a countdown is started deliberately.
+    state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+    if (cue->kind == CueKind::VideoSynth) {
+      rebuildVideoSynthFrame(*cue, 0.0, 0.0);
+    } else {
+      // The audio device is opened PAUSED, and the ONLY resume is at the end of
+      // this function on the file-decode path -- which this branch returns
+      // before reaching. So the tone generated its first fifth of a second,
+      // found the stream still full because nothing was draining it, and never
+      // produced another sample. MEASURED: pumpToneAudio ran exactly ONCE per
+      // take (peak 29203, tap connected) -- so the generator, the routing and
+      // the tap were all fine and the device was simply never started. That is
+      // the silent output, the dead VU meter and the -91 dBFS recording, all
+      // from one missing line.
+      if (audioStream_) {
+        setOutputPaused(!autoplay);
+      }
+      rebuildToneFrame(*cue);
+    }
+    return;
+  }
+
+  // A MIC CUE IS A LIVE INPUT AND NO PICTURE. Duration 0 holds it on air
+  // until it is stopped, like the other live sources; the capture thread
+  // feeds the deck's audio path from here on.
+  if (cue->kind == CueKind::Mic) {
+    duration_ = 0.0;
+    currentPosition_ = 0.0;
+    pausedPosition_ = 0.0;
+    playbackStartPosition_ = 0.0;
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+    micLive_.store(autoplay, std::memory_order_relaxed);
+    startMicCapture(*cue);
+    if (audioStream_) {
+      setOutputPaused(!autoplay);
+    }
+    return;
+  }
+
+  // A MIDI FILE HAS A LENGTH AND NO PICTURE.
+  //
+  // The transport is the whole of what the engine does for it: a duration and
+  // a position. Sending the notes is the app's job, once a tick, from that
+  // position -- which is what makes the file scrub, pause and loop with
+  // everything else rather than running on a clock of its own.
+  if (cue->kind == CueKind::MidiFile) {
+    duration_ = std::max(0.0, cue->duration);
+    currentPosition_ = 0.0;
+    pausedPosition_ = 0.0;
+    playbackStartPosition_ = 0.0;
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+    return;
+  }
+
+  if (cue->kind == CueKind::Timer) {
+    // Duration is the countdown PLUS an overtime allowance, so the transport
+    // keeps advancing past zero instead of hitting its end and auto-advancing
+    // to the next cue while a speaker is still talking. Without count-up it
+    // stops exactly at zero, which is what the operator asked for.
+    // The timer runs its OWN clock (see TimerRuntime); the transport just
+    // holds the cue on air. Duration 0 = hold indefinitely, so taking a timer
+    // never auto-advances the playlist out from under a live countdown.
+    duration_ = 0.0;
+    currentPosition_ = 0.0;
+    pausedPosition_ = 0.0;
+    playbackStartPosition_ = 0.0;
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    state_ = TransportState::Paused;
+    rebuildTimerFrame(*cue, 0.0, false);
+    return;
+  }
+
+  // Spout on Windows. The platform capture backend reports this kind as
+  // scaffold-only, and the engine then drew a striped placeholder -- so a
+  // Syphon/Spout cue has never shown a picture. Received natively here, the
+  // way NDI and DeckLink are, because no ffmpeg build can do it either.
+#if defined(DECKBOY_HAS_SPOUT)
+  if (cue->kind == CueKind::Syphon) {
+    if (startSpoutCapture(*cue)) {
+      return;
+    }
+    // Falls through to the placeholder when the receiver could not start,
+    // which is an honest picture of "nothing is arriving".
+  }
+#endif
+
+  if (isSourceCueKind(cue->kind)) {
+    loadSourceFrame(*cue);
+    duration_ = 0.0;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    state_ = TransportState::Paused;
+    if (autoplay) {
+      startSourceCapture(*cue);
+    }
+    return;
+  }
+
+  if (cue->kind == CueKind::Browser || cue->kind == CueKind::LowerThird ||
+      cue->kind == CueKind::Composite) {
+    initStillTimer(*cue, autoplay);
+    return;
+  }
+
+  cueInPointSeconds_ = std::clamp(cue->inPointSeconds, 0.0, std::max(0.0, cue->duration));
+  cueOutPointSeconds_ = cue->outPointSeconds > 0.0 ? cue->outPointSeconds : cue->duration;
+  cueOutPointSeconds_ = std::clamp(cueOutPointSeconds_, cueInPointSeconds_, std::max(cueInPointSeconds_, cue->duration));
+  duration_ = std::max(0.01, cueOutPointSeconds_ - cueInPointSeconds_);
+  // A LIVE STREAM HAS NO END. It carries duration 0, which the floor above
+  // turns into 0.01s -- so an SRT cue finished a hundredth of a second after
+  // TAKE and the end handling parked it Paused at 0:00, with the feed
+  // connected and never read. Its clock runs; only the operator ends it.
+  liveSourceNoEnd_ = cue->kind == CueKind::SrtStream || cue->kind == CueKind::NdiSource;
+  // And no length: position() clamps the clock to duration_ when it is above
+  // zero, so at 0.01s the clock froze and no frame after the first was ever
+  // due -- Playing, and black. Zero is "unbounded" to position() and to
+  // every end check.
+  if (liveSourceNoEnd_) {
+    duration_ = 0.0;
+  }
+
+  // A DeckLink input is captured natively rather than decoded, so it takes its
+  // own path and never reaches the ffmpeg pipeline: the bundled ffmpeg has no
+  // decklink demuxer, and the SDK is already here for playout.
+  if (cue->kind == CueKind::DeckLinkSource) {
+    if (!startDeckLinkCapture(*cue)) {
+      std::cerr << "DeckLink input unavailable for " << cue->path << std::endl;
+    }
+    return;
+  }
+  // NDI likewise. It used to go down the ffmpeg path asking for the
+  // libndi_newtek input device, which upstream removed in 2021 -- so ffmpeg
+  // exited immediately and the cue sat there named and blank for ever.
+  if (cue->kind == CueKind::NdiSource) {
+    if (!startNdiCapture(*cue)) {
+      std::cerr << "NDI input unavailable for " << cue->path << std::endl;
+    }
+    return;
+  }
+  startDecoderThreads(*cue, cueInPointSeconds_, 0.0);
+  state_ = autoplay ? TransportState::Playing : TransportState::Paused;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = 0.0;
+  pausedPosition_ = 0.0;
+  if (audioStream_) {
+    // NOT RELEASED HERE ANY MORE on a playing file cue -- see
+    // kAudioPrimeDeadlineMs. The device was unpaused the instant the decoder
+    // threads were spawned, so on a cold file it played an empty stream while
+    // ffmpeg was still opening the thing, and the picture followed a clock
+    // built on samples that did not exist.
+    // ONLY WHEN THERE IS AUDIO COMING. startDecoderThreads spawns the audio
+    // thread only for a cue that has a track and has it enabled, so its
+    // joinability is the honest answer to "will samples arrive?". Priming a
+    // silent cue would hold its picture for the whole deadline and delay
+    // every mute clip in the show by 400ms -- the fault, moved somewhere
+    // less visible.
+    // The same condition both decode paths use to decide whether to spawn an
+    // audio thread at all, stated once here rather than inferred from the
+    // thread's lifecycle.
+    const bool audioIsComing = autoplay && audioStream_ != nullptr &&
+                               cue->hasAudio && cue->audioEnabled;
+    setOutputPaused(true);
+    audioPrimePending_ = audioIsComing;
+    if (audioIsComing) {
+      audioPrimeStartedAt_ = std::chrono::steady_clock::now();
+    } else if (autoplay) {
+      setOutputPaused(false);
+    }
+  }
+}
+
+// Replace the owned active-cue snapshot in place. The optional stays engaged,
+// so activeCue_ remains stable across the assignment. Publishes fresh fade
+// params to the audio-thread mirrors.
+void MediaEngine::syncActiveCueSnapshot(const Cue& cue) {
+  if (!activeCueSnapshot_) {
+    return;  // nothing loaded — loadCue creates the snapshot
+  }
+  *activeCueSnapshot_ = cue;
+  syncAudioFadeParams();
+  // Every editor reaches this path, including remote and batch edits. A new
+  // CPU effect must reach queued and paused frames without another TAKE.
+  const bool bridge = cueDecodesAsRgba(cue);
+  const bool wasBridge = liveRgbaBridge_.exchange(bridge);
+  if (bridge && !wasBridge) {
+    if (displayFrame_) bridgeFrameToRgba(*displayFrame_);
+    if (heldFrame_) bridgeFrameToRgba(*heldFrame_);
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    for (DecodedFrame& queued : frameQueue_) bridgeFrameToRgba(queued);
+  }
+  lastRenderedFrameIndex_ = static_cast<std::uint64_t>(-1);
+}
+
+// Pixel format is per-cue. Cues with chroma key or color controls need RGBA
+// because the effects path mutates interleaved RGBA bytes; everything else
+// takes the NV12 fast path (~62% less pipe bandwidth).
+// The effect stack counts too. Without it here a cue carrying effects still
+// took the NV12 fast path and the whole stack was silently skipped -- the
+// pixels never reached a CPU buffer for it to run on. Same trap the chroma
+// key would have hit if this predicate had not existed.
+// forcePixelFrames_ is VJ mode asking for frames it can SEE. A zero-copy
+// NV12 surface has no pixels on the CPU side, so the control window cannot
+// make an A or B preview out of it -- and a mixer whose preview monitors are
+// blank is a mixer you are fading blind. The cost is the zero-copy path, and
+// only while VJ mode is on, which is exactly when both decks need looking at.
+bool MediaEngine::cueDecodesAsRgba(const Cue& cue) const {
+  return cue.chromaKeyEnabled ||
+         // A clip with alpha: NV12 has nowhere to keep it.
+         cue.sourceHasAlpha ||
+         colorControlsActive(cue.brightness, cue.contrast, cue.saturation, cue.hueShift) ||
+         deckboy::effects::cueEffectStackActive(cue.effects) ||
+         // The audio chain can need the picture too -- see audioChainNeedsPicture.
+         deckboy::audiofx::audioChainNeedsPicture(cue.audioEffects) ||
+         forcePixelFrames_;
+}
+
+// A LOOK EDIT ON AIR MUST NOT STOP THE PICTURE.
+//
+// Adding the first effect (or clearing the last) changes whether the cue needs
+// RGBA, and the decode format is chosen when the decode opens. This used to
+// reopen the decoder to change it -- and a reopen has to re-seek and re-buffer
+// before its first frame, so every such edit froze the programme for a few
+// hundred milliseconds. Holding the last frame across the gap made it a still
+// instead of a hole; measured in a recording it was still 7-20 identical
+// frames per edit, after every edit.
+//
+// The decode does not need reopening to serve the new look:
+//   * no longer needs RGBA: RGBA frames upload as they are, and the effects
+//     simply stop being applied -- nothing to do;
+//   * newly needs RGBA: convert each frame to RGBA on the decode thread, the
+//     same thread the reopened decoder would have done it on. A zero-copy GPU
+//     frame is downloaded first. The next take opens in the right format and
+//     the bridge switches off.
+// Datamosh is the exception: it is a decode behaviour (keyframes withheld),
+// not a pixel one, so changing it still needs the reopen.
+bool MediaEngine::adoptLookWithoutRestart(const Cue& cue) {
+  if (!activeCue_ || activeCue_->kind != CueKind::Video) {
+    return false;
+  }
+  if (datamoshActiveForCue(cue) != activeDecodeDatamosh_) {
+    return false;
+  }
+  syncActiveCueSnapshot(cue);
+  return true;
+}
+
+// NV12 (or a zero-copy GPU surface) to packed RGBA, in place. SDL's own
+// converter, so the colour matrix is the one SDL uses to draw an NV12 texture
+// -- the picture must not shift the moment an effect is added. An RGBA frame
+// is left alone, so calling this on any frame is safe.
+void MediaEngine::bridgeFrameToRgba(DecodedFrame& frame) {
+#if DECKBOY_INPROC_DECODE
+  if (frame.isGpu()) {
+    DecodedFrame cpu;
+    if (!deckboy::libav::downloadGpuFrameNV12(frame, cpu)) {
+      return;   // left as it was: drawn without the look, never dropped
+    }
+    frame.pixels = std::move(cpu.pixels);
+    frame.format = cpu.format;
+    frame.colorspace = cpu.colorspace;
+    frame.width = cpu.width;
+    frame.height = cpu.height;
+    frame.gpuFrameRef.reset();
+    frame.gpuTexture = nullptr;
+    frame.gpuDevice = nullptr;
+    frame.gpuSubresource = 0;
+    frame.gpuKind = DecodedFrame::GpuKind::None;
+  }
+#endif
+  if (frame.format != FramePixelFormat::NV12 || frame.width <= 0 || frame.height <= 0 ||
+      frame.pixels.size() < frameBufferSize(FramePixelFormat::NV12, frame.width, frame.height)) {
+    return;
+  }
+  std::vector<std::uint8_t> rgba(static_cast<std::size_t>(frame.width) *
+                                 static_cast<std::size_t>(frame.height) * 4u);
+  if (!SDL_ConvertPixelsAndColorspace(frame.width, frame.height, SDL_PIXELFORMAT_NV12,
+                         frameColorspace(frame), 0, frame.pixels.data(), frame.width,
+                         SDL_PIXELFORMAT_RGBA32, SDL_COLORSPACE_SRGB, 0,
+                         rgba.data(), frame.width * 4)) {
+    return;
+  }
+  frame.pixels = std::move(rgba);
+  frame.format = FramePixelFormat::RGBA32;
+  frame.colorspace = SDL_COLORSPACE_SRGB;
+}
+
+// Hot-update runtime parameters from the active cue without restarting decode.
+// Called when the operator adjusts speed, in/out points, or pause points
+// while a cue is playing. Recalculates the position to maintain continuity.
+// updatedCue (when given) is the app's current cue — refresh the owned
+// snapshot from it first so we don't re-read stale parameters.
+void MediaEngine::refreshActiveCueRuntime(const Cue* updatedCue) {
+  if (updatedCue) {
+    syncActiveCueSnapshot(*updatedCue);
+  }
+  if (!activeCue_) {
+    return;
+  }
+
+  playbackSpeed_ = std::clamp(activeCue_->playbackSpeed, 0.25, 4.0);
+  pausePoints_ = activeCue_->pausePoints;
+
+  if (activeCue_->kind != CueKind::Video && activeCue_->kind != CueKind::Audio) {
+    nextPausePointIdx_ = 0;
+    return;
+  }
+
+  double absoluteSeconds = cueInPointSeconds_ + position();
+  cueInPointSeconds_ = std::clamp(activeCue_->inPointSeconds, 0.0, std::max(0.0, activeCue_->duration));
+  cueOutPointSeconds_ = activeCue_->outPointSeconds > 0.0 ? activeCue_->outPointSeconds : activeCue_->duration;
+  cueOutPointSeconds_ = std::clamp(cueOutPointSeconds_, cueInPointSeconds_,
+                                   std::max(cueInPointSeconds_, activeCue_->duration));
+  duration_ = std::max(0.01, cueOutPointSeconds_ - cueInPointSeconds_);
+  frameRate_ = activeCue_->kind == CueKind::Video && activeCue_->fps > 1.0 ? activeCue_->fps : frameRate_;
+
+  double clampedAbsoluteSeconds = std::clamp(absoluteSeconds, cueInPointSeconds_, cueOutPointSeconds_);
+  double nextPosition = std::clamp(clampedAbsoluteSeconds - cueInPointSeconds_, 0.0, duration_);
+  pausedPosition_ = nextPosition;
+  currentPosition_ = nextPosition;
+  playbackStartPosition_ = nextPosition;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  avJumpExpected_ = true;   // a loop wrap is a deliberate move
+  lastRenderedFrameIndex_ = static_cast<std::uint64_t>(-1);
+  restartMediaFpsWindow();
+  decoderEof_ = false;
+  reachedEnd_ = false;
+  playedToEnd_ = false;
+
+  nextPausePointIdx_ = 0;
+  while (nextPausePointIdx_ < pausePoints_.size() && pausePoints_[nextPausePointIdx_] <= nextPosition) {
+    ++nextPausePointIdx_;
+  }
+
+  // HOLD THE PICTURE ACROSS THE RESTART, the same way loadCue() does for an
+  // ordinary take (see heldFrame_ there). stopDecoderThreads() below clears
+  // frameQueue_ and startDecoderThreads() has to re-buffer before the first
+  // new frame is ready -- without a held frame, currentFrame() goes null for
+  // that whole span and the layer drew nothing, which is what an effect
+  // toggle (adding or clearing the first/last effect flips the decode format
+  // between RGBA and NV12, see startDecoderThreads) looked like on the
+  // output: the picture dropped out for the restart instead of just holding.
+  // outgoingSeconds_ is left at 0, so this is a plain hold with no transition
+  // drawn over it -- the 1-second floor in currentFrame()'s hold window is
+  // already enough to cover a decoder restart on its own.
+  if (displayFrame_.has_value()) {
+    heldFrame_ = std::move(displayFrame_);
+    heldFrameSince_ = std::chrono::steady_clock::now();
+  }
+
+  stopDecoderThreads();
+  clearAudio();
+  startDecoderThreads(*activeCue_, cueInPointSeconds_ + nextPosition, nextPosition);
+  if (audioStream_) {
+    setOutputPaused(state_ != TransportState::Playing);
+  }
+}
+
+// Trim edited while the cue is playing.
+//
+// THE CACHED TRIM IS THE ONE THAT MATTERS. syncActiveCueSnapshot copies the
+// operator's new in/out into the engine's cue, but the transport does not read
+// them from there -- it runs on cueInPointSeconds_/cueOutPointSeconds_ and the
+// duration_ derived from them, and those were only ever recomputed by loadCue
+// and refreshActiveCueRuntime. So editing the points of a LIVE cue changed the
+// numbers in the inspector and nothing else: a looping cue kept looping the old
+// range until it was re-taken, which is exactly what was reported.
+//
+// The two edits are not the same job:
+//
+//   OUT moved -- nothing about the pass in flight changes except where it
+//   ends. The position basis is untouched and the frames already decoded stay
+//   valid, so the bounds are updated in place and the picture never flinches.
+//   Pulling the out point behind the playhead makes duration_ < position,
+//   which the end check reads as "over" and loops immediately -- right.
+//
+//   IN moved -- the basis itself moves. Position is measured FROM the in
+//   point and so are the indices on every frame already in the queue, so
+//   shifting it without re-seating the decode would have the renderer asking
+//   for frame numbers that no longer mean what the decoder meant by them.
+//   refreshActiveCueRuntime re-seeks and keeps the same absolute frame on
+//   screen across it.
+void MediaEngine::applyActiveCueTrimEdit(const Cue& cue) {
+  if (!activeCue_) {
+    return;
+  }
+  if (activeCue_->kind != CueKind::Video && activeCue_->kind != CueKind::Audio) {
+    return;
+  }
+
+  const double newIn = std::clamp(cue.inPointSeconds, 0.0, std::max(0.0, cue.duration));
+  double newOut = cue.outPointSeconds > 0.0 ? cue.outPointSeconds : cue.duration;
+  newOut = std::clamp(newOut, newIn, std::max(newIn, cue.duration));
+
+  // A tenth of a frame at 240fps: far below anything an operator can set, and
+  // far above the rounding in a double that has been through a frame snap.
+  constexpr double kEpsilon = 0.0004;
+  const bool inMoved = std::abs(newIn - cueInPointSeconds_) > kEpsilon;
+  const bool outMoved = std::abs(newOut - cueOutPointSeconds_) > kEpsilon;
+  if (!inMoved && !outMoved) {
+    return;
+  }
+
+  if (inMoved) {
+    refreshActiveCueRuntime(&cue);
+    return;
+  }
+
+  cueOutPointSeconds_ = newOut;
+  duration_ = std::max(0.01, cueOutPointSeconds_ - cueInPointSeconds_);
+}
+
+// Resume playback from the current position. For source cues (camera/window),
+// this starts or resumes the capture backend. For video/audio cues, this
+// unpauses the SDL audio device and starts the wall-clock timer.
+void MediaEngine::setAudioDevice(SDL_AudioStream* stream, int channels) {
+  // Redirect PCM output to a newly opened device. The caller closes the old
+  // device after this returns; start the new one clean and matched to the
+  // current transport so a device change never interrupts playback.
+  //
+  // Under the lock: the audio thread keeps decoding across the swap, and it
+  // must not be holding the outgoing pointer when the caller frees it.
+  {
+    std::lock_guard<std::mutex> lock(audioStreamMutex_);
+    audioStream_ = stream;
+    if (channels > 0) {
+      audioDeviceChannels_.store(std::clamp(channels, 2, kMaxAudioMatrixOuts));
+    }
+  }
+  if (audioStream_ && tapeSpeed_ != 1.0) {
+    SDL_SetAudioStreamFrequencyRatio(audioStream_, static_cast<float>(tapeSpeed_));
+  }
+  if (audioStream_) {
+    SDL_ClearAudioStream(audioStream_);
+    deckboySetAudioPaused(audioStream_, state_ != TransportState::Playing);
+  }
+}
+
+// Hand the device back. Decode stops first, which joins the audio thread — the
+// only other user of the pointer — so after this returns nothing in the engine
+// can reach the stream and the owner is free to destroy it.
+void MediaEngine::detachAudioDevice() {
+  stopDecoderThreads();
+  SDL_AudioStream* stream = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(audioStreamMutex_);
+    stream = audioStream_;
+    audioStream_ = nullptr;
+  }
+  if (stream) {
+    SDL_ClearAudioStream(stream);
+    deckboySetAudioPaused(stream, true);
+  }
+  audioDelayFifo_.clear();
+  audioDelayHeldFrames_.store(0, std::memory_order_relaxed);
+}
+
+void MediaEngine::play() {
+  if (!activeCue_) return;
+  if (isSourceCueKind(activeCue_->kind)) {
+    if (isSourceCapturing_) {
+      state_ = TransportState::Playing;
+      return;
+    }
+    if (startSourceCapture(*activeCue_)) {
+      state_ = TransportState::Playing;
+    }
+    return;
+  }
+  bool isTimedStill = activeCue_->kind != CueKind::Video && duration_ > 0.0;
+  const bool isTone = activeCue_->kind == CueKind::Tone;
+  if (activeCue_->kind != CueKind::Video && activeCue_->kind != CueKind::Text && !isTimedStill && !isTone) return;
+  if (state_ == TransportState::Playing) return;
+  if (isTone) {
+    // Its device was held by PAUSE or STOP; the update loop refills it once
+    // the state says Playing. A STOP also darkened the deck, so the card
+    // comes back with the sound. A sting has a length, so its clock picks up
+    // where it paused, as any timed cue's does.
+    playbackClockStart_ = std::chrono::steady_clock::now();
+    playbackStartPosition_ = pausedPosition_;
+    state_ = TransportState::Playing;
+    if (!hasPictureToShow()) rebuildToneFrame(*activeCue_);
+    if (audioStream_ != nullptr) setOutputPaused(false);
+    return;
+  }
+  if (activeCue_->kind == CueKind::Video && !decodersRunning_) {
+    // Pipes were released by a dark STOP — revive them from the reracked
+    // position so PLAY works without a fresh TAKE.
+    startDecoderThreads(*activeCue_, cueInPointSeconds_ + pausedPosition_, pausedPosition_);
+  }
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = pausedPosition_;
+  // Resuming re-anchors the clock on purpose, so the next tick is not a jump.
+  // Everything AFTER that tick is fair game -- which is the whole point, since
+  // the fault being hunted shows up just after a resume.
+  avJumpExpected_ = true;
+  state_ = TransportState::Playing;
+  if (audioStream_ != nullptr && (activeCue_->kind == CueKind::Video || activeCue_->kind == CueKind::Audio)) {
+    setOutputPaused(false);
+  }
+}
+
+// Pause playback and record the current position for later resume.
+// For source cues, this stops the capture backend entirely.
+// For video/audio, this pauses the SDL audio device and freezes the clock.
+void MediaEngine::pause() {
+  if (!activeCue_) return;
+  if (isSourceCueKind(activeCue_->kind)) {
+    if (isSourceCapturing_) {
+      stopDecoderThreads();
+    }
+    isSourceCapturing_ = false;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    state_ = TransportState::Paused;
+    return;
+  }
+  bool isAV = activeCue_->kind == CueKind::Video || activeCue_->kind == CueKind::Audio;
+  bool isTimedStill = !isAV && duration_ > 0.0;
+  // A TONE PAUSES TOO. It used to return here, so PAUSE on a line-up tone
+  // said "paused" and the tone went on; its device is the one thing to hold.
+  const bool isTone = activeCue_->kind == CueKind::Tone;
+  if (!isAV && activeCue_->kind != CueKind::Text && !isTimedStill && !isTone) return;
+  if (state_ != TransportState::Playing) {
+    state_ = TransportState::Paused;
+    return;
+  }
+  pausedPosition_ = position();
+  currentPosition_ = pausedPosition_;
+  state_ = TransportState::Paused;
+  if (audioStream_ != nullptr && (isAV || isTone)) {
+    setOutputPaused(true);
+  }
+}
+
+// Play ↔ pause toggle. Dispatches to play() or pause() based on current state.
+void MediaEngine::toggle() {
+  if (!activeCue_) return;
+  if (isSourceCueKind(activeCue_->kind)) {
+    if (isSourceCapturing_ || state_ == TransportState::Playing) {
+      pause();
+    } else {
+      play();
+    }
+    return;
+  }
+  bool isTimedStill = activeCue_->kind != CueKind::Video && duration_ > 0.0;
+  if (activeCue_->kind != CueKind::Video && activeCue_->kind != CueKind::Text && !isTimedStill &&
+      activeCue_->kind != CueKind::Tone) return;
+  if (state_ == TransportState::Playing) { pause(); } else { play(); }
+}
+
+// Stop playback and rewind to the beginning. Default (clearVisual=false):
+// video restarts decode at 0 and holds the first frame — the RERACK-style
+// ready state. clearVisual=true is the operator STOP verb: the deck goes
+// DARK (visual cleared, pipes released); play() revives the pipes from the
+// reracked position, TAKE reloads as usual.
+void MediaEngine::stop(bool clearVisual) {
+  if (!activeCue_) {
+    return;
+  }
+  clearVisualOnReachedEnd_ = false;
+  auto applyVisualClear = [&]() {
+    if (!clearVisual) {
+      return;
+    }
+    displayFrame_.reset();
+    clearTexture();
+    clearTransitionTexture();
+    // AND THE PICTURE IT WAS FADING FROM. STOP mid-dissolve cleared the
+    // incoming cue but left the outgoing one in heldFrame_, which
+    // currentFrame() hands the compositor until the old fade's deadline, so
+    // the red faded out on its own after the operator had pressed STOP.
+    heldFrame_.reset();
+    liveOutgoing_ = false;
+  };
+  // A NATIVE CAPTURE IS NOT A DECODER PIPELINE, so neither branch below stops
+  // it: NdiSource, DeckLinkSource and a Spout source are not source-cue kinds
+  // (they do not use the source:// capture backend) and are not Video or
+  // Audio, so stop() fell through to "pause and return" and left the card,
+  // the network stream or the shared texture being read.
+  //
+  // I said this was fixed when NDI shipped and it was not: that edit lived in
+  // a script which failed its own assertion before writing anything, and only
+  // the stopAll() half was re-applied afterwards. The commit message ran ahead
+  // of the code.
+  if (deckLinkCapturing_ || ndiCapturing_ || spoutCapturing_) {
+    stopDeckLinkCapture();
+    stopNdiCapture();
+    stopSpoutCapture();
+    state_ = TransportState::Paused;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    applyVisualClear();
+    return;
+  }
+  if (isSourceCueKind(activeCue_->kind)) {
+    if (isSourceCapturing_) {
+      stopDecoderThreads();
+    }
+    isSourceCapturing_ = false;
+    if (!clearVisual) {
+      loadSourceFrame(*activeCue_);  // hold the poster frame unless darkening
+    }
+    state_ = TransportState::Paused;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    applyVisualClear();
+    return;
+  }
+  // A TEXT CUE HAS NO FRAME TO CLEAR: the outputs draw it from the cue while
+  // its engine is not Stopped. So "darken" has to be the state itself --
+  // Paused at 0 below would leave a card on screen after STOP. RERACK (no
+  // clear) holds it at its first moment, as it does every other still.
+  if (activeCue_->kind == CueKind::Mic) {
+    stopMicCapture();
+    clearAudio();
+    state_ = TransportState::Stopped;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    if (audioStream_) {
+      setOutputPaused(true);
+    }
+    return;
+  }
+  if (activeCue_->kind == CueKind::Text) {
+    state_ = clearVisual ? TransportState::Stopped : TransportState::Paused;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    return;
+  }
+  bool isAV = activeCue_->kind == CueKind::Video || activeCue_->kind == CueKind::Audio;
+  if (!isAV) {
+    state_ = TransportState::Paused;
+    pausedPosition_ = 0.0;
+    currentPosition_ = 0.0;
+    applyVisualClear();
+    // A TONE STOPS SOUNDING. Paused alone left its device running, and the
+    // update loop topping it up, so a line-up tone went on through STOP.
+    // The fifth of a second already queued goes too: STOP means now.
+    if (activeCue_->kind == CueKind::Tone) {
+      stingElapsed_ = 0.0;   // reracked: a sting starts again from its strike
+      stingPhase_ = 0.0;
+      if (audioStream_ != nullptr) {
+        setOutputPaused(true);
+        clearAudio();
+      }
+    }
+    return;
+  }
+  if (clearVisual) {
+    // Kill the pipes rather than seek-restarting them: a fresh decode's
+    // first frame would immediately repopulate displayFrame_ and relight
+    // the deck the next tick.
+    stopDecoderThreads();
+    clearAudio();
+  } else {
+    seek(0.0, false);
+  }
+  state_ = TransportState::Stopped;
+  pausedPosition_ = 0.0;
+  currentPosition_ = 0.0;
+  applyVisualClear();
+  if (audioStream_) {
+    setOutputPaused(true);
+  }
+}
+
+// Clear everything — equivalent to "no cue loaded". Output goes to black.
+void MediaEngine::clear() {
+  stopAll();
+}
+
+// Seek to a specific position (in seconds relative to the cue's in-point).
+// For video/audio cues, this kills the current ffmpeg decode and restarts
+// from the new position. The clearVisualFrame flag controls whether the
+// current frame is blanked during the seek (true for hard stops).
+void MediaEngine::seek(double seconds, bool clearVisualFrame) {
+  if (!activeCue_) {
+    return;
+  }
+  if (activeCue_->kind == CueKind::Image || isSourceCueKind(activeCue_->kind)) {
+    return;
+  }
+  // A held text cue has a clock but no end. Treating zero duration as its
+  // upper bound made every seek return to the start of the entrance.
+  const double clamped = activeCue_->kind == CueKind::Text && duration_ <= 0.0
+    ? std::max(0.0, seconds) : std::clamp(seconds, 0.0, duration_);
+  pausedPosition_ = clamped;
+  currentPosition_ = clamped;
+  playbackStartPosition_ = clamped;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  avJumpExpected_ = true;   // a seek is a deliberate move
+  if (clamped < duration_) playedToEnd_ = false;   // sent back: not finished
+  lastRenderedFrameIndex_ = static_cast<std::uint64_t>(-1);
+  if (activeCue_->kind == CueKind::Text) return;
+  restartMediaFpsWindow();
+  if (clearVisualFrame) {
+    displayFrame_.reset();
+  }
+  nextPausePointIdx_ = 0;
+  while (nextPausePointIdx_ < pausePoints_.size() && pausePoints_[nextPausePointIdx_] <= clamped) {
+    ++nextPausePointIdx_;
+  }
+  clearTransitionTexture();
+  if (clearVisualFrame) {
+    clearTexture();
+  }
+  clearAudio();
+  if (activeCue_->kind == CueKind::Pattern) {
+    loadPatternFrame(*activeCue_);
+    state_ = TransportState::Paused;
+    return;
+  }
+  if (activeCue_->kind == CueKind::Browser) {
+    state_ = TransportState::Paused;
+    return;
+  }
+
+  stopDecoderThreads();
+  startDecoderThreads(*activeCue_, cueInPointSeconds_ + clamped, clamped);
+  if (audioStream_) {
+    setOutputPaused(state_ != TransportState::Playing);
+  }
+}
+
+// Set the playback volume (0.0–1.0). Atomic store — safe to call from any thread.
+// The audio decode thread reads this each sample pair via volume_.load() to scale PCM output.
+void MediaEngine::setVolume(float value) {
+  volume_.store(std::clamp(value, 0.0f, 1.0f));
+}
+
+// Replace the auto-pause timecodes for the active cue. Sorts the list and
+// advances the index past any points already behind the current position,
+// so only future pause points trigger. Called from the inspector when the
+// operator edits pause points on a playing cue.
+void MediaEngine::setPausePoints(std::vector<double> points) {
+  std::sort(points.begin(), points.end());
+  pausePoints_ = std::move(points);
+  double pos = position();
+  nextPausePointIdx_ = 0;
+  while (nextPausePointIdx_ < pausePoints_.size() && pausePoints_[nextPausePointIdx_] <= pos) {
+    ++nextPausePointIdx_;
+  }
+}
+
+// Current playback position in seconds (relative to the cue's in-point).
+// When playing, this is computed from the wall clock (steady_clock) and
+// speed multiplier. When paused/stopped, returns the stored position.
+double MediaEngine::position() const {
+  if (!activeCue_) {
+    return 0.0;
+  }
+  if (state_ == TransportState::Playing) {
+    auto now = std::chrono::steady_clock::now();
+    // clockTrim_ is the audio-master steering (update()): the wall clock, run
+    // a hair fast or slow so the picture stays on the sound card's clock.
+    double elapsed = std::chrono::duration<double>(now - playbackClockStart_).count() *
+                     playbackSpeed_ * tapeSpeed_ * clockTrim_;
+    const double pos = playbackStartPosition_ + elapsed;
+    return duration_ > 0.0 ? std::clamp(pos, 0.0, duration_) : std::max(0.0, pos);
+  }
+  return currentPosition_;
+}
+
+// Check and consume the "reached end" flag. Returns true once per playback end.
+// The caller (transport handler) polls this each frame and decides what to do
+// (stop, loop, auto-advance, etc.) based on the cue's end action.
+bool MediaEngine::reachedEnd() {
+  if (reachedEnd_) {
+    reachedEnd_ = false;
+    return true;
+  }
+  return false;
+}
+
+// Called by the transport handler after reachedEnd() returns true.
+// Stops decode and either holds the last frame or clears to black.
+void MediaEngine::finalizeReachedEnd(bool keepVisibleFrame) {
+  if (!keepVisibleFrame && clearVisualOnReachedEnd_) {
+    displayFrame_.reset();
+    clearTexture();
+  }
+  clearVisualOnReachedEnd_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// update — Per-frame tick called from the main render loop.
+//
+// Responsibilities:
+//   1. Check for a completed async still-image decode (imageFramePending_)
+//   2. For non-video cues: advance the still timer and check for end-of-duration
+//   3. For video cues: pop decoded frames from frameQueue_, upload to GPU
+//      texture, check pause points, detect end-of-playback (decoderEof_)
+//   4. Apply per-pixel effects (chroma key, color controls) to the current frame
+//
+// This must be called every frame from the main thread (not a decode thread).
+// ---------------------------------------------------------------------------
+void MediaEngine::update() {
+  // ── RELEASE THE PRIMED DEVICE ─────────────────────────────────────────
+  //
+  // Here rather than on the audio thread: the audio thread must not touch
+  // the transport, and this is the tick that already runs once a frame.
+  if (audioPrimePending_) {
+    const bool enough =
+      queuedAudioBytes() >= audioPrimeFrames() * audioStreamBytesPerFrame();
+    const auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - audioPrimeStartedAt_).count();
+    if (enough || waited >= kAudioPrimeDeadlineMs ||
+        state_ != TransportState::Playing) {
+      audioPrimePending_ = false;
+      if (audioStream_ && state_ == TransportState::Playing) {
+        setOutputPaused(false);
+        // THE CLOCK STARTS WITH THE SOUND, not with the take -- but only
+        // when the wait was long enough to be worth correcting for.
+        //
+        // Two reasons for the threshold, both measured. On the DEADLINE the
+        // audio never came at all, and re-basing then would push the picture
+        // back 400ms to keep time with something that is not playing. And on
+        // a WARM file the audio is there within one tick, so re-basing buys
+        // nothing and costs the tick's own jitter: tools/record_avsync_check
+        // went from +72.7ms to +81.5ms mean video-late with the clock reset
+        // running unconditionally. Under 30ms there is nothing to correct.
+        if (enough && waited >= 30) {
+          playbackClockStart_ = std::chrono::steady_clock::now();
+          // A deliberate re-base, like every other one -- otherwise the
+          // discontinuity detector reports the audio prime doing its job as
+          // a fault, which it did: one jump of -0.128s per take.
+          avJumpExpected_ = true;
+        }
+      }
+    }
+  }
+
+  // ── HOLD THE CLOCK UNTIL THERE IS A CUSHION ───────────────────────────
+  //
+  // The same argument as the audio prime above, measured on the same clips:
+  // the frame queue runs down to one frame of six in the moment after a take,
+  // because the clock starts at the take while the decoder is still opening
+  // and seeking. One frame is no slack, and the picture holds.
+  //
+  // The PICTURE is not delayed -- frame zero shows the moment it arrives,
+  // since a held clock keeps targetFrame at zero. What waits is time starting
+  // to run.
+  if (videoPrimePending_) {
+    std::size_t queued = 0;
+    {
+      std::lock_guard<std::mutex> lock(frameMutex_);
+      queued = frameQueue_.size();
+    }
+    const auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - videoPrimeStartedAt_).count();
+    const bool enough = queued >= kVideoPrimeFrames;
+    // The deadline matters as much as the target. A short cue, a still that
+    // decodes to one frame, or a file that is simply slow must not be able to
+    // hold the clock indefinitely -- a take that never starts is far worse
+    // than a take that stutters.
+    // THE EXIT CONDITIONS ARE ONLY "FULL", "TOO LATE" AND "NOTHING COMING".
+    //
+    // The first version also gave up when the transport was not yet playing or
+    // the decoders were not yet running -- and those are exactly the state of
+    // a cue in the instant after a take, which is the ONLY moment this exists
+    // for. It cancelled itself on its first tick every time, and the measured
+    // queue low-water did not move: still one frame of six after twenty take
+    // cycles, with the stall still there. A cue that is taken and never
+    // played is handled by the deadline, which is what a deadline is for.
+    if (enough || waited >= kVideoPrimeDeadlineMs || decoderEof_.load()) {
+      videoPrimePending_ = false;
+      // Re-base so the time spent waiting is not charged to the cue. Only
+      // when the wait was real: on a warm file the queue is there within a
+      // tick, and re-basing then buys nothing and costs the tick's jitter --
+      // the same threshold, and the same reason, as the audio prime.
+      if (enough && waited >= 30 && state_ == TransportState::Playing) {
+        playbackClockStart_ = std::chrono::steady_clock::now();
+        avJumpExpected_ = true;   // a deliberate re-base, not a fault
+      }
+    } else if (state_ == TransportState::Playing) {
+      // Still filling: keep the clock at the start position by pushing its
+      // origin forward every tick. Only while playing -- a cue that has been
+      // taken but not started has no clock running to hold.
+      playbackClockStart_ = std::chrono::steady_clock::now();
+    }
+  }
+
+  // Colour and key edits are adopted here rather than in render(): the output
+  // window does not go through render() at all.
+  syncPixelEffectsFromCue();
+
+  // Catch-all publish: fade params, duration, and suppress flags can change
+  // from several paths (handlePlaybackEnd loop re-assert, browser duration
+  // restore, snapshot sync). One relaxed store set per tick keeps the audio
+  // thread at most a frame behind without sprinkling syncs at every site.
+  syncAudioFadeParams();
+  // A window capture is watched, not assumed: see the function for the two
+  // failures it exists for (a window that never repaints, an ffmpeg with no WGC).
+  serviceWindowCaptureWatchdog();
+  if (imageFramePending_.exchange(false)) {
+    std::lock_guard<std::mutex> lk(imageMutex_);
+    if (pendingImageFrame_) {
+      pendingImageFrame_->index = ++displayFrameSerial_;
+      displayFrame_ = std::move(pendingImageFrame_);
+      releaseHeldFrameIfTransitionDone();
+      uploadFrame(*displayFrame_);
+    }
+  }
+
+  if (!activeCue_) {
+    return;
+  }
+
+  // NATIVE CAPTURES COUNT AS LIVE PICTURES HERE. Below this point is the only
+  // code that drains frameQueue_ into displayFrame_, and a DeckLink or NDI cue
+  // is none of Video, browser or source:// -- so it returned early, the frames
+  // its capture thread pushed were never consumed, and the queue cap threw
+  // them away. The capture worked perfectly and nothing was ever drawn.
+  //
+  // DeckLink has had this since it was written; there is no card here to have
+  // noticed. NDI inherited it by following the same pattern, which is how it
+  // came to light.
+  //
+  // SRT had the same fault, a third time: its frames arrive through the
+  // ordinary decoder queue, but the kind is not Video, so it returned here,
+  // the queue filled, ffmpeg blocked on a full pipe and the feed stopped
+  // being read -- Playing, and black.
+  if (activeCue_->kind != CueKind::Video && activeCue_->kind != CueKind::SrtStream &&
+      !isBrowserCapturing_ && !isSourceCapturing_ && !deckLinkCapturing_ &&
+      !ndiCapturing_ && !spoutCapturing_) {
+    // Pocket-test A/V sync pop: the test card's buoy lamp flashes on each
+    // wall-clock second; synthesize the matching 1 kHz pop into the deck's
+    // audio stream so flash and pop leave Deckboy together. Keyed to the
+    // VISUAL being live (the card animates even while held/paused), not to
+    // transport state — if the lamp is flashing on the output, it pops;
+    // STOP-dark clears the frame and silences it.
+    if (displayFrame_.has_value() && audioStream_ != nullptr &&
+        activeCue_->kind == CueKind::Pattern && activeCue_->audioEnabled &&
+        stripPatternMotionSuffix(normalizePatternTypeId(activeCue_->path)) == "pocket-test") {
+      queuePocketSyncAudio();
+    }
+    serviceLoopSeam();
+    if (duration_ > 0.0 && state_ == TransportState::Playing) {
+      currentPosition_ = position();
+      if (nextPausePointIdx_ < pausePoints_.size() &&
+          currentPosition_ >= pausePoints_[nextPausePointIdx_]) {
+        ++nextPausePointIdx_;
+        pause();
+        return;
+      }
+      if (!liveSourceNoEnd_ && currentPosition_ >= duration_ - 0.01) {
+        handlePlaybackEnd();
+      }
+    } else {
+      // Paused/stopped still: hold the paused position rather than snapping to
+      // 0. `pausedPosition_` is the real freeze point — 0 at the start, the
+      // mid-cue spot for a manual pause, or `duration_` after a pause-on-last
+      // end. Resetting to 0 here made the output evaluate the fade-IN ramp at
+      // t=0 (gain 0 → fully transparent), so a held still vanished at the end
+      // of its duration even though its frame was still resident.
+      currentPosition_ = pausedPosition_;
+    }
+    return;
+  }
+
+  serviceLoopSeam();
+  currentPosition_ = position();
+
+  // Audio-master drift correction. The audio device consumes samples on its
+  // own crystal; the wall clock driving position() drifts against it over
+  // long-form playback (and immediately on VFR sources). When the audio
+  // clock — frames queued minus frames still buffered — diverges from the
+  // video position by more than ~2 frames, re-anchor the wall clock to it.
+  // Skipped near EOF (audio drains before video finishes) and for live
+  // streams (audioClockValid_ is false there).
+  // A DECK WITH NOTHING GOING TO THE DEVICE HAS NO AUDIO CLOCK.
+  // queueToDevices skips the device entirely when the deck is muted out of
+  // the PA, but audioFramesQueued_ has already counted those frames -- so the
+  // queue stays empty while the counter climbs, and "counted minus buffered"
+  // reports the DECODER's progress as though it were the device's. It tracks
+  // roughly, because decode is throttled by the video queue, which is the
+  // worst kind of wrong: plausible until the decoder gets ahead. A silent
+  // deck uses the wall clock, which is what it should have been doing.
+  const bool audioReachesDevice = !mainDeviceMuted_.load(std::memory_order_relaxed);
+  if (state_ == TransportState::Playing && audioClockValid_ && audioReachesDevice &&
+      audioStream_ != nullptr && !decoderEof_.load()) {
+    std::uint64_t queuedFrames = audioFramesQueued_.load(std::memory_order_relaxed);
+    if (queuedFrames >= 4800) {  // trust the clock only after ~100ms of audio
+      const double rate = static_cast<double>(audioRate_);
+      double queuedSeconds = static_cast<double>(queuedFrames) / rate;
+      // WHAT THE DEVICE HAS NOT PLAYED YET is the device's own queue PLUS
+      // anything parked in the operator's delay line. audioFramesQueued_
+      // counts at process time, before the delay, so leaving the delay out
+      // made the video clock run ahead of the sound by exactly the delay --
+      // and the correction below then dragged the picture forward to match a
+      // clock that was wrong. tapPlayedAudio forty lines down has always
+      // subtracted both; this reader was missed when the delay line landed.
+      double bufferedSeconds =
+        static_cast<double>(std::max(0, SDL_GetAudioStreamQueued(audioStream_)))
+        / (rate * static_cast<double>(audioStreamBytesPerFrame()));
+      bufferedSeconds +=
+        static_cast<double>(audioDelayHeldFrames_.load(std::memory_order_relaxed))
+        / rate;
+      double playedWallSeconds = std::max(0.0, queuedSeconds - bufferedSeconds);
+      // atempo re-times the pipe to wall rate; position space runs at
+      // playbackSpeed_ × wall, so scale before comparing.
+      double audioClock = audioClockStartSeconds_ + playedWallSeconds * playbackSpeed_;
+      // Stall detection: the audio clock only counts as a master while it is
+      // actually ADVANCING. If the device stops consuming (endpoint lost,
+      // WASAPI stream dead) or the audio pipe dies mid-file, the clock
+      // freezes — correcting against a frozen clock pins video at that
+      // position forever. Fall back to the wall clock until it moves again.
+      Uint64 nowMs = SDL_GetTicks();
+      if (audioClock > lastAudioClockSeconds_ + 0.001) {
+        lastAudioClockSeconds_ = audioClock;
+        lastAudioClockAdvanceMs_ = nowMs;
+      }
+      bool clockAdvancing = lastAudioClockAdvanceMs_ != 0 &&
+                            (nowMs - lastAudioClockAdvanceMs_) < 400;
+      double drift = currentPosition_ - audioClock;
+      bool nearEnd = duration_ > 0.0 && audioClock >= duration_ - 0.25;
+      // STEERED, NOT SNAPPED. This used to leave the picture on the wall
+      // clock and re-anchor only past 60 ms of drift. A sound card's crystal
+      // and the system clock differ by tens of parts per million, so the
+      // picture slid against the sound all the time -- 67 ms an hour on a
+      // real card, 174 on SDL's dummy driver -- and either never reached the
+      // line (a growing lip-sync error nobody corrected) or reached it and
+      // jumped. Measured with tools/check_web_monitor_av.mjs over 15 minutes.
+      //
+      // Now the error is smoothed over about a second (the device takes audio
+      // in chunks, so the raw reading jumps by 10-20 ms) and steered out by
+      // running the picture clock up to 0.5% fast or slow: invisible, and it
+      // leaves well under a millisecond at the rates real cards differ by.
+      // A snap remains for a real break -- a device glitch, a dropout -- where
+      // easing would take seconds to catch up.
+      const auto tick = std::chrono::steady_clock::now();
+      if (clockAdvancing && audioClock >= 0.0 && !nearEnd) {
+        if (std::abs(drift) > 0.15) {
+          playbackClockStart_ = tick;
+          playbackStartPosition_ = audioClock;
+          currentPosition_ = audioClock;
+          clockTrim_ = 1.0;
+          clockDriftPrimed_ = false;
+        } else {
+          const double dt = clockDriftPrimed_
+            ? std::clamp(std::chrono::duration<double>(tick - clockDriftLastTick_).count(), 0.0, 0.25)
+            : 0.0;
+          clockDriftFiltered_ = clockDriftPrimed_
+            ? clockDriftFiltered_ + (drift - clockDriftFiltered_) * (1.0 - std::exp(-dt / 1.0))
+            : drift;
+          clockDriftPrimed_ = true;
+          // Picture ahead (drift > 0) runs the clock slow, behind runs it fast.
+          const double trim = 1.0 - std::clamp(clockDriftFiltered_ * 0.3, -0.005, 0.005);
+          // Re-anchored at the current position on every change, so a new
+          // trim bends the clock from here rather than rescaling the past.
+          playbackStartPosition_ = currentPosition_;
+          playbackClockStart_ = tick;
+          clockTrim_ = trim;
+        }
+        clockDriftLastTick_ = tick;
+      }
+    }
+  } else if (state_ != TransportState::Playing || !audioClockValid_ || !audioReachesDevice) {
+    // No sound to follow: the wall clock, untrimmed, as before.
+    if (clockTrim_ != 1.0 && state_ == TransportState::Playing) {
+      playbackStartPosition_ = currentPosition_;
+      playbackClockStart_ = std::chrono::steady_clock::now();
+    }
+    clockTrim_ = 1.0;
+    clockDriftPrimed_ = false;
+  }
+
+  // ── DID THE PLAYHEAD JUMP? ───────────────────────────────────────────────
+  //
+  // After the audio-master correction on purpose: a correction that yanks the
+  // playhead is one of the things being measured, not an excuse.
+  //
+  // Compared against ELAPSED WALL TIME rather than against a frame period,
+  // because the tick rate varies -- a long frame is not a jump, and calling
+  // one would bury the real thing in noise.
+  {
+    const auto tickNow = std::chrono::steady_clock::now();
+    if (state_ != TransportState::Playing || avJumpExpected_ ||
+        avJumpPrevPosition_ < 0.0) {
+      avJumpExpected_ = false;
+    } else {
+      const double wall = std::chrono::duration<double>(tickNow - avJumpPrevAt_).count();
+      const double expected = wall * playbackSpeed_;
+      const double moved = currentPosition_ - avJumpPrevPosition_;
+      const double slip = moved - expected;
+      // A tenth of a second. The audio-master correction is allowed to move
+      // the playhead by up to its own 0.06 threshold as a matter of course,
+      // and a scheduler hiccup adds a few more milliseconds; anything past
+      // this is the operator seeing a freeze.
+      if (std::abs(slip) > 0.1) {
+        ++avJumpCount_;
+        avJumpLastSeconds_ = slip;
+        if (std::abs(slip) > std::abs(avJumpWorstSeconds_)) {
+          avJumpWorstSeconds_ = slip;
+        }
+      }
+    }
+    avJumpPrevPosition_ = currentPosition_;
+    avJumpPrevAt_ = tickNow;
+  }
+
+  if (state_ == TransportState::Playing && nextPausePointIdx_ < pausePoints_.size()) {
+    if (currentPosition_ >= pausePoints_[nextPausePointIdx_]) {
+      ++nextPausePointIdx_;
+      pause();
+      return;
+    }
+  }
+
+  // WHICH FRAME THIS TICK -- the cadence scheduler.
+  //
+  // The clock says floor(position x rate), but read at whatever moment the
+  // tick happens to run, that answer wobbles: when the ticks are paced by a
+  // screen whose rate is (near) the clip's, or a simple fraction of it, every
+  // tick lands near the same point of a frame for seconds on end, and a
+  // millisecond either side turns into a repeated frame and then a skipped
+  // one. On an SDL_GPU output one frame in six never reached the screen in
+  // some seconds while the output never missed a refresh; 24 fps on 60 Hz
+  // came out as whatever 3s and 2s the jitter picked rather than 3:2.
+  //
+  // So the picture is scheduled in TICKS, not read off the clock: a phase that
+  // advances by the clip's frames per screen refresh every tick, that ratio
+  // snapped to the nearest simple fraction (1, 1/2, 2/5, 5/12, 5/6 ...) so the
+  // pattern repeats exactly. The clock only corrects it: more than 0.6 of a
+  // frame behind and one frame is skipped, as far ahead and one is held. A
+  // correction moves a whole frame, landing well inside the window, so it
+  // cannot dither -- 60 fps on a 59.94 Hz screen loses one frame every 17
+  // seconds at a steady point -- and the picture stays within 0.6 of a frame
+  // of the clock, where reading the clock directly kept it within one. A long stall, a seek or a loop starts it
+  // again from the clock. Until the tick rate is known it is the plain clock.
+  // In index space: frame numbers carry on through a seamless loop's seam
+  // while the position goes back to zero (indexBase_, THE LOOP SEAM).
+  const double clockFrames = static_cast<double>(indexBase_) + currentPosition_ * frameRate_;
+  std::uint64_t targetFrame = static_cast<std::uint64_t>(std::floor(clockFrames));
+  {
+    const auto tickAt = std::chrono::steady_clock::now();
+    if (frameTickValid_) {
+      // THE TICK PERIOD, to about 0.1%: the mean of the last 128 intervals,
+      // stalls (over 1.5x the median) left out. A running average of single
+      // ticks wobbled by about 1%, and the ratio has to be known well enough
+      // to tell 60 on 60 from 60 on 59.94 (0.1%) or it settles on a wrong one.
+      const double dt = std::chrono::duration<double>(tickAt - frameTickPrevAt_).count();
+      if (dt > 0.002 && dt < 0.25) {
+        tickIntervals_[tickIntervalNext_] = dt;
+        tickIntervalNext_ = (tickIntervalNext_ + 1) % kTickIntervals;
+        if (tickSamples_ < kTickIntervals) ++tickSamples_;
+        std::array<double, kTickIntervals> sorted {};
+        std::copy(tickIntervals_.begin(), tickIntervals_.begin() + tickSamples_, sorted.begin());
+        std::nth_element(sorted.begin(), sorted.begin() + tickSamples_ / 2, sorted.begin() + tickSamples_);
+        const double median = sorted[static_cast<std::size_t>(tickSamples_ / 2)];
+        double sum = 0.0;
+        int used = 0;
+        for (int k = 0; k < tickSamples_; ++k) {
+          if (tickIntervals_[k] <= median * 1.5) {
+            sum += tickIntervals_[k];
+            ++used;
+          }
+        }
+        tickIntervalAvg_ = used > 0 ? sum / used : median;
+      }
+    }
+    frameTickPrevAt_ = tickAt;
+    frameTickValid_ = true;
+
+    // At its tape speed as well: the picture clock runs at it, so the clip's
+    // frames go by at it. (Lock-to-screen's trim is part of tapeSpeed_.)
+    const double contentRate = frameRate_ * playbackSpeed_ * tapeSpeed_;
+    const bool schedulable = state_ == TransportState::Playing && contentRate > 1.0 &&
+                             tickSamples_ >= 120 && tickIntervalAvg_ > 0.0 &&
+                             lastRenderedFrameIndex_ != static_cast<std::uint64_t>(-1);
+    if (!schedulable) {
+      cadenceActive_ = false;
+    } else {
+      const double measured = contentRate * tickIntervalAvg_;   // clip frames per tick
+      // STICKY: a ratio already in use stays while the measurement is within
+      // 0.6% of it, so a stall that nudges the measurement cannot re-decide it:
+      // re-deciding restarted the phase from the clock -- the very
+      // repeat-then-skip this exists to stop.
+      // An unsnapped ratio (first measured under load, say) keeps looking for
+      // its fraction: switching to it is well under the 2% that restarts.
+      double ratio = cadenceRatio_;
+      if (!cadenceActive_ || !cadenceSnapped_ ||
+          std::abs(measured - cadenceRatio_) > cadenceRatio_ * 0.006) {
+        // The nearest simple fraction within 0.5%, smallest denominator first.
+        // Real near misses (60 on 59.94, 23.976 on 24) are 0.1%; the rest of
+        // the window is room for the measurement's own error.
+        const bool wasTrimmed = cadenceActive_ && !cadenceSnapped_ &&
+                                std::abs(measured - cadenceRatio_) <= cadenceRatio_ * 0.006;
+        ratio = wasTrimmed ? cadenceRatio_ : measured;
+        cadenceSnapped_ = false;
+        for (int q = 1; q <= 12; ++q) {
+          const double p = std::round(measured * q);
+          if (p >= 1.0 && std::abs(p / q - measured) <= measured * 0.005) {
+            ratio = p / q;
+            cadenceSnapped_ = true;
+            break;
+          }
+        }
+      }
+      if (!cadenceActive_ || std::abs(ratio - cadenceRatio_) > cadenceRatio_ * 0.02) {
+        // Start (or re-start on a really different rate -- a new screen, a
+        // speed change) exactly on the clock. The phase then moves by a fixed
+        // step, so where it sits within a frame no longer matters: there is no
+        // jitter left to tip it either way.
+        cadencePhase_ = clockFrames - ratio;
+        cadenceActive_ = true;
+      }
+      if (std::abs(ratio - cadenceRatio_) > cadenceRatio_ * 0.02) {
+        resetScreenLock();                         // a new screen: find its trim afresh
+      }
+      cadenceRatio_ = ratio;
+      cadencePhase_ += ratio;
+      const double error = clockFrames - cadencePhase_;
+      // A ratio that is no simple fraction is only as good as the measurement;
+      // the clock's error trims it, slowly, so it converges on the true one
+      // instead of being corrected a frame at a time in both directions.
+      if (!cadenceSnapped_ && std::abs(error) <= 4.0) {
+        cadenceRatio_ += error * 0.0005;
+      }
+      if (std::abs(error) > 4.0) {
+        cadencePhase_ = clockFrames;               // a stall: back to the clock
+      } else if (error > 0.6) {
+        cadencePhase_ += 1.0;                      // behind: skip one frame
+        ++cadenceSkips_;
+      } else if (error < -0.6) {
+        cadencePhase_ -= 1.0;                      // ahead: hold one frame
+        ++cadenceHolds_;
+      }
+      // ── LOCK TO THE SCREEN (Cue::lockToScreen) ───────────────────────────
+      // A snapped ratio a hair off the clip's -- 60 on 59.94, 24 on 23.976,
+      // 0.1% -- is made exact by trimming the clip's speed, so the error never
+      // reaches a correction: every frame shown once. A phase-locked loop on
+      // the clock error does it. The error is smoothed first (a third of a
+      // second): it carries the tick's own timing jitter, a tenth of a frame
+      // or so, and a trim that followed that would wobble the sound. The
+      // integral finds the exact trim -- the measured ratio is only good to
+      // about 0.1%, so it says where to start and no more -- while the
+      // proportional term keeps the error near zero meanwhile. SIMULATED with
+      // 1 ms of tick jitter: no correction from the first frame, and the trim
+      // steady to 0.005%. The trim is part of the tape speed, so the sound
+      // follows it, pitch and all: 1.7 cents at 0.1%. A screen out of reach
+      // is let go rather than chased: pinned at its limit the loop corrects
+      // MORE often than no loop at all.
+      //
+      // WHILE THE SOUND CARD IS BEING CAUGHT UP WITH (clockTrim_ above, the
+      // first seconds of a take, a seam), the picture clock runs up to 0.5%
+      // off the clip's own rate on purpose, and a loop that followed it would
+      // chase that instead of the screen. It holds its trim until that
+      // settles, and judges a screen out of reach only once the steering is
+      // nearly still. MEASURED: a cue taken with the lock on reached the
+      // limit while the steering eased off and was given up on for the whole
+      // take -- 0.1% for the screen plus the steering's last 0.05% left no
+      // room at a 0.15% limit, hence 0.2%. A real card settles within a few
+      // hundred ppm; SDL's dummy driver never does, so there the lock never
+      // acts.
+      {
+        constexpr double kLimit = 0.002;
+        const bool wanted = activeCue_ && activeCue_->lockToScreen && cadenceSnapped_ &&
+                            userTapeSpeed_ == 1.0 && playbackSpeed_ == 1.0;
+        const bool catchingUp = std::abs(clockTrim_ - 1.0) > 0.0005;
+        const bool settled = std::abs(clockTrim_ - 1.0) < 0.0002;
+        double wantTrim = 1.0;
+        if (!wanted) {
+          // Off, or the cue's rate is not the screen's to take: let go, and
+          // look afresh next time, out of reach or not.
+          screenLockEngaged_ = false;
+          screenLockBaseValid_ = false;
+          screenLockOutOfReach_ = false;
+        } else if (!screenLockOutOfReach_) {
+          // The trim that would make the measured rate the snapped one.
+          const double base = ratio / std::max(1e-9, measured / screenLockTrim_);
+          screenLockBase_ = screenLockBaseValid_ ? screenLockBase_ + (base - screenLockBase_) * 0.01 : base;
+          screenLockBaseValid_ = true;
+          if (!screenLockEngaged_ && !catchingUp && std::abs(screenLockBase_ - 1.0) <= 0.002) {
+            screenLockEngaged_ = true;
+            screenLockIntegral_ = std::clamp(screenLockBase_ - 1.0, -kLimit, kLimit);
+            screenLockError_ = 0.0;
+            screenLockPinned_ = 0;
+          }
+        }
+        if (screenLockEngaged_ && catchingUp) {
+          wantTrim = screenLockTrim_;                // hold until the clock settles
+        } else if (screenLockEngaged_) {
+          screenLockError_ += ((clockFrames - cadencePhase_) - screenLockError_) * 0.05;
+          screenLockIntegral_ = std::clamp(screenLockIntegral_ - 6.25e-6 * screenLockError_, -kLimit, kLimit);
+          if (std::abs(screenLockIntegral_) < kLimit) {
+            screenLockPinned_ = 0;
+          } else if (settled) {
+            ++screenLockPinned_;
+          }
+          if (screenLockPinned_ > 600) {           // ten settled seconds at the limit
+            screenLockOutOfReach_ = true;
+            screenLockEngaged_ = false;
+          } else {
+            wantTrim = std::clamp(1.0 + screenLockIntegral_ - 0.005 * screenLockError_,
+                                  1.0 - kLimit, 1.0 + kLimit);
+          }
+        }
+        if (std::abs(wantTrim - screenLockTrim_) > 1e-7) {
+          screenLockTrim_ = wantTrim;
+          applyEffectiveTapeSpeed(userTapeSpeed_ * screenLockTrim_);
+        }
+      }
+      targetFrame = static_cast<std::uint64_t>(std::max(0.0, std::floor(cadencePhase_)));
+    }
+  }
+  bool advancedDisplayFrame = false;
+  std::uint64_t advancedFrameIndex = static_cast<std::uint64_t>(-1);
+  {
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    while (!frameQueue_.empty() && frameQueue_.front().index <= targetFrame) {
+      displayFrame_ = std::move(frameQueue_.front());
+      releaseHeldFrameIfTransitionDone();
+      frameQueue_.pop_front();
+      lastRenderedFrameIndex_ = displayFrame_->index;
+      advancedDisplayFrame = true;
+      advancedFrameIndex = displayFrame_->index;
+    }
+  }
+
+  // ── DID THE PICTURE STALL? ───────────────────────────────────────────────
+  //
+  // Only while a VIDEO cue is actually playing with decoders running. A still,
+  // a paused cue and a cue holding its last frame all correctly show the same
+  // picture forever, and counting those would bury the real thing.
+  {
+    // NOT WHILE PRIMING. The queue is filling from empty by design there, so
+    // sampling it would make the low-water measure the prime rather than the
+    // headroom the cue actually plays with -- which is the number this is for.
+    if (state_ == TransportState::Playing && decodersRunning_ && !videoPrimePending_) {
+      std::lock_guard<std::mutex> lock(frameMutex_);
+      queueLowWater_ = std::min(queueLowWater_, static_cast<int>(frameQueue_.size()));
+    }
+    const bool shouldBeMoving =
+      state_ == TransportState::Playing && decodersRunning_ &&
+      !decoderEof_.load() && activeCue_ &&
+      (activeCue_->kind == CueKind::Video || isSourceCueKind(activeCue_->kind));
+    const auto tickNow = std::chrono::steady_clock::now();
+    if (!shouldBeMoving) {
+      stallTimingValid_ = false;
+    } else if (advancedDisplayFrame || !stallTimingValid_) {
+      if (stallTimingValid_) {
+        const double gap =
+          std::chrono::duration<double>(tickNow - stallLastAdvanceAt_).count();
+        // Three frame periods, floored at 100ms so a slow-framerate cue does
+        // not report a stall for every ordinary gap. At 23.976 that is 125ms:
+        // past it, the operator sees the picture hold.
+        const double period = frameRate_ > 1.0 ? 1.0 / frameRate_ : 0.04;
+        const double threshold = std::max(0.1, period * 3.0);
+        if (gap > threshold) {
+          ++stallCount_;
+          stallLastSeconds_ = gap;
+          if (gap > stallWorstSeconds_) stallWorstSeconds_ = gap;
+        }
+      }
+      stallLastAdvanceAt_ = tickNow;
+      stallTimingValid_ = true;
+    }
+  }
+
+  if (advancedDisplayFrame && shouldMeasureMediaFps()) {
+    recordMediaFrameAdvance(advancedFrameIndex);
+  }
+  // On the frame advance, not on the render tick: the picture only changes
+  // when the picture changes, and measuring it 240 times a second would be
+  // 240 identical answers.
+  if (advancedDisplayFrame && displayFrame_) {
+    publishPictureStats(*displayFrame_);
+  }
+
+  // Upload only when the display frame actually changed (or the texture was
+  // torn down). The old unconditional call re-uploaded the same pixels every
+  // render tick — at the 240 Hz loop floor that was hundreds of MB/s of bus
+  // traffic per playing deck for nothing. render() still re-uploads directly
+  // when effect parameters change without a new frame.
+  if (displayFrame_ &&
+      (displayFrame_->index != lastUploadedFrameIndex_ ||
+       (!texture_ && !displayFrame_->isGpu()))) {
+    uploadFrame(*displayFrame_);
+    lastUploadedFrameIndex_ = displayFrame_->index;
+  }
+
+  // Decode watchdog (in-process path): playing, not at EOF, queue starved and
+  // the decode thread hasn't produced a frame in seconds — a wedged decoder
+  // must rerack the deck (transport polls consumeDecodeStall()), not hang it.
+  if (inprocDecodeActive_ && decodersRunning_ && state_ == TransportState::Playing &&
+      !decoderEof_.load() && activeCue_ && activeCue_->kind == CueKind::Video) {
+    Uint64 lastPush = lastFramePushMs_.load();
+    if (lastPush != 0 && SDL_GetTicks() - lastPush > 4000 && queuedFrames() == 0) {
+      decodeStallLatched_ = true;
+    }
+  }
+
+  // A live source never reaches an end: a dropped feed is the stall
+  // watchdog's business, not a cue finishing.
+  if (!liveSourceNoEnd_ && state_ == TransportState::Playing && duration_ > 0.0 &&
+      currentPosition_ >= duration_ - 0.01) {
+    handlePlaybackEnd();
+  }
+
+  if (!liveSourceNoEnd_ && state_ == TransportState::Playing && decoderEof_ &&
+      queuedFrames() == 0 && currentPosition_ >= duration_ - 0.02) {
+    handlePlaybackEnd();
+  }
+}
+
+// Check and consume the decode-stall watchdog latch. Returns true once per
+// stall; the transport handler reracks the deck and toasts the operator.
+void MediaEngine::latchAudioStartFailure(std::string reason) {
+  std::lock_guard<std::mutex> lock(audioStartFailureMutex_);
+  // FIRST reason wins. A later one is usually a consequence of the first, and
+  // the operator wants the cause, not the last thing that went wrong.
+  if (audioStartFailure_.empty()) {
+    audioStartFailure_ = std::move(reason);
+  }
+}
+
+std::string MediaEngine::consumeAudioStartFailure() {
+  std::lock_guard<std::mutex> lock(audioStartFailureMutex_);
+  std::string out;
+  out.swap(audioStartFailure_);
+  return out;
+}
+
+bool MediaEngine::consumeDecodeStall() {
+  if (decodeStallLatched_) {
+    decodeStallLatched_ = false;
+    return true;
+  }
+  return false;
+}
+
+bool MediaEngine::consumeStillDecodeFailure() {
+  return imageDecodeFailed_.exchange(false, std::memory_order_acq_rel);
+}
+
+std::size_t MediaEngine::copyRecentProgramAudio(std::vector<float>& out) const {
+  std::lock_guard<std::mutex> lock(recentAudioMutex_);
+  if (recentAudio_.size() != kRecentAudioSamples) {
+    out.clear();
+    return 0;
+  }
+  // Unrolled into time order here rather than at the drawing end: an effect
+  // should be handed a signal that reads left to right, not a ring and an index.
+  out.resize(kRecentAudioSamples);
+  const std::size_t head = recentAudioWrite_ % kRecentAudioSamples;
+  std::copy(recentAudio_.begin() + static_cast<std::ptrdiff_t>(head),
+            recentAudio_.end(), out.begin());
+  std::copy(recentAudio_.begin(),
+            recentAudio_.begin() + static_cast<std::ptrdiff_t>(head),
+            out.begin() + static_cast<std::ptrdiff_t>(kRecentAudioSamples - head));
+  return out.size();
+}
+
+bool MediaEngine::consumeSourceCaptureFallback() {
+  return sourceCaptureFellBack_.exchange(false, std::memory_order_acq_rel);
+}
+
+// Reset all FPS measurement state. Called on cue load and after runtime refresh
+// to start a fresh measurement window for the new decode stream.
+void MediaEngine::resetMediaFpsTelemetry() {
+  mediaFpsSampleStartedAtMs_ = 0;
+  mediaFpsFrameCount_ = 0;
+  mediaFpsMeasured_ = 0.0;
+  lastMeasuredMediaFrameIndex_ = static_cast<std::uint64_t>(-1);
+}
+
+// The same stream, moved: a seek, a loop going round, an edit to the live cue.
+// Measuring starts again, but the last rate stays on show until the next
+// window reports. Zeroing it here put DECODE WARM on the monitor for most of
+// a second every time a looping clip went round.
+void MediaEngine::restartMediaFpsWindow() {
+  mediaFpsSampleStartedAtMs_ = 0;
+  mediaFpsFrameCount_ = 0;
+  lastMeasuredMediaFrameIndex_ = static_cast<std::uint64_t>(-1);
+}
+
+// FPS measurement is only meaningful for continuously-decoded streams:
+// video files, browser capture, and source capture. Still images and
+// pattern cues don't have a decode frame rate to measure.
+bool MediaEngine::shouldMeasureMediaFps() const {
+  return activeCue_ &&
+         (activeCue_->kind == CueKind::Video || isBrowserCapturing_ || isSourceCapturing_);
+}
+
+// Record a frame advance for FPS telemetry. Uses a sliding 750ms window:
+// counts unique frames within the window, then computes frames/second when
+// the window expires. The result is stored in mediaFpsMeasured_ and exposed
+// to the UI via mediaFpsMeasured() for the performance overlay.
+void MediaEngine::recordMediaFrameAdvance(std::uint64_t frameIndex) {
+  if (frameIndex == static_cast<std::uint64_t>(-1) ||
+      frameIndex == lastMeasuredMediaFrameIndex_) {
+    return;  // duplicate or sentinel — skip
+  }
+  lastMeasuredMediaFrameIndex_ = frameIndex;
+  Uint64 now = SDL_GetTicks();
+  if (mediaFpsSampleStartedAtMs_ == 0) {
+    // First frame in this measurement window — start the clock
+    mediaFpsSampleStartedAtMs_ = now;
+    mediaFpsFrameCount_ = 0;
+  }
+  mediaFpsFrameCount_ += 1;
+  Uint64 elapsedMs = now - mediaFpsSampleStartedAtMs_;
+  if (elapsedMs >= 750) {
+    // Window expired — compute FPS and start a new window
+    mediaFpsMeasured_ = elapsedMs > 0
+      ? (static_cast<double>(mediaFpsFrameCount_) * 1000.0 / static_cast<double>(elapsedMs))
+      : mediaFpsMeasured_;
+    mediaFpsFrameCount_ = 0;
+    mediaFpsSampleStartedAtMs_ = now;
+  }
+}
+
+// Return a pointer to the currently displayed frame, or nullptr if no frame
+// is loaded. Used by the output renderer (app_render_output.ipp) to read
+// pixel data directly for compositing onto the output window/NDI/DeckLink.
+const DecodedFrame* MediaEngine::currentFrame() const {
+  // NOTHING TO HAND THE COMPOSITOR. Counted here rather than in render(),
+  // which the output never calls -- a counter in a path nothing runs reads
+  // zero whether or not the bug is there, which is how the first attempt at
+  // measuring this proved nothing at all.
+  if (!displayFrame_.has_value() && !heldFrame_.has_value() && activeCue_) {
+    ++blankFrames_;
+  }
+  if (displayFrame_.has_value()) {
+    return &(*displayFrame_);
+  }
+  // Still waiting on the incoming cue: keep showing the one it is replacing.
+  //
+  // A SECOND, no more. A still decodes in a fraction of that, and a cue that
+  // never decodes at all -- a missing file, a browser that fails to start --
+  // must not leave the previous picture up looking like it worked.
+  if (heldFrame_.has_value()) {
+    // Long enough for the transition that was asked for, and a second on top
+    // for the incoming cue to decode. A cue that never decodes at all must not
+    // leave the previous picture up looking like it worked.
+    const double limit = 1.0 + outgoingSeconds_;
+    const double held = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - heldFrameSince_).count();
+    if (held <= limit) {
+      return &(*heldFrame_);
+    }
+  }
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// render — Draw the current frame and transition overlay to the given rect.
+//
+// This handles:
+//   1. Draw the current frame (if available) using drawTextureFitted()
+//      with the cue's scale mode, offset, rotation, and crop
+//   2. If a transition is active, draw the transition overlay (crossfade
+//      blend or dip-to-black) using drawTransitionOverlay()
+//   3. Apply the visual fade gain (fade-in/fade-out alpha)
+//
+// Called from the main render loop for the inline preview. The output window
+// uses a separate path (app_render_output.ipp) that reads currentFrame()
+// directly and composites with its own AOI/warp/edge-blend pipeline.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// syncPixelEffectsFromCue -- adopt the cue's colour/key settings, and re-upload
+// the current frame if they changed.
+//
+// This used to live inside render(), which is the INLINE PREVIEW path only --
+// the output window composites from currentFrame() through its own pipeline and
+// never ran this. So brightness, contrast, saturation, hue and the chroma key
+// updated live in the preview and did nothing on the output until the cue was
+// retaken, which is where the operator actually sees them. A playing video hid
+// it, because the next decoded frame uploads anyway; a still, a pattern or a
+// paused clip sat unchanged.
+//
+// Called once per tick from update(), so every view gets the same picture and
+// the re-upload happens once a frame rather than once per view.
+// ---------------------------------------------------------------------------
+void MediaEngine::syncPixelEffectsFromCue() {
+  bool pixelEffectsChanged = false;
+  if (activeCue_) {
+    bool prevKeyEnabled = chromaKeyEnabled_;
+    SDL_Color prevKeyColor = chromaKeyColor_;
+    float prevKeyTolerance = chromaKeyTolerance_;
+    float prevKeySoftness = chromaKeySoftness_;
+    float prevBrightness = brightness_;
+    float prevContrast = contrast_;
+    float prevSaturation = saturation_;
+    float prevHueShift = hueShift_;
+
+    outputScaleX_ = activeCue_->outputScaleX;
+    outputScaleY_ = activeCue_->outputScaleY;
+    scaleMode_ = activeCue_->scaleMode;
+    outputOffsetX_ = activeCue_->outputOffsetX;
+    outputOffsetY_ = activeCue_->outputOffsetY;
+    outputRotationDegrees_ = activeCue_->outputRotationDegrees;
+    cropLeft_ = activeCue_->cropLeft;
+    cropRight_ = activeCue_->cropRight;
+    cropTop_ = activeCue_->cropTop;
+    cropBottom_ = activeCue_->cropBottom;
+    chromaKeyEnabled_ = activeCue_->chromaKeyEnabled;
+    chromaKeyColor_ = activeCue_->chromaKeyColor;
+    chromaKeyTolerance_ = activeCue_->chromaKeyTolerance;
+    chromaKeySoftness_ = activeCue_->chromaKeySoftness;
+    brightness_ = std::clamp(activeCue_->brightness, 0.0f, 2.0f);
+    contrast_ = std::clamp(activeCue_->contrast, 0.0f, 2.0f);
+    saturation_ = std::clamp(activeCue_->saturation, 0.0f, 2.0f);
+    hueShift_ = std::clamp(activeCue_->hueShift, -180.0f, 180.0f);
+
+    pixelEffectsChanged =
+      prevKeyEnabled != chromaKeyEnabled_
+      || prevKeyColor.r != chromaKeyColor_.r
+      || prevKeyColor.g != chromaKeyColor_.g
+      || prevKeyColor.b != chromaKeyColor_.b
+      || std::fabs(prevKeyTolerance - chromaKeyTolerance_) > 0.001f
+      || std::fabs(prevKeySoftness - chromaKeySoftness_) > 0.001f
+      || std::fabs(prevBrightness - brightness_) > 0.001f
+      || std::fabs(prevContrast - contrast_) > 0.001f
+      || std::fabs(prevSaturation - saturation_) > 0.001f
+      || std::fabs(prevHueShift - hueShift_) > 0.001f;
+  }
+  if (pixelEffectsChanged && displayFrame_) {
+    uploadFrame(*displayFrame_);
+  }
+}
+
+void MediaEngine::render(SDL_Rect target) {
+  syncPixelEffectsFromCue();
+
+
+  SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, 255);
+  SDL_RenderFillRect(outputRenderer_, nullptr);
+
+  bool drewCurrent = drawTextureFitted(texture_, textureWidth_, textureHeight_, target, 255);
+  drawTransitionOverlay(target, drewCurrent);
+
+
+
+  double gain = visualFadeGainAt(position());
+  if (drewCurrent && gain < 0.999) {
+    SDL_SetRenderDrawBlendMode(outputRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, static_cast<Uint8>((1.0 - gain) * 255.0));
+    SDL_RenderFillRect(outputRenderer_, nullptr);
+  }
+}
+
+// Regenerate the pattern cue's pixels using the current wall-clock time.
+// Called each frame from the main loop for animated patterns (e.g. pocket-test,
+// any pattern with the -motion suffix). The wall time drives animation phase
+// so the pattern progresses smoothly regardless of frame rate.
+// Regenerate a Timer cue from the transport clock. See the header for why the
+// transport IS the timer rather than a clock beside it.
+
+void MediaEngine::rebuildTimerFrame(const Cue& cue, double elapsedSeconds, bool running) {
+  auto size = currentOutputSizeHint();
+  const int w = size.first;
+  const int h = size.second;
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  DecodedFrame frame;
+  frame.width = w;
+  frame.height = h;
+  frame.format = FramePixelFormat::RGBA32;
+  frame.pixels.assign(static_cast<std::size_t>(w) * h * 4, 0);
+  buildTimerFrame(frame, cue.timer, elapsedSeconds, running);
+  displayFrame_ = std::move(frame);
+  displayFrame_->index = ++displayFrameSerial_;
+  uploadFrame(*displayFrame_);
+}
+
+
+// ---------------------------------------------------------------------------
+// Video synth
+//
+// Atari Video Music folded simple shapes through mirrors; Sleepy Circuits
+// Hypno adds FEEDBACK, transforming each frame and blending it into the next.
+// The feedback is what makes it look alive rather than like a screensaver, so
+// it is the structural centre of this rather than a post-effect.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Text-mode cell rendering.
+//
+// The references are not "a filter over a picture" -- they are a CHARACTER
+// GRID with an indexed palette, corrupted at the CELL level: wrong glyph,
+// wrong colour pair, whole rows locked to one repeating character. That is
+// what makes a corrupted NES tilemap or a torn ANSI screen read as authentic
+// rather than as a post-effect, so this renders cells rather than filtering
+// pixels.
+//
+// The ramp is deliberately BLOCK and DITHER characters rather than letters.
+// Letters carry meaning the picture does not have; blocks and dithers carry
+// density, which is the only thing a cell needs to say.
+// ---------------------------------------------------------------------------
+namespace {
+
+// 5x7 cells, densest last. Bit 4 is the leftmost pixel.
+const std::uint8_t kCellRamp[][7] = {
+  {0x00,0x00,0x00,0x00,0x00,0x00,0x00},   // empty
+  {0x00,0x00,0x04,0x00,0x00,0x00,0x00},   // single dot
+  {0x00,0x0A,0x00,0x0A,0x00,0x0A,0x00},   // sparse dither
+  {0x15,0x00,0x0A,0x00,0x15,0x00,0x0A},   // 25% checker
+  {0x15,0x0A,0x15,0x0A,0x15,0x0A,0x15},   // 50% checker
+  {0x00,0x0E,0x0A,0x0E,0x00,0x00,0x00},   // small box
+  {0x1F,0x11,0x11,0x11,0x11,0x11,0x1F},   // hollow block
+  {0x0A,0x1F,0x1F,0x1F,0x1F,0x1F,0x0A},   // heavy
+  {0x1F,0x1F,0x1F,0x1F,0x1F,0x1F,0x1F},   // solid
+};
+constexpr int kCellRampCount = static_cast<int>(sizeof(kCellRamp) / sizeof(kCellRamp[0]));
+
+// Glyphs that are STRUCTURE rather than density -- lines and corners. Cell
+// corruption swaps in one of these, which is what produces the box-drawing
+// wreckage in a torn text screen instead of a tidy density gradient.
+const std::uint8_t kCellJunk[][7] = {
+  {0x04,0x04,0x04,0x1F,0x04,0x04,0x04},   // cross
+  {0x00,0x00,0x1F,0x00,0x1F,0x00,0x00},   // equals
+  {0x1C,0x10,0x10,0x10,0x10,0x10,0x1C},   // bracket
+  {0x11,0x0A,0x04,0x0A,0x11,0x00,0x00},   // x
+  {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10},   // F
+  {0x04,0x04,0x04,0x04,0x04,0x04,0x04},   // pipe
+  {0x00,0x1F,0x00,0x00,0x00,0x1F,0x00},   // rails
+  {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E},   // O
+};
+constexpr int kCellJunkCount = static_cast<int>(sizeof(kCellJunk) / sizeof(kCellJunk[0]));
+
+// Music and sparkle: the decorative set, drawn here rather than typed.
+//
+// The grid is built from 5x7 bitmaps baked into this file, not from a font, so
+// a character only exists if it is drawn. That is why typing a note into the
+// custom-glyph field does nothing -- every byte outside printable ASCII is
+// dropped. These are the marks that field was reaching for: a dot, a small
+// plus, a ring high and a ring low, a star, a diamond, and a quaver, a pair and
+// a beamed pair.
+//
+// ORDERED BY INK, like every other set here, so the picture still reads as a
+// picture rather than as texture: an empty cell through to a double-beamed
+// pair at 24 lit pixels. The table is generated sorted -- adding a mark means
+// re-sorting, not appending, or it lands at the wrong brightness.
+//
+// asciiShuffle already re-maps which glyph carries which density, from a seed,
+// so the same set gives a different handwriting and stays repeatable across a
+// reopen. That is the randomiser; this is the alphabet it draws from.
+const std::uint8_t kCellSparkle[][7] = {
+  {0x00,0x00,0x00,0x00,0x00,0x00,0x00},   // (blank)
+  {0x00,0x00,0x00,0x04,0x00,0x00,0x00},   // middle dot
+  {0x00,0x00,0x0A,0x00,0x00,0x00,0x00},   // two dots
+  {0x00,0x00,0x00,0x15,0x00,0x00,0x00},   // three dots
+  {0x00,0x00,0x0E,0x11,0x00,0x00,0x00},   // arc
+  {0x00,0x00,0x00,0x00,0x04,0x0E,0x04},   // small plus, low
+  {0x00,0x00,0x08,0x15,0x02,0x00,0x00},   // tilde
+  {0x00,0x04,0x0A,0x11,0x0A,0x04,0x00},   // open diamond
+  {0x0E,0x0A,0x0E,0x00,0x00,0x00,0x00},   // ring above
+  {0x00,0x00,0x00,0x00,0x0E,0x0A,0x0E},   // small circle, low
+  {0x00,0x11,0x0A,0x04,0x0A,0x11,0x00},   // cross
+  {0x04,0x04,0x04,0x04,0x04,0x0C,0x0C},   // quarter note
+  {0x00,0x04,0x15,0x0E,0x15,0x04,0x00},   // star
+  {0x00,0x04,0x0E,0x1F,0x0E,0x04,0x00},   // diamond sparkle
+  {0x07,0x05,0x04,0x04,0x04,0x0E,0x0E},   // quaver
+  {0x1F,0x11,0x11,0x11,0x11,0x1B,0x1B},   // beamed pair
+  {0x1F,0x1F,0x11,0x11,0x11,0x1B,0x1B},   // double-beamed pair
+};
+constexpr int kCellSparkleCount =
+  static_cast<int>(sizeof(kCellSparkle) / sizeof(kCellSparkle[0]));
+
+// A conventional ASCII density ramp, drawn rather than borrowed from the timer
+// font so the set is self-contained and ordered exactly by ink coverage.
+// space . : - + * o X # @
+const std::uint8_t kCellAscii[][7] = {
+  {0x00,0x00,0x00,0x00,0x00,0x00,0x00},
+  {0x00,0x00,0x00,0x00,0x00,0x04,0x00},   // .
+  {0x00,0x04,0x00,0x00,0x04,0x00,0x00},   // :
+  {0x00,0x00,0x00,0x0E,0x00,0x00,0x00},   // -
+  {0x00,0x04,0x04,0x1F,0x04,0x04,0x00},   // +
+  {0x00,0x11,0x0A,0x1F,0x0A,0x11,0x00},   // *
+  {0x00,0x0E,0x11,0x11,0x11,0x0E,0x00},   // o
+  {0x11,0x0A,0x04,0x0A,0x11,0x00,0x00},   // X
+  {0x0A,0x1F,0x0A,0x0A,0x1F,0x0A,0x00},   // #
+  {0x0E,0x11,0x17,0x15,0x17,0x10,0x0E},   // @
+};
+constexpr int kCellAsciiCount = static_cast<int>(sizeof(kCellAscii) / sizeof(kCellAscii[0]));
+
+// The full printable ASCII set, 0x20..0x7E, drawn as 5x7 cells. Bit 4 is the
+// leftmost pixel of each row. Written out rather than borrowed from the timer
+// font because that one covers only what a clock needs.
+//
+// The set is NOT stored in density order -- it is stored in ASCII order, and
+// the ramp order is computed once by counting lit pixels. Hand-ordering 95
+// glyphs by eye would be guesswork, and counting is exact.
+const std::uint8_t kCellAsciiFull[][7] = {
+  {0x00,0x00,0x00,0x00,0x00,0x00,0x00},   // space
+  {0x04,0x04,0x04,0x04,0x04,0x00,0x04},   // !
+  {0x0A,0x0A,0x00,0x00,0x00,0x00,0x00},   // "
+  {0x0A,0x0A,0x1F,0x0A,0x1F,0x0A,0x0A},   // #
+  {0x04,0x0F,0x14,0x0E,0x05,0x1E,0x04},   // $
+  {0x18,0x19,0x02,0x04,0x08,0x13,0x03},   // %
+  {0x0C,0x12,0x14,0x08,0x15,0x12,0x0D},   // &
+  {0x04,0x04,0x00,0x00,0x00,0x00,0x00},   // '
+  {0x02,0x04,0x08,0x08,0x08,0x04,0x02},   // (
+  {0x08,0x04,0x02,0x02,0x02,0x04,0x08},   // )
+  {0x00,0x04,0x15,0x0E,0x15,0x04,0x00},   // *
+  {0x00,0x04,0x04,0x1F,0x04,0x04,0x00},   // +
+  {0x00,0x00,0x00,0x00,0x00,0x04,0x08},   // ,
+  {0x00,0x00,0x00,0x1F,0x00,0x00,0x00},   // -
+  {0x00,0x00,0x00,0x00,0x00,0x0C,0x0C},   // .
+  {0x00,0x01,0x02,0x04,0x08,0x10,0x00},   // /
+  {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E},   // 0
+  {0x04,0x0C,0x04,0x04,0x04,0x04,0x0E},   // 1
+  {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F},   // 2
+  {0x1F,0x02,0x04,0x02,0x01,0x11,0x0E},   // 3
+  {0x02,0x06,0x0A,0x12,0x1F,0x02,0x02},   // 4
+  {0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E},   // 5
+  {0x06,0x08,0x10,0x1E,0x11,0x11,0x0E},   // 6
+  {0x1F,0x01,0x02,0x04,0x08,0x08,0x08},   // 7
+  {0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E},   // 8
+  {0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C},   // 9
+  {0x00,0x0C,0x0C,0x00,0x0C,0x0C,0x00},   // :
+  {0x00,0x0C,0x0C,0x00,0x0C,0x04,0x08},   // ;
+  {0x02,0x04,0x08,0x10,0x08,0x04,0x02},   // <
+  {0x00,0x00,0x1F,0x00,0x1F,0x00,0x00},   // =
+  {0x08,0x04,0x02,0x01,0x02,0x04,0x08},   // >
+  {0x0E,0x11,0x01,0x02,0x04,0x00,0x04},   // ?
+  {0x0E,0x11,0x01,0x0D,0x15,0x15,0x0E},   // @
+  {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11},   // A
+  {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E},   // B
+  {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E},   // C
+  {0x1C,0x12,0x11,0x11,0x11,0x12,0x1C},   // D
+  {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F},   // E
+  {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10},   // F
+  {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F},   // G
+  {0x11,0x11,0x11,0x1F,0x11,0x11,0x11},   // H
+  {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E},   // I
+  {0x07,0x02,0x02,0x02,0x02,0x12,0x0C},   // J
+  {0x11,0x12,0x14,0x18,0x14,0x12,0x11},   // K
+  {0x10,0x10,0x10,0x10,0x10,0x10,0x1F},   // L
+  {0x11,0x1B,0x15,0x15,0x11,0x11,0x11},   // M
+  {0x11,0x11,0x19,0x15,0x13,0x11,0x11},   // N
+  {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E},   // O
+  {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10},   // P
+  {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D},   // Q
+  {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11},   // R
+  {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E},   // S
+  {0x1F,0x04,0x04,0x04,0x04,0x04,0x04},   // T
+  {0x11,0x11,0x11,0x11,0x11,0x11,0x0E},   // U
+  {0x11,0x11,0x11,0x11,0x11,0x0A,0x04},   // V
+  {0x11,0x11,0x11,0x15,0x15,0x15,0x0A},   // W
+  {0x11,0x11,0x0A,0x04,0x0A,0x11,0x11},   // X
+  {0x11,0x11,0x0A,0x04,0x04,0x04,0x04},   // Y
+  {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F},   // Z
+  {0x0E,0x08,0x08,0x08,0x08,0x08,0x0E},   // [
+  {0x00,0x10,0x08,0x04,0x02,0x01,0x00},   // backslash
+  {0x0E,0x02,0x02,0x02,0x02,0x02,0x0E},   // ]
+  {0x04,0x0A,0x11,0x00,0x00,0x00,0x00},   // ^
+  {0x00,0x00,0x00,0x00,0x00,0x00,0x1F},   // _
+  {0x08,0x04,0x00,0x00,0x00,0x00,0x00},   // `
+  {0x00,0x00,0x0E,0x01,0x0F,0x11,0x0F},   // a
+  {0x10,0x10,0x1E,0x11,0x11,0x11,0x1E},   // b
+  {0x00,0x00,0x0E,0x11,0x10,0x11,0x0E},   // c
+  {0x01,0x01,0x0F,0x11,0x11,0x11,0x0F},   // d
+  {0x00,0x00,0x0E,0x11,0x1F,0x10,0x0E},   // e
+  {0x06,0x09,0x08,0x1C,0x08,0x08,0x08},   // f
+  {0x00,0x00,0x0F,0x11,0x0F,0x01,0x0E},   // g
+  {0x10,0x10,0x1E,0x11,0x11,0x11,0x11},   // h
+  {0x04,0x00,0x0C,0x04,0x04,0x04,0x0E},   // i
+  {0x02,0x00,0x06,0x02,0x02,0x12,0x0C},   // j
+  {0x10,0x10,0x12,0x14,0x18,0x14,0x12},   // k
+  {0x0C,0x04,0x04,0x04,0x04,0x04,0x0E},   // l
+  {0x00,0x00,0x1A,0x15,0x15,0x15,0x15},   // m
+  {0x00,0x00,0x1E,0x11,0x11,0x11,0x11},   // n
+  {0x00,0x00,0x0E,0x11,0x11,0x11,0x0E},   // o
+  {0x00,0x00,0x1E,0x11,0x1E,0x10,0x10},   // p
+  {0x00,0x00,0x0F,0x11,0x0F,0x01,0x01},   // q
+  {0x00,0x00,0x16,0x19,0x10,0x10,0x10},   // r
+  {0x00,0x00,0x0F,0x10,0x0E,0x01,0x1E},   // s
+  {0x08,0x08,0x1C,0x08,0x08,0x09,0x06},   // t
+  {0x00,0x00,0x11,0x11,0x11,0x11,0x0F},   // u
+  {0x00,0x00,0x11,0x11,0x11,0x0A,0x04},   // v
+  {0x00,0x00,0x11,0x15,0x15,0x15,0x0A},   // w
+  {0x00,0x00,0x11,0x0A,0x04,0x0A,0x11},   // x
+  {0x00,0x00,0x11,0x11,0x0F,0x01,0x0E},   // y
+  {0x00,0x00,0x1F,0x02,0x04,0x08,0x1F},   // z
+  {0x06,0x08,0x08,0x10,0x08,0x08,0x06},   // {
+  {0x04,0x04,0x04,0x04,0x04,0x04,0x04},   // |
+  {0x0C,0x02,0x02,0x01,0x02,0x02,0x0C},   // }
+  {0x00,0x00,0x08,0x15,0x02,0x00,0x00},   // ~
+};
+constexpr int kCellAsciiFullCount =
+  static_cast<int>(sizeof(kCellAsciiFull) / sizeof(kCellAsciiFull[0]));
+
+// Indices into kCellAsciiFull, sorted from least to most ink. Built once on
+// first use: the density ramp needs an ordering, and coverage is the only
+// honest measure of how dark a glyph reads.
+const std::vector<int>& asciiRampOrder() {
+  static const std::vector<int> order = [] {
+    std::vector<int> idx(static_cast<std::size_t>(kCellAsciiFullCount));
+    for (int i = 0; i < kCellAsciiFullCount; ++i) idx[static_cast<std::size_t>(i)] = i;
+    auto ink = [](int i) {
+      int n = 0;
+      for (int r = 0; r < 7; ++r) {
+        for (int b = 0; b < 5; ++b) {
+          if ((kCellAsciiFull[i][r] >> b) & 1) ++n;
+        }
+      }
+      return n;
+    };
+    std::stable_sort(idx.begin(), idx.end(),
+                     [&](int a, int b) { return ink(a) < ink(b); });
+    return idx;
+  }();
+  return order;
+}
+// Pick the glyph table for a set, and report how many entries it has.
+inline const std::uint8_t (*cellSetFor(int set, int& count))[7] {
+  switch (set) {
+    case 1:  count = kCellAsciiFullCount; return kCellAsciiFull;   // 95 glyphs
+    case 2:  count = kCellJunkCount;      return kCellJunk;
+    case 4:  count = kCellAsciiFullCount; return kCellAsciiFull;
+    case 6:  count = kCellSparkleCount;   return kCellSparkle;
+    default: count = kCellRampCount;      return kCellRamp;
+  }
+}
+
+// Hardware palettes, each the real set the machine could show. A limited,
+// AUTHENTIC palette is most of why period work looks period: the colours had
+// relationships to each other that a freely-picked set does not.
+const std::uint8_t kPalC64[16][3] = {
+  {  0,  0,  0}, {255,255,255}, {136, 57, 50}, {103,182,189},
+  {139, 63,150}, { 85,160, 73}, { 64, 49,141}, {191,206,114},
+  {139, 84, 41}, { 87, 66,  0}, {184,105, 98}, { 80, 80, 80},
+  {120,120,120}, {148,224,137}, {120,105,196}, {159,159,159},
+};
+const std::uint8_t kPalGameboy[4][3] = {
+  { 15, 56, 15}, { 48, 98, 48}, {139,172, 15}, {155,188, 15},
+};
+const std::uint8_t kPalCga[4][3] = {
+  {  0,  0,  0}, { 85,255,255}, {255, 85,255}, {255,255,255},
+};
+const std::uint8_t kPalNes[12][3] = {
+  {  0,  0,  0}, { 60, 60, 60}, {124,124,124}, {188,188,188},
+  {252,252,252}, {172, 16,  0}, {248, 56,  0}, {252,160, 68},
+  {  0,120,248}, { 60,188,252}, {  0,168,  0}, {184,248,184},
+};
+const std::uint8_t kPalVapor[8][3] = {
+  { 16,  0, 32}, { 64,  0, 96}, {148, 32,180}, {255, 64,180},
+  {255,128,220}, { 64,224,255}, {160,255,255}, {255,255,255},
+};
+
+// Quantise a normalised value to a table. Nearest-by-index rather than
+// nearest-by-colour: the input is a ramp position, not a measured colour, and
+// walking the table in order keeps the palette's own progression intact.
+inline void samplePalette(const std::uint8_t table[][3], int count, double u,
+                          double& r, double& g, double& b) {
+  const int i = std::clamp(static_cast<int>(u * count), 0, count - 1);
+  r = table[i][0] / 255.0;
+  g = table[i][1] / 255.0;
+  b = table[i][2] / 255.0;
+}
+
+// A 16-entry indexed palette, the EGA/VGA set the references were made on.
+// Quantising to it is most of why they look like hardware and not like a
+// gradient: a limited palette forces flat areas and hard colour boundaries.
+const std::uint8_t kCellPalette[16][3] = {
+  {  0,  0,  0}, {  0,  0,170}, {  0,170,  0}, {  0,170,170},
+  {170,  0,  0}, {170,  0,170}, {170, 85,  0}, {170,170,170},
+  { 85, 85, 85}, { 85, 85,255}, { 85,255, 85}, { 85,255,255},
+  {255, 85, 85}, {255, 85,255}, {255,255, 85}, {255,255,255},
+};
+
+int nearestPaletteIndex(int r, int g, int b) {
+  int best = 0;
+  int bestDist = 1 << 30;
+  for (int i = 0; i < 16; ++i) {
+    const int dr = r - kCellPalette[i][0];
+    const int dg = g - kCellPalette[i][1];
+    const int db = b - kCellPalette[i][2];
+    const int dist = dr * dr + dg * dg + db * db;
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return best;
+}
+
+}  // namespace
+
+
+// ---------------------------------------------------------------------------
+// Sprite sheet import.
+//
+// Tiles are used exactly like glyphs: chosen by brightness, corrupted by the
+// same cell logic, drawn into the same grid. That is deliberate -- a sheet is
+// another alphabet, not a separate feature, so everything already built for
+// text mode applies to it unchanged.
+// ---------------------------------------------------------------------------
+// Decode one image, scaled to fit a tile and centred on it. Used by the folder
+// path, where every file is a separate sprite of its own size rather than a
+// cell in a grid.
+//
+// Scaled to FIT rather than filled: a sprite drawn to the edges of its cell
+// loses the silhouette, and the silhouette is the only thing legible once a
+// sprite is standing in for a character.
+static bool decodeSpriteInto(const std::string& file, int tileW, int tileH,
+                             std::vector<std::uint8_t>& atlas,
+                             std::size_t atlasW, int col, int row) {
+  // The filter does the fitting, so the output is ALWAYS tileW x tileH and its
+  // size is known without probing the source first. Scaled to FIT and padded
+  // centred: a sprite drawn to the edges of its cell loses the silhouette, and
+  // the silhouette is the only legible thing once a sprite stands in for a
+  // character. Nearest neighbour because this is pixel art and smoothing it on
+  // the way in destroys what makes it worth using.
+  const std::string chain =
+    "scale=" + std::to_string(tileW) + ":" + std::to_string(tileH) +
+    ":force_original_aspect_ratio=decrease:flags=neighbor,"
+    "pad=" + std::to_string(tileW) + ":" + std::to_string(tileH) +
+    ":(ow-iw)/2:(oh-ih)/2:color=0x00000000";
+
+  ChildProcess proc;
+  const std::vector<std::string> args {
+    "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", file,
+    "-frames:v", "1", "-vf", chain,
+    "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"
+  };
+  if (!spawnPipeProcess(proc, args)) return false;
+  std::vector<std::uint8_t> px(static_cast<std::size_t>(tileW) * tileH * 4);
+  const bool ok = readExact(proc.readFd, px.data(), px.size());
+  proc.stop();
+  if (!ok) return false;
+
+  for (int y = 0; y < tileH; ++y) {
+    for (int x = 0; x < tileW; ++x) {
+      const std::size_t src = (static_cast<std::size_t>(y) * tileW + x) * 4;
+      const std::size_t dstX = static_cast<std::size_t>(col * tileW + x);
+      const std::size_t dstY = static_cast<std::size_t>(row * tileH + y);
+      const std::size_t dst = (dstY * atlasW + dstX) * 4;
+      if (dst + 3 >= atlas.size()) continue;
+      atlas[dst + 0] = px[src + 0];
+      atlas[dst + 1] = px[src + 1];
+      atlas[dst + 2] = px[src + 2];
+      atlas[dst + 3] = px[src + 3];
+    }
+  }
+  return true;
+}
+
+bool MediaEngine::ensureSpriteSheet(const std::string& path, int tileW, int tileH) {
+  if (path.empty() || tileW < 2 || tileH < 2) return false;
+  if (spriteSheetLoaded_ == path && spriteSheetTileW_ == tileW &&
+      spriteSheetTileH_ == tileH) {
+    return !spriteTilesByLuma_.empty();
+  }
+  spriteSheetLoaded_ = path;
+  spriteSheetTileW_ = tileW;
+  spriteSheetTileH_ = tileH;
+  spriteTilesByLuma_.clear();
+  spriteSheetRgba_.clear();
+
+  // A FOLDER of individual sprites, rather than one gridded sheet. This is how
+  // most sprite collections actually arrive -- one file per sprite, each its
+  // own size -- and slicing such a file on a grid yields a single tile, which
+  // renders as the same sprite in every cell and looks like the feature is
+  // doing nothing.
+  std::error_code dirEc;
+  if (dbfs::is_directory(path, dirEc)) {
+    std::vector<std::string> files;
+    for (const auto& entry : dbfs::directory_iterator(path, dirEc)) {
+      if (!entry.is_regular_file()) continue;
+      std::string ext = entry.path().extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (ext == ".png" || ext == ".gif" || ext == ".bmp" ||
+          ext == ".jpg" || ext == ".jpeg" || ext == ".webp") {
+        files.push_back(entry.path().string());
+      }
+    }
+    std::sort(files.begin(), files.end());
+    // Capped. Each file is a separate ffmpeg decode, so a folder of thousands
+    // would stall for minutes; 256 tiles is already far more alphabet than a
+    // cell grid can show at once.
+    constexpr std::size_t kMaxTiles = 256;
+    if (files.size() > kMaxTiles) files.resize(kMaxTiles);
+    if (files.empty()) return false;
+
+    const int cols = static_cast<int>(std::ceil(std::sqrt(
+      static_cast<double>(files.size()))));
+    const int rows = static_cast<int>((files.size() + cols - 1) / cols);
+    spriteSheetW_ = cols * tileW;
+    spriteSheetH_ = rows * tileH;
+    spriteSheetCols_ = cols;
+    spriteSheetRows_ = rows;
+    spriteSheetRgba_.assign(
+      static_cast<std::size_t>(spriteSheetW_) * spriteSheetH_ * 4, 0);
+
+    // Per file, because the concat demuxer requires every input to share
+    // stream parameters and a folder of individual sprites is by definition
+    // all different sizes. The one-pass version built an atlas that scored
+    // zero usable tiles and rendered black -- correct for a real sheet,
+    // useless for the case this path exists to serve.
+    //
+    // ffprobe is NOT called any more: the filter chain pads every sprite to
+    // exactly the tile size, so the output byte count is known in advance.
+    // That halves the process count against the first version.
+    for (std::size_t i = 0; i < files.size(); ++i) {
+      decodeSpriteInto(files[i], tileW, tileH, spriteSheetRgba_,
+                       static_cast<std::size_t>(spriteSheetW_),
+                       static_cast<int>(i % cols), static_cast<int>(i / cols));
+    }
+
+    // Rank exactly as the sheet path does, but WITHOUT the coverage filter: a
+    // small sprite centred on a large tile is legitimately sparse, and
+    // dropping it would discard most of a folder.
+    for (std::size_t i = 0; i < files.size(); ++i) {
+      const int tx = static_cast<int>(i % cols);
+      const int ty = static_cast<int>(i / cols);
+      long long total = 0, covered = 0;
+      for (int y = 0; y < tileH; ++y) {
+        const std::size_t rowOff =
+          (static_cast<std::size_t>(ty * tileH + y) * spriteSheetW_ + tx * tileW) * 4;
+        for (int x = 0; x < tileW; ++x) {
+          const std::size_t o = rowOff + static_cast<std::size_t>(x) * 4;
+          if (o + 3 >= spriteSheetRgba_.size()) continue;
+          if (spriteSheetRgba_[o + 3] < 32) continue;
+          total += (spriteSheetRgba_[o + 0] * 77 + spriteSheetRgba_[o + 1] * 151 +
+                    spriteSheetRgba_[o + 2] * 28) >> 8;
+          ++covered;
+        }
+      }
+      if (covered == 0) continue;
+      const int mean = static_cast<int>(total / covered);
+      const int weighted =
+        static_cast<int>(mean * covered / std::max(1, tileW * tileH));
+      spriteTilesByLuma_.emplace_back(weighted, static_cast<int>(i));
+    }
+    std::sort(spriteTilesByLuma_.begin(), spriteTilesByLuma_.end());
+    return !spriteTilesByLuma_.empty();
+  }
+
+  // Size first, so the buffer can be exact. A sheet is an ordinary image, so
+  // this is the same probe the still-image path uses.
+  int srcW = 0, srcH = 0;
+  {
+    const std::vector<std::string> probeArgs {
+      "ffprobe", "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "stream=width,height", "-of", "csv=p=0", path
+    };
+    if (auto probe = readAllText(probeArgs)) {
+      std::sscanf(probe->c_str(), "%d,%d", &srcW, &srcH);
+    }
+  }
+  if (srcW <= 0 || srcH <= 0) return false;
+
+  ChildProcess proc;
+  const std::vector<std::string> args {
+    "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path,
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"
+  };
+  if (!spawnPipeProcess(proc, args)) return false;
+  const std::size_t want = static_cast<std::size_t>(srcW) * srcH * 4;
+  spriteSheetRgba_.resize(want);
+  const bool ok = readExact(proc.readFd, spriteSheetRgba_.data(), want);
+  proc.stop();
+  if (!ok) { spriteSheetRgba_.clear(); return false; }
+
+  spriteSheetW_ = srcW;
+  spriteSheetH_ = srcH;
+  spriteSheetCols_ = srcW / tileW;
+  spriteSheetRows_ = srcH / tileH;
+  if (spriteSheetCols_ <= 0 || spriteSheetRows_ <= 0) return false;
+
+  // Rank tiles by mean brightness, weighted by ALPHA. Sprite sheets are mostly
+  // transparent padding, and a tile that is 90% empty should read as dark
+  // whatever colour the remaining pixels are.
+  for (int ty = 0; ty < spriteSheetRows_; ++ty) {
+    for (int tx = 0; tx < spriteSheetCols_; ++tx) {
+      long long total = 0;
+      long long covered = 0;
+      for (int y = 0; y < tileH; ++y) {
+        const std::size_t rowOff =
+          (static_cast<std::size_t>(ty * tileH + y) * srcW + tx * tileW) * 4;
+        for (int x = 0; x < tileW; ++x) {
+          const std::size_t o = rowOff + static_cast<std::size_t>(x) * 4;
+          const int a = spriteSheetRgba_[o + 3];
+          if (a < 32) continue;
+          const int l = (spriteSheetRgba_[o + 0] * 77 +
+                         spriteSheetRgba_[o + 1] * 151 +
+                         spriteSheetRgba_[o + 2] * 28) >> 8;
+          total += l;
+          ++covered;
+        }
+      }
+      const int area = tileW * tileH;
+      if (covered * 4 < area) continue;   // mostly empty: not a usable tile
+      const int mean = static_cast<int>(total / std::max<long long>(1, covered));
+      // Scale by coverage so a sparse tile ranks darker than a solid one of
+      // the same colour.
+      const int weighted = static_cast<int>(mean * covered / area);
+      spriteTilesByLuma_.emplace_back(weighted, ty * spriteSheetCols_ + tx);
+    }
+  }
+  std::sort(spriteTilesByLuma_.begin(), spriteTilesByLuma_.end());
+  return !spriteTilesByLuma_.empty();
+}
+
+// ---------------------------------------------------------------------------
+// Text mode.
+//
+// Draws a source raster as a grid of character cells. It lived inside
+// rebuildVideoSynthFrame, which made "render this as text" a property of one
+// cue kind rather than something that can be done to a picture -- and a
+// picture is a picture whether it came from an oscillator, a file, a capture
+// card or a camera. Nothing in here ever cared: cells sample the source with
+// `cx * srcW / cols`, so any size in and any size out has always worked.
+//
+// Cells are drawn at DESTINATION resolution deliberately. Rendering them small
+// and scaling up would blur the glyph edges, which is the one thing the look
+// depends on.
+// ---------------------------------------------------------------------------
+// Fonts with broad symbol and emoji coverage, in the order worth trying.
+//
+// A system font rather than a bundled one: the bundled faces are a pixel face
+// and a sans, neither of which has a note or a star in it, and shipping a font
+// with tens of thousands of glyphs would add tens of megabytes to every
+// download for a feature not everyone uses. What IS on the machine is what gets
+// used, and the fallback chain ends at the app's own font so there is always
+// something.
+const char* const kFontGlyphCandidates[] = {
+#if defined(_WIN32)
+  "C:/Windows/Fonts/seguiemj.ttf",     // Segoe UI Emoji -- colour emoji
+  "C:/Windows/Fonts/seguisym.ttf",     // Segoe UI Symbol -- notes, stars, arrows
+  "C:/Windows/Fonts/seguihis.ttf",     // Segoe UI Historic -- runic, ogham, old scripts
+  "C:/Windows/Fonts/cambria.ttc",      // maths and technical
+  "C:/Windows/Fonts/segoeui.ttf",
+  "C:/Windows/Fonts/arial.ttf",
+  "C:/Windows/Fonts/ARIALUNI.TTF",     // Arial Unicode MS, where it is installed
+#elif defined(__APPLE__)
+  "/System/Library/Fonts/Apple Color Emoji.ttc",
+  "/System/Library/Fonts/Apple Symbols.ttf",
+  "/System/Library/Fonts/Helvetica.ttc",
+#else
+  "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+  "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+  "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+  "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+#endif
+};
+
+// Decode one UTF-8 character, returning its byte length. Length 0 means the
+// string is exhausted or malformed.
+std::size_t utf8Advance(const std::string& text, std::size_t at, std::string& outChar) {
+  if (at >= text.size()) return 0;
+  const unsigned char lead = static_cast<unsigned char>(text[at]);
+  std::size_t width = 1;
+  if (lead >= 0xF0)      width = 4;
+  else if (lead >= 0xE0) width = 3;
+  else if (lead >= 0xC0) width = 2;
+  if (at + width > text.size()) return 0;
+  outChar = text.substr(at, width);
+  return width;
+}
+
+// ── REAL TYPOGRAPHY INTO A GENERATED FRAME ───────────────────────────────────
+//
+// The engine draws its clock as seven-segment geometry so it never depends on
+// a font being installed, and that is still the right default for a stage
+// timer seen from the back of a room. But it was never a LIMIT: SDL_ttf is
+// right here, and rebuildFontGlyphs has been opening operator-chosen faces for
+// the character grid all along.
+//
+// So this is the shared way to put a string into a DecodedFrame's RGBA buffer
+// with a real face, for anything generated that wants words rather than
+// digits: the timer's typeface mode, and the teleprompter.
+//
+// FACES ARE CACHED, and that is not an optimisation -- it is the difference
+// between working and not. A live timer regenerates its whole picture every
+// tick, so opening eight faces from disk per call is eight file opens sixty
+// times a second. The first version did exactly that and the main thread
+// crawled: the app still answered socket QUERIES instantly (those are served
+// on the network thread) while anything that had to reach the main thread took
+// seconds. That asymmetry is the tell, and it is worth remembering -- an app
+// that answers STATUS but not TIMER FACE is not hung, it is starved.
+//
+// Fonts do not change under us, so the path and the point size are the whole
+// key. Entries are shared_ptr so an eviction cannot pull a face out from under
+// a frame that is mid-draw.
+namespace {
+
+// The operator's face, or the bundled one. Not a list of faces any more: what
+// the face cannot draw -- a timer message in Arabic, a teleprompter script in
+// Japanese -- the shaper draws from its fallback chain, a PIECE at a time
+// rather than a character at a time, so joined scripts stay joined and every
+// piece sits on one baseline.
+struct FrameTextFaces {
+  TTF_Font* face = nullptr;
+  ~FrameTextFaces() {
+    if (face) {
+      deckboy::render::shaping::forgetFace(face);
+      TTF_CloseFont(face);
+    }
+  }
+  bool empty() const { return face == nullptr; }
+};
+
+void openFrameTextFaces(FrameTextFaces& out, const std::string& fontPath, int pt) {
+  if (pt < 4) {
+    return;
+  }
+  std::string path = fontPath;
+  if (!path.empty()) {
+    out.face = TTF_OpenFont(path.c_str(), static_cast<float>(pt));
+  }
+  // The bundled face when the operator chose none, or theirs will not open,
+  // so a show looks the same on all three platforms -- the same reason
+  // Liberation is shipped rather than leaned on per-OS.
+  if (!out.face) {
+    path = (deckboy::core::Paths::dataDir() / "fonts" / "LiberationSans-Regular.ttf").string();
+    out.face = TTF_OpenFont(path.c_str(), static_cast<float>(pt));
+  }
+  if (out.face) {
+    deckboy::render::shaping::registerFace(out.face, path, static_cast<float>(pt));
+  }
+}
+
+// The cache. A timer's size follows the output raster, not the frame, so the
+// steady state is one or two entries; the cap only matters if something starts
+// asking with a new size every tick, and then it stops that eating every font
+// handle on the machine rather than letting it.
+std::shared_ptr<FrameTextFaces> frameTextFacesFor(const std::string& fontPath,
+                                                  int pt) {
+  static std::mutex mutex;
+  static std::map<std::pair<std::string, int>, std::shared_ptr<FrameTextFaces>> cache;
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto key = std::make_pair(fontPath, pt);
+  if (auto found = cache.find(key); found != cache.end()) {
+    return found->second;
+  }
+  if (cache.size() >= 16) {
+    // Safe to drop: anything mid-draw holds its own shared_ptr.
+    cache.clear();
+  }
+  auto made = std::make_shared<FrameTextFaces>();
+  openFrameTextFaces(*made, fontPath, pt);
+  cache.emplace(key, made);
+  return made;
+}
+
+// THE RENDERED STRING IS CACHED TOO, and this is the one that matters.
+//
+// Caching the FACES was not enough. A live timer rebuilds its whole picture
+// every tick, and at a 4K raster the clock is around a thousand pixels tall:
+// rasterising five glyphs that size and compositing them costs millions of
+// pixel operations sixty times a second. The main thread crawled -- socket
+// QUERIES still answered instantly off the network thread while anything that
+// had to reach the main thread took five seconds, which is the tell.
+//
+// The clock text changes once a second. So the glyphs are rasterised when the
+// STRING changes and blitted from a small RGBA buffer the rest of the time.
+// Same argument as timerLogoFor, which caches the decoded logo for the same
+// reason.
+struct FrameTextBitmap {
+  std::vector<std::uint8_t> rgba;
+  int w = 0;
+  int h = 0;
+};
+
+// How wide a string is in these faces, so a caller can centre or wrap it.
+int frameTextWidth(FrameTextFaces& faces, const std::string& text) {
+  if (faces.empty() || text.empty()) {
+    return 0;
+  }
+  int w = 0;
+  deckboy::render::shaping::textSize(faces.face, text.c_str(), text.size(), &w, nullptr);
+  return w;
+}
+
+// One string, rasterised once and kept. Keyed by everything that changes what
+// the pixels are; the colour is NOT part of the key because the glyphs are
+// rendered white and tinted on the way out, which is what lets an amber clock
+// and a red one share a rasterisation.
+const FrameTextBitmap* frameTextBitmapFor(const std::string& text,
+                                          const std::string& fontPath, int pt) {
+  static std::mutex mutex;
+  static std::map<std::tuple<std::string, std::string, int>, FrameTextBitmap> cache;
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto key = std::make_tuple(text, fontPath, pt);
+  if (auto found = cache.find(key); found != cache.end()) {
+    return &found->second;
+  }
+  // A clock cycles through a bounded set of strings ("4:59", "4:58", ...), so
+  // this settles; the cap is for a message that changes every frame through a
+  // {remaining} placeholder, which would otherwise grow without end.
+  if (cache.size() >= 256) {
+    cache.clear();
+  }
+  auto faces = frameTextFacesFor(fontPath, pt);
+  if (!faces || faces->empty() || text.empty()) {
+    return nullptr;
+  }
+  // The whole string through the shaper. This used to draw a CHARACTER at a
+  // time, each in whichever face had it, which can never join an Arabic word
+  // and put a right-to-left message on the clock backwards.
+  SDL_Surface* rendered = deckboy::render::shaping::renderText(
+    faces->face, text.c_str(), text.size(), SDL_Color {255, 255, 255, 255});
+  if (!rendered) {
+    return nullptr;
+  }
+  SDL_Surface* rgba = rendered;
+  if (rendered->format != SDL_PIXELFORMAT_ARGB8888) {
+    rgba = SDL_ConvertSurface(rendered, SDL_PIXELFORMAT_ARGB8888);
+    SDL_DestroySurface(rendered);
+    if (!rgba) {
+      return nullptr;
+    }
+  }
+  FrameTextBitmap bitmap;
+  bitmap.w = rgba->w;
+  bitmap.h = rgba->h;
+  if (bitmap.w <= 0 || bitmap.h <= 0) {
+    SDL_DestroySurface(rgba);
+    return nullptr;
+  }
+  bitmap.rgba.assign(static_cast<std::size_t>(bitmap.w) * bitmap.h * 4, 0);
+  const std::uint8_t* src = static_cast<const std::uint8_t*>(rgba->pixels);
+  for (int gy = 0; gy < rgba->h; ++gy) {
+    for (int gx = 0; gx < rgba->w; ++gx) {
+      const std::uint8_t* sp = src + static_cast<std::size_t>(gy) * rgba->pitch + gx * 4;
+      // ARGB8888 lands B,G,R,A little-endian. Stored as coverage: the glyph
+      // is white, so the alpha is all that matters and the tint comes later.
+      bitmap.rgba[(static_cast<std::size_t>(gy) * bitmap.w + gx) * 4 + 3] = sp[3];
+    }
+  }
+  SDL_DestroySurface(rgba);
+  auto inserted = cache.emplace(key, std::move(bitmap));
+  return &inserted.first->second;
+}
+
+// Blit a cached string, tinted. This is what a per-frame caller should use.
+void drawFrameTextCached(DecodedFrame& frame, const std::string& text,
+                         const std::string& fontPath, int pt, int x, int y,
+                         SDL_Color color) {
+  const FrameTextBitmap* bitmap = frameTextBitmapFor(text, fontPath, pt);
+  if (!bitmap || frame.pixels.empty()) {
+    return;
+  }
+  // ACROSS THE CORES, like every other expensive pixel loop in this codebase.
+  // A stage clock at a 4K raster is a bitmap around a thousand pixels tall, and
+  // the timer regenerates its whole frame every tick -- composited on one
+  // thread that was enough to starve the main loop, which showed up as the app
+  // answering network QUERIES instantly while taking five seconds to act on
+  // anything. The rows are independent, which is the only question
+  // parallelRows asks.
+  deckboy::effects::detail::parallelRows(bitmap->h, bitmap->w,
+                                         [&](int firstRow, int lastRow) {
+    for (int gy = firstRow; gy < lastRow; ++gy) {
+      const int dy = y + gy;
+      if (dy < 0 || dy >= frame.height) continue;
+      const std::uint8_t* srcRow =
+        bitmap->rgba.data() + static_cast<std::size_t>(gy) * bitmap->w * 4;
+      std::uint8_t* dstRow =
+        frame.pixels.data() + static_cast<std::size_t>(dy) * frame.width * 4;
+      for (int gx = 0; gx < bitmap->w; ++gx) {
+        const int dx = x + gx;
+        if (dx < 0 || dx >= frame.width) continue;
+        const int a = srcRow[static_cast<std::size_t>(gx) * 4 + 3];
+        if (a == 0) continue;
+        std::uint8_t* dp = dstRow + static_cast<std::size_t>(dx) * 4;
+        // ON NOTHING, THE INK IS THE INK. Mixing an edge pixel with whatever
+        // colour sits under alpha 0 darkens it, and the compositor then draws
+        // that darkened colour at the edge's alpha: a black fringe round every
+        // letter on a transparent frame.
+        if (dp[3] == 0) {
+          dp[0] = color.r;
+          dp[1] = color.g;
+          dp[2] = color.b;
+          dp[3] = static_cast<std::uint8_t>(a);
+          continue;
+        }
+        dp[0] = static_cast<std::uint8_t>((color.r * a + dp[0] * (255 - a)) / 255);
+        dp[1] = static_cast<std::uint8_t>((color.g * a + dp[1] * (255 - a)) / 255);
+        dp[2] = static_cast<std::uint8_t>((color.b * a + dp[2] * (255 - a)) / 255);
+        dp[3] = static_cast<std::uint8_t>(std::min(255, dp[3] + a));
+      }
+    }
+  });
+}
+
+// How wide a cached string is, for centring it.
+int frameTextCachedWidth(const std::string& text, const std::string& fontPath,
+                         int pt) {
+  const FrameTextBitmap* bitmap = frameTextBitmapFor(text, fontPath, pt);
+  return bitmap ? bitmap->w : 0;
+}
+
+}  // namespace
+
+void MediaEngine::rebuildFontGlyphs(const std::string& glyphs, int cellW, int cellH,
+                                    const std::string& fontPath) {
+  const std::string key = std::to_string(cellW) + "x" + std::to_string(cellH) +
+                          ":" + fontPath + ":" + glyphs;
+  if (key == fontGlyphsKey_ && !fontGlyphs_.empty()) {
+    return;                       // already have exactly these, at this size
+  }
+  fontGlyphsKey_ = key;
+  fontGlyphs_.clear();
+  fontGlyphW_ = cellW;
+  fontGlyphH_ = cellH;
+  if (cellW < 2 || cellH < 2 || glyphs.empty()) {
+    return;
+  }
+
+  // Sized to the cell. A little under, so a tall glyph has somewhere to go
+  // rather than being clipped at the cap height.
+  const int pt = std::max(6, static_cast<int>(cellH * 0.9));
+
+  // EVERY candidate, not the first that opens.
+  //
+  // The first version took the first font that loaded, which on Windows is the
+  // emoji face -- and that has no musical notes, no dingbats and no stars, so
+  // most of a pasted row came out as the empty box a font draws for a character
+  // it does not have. Coverage is per CHARACTER, not per font: ask each face in
+  // turn whether it actually has this one.
+  std::vector<TTF_Font*> faces;
+  // The operator's choice goes FIRST and the platform chain still backs it up
+  // per character, so picking a face for its stars does not cost you the
+  // letters it happens not to have.
+  if (!fontPath.empty()) {
+    if (TTF_Font* chosen = TTF_OpenFont(fontPath.c_str(), static_cast<float>(pt))) {
+      faces.push_back(chosen);
+    }
+  }
+  for (const char* path : kFontGlyphCandidates) {
+    if (TTF_Font* f = TTF_OpenFont(path, static_cast<float>(pt))) {
+      faces.push_back(f);
+    }
+  }
+  if (faces.empty()) {
+    return;                       // no usable font: the caller falls back
+  }
+
+  for (std::size_t at = 0; at < glyphs.size(); ) {
+    std::string one;
+    const std::size_t width = utf8Advance(glyphs, at, one);
+    if (width == 0) break;
+    at += width;
+
+    // The codepoint, so coverage can be asked about it.
+    std::uint32_t code = static_cast<unsigned char>(one[0]);
+    if (width == 2)      code = ((code & 0x1Fu) << 6) | (one[1] & 0x3Fu);
+    else if (width == 3) code = ((code & 0x0Fu) << 12) | ((one[1] & 0x3Fu) << 6) | (one[2] & 0x3Fu);
+    else if (width == 4) code = ((code & 0x07u) << 18) | ((one[1] & 0x3Fu) << 12) |
+                                ((one[2] & 0x3Fu) << 6) | (one[3] & 0x3Fu);
+    // DRAW WHAT CAN BE DRAWN, and leave out what cannot.
+    //
+    // A character no face provides used to be rendered anyway, which gets you
+    // the empty box a font draws for a glyph it does not have -- so a set of
+    // runes on a machine without a runic face came out as a field of boxes
+    // rather than as anything. Skipping it means the set is whatever the
+    // machine can actually show, and an empty set falls back to the bitmap
+    // glyphs instead of drawing nothing but tofu.
+    // THE EMOJI FACE ONLY FOR EMOJI.
+    //
+    // It sits first in the list because colour emoji have to come from it, but
+    // it also claims plenty of ordinary symbols and draws some of them as
+    // something else entirely -- a star operator came out as an accented
+    // letter. So for anything below the emoji planes, the symbol faces are
+    // asked first and the emoji face is the last resort.
+    const bool isEmoji = code >= 0x1F000u ||
+                         (code >= 0x2600u && code <= 0x27BFu && code != 0x2605u && code != 0x2606u);
+    TTF_Font* font = nullptr;
+    if (!isEmoji && faces.size() > 1) {
+      for (std::size_t i = 1; i < faces.size(); ++i) {
+        if (TTF_FontHasGlyph(faces[i], code)) { font = faces[i]; break; }
+      }
+    }
+    if (!font) {
+      for (TTF_Font* f : faces) {
+        if (TTF_FontHasGlyph(f, code)) { font = f; break; }
+      }
+    }
+    if (!font) {
+      continue;
+    }
+    FontCellGlyph cell;
+    cell.rgba.assign(static_cast<std::size_t>(cellW) * cellH * 4, 0);
+    SDL_Surface* rendered = deckboy::render::shaping::renderText(
+      font, one.c_str(), one.size(), SDL_Color {255, 255, 255, 255});
+    if (rendered) {
+      SDL_Surface* rgba = SDL_ConvertSurface(rendered, SDL_PIXELFORMAT_ARGB8888);
+      SDL_DestroySurface(rendered);
+      if (rgba) {
+        // Centre it, scaling down if the face drew wider than the cell -- some
+        // emoji are square and much wider than a text glyph of the same size.
+        const double scale = std::min(1.0,
+          std::min(static_cast<double>(cellW) / std::max(1, rgba->w),
+                   static_cast<double>(cellH) / std::max(1, rgba->h)));
+        const int drawW = std::max(1, static_cast<int>(rgba->w * scale));
+        const int drawH = std::max(1, static_cast<int>(rgba->h * scale));
+        const int offX = (cellW - drawW) / 2;
+        const int offY = (cellH - drawH) / 2;
+        const std::uint8_t* srcPix = static_cast<const std::uint8_t*>(rgba->pixels);
+        bool sawColour = false;
+        for (int y = 0; y < drawH; ++y) {
+          const int sy = std::min(rgba->h - 1, static_cast<int>(y / scale));
+          for (int x = 0; x < drawW; ++x) {
+            const int sx = std::min(rgba->w - 1, static_cast<int>(x / scale));
+            const std::uint8_t* sp = srcPix + static_cast<std::size_t>(sy) * rgba->pitch + sx * 4;
+            const int dx = offX + x, dy = offY + y;
+            if (dx < 0 || dy < 0 || dx >= cellW || dy >= cellH) continue;
+            std::uint8_t* dp = cell.rgba.data() +
+              (static_cast<std::size_t>(dy) * cellW + dx) * 4;
+            dp[0] = sp[0]; dp[1] = sp[1]; dp[2] = sp[2]; dp[3] = sp[3];
+            // ARGB8888 on a little-endian machine lands as B,G,R,A. A glyph
+            // drawn in white stays white; anything else came from a colour
+            // font and must keep its own colours.
+            if (sp[3] > 8 && (std::abs(sp[0] - sp[1]) > 24 || std::abs(sp[1] - sp[2]) > 24)) {
+              sawColour = true;
+            }
+          }
+        }
+        cell.colour = sawColour;
+        SDL_DestroySurface(rgba);
+      }
+    }
+    fontGlyphs_.push_back(std::move(cell));
+  }
+  for (TTF_Font* f : faces) {
+    TTF_CloseFont(f);
+  }
+}
+
+void MediaEngine::renderTextMode(const std::uint8_t* src, int srcW, int srcH,
+                                 std::uint8_t* dst, int dstW, int dstH,
+                                 const VideoSynthSettings& vs,
+                                 std::uint64_t serial, double seconds) {
+  if (!src || !dst || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) {
+    return;
+  }
+
+    // Text-mode render. Cells are drawn at OUTPUT resolution so the glyph
+    // edges stay crisp -- rendering them small and scaling up would blur the
+    // one thing the look depends on.
+    // Worked out ONCE per frame rather than per cell: eight thousand cells
+    // parsing the same two strings would be the most expensive thing in the
+    // mode.
+    // YOUR OWN GLYPHS, decoded as UTF-8.
+    //
+    // This walked the string a BYTE at a time and kept only printable ASCII,
+    // so pasting a row of marks off a kaomoji site produced nothing at all:
+    // every lead byte of a multi-byte character fell outside the table and was
+    // dropped in silence. The marks that exist are drawn in kCellSparkle, so a
+    // pasted one can be recognised and pointed at the glyph that means it --
+    // several spellings each, because a star arrives as any of a dozen
+    // codepoints depending where it was copied from.
+    //
+    // Each entry packs WHICH TABLE in the high bits, since a custom set can now
+    // mix ASCII and marks.
+    struct MarkAlias { std::uint32_t code; int glyph; };
+    static const MarkAlias kMarkAliases[] = {
+      {0x00B7, 1}, {0x2022, 1}, {0x30FB, 1}, {0xFF65, 1}, {0x2027, 1}, // dot
+      {0x2025, 2}, {0x00A8, 2},                                        // two dots
+      {0x2026, 3}, {0x22EF, 3},                                        // three dots
+      {0x2312, 4}, {0x25E0, 4},                                        // arc
+      {0x208A, 5}, {0xFF0B, 5}, {0x271A, 5},                           // small plus
+      {0x301C, 6}, {0xFF5E, 6}, {0x223C, 6}, {0x3030, 6},              // tilde
+      {0x25C7, 7}, {0x2662, 7}, {0x22C4, 7}, {0x25CA, 7},              // open diamond
+      {0x02DA, 8}, {0x00B0, 8}, {0x309C, 8}, {0xFF9F, 8}, {0x25E6, 8}, // ring above
+      {0x3002, 9}, {0xFF61, 9}, {0x25CB, 9}, {0x25CF, 9},              // small circle
+      {0x2715, 10}, {0x00D7, 10}, {0x2717, 10}, {0x2716, 10},          // cross
+      {0x2669, 11},                                                    // quarter note
+      {0x22C6, 12}, {0x2605, 12}, {0x2606, 12}, {0x2734, 12},
+      {0x2739, 12}, {0x272A, 12}, {0x2B50, 12},                        // star
+      {0x2726, 13}, {0x2727, 13}, {0x25C6, 13}, {0x2666, 13},
+      {0x2728, 13}, {0x274B, 13},                                      // sparkle
+      {0x266A, 14},                                                    // quaver
+      {0x266B, 15},                                                    // beamed pair
+      {0x266C, 16},                                                    // double beam
+    };
+    constexpr int kCustomTableShift = 16;
+    std::vector<int> customGlyphs;
+    // Set when the operator typed something no bitmap in this file can draw.
+    // That is the signal to render the whole set through a FONT instead: the
+    // alternative is what used to happen, which was dropping the character in
+    // silence and leaving them wondering why nothing changed.
+    bool glyphsNeedFont = false;
+    for (std::size_t at = 0; at < vs.asciiGlyphs.size(); ) {
+      const unsigned char lead = static_cast<unsigned char>(vs.asciiGlyphs[at]);
+      std::uint32_t code = lead;
+      std::size_t width = 1;
+      if (lead >= 0xF0)      { code = lead & 0x07u; width = 4; }
+      else if (lead >= 0xE0) { code = lead & 0x0Fu; width = 3; }
+      else if (lead >= 0xC0) { code = lead & 0x1Fu; width = 2; }
+      if (width > 1) {
+        if (at + width > vs.asciiGlyphs.size()) break;   // truncated tail
+        for (std::size_t k = 1; k < width; ++k) {
+          const unsigned char cont = static_cast<unsigned char>(vs.asciiGlyphs[at + k]);
+          if ((cont & 0xC0u) != 0x80u) { code = 0xFFFFFFFFu; break; }
+          code = (code << 6) | (cont & 0x3Fu);
+        }
+      }
+      at += width;
+      if (code < 128u) {
+        const int gi = static_cast<int>(code) - 32;
+        if (gi >= 0 && gi < kCellAsciiFullCount) customGlyphs.push_back(gi);
+        continue;
+      }
+      bool drawn = false;
+      for (const MarkAlias& alias : kMarkAliases) {
+        if (alias.code == code) {
+          customGlyphs.push_back((1 << kCustomTableShift) | alias.glyph);
+          drawn = true;
+          break;
+        }
+      }
+      if (!drawn) {
+        glyphsNeedFont = true;
+      }
+    }
+    // Which phrase is showing, and where. It moves on a slow clock and lands
+    // somewhere derived from that clock, so it is repeatable rather than
+    // jittering to a new place every frame.
+    std::string phraseText;
+    int phraseRow = -1, phraseCol = 0, phraseLen = 0;
+    if (!vs.asciiPhrases.empty() && vs.asciiPhraseHold > 0.01) {
+      std::vector<std::string> phrases;
+      std::size_t at = 0;
+      while (at <= vs.asciiPhrases.size()) {
+        const std::size_t bar = vs.asciiPhrases.find('|', at);
+        std::string one = vs.asciiPhrases.substr(
+          at, bar == std::string::npos ? std::string::npos : bar - at);
+        while (!one.empty() && one.front() == ' ') one.erase(one.begin());
+        while (!one.empty() && one.back() == ' ') one.pop_back();
+        if (!one.empty()) phrases.push_back(one);
+        if (bar == std::string::npos) break;
+        at = bar + 1;
+      }
+      if (!phrases.empty()) {
+        // The clock passed in, not the frame count. This divided the frame
+        // serial by an assumed 60, so a phrase set to hold for two seconds
+        // held for two and a half on a 50Hz display and five on a 24Hz one --
+        // and the accurate clock was already sitting in a parameter this
+        // local was shadowing.
+        const std::uint64_t slot =
+          static_cast<std::uint64_t>(seconds / vs.asciiPhraseHold);
+        std::uint32_t h = static_cast<std::uint32_t>(slot * 2654435761u);
+        h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+        phraseText = phrases[h % phrases.size()];
+        phraseLen = static_cast<int>(phraseText.size());
+      }
+    }
+    const int cols = std::clamp(vs.asciiCols, 20, 200);
+    // THE GRID COVERS THE WHOLE RASTER.
+    //
+    // Cell size used to be dstW/cols and dstH/cellH -- integer division, with
+    // the remainder simply never drawn. At 1280 wide and 74 columns that is a
+    // 17px cell, 74 of them reach 1258, and the last 22 COLUMNS OF PIXELS were
+    // not part of the picture at all: a bare strip down the right edge, and
+    // another along the bottom. As the video synth it showed as a black band
+    // (there is a clear() further down whose whole job was to stop that
+    // remainder showing white); as an EFFECT over a clip it showed the
+    // untouched video, which is how it was spotted.
+    //
+    // The fix is to put the cell EDGES on proportional boundaries, the same
+    // arithmetic the source sampling above already uses. Cells then differ by
+    // a pixel here and there, the last one lands exactly on the raster edge,
+    // and nothing is left over. The nominal size below is only used to choose
+    // a row count that keeps the 5x7 glyph aspect roughly right.
+    const int nomCellW = std::max(3, dstW / cols);
+    const int nomCellH = std::max(4, (nomCellW * 7) / 5);   // 5x7 glyph aspect
+    const int rows = std::max(1, dstH / nomCellH);
+    auto colEdge = [&](int c) { return (c * dstW) / cols; };
+    auto rowEdge = [&](int r) { return (r * dstH) / rows; };
+    if (phraseLen > 0) {
+      const std::uint64_t slot =
+        static_cast<std::uint64_t>(seconds / vs.asciiPhraseHold);
+      std::uint32_t p = static_cast<std::uint32_t>(slot * 40503u + 17u);
+      p ^= p >> 11; p *= 2654435761u; p ^= p >> 15;
+      phraseRow = static_cast<int>(p % static_cast<std::uint32_t>(std::max(1, rows)));
+      const int room = std::max(1, cols - phraseLen);
+      phraseCol = static_cast<int>((p >> 8) % static_cast<std::uint32_t>(room));
+      // A phrase wider than the grid would wrap into nonsense; clip it.
+      phraseLen = std::min(phraseLen, cols - phraseCol);
+    }
+    std::uint32_t cseed = static_cast<std::uint32_t>(serial * 2246822519u) | 1u;
+    auto crnd = [&cseed]() {
+      cseed ^= cseed << 13; cseed ^= cseed >> 17; cseed ^= cseed << 5;
+      return cseed;
+    };
+    const double corrupt = std::clamp(vs.glitch, 0.0, 1.0);
+    // Sheet mode only engages if the sheet actually loaded. A missing file
+    // falls back to blocks rather than drawing nothing, because an empty
+    // screen gives the operator no clue which of the two went wrong.
+    // Uses the sheet only if it is ALREADY loaded. This used to call
+    // ensureSpriteSheet from here, which on a folder spawns two subprocesses
+    // per file -- two hundred of them for a hundred sprites -- synchronously,
+    // in the middle of drawing a frame. The app froze hard.
+    //
+    // Loading now happens when the operator CHOOSES a set, which is a moment
+    // that can afford to take a second, and this only ever reads the result.
+    const bool useSprites = vs.asciiCharSet == 5 &&
+      spriteSheetLoaded_ == vs.spriteSheetPath &&
+      !spriteTilesByLuma_.empty() && spriteSheetCols_ > 0;
+
+    // FONT GLYPHS, if this cue is drawing with them. Built here, before the
+    // cell loop is threaded: rasterising a glyph touches SDL_ttf, which is not
+    // safe to call from several threads at once, and doing it per cell would
+    // be the most expensive thing in the mode by a wide margin.
+    // Font rendering is chosen EXPLICITLY, by picking the font glyph set, or
+    // IMPLICITLY, by typing a character no bitmap here can draw. The implicit
+    // route is the one that matters: an operator pasting a row of symbols is
+    // not going to hunt for a mode first, and the old behaviour -- drop it and
+    // say nothing -- is what made the field look broken.
+    const bool useFontGlyphs =
+      // A CHOSEN FONT IS A CHOICE, so honour it. This asked only whether the
+      // set was "font" or whether the glyphs contained something the 5x7
+      // bitmap cannot draw -- so picking a typeface and then typing plain
+      // letters got the blocky built-in face and no sign why. The font row
+      // exists to be used; using it is the request.
+      (vs.asciiCharSet == 7 || glyphsNeedFont || !vs.asciiFontPath.empty()) &&
+      !vs.asciiGlyphs.empty();
+    if (useFontGlyphs) {
+      rebuildFontGlyphs(vs.asciiGlyphs, nomCellW, nomCellH, vs.asciiFontPath);
+    }
+
+    // Threaded by cell row. Text mode writes the ENTIRE output raster one
+    // cell at a time, which at 1080p is two million pixels on a single thread
+    // -- the largest remaining cost once the CRT was fixed.
+    auto renderCellRows = [&](int rowBegin, int rowEnd) {
+    for (int cy = rowBegin; cy < rowEnd; ++cy) {
+      // ROW LOCK. A corrupted text screen does not scatter random cells -- a
+      // row loses sync and repeats ONE character across its whole width, in
+      // one colour pair. That banding is the signature of the reference
+      // images, and scattering instead just looks like noise.
+      const bool rowLocked = corrupt > 0.05 &&
+        (crnd() % 100u) < static_cast<std::uint32_t>(corrupt * 35.0);
+      const int lockGlyph = static_cast<int>(crnd() % static_cast<std::uint32_t>(kCellJunkCount));
+      const int lockInk = static_cast<int>(crnd() % 16u);
+      const int lockBg = static_cast<int>(crnd() % 16u);
+
+      for (int cx = 0; cx < cols; ++cx) {
+        // Average the source cell rather than point-sampling: a single pixel
+        // from a dithered pattern reports whichever phase it landed on and the
+        // grid flickers.
+        int sr = 0, sg = 0, sb = 0, count = 0;
+        const int sx0 = (cx * srcW) / cols;
+        const int sx1 = std::max(sx0 + 1, ((cx + 1) * srcW) / cols);
+        const int sy0 = (cy * srcH) / rows;
+        const int sy1 = std::max(sy0 + 1, ((cy + 1) * srcH) / rows);
+        for (int sy = sy0; sy < std::min(sy1, srcH); ++sy) {
+          for (int sx = sx0; sx < std::min(sx1, srcW); ++sx) {
+            const std::size_t o = (static_cast<std::size_t>(sy) * srcW + sx) * 4;
+            sb += src[o + 0]; sg += src[o + 1]; sr += src[o + 2];
+            ++count;
+          }
+        }
+        if (count == 0) count = 1;
+        sr /= count; sg /= count; sb /= count;
+
+        const int luma = (sr * 77 + sg * 151 + sb * 28) >> 8;
+        int setCount = 0;
+        const std::uint8_t (*set)[7] = cellSetFor(vs.asciiCharSet, setCount);
+        // Mixed draws from both the density ramp and the structural glyphs,
+        // chosen by position rather than at random -- random per frame would
+        // make every cell flicker between alphabets.
+        if (vs.asciiCharSet == 3) {
+          if (((cx * 7 + cy * 13) & 3) == 0) { set = kCellJunk; setCount = kCellJunkCount; }
+          else { set = kCellRamp; setCount = kCellRampCount; }
+        }
+        int rampIndex = (luma * (setCount - 1)) / 255;
+        rampIndex = std::clamp(rampIndex, 0, setCount - 1);
+        // Set 1 walks the ASCII font in DENSITY order so brightness maps to
+        // ink coverage and the picture still reads. Set 4 walks it in raw
+        // ASCII order instead: the mapping is then arbitrary, which is the
+        // point -- it looks like text rather than like a gradient.
+        if (vs.asciiCharSet == 1) {
+          rampIndex = asciiRampOrder()[static_cast<std::size_t>(rampIndex)];
+        }
+        if (vs.asciiShuffle > 0) {
+          // A fixed permutation from the seed: same glyphs, different
+          // handwriting. Deterministic, so the look is repeatable.
+          std::uint32_t h = static_cast<std::uint32_t>(rampIndex * 2654435761u +
+                                                       vs.asciiShuffle * 40503u);
+          h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+          rampIndex = static_cast<int>(h % static_cast<std::uint32_t>(setCount));
+        }
+        // CHAOS. How much the cell stops caring what the picture says.
+        //
+        // At 0 the glyph is whatever the brightness ranked; at 1 it is any
+        // glyph in the set. That is what makes a set of seventeen marks show
+        // seventeen marks -- ranked strictly by ink, a flat area of picture
+        // picks one of them and the rest never appear.
+        //
+        // Hashed from the CELL POSITION, not from the frame: a cell that
+        // re-rolls every frame is a flicker, not a texture. Same reasoning,
+        // and the same hash, as the sprite path above.
+        if (vs.asciiChaos > 0.001 && setCount > 1) {
+          std::uint32_t h = static_cast<std::uint32_t>(cx) * 73856093u ^
+                            static_cast<std::uint32_t>(cy) * 19349663u ^
+                            static_cast<std::uint32_t>(vs.asciiShuffle) * 83492791u;
+          h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+          const double mix = (h & 0xFFFFu) / 65535.0;
+          if (mix < std::clamp(vs.asciiChaos, 0.0, 1.0)) {
+            rampIndex = static_cast<int>((h >> 16) % static_cast<std::uint32_t>(setCount));
+          }
+        }
+
+        // YOUR OWN GLYPHS, if any were given. The ASCII table is stored in
+        // character order starting at space, so a character maps to a glyph
+        // by subtraction and no lookup table is needed.
+        if (!customGlyphs.empty()) {
+          int slot = std::clamp(
+            (luma * (static_cast<int>(customGlyphs.size()) - 1)) / 255,
+            0, static_cast<int>(customGlyphs.size()) - 1);
+          // Chaos applies HERE too, and within the operator's own set rather
+          // than the whole table behind it -- a random pick across all 95 ASCII
+          // glyphs would ignore the very thing they typed.
+          if (vs.asciiChaos > 0.001 && customGlyphs.size() > 1) {
+            std::uint32_t hc = static_cast<std::uint32_t>(cx) * 73856093u ^
+                               static_cast<std::uint32_t>(cy) * 19349663u ^
+                               static_cast<std::uint32_t>(vs.asciiShuffle) * 83492791u;
+            hc ^= hc >> 13; hc *= 2246822519u; hc ^= hc >> 16;
+            if ((hc & 0xFFFFu) / 65535.0 < std::clamp(vs.asciiChaos, 0.0, 1.0)) {
+              slot = static_cast<int>((hc >> 16) %
+                       static_cast<std::uint32_t>(customGlyphs.size()));
+            }
+          }
+          const int packed = customGlyphs[static_cast<std::size_t>(slot)];
+          if ((packed >> kCustomTableShift) != 0) {
+            set = kCellSparkle;
+            setCount = kCellSparkleCount;
+          } else {
+            set = kCellAsciiFull;
+            setCount = kCellAsciiFullCount;
+          }
+          rampIndex = packed & ((1 << kCustomTableShift) - 1);
+        }
+        // A PHRASE, if one is showing and this cell is inside it. Overrides
+        // whatever the brightness chose, because the word is the point.
+        if (phraseLen > 0 && cy == phraseRow &&
+            cx >= phraseCol && cx < phraseCol + phraseLen) {
+          const char ch = phraseText[static_cast<std::size_t>(cx - phraseCol)];
+          const int gi = static_cast<int>(ch) - 32;
+          if (gi >= 0 && gi < kCellAsciiFullCount) {
+            set = kCellAsciiFull;
+            setCount = kCellAsciiFullCount;
+            rampIndex = gi;
+          }
+        }
+        const std::uint8_t* glyph = set[rampIndex];
+
+        // Ink. The old boolean offered green or picture-colour and nothing
+        // else; these are the phosphors people actually mean, plus a mode that
+        // locks the text to the selected hardware palette.
+        int inkIdx;
+        switch (vs.asciiInk) {
+          case 1:  inkIdx = 10; break;   // green
+          case 2:  inkIdx = 14; break;   // amber
+          case 3:  inkIdx = 11; break;   // cyan
+          case 4:  inkIdx = 15; break;   // white
+          case 5: {
+            // Palette-locked: quantise the cell's own colour into the palette
+            // already chosen for the picture, so text mode and pixel mode
+            // agree about what machine this is.
+            double pr = 0, pg = 0, pb = 0;
+            const double u = luma / 255.0;
+            switch (vs.palette) {
+              case VideoSynthPalette::C64:     samplePalette(kPalC64, 16, u, pr, pg, pb); break;
+              case VideoSynthPalette::Gameboy: samplePalette(kPalGameboy, 4, u, pr, pg, pb); break;
+              case VideoSynthPalette::Cga:     samplePalette(kPalCga, 4, u, pr, pg, pb); break;
+              case VideoSynthPalette::Nes:     samplePalette(kPalNes, 12, u, pr, pg, pb); break;
+              case VideoSynthPalette::Vapor:   samplePalette(kPalVapor, 8, u, pr, pg, pb); break;
+              default: pr = sr / 255.0; pg = sg / 255.0; pb = sb / 255.0; break;
+            }
+            inkIdx = nearestPaletteIndex(static_cast<int>(pr * 255),
+                                         static_cast<int>(pg * 255),
+                                         static_cast<int>(pb * 255));
+            break;
+          }
+          // PICTURE MEANS THE PICTURE.
+          //
+          // This quantised the cell's colour to the 16-entry EGA palette, whose
+          // only mid-tones are grey -- so ordinary footage, which is mostly
+          // desaturated mid-tones, came out grey and white almost everywhere.
+          // MEASURED on one held frame: 19.5% of the source's lit pixels are
+          // desaturated, and 89.3% of the glyph pixels drawn from it were.
+          //
+          // The quantised look is what ink mode 5, PALETTE, exists to give, and
+          // it stays exactly as it was. "Picture" now uses the cell's own
+          // averaged colour, which is what an operator picking it is asking
+          // for: the clip, drawn as characters.
+          default: inkIdx = -1; break;   // -1 = the cell's own colour
+        }
+        const bool monoInk = vs.asciiInk >= 1 && vs.asciiInk <= 4;
+        int bgIdx = 0;
+
+        if (rowLocked) {
+          glyph = kCellJunk[lockGlyph];
+          // A mono phosphor screen corrupts by BRIGHTNESS, not by hue -- a
+          // green terminal cannot suddenly show magenta. Colour-pair
+          // corruption belongs to the palette modes.
+          if (!monoInk) { inkIdx = lockInk; bgIdx = lockBg; }
+        } else if (corrupt > 0.05 &&
+                   (crnd() % 1000u) < static_cast<std::uint32_t>(corrupt * 90.0)) {
+          // Scattered single-cell corruption on top of the row banding.
+          glyph = kCellJunk[crnd() % static_cast<std::uint32_t>(kCellJunkCount)];
+          if (!monoInk) inkIdx = static_cast<int>(crnd() % 16u);
+        }
+
+        // Cell origin AND extent, needed by BOTH the sprite branch below and
+        // the glyph path after it, so they are computed once here. Both come
+        // from the proportional edges, so cells tile the raster exactly.
+        const int px0 = colEdge(cx);
+        const int py0 = rowEdge(cy);
+        const int cellW = colEdge(cx + 1) - px0;
+        const int cellH = rowEdge(cy + 1) - py0;
+
+        // WOBBLE: the cell tilts as though the character were a card.
+        //
+        // Not a projection -- a squash on one axis, a stretch on the other and
+        // a shear between them, which the eye reads as depth for a fraction of
+        // the cost. Each cell carries its own PHASE so the grid breathes
+        // instead of sliding about as one sheet.
+        //
+        // Where the tilt points depends on the mode: its own position (drift),
+        // the picture's luma gradient (flow), or the cell's hue. Flow is the
+        // interesting one -- characters lean the way the image does, so an edge
+        // combs the grid along itself.
+        // How near the eye is to the card. Small values fisheye; large ones
+        // flatten back to the shear this replaced.
+        constexpr double kWobFocal = 1.6;
+        double wobCosY = 1.0, wobSinY = 0.0, wobCosX = 1.0, wobSinX = 0.0;
+        double wobFacing = 1.0;
+        const double wobAmt = std::clamp(vs.asciiWobble, 0.0, 1.0);
+        if (wobAmt > 0.001) {
+          double dir = 0.0;
+          if (vs.asciiWobbleMode == 1) {
+            // Luma gradient from the four neighbouring cells, sampled straight
+            // out of the source rather than kept from the previous pass: one
+            // pixel each, and it costs four reads on a cell that already did
+            // dozens.
+            auto lumaAt = [&](int ccx, int ccy) -> int {
+              const int sx = std::clamp(((ccx * 2 + 1) * srcW) / (cols * 2), 0, srcW - 1);
+              const int sy = std::clamp(((ccy * 2 + 1) * srcH) / (rows * 2), 0, srcH - 1);
+              const std::uint8_t* q = src + (static_cast<std::size_t>(sy) * srcW + sx) * 4;
+              return (q[2] * 77 + q[1] * 151 + q[0] * 28) >> 8;
+            };
+            const int gxL = lumaAt(std::max(0, cx - 1), cy);
+            const int gxR = lumaAt(std::min(cols - 1, cx + 1), cy);
+            const int gyU = lumaAt(cx, std::max(0, cy - 1));
+            const int gyD = lumaAt(cx, std::min(rows - 1, cy + 1));
+            // WEIGHTED BY HOW MUCH GRADIENT THERE ACTUALLY IS.
+            //
+            // atan2 of a near-zero gradient is noise: across a flat part of
+            // the picture neighbouring cells got directions pointing all over,
+            // which threw the phase apart again and undid the coherence the
+            // travelling wave exists to give. Measured along a row of thirty
+            // cells, flow stepped 29 units between neighbours against 9 for
+            // drift -- scattered by exactly the amount the picture was flat.
+            //
+            // A direction taken from no gradient carries no information, so it
+            // now carries no weight, and those cells fall back to the wave.
+            // Where the picture does have an edge the flow follows it, which
+            // is the whole point of the mode.
+            const double gdx = static_cast<double>(gxR - gxL);
+            const double gdy = static_cast<double>(gyD - gyU);
+            const double gmag = std::sqrt(gdx * gdx + gdy * gdy);
+            dir = std::atan2(gdy, gdx) * std::clamp(gmag / 40.0, 0.0, 1.0);
+          } else if (vs.asciiWobbleMode == 2) {
+            const int mx = std::max(sr, std::max(sg, sb));
+            const int mn = std::min(sr, std::min(sg, sb));
+            if (mx > mn) {
+              const double c = static_cast<double>(mx - mn);
+              double h = 0.0;
+              if (mx == sr)      h = std::fmod((sg - sb) / c, 6.0);
+              else if (mx == sg) h = (sb - sr) / c + 2.0;
+              else               h = (sr - sg) / c + 4.0;
+              // Weighted by saturation for the same reason flow is weighted
+              // by gradient: the hue of a nearly grey cell is arbitrary, and
+              // an arbitrary direction is noise. Fully grey was already
+              // handled by the test above; this covers everything approaching
+              // it rather than only the exact case.
+              const double sat = c / std::max(1.0, static_cast<double>(mx));
+              dir = h * 1.04719755 * std::clamp(sat * 2.0, 0.0, 1.0);
+            }
+          } else {
+            // Drift takes its direction from the wave below rather than adding
+            // a second, faster one of its own.
+            dir = 0.0;
+          }
+          // A WAVE THAT TRAVELS ACROSS THE GRID, not a phase thrown per cell.
+          //
+          // This stepped about a radian per column and nearly two per row, so
+          // neighbouring cards faced almost opposite ways -- deliberately, to
+          // keep them out of step. That is why the perspective did not read as
+          // depth on anything but solid blocks: a card only looks like a card
+          // if the ones beside it agree roughly where the surface is going, and
+          // with the phase scattered the depth shading came out as noise
+          // instead of as a gradient across the picture.
+          //
+          // At these steps a wavelength spans some thirty cells, so a run of
+          // neighbours turns together as one sheet and the light travels over
+          // it. Cells still differ -- just over a distance the eye can follow.
+          const double phase = seconds * 2.0 + dir + (cx * 0.18 + cy * 0.26);
+          // Turned about BOTH axes, a quarter out of step, which is what makes
+          // it tumble rather than swing like a gate on a hinge.
+          const double angY = std::sin(phase) * wobAmt * 1.15;
+          const double angX = std::sin(phase * 0.73 + 1.57) * wobAmt * 0.75;
+          wobCosY = std::cos(angY); wobSinY = std::sin(angY);
+          wobCosX = std::cos(angX); wobSinX = std::sin(angX);
+          // HOW SQUARELY THIS CARD FACES THE EYE, which is the light.
+          //
+          // The shading was taken from the projected depth alone, and that
+          // sits so close to 1 across most of a card that ink already at full
+          // brightness simply clamped: measured across a row of thirty cells
+          // the ink ran 245-255 with the wobble at 0.85, so there was no
+          // lighting cue at all and the turn read as distortion.
+          //
+          // A surface turned away from the eye catches less light -- the
+          // cosine of its angle, which after rotating about both axes is just
+          // the product of the two cosines already worked out. One multiply
+          // per cell, no per-pixel cost, and it is the cue the eye actually
+          // uses: edge-on goes dark, face-on comes back to full.
+          wobFacing = std::clamp(wobCosY * wobCosX, 0.22, 1.0);
+        }
+        const bool wobbling = wobAmt > 0.001;
+        // THE HORIZONTAL HALF OF THE PROJECTION DOES NOT DEPEND ON THE ROW.
+        //
+        // sPos and depthY are functions of the column alone, and computing them
+        // per pixel cost two divides on every pixel of every cell -- which took
+        // the mode from 150% of a core to 358%. Worked out once per column and
+        // read back per row it is 210%, and the picture is identical.
+        //
+        // thread_local because the cell loop is threaded by row band; sized
+        // once and reused, so a frame does no allocation.
+        static thread_local std::vector<double> wobColS;
+        static thread_local std::vector<double> wobColDepth;
+        constexpr double kWobInvFocal = 1.0 / kWobFocal;
+        if (wobbling) {
+          wobColS.resize(static_cast<std::size_t>(cellW));
+          wobColDepth.resize(static_cast<std::size_t>(cellW));
+          for (int rx = 0; rx < cellW; ++rx) {
+            const double u = (static_cast<double>(rx) / std::max(1, cellW)) - 0.5;
+            double denomY = wobCosY - u * wobSinY * kWobInvFocal;
+            if (std::abs(denomY) < 1e-4) denomY = (denomY < 0.0 ? -1e-4 : 1e-4);
+            const double sPos = u / denomY;
+            wobColS[static_cast<std::size_t>(rx)] = sPos;
+            wobColDepth[static_cast<std::size_t>(rx)] = 1.0 + sPos * wobSinY * kWobInvFocal;
+          }
+        }
+
+        // A FONT-DRAWN CELL takes a different path entirely: it is a cached
+        // RGBA bitmap rather than a 5x7 bit pattern, so it is blitted here and
+        // the glyph machinery below is skipped.
+        if (useFontGlyphs && !fontGlyphs_.empty()) {
+          int pick = std::clamp(
+            (luma * (static_cast<int>(fontGlyphs_.size()) - 1)) / 255,
+            0, static_cast<int>(fontGlyphs_.size()) - 1);
+          if (vs.asciiChaos > 0.001 && fontGlyphs_.size() > 1) {
+            std::uint32_t hf = static_cast<std::uint32_t>(cx) * 73856093u ^
+                               static_cast<std::uint32_t>(cy) * 19349663u ^
+                               static_cast<std::uint32_t>(vs.asciiShuffle) * 83492791u;
+            hf ^= hf >> 13; hf *= 2246822519u; hf ^= hf >> 16;
+            if ((hf & 0xFFFFu) / 65535.0 < std::clamp(vs.asciiChaos, 0.0, 1.0)) {
+              pick = static_cast<int>((hf >> 16) %
+                       static_cast<std::uint32_t>(fontGlyphs_.size()));
+            }
+          }
+          const FontCellGlyph& fg = fontGlyphs_[static_cast<std::size_t>(pick)];
+          // The ink applies to a monochrome glyph. A colour emoji carries its
+          // own colours and tinting it would throw away the only reason to
+          // draw one.
+          std::uint8_t tint[3] = {
+            static_cast<std::uint8_t>(std::clamp(sr, 0, 255)),
+            static_cast<std::uint8_t>(std::clamp(sg, 0, 255)),
+            static_cast<std::uint8_t>(std::clamp(sb, 0, 255))
+          };
+          if (vs.asciiInk >= 1 && vs.asciiInk <= 4) {
+            const int idx = vs.asciiInk == 1 ? 10 : vs.asciiInk == 2 ? 14
+                          : vs.asciiInk == 3 ? 11 : 15;
+            tint[0] = kCellPalette[idx][0];
+            tint[1] = kCellPalette[idx][1];
+            tint[2] = kCellPalette[idx][2];
+          }
+          for (int ry = 0; ry < cellH; ++ry) {
+            const int gyPlain = (ry * fontGlyphH_) / std::max(1, cellH);
+            if (py0 + ry < 0 || py0 + ry >= dstH) continue;
+            std::uint8_t* row = dst + (static_cast<std::size_t>(py0 + ry) * dstW) * 4;
+            const double vNorm = (static_cast<double>(ry) / std::max(1, cellH)) - 0.5;
+            double wobShade = 1.0;
+            for (int rx = 0; rx < cellW; ++rx) {
+              int gx = (rx * fontGlyphW_) / std::max(1, cellW);
+              int gy = gyPlain;
+              if (wobbling) {
+                // Sample the glyph THROUGH the tilt rather than transforming
+                // drawn pixels: reading from a rotated position costs one
+                // multiply-add per pixel and never leaves a gap behind.
+                // The column half comes from the table built for this cell;
+                // only the row half is left to solve per pixel.
+                const double sPos = wobColS[static_cast<std::size_t>(rx)];
+                const double depthY = wobColDepth[static_cast<std::size_t>(rx)];
+                const double tMid = vNorm * depthY;
+                double denomX = wobCosX - tMid * wobSinX * kWobInvFocal;
+                if (std::abs(denomX) < 1e-4) denomX = (denomX < 0.0 ? -1e-4 : 1e-4);
+                const double tPos = tMid / denomX;
+                const double depthX = 1.0 + tPos * wobSinX * kWobInvFocal;
+                const double su = sPos * depthX;
+                const double sv = tPos;
+                wobShade = wobFacing *
+                std::clamp(1.0 / std::max(0.30, depthY * depthX), 0.55, 1.35);
+                if (su < -0.5 || su > 0.5 || sv < -0.5 || sv > 0.5) {
+                  // TURNED OFF THE EDGE OF ITS OWN CELL.
+                  //
+                  // Skipping the pixel leaves whatever the destination held --
+                  // and in the effect path that is the SOURCE PICTURE, so a
+                  // large, strongly turned character showed the clip through
+                  // the corner it had rotated out of. The cell owns every pixel
+                  // inside it, glyph or not.
+                  std::uint8_t* pB = row + static_cast<std::size_t>(px0 + rx) * 4;
+                  pB[0] = 0; pB[1] = 0; pB[2] = 0; pB[3] = 255;
+                  continue;
+                }
+                gx = static_cast<int>((su + 0.5) * fontGlyphW_);
+                gy = static_cast<int>((sv + 0.5) * fontGlyphH_);
+              }
+              if (px0 + rx < 0 || px0 + rx >= dstW) continue;
+              const std::size_t gi2 =
+                (static_cast<std::size_t>(std::min(gy, fontGlyphH_ - 1)) * fontGlyphW_ +
+                 std::min(gx, fontGlyphW_ - 1)) * 4;
+              if (gi2 + 3 >= fg.rgba.size()) continue;
+              const int alpha = fg.rgba[gi2 + 3];
+              std::uint8_t* p = row + static_cast<std::size_t>(px0 + rx) * 4;
+              if (alpha < 8) {
+                p[0] = 0; p[1] = 0; p[2] = 0; p[3] = 255;
+                continue;
+              }
+              // The projection's own depth, used as light. A face turning
+              // towards the eye brightens and the receding half falls away,
+              // which is most of what sells the turn as a turn.
+              auto shade = [&](int v) {
+                return static_cast<std::uint8_t>(
+                  std::clamp(static_cast<int>(v * wobShade), 0, 255));
+              };
+              if (fg.colour) {
+                p[0] = shade(fg.rgba[gi2 + 0]);
+                p[1] = shade(fg.rgba[gi2 + 1]);
+                p[2] = shade(fg.rgba[gi2 + 2]);
+              } else {
+                p[0] = shade(tint[2] * alpha / 255);
+                p[1] = shade(tint[1] * alpha / 255);
+                p[2] = shade(tint[0] * alpha / 255);
+              }
+              p[3] = 255;
+            }
+          }
+          continue;
+        }
+
+
+        if (useSprites) {
+          // Draw a TILE instead of a glyph, chosen by the same brightness the
+          // glyph ramp uses, so the picture still reads through the sprites.
+          const std::size_t n = spriteTilesByLuma_.size();
+          std::size_t pick = static_cast<std::size_t>(luma) * n / 256u;
+          if (pick >= n) pick = n - 1;
+          if (rowLocked) pick = static_cast<std::size_t>(lockGlyph) % n;
+          // CHAOS mixes a position-hashed random pick against the
+          // brightness-ranked one. Hashed rather than time-random: a tile that
+          // reshuffles every frame is a flicker, not a texture.
+          if (vs.spriteChaos > 0.001) {
+            std::uint32_t h = static_cast<std::uint32_t>(cx * 73856093u ^ cy * 19349663u);
+            h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+            const double mix = (h & 0xFFFFu) / 65535.0;
+            if (mix < vs.spriteChaos) pick = (h >> 16) % n;
+          }
+          const int tile = spriteTilesByLuma_[pick].second;
+          const int tx0 = (tile % spriteSheetCols_) * spriteSheetTileW_;
+          const int ty0 = (tile / spriteSheetCols_) * spriteSheetTileH_;
+
+          // Per-cell transform. Quarter turns are index swaps rather than real
+          // rotation, so they stay pixel-exact; only free rotation samples at
+          // an angle, and it is opt-in for that reason.
+          int quarter = 0;
+          double freeRad = 0.0;
+          switch (vs.spriteRotate) {
+            case 1: quarter = 1; break;
+            case 2: quarter = 2; break;
+            case 3: quarter = 3; break;
+            case 4: quarter = (luma * 4) / 256; break;   // by brightness
+            case 5:
+              freeRad = seconds * vs.spriteFreeAngle * 0.017453292519943295;
+              break;
+            default: break;
+          }
+          bool flipX = vs.spriteFlip == 1;
+          bool flipY = vs.spriteFlip == 2;
+          if (vs.spriteFlip == 3) {
+            // Alternating by cell position: a checkerboard of mirrored tiles,
+            // which reads as deliberate pattern where random flipping reads as
+            // noise.
+            flipX = ((cx + cy) & 1) != 0;
+            flipY = ((cx ^ cy) & 2) != 0;
+          }
+          // Jitter shrinks a cell's tile, hashed by position so it holds still.
+          double jitter = 1.0;
+          if (vs.spriteJitter > 0.001) {
+            std::uint32_t jh = static_cast<std::uint32_t>(cx * 2654435761u ^ cy * 40503u);
+            jh ^= jh >> 15;
+            jitter = 1.0 - vs.spriteJitter * ((jh & 0xFFFFu) / 65535.0) * 0.6;
+          }
+          // Nothing to transform: take the integer path. The transform below
+          // does two divisions per PIXEL plus trig when spinning, which at
+          // 1080p is millions of floating-point operations a frame -- and the
+          // default is no transform at all, so paying for it unconditionally
+          // was a straight regression.
+          const bool plain = (quarter == 0) && (freeRad == 0.0) &&
+                             !flipX && !flipY && (jitter > 0.999);
+          if (plain) {
+            for (int ry = 0; ry < cellH; ++ry) {
+              if (py0 + ry >= dstH) break;
+              const int sy = ty0 + (ry * spriteSheetTileH_) / cellH;
+              std::uint8_t* row = dst +
+                (static_cast<std::size_t>(py0 + ry) * dstW) * 4;
+              for (int rx = 0; rx < cellW; ++rx) {
+                if (px0 + rx >= dstW) break;
+                const int sx = tx0 + (rx * spriteSheetTileW_) / cellW;
+                const std::size_t so =
+                  (static_cast<std::size_t>(sy) * spriteSheetW_ + sx) * 4;
+                std::uint8_t* p = row + static_cast<std::size_t>(px0 + rx) * 4;
+                if (so + 3 >= spriteSheetRgba_.size() ||
+                    spriteSheetRgba_[so + 3] < 32) {
+                  p[0] = 0; p[1] = 0; p[2] = 0; p[3] = 255;
+                  continue;
+                }
+                p[0] = spriteSheetRgba_[so + 0];
+                p[1] = spriteSheetRgba_[so + 1];
+                p[2] = spriteSheetRgba_[so + 2];
+                p[3] = 255;
+              }
+            }
+            continue;
+          }
+
+          for (int ry = 0; ry < cellH; ++ry) {
+            if (py0 + ry >= dstH) break;
+            // Cell-local coordinates, centred, so every transform is about
+            // the tile's middle rather than its corner.
+            double lx = (static_cast<double>(ry) / cellH) - 0.5;
+            std::uint8_t* row = dst +
+              (static_cast<std::size_t>(py0 + ry) * dstW) * 4;
+            for (int rx = 0; rx < cellW; ++rx) {
+              if (px0 + rx >= dstW) break;
+              double ux = (static_cast<double>(rx) / cellW) - 0.5;
+              double uy = lx;
+              if (jitter < 0.999) { ux /= jitter; uy /= jitter; }
+              if (freeRad != 0.0) {
+                const double cs = std::cos(freeRad), sn = std::sin(freeRad);
+                const double rxr = ux * cs - uy * sn;
+                uy = ux * sn + uy * cs;
+                ux = rxr;
+              }
+              for (int q = 0; q < quarter; ++q) {
+                const double tmp = ux;
+                ux = -uy;
+                uy = tmp;
+              }
+              if (flipX) ux = -ux;
+              if (flipY) uy = -uy;
+              // Outside the tile after transforming: leave it transparent
+              // rather than clamping, which would smear the edge pixel into a
+              // streak across the cell.
+              if (ux < -0.5 || ux >= 0.5 || uy < -0.5 || uy >= 0.5) {
+                std::uint8_t* pc = row + static_cast<std::size_t>(px0 + rx) * 4;
+                pc[0] = 0; pc[1] = 0; pc[2] = 0; pc[3] = 255;
+                continue;
+              }
+              const int sx = tx0 + static_cast<int>((ux + 0.5) * spriteSheetTileW_);
+              const int sy = ty0 + static_cast<int>((uy + 0.5) * spriteSheetTileH_);
+              const std::size_t so =
+                (static_cast<std::size_t>(sy) * spriteSheetW_ + sx) * 4;
+              if (so + 3 >= spriteSheetRgba_.size()) continue;
+              const int a = spriteSheetRgba_[so + 3];
+              std::uint8_t* p = row + static_cast<std::size_t>(px0 + rx) * 4;
+              if (a < 32) { p[0] = 0; p[1] = 0; p[2] = 0; p[3] = 255; continue; }
+              p[0] = spriteSheetRgba_[so + 0];
+              p[1] = spriteSheetRgba_[so + 1];
+              p[2] = spriteSheetRgba_[so + 2];
+              p[3] = 255;
+            }
+          }
+          continue;
+        }
+
+
+        // inkIdx -1 means "the cell's own colour", which has no palette entry.
+        //
+        // LIFTED TO FULL VALUE, hue and saturation kept. A 5x7 glyph covers
+        // roughly a third of its cell, so drawing it in the source colour
+        // made the cell average about a third of the source brightness --
+        // and the glyph CHOSEN for a dark cell is sparser still, so the two
+        // multiply. Tone was being carried twice, by the density of the
+        // character and again by the colour of it, and the picture came out
+        // crushed nearly to black: measured on a normal frame, 46% of the
+        // raster lit and almost all of it within a few levels of zero.
+        //
+        // Coloured character art carries tone with the DENSITY and colour
+        // with the ink, which is what this does now. The cell keeps its hue
+        // exactly -- the channel ratios are untouched -- and the glyph is
+        // drawn at the brightness that hue can reach.
+        const int cellPeak = std::max(1, std::max(sr, std::max(sg, sb)));
+        const int inkLift = std::min(255 * 256 / cellPeak, 256 * 4);
+        const std::uint8_t cellInk[3] = {
+          static_cast<std::uint8_t>(std::clamp(sr * inkLift / 256, 0, 255)),
+          static_cast<std::uint8_t>(std::clamp(sg * inkLift / 256, 0, 255)),
+          static_cast<std::uint8_t>(std::clamp(sb * inkLift / 256, 0, 255))
+        };
+        const std::uint8_t* ink = inkIdx < 0 ? cellInk : kCellPalette[inkIdx];
+        const std::uint8_t* bg = kCellPalette[std::max(0, bgIdx)];
+
+        // A 5x7 glyph in a cell many pixels tall means each glyph row repeats
+        // over several output rows. Draw it once and memcpy the repeats: the
+        // per-pixel path ran for the entire output raster, which in text mode
+        // was the dominant cost.
+        int prevGy = -1;
+        const std::uint8_t* prevRowStart = nullptr;
+        const int spanW = std::min(cellW, dstW - px0);
+        if (spanW <= 0) continue;
+        for (int ry = 0; ry < cellH; ++ry) {
+          if (py0 + ry >= dstH) break;
+          std::uint8_t* row = dst +
+            (static_cast<std::size_t>(py0 + ry) * dstW) * 4;
+          std::uint8_t* cellStart = row + static_cast<std::size_t>(px0) * 4;
+          const int gyPlain = std::min(6, (ry * 7) / cellH);
+          const double wobV = (static_cast<double>(ry) / std::max(1, cellH)) - 0.5;
+          double wobShade = 1.0;
+          // The repeat trick draws one glyph row and copies it down the cell.
+          // A wobbling cell samples differently on every row, so there is
+          // nothing to repeat and the copy would smear the tilt away.
+          if (!wobbling && gyPlain == prevGy && prevRowStart) {
+            std::memcpy(cellStart, prevRowStart, static_cast<std::size_t>(spanW) * 4);
+            continue;
+          }
+          for (int rx = 0; rx < spanW; ++rx) {
+            int gx = std::min(4, (rx * 5) / cellW);
+            int gy = gyPlain;
+            if (wobbling) {
+              // The column half comes from the table built for this cell;
+              // only the row half is left to solve per pixel.
+              const double sPos = wobColS[static_cast<std::size_t>(rx)];
+              const double depthY = wobColDepth[static_cast<std::size_t>(rx)];
+              const double tMid = wobV * depthY;
+              double denomX = wobCosX - tMid * wobSinX * kWobInvFocal;
+              if (std::abs(denomX) < 1e-4) denomX = (denomX < 0.0 ? -1e-4 : 1e-4);
+              const double tPos = tMid / denomX;
+              const double depthX = 1.0 + tPos * wobSinX * kWobInvFocal;
+              const double su = sPos * depthX;
+              const double sv = tPos;
+              wobShade = wobFacing *
+                std::clamp(1.0 / std::max(0.30, depthY * depthX), 0.55, 1.35);
+              if (su < -0.5 || su > 0.5 || sv < -0.5 || sv > 0.5) {
+                // Background, not a hole -- see the font path.
+                //
+                // In palette order: byte 0 is RED. Written reversed this was
+                // the very swap the note below records as fixed, so a glitch
+                // row -- the only way bgIdx leaves 0 -- showed the surround of
+                // a turned card in one colour and the same background inside
+                // it in another. Invisible on the black default, which is why
+                // the coverage test did not catch it.
+                std::uint8_t* pB = row + static_cast<std::size_t>(px0 + rx) * 4;
+                pB[0] = bg[0]; pB[1] = bg[1]; pB[2] = bg[2]; pB[3] = 255;
+                continue;
+              }
+              gx = std::clamp(static_cast<int>((su + 0.5) * 5.0), 0, 4);
+              gy = std::clamp(static_cast<int>((sv + 0.5) * 7.0), 0, 6);
+            }
+            const bool on = ((glyph[gy] >> (4 - gx)) & 1) != 0;
+            const std::uint8_t* c = on ? ink : bg;
+            std::uint8_t* p = cellStart + static_cast<std::size_t>(rx) * 4;
+            // RGBA32: byte 0 is RED. This wrote c[2] -- blue -- into it, so
+            // every palette colour came out with red and blue exchanged.
+            // Amber rendered as cyan and cyan as amber, which is how it
+            // was spotted. fillTimerRect writes r,g,b in order and its
+            // digits were always correct, which is the reference.
+            if (wobbling && on) {
+              // THE LIGHT THE FONT PATH ALREADY HAD. wobShade was worked out
+              // here and then thrown away, so a card built from the built-in
+              // 5x7 sets turned without ever catching the light while the same
+              // card built from a custom set did -- and the light is most of
+              // what sells the turn as a turn rather than as a distortion.
+              // Only the ink is lit; the cell background is not.
+              p[0] = static_cast<std::uint8_t>(
+                std::clamp(static_cast<int>(c[0] * wobShade), 0, 255));
+              p[1] = static_cast<std::uint8_t>(
+                std::clamp(static_cast<int>(c[1] * wobShade), 0, 255));
+              p[2] = static_cast<std::uint8_t>(
+                std::clamp(static_cast<int>(c[2] * wobShade), 0, 255));
+              p[3] = 255;
+            } else {
+              p[0] = c[0]; p[1] = c[1]; p[2] = c[2]; p[3] = 255;
+            }
+          }
+          prevGy = wobbling ? -1 : gyPlain;
+          prevRowStart = cellStart;
+        }
+      }
+    }
+    };   // renderCellRows
+
+    // ── Glitch marks ─────────────────────────────────────────────────────────
+    //
+    // A SECOND PASS, because marks belong to a cell but land outside it. The
+    // grid is drawn in parallel row bands; a mark climbing two cells from its
+    // own would write into another band's rows, which is a race. So each band
+    // instead asks which marks land on ITS rows and derives them from the
+    // originating cell -- the same answer from either side, computed twice
+    // rather than shared.
+    // The marks take the SAME ink the text does, resolved once: a mark in a
+    // different colour reads as an overlay rather than as part of the
+    // character it is escaping from.
+    std::uint8_t zalgoInk[3] = {255, 255, 255};
+    {
+      int inkIdx = vs.asciiInk == 1 ? 10 : vs.asciiInk == 2 ? 14
+                 : vs.asciiInk == 3 ? 11 : 15;
+      zalgoInk[0] = kCellPalette[inkIdx][0];
+      zalgoInk[1] = kCellPalette[inkIdx][1];
+      zalgoInk[2] = kCellPalette[inkIdx][2];
+    }
+    const double zalgoUp = std::clamp(vs.asciiZalgoUp, 0.0, 1.0);
+    const double zalgoDown = std::clamp(vs.asciiZalgoDown, 0.0, 1.0);
+    const double zalgoMid = std::clamp(vs.asciiZalgoMid, 0.0, 1.0);
+    const int zalgoReach = std::clamp(vs.asciiZalgoReach, 1, 6);
+    const bool zalgoOn = zalgoUp > 0.001 || zalgoDown > 0.001 || zalgoMid > 0.001;
+    // Drift re-rolls the marks over time. At 0 they are welded to their cell,
+    // which is what makes a still image look engraved rather than boiling.
+    const std::uint32_t zalgoEpoch = vs.asciiZalgoDrift <= 0.001
+      ? 0u
+      : static_cast<std::uint32_t>(
+          static_cast<double>(serial) * std::clamp(vs.asciiZalgoDrift, 0.0, 1.0) * 0.5);
+
+    // Eight marks in a 5x3 box: ticks, dots, rings, bars and slashes. Small
+    // and open, because a solid block above a letter reads as a block and not
+    // as a mark.
+    static const std::uint8_t kMarks[8][3] = {
+      {0x04, 0x00, 0x00},   // a dot
+      {0x0A, 0x00, 0x00},   // two dots
+      {0x04, 0x0A, 0x00},   // a caret
+      {0x1F, 0x00, 0x00},   // a bar
+      {0x08, 0x04, 0x02},   // a slash
+      {0x02, 0x04, 0x08},   // the other slash
+      {0x0E, 0x0A, 0x0E},   // a ring
+      {0x15, 0x00, 0x15},   // scatter
+    };
+
+    auto drawMarkRows = [&](int rowBegin, int rowEnd) {
+      // Same proportional edges as the glyph pass, or the marks would drift
+      // out of their cells at the right of the frame.
+      const int yStart = rowEdge(rowBegin);
+      const int yEnd = std::min(dstH, rowEdge(rowEnd));
+      for (int cx = 0; cx < cols; ++cx) {
+        const int px0 = colEdge(cx);
+        const int spanW = std::min(colEdge(cx + 1) - px0, dstW - px0);
+        if (spanW <= 0) continue;
+        // THE MARKS TAKE THE PICTURE'S COLOUR under picture ink.
+        //
+        // They were drawn in whatever the phosphor was, and picture ink has no
+        // phosphor -- the lookup fell through to palette entry 15, pure white.
+        // So a glitch over a coloured clip came out as white confetti sitting
+        // on top of it rather than as damage to it.
+        std::uint8_t markInk[3] = {zalgoInk[0], zalgoInk[1], zalgoInk[2]};
+        if (vs.asciiInk == 0) {
+          const int sxm = std::clamp(((cx * 2 + 1) * srcW) / (cols * 2), 0, srcW - 1);
+          const int sym = std::clamp(((rowBegin * 2 + 1) * srcH) / (rows * 2), 0, srcH - 1);
+          const std::uint8_t* q = src + (static_cast<std::size_t>(sym) * srcW + sxm) * 4;
+          markInk[0] = q[2]; markInk[1] = q[1]; markInk[2] = q[0];
+        }
+        // Every cell whose marks could reach these rows, including the ones
+        // outside this band -- that is what makes the answer the same from
+        // either side.
+        for (int cy = rowBegin - zalgoReach; cy < rowEnd + zalgoReach; ++cy) {
+          if (cy < 0 || cy >= rows) continue;
+          for (int slot = 0; slot < zalgoReach * 2; ++slot) {
+            // One hash decides everything about one mark, so the whole field
+            // is reproducible from the cell, the slot and the epoch.
+            std::uint32_t h = static_cast<std::uint32_t>(cx) * 73856093u ^
+                              static_cast<std::uint32_t>(cy) * 19349663u ^
+                              static_cast<std::uint32_t>(slot) * 83492791u ^
+                              (zalgoEpoch * 2654435761u) ^
+                              (static_cast<std::uint32_t>(vs.asciiShuffle) * 40503u);
+            h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
+            const bool above = (slot % 2) == 0;
+            const int step = slot / 2 + 1;              // 1..reach cells away
+            const double density = above ? zalgoUp : zalgoDown;
+            // Thinner the further it climbs: a stack that does not taper reads
+            // as a second row of text rather than as something escaping.
+            const double taper = 1.0 - (step - 1) / static_cast<double>(zalgoReach + 1);
+            if ((h % 1000u) >= static_cast<std::uint32_t>(density * taper * 1000.0)) {
+              continue;
+            }
+            // SCALED TO THE CELL, like the glyphs are. Drawn at its native
+            // 5x3 it is three pixels tall in a cell of thirty and reads as
+            // dirt on the screen rather than as a mark on a character.
+            const int cellTop = rowEdge(cy);
+            const int cellBottom = rowEdge(cy + 1);
+            const int markH = std::max(3, (cellBottom - cellTop) / 2);
+            const int markY = above ? (cellTop - step * markH)
+                                    : (cellBottom + (step - 1) * markH);
+            if (markY + markH <= yStart || markY >= yEnd) continue;
+            const std::uint8_t* mark = kMarks[(h >> 8) % 8];
+            // CHANNEL SPLIT on a third of them. Digital corruption separates
+            // into its channels -- that fringing is most of what makes a
+            // glitch read as a glitch rather than as decoration. Cheap here:
+            // drop one channel of the mark's colour rather than re-drawing the
+            // cell three times at an offset.
+            // MULTIPLICATIVE, not additive. The first version subtracted from
+            // one channel and ADDED a constant to another, which on the dark
+            // parts of a picture invents brightness that was never there and
+            // turns a muted cell into a saturated primary -- red, green and
+            // blue confetti, which is not what damage to this picture looks
+            // like. Scaling keeps the cell's own hue and its own level: a
+            // glitch on a dark area stays dark.
+            std::uint8_t drawInk[3] = {markInk[0], markInk[1], markInk[2]};
+            {
+              // Lifted a little so the mark reads as damage rather than
+              // vanishing into the cell it sits beside.
+              for (int ch = 0; ch < 3; ++ch) {
+                drawInk[ch] = static_cast<std::uint8_t>(
+                  std::min(255, static_cast<int>(drawInk[ch] * 1.35 + 18)));
+              }
+              if (((h >> 19) & 1u) != 0u) {
+                const std::uint32_t split = (h >> 21) % 3u;
+                drawInk[split] = static_cast<std::uint8_t>(drawInk[split] * 0.3);
+              }
+            }
+            // A sideways nudge, so a stack is not a perfect column.
+            const int nudge = static_cast<int>((h >> 16) % 5u) - 2;
+            for (int ry = 0; ry < markH; ++ry) {
+              const int y = markY + ry;
+              if (y < yStart || y >= yEnd || y < 0 || y >= dstH) continue;
+              const int my = std::min(2, (ry * 3) / markH);
+              std::uint8_t* row = dst + (static_cast<std::size_t>(y) * dstW) * 4;
+              for (int rx = 0; rx < spanW; ++rx) {
+                const int mx = std::min(4, (rx * 5) / spanW);
+                if (((mark[my] >> (4 - mx)) & 1) == 0) continue;
+                const int x = px0 + rx + nudge;
+                if (x < 0 || x >= dstW) continue;
+                std::uint8_t* p = row + static_cast<std::size_t>(x) * 4;
+                p[0] = drawInk[2]; p[1] = drawInk[1]; p[2] = drawInk[0];
+                p[3] = 255;
+              }
+            }
+          }
+          // Through the character: a strike that sits ON the cell rather than
+          // outside it, so it damages the glyph instead of decorating it.
+          if (zalgoMid > 0.001) {
+            std::uint32_t h = static_cast<std::uint32_t>(cx) * 2654435761u ^
+                              static_cast<std::uint32_t>(cy) * 40503u ^
+                              (zalgoEpoch * 19349663u);
+            h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+            if ((h % 1000u) < static_cast<std::uint32_t>(zalgoMid * 1000.0)) {
+              const int cellTop = rowEdge(cy);
+              const int cellSpan = std::max(1, rowEdge(cy + 1) - cellTop);
+              const int y = cellTop + static_cast<int>((h >> 9) %
+                                        static_cast<std::uint32_t>(cellSpan));
+              if (y >= yStart && y < yEnd && y >= 0 && y < dstH) {
+                std::uint8_t* row = dst + (static_cast<std::size_t>(y) * dstW) * 4;
+                for (int rx = 0; rx < spanW; ++rx) {
+                  std::uint8_t* p = row + static_cast<std::size_t>(px0 + rx) * 4;
+                  // The strike THROUGH a character keeps the cell's colour --
+                  // it is damage to the glyph, not a mark sitting beside it.
+                  p[0] = markInk[2]; p[1] = markInk[1]; p[2] = markInk[0];
+                  p[3] = 255;
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    // The same persistent pool. A text screen is few rows and each one writes
+    // a whole band of the OUTPUT raster, so 4 rows a band is worth splitting;
+    // building a pool to do it was not.
+    vsynthWorkers_.run(rows, 4, renderCellRows);
+    if (zalgoOn) {
+      vsynthWorkers_.run(rows, 4, drawMarkRows);
+    }
+}
+
+void MediaEngine::rebuildVideoSynthFrame(const Cue& cue, double wallSeconds,
+                                         double audioLevel) {
+  // DISPLAY RATE, not render-loop rate. The render loop runs to a 240 Hz
+  // floor; the synth was rebuilding on every tick of it, so three of every
+  // four frames were generated, uploaded and thrown away -- and each one
+  // built and joined a thread pool to do it. rebuildPatternFrame has had this
+  // gate for a long time; this function was written without it.
+  //
+  // A negative clock means "never built", which is the take path: it must
+  // always produce the first frame.
+  double vsRefreshHz = 60.0;
+  if (outputSizeProvider_) {
+    const OutputModeHint mode = outputSizeProvider_();
+    if (mode.refreshHz >= 1.0) {
+      vsRefreshHz = std::clamp(mode.refreshHz, 23.0, 240.0);
+    }
+  }
+  if (displayFrame_ && lastVsynthRebuildSeconds_ >= 0.0 &&
+      wallSeconds - lastVsynthRebuildSeconds_ < (1.0 / vsRefreshHz) * 0.98) {
+    return;
+  }
+  lastVsynthRebuildSeconds_ = wallSeconds;
+
+  auto size = currentOutputSizeHint();
+  const int outW = size.first;
+  const int outH = size.second;
+  if (outW <= 0 || outH <= 0) return;
+
+  // The keys ride on a copy, so the cue keeps what the operator set.
+  VideoSynthSettings keyed = cue.videoSynth;
+  keyed.scale *= vsKeyScale_.load(std::memory_order_relaxed);
+  keyed.feedbackAmount = std::min(0.95, keyed.feedbackAmount + 0.35 * vsKeyBloom_.load(std::memory_order_relaxed));
+  const VideoSynthSettings& vs = keyed;
+
+  // DECKBOY_SYNTH_BENCH=1 reports where the frame time goes, averaged over 60
+  // frames. The synth is the one source that can hold the whole render loop
+  // down, so "it feels heavy" needs to become numbers before anything is
+  // changed on its account.
+  static const bool synthBench = [] {
+    const char* e = std::getenv("DECKBOY_SYNTH_BENCH");
+    return e && *e;
+  }();
+  using SynthClock = std::chrono::steady_clock;
+  const auto benchT0 = SynthClock::now();
+  auto benchSmall = benchT0, benchGlitch = benchT0, benchCrt = benchT0,
+       benchScale = benchT0;
+
+  // Rate-limited to the DISPLAY. This ran on every update tick, and the update
+  // loop has a 240Hz floor -- so on a 60Hz output it was generating (and
+  // discarding) up to four frames for every one shown. rebuildPatternFrame has
+  // had this limiter all along; the video synth simply never got one, which is
+  // the single largest cause of it feeling heavy.
+  {
+    double refreshHz = 60.0;
+    if (outputSizeProvider_) {
+      OutputModeHint mode = outputSizeProvider_();
+      if (mode.refreshHz >= 1.0) {
+        refreshHz = std::clamp(mode.refreshHz, 23.0, 240.0);
+      }
+    }
+    const double minInterval = 1.0 / refreshHz;
+    if (displayFrame_ && wallSeconds - lastVideoSynthSeconds_ < minInterval * 0.98) {
+      return;
+    }
+    lastVideoSynthSeconds_ = wallSeconds;
+  }
+
+  // RENDER SMALL, THEN UPSCALE. The first version generated every pixel of a
+  // 1080p raster with three or four sin() calls each -- about eight million
+  // transcendental ops a frame, which measured out at roughly 3fps.
+  //
+  // Rendering at a low internal resolution is not a compromise here, it is the
+  // correct look: Atari Video Music ran at broadcast-era resolution and Hypno
+  // works at a low internal size too. Big soft pixels ARE the aesthetic. This
+  // also makes the feedback path cheap enough to be interesting.
+  // Finer than the first pass. At 480 wide the nearest-neighbour upscale makes
+  // every internal pixel a 4x4 block, so slow motion crawls in visible jumps
+  // rather than gliding -- the quantisation, not the speed, is what stops it
+  // looking smooth. The hard-edged shapes cost no transcendentals, so this is
+  // affordable now in a way it was not when everything went through sin().
+  // Resolution is the operator's, not a constant. Divisor 8 down to 2: at the
+  // coarse end this is both the chunky look and a quarter of the pixels.
+  const int divisor = 10 - 2 * std::clamp(vs.resolution, 1, 5) + 2;  // 1->10 .. 5->2
+  const int W = std::clamp(outW / std::max(2, divisor), 120, 960);
+  const int H = std::max(90, (W * outH) / std::max(1, outW));
+
+  const double lvl = std::clamp(audioLevel, 0.0, 1.0);
+  const double react = std::clamp(vs.audioReactivity, 0.0, 1.0);
+  const double drive = 1.0 + lvl * react * 1.5;
+  const double t = wallSeconds * std::clamp(vs.speed, 0.01, 8.0);
+
+  const bool feedbackOn = vs.feedbackAmount > 0.01;
+  const bool havePrev = feedbackOn && vsynthPrevW_ == W && vsynthPrevH_ == H &&
+                        vsynthPrev_.size() == static_cast<std::size_t>(W) * H * 4;
+  // Per SECOND, not per frame, and scaled by speed like everything else.
+  // This advanced once per frame regardless of elapsed time, so the rotation
+  // ran at whatever rate the render loop happened to hit and ignored the speed
+  // control entirely -- which is precisely why the motion could not be dialled
+  // down. Framerate-dependent animation is never right; here it also made the
+  // one control that should have fixed it useless.
+  const double dt = (vsynthLastSeconds_ > 0.0)
+    ? std::clamp(wallSeconds - vsynthLastSeconds_, 0.0, 0.25)
+    : 0.0;
+  vsynthLastSeconds_ = wallSeconds;
+  vsynthRotation_ += vs.feedbackRotate * 0.017453292519943295 * dt *
+                     std::clamp(vs.speed, 0.01, 8.0) * 60.0;
+
+  const double scale = std::clamp(vs.scale, 0.1, 8.0) * 4.0;
+  const double warp = std::clamp(vs.warp, 0.0, 2.0);
+  const double cosR = std::cos(vsynthRotation_);
+  const double sinR = std::sin(vsynthRotation_);
+  const double zoom = std::clamp(vs.feedbackZoom, 0.90, 1.15);
+  const double fb = std::clamp(vs.feedbackAmount, 0.0, 0.95);
+
+  // Reused across frames. assign() only reallocates when the size changes,
+  // which happens when the operator moves the detail control, not per frame.
+  const std::size_t smallBytes = static_cast<std::size_t>(W) * H * 4;
+  if (vsynthSmall_.size() != smallBytes) vsynthSmall_.assign(smallBytes, 0);
+  std::vector<std::uint8_t>& small = vsynthSmall_;
+
+  // Precompute the row term once per row instead of per pixel. Halves the
+  // transcendental count on its own.
+  // Threaded by row. Rows are independent -- each writes only its own output
+  // and reads only the PREVIOUS frame -- so this parallelises with no locking.
+  // Raising the internal resolution without doing this is what made the
+  // controls feel like they bogged the app down.
+  auto renderRows = [&](int rowBegin, int rowEnd) {
+  for (int y = rowBegin; y < rowEnd; ++y) {
+    const double nyRaw = (static_cast<double>(y) / H - 0.5) * 2.0;
+    for (int x = 0; x < W; ++x) {
+      double nx = (static_cast<double>(x) / W - 0.5) * 2.0 *
+                  (static_cast<double>(outW) / outH);
+      double ny = nyRaw;
+
+      switch (vs.mirror) {
+        case VideoSynthMirror::Horizontal: nx = std::abs(nx); break;
+        case VideoSynthMirror::Quad:       nx = std::abs(nx); ny = std::abs(ny); break;
+        case VideoSynthMirror::Kaleido:
+          nx = std::abs(nx); ny = std::abs(ny);
+          if (ny > nx) std::swap(nx, ny);
+          break;
+        default: break;
+      }
+
+      const double sx = nx * scale * drive;
+      const double sy = ny * scale * drive;
+      double v = 0.0;
+      switch (vs.shape) {
+        case VideoSynthShape::Diamond: {
+          // HARD edges, not a sine field. Atari Video Music's look comes from
+          // flat bands of colour with sharp boundaries; a smooth gradient
+          // reads as a screensaver instead.
+          const double band = std::fmod(std::abs(sx) + std::abs(sy) + t * 2.0, 2.0);
+          v = band < 1.0 ? 1.0 : -1.0;
+          break;
+        }
+        case VideoSynthShape::Rings: {
+          // WRAP THE NEGATIVE. std::fmod keeps the sign of its dividend, so
+          // once the time term overtakes the radius term -- about seven
+          // seconds in at speed 1 -- every pixel returned a value in (-2, 0],
+          // `band < 1.0` was true everywhere, and the rings became one flat
+          // field of the palette's top colour. On Vapor, whose top entry is
+          // pure white, that is a white rectangle on the output; on NES it is
+          // a flat pastel; on Fire it is a flat orange. It reads as "the synth
+          // broke" rather than as a shape that stopped being a shape, and it
+          // is time-dependent, so it looks right for the first few seconds
+          // after the take and then goes.
+          //
+          // Diamond and Grid do not have it: they add the time term inside the
+          // fmod, or take abs() before it. This is the only shape that
+          // subtracts, which is what makes the bands travel INWARD.
+          const double r = std::sqrt(sx * sx + sy * sy);
+          double band = std::fmod(r * 1.5 - t * 2.0, 2.0);
+          if (band < 0.0) band += 2.0;
+          v = band < 1.0 ? 1.0 : -1.0;   // concentric BANDS, not a ripple
+          break;
+        }
+        case VideoSynthShape::Grid: {
+          const double gx = std::fmod(std::abs(sx + t), 2.0) < 1.0 ? 1.0 : -1.0;
+          const double gy = std::fmod(std::abs(sy - t * 1.3), 2.0) < 1.0 ? 1.0 : -1.0;
+          v = gx * gy;
+          break;
+        }
+        case VideoSynthShape::Moire: {
+          const double a1 = sx * cosR - sy * sinR;
+          const double a2 = sx * cosR + sy * sinR;
+          v = std::sin(a1 * 3.0 + t) * std::sin(a2 * 3.1 - t);
+          break;
+        }
+        default:
+          v = std::sin(sx + t) + std::sin(sy - t * 1.1)
+            + std::sin((sx + sy) * warp + t * 0.7);
+          v /= 3.0;
+          break;
+      }
+
+      const double u = std::clamp(v * 0.5 + 0.5, 0.0, 1.0);
+
+      // POSTERISED palettes. The reference machines had a handful of colours,
+      // not a smooth ramp, and quantising is most of why they look designed
+      // rather than computed.
+      const int steps = 6;
+      // The top step used to land ABOVE 1. floor(u * 6) reaches 6 when u is
+      // exactly 1, and dividing by 5 gives 1.2 -- so the brightest level was
+      // out of range: the analytic palettes multiplied it up and clipped to
+      // white instead of their own top colour, and the table palettes only
+      // escaped because samplePalette clamps. u is exactly 1 for every pixel
+      // of the hard-edged shapes, which is precisely where it showed.
+      const double q = std::min(std::floor(u * steps),
+                                static_cast<double>(steps - 1)) / (steps - 1);
+      double r8 = 0.0, g8 = 0.0, b8 = 0.0;
+      switch (vs.palette) {
+        case VideoSynthPalette::Amber: r8 = q; g8 = q * 0.55; b8 = q * 0.05; break;
+        case VideoSynthPalette::Ice:   r8 = q * 0.2; g8 = q * 0.65; b8 = q; break;
+        case VideoSynthPalette::Fire:  r8 = q; g8 = q * q * 0.6; b8 = q * q * q * 0.2; break;
+        case VideoSynthPalette::Mono:  r8 = g8 = b8 = q; break;
+        case VideoSynthPalette::Ega: {
+          const int i = std::clamp(static_cast<int>(q * 16), 0, 15);
+          r8 = kCellPalette[i][0] / 255.0;
+          g8 = kCellPalette[i][1] / 255.0;
+          b8 = kCellPalette[i][2] / 255.0;
+          break;
+        }
+        case VideoSynthPalette::C64:
+          samplePalette(kPalC64, 16, q, r8, g8, b8); break;
+        case VideoSynthPalette::Gameboy:
+          samplePalette(kPalGameboy, 4, q, r8, g8, b8); break;
+        case VideoSynthPalette::Cga:
+          samplePalette(kPalCga, 4, q, r8, g8, b8); break;
+        case VideoSynthPalette::Nes:
+          samplePalette(kPalNes, 12, q, r8, g8, b8); break;
+        case VideoSynthPalette::Vapor:
+          samplePalette(kPalVapor, 8, q, r8, g8, b8); break;
+        default: {
+          const double hue = std::fmod(q + t * 0.08, 1.0) * 6.0;
+          const int seg = static_cast<int>(hue) % 6;
+          const double f = hue - std::floor(hue);
+          switch (seg) {
+            case 0: r8 = 1;     g8 = f;     b8 = 0;     break;
+            case 1: r8 = 1 - f; g8 = 1;     b8 = 0;     break;
+            case 2: r8 = 0;     g8 = 1;     b8 = f;     break;
+            case 3: r8 = 0;     g8 = 1 - f; b8 = 1;     break;
+            case 4: r8 = f;     g8 = 0;     b8 = 1;     break;
+            default: r8 = 1;    g8 = 0;     b8 = 1 - f; break;
+          }
+          break;
+        }
+      }
+
+      double fr = r8 * 255.0, fg = g8 * 255.0, fbc = b8 * 255.0;
+
+      if (havePrev) {
+        const double cx = W * 0.5, cy = H * 0.5;
+        const double dx = (x - cx) / zoom;
+        const double dy = (y - cy) / zoom;
+        const int px = static_cast<int>(dx * cosR - dy * sinR + cx);
+        const int py = static_cast<int>(dx * sinR + dy * cosR + cy);
+        // CLAMPED, not skipped. With zoom below 1 the sample coordinates
+        // expand past the raster at the edges, and skipping meant those pixels
+        // received no feedback at all -- a clean border where the effect
+        // visibly stopped. Clamping smears the edge outward instead, which is
+        // what the analogue machines did anyway.
+        {
+          const int cpx = std::clamp(px, 0, W - 1);
+          const int cpy = std::clamp(py, 0, H - 1);
+          const std::size_t o = (static_cast<std::size_t>(cpy) * W + cpx) * 4;
+          // Feedback is ADDITIVE-leaning rather than a plain crossfade: the
+          // trails brighten where they overlap, which is what makes a video
+          // feedback loop look like light rather than like a blur.
+          fr = std::min(255.0, fr * (1.0 - fb * 0.6) + vsynthPrev_[o + 0] * fb);
+          fg = std::min(255.0, fg * (1.0 - fb * 0.6) + vsynthPrev_[o + 1] * fb);
+          fbc = std::min(255.0, fbc * (1.0 - fb * 0.6) + vsynthPrev_[o + 2] * fb);
+          // Decay, or the loop saturates to white within a second.
+          fr *= 0.94; fg *= 0.94; fbc *= 0.94;
+        }
+      }
+
+      const std::size_t off = (static_cast<std::size_t>(y) * W + x) * 4;
+      // Red first, matching RGBA32. This wrote blue into byte 0, which put
+      // every hardware palette out by a red/blue exchange -- the palettes are
+      // the whole point of those modes, so they were the most wrong thing on
+      // screen while still looking superficially plausible.
+      small[off + 0] = static_cast<std::uint8_t>(std::clamp(fr, 0.0, 255.0));
+      small[off + 1] = static_cast<std::uint8_t>(std::clamp(fg, 0.0, 255.0));
+      small[off + 2] = static_cast<std::uint8_t>(std::clamp(fbc, 0.0, 255.0));
+      small[off + 3] = 255;
+    }
+  }
+  };   // renderRows
+
+  {
+    unsigned hw = std::thread::hardware_concurrency();
+    if (hw == 0) hw = 1;
+    const int workers = std::max(1, std::min<int>(static_cast<int>(hw), std::max(1, H / 16)));
+    // 16 rows is the point where splitting pays for the wakeup. Below it the
+    // pool runs the whole range on this thread and costs nothing.
+    (void)workers;
+    vsynthWorkers_.run(H, 16, renderRows);
+  }
+  if (synthBench) benchSmall = SynthClock::now();
+
+  // ---- Glitch stack --------------------------------------------------------
+  // Applied to the low-resolution buffer, in a fixed order. Each is skipped
+  // entirely at 0, so an operator who wants the clean synth pays nothing.
+  {
+    // Deterministic per-frame randomness. A different seed each frame gives
+    // movement; a HASH of the frame counter rather than a running generator
+    // means the look does not depend on how many frames have been drawn, so
+    // the same settings look the same whenever they are dialled up.
+    std::uint32_t seed = static_cast<std::uint32_t>(displayFrameSerial_ * 2654435761u) | 1u;
+    auto rnd = [&seed]() {
+      seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+      return seed;
+    };
+
+    // PIXEL SORT and BLOCK GLITCH now live in cue_effects.hpp, so the same
+    // code serves a synth cue and any other cue's effect stack. They were
+    // synth-only, which was a waste: a pixel sort is at least as interesting
+    // on a face as on an oscillator.
+    deckboy::effects::applyPixelSort(small.data(), W, H,
+                                     std::clamp(vs.pixelSort, 0.0, 1.0));
+    deckboy::effects::applyBlockGlitch(small.data(), W, H,
+                                       std::clamp(vs.glitch, 0.0, 1.0), seed);
+  }
+
+  if (feedbackOn) {
+    // The previous attempt at this swapped and then COPIED BACK, which is
+    // exactly a copy with extra steps -- it saved nothing. The upscale below
+    // still needs to read the frame just rendered, so the buffers are swapped
+    // AFTER it, at the end of the function. Here we only record the geometry.
+    vsynthPrevW_ = W;
+    vsynthPrevH_ = H;
+  } else if (!vsynthPrev_.empty()) {
+    vsynthPrev_.clear();
+    vsynthPrev_.shrink_to_fit();
+    vsynthPrevW_ = vsynthPrevH_ = 0;
+  }
+
+  // EMIT THE SMALL PICTURE and let the GPU scale it, except in text mode.
+  //
+  // The synth renders internally at a fraction of the output -- 384x216 for a
+  // 4K raster -- applies the glitch and CRT stages there, and only then blew it
+  // up to full size on the CPU. That produced a 33MB frame, every frame, which
+  // then had to be uploaded to the GPU: measured at 4K the synth itself took
+  // 5.8ms while the app managed 38fps, so most of a 26ms frame was going into
+  // pushing pixels that carry no more information than the 330KB they came
+  // from.
+  //
+  // The upscale is nearest-neighbour, and Deckboy creates every texture with
+  // nearest filtering, so handing the small frame to the existing pipeline
+  // produces the same picture by the same method -- just on the GPU, for free,
+  // after a hundredth of the upload.
+  //
+  // TEXT MODE is the exception and stays full raster: its glyphs are drawn at
+  // output resolution on purpose, because scaling them up blurs the one thing
+  // that look depends on.
+  // DECKBOY_SYNTH_FULLRASTER=1 forces the old CPU upscale back. Kept because
+  // the claim "the picture is identical" deserves a way to check it rather
+  // than a reassurance, and because it is the escape hatch if a machine ever
+  // scales differently from the way this assumes.
+  static const bool forceFullRaster = [] {
+    const char* e = std::getenv("DECKBOY_SYNTH_FULLRASTER");
+    return e && *e;
+  }();
+  // A CUE CARRYING THE TEXT MODE EFFECT NEEDS THE FULL RASTER.
+  //
+  // The synth normally emits a small frame and lets the scaler take it up,
+  // which is right for a picture made of soft gradients and wrong for a
+  // character grid: the grid wants one cell per output cell, not a grid drawn
+  // small and then magnified.
+  //
+  // vs.ascii used to carry that, and text mode moving to an effect (v0.95.0)
+  // made vs.ascii permanently false -- so a synth cue with a character grid
+  // started emitting small and the effect drew its grid into a low-resolution
+  // frame that was then scaled up. The result reads as a coarser, simpler
+  // version of the same effect, which is exactly how it was described.
+  //
+  // The engine has the cue's effect stack, so it can just ask.
+  bool textModeDownstream = false;
+  for (const auto& fx : cue.effects) {
+    if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+      textModeDownstream = true;
+      break;
+    }
+  }
+  const bool emitSmall = !vs.ascii && !textModeDownstream && !forceFullRaster;
+  // BUILD IN PLACE, into the frame we already hold.
+  //
+  // This used to construct a local DecodedFrame and try to recycle the old
+  // buffer into it by move. The move only happened when the previous frame
+  // was exactly the same size, and the local was then moved back into
+  // displayFrame_ at the end -- so the steady state still churned full-raster
+  // allocations, and at 4K that is 33 MB a frame. It went unnoticed because
+  // every OTHER path here now emits the small internal raster, where the same
+  // churn is 330 KB and invisible. Text mode is the one mode that must emit at
+  // full size, so it was the one that showed it: measured on a 4K display,
+  // 250 MB to 3.4 GB in two seconds, and a 32 GB machine down to 100 MB free.
+  //
+  // rebuildPatternFrame was fixed for exactly this, and carries exactly this
+  // comment. This function was written without the lesson.
+  if (!displayFrame_) {
+    displayFrame_.emplace();
+  }
+  DecodedFrame& frame = *displayFrame_;
+  frame.width = emitSmall ? W : outW;
+  frame.height = emitSmall ? H : outH;
+  frame.format = FramePixelFormat::RGBA32;
+  // Opaque BLACK, not white. The buffer was filled with 255 -- white, fully
+  // opaque -- and in text mode the cell grid only covers outH/cellH whole
+  // rows, so whatever remainder did not divide evenly stayed white. That was
+  // the bright line along the bottom edge, and the same applied to any
+  // leftover column on the right.
+  //
+  // MEASURED at 4K this pair of lines cost 12ms a frame -- more than the whole
+  // rest of the synth after the CRT fix -- and almost all of it was wasted.
+  // `assign` allocated and zero-filled 33MB every frame, then a strided loop
+  // touched 8.3 million alpha bytes, and the upscale below immediately
+  // overwrote every pixel including alpha.
+  //
+  // So: recycle the previous frame's buffer rather than allocating a new one,
+  // and clear only when something might not be written. The nearest-neighbour
+  // upscale covers every output pixel; TEXT MODE does not, because the cell
+  // grid only covers outH/cellH whole rows and any remainder would otherwise
+  // show whatever the last frame left there. That remainder is the bright edge
+  // the original clear was added to fix, so it still gets one.
+  const std::size_t frameBytes =
+    static_cast<std::size_t>(frame.width) * frame.height * 4;
+  // Only a raster change costs an allocation now; every other frame reuses
+  // the buffer it already has.
+  if (frame.pixels.size() != frameBytes) {
+    frame.pixels.assign(frameBytes, 0);
+  }
+  if (vs.ascii) {
+    std::memset(frame.pixels.data(), 0, frameBytes);
+    for (std::size_t i = 3; i < frameBytes; i += 4) frame.pixels[i] = 255;
+  }
+
+  if (synthBench) benchGlitch = SynthClock::now();
+
+  // ---- CRT ------------------------------------------------------------
+  // Runs on the SMALL buffer, like every other stage.
+  //
+  // It used to run after the upscale, on the full output raster: a 33MB memcpy
+  // of the frame plus a windowed bloom in doubles for every one of 8.3 million
+  // pixels. MEASURED at 4K it cost 23ms of a 35ms frame -- two thirds of the
+  // synth's entire budget, and the reason a 4K video synth could not hold 30fps.
+  //
+  // Nothing about the effect needed that resolution. Every quantity in it was
+  // already expressed in BLOCKS, because a scanline is one source pixel tall
+  // and the bloom radius spans about one source pixel: at output scale those
+  // were being reconstructed by multiplying back up by the block size. Done
+  // here they are simply 1, the picture is 100x smaller, and the nearest-
+  // neighbour upscale carries the result out unchanged -- the blocks it
+  // produces are exactly the blocks the effect was drawn in terms of.
+  //
+  // The one thing that genuinely lived at output scale was the gun
+  // misalignment, a third of a block. At small scale that is a third of a
+  // pixel, so it becomes a weighted blend with the neighbour instead of a
+  // sample from it -- which is what a third-of-a-pixel offset means anyway,
+  // and it now applies evenly rather than only near block edges.
+  const double crtAmt = std::clamp(vs.crt, 0.0, 1.0);
+  if (crtAmt > 0.01) {
+    const int rowBytes = W * 4;
+    const int radius = std::max(1, static_cast<int>(std::lround(0.4 + crtAmt * 0.9)));
+    if (vsynthCrtSrc_.size() != small.size()) {
+      vsynthCrtSrc_.resize(small.size());
+    }
+    std::memcpy(vsynthCrtSrc_.data(), small.data(), small.size());
+    const std::vector<std::uint8_t>& src = vsynthCrtSrc_;
+    // A third of a pixel of separation, applied as a blend.
+    const double fringeMix = crtAmt * 0.35 / 3.0;
+
+    auto crtRows = [&](int y0, int y1) {
+      int sum[3] = {0, 0, 0};
+      for (int y = y0; y < y1; ++y) {
+        const std::uint8_t* s = src.data() + static_cast<std::size_t>(y) * rowBytes;
+        std::uint8_t* dst = small.data() + static_cast<std::size_t>(y) * rowBytes;
+
+        // One dark line per source row: after the upscale that is one dark
+        // block row, which is what a scanline looks like.
+        const double lineGain = (y & 1) ? (1.0 - crtAmt * 0.5) : 1.0;
+
+        sum[0] = sum[1] = sum[2] = 0;
+        for (int k = -radius; k <= radius; ++k) {
+          const int sx = std::clamp(k, 0, W - 1);
+          const std::size_t o = static_cast<std::size_t>(sx) * 4;
+          sum[0] += s[o + 0]; sum[1] += s[o + 1]; sum[2] += s[o + 2];
+        }
+        const int window = radius * 2 + 1;
+
+        for (int x = 0; x < W; ++x) {
+          const std::size_t o = static_cast<std::size_t>(x) * 4;
+          // Bloom ADDS, so edges stay sharp and only the light spills.
+          const double bloom = crtAmt * 0.9;
+          double ob = s[o + 0] + (sum[0] / static_cast<double>(window)) * bloom;
+          double og = s[o + 1] + (sum[1] / static_cast<double>(window)) * bloom;
+          double orr = s[o + 2] + (sum[2] / static_cast<double>(window)) * bloom;
+
+          const int xr = std::min(x + 1, W - 1);
+          const int xb = std::max(x - 1, 0);
+          orr = orr * (1.0 - fringeMix) +
+                s[static_cast<std::size_t>(xr) * 4 + 2] * fringeMix;
+          ob = ob * (1.0 - fringeMix) +
+               s[static_cast<std::size_t>(xb) * 4 + 0] * fringeMix;
+
+          dst[o + 0] = static_cast<std::uint8_t>(std::clamp(ob * lineGain, 0.0, 255.0));
+          dst[o + 1] = static_cast<std::uint8_t>(std::clamp(og * lineGain, 0.0, 255.0));
+          dst[o + 2] = static_cast<std::uint8_t>(std::clamp(orr * lineGain, 0.0, 255.0));
+
+          const int addX = std::min(x + radius + 1, W - 1);
+          const int dropX = std::max(x - radius, 0);
+          const std::size_t oa = static_cast<std::size_t>(addX) * 4;
+          const std::size_t od = static_cast<std::size_t>(dropX) * 4;
+          sum[0] += s[oa + 0] - s[od + 0];
+          sum[1] += s[oa + 1] - s[od + 1];
+          sum[2] += s[oa + 2] - s[od + 2];
+        }
+      }
+    };
+    // Small enough now that spawning a thread pool would cost more than the
+    // work; the whole pass is a fraction of a millisecond.
+    crtRows(0, H);
+  }
+
+  if (synthBench) benchCrt = SynthClock::now();
+  if (vs.ascii) {
+    // WALL seconds, not the speed-scaled pattern clock. Phrase hold is stated
+    // in seconds and sprite spin in degrees per second, so both want real
+    // time; the speed knob belongs to the oscillators that make the picture.
+    renderTextMode(small.data(), W, H, frame.pixels.data(), outW, outH, vs,
+                   displayFrameSerial_, wallSeconds);
+  } else if (emitSmall) {
+    // Straight out, at the size it was rendered. One 330KB copy instead of a
+    // 33MB upscale, and the scaling happens on the GPU where it is free.
+    std::memcpy(frame.pixels.data(), small.data(), frameBytes);
+  } else {
+    // Nearest-neighbour upscale. Deliberately not interpolated: soft edges
+    // would undo the posterisation and the hard shapes the look depends on.
+    //
+    // The x mapping is the same for every row, so it is computed ONCE rather
+    // than per pixel, and consecutive output rows that map to the same source
+    // row are a straight memcpy of the row above. At the default resolution
+    // each internal row covers eight output rows, so seven in eight rows cost
+    // one memcpy instead of 1920 four-byte copies.
+    std::vector<int> xmap(static_cast<std::size_t>(outW));
+    for (int x = 0; x < outW; ++x) xmap[static_cast<std::size_t>(x)] = ((x * W) / outW) * 4;
+
+    int lastSrcRow = -1;
+    const std::uint8_t* lastDstRow = nullptr;
+    for (int y = 0; y < outH; ++y) {
+      const int sy2 = (y * H) / outH;
+      std::uint8_t* dstRow = frame.pixels.data() + static_cast<std::size_t>(y) * outW * 4;
+      if (sy2 == lastSrcRow && lastDstRow) {
+        std::memcpy(dstRow, lastDstRow, static_cast<std::size_t>(outW) * 4);
+        continue;
+      }
+      const std::uint8_t* srcRow = small.data() + static_cast<std::size_t>(sy2) * W * 4;
+      for (int x = 0; x < outW; ++x) {
+        std::memcpy(dstRow + static_cast<std::size_t>(x) * 4,
+                    srcRow + xmap[static_cast<std::size_t>(x)], 4);
+      }
+      lastSrcRow = sy2;
+      lastDstRow = dstRow;
+    }
+  }
+
+  if (synthBench) benchScale = SynthClock::now();
+
+  // NOW the buffers can trade places: everything that needed to read this
+  // frame has read it. Next frame renders into what is currently `prev` and
+  // reads what is currently `small`, so neither is ever copied.
+  if (feedbackOn) {
+    vsynthSmall_.swap(vsynthPrev_);
+  }
+
+  if (synthBench) {
+    const auto end = SynthClock::now();
+    auto ms = [](auto a, auto b) {
+      return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    static int n = 0;
+    static double sSmall = 0, sGlitch = 0, sScale = 0, sCrt = 0, sTotal = 0;
+    sSmall  += ms(benchT0, benchSmall);
+    sGlitch += ms(benchSmall, benchGlitch);
+    sCrt    += ms(benchGlitch, benchCrt);
+    sScale  += ms(benchCrt, benchScale);
+    sTotal  += ms(benchT0, end);
+    if (++n == 20) {
+      std::cerr << "synth-bench small=" << (sSmall / n) << " glitch="
+                << (sGlitch / n) << " upscale=" << (sScale / n) << " crt="
+                << (sCrt / n) << " total=" << (sTotal / n) << "ms  internal="
+                << W << "x" << H << " out=" << outW << "x" << outH << std::endl;
+      n = 0; sSmall = sGlitch = sScale = sCrt = sTotal = 0;
+    }
+  }
+
+  frame.index = ++displayFrameSerial_;
+  uploadFrame(frame);
+}
+
+void MediaEngine::rebuildPatternFrame(const Cue& cue, double wallSeconds) {
+  // Animated patterns rebuild at the SELECTED DISPLAY's refresh rate (or
+  // the project's explicit refresh override — the app's mode provider
+  // decides), never the render-loop rate (240 Hz floor): a full-raster CPU
+  // rebuild + texture upload per loop tick pegs a core and lags the app.
+  // Terrarium is slower still: it only changes on its 9 TPS sim tick.
+  const std::string terraBase = stripPatternMotionSuffix(normalizePatternTypeId(cue.path));
+  const bool isTerrarium = terraBase == "terrarium" || terraBase == "terrarium-pico";
+  double refreshHz = 60.0;
+  if (outputSizeProvider_) {
+    OutputModeHint mode = outputSizeProvider_();
+    if (mode.refreshHz >= 1.0) {
+      refreshHz = std::clamp(mode.refreshHz, 23.0, 240.0);
+    }
+  }
+  const double minInterval = isTerrarium ? (1.0 / 9.0) : (1.0 / refreshHz);
+  if (displayFrame_ && wallSeconds - lastPatternRebuildSeconds_ < minInterval * 0.98) {
+    return;
+  }
+  lastPatternRebuildSeconds_ = wallSeconds;
+  auto [fallbackW, fallbackH] = currentOutputSizeHint();
+  // A DRAWING plays on its own clock -- the cue's position, so a replay
+  // starts when the cue is taken -- and only rebuilds when what it shows
+  // has changed.
+  double animTime = wallSeconds;
+  if (terraBase == "draw") {
+    // Every rebuild advances it, like every other generator's clock: a held
+    // generator never reaches the Playing state, so that cannot gate it.
+    if (drawClockWall_ >= 0.0) {
+      drawClock_ += std::clamp(wallSeconds - drawClockWall_, 0.0, 0.5);
+    }
+    drawClockWall_ = wallSeconds;
+    animTime = drawClock_;
+    const auto m = deckboy::draw::momentAt(cue.drawing, animTime);
+    const std::array<std::uint64_t, 7> key {std::hash<std::string> {}(cue.id), cue.drawing.revision,
+                                            static_cast<std::uint64_t>(m.frame),
+                                            m.strokes, m.lastPoints, static_cast<std::uint64_t>(fallbackW),
+                                            static_cast<std::uint64_t>(fallbackH)};
+    if (displayFrame_ && key == lastDrawKey_) return;
+    lastDrawKey_ = key;
+  }
+  // Build IN PLACE into the frame we already hold. Constructing a fresh
+  // DecodedFrame here meant a new full-raster allocation every single frame —
+  // 33 MB at 4K, ~2 GB/s of churn, which exhausted the system commit limit and
+  // dragged the whole machine down. Reusing the buffer makes the steady state
+  // allocation-free; only a raster change resizes it.
+  if (!displayFrame_) {
+    displayFrame_.emplace();
+  }
+  buildPatternFrameInto(*displayFrame_, cue, animTime, fallbackW, fallbackH);
+  if (!displayFrame_->pixels.empty()) {
+    displayFrame_->index = ++displayFrameSerial_;
+    uploadFrame(*displayFrame_);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// startBrowserCapture — Begin screen-capture for browser cue rendering.
+//
+// This is the "capture a window" approach to browser cues: spawns ffmpeg to
+// capture the browser window's pixels and pipe them as raw RGBA frames.
+// Used on Linux/macOS where CEF integration captures the browser's X11/Cocoa
+// window directly. On Windows, browser cues use pushBrowserFrame() instead.
+//
+// The displayId is the X11 display identifier (e.g. ":0.0") or window handle.
+// fadeIn/fadeOut params are reserved for future use (currently unused).
+// ---------------------------------------------------------------------------
+bool MediaEngine::startBrowserCapture(const std::string& displayId, int w, int h,
+                                       double /*fadeInSeconds*/, double /*fadeOutSeconds*/,
+                                       double transSecs, TransitionStyle transStyle) {
+  stopDecoderThreads();
+  isBrowserCapturing_ = false;
+  frameRate_ = 30.0;
+  duration_ = 0.0;
+  browserCaptureW_ = w;
+  browserCaptureH_ = h;
+  if (transSecs > 0.0 && texture_) {
+    beginTransition(transSecs, transStyle);
+  }
+
+  // Build capture request targeting the browser window
+  deckboy::platform::SourceCaptureRequest request;
+  request.kind = deckboy::platform::SourceCaptureKind::Window;
+  request.sourceRef = trim(displayId);
+  // X11 display IDs need a screen suffix (e.g. ":0" → ":0.0")
+  if (!request.sourceRef.empty() && request.sourceRef.front() == ':' &&
+      request.sourceRef.find('.') == std::string::npos) {
+    request.sourceRef += ".0";
+  }
+  request.width = w;
+  request.height = h;
+  request.frameRate = 30;
+  request.drawMouse = false;  // don't capture cursor over the browser window
+  auto plan = deckboy::platform::planSourceCapture(request);
+  if (!plan.supported || plan.ffmpegArgs.empty()) {
+    return false;
+  }
+  // KEEP THE HELPER'S STDERR.
+  //
+  // This spawned with stderr sent to /dev/null, so when a capture backend
+  // refused -- wrong window, missing permission, unsupported size -- it said so
+  // into nothing and the operator got a black output with no reason anywhere.
+  // That cost a long session on macOS: the helper was printing exactly what was
+  // wrong and every word was being discarded.
+  //
+  // Same reasoning as runCaptured() in the subprocess layer: a tool that fails
+  // has usually just explained why.
+  {
+    SpawnOptions options;
+    options.stdinMode = StdioMode::Null;
+    options.stdoutMode = StdioMode::Pipe;   // the frames
+    options.stderrMode = StdioMode::Inherit; // straight to Deckboy's own stderr
+    if (!spawnProcess(videoProcess_, plan.ffmpegArgs, options)) {
+      return false;
+    }
+  }
+
+  // Spawn decode thread — identical pattern to startDecoderThreads video thread
+  const size_t frameBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
+  int videoFd = videoProcess_.readFd;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = 0.0;
+  state_ = TransportState::Playing;
+  isBrowserCapturing_ = true;
+
+  videoThread_ = std::thread([this, w, h, frameBytes, videoFd]() {
+    std::uint64_t frameIdx = 0;
+    while (!decoderStop_.load()) {
+      // Back-pressure: wait for room in the frame queue
+      while (!decoderStop_.load()) {
+        bool hasRoom = false;
+        { std::lock_guard<std::mutex> lk(frameMutex_); hasRoom = frameQueue_.size() < kMaxVideoFrames; }
+        if (hasRoom) break;
+        SDL_Delay(4);
+      }
+      if (decoderStop_.load()) break;
+      DecodedFrame frame;
+      frame.width = w;
+      frame.height = h;
+      frame.index = frameIdx++;
+      frame.pixels.resize(frameBytes);
+      if (!readExact(videoFd, frame.pixels.data(), frameBytes)) {
+        decoderEof_ = true;
+        break;
+      }
+      std::lock_guard<std::mutex> lk(frameMutex_);
+      frameQueue_.push_back(std::move(frame));
+    }
+    decoderEof_ = true;
+  });
+  return true;
+}
+
+// Stop browser capture: clear the flag and shut down decode threads.
+void MediaEngine::stopBrowserCapture() {
+  isBrowserCapturing_ = false;
+  stopDecoderThreads();
+}
+
+// ---------------------------------------------------------------------------
+// startBrowserFrameMode — Prepare for push-based browser frame delivery.
+//
+// Unlike startBrowserCapture (which spawns ffmpeg to capture a window), this
+// mode receives frames directly from the browser backend via pushBrowserFrame().
+// Used when the browser backend renders offscreen and delivers RGBA buffers.
+//
+// Preserves the still duration from activeCue so that timed browser cues
+// (with stillDurationSeconds) correctly fade out and auto-advance. The
+// playback clock is reset so fade-in timing starts from when frames arrive.
+// ---------------------------------------------------------------------------
+bool MediaEngine::startBrowserFrameMode(int w, int h, double transSecs, TransitionStyle transStyle) {
+  stopDecoderThreads();
+  isBrowserCapturing_ = false;
+  frameRate_ = 30.0;
+  // Preserve still duration from activeCue so fade-out and auto-advance work correctly.
+  // loadCue already called initStillTimer which set duration_ = cue.stillDurationSeconds.
+  // The clock is reset below so fade-in and duration countdown are relative to when the
+  // first browser frame arrives (not when the cue was taken).
+  duration_ = (activeCue_ && activeCue_->stillDurationSeconds > 0.0)
+              ? activeCue_->stillDurationSeconds : 0.0;
+  browserCaptureW_ = w;
+  browserCaptureH_ = h;
+  browserFrameIdx_ = 0;
+  if (transSecs > 0.0 && texture_) {
+    beginTransition(transSecs, transStyle);
+  }
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = 0.0;
+  state_ = TransportState::Playing;
+  isBrowserCapturing_ = true;
+  return true;
+}
+
+// Receive a single RGBA frame from the browser backend and queue it for display.
+// Called from the browser backend thread — must be thread-safe via frameMutex_.
+// Keeps at most 2 frames buffered (drops stale ones) to minimize latency.
+// ── DeckLink capture ────────────────────────────────────────────────────────
+//
+// The card calls us on its own thread. That is the same arrangement the
+// browser backend has, so the frames go in through the same mutex-guarded
+// push and everything downstream -- upload, effects, compositing -- is
+// unchanged.
+bool MediaEngine::startDeckLinkCapture(const Cue& cue) {
+  stopDeckLinkCapture();
+  // decklink://<index>, mirroring ndi://<name>. The index is what the SDK
+  // enumerates, and the UI writes it when the operator picks a device.
+  const std::string prefix = "decklink://";
+  if (cue.path.rfind(prefix, 0) != 0) {
+    return false;
+  }
+  int deviceId = 0;
+  try {
+    deviceId = std::stoi(cue.path.substr(prefix.size()));
+  } catch (...) {
+    deviceId = 0;
+  }
+  deckLinkInput_ = std::make_unique<deckboy::platform::video::DeckLinkInput>();
+  deckLinkInput_->onFrame([this](const std::uint8_t* bgra, int w, int h, int stride) {
+    if (!bgra || w <= 0 || h <= 0) {
+      return;
+    }
+    // BGRA off the card, RGBA for the pipeline. The scratch is a member so the
+    // driver thread never allocates -- it will not wait for us and an
+    // allocation here would show up as dropped frames rather than as a stall.
+    const std::size_t need = static_cast<std::size_t>(w) * h * 4;
+    if (deckLinkRgba_.size() != need) {
+      deckLinkRgba_.assign(need, 0);
+    }
+    for (int y = 0; y < h; ++y) {
+      const std::uint8_t* src = bgra + static_cast<std::size_t>(y) * stride;
+      std::uint8_t* dst = deckLinkRgba_.data() + static_cast<std::size_t>(y) * w * 4;
+      for (int x = 0; x < w; ++x) {
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+        dst[3] = 255;
+        src += 4;
+        dst += 4;
+      }
+    }
+    DecodedFrame frame;
+    frame.width = w;
+    frame.height = h;
+    frame.format = FramePixelFormat::RGBA32;
+    frame.index = deckLinkFrameIdx_++;
+    frame.pixels = deckLinkRgba_;
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    while (frameQueue_.size() >= 2) frameQueue_.pop_front();
+    frameQueue_.push_back(std::move(frame));
+  });
+  // The starting guess only matters until the card reports what is actually
+  // arriving, which it does on the first frame when it supports detection.
+  const bool started = deckLinkInput_->start(
+    deviceId, deckboy::platform::video::DeckLinkMode::HD1080p5994, true, 2);
+  if (!started) {
+    deckLinkInput_.reset();
+    return false;
+  }
+  deckLinkCapturing_ = true;
+  // See the note in startNdiCapture: a live input is shown as it arrives
+  // rather than paced against a clock it has no relationship to.
+  frameRate_ = 120.0;
+  duration_ = 0.0;              // a live input runs until it is taken off
+  currentPosition_ = 0.0;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  state_ = TransportState::Playing;
+  return true;
+}
+
+void MediaEngine::stopDeckLinkCapture() {
+  if (deckLinkInput_) {
+    deckLinkInput_->stop();
+    deckLinkInput_.reset();
+  }
+  deckLinkCapturing_ = false;
+}
+
+bool MediaEngine::startNdiCapture(const Cue& cue) {
+  stopNdiCapture();
+  // ndi://<source name>, mirroring decklink://<index>.
+  const std::string prefix = "ndi://";
+  if (cue.path.rfind(prefix, 0) != 0) {
+    return false;
+  }
+  const std::string sourceName = cue.path.substr(prefix.size());
+  ndiInput_ = std::make_unique<deckboy::platform::video::NdiInput>();
+  ndiInput_->onFrame([this](const std::uint8_t* bgra, int w, int h, int stride) {
+    if (!bgra || w <= 0 || h <= 0) {
+      return;
+    }
+    // BGRA off the wire, RGBA for the pipeline. The scratch is a member so the
+    // receive thread never allocates: NDI will not wait for us, and an
+    // allocation here would show up as dropped frames rather than as a stall.
+    const std::size_t need = static_cast<std::size_t>(w) * h * 4;
+    if (ndiRgba_.size() != need) {
+      ndiRgba_.assign(need, 0);
+    }
+    for (int y = 0; y < h; ++y) {
+      const std::uint8_t* src = bgra + static_cast<std::size_t>(y) * stride;
+      std::uint8_t* dst = ndiRgba_.data() + static_cast<std::size_t>(y) * w * 4;
+      for (int x = 0; x < w; ++x) {
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+        dst[3] = 255;
+        src += 4;
+        dst += 4;
+      }
+    }
+    DecodedFrame frame;
+    frame.width = w;
+    frame.height = h;
+    frame.format = FramePixelFormat::RGBA32;
+    frame.index = ndiFrameIdx_++;
+    frame.pixels = ndiRgba_;
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    while (frameQueue_.size() >= 2) frameQueue_.pop_front();
+    frameQueue_.push_back(std::move(frame));
+  });
+  if (!ndiInput_->start(sourceName)) {
+    ndiInput_.reset();
+    return false;
+  }
+  ndiCapturing_ = true;
+  // SHOW WHAT ARRIVES. The frame consumer drains everything whose index is at
+  // or below currentPosition_ * frameRate_, which is right for a file being
+  // paced against its own clock and wrong for a live input: there is nothing
+  // to pace against, and a sender running faster than the assumed rate would
+  // have frames queue up and be dropped. A high nominal rate makes the target
+  // outrun the arrivals, so each frame is shown as soon as it lands.
+  frameRate_ = 120.0;
+  duration_ = 0.0;              // a live input runs until it is taken off
+  currentPosition_ = 0.0;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  state_ = TransportState::Playing;
+  return true;
+}
+
+void MediaEngine::stopNdiCapture() {
+  if (ndiInput_) {
+    ndiInput_->stop();
+    ndiInput_.reset();
+  }
+  ndiCapturing_ = false;
+}
+
+std::string MediaEngine::ndiCaptureError() const {
+  return ndiInput_ ? ndiInput_->lastError() : std::string();
+}
+
+bool MediaEngine::startSpoutCapture(const Cue& cue) {
+  stopSpoutCapture();
+#if defined(DECKBOY_HAS_SPOUT)
+  // source://spout/<sender name>, written by addSourceCue. An empty name is
+  // legitimate and means "whatever is sending", which is what a receiver with
+  // nothing chosen should do.
+  std::string senderName;
+  const std::string prefix = "source://";
+  if (cue.path.rfind(prefix, 0) == 0) {
+    const std::size_t slash = cue.path.find('/', prefix.size());
+    if (slash != std::string::npos) {
+      senderName = cue.path.substr(slash + 1);
+    }
+  }
+  if (senderName == "default-bus" || senderName == "default") {
+    senderName.clear();
+  }
+  spoutInput_ = std::make_unique<deckboy::platform::video::SpoutInput>();
+  spoutInput_->onFrame([this](const std::uint8_t* bgra, int w, int h, int stride) {
+    if (!bgra || w <= 0 || h <= 0) {
+      return;
+    }
+    const std::size_t need = static_cast<std::size_t>(w) * h * 4;
+    if (spoutRgba_.size() != need) {
+      spoutRgba_.assign(need, 0);
+    }
+    for (int y = 0; y < h; ++y) {
+      const std::uint8_t* src = bgra + static_cast<std::size_t>(y) * stride;
+      std::uint8_t* dst = spoutRgba_.data() + static_cast<std::size_t>(y) * w * 4;
+      for (int x = 0; x < w; ++x) {
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+        dst[3] = 255;
+        src += 4;
+        dst += 4;
+      }
+    }
+    DecodedFrame frame;
+    frame.width = w;
+    frame.height = h;
+    frame.format = FramePixelFormat::RGBA32;
+    frame.index = spoutFrameIdx_++;
+    frame.pixels = spoutRgba_;
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    while (frameQueue_.size() >= 2) frameQueue_.pop_front();
+    frameQueue_.push_back(std::move(frame));
+  });
+  if (!spoutInput_->start(senderName)) {
+    spoutInput_.reset();
+    return false;
+  }
+  spoutCapturing_ = true;
+  // See startNdiCapture: a live input is shown as it arrives rather than paced
+  // against a clock it has no relationship to.
+  frameRate_ = 120.0;
+  duration_ = 0.0;
+  currentPosition_ = 0.0;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  state_ = TransportState::Playing;
+  return true;
+#else
+  (void) cue;
+  return false;
+#endif
+}
+
+void MediaEngine::stopSpoutCapture() {
+  if (spoutInput_) {
+    spoutInput_->stop();
+    spoutInput_.reset();
+  }
+  spoutCapturing_ = false;
+}
+
+std::string MediaEngine::spoutCaptureError() const {
+  return spoutInput_ ? spoutInput_->lastError() : std::string();
+}
+
+int MediaEngine::deckLinkSignalWidth() const {
+  return deckLinkInput_ ? deckLinkInput_->detectedWidth() : 0;
+}
+
+int MediaEngine::deckLinkSignalHeight() const {
+  return deckLinkInput_ ? deckLinkInput_->detectedHeight() : 0;
+}
+
+void MediaEngine::pushBrowserFrame(const uint8_t* rgba, int w, int h) {
+  if (!isBrowserCapturing_ || !rgba || w <= 0 || h <= 0) return;
+  DecodedFrame frame;
+  frame.width  = w;
+  frame.height = h;
+  frame.index  = browserFrameIdx_++;
+  frame.pixels.assign(rgba, rgba + static_cast<size_t>(w) * h * 4);
+  std::lock_guard<std::mutex> lk(frameMutex_);
+  // Discard stale frames — keep at most 2 buffered to bound latency
+  while (frameQueue_.size() >= 2) frameQueue_.pop_front();
+  frameQueue_.push_back(std::move(frame));
+}
+
+// ---------------------------------------------------------------------------
+// startSourceCapture — Begin live capture from a camera, window, or app texture.
+//
+// Spawns ffmpeg with platform-specific capture args (built by buildSourceCaptureArgs)
+// and starts a decode thread to pipe raw RGBA frames into frameQueue_. The
+// capture runs at 30fps with dimensions clamped to 160–3840 x 90–2160.
+//
+// Not implemented on Windows (returns false) — Windows source capture would
+// need DXGI Desktop Duplication or DirectShow, which isn't wired up yet.
+// ---------------------------------------------------------------------------
+bool MediaEngine::startSourceCapture(const Cue& cue) {
+  if (!isSourceCueKind(cue.kind)) {
+    return false;
+  }
+
+  auto [fallbackW, fallbackH] = currentOutputSizeHint();
+  int w = cue.width > 0 ? cue.width : fallbackW;
+  int h = cue.height > 0 ? cue.height : fallbackH;
+  w = std::clamp(w, 160, 3840);
+  h = std::clamp(h, 90, 2160);
+
+  deckboy::platform::SourceCapturePlan plan;
+  if (!buildSourceCapturePlan(cue, w, h, plan)) {
+    return false;
+  }
+  // A capture may deliver frames SMALLER than the cue's raster -- a window
+  // is captured at its own size rather than blown up into a 4K pipe, and
+  // the compositor scales it on the GPU instead. Everything below sizes
+  // itself from what will actually arrive.
+  if (plan.frameWidth > 0 && plan.frameHeight > 0) {
+    w = plan.frameWidth;
+    h = plan.frameHeight;
+  }
+
+  stopDecoderThreads();
+  isSourceCapturing_ = false;
+
+  if (!spawnPipeProcess(videoProcess_, plan.ffmpegArgs)) {
+    return false;
+  }
+
+  // Watchdog state for the window-capture path. See
+  // serviceWindowCaptureWatchdog: a repaint-driven capture may need the window
+  // poked, and an ffmpeg that cannot do WGC at all has to be replaced by the
+  // gdigrab line before the operator is left looking at a dark cue.
+  sourceFramesSeen_.store(0);
+  sourceRepaintTitle_ = plan.repaintWindowTitle;
+  sourceFallbackArgs_ = plan.fallbackFfmpegArgs;
+  sourceFallbackBackendId_ = plan.fallbackBackendId;
+  sourceCaptureStartedAt_ = std::chrono::steady_clock::now();
+  sourceNudgedAt_ = {};
+  sourceNudgeCount_ = 0;
+  sourceCaptureWidth_ = w;
+  sourceCaptureHeight_ = h;
+
+  const size_t frameBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
+  int videoFd = videoProcess_.readFd;
+  // The rate the CAPTURE settled on, which is not always the one asked
+  // for: a small enough window runs at 60 so it does not judder against a
+  // 60Hz output.
+  frameRate_ = plan.frameRate > 0 ? static_cast<double>(plan.frameRate) : 30.0;
+  duration_ = 0.0;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = 0.0;
+  pausedPosition_ = 0.0;
+  currentPosition_ = 0.0;
+  state_ = TransportState::Playing;
+  isSourceCapturing_ = true;
+
+  videoThread_ = std::thread([this, w, h, frameBytes, videoFd]() {
+    std::uint64_t frameIdx = 0;
+    while (!decoderStop_.load()) {
+      while (!decoderStop_.load()) {
+        bool hasRoom = false;
+        { std::lock_guard<std::mutex> lk(frameMutex_); hasRoom = frameQueue_.size() < kMaxVideoFrames; }
+        if (hasRoom) break;
+        SDL_Delay(4);
+      }
+      if (decoderStop_.load()) break;
+
+      DecodedFrame frame;
+      frame.width = w;
+      frame.height = h;
+      frame.index = frameIdx++;
+      frame.pixels.resize(frameBytes);
+      if (!readExact(videoFd, frame.pixels.data(), frameBytes)) {
+        decoderEof_ = true;
+        break;
+      }
+
+      sourceFramesSeen_.fetch_add(1);
+      std::lock_guard<std::mutex> lk(frameMutex_);
+      frameQueue_.push_back(std::move(frame));
+    }
+    decoderEof_ = true;
+  });
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// serviceWindowCaptureWatchdog — make a window cue actually arrive.
+//
+// Runs once a tick on the main thread while a source capture is up. Two
+// failures it exists for, both measured rather than imagined:
+//
+//   1. Windows.Graphics.Capture delivers a frame only when the window PAINTS.
+//      A window holding something static -- a slide, a score, a chat window
+//      nobody is typing in -- gave zero frames in 29 seconds of capture. One
+//      RedrawWindow produced a frame immediately, so the window is poked while
+//      the capture is still waiting for its first one, and again if it later
+//      goes quiet for a second.
+//   2. WGC may not be there at all: the filter arrived in ffmpeg 8, and Deckboy
+//      captures through whichever ffmpeg the machine has. Planning already
+//      checks for the filter, but the capture can still fail inside the OS, and
+//      the symptom is the same -- ffmpeg exits having written nothing. After a
+//      second of that, the plan's gdigrab line is spawned in its place: an
+//      imperfect picture on a scaled display beats a dark cue.
+// ---------------------------------------------------------------------------
+void MediaEngine::serviceWindowCaptureWatchdog() {
+  if (!isSourceCapturing_ || sourceCaptureStartedAt_.time_since_epoch().count() == 0) {
+    return;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  const double sinceStart =
+    std::chrono::duration<double>(now - sourceCaptureStartedAt_).count();
+  const std::uint64_t frames = sourceFramesSeen_.load();
+
+  // The capture process died before a single frame: swap in the fallback line.
+  if (frames == 0 && sinceStart > 1.0 && !sourceFallbackArgs_.empty() &&
+      (decoderEof_.load() || sinceStart > 3.0)) {
+    std::vector<std::string> fallback = sourceFallbackArgs_;
+    const std::string backendId = sourceFallbackBackendId_;
+    // Keep the repaint title: the fallback does not need it, but clearing the
+    // state before the respawn stops the watchdog trying the same swap twice.
+    sourceFallbackArgs_.clear();
+    sourceFallbackBackendId_.clear();
+    stopDecoderThreads();
+    if (spawnPipeProcess(videoProcess_, fallback)) {
+      const int w = sourceCaptureWidth_;
+      const int h = sourceCaptureHeight_;
+      const size_t frameBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
+      const int videoFd = videoProcess_.readFd;
+      decoderEof_ = false;
+      decoderStop_ = false;
+      isSourceCapturing_ = true;
+      state_ = TransportState::Playing;
+      sourceCaptureStartedAt_ = now;
+      sourceFramesSeen_.store(0);
+      videoThread_ = std::thread([this, w, h, frameBytes, videoFd]() {
+        std::uint64_t frameIdx = 0;
+        while (!decoderStop_.load()) {
+          while (!decoderStop_.load()) {
+            bool hasRoom = false;
+            { std::lock_guard<std::mutex> lk(frameMutex_); hasRoom = frameQueue_.size() < kMaxVideoFrames; }
+            if (hasRoom) break;
+            SDL_Delay(4);
+          }
+          if (decoderStop_.load()) break;
+          DecodedFrame frame;
+          frame.width = w;
+          frame.height = h;
+          frame.index = frameIdx++;
+          frame.pixels.resize(frameBytes);
+          if (!readExact(videoFd, frame.pixels.data(), frameBytes)) {
+            decoderEof_ = true;
+            break;
+          }
+          sourceFramesSeen_.fetch_add(1);
+          std::lock_guard<std::mutex> lk(frameMutex_);
+          frameQueue_.push_back(std::move(frame));
+        }
+        decoderEof_ = true;
+      });
+      sourceCaptureFellBack_.store(true);
+    }
+    return;
+  }
+
+  if (sourceRepaintTitle_.empty()) {
+    return;
+  }
+  // Poke while waiting for frame one, then only if the window has gone quiet.
+  // Ten nudges at 350ms covers a slow-starting app without hammering a window
+  // that simply has nothing new to draw.
+  const bool waiting = (frames == 0 && sourceNudgeCount_ < 10);
+  const bool wentQuiet = (frames > 0 && sinceStart > 1.0);
+  if (!waiting && !wentQuiet) {
+    return;
+  }
+  const double sinceNudge = sourceNudgedAt_.time_since_epoch().count() == 0
+    ? 1e9
+    : std::chrono::duration<double>(now - sourceNudgedAt_).count();
+  const double interval = waiting ? 0.35 : 1.0;
+  if (sinceNudge < interval) {
+    return;
+  }
+  sourceNudgedAt_ = now;
+  if (waiting) {
+    ++sourceNudgeCount_;
+  }
+  deckboy::platform::nudgeWindowRepaint(sourceRepaintTitle_);
+}
+
+// ── Private methods ──────────────────────────────────────────────────────────
+
+// Compute the visual fade gain (0–1) at a given playback position.
+// Handles both fade-in (ramp from 0→1 over fadeInSeconds) and fade-out
+// (ramp from 1→0 over fadeOutSeconds before the cue ends).
+// The suppress flags allow disabling either fade independently:
+//   - suppressFadeInForCurrentCue_: set when cue is loaded mid-transition
+//   - suppressVisualFadeOutForCurrentCue_: set for auto-advancing cues
+//     (the deck-level crossfade handles the visual transition instead)
+//
+// NOTE: visualFadeGainAt and fadeGainAt currently have identical logic.
+// They were historically separate (visual vs audio fade paths) but converged.
+// Kept as two entry points for API clarity — callers read differently.
+// The clock a fade-in should be read against. See the header for why a held
+// still cannot use its own position.
+double MediaEngine::fadeRidePositionSeconds() const {
+  if (!activeCue_ || duration_ > 0.0) {
+    return position();
+  }
+  // A held still: no timeline, so the fade rides the time it has been up.
+  // Zero-initialised until the first cue is loaded, which reads as "just
+  // taken" and is the right answer for a cue that is not up yet.
+  if (cueTakenAt_.time_since_epoch().count() == 0) {
+    return position();
+  }
+  return std::chrono::duration<double>(
+    std::chrono::steady_clock::now() - cueTakenAt_).count();
+}
+
+double MediaEngine::visualFadeGainAt(double positionSeconds) const {
+  if (!activeCue_) {
+    return 1.0;  // no cue → fully visible (no fade)
+  }
+  double gain = 1.0;
+  // Fade-in: linear ramp from 0 to 1 over fadeInSeconds
+  if (!suppressFadeInForCurrentCue_ && activeCue_->fadeInSeconds > 0.001) {
+    gain = std::min(gain, std::clamp(positionSeconds / activeCue_->fadeInSeconds, 0.0, 1.0));
+  }
+  // Fade-out: linear ramp from 1 to 0 over fadeOutSeconds before the end.
+  // Honored whenever the operator configured a fade-out, including hold/
+  // pause-on-last stills — if you set a fade-out you want to see it. Stills
+  // default to fadeOutSeconds == 0 (see applyDeckDefaultsToCue) so the common
+  // case holds cleanly; this branch only engages once it's turned on.
+  // A cue going round seamlessly does not end at the end of a pass, so it
+  // does not fade out there either (the last of N repeats does).
+  if (!suppressVisualFadeOutForCurrentCue_ && !loopAtPassEnd_.load() &&
+      activeCue_->fadeOutSeconds > 0.001 && duration_ > 0.0) {
+    double remaining = std::max(0.0, duration_ - positionSeconds);
+    gain = std::min(gain, std::clamp(remaining / activeCue_->fadeOutSeconds, 0.0, 1.0));
+  }
+  return std::clamp(gain, 0.0, 1.0);
+}
+
+// Compute the raw fade gain (used for audio fade and other non-visual purposes).
+// Currently identical to visualFadeGainAt — see note above.
+double MediaEngine::fadeGainAt(double positionSeconds) const {
+  if (!activeCue_) {
+    return 1.0;
+  }
+  double gain = 1.0;
+  if (!suppressFadeInForCurrentCue_ && activeCue_->fadeInSeconds > 0.001) {
+    gain = std::min(gain, std::clamp(positionSeconds / activeCue_->fadeInSeconds, 0.0, 1.0));
+  }
+  if (!suppressVisualFadeOutForCurrentCue_ &&
+      activeCue_->fadeOutSeconds > 0.001 && duration_ > 0.0) {
+    double remaining = std::max(0.0, duration_ - positionSeconds);
+    gain = std::min(gain, std::clamp(remaining / activeCue_->fadeOutSeconds, 0.0, 1.0));
+  }
+  return std::clamp(gain, 0.0, 1.0);
+}
+
+// Publish fade parameters to the atomic mirrors the audio thread reads.
+// Main thread only. Relaxed ordering is fine: each field is independently
+// atomic and a one-buffer lag on a fade edit is inaudible.
+void MediaEngine::syncAudioFadeParams() {
+  const Cue* cue = activeCue_;
+  // Audio fades follow the visual fades unless the cue overrides them
+  // (audioFade*Seconds >= 0 — 0 means "no audio fade", >0 explicit length).
+  double fadeIn = 0.0;
+  double fadeOut = 0.0;
+  if (cue) {
+    fadeIn = cue->audioFadeInSeconds >= 0.0f
+      ? static_cast<double>(cue->audioFadeInSeconds) : cue->fadeInSeconds;
+    fadeOut = cue->audioFadeOutSeconds >= 0.0f
+      ? static_cast<double>(cue->audioFadeOutSeconds) : cue->fadeOutSeconds;
+  }
+  audioFadeInSeconds_.store(fadeIn, std::memory_order_relaxed);
+  audioFadeOutSeconds_.store(fadeOut, std::memory_order_relaxed);
+  audioFadeDuration_.store(cue ? duration_ : 0.0, std::memory_order_relaxed);
+  audioSuppressFadeIn_.store(suppressFadeInForCurrentCue_, std::memory_order_relaxed);
+  audioSuppressFadeOut_.store(suppressVisualFadeOutForCurrentCue_, std::memory_order_relaxed);
+  // Per-cue audio trim/pan/mono ride the same mirrors — edits apply live
+  // (snapshot sync → next tick) with no decode restart.
+  audioCueGain_.store(
+    cue ? std::pow(10.0, std::clamp(cue->audioGainDb, kCueAudioGainMinDb, kCueAudioGainMaxDb) / 20.0) : 1.0,
+    std::memory_order_relaxed);
+  audioCuePan_.store(cue ? std::clamp(cue->audioPan, -1.0f, 1.0f) : 0.0f,
+                     std::memory_order_relaxed);
+  audioCueMono_.store(cue != nullptr && cue->audioMono, std::memory_order_relaxed);
+  audioCuePairOffset_.store(cue ? std::clamp(cue->audioOutputPair, 0, 7) : 0,
+                            std::memory_order_relaxed);
+  micChannel_.store(cue ? static_cast<int>(cue->micChannel) : 0, std::memory_order_relaxed);
+  // AND THE MATRIX, from the same place and at the same moment as everything
+  // else the audio thread needs. Published here rather than from the app so
+  // there is one path: every edit that reaches the engine's cue snapshot
+  // reaches the matrix too, and none can be forgotten.
+  if (patchRouting_.active) {
+    publishPatchGains(cue);   // the playlist is in the patch: names, not channels
+  } else if (cue && !cue->audioMatrix.empty()) {
+    setAudioMatrix(cue->audioMatrix);
+  } else {
+    clearAudioMatrix();
+  }
+  // WHERE THE PICTURE IS AND HOW LONG IS LEFT, for the deck-aware effects.
+  // Geometry is the cue's own output scale and offset, which is what the
+  // compositor uses -- so "where it sounds" and "where it is" cannot drift
+  // apart, because they are the same two numbers.
+  if (cue) {
+    audioCtxCenterX_.store(
+      std::clamp(0.5f + cue->outputOffsetX, 0.0f, 1.0f), std::memory_order_relaxed);
+    audioCtxCenterY_.store(
+      std::clamp(0.5f + cue->outputOffsetY, 0.0f, 1.0f), std::memory_order_relaxed);
+    audioCtxCoverage_.store(
+      std::clamp(cue->outputScaleX * cue->outputScaleY, 0.0f, 1.0f),
+      std::memory_order_relaxed);
+    // The VIDEO frame period, which is what Frame lock quantises to. A cue
+    // with no video reports zero and the effect passes through.
+    const double fps = cue->fps > 0.0 ? cue->fps : frameRate_;
+    audioCtxFramePeriod_.store(
+      (fps > 1.0 && cue->kind == CueKind::Video) ? 1.0 / fps : 0.0,
+      std::memory_order_relaxed);
+  } else {
+    audioCtxCenterX_.store(0.5f, std::memory_order_relaxed);
+    audioCtxCenterY_.store(0.5f, std::memory_order_relaxed);
+    audioCtxCoverage_.store(1.0f, std::memory_order_relaxed);
+    audioCtxFramePeriod_.store(0.0, std::memory_order_relaxed);
+  }
+  audioCtxHeld_.store(state_ == TransportState::Paused, std::memory_order_relaxed);
+
+  // The effect stack is a vector, so it goes across under the lock rather than
+  // through an atomic. Only bump the generation when it actually differs --
+  // this runs every tick, and a needless bump would make the audio thread take
+  // the lock and rebuild its copy sixty times a second for nothing.
+  {
+    const std::vector<deckboy::audiofx::AudioEffect> empty;
+    const std::vector<deckboy::audiofx::AudioEffect>& want =
+      cue ? cue->audioEffects : empty;
+    // OUTSIDE THE LOCK, because opening a plugin is a LoadLibrary and a
+    // licence check, and the audio thread takes this same mutex. It reuses
+    // the instances that are already open, so the common case is a walk over
+    // a short vector and no work at all.
+    std::vector<AudioPluginRef> plugins = reconcileAudioPlugins(cue);
+    // The instances the audio thread handed back when it last changed stacks,
+    // freed HERE -- a plugin's destructor stops threads and frees megabytes,
+    // and the audio thread is not where that should happen.
+    std::vector<AudioPluginRef> retired;
+    std::lock_guard<std::mutex> lock(audioEffectsMutex_);
+    retired.swap(audioPluginRetired_);
+    bool same = want.size() == audioEffectsPending_.size();
+    for (std::size_t i = 0; same && i < want.size(); ++i) {
+      const deckboy::audiofx::AudioEffect& a = want[i];
+      const deckboy::audiofx::AudioEffect& b = audioEffectsPending_[i];
+      same = a.kind == b.kind && a.amount == b.amount && a.paramA == b.paramA &&
+             a.paramB == b.paramB && a.paramC == b.paramC &&
+             a.paramD == b.paramD && a.bypassed == b.bypassed &&
+             // WHICH plugin, or picking one in a slot would never reach the
+             // audio thread: every other field can be identical across a
+             // change from one reverb to another.
+             a.pluginId == b.pluginId;
+    }
+    if (!same || plugins != audioPluginsPending_) {
+      audioEffectsPending_ = want;
+      audioPluginsPending_ = std::move(plugins);
+      audioEffectsGeneration_.fetch_add(1, std::memory_order_release);
+    }
+  }
+}
+
+// ── OPENING, KEEPING AND LETTING GO OF SOMEBODY ELSE'S CODE ─────────────────
+//
+// Main thread. Returns the instance for every position in the cue's chain --
+// null in the positions holding Deckboy's own effects, which keeps the vector
+// index-parallel to the stack so the audio thread never has to look anything
+// up.
+//
+// An instance is REUSED whenever the id in that position has not changed, so
+// riding a knob does not reload a plugin, and moving an effect up the chain
+// carries its plugin with it only if the id moved with it.
+std::vector<std::shared_ptr<deckboy::platform::audioplugin::AudioPluginInstance>>
+MediaEngine::reconcileAudioPlugins(const Cue* cue) {
+  namespace ap = deckboy::platform::audioplugin;
+  std::vector<AudioPluginRef> next;
+  std::vector<std::string> nextIds;
+  if (!cue) {
+    audioPluginPendingIds_.clear();
+    return next;
+  }
+  const std::vector<deckboy::audiofx::AudioEffect>& stack = cue->audioEffects;
+  next.resize(stack.size());
+  nextIds.resize(stack.size());
+  for (std::size_t i = 0; i < stack.size(); ++i) {
+    const deckboy::audiofx::AudioEffect& fx = stack[i];
+    if (fx.kind != deckboy::audiofx::AudioEffectKind::Plugin ||
+        fx.pluginId.empty()) {
+      continue;
+    }
+    nextIds[i] = fx.pluginId;
+    // Already open in this position? Then it keeps its state, its own editor
+    // settings and its delay tails.
+    if (i < audioPluginPendingIds_.size() &&
+        audioPluginPendingIds_[i] == fx.pluginId &&
+        i < audioPluginsPending_.size() && audioPluginsPending_[i]) {
+      next[i] = audioPluginsPending_[i];
+      continue;
+    }
+    // A BLOCK BIG ENOUGH FOR THE BIGGEST CHUNK THIS ENGINE QUEUES. A plugin
+    // set up for a smaller block refuses the buffer rather than growing one on
+    // the audio thread, which would be silence in the middle of a show.
+    std::shared_ptr<ap::AudioPluginInstance> instance =
+      ap::openAudioPlugin(fx.pluginId, static_cast<double>(audioRate_),
+                          kMaxAudioPluginBlockFrames);
+    if (!instance) {
+      // The show keeps the id and the settings; it just cannot make the sound
+      // on this machine. Said once, by name.
+      missingAudioPlugin_ = fx.pluginId;
+      continue;
+    }
+    if (!fx.pluginState.empty()) {
+      instance->loadState(fx.pluginState);
+    }
+    next[i] = std::move(instance);
+  }
+  // The four mapped controls, pushed from HERE rather than from the audio
+  // thread: setting a parameter is a plugin call like any other and may
+  // allocate. The plugin's own ring carries the value across to its processor.
+  for (std::size_t i = 0; i < next.size(); ++i) {
+    if (!next[i]) {
+      continue;
+    }
+    const auto& params = next[i]->parameters();
+    const float mapped[4] = {stack[i].paramA, stack[i].paramB,
+                             stack[i].paramC, stack[i].paramD};
+    int taken = 0;
+    for (const auto& p : params) {
+      if (!p.automatable) {
+        continue;
+      }
+      if (taken >= 4) {
+        break;
+      }
+      const double want = static_cast<double>(mapped[taken]);
+      // Only when it MOVED. Pushing four parameters sixty times a second would
+      // fight a plugin's own editor for control of them.
+      if (std::fabs(next[i]->parameter(p.id) - want) > 1e-6) {
+        next[i]->setParameter(p.id, want);
+      }
+      ++taken;
+    }
+  }
+  audioPluginPendingIds_ = std::move(nextIds);
+  return next;
+}
+
+std::shared_ptr<deckboy::platform::audioplugin::AudioPluginInstance>
+MediaEngine::audioPluginForSlot(int index) const {
+  if (index < 0 || index >= static_cast<int>(audioPluginsPending_.size())) {
+    return nullptr;
+  }
+  return audioPluginsPending_[static_cast<std::size_t>(index)];
+}
+
+bool MediaEngine::consumeAudioPluginOverrun() {
+  return audioPluginOverran_.exchange(false, std::memory_order_relaxed);
+}
+
+std::string MediaEngine::consumeMissingAudioPlugin() {
+  std::string out;
+  out.swap(missingAudioPlugin_);
+  return out;
+}
+
+// AUDIO THREAD. Everything here is either preallocated or already open; the
+// one call that is not ours is process(), and that carries its own budget.
+bool MediaEngine::AudioPluginHost::processPluginSlot(
+    std::size_t index, const deckboy::audiofx::AudioEffect& fx,
+    double* samples, std::size_t frames) {
+  return engine && engine->processAudioPluginSlot(index, fx, samples, frames);
+}
+
+bool MediaEngine::processAudioPluginSlot(std::size_t index,
+                                         const deckboy::audiofx::AudioEffect& fx,
+                                         double* samples, std::size_t frames) {
+  if (index >= audioPluginsActive_.size() || !audioPluginsActive_[index] ||
+      frames == 0) {
+    // An empty plugin slot is an empty slot, not a silence: the operator has
+    // added the slot and not yet chosen, or is on the machine that has not got
+    // the plugin. Either way the cue keeps its sound.
+    return false;
+  }
+  const auto& instance = audioPluginsActive_[index];
+  // THE SHARED IMPLEMENTATION, not a copy of it. Units, the plugin call and
+  // the dry/wet mix all live in applyPluginSlot (platform/audio_plugin.hpp),
+  // which --plugin-chain-check calls too. When the engine had its own copy and
+  // the check had another, the check could not see the engine's fault and a
+  // broken release went out green.
+  if (!deckboy::platform::audioplugin::applyPluginSlot(
+          *instance, static_cast<double>(fx.amount), samples, frames,
+          audioPluginScratch_, kMaxAudioPluginBlockFrames)) {
+    if (instance->overran()) {
+      audioPluginOverran_.store(true, std::memory_order_relaxed);
+    }
+    return false;   // the audio is exactly as the plugin found it
+  }
+  return true;
+}
+
+// Pull a changed stack across onto the audio thread. Called once per chunk;
+// the common case is an atomic load and a comparison.
+//
+// A stack whose SHAPE changed clears the filter and delay memory: the slots are
+// indexed by position, so inserting an effect at the top would otherwise hand a
+// delay's line to a compressor and a compressor's envelope to a gate. Turning a
+// knob keeps the memory, which is what lets somebody ride a filter live.
+// ── WHAT THE PICTURE IS DOING, FOR THE AUDIO TO FOLLOW ──────────────────────
+//
+// The Picture effect turns the cue's own brightness and movement into a filter
+// (see audio_effects.hpp). This is where those two numbers come from.
+//
+// SUBSAMPLED HARD, on purpose. A 32x18 grid is 576 samples out of eight
+// million, it is computed once per decoded frame rather than once per audio
+// callback, and the two things it produces are a mean and a difference of
+// means -- neither of which gets more truthful from reading every pixel. The
+// budget for this is "free or it does not go in the frame path".
+//
+// A GPU FRAME HAS NO PIXELS TO READ. That is the whole point of the zero-copy
+// path: the picture never comes down to the CPU. So hasPicture goes false and
+// the effect passes the signal through untouched rather than following a
+// number invented from nothing -- and cueNeedsCpuPixelPath asks for CPU frames
+// when a Picture effect is actually in the chain, which is the same mechanism
+// the picture effects already use to get pixels they can act on.
+// The picture as the audience sees it, read back for Ouroboros. Same coarse grid
+// and the same luma weights as publishPictureStats, so the two numbers mean the
+// same thing and differ only in WHEN they were taken.
+void MediaEngine::publishPostEffectStats(const std::uint8_t* rgba, int width, int height) {
+  if (!rgba || width <= 0 || height <= 0) {
+    return;
+  }
+  constexpr int kCols = 32;
+  constexpr int kRows = 18;
+  double sum = 0.0;
+  int count = 0;
+  for (int gy = 0; gy < kRows; ++gy) {
+    const int y = std::min(height - 1, (gy * height) / kRows + height / (kRows * 2));
+    for (int gx = 0; gx < kCols; ++gx) {
+      const int x = std::min(width - 1, (gx * width) / kCols + width / (kCols * 2));
+      const std::size_t at = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                              static_cast<std::size_t>(x)) * 4u;
+      sum += 0.2126 * rgba[at] + 0.7152 * rgba[at + 1] + 0.0722 * rgba[at + 2];
+      ++count;
+    }
+  }
+  const float luma = static_cast<float>(sum / (255.0 * std::max(1, count)));
+  const float motion = postLumaPrev_ < 0.0f
+    ? 0.0f
+    : std::clamp(std::fabs(luma - postLumaPrev_) * 8.0f, 0.0f, 1.0f);
+  postLumaPrev_ = luma;
+  audioCtxPostLuma_.store(luma, std::memory_order_relaxed);
+  audioCtxPostMotion_.store(motion, std::memory_order_relaxed);
+  audioCtxPostAtMs_.store(SDL_GetTicks(), std::memory_order_relaxed);
+}
+
+void MediaEngine::publishPictureStats(const DecodedFrame& frame) {
+  if (frame.pixels.empty() || frame.width <= 0 || frame.height <= 0) {
+    audioCtxHasPicture_.store(false, std::memory_order_relaxed);
+    pictureStatsPrevLuma_ = -1.0;
+    return;
+  }
+  // RGBA, NV12 and P010 (an HDR stream) reach here, and the luma of an NV12
+  // frame is its first plane -- already the number wanted, with no arithmetic
+  // at all. P010's is too, two bytes a sample with the value's top eight bits
+  // in the second (the code, not the light: PQ, near enough for a level).
+  const bool nv12 = frame.format == FramePixelFormat::NV12;
+  const bool p010 = frame.format == FramePixelFormat::P010;
+  const std::size_t stride = nv12 ? static_cast<std::size_t>(frame.width)
+                           : p010 ? static_cast<std::size_t>(frame.width) * 2
+                                  : static_cast<std::size_t>(frame.width) * 4;
+  if (frame.pixels.size() < stride * static_cast<std::size_t>(frame.height)) {
+    audioCtxHasPicture_.store(false, std::memory_order_relaxed);
+    return;
+  }
+  constexpr int kCols = 32;
+  constexpr int kRows = 18;
+  double sum = 0.0;
+  int taken = 0;
+  for (int ry = 0; ry < kRows; ++ry) {
+    const int y = frame.height * (ry * 2 + 1) / (kRows * 2);
+    const std::uint8_t* row = frame.pixels.data() + static_cast<std::size_t>(y) * stride;
+    for (int rx = 0; rx < kCols; ++rx) {
+      const int x = frame.width * (rx * 2 + 1) / (kCols * 2);
+      if (nv12) {
+        sum += row[x];
+      } else if (p010) {
+        sum += row[static_cast<std::size_t>(x) * 2 + 1];
+      } else {
+        const std::uint8_t* px = row + static_cast<std::size_t>(x) * 4;
+        // Rec.709 luma. The cheap (r+g+b)/3 makes a saturated blue as bright
+        // as a mid grey, and a cut to a deep blue would then not close the
+        // filter -- which is exactly the move somebody would arm this for.
+        sum += 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2];
+      }
+      ++taken;
+    }
+  }
+  if (taken == 0) {
+    audioCtxHasPicture_.store(false, std::memory_order_relaxed);
+    return;
+  }
+  const double luma = std::clamp(sum / (taken * 255.0), 0.0, 1.0);
+  // Motion as the frame-to-frame change in mean brightness, scaled so an
+  // ordinary cut reads as 1. It is a crude measure and an honest one: it
+  // cannot tell a pan from a cut, and it does not claim to. The alternative
+  // was the decoder's motion vectors, which the hardware path does not expose
+  // and which would tie this to one decoder.
+  double motion = 0.0;
+  if (pictureStatsPrevLuma_ >= 0.0) {
+    motion = std::clamp(std::fabs(luma - pictureStatsPrevLuma_) * 8.0, 0.0, 1.0);
+  }
+  pictureStatsPrevLuma_ = luma;
+  audioCtxLuma_.store(static_cast<float>(luma), std::memory_order_relaxed);
+  audioCtxMotion_.store(static_cast<float>(motion), std::memory_order_relaxed);
+  audioCtxHasPicture_.store(true, std::memory_order_relaxed);
+}
+
+void MediaEngine::refreshAudioEffectStack() {
+  const std::uint32_t generation =
+    audioEffectsGeneration_.load(std::memory_order_acquire);
+  if (generation == audioEffectsSeen_) {
+    return;
+  }
+  std::vector<deckboy::audiofx::AudioEffect> incoming;
+  std::vector<AudioPluginRef> incomingPlugins;
+  {
+    std::lock_guard<std::mutex> lock(audioEffectsMutex_);
+    incoming = audioEffectsPending_;
+    incomingPlugins = audioPluginsPending_;
+    // HAND THE OLD ONES BACK rather than dropping the last reference here. If
+    // this thread held the last one, the plugin's destructor would run on the
+    // audio thread -- stopping its threads and freeing its buffers between two
+    // buffers of a live show. The main thread frees them on its next tick.
+    for (auto& gone : audioPluginsActive_) {
+      if (gone) {
+        audioPluginRetired_.push_back(std::move(gone));
+      }
+    }
+  }
+  audioPluginsActive_ = std::move(incomingPlugins);
+  bool shapeChanged = incoming.size() != audioEffectsActive_.size();
+  for (std::size_t i = 0; !shapeChanged && i < incoming.size(); ++i) {
+    shapeChanged = incoming[i].kind != audioEffectsActive_[i].kind;
+  }
+  audioEffectsActive_ = std::move(incoming);
+  audioEffectsSeen_ = generation;
+  if (shapeChanged) {
+    audioEffectState_.slots.assign(audioEffectsActive_.size(),
+                                   deckboy::audiofx::AudioEffectSlotState {});
+  }
+}
+
+// Audio-thread-safe fade gain: same curve as fadeGainAt but reads only the
+// atomic mirrors — never activeCue_ / duration_ / the suppress flags, which
+// are plain members owned by the main thread.
+double MediaEngine::audioFadeGainAt(double positionSeconds) const {
+  double gain = 1.0;
+  double fadeIn = audioFadeInSeconds_.load(std::memory_order_relaxed);
+  // Once round: the audio thread is into the next pass well before the
+  // engine's seam sets the suppress flag, so it checks for itself.
+  if (!audioSuppressFadeIn_.load(std::memory_order_relaxed) &&
+      audioPassesStarted_.load(std::memory_order_relaxed) == 0 && fadeIn > 0.001) {
+    gain = std::min(gain, std::clamp(positionSeconds / fadeIn, 0.0, 1.0));
+  }
+  double fadeOut = audioFadeOutSeconds_.load(std::memory_order_relaxed);
+  double duration = audioFadeDuration_.load(std::memory_order_relaxed);
+  if (!audioSuppressFadeOut_.load(std::memory_order_relaxed) &&
+      !loopAtPassEnd_.load(std::memory_order_relaxed) && fadeOut > 0.001 && duration > 0.0) {
+    double remaining = std::max(0.0, duration - positionSeconds);
+    gain = std::min(gain, std::clamp(remaining / fadeOut, 0.0, 1.0));
+  }
+  return std::clamp(gain, 0.0, 1.0);
+}
+
+// Set up the duration timer for still-type cues (Image, Pattern, Browser, Composite).
+// If the cue has a stillDurationSeconds > 0, the engine treats it as a timed cue:
+// playback progresses via wall clock and handlePlaybackEnd() fires when duration expires.
+// If stillDurationSeconds is 0, the cue stays on screen indefinitely (manual control only).
+// autoplay=true starts the clock immediately; false pauses at the start.
+void MediaEngine::initStillTimer(const Cue& cue, bool autoplay) {
+  if (cue.stillDurationSeconds > 0.0) {
+    duration_ = cue.stillDurationSeconds;
+    if (autoplay) {
+      playbackClockStart_ = std::chrono::steady_clock::now();
+      playbackStartPosition_ = 0.0;
+      pausedPosition_ = 0.0;
+      state_ = TransportState::Playing;
+    } else {
+      state_ = TransportState::Paused;
+    }
+  } else {
+    duration_ = 0.0;
+    state_ = TransportState::Paused;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// beginTransition — Snapshot the current frame and start a visual transition.
+//
+// Takes ownership of the current texture_ (moves it to transitionTexture_)
+// so the outgoing cue's last frame is preserved. The transition timer doesn't
+// start until the incoming cue's first frame arrives (transitionWaitingForFirstFrame_).
+// This prevents jarring partial-blends when the new cue takes a moment to decode.
+//
+// sourceGain captures the outgoing cue's fade level at the moment of transition —
+// if the outgoing cue was mid-fade, the transition starts from that reduced opacity
+// rather than snapping to full brightness.
+//
+// For cuts (seconds ≤ 0), the old frame is discarded immediately. We don't enter
+// the waiting state because some cue types (e.g. browser on Windows) never produce
+// frames, so waiting would hold the old frame forever.
+// ---------------------------------------------------------------------------
+void MediaEngine::beginTransition(double seconds, TransitionStyle style, float sourceGain) {
+  clearTransitionTexture();
+  if (!texture_) {
+    return;
+  }
+  if (seconds <= 0.001) {
+    // For cuts: discard the old frame immediately.  Entering the
+    // "waiting for first frame" state would hold it on screen until
+    // the next cue renders something — which never happens for cues
+    // that don't produce frames (e.g. browser on Windows).
+    //
+    // NOTE: this is the texture path used by render(), which nothing currently
+    // calls. What the OUTPUT reads is currentFrame(); the black frame between
+    // two cues lived there and is fixed there, by heldFrame_.
+    clearTexture();
+    return;
+  }
+
+  // Move the current frame texture to the transition snapshot
+  transitionTexture_ = texture_;
+  transitionTextureWidth_ = textureWidth_;
+  transitionTextureHeight_ = textureHeight_;
+  texture_ = nullptr;
+  textureWidth_ = 0;
+  textureHeight_ = 0;
+  // THE OUTGOING CUE'S GEOMETRY, captured here and nowhere else it could be.
+  // loadCue() (the caller of beginTransition) overwrites scaleMode_ /
+  // outputScaleX_ / crop*_ with the INCOMING cue's values in the very next
+  // lines after this call returns, so this is the last point at which those
+  // live fields still describe the cue whose frame we just snapshotted.
+  transitionScaleX_ = outputScaleX_;
+  transitionScaleY_ = outputScaleY_;
+  transitionScaleMode_ = scaleMode_;
+  transitionOffsetX_ = outputOffsetX_;
+  transitionOffsetY_ = outputOffsetY_;
+  transitionRotationDegrees_ = outputRotationDegrees_;
+  transitionCropLeft_ = cropLeft_;
+  transitionCropRight_ = cropRight_;
+  transitionCropTop_ = cropTop_;
+  transitionCropBottom_ = cropBottom_;
+  transitionDurationSeconds_ = std::clamp(seconds, 0.0, 10.0);
+  transitionStyle_ = style;
+  transitionSourceGain_ = std::clamp(sourceGain, 0.0f, 1.0f);
+  transitionActive_ = true;
+  transitionWaitingForFirstFrame_ = true;  // timer starts when incoming cue provides first frame
+}
+
+// Release the transition snapshot texture and reset all transition state.
+// Called when a transition completes (progress >= 1.0), when a new cue is
+// loaded (via beginTransition → clearTransitionTexture first), or during stopAll.
+void MediaEngine::clearTransitionTexture() {
+  if (transitionTexture_ && !sdlTornDown()) {
+    SDL_DestroyTexture(transitionTexture_);
+  }
+  transitionTexture_ = nullptr;
+  transitionTextureWidth_ = 0;
+  transitionTextureHeight_ = 0;
+  transitionActive_ = false;
+  transitionWaitingForFirstFrame_ = false;
+  transitionDurationSeconds_ = 0.0;
+  transitionStyle_ = TransitionStyle::Cut;
+  transitionSourceGain_ = 1.0f;
+  transitionScaleX_ = 1.0f;
+  transitionScaleY_ = 1.0f;
+  transitionScaleMode_ = ScaleMode::Fit;
+  transitionOffsetX_ = 0.0f;
+  transitionOffsetY_ = 0.0f;
+  transitionRotationDegrees_ = 0.0f;
+  transitionCropLeft_ = 0.0f;
+  transitionCropRight_ = 0.0f;
+  transitionCropTop_ = 0.0f;
+  transitionCropBottom_ = 0.0f;
+}
+
+// ---------------------------------------------------------------------------
+// The outgoing tail (see beginLiveOutgoing in the header).
+// ---------------------------------------------------------------------------
+namespace {
+std::int64_t steadyNowNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+}  // namespace
+
+void MediaEngine::beginLiveOutgoing(const MediaEngine& outgoing, double seconds,
+                                    TransitionStyle style) {
+  liveOutgoing_ = false;
+  const DecodedFrame* picture = outgoing.currentFrame();
+  if (!picture || seconds <= 0.0001) {
+    return;
+  }
+  // Everything loadCue() captures from its own outgoing cue, taken from the
+  // tail instead: the picture, when the blend started, how long and in what
+  // style, the outgoing cue's own geometry, and how faded it already was.
+  heldFrame_ = *picture;
+  heldFrameSince_ = std::chrono::steady_clock::now();
+  outgoingSeconds_ = std::clamp(seconds, 0.0, 10.0);
+  outgoingStyle_ = style;
+  outgoingCueSnapshot_ = outgoing.activeCueSnapshot_;
+  transitionSourceGain_ = transitionSourceGainForLoadCue(
+    outgoing.activeCue_, outgoing.state_, outgoing.currentVisualFadeGain());
+  liveOutgoing_ = true;
+}
+
+void MediaEngine::beginFrozenOutgoing(DecodedFrame picture, double seconds,
+                                      TransitionStyle style) {
+  liveOutgoing_ = false;
+  if (seconds <= 0.0001 || picture.width <= 0 || picture.height <= 0 || picture.pixels.empty()) {
+    return;
+  }
+  heldFrame_ = std::move(picture);
+  heldFrameSince_ = std::chrono::steady_clock::now();
+  outgoingSeconds_ = std::clamp(seconds, 0.0, 10.0);
+  outgoingStyle_ = style;
+  // The picture is the whole layer as it was drawn, so it goes back exactly
+  // where it came from: stretched over the same rect, no crop, no offset.
+  Cue placed;
+  placed.scaleMode = ScaleMode::Stretch;
+  outgoingCueSnapshot_ = placed;
+  transitionSourceGain_ = 1.0f;
+}
+
+void MediaEngine::feedLiveOutgoingFrame(const DecodedFrame& frame) {
+  if (!liveOutgoingActive()) {
+    return;
+  }
+  // Assigned INTO the held frame rather than replacing the optional: its
+  // address is how the compositor tells "this is still the outgoing hold"
+  // from the incoming cue's first frame (renderDeckLayerIntoOutput), and the
+  // pixel buffer's capacity is reused frame to frame.
+  *heldFrame_ = frame;
+}
+
+void MediaEngine::beginTailFade(double seconds) {
+  audioTapMuted_.store(true, std::memory_order_relaxed);
+  tailFadeStartNs_.store(steadyNowNs(), std::memory_order_relaxed);
+  const auto lengthNs = static_cast<std::int64_t>(std::max(0.0, seconds) * 1e9);
+  tailFadeLengthNs_.store(std::max<std::int64_t>(1, lengthNs), std::memory_order_release);
+}
+
+// Equal power: the outgoing sound falls along a quarter of a cosine, so it
+// and an incoming cue fading in sum to a steady loudness across the blend
+// rather than dipping in the middle the way two straight lines do.
+double MediaEngine::tailFadeGainAtNs(std::int64_t ns) const {
+  const std::int64_t length = tailFadeLengthNs_.load(std::memory_order_acquire);
+  if (length <= 0) {
+    return 1.0;
+  }
+  const double t = std::clamp(
+    static_cast<double>(ns - tailFadeStartNs_.load(std::memory_order_relaxed)) /
+      static_cast<double>(length), 0.0, 1.0);
+  return std::cos(t * 1.5707963267948966);
+}
+
+void MediaEngine::inheritDeckSettingsFrom(const MediaEngine& other) {
+  setVolume(other.volume_.load());
+  setMasterGain(other.masterGain_.load());
+  setAudioDelayMs(other.audioDelayMs_.load());
+  setAudioDeviceChannels(other.audioDeviceChannels_.load());
+  setMonitorMuted(other.monitorMuted());
+  setMainDeviceMuted(other.mainDeviceMuted());
+  forcePixelFrames_ = other.forcePixelFrames_;
+  zeroCopyImport_ = other.zeroCopyImport_;
+  hiddenUploadTarget_ = other.hiddenUploadTarget_;
+  drawsOwnTexture_ = other.drawsOwnTexture_;
+  audioRate_ = other.audioRate_;
+  // Well clear of anything the tail will still number while it fades -- it
+  // keeps counting from the same place -- and of anything already cached.
+  displayFrameSerial_ = other.displayFrameSerial_ + 100000u;
+}
+
+// ---------------------------------------------------------------------------
+// drawTextureFitted — Blit a texture into the target rect with scale/crop/offset.
+//
+// This is the common draw path for both the current frame and the transition
+// snapshot. It applies all per-cue geometry transforms in this order:
+//   1. Crop: compute source rect from crop fractions (left/right/top/bottom)
+//   2. Scale mode: Fit (letterbox), Fill (crop to fill), Stretch, or Unscaled
+//   3. Output scale: per-cue X/Y scale multipliers (outputScaleX/Y)
+//   4. Offset: per-cue X/Y pixel offset (outputOffsetX/Y)
+//   5. Rotation: per-cue rotation in degrees (outputRotationDegrees)
+//   6. Alpha: overall opacity (used for fade and transition blending)
+//
+// Returns true if the texture was drawn, false if inputs were invalid.
+// ---------------------------------------------------------------------------
+bool MediaEngine::drawTextureFitted(SDL_Texture* texture, int width, int height, const SDL_Rect& target, Uint8 alphaValue, bool useOutgoingGeometry) {
+  if (!texture || width <= 0 || height <= 0) {
+    return false;
+  }
+  // WHICH GEOMETRY: the live cue's fields, or the transitionX_ snapshot taken
+  // in beginTransition() for whichever cue's frame this texture actually is.
+  // Reading the live fields unconditionally was the bug (see the comment on
+  // the transition* members in media_engine.hpp) — loadCue() overwrites them
+  // with the INCOMING cue's values before drawTransitionOverlay ever runs, so
+  // the outgoing snapshot rendered with the wrong cue's scale/crop/offset for
+  // the whole transition, not just after it.
+  const float cropLeft = useOutgoingGeometry ? transitionCropLeft_ : cropLeft_;
+  const float cropRight = useOutgoingGeometry ? transitionCropRight_ : cropRight_;
+  const float cropTop = useOutgoingGeometry ? transitionCropTop_ : cropTop_;
+  const float cropBottom = useOutgoingGeometry ? transitionCropBottom_ : cropBottom_;
+  const ScaleMode scaleMode = useOutgoingGeometry ? transitionScaleMode_ : scaleMode_;
+  const float outputScaleX = useOutgoingGeometry ? transitionScaleX_ : outputScaleX_;
+  const float outputScaleY = useOutgoingGeometry ? transitionScaleY_ : outputScaleY_;
+  const float outputOffsetX = useOutgoingGeometry ? transitionOffsetX_ : outputOffsetX_;
+  const float outputOffsetY = useOutgoingGeometry ? transitionOffsetY_ : outputOffsetY_;
+  const float outputRotationDegrees = useOutgoingGeometry ? transitionRotationDegrees_ : outputRotationDegrees_;
+
+  // Step 1: Compute the source rect after cropping (fractions → pixel offsets)
+  int cropL = std::clamp(static_cast<int>(std::lround(static_cast<double>(width) * cropLeft)), 0, width - 1);
+  int cropR = std::clamp(static_cast<int>(std::lround(static_cast<double>(width) * cropRight)), 0, width - 1);
+  int cropT = std::clamp(static_cast<int>(std::lround(static_cast<double>(height) * cropTop)), 0, height - 1);
+  int cropB = std::clamp(static_cast<int>(std::lround(static_cast<double>(height) * cropBottom)), 0, height - 1);
+  int srcW = std::max(1, width - cropL - cropR);
+  int srcH = std::max(1, height - cropT - cropB);
+  SDL_Rect source {cropL, cropT, srcW, srcH};
+
+  // Step 2: Compute the scale factor based on the chosen scale mode
+  double scale;
+  if (scaleMode == ScaleMode::Fit) {
+    // Letterbox: scale to fit within target, preserving aspect ratio
+    scale = std::min(
+      static_cast<double>(target.w) / static_cast<double>(srcW),
+      static_cast<double>(target.h) / static_cast<double>(srcH)
+    );
+  } else if (scaleMode == ScaleMode::Fill) {
+    // Fill: scale to cover target entirely, cropping overflow
+    scale = std::max(
+      static_cast<double>(target.w) / static_cast<double>(srcW),
+      static_cast<double>(target.h) / static_cast<double>(srcH)
+    );
+  } else if (scaleMode == ScaleMode::Stretch) {
+    scale = 1.0;  // stretch handles dimensions separately below
+  } else {
+    scale = 1.0;  // Unscaled: 1:1 pixel mapping
+  }
+
+  // Step 3: Compute draw dimensions based on scale mode
+  int drawW, drawH;
+  if (scaleMode == ScaleMode::Stretch) {
+    drawW = target.w;  // fill target exactly, ignoring aspect ratio
+    drawH = target.h;
+  } else if (scaleMode == ScaleMode::Unscaled) {
+    drawW = srcW;  // native pixel size, may be smaller or larger than target
+    drawH = srcH;
+  } else {
+    drawW = std::max(1, static_cast<int>(std::round(srcW * scale)));
+    drawH = std::max(1, static_cast<int>(std::round(srcH * scale)));
+  }
+
+  // Step 4: Apply per-cue output scale (additional zoom) and center with offset
+  int scaledW = std::max(1, static_cast<int>(drawW * outputScaleX));
+  int scaledH = std::max(1, static_cast<int>(drawH * outputScaleY));
+  SDL_Rect destination {
+    target.x + (target.w - scaledW) / 2 + static_cast<int>(outputOffsetX),
+    target.y + (target.h - scaledH) / 2 + static_cast<int>(outputOffsetY),
+    scaledW,
+    scaledH
+  };
+
+  // Step 5: Blit with alpha blending and rotation around the center point
+  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+  SDL_SetTextureAlphaMod(texture, alphaValue);
+  SDL_Point center {destination.w / 2, destination.h / 2};
+  SDL_RenderTextureRotated(outputRenderer_, texture, &source, &destination, outputRotationDegrees, &center, SDL_FLIP_NONE);
+  SDL_SetTextureAlphaMod(texture, 255);  // reset alpha mod to avoid leaking to other draws
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// drawTransitionOverlay — Render the transition blend between outgoing and incoming cues.
+//
+// Two transition styles:
+//   Crossfade: outgoing frame fades out (alpha decreasing) while incoming draws at full
+//   DipBlack:  first half fades outgoing to black, second half fades incoming from black
+//
+// State machine:
+//   1. WaitingForFirstFrame: hold outgoing at sourceGain opacity until incoming arrives
+//   2. Once incoming frame is drawn, start the real timer
+//   3. Animate progress 0→1 over transitionDurationSeconds_
+//   4. At progress=1.0, clean up (clearTransitionTexture)
+//
+// The drewCurrent flag tells us whether render() successfully drew the incoming cue's
+// frame. If false, we're still waiting for the first decode — keep showing outgoing.
+// ---------------------------------------------------------------------------
+void MediaEngine::drawTransitionOverlay(const SDL_Rect& target, bool drewCurrent) {
+  if (!transitionActive_) {
+    return;
+  }
+
+  // Phase 1: waiting for the incoming cue to produce its first frame
+  if (transitionWaitingForFirstFrame_) {
+    if (drewCurrent) {
+      // First frame arrived — start the transition timer
+      transitionWaitingForFirstFrame_ = false;
+      transitionStartedAt_ = std::chrono::steady_clock::now();
+      if (transitionDurationSeconds_ <= 0.001) {
+        clearTransitionTexture();  // instant cut
+        return;
+      }
+    } else {
+      // Still waiting — show the outgoing frame at its captured fade level
+      Uint8 waitAlpha = static_cast<Uint8>(transitionSourceGain_ * 255.0f);
+      drawTextureFitted(transitionTexture_, transitionTextureWidth_, transitionTextureHeight_, target, waitAlpha, true);
+      if (waitAlpha < 255) {
+        // If outgoing was partially faded, fill the rest with black
+        SDL_SetRenderDrawBlendMode(outputRenderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, 255 - waitAlpha);
+        SDL_RenderFillRect(outputRenderer_, nullptr);
+        SDL_SetRenderDrawBlendMode(outputRenderer_, SDL_BLENDMODE_NONE);
+      }
+      return;
+    }
+  }
+
+  // Phase 2: transition is actively animating
+  double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - transitionStartedAt_).count();
+  double progress = transitionDurationSeconds_ <= 0.0001 ? 1.0 : std::clamp(elapsed / transitionDurationSeconds_, 0.0, 1.0);
+  if (progress >= 1.0) {
+    clearTransitionTexture();  // transition complete — release snapshot
+    return;
+  }
+
+  if (transitionStyle_ == TransitionStyle::DipBlack) {
+    // Dip-to-black: two halves
+    if (progress < 0.5) {
+      // First half: outgoing fades to black (0→100% black overlay)
+      Uint8 srcA = static_cast<Uint8>(transitionSourceGain_ * 255.0f);
+      drawTextureFitted(transitionTexture_, transitionTextureWidth_, transitionTextureHeight_, target, srcA, true);
+      SDL_SetRenderDrawBlendMode(outputRenderer_, SDL_BLENDMODE_BLEND);
+      double blackAlpha = std::clamp(progress * 2.0, 0.0, 1.0);
+      if (transitionSourceGain_ < 1.0f) blackAlpha = std::max(blackAlpha, 1.0 - transitionSourceGain_);
+      SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, static_cast<Uint8>(blackAlpha * 255.0));
+      SDL_RenderFillRect(outputRenderer_, nullptr);
+    } else {
+      // Second half: incoming emerges from black (100%→0% black overlay)
+      if (!drewCurrent) {
+        SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, 255);
+        SDL_RenderFillRect(outputRenderer_, nullptr);
+      }
+      double fadeOutBlack = std::clamp(1.0 - (progress - 0.5) * 2.0, 0.0, 1.0);
+      SDL_SetRenderDrawBlendMode(outputRenderer_, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(outputRenderer_, 0, 0, 0, static_cast<Uint8>(fadeOutBlack * 255.0));
+      SDL_RenderFillRect(outputRenderer_, nullptr);
+    }
+    return;
+  }
+
+  // Crossfade: outgoing fades out linearly over the transition duration
+  Uint8 alphaValue = static_cast<Uint8>(transitionSourceGain_ * std::clamp(1.0 - progress, 0.0, 1.0) * 255.0);
+  drawTextureFitted(transitionTexture_, transitionTextureWidth_, transitionTextureHeight_, target, alphaValue, true);
+}
+
+// ---------------------------------------------------------------------------
+// handlePlaybackEnd — Respond when playback reaches the end of the cue duration.
+//
+// The behaviour depends on the cue's end action (resolvedCueEndAction):
+//   Loop:        seek back to 0, suppress fades (seamless loop), keep playing
+//   PauseOnLast: pause on the final frame (hold visible), mute audio
+//   Stop:        stop transport, set reachedEnd_ flag for the transport handler
+//                to pick up (which may auto-advance to the next cue)
+//
+// clearVisualOnReachedEnd_ controls whether finalizeReachedEnd() clears the
+// texture (go to black) or holds the last frame. Loop/PauseOnLast keep the
+// frame; Stop clears it.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// THE LOOP SEAM.
+//
+// A loop used to be seek(0): every queued sample of sound thrown away, both
+// decoders stopped and the file opened again, so every pass of a looping
+// clip ended in a gap -- a held picture, then silence, at the seam. Now the
+// in-process decoders go round by themselves at the end of a pass (rewind on
+// the open pipeline, startInprocDecoders), the frame numbers carry on, and
+// the engine wraps its clock -- and the audio clock with it -- in one tick
+// at the exact end of the pass, while what is queued plays straight through.
+// Anything that cannot do that (a decoder that stopped instead, loop switched
+// on after the decoder had finished, the subprocess decode) goes round the
+// old way, restartLoopFromTop().
+// ---------------------------------------------------------------------------
+bool MediaEngine::seamlessLoopWanted() const {
+  if (!activeCue_ || !inprocDecodeActive_ || loopPassSeconds_ <= 0.0 || liveSourceNoEnd_ ||
+      devampRequested_) {
+    return false;
+  }
+  if (resolvedCueEndAction(*activeCue_) != CueEndAction::Loop) {
+    return false;
+  }
+  // The last of N repeats ends the cue rather than going round again.
+  return activeCue_->loopCount <= 0 || loopPassesPlayed_ + 1 < activeCue_->loopCount;
+}
+
+bool MediaEngine::seamlessLoopInFlight() const {
+  if (!loopAtPassEnd_.load() || !decodersRunning_ || loopPassSeconds_ <= 0.0) {
+    return false;
+  }
+  // A decoder that stopped at the end instead of going round leaves nothing
+  // to wrap onto.
+  if (loopPassFrames_ > 0 ? decoderEof_.load() : audioDecodeEnded_.load()) {
+    return false;
+  }
+  // Nor does one that has not got round half a second after the seam.
+  return rawPlayingPosition() < loopPassSeconds_ + 0.5;
+}
+
+double MediaEngine::rawPlayingPosition() const {
+  if (state_ != TransportState::Playing) {
+    return currentPosition_;
+  }
+  const double elapsed =
+    std::chrono::duration<double>(std::chrono::steady_clock::now() - playbackClockStart_).count() *
+    playbackSpeed_ * tapeSpeed_ * clockTrim_;
+  return playbackStartPosition_ + elapsed;
+}
+
+bool MediaEngine::wrapLoopSeamlessly(double rawPosition) {
+  const std::uint64_t next = passesWrapped_ + 1;
+  if (loopPassFrames_ > 0 && decoderEof_.load()) {
+    return false;   // the picture stopped instead of going round
+  }
+  // Both halves must already be into the next pass (a sound decoder that has
+  // stopped has nothing to wait for).
+  if (loopPassFrames_ > 0 && videoPassesStarted_.load() < next) {
+    return false;
+  }
+  if (!audioDecodeEnded_.load() && audioPassesStarted_.load() < next) {
+    return false;
+  }
+  const double over = std::clamp(rawPosition - loopPassSeconds_, 0.0, loopPassSeconds_);
+  playbackStartPosition_ = over;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  currentPosition_ = over;
+  pausedPosition_ = over;
+  // The sound card's clock counts on through the seam; take the same pass off
+  // it, so the steering compares like with like.
+  audioClockStartSeconds_ -= loopPassSeconds_;
+  if (lastAudioClockSeconds_ >= 0.0) {
+    lastAudioClockSeconds_ -= loopPassSeconds_;
+  }
+  indexBase_ += loopPassFrames_;
+  ++passesWrapped_;
+  ++loopPassesPlayed_;
+  avJumpExpected_ = true;   // a deliberate re-base, not a jump
+  playedToEnd_ = false;
+  suppressFadeInForCurrentCue_ = true;
+  suppressVisualFadeOutForCurrentCue_ = true;
+  syncAudioFadeParams();
+  nextPausePointIdx_ = 0;
+  while (nextPausePointIdx_ < pausePoints_.size() && pausePoints_[nextPausePointIdx_] <= over) {
+    ++nextPausePointIdx_;
+  }
+  // The last of N repeats has just begun: this time the decoders stop.
+  loopAtPassEnd_.store(seamlessLoopWanted());
+  return true;
+}
+
+// Every tick: keep the decoders told whether to go round, and wrap the clock
+// at the exact end of a pass once both are into the next one.
+void MediaEngine::serviceLoopSeam() {
+  loopAtPassEnd_.store(seamlessLoopWanted());
+  if (state_ != TransportState::Playing || loopPassSeconds_ <= 0.0 || !decodersRunning_) {
+    return;
+  }
+  const double raw = rawPlayingPosition();
+  if (raw >= loopPassSeconds_) {
+    wrapLoopSeamlessly(raw);
+  }
+}
+
+// Go round by starting the decode again -- the gap at the seam -- for what
+// cannot loop seamlessly.
+void MediaEngine::restartLoopFromTop() {
+  ++loopPassesPlayed_;   // before the restart, which asks seamlessLoopWanted()
+  suppressFadeInForCurrentCue_ = true;
+  suppressVisualFadeOutForCurrentCue_ = true;
+  seek(0.0, false);  // restart decode from beginning
+  state_ = TransportState::Playing;
+  playbackClockStart_ = std::chrono::steady_clock::now();
+  playbackStartPosition_ = 0.0;
+  pausedPosition_ = 0.0;
+  if (audioStream_) {
+    setOutputPaused(false);  // ensure audio is unpaused
+  }
+}
+
+void MediaEngine::handlePlaybackEnd() {
+  if (!activeCue_) {
+    return;
+  }
+  CueEndAction act = resolvedCueEndAction(*activeCue_);
+  // DEVAMPED: this loop point is the end. What the cue does next is what it
+  // would have done with no loop -- hold its last frame, or end and let the
+  // transport's continue/advance logic take over.
+  if (act == CueEndAction::Loop && devampRequested_) {
+    devampRequested_ = false;
+    act = activeCue_->pauseOnLastFrame ? CueEndAction::PauseOnLast : CueEndAction::AutoNext;
+  }
+  // REPEATS (Cue::loopCount, shown as "3x"): the last of the passes ends the
+  // cue the way a devamped loop does. The count was shown and edited but
+  // never read, so a cue set to play three times went round for ever.
+  if (act == CueEndAction::Loop && activeCue_->loopCount > 0 &&
+      loopPassesPlayed_ + 1 >= activeCue_->loopCount) {
+    act = activeCue_->pauseOnLastFrame ? CueEndAction::PauseOnLast : CueEndAction::AutoNext;
+  }
+
+  if (act == CueEndAction::Loop) {
+    // The decoders are already into the next pass; the seam in update()
+    // wraps the clock at the exact end of this one. Nothing to do here.
+    if (seamlessLoopInFlight()) {
+      return;
+    }
+    restartLoopFromTop();
+    return;
+  }
+  if (act == CueEndAction::PauseOnLast) {
+    // Freeze on the final frame — useful for "reveal" cues that hold an image
+    state_ = TransportState::Paused;
+    pausedPosition_ = duration_;
+    currentPosition_ = duration_;
+    clearVisualOnReachedEnd_ = false;  // keep last frame visible
+    playedToEnd_ = true;
+    if (audioStream_) {
+      setOutputPaused(true);
+    }
+    // A HOLDING CUE SET TO CONTINUE FOLLOW STILL ENDS. The transport only
+    // advances on reachedEnd(), and a hold never raised it -- so FOLLOW, whose
+    // whole meaning is "when this one finishes", never fired on any cue that
+    // holds its last frame, which is the default. Raised for FOLLOW only, so
+    // every other holding cue behaves exactly as it did.
+    if (activeCue_->continueMode == CueContinueMode::AutoFollow) {
+      reachedEnd_ = true;
+    }
+    return;
+  }
+  // Default: stop and signal end-of-playback (the transport handler decides
+  // whether to auto-advance, clear, or wait for operator input)
+  state_ = TransportState::Stopped;
+  pausedPosition_ = duration_;
+  currentPosition_ = duration_;
+  clearVisualOnReachedEnd_ = true;  // go to black when finalized
+  playedToEnd_ = true;
+  if (audioStream_) {
+    setOutputPaused(true);
+  }
+  reachedEnd_ = true;  // consumed by reachedEnd() in the next update cycle
+}
+
+// Release the main frame GPU texture. Called when clearing the deck,
+// loading a new cue, or during stopAll cleanup.
+void MediaEngine::clearTexture() {
+  // An imported texture is the importer's, not ours: drop the pointer and let
+  // the importer free what it made, since the decoder's buffers are changing.
+  if (texture_ && !sdlTornDown() && !textureImported_) {
+    SDL_DestroyTexture(texture_);
+  }
+  textureImported_ = false;
+#if defined(__linux__) && DECKBOY_INPROC_DECODE
+  if (drmImporter_ && !sdlTornDown()) {
+    drmImporter_->clear();
+  }
+#endif
+  texture_ = nullptr;
+  textureWidth_ = 0;
+  textureHeight_ = 0;
+  textureFormat_ = 0;
+  lastUploadedFrameIndex_ = static_cast<std::uint64_t>(-1);
+}
+
+// One frame's upload, into the process-wide stage totals (stage_timings.hpp).
+void MediaEngine::countUpload(std::chrono::steady_clock::time_point started) {
+  deckboy::libav::StageTimings& t = deckboy::libav::stageTimings();
+  t.uploadNs += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now() - started).count());
+  t.uploads += 1;
+}
+
+// A decoder's DRM-PRIME frame, shown from its own buffer (see
+// engine/drm_prime_import.hpp). texture_ then points into the importer's cache
+// rather than at a texture this engine owns, which textureImported_ records.
+void MediaEngine::showImportedFrame(const DecodedFrame& frame) {
+#if defined(__linux__) && DECKBOY_INPROC_DECODE
+  if (!outputRenderer_ || !frame.gpuTexture) {
+    return;
+  }
+  if (!drmImporter_) {
+    drmImporter_.reset(new deckboy::engine::DrmPrimeImporter());
+  }
+  SDL_Texture* imported = drmImporter_->textureFor(
+    outputRenderer_, static_cast<const AVDRMFrameDescriptor*>(frame.gpuTexture),
+    frame.width, frame.height, frameColorspace(frame));
+  if (!imported) {
+    return;   // the last picture stays up rather than a wrong one
+  }
+  if (texture_ && !textureImported_) {
+    SDL_DestroyTexture(texture_);
+  }
+  texture_ = imported;
+  textureImported_ = true;
+  textureWidth_ = frame.width;
+  textureHeight_ = frame.height;
+  textureFormat_ = SDL_PIXELFORMAT_NV12;
+#else
+  (void)frame;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// uploadFrame — Push a decoded frame from CPU to its GPU texture.
+//
+// Recreates the texture whenever dimensions OR pixel format change, so a
+// cue switch from an effects-enabled RGBA cue to a plain NV12 cue rebuilds
+// the texture once and then streams updates without further churn.
+//
+// NV12 frames take the fast path: SDL_UpdateNVTexture with the Y plane
+// followed by the interleaved UV plane. They do not go through the effects
+// scratch buffer — startDecoderThreads only picks NV12 when the cue had no
+// chroma key or color controls active at TAKE time, so there is nothing to
+// apply here. Toggling effects live on an NV12 cue is silently ignored
+// until the next reload; the trade-off is recorded in DEVNOTES.
+//
+// RGBA frames keep the original CPU-effects pipeline: if effects are
+// active, pixels are copied into keyedPixelsScratch_ and mutated there so
+// the source frame stays intact for re-processing on parameter changes.
+// ---------------------------------------------------------------------------
+void MediaEngine::uploadFrame(const DecodedFrame& frame) {
+  if (!drawsOwnTexture_) {
+    return;   // nothing will draw it (setDrawsOwnTexture)
+  }
+#if defined(__linux__) && DECKBOY_INPROC_DECODE
+  if (frame.gpuKind == DecodedFrame::GpuKind::DrmPrime) {
+    showImportedFrame(frame);
+    return;
+  }
+#endif
+  if (frame.isGpu()) {
+    // Zero-copy frame: composited from its wrapped D3D11 texture at the
+    // output bridge — nothing to upload on the deck's hidden renderer.
+    return;
+  }
+  if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+    return;
+  }
+  const Uint32 wantFormat = sdlPixelFormat(frame.format);
+  const bool sizeChanged = textureWidth_ != frame.width || textureHeight_ != frame.height;
+  const bool formatChanged = textureFormat_ != wantFormat ||
+                            deckboyTextureColorspace(texture_) != frameColorspace(frame);
+  if (!texture_ || sizeChanged || formatChanged) {
+    clearTexture();
+    texture_ = deckboyCreateTexture(
+      outputRenderer_,
+      wantFormat,
+      SDL_TEXTUREACCESS_STREAMING,
+      frame.width,
+      frame.height, frameColorspace(frame)
+    );
+    if (!texture_) {
+      return;
+    }
+    textureWidth_ = frame.width;
+    textureHeight_ = frame.height;
+    textureFormat_ = wantFormat;
+  }
+  if (frame.format == FramePixelFormat::NV12 || frame.format == FramePixelFormat::P010) {
+    // P010 is an HDR stream's frame (startSrtDecoder): NV12's two planes at
+    // two bytes a sample.
+    const int bytesPerSample = frame.format == FramePixelFormat::P010 ? 2 : 1;
+    const std::uint8_t* y = frame.pixels.data();
+    const std::uint8_t* uv = y + static_cast<std::size_t>(frame.width) * static_cast<std::size_t>(frame.height) *
+                                 bytesPerSample;
+    const auto uploadStarted = std::chrono::steady_clock::now();
+    SDL_UpdateNVTexture(texture_, nullptr, y, frame.width * bytesPerSample, uv, frame.width * bytesPerSample);
+    countUpload(uploadStarted);
+    return;
+  }
+  // RGBA path: apply per-pixel effects (chroma key + color controls) if any
+  // are active. The scratch copy keeps the source frame reusable for the next
+  // upload — needed because render() may call uploadFrame again when effect
+  // parameters change without a new frame arriving.
+  const std::uint8_t* uploadPixels = frame.pixels.data();
+  if (chromaKeyEnabled_ || colorControlsActive(brightness_, contrast_, saturation_, hueShift_)) {
+    keyedPixelsScratch_.assign(frame.pixels.begin(), frame.pixels.end());
+    applyCueVisualEffectsToPixels(
+      keyedPixelsScratch_,
+      chromaKeyEnabled_,
+      chromaKeyColor_,
+      chromaKeyTolerance_,
+      chromaKeySoftness_,
+      brightness_,
+      contrast_,
+      saturation_,
+      hueShift_);
+    uploadPixels = keyedPixelsScratch_.data();
+  }
+  // LOCK, don't UPDATE. SDL_UpdateTexture on a STREAMING texture makes the
+  // backend stage the pixels through a temporary resource, and when updates
+  // outpace presents those temporaries pile up: measured on a 4K text-mode
+  // synth cue, 250 MB to 3.4 GB of committed memory in two seconds, and a
+  // 32 GB machine down to 100 MB free. Proven by skipping this one call --
+  // the same cue then held flat at 357 MB.
+  //
+  // Lock/unlock is what STREAMING access is for: it maps the texture's own
+  // storage and discards the previous contents, so there is nothing to
+  // accumulate. SDL_UpdateTexture stays as the fallback for the case where a
+  // lock is refused, which is rare but must not black the picture out.
+  const auto uploadStarted = std::chrono::steady_clock::now();
+  writeStreamingTexture(texture_, uploadPixels, frame.width, frame.height);
+  countUpload(uploadStarted);
+
+  // RETIRE THE UPLOAD.
+  //
+  // Every CPU-to-GPU texture write stages through a temporary, and the driver
+  // holds those temporaries until a Present on that swapchain retires them.
+  // Each deck's engine draws into a window created HIDDEN purely as an upload
+  // target (createDeckRuntime), and nothing ever presents it -- so the staged
+  // copies accumulated one whole frame at a time, for as long as a cue was
+  // live, and were never freed.
+  //
+  // Measured on a 4K display: about 16 MB/s with the video synth's small
+  // internal raster, and 1.6 GB/s in text mode, which is the one mode that has
+  // to emit at full size. That is 250 MB to 3.4 GB in two seconds, and a 32 GB
+  // machine down to 100 MB free. It was never specific to the synth -- every
+  // cue leaked in proportion to the bytes it uploaded; the synth in text mode
+  // was simply the fastest way to see it.
+  //
+  // Bisected to here: skipping the write holds flat, writing a single pixel
+  // holds flat, copying the same bytes into our own buffer holds flat, and
+  // adding this one Present holds flat. It is not a D3D11 quirk -- the OpenGL
+  // backend behaves identically -- and SDL_FlushRenderer does NOT help,
+  // because it flushes SDL's command queue rather than the device.
+  //
+  // Presenting a hidden window costs nothing anybody sees: there is no
+  // composition and no vsync wait on an occluded swapchain. Only the deck's
+  // private target is presented this way. An engine drawing into a real
+  // output, or into the control window, leaves the presenting to whoever owns
+  // that renderer -- doing it here would tear the picture.
+  if (hiddenUploadTarget_) {
+    SDL_RenderPresent(outputRenderer_);
+  }
+}
+
+// One row-aware copy into a locked streaming texture. The pitch the backend
+// hands back is NOT always the row length -- it is whatever alignment the
+// driver wants -- so a single memcpy of the whole buffer is only valid when
+// they happen to match.
+void MediaEngine::writeStreamingTexture(SDL_Texture* texture,
+                                        const std::uint8_t* rgba,
+                                        int width, int height) {
+  if (!texture || !rgba || width <= 0 || height <= 0) {
+    return;
+  }
+  void* dst = nullptr;
+  int pitch = 0;
+  if (!SDL_LockTexture(texture, nullptr, &dst, &pitch) || !dst) {
+    SDL_UpdateTexture(texture, nullptr, rgba, width * 4);
+    return;
+  }
+  const std::size_t rowBytes = static_cast<std::size_t>(width) * 4;
+  if (pitch == static_cast<int>(rowBytes)) {
+    std::memcpy(dst, rgba, rowBytes * static_cast<std::size_t>(height));
+  } else {
+    std::uint8_t* out = static_cast<std::uint8_t*>(dst);
+    for (int y = 0; y < height; ++y) {
+      std::memcpy(out + static_cast<std::size_t>(y) * pitch,
+                  rgba + static_cast<std::size_t>(y) * rowBytes, rowBytes);
+    }
+  }
+  SDL_UnlockTexture(texture);
+}
+
+// Join the still-image decode thread and clean up its process and pending frame.
+// Must be called before starting a new image decode (loadStillFrame) to avoid
+// leaking the previous thread. Uses the two-phase shutdown pattern: kill the
+// process first (unblocks readExact in the thread), then join.
+void MediaEngine::stopImageThread() {
+  // Announce the kill BEFORE it happens: killing the process makes the decode
+  // thread's pipe read fail, and without this flag that read would be
+  // indistinguishable from a genuine decode failure and would false-alarm the
+  // operator on every ordinary cue switch.
+  imageCancelRequested_.store(true, std::memory_order_release);
+  imageProcess_.killProcessOnly();
+  if (imageThread_.joinable()) {
+    imageThread_.join();
+  }
+  imageProcess_.stop();
+  imageCancelRequested_.store(false, std::memory_order_release);
+  // Clear any unconsumed failure latch here — this is the single point every
+  // new still decode passes through (loadStillFrame calls it first), so a
+  // failure from a previous cue can never leak a stale toast onto the next one.
+  imageDecodeFailed_.store(false, std::memory_order_release);
+  std::lock_guard<std::mutex> lk(imageMutex_);
+  pendingImageFrame_.reset();
+  imageFramePending_.store(false);
+}
+
+// Query the actual output dimensions from the SDL renderer. Falls back to
+// kOutputWidth x kOutputHeight (1280x720) if the renderer isn't available.
+// Used by decode functions to size frames appropriately when the cue doesn't
+// specify explicit dimensions (e.g. un-ingested cues, live streams).
+std::pair<int, int> MediaEngine::currentOutputSizeHint() const {
+  // The app-provided program-output raster wins: patterns must stay
+  // pixel-mapped to the display the operator actually selected, live.
+  if (outputSizeProvider_) {
+    OutputModeHint mode = outputSizeProvider_();
+    if (mode.width > 0 && mode.height > 0) {
+      return {mode.width, mode.height};
+    }
+  }
+  int w = kOutputWidth;
+  int h = kOutputHeight;
+  if (outputRenderer_) {
+    int rw = 0;
+    int rh = 0;
+    if (SDL_GetCurrentRenderOutputSize(outputRenderer_, &rw, &rh) && rw > 0 && rh > 0) {
+      w = rw;
+      h = rh;
+    }
+  }
+  return {w, h};
+}
+
+// Resolve the media file path for a cue. If a CuePathResolver callback was
+// provided (e.g. to transform relative paths to absolute), it gets first
+// priority. Falls back to cue.path if the resolver returns empty.
+// Datamosh only applies to a file-backed video cue that has actually been
+// prepared. Everything else - stills, patterns, browser, live sources, and an
+// unprepared cue - reports false, so the toggle can say "not prepared" instead
+// of silently doing nothing.
+bool MediaEngine::datamoshActiveForCue(const Cue& cue) const {
+  if (!cue.datamoshEnabled || cue.kind != CueKind::Video) return false;
+  if (cue.moshPath.empty()) return false;
+  std::error_code ec;
+  return dbfs::exists(cue.moshPath, ec);
+}
+
+std::string MediaEngine::mediaPathForCue(const Cue& cue) const {
+  if (cuePathResolver_) {
+    std::string resolved = cuePathResolver_(cue);
+    if (!trim(resolved).empty()) {
+      return resolved;
+    }
+  }
+  return cue.path;
+}
+
+// ---------------------------------------------------------------------------
+// loadStillFrame — Async-decode a single frame from an image file.
+//
+// Spawns ffmpeg to decode one frame (the first) at the target resolution,
+// piping raw RGBA via stdout. The decode runs on imageThread_ to avoid
+// blocking the main thread. When complete, the frame is placed in
+// pendingImageFrame_ and the atomic flag imageFramePending_ is set.
+// The main thread picks it up in update() on the next tick.
+//
+// Dimensions are clamped to the output resolution — no point decoding a
+// 4K image when the output is 1280x720. Uses "neighbor" scaling (nearest-
+// neighbor) since still images are often pixel-art or diagrams.
+// ---------------------------------------------------------------------------
+void MediaEngine::loadStillFrame(const Cue& cue) {
+  stopImageThread();
+  std::string mediaPath = mediaPathForCue(cue);
+  if (mediaPath.empty()) {
+    return;
+  }
+
+  // Determine decode dimensions: use cue size if available, else output size
+  auto [capW, capH] = currentOutputSizeHint();
+  int w = cue.width > 0 ? cue.width : capW;
+  int h = cue.height > 0 ? cue.height : capH;
+  // Downscale to output resolution if the image is larger (save decode time + memory)
+  if (w > capW || h > capH) {
+    double scale = std::min(
+      static_cast<double>(capW) / w,
+      static_cast<double>(capH) / h
+    );
+    w = std::max(1, static_cast<int>(w * scale));
+    h = std::max(1, static_cast<int>(h * scale));
+  }
+
+  // HEIF/HEIC (iPhone photos) are reconstructed from tiles through an INTERNAL
+  // complex filtergraph, and ffmpeg refuses to also apply a simple `-vf` filter
+  // on top of that ("Simple and complex filtering cannot be used together for
+  // the same stream") — so `-vf scale` produced zero bytes and the still cue
+  // loaded but never showed a frame. The fix is to express the scale as a
+  // `-filter_complex` graph, which composes with the tile reconstruction. That
+  // form works for ordinary images too, but `-vf` is kept as the default so the
+  // long-proven PNG/JPG path is untouched; only the complex-graph formats take
+  // the new branch.
+  const std::string scaleExpr =
+    "scale=" + std::to_string(w) + ":" + std::to_string(h) + ":flags=neighbor";
+  // Extension check without pulling in <filesystem> here: take the tail after
+  // the last '.' and lowercase it.
+  std::string lowerExt;
+  if (auto dot = mediaPath.find_last_of('.'); dot != std::string::npos) {
+    lowerExt = mediaPath.substr(dot);
+    std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  }
+  const bool complexGraphFormat = (lowerExt == ".heic" || lowerExt == ".heif");
+
+  std::vector<std::string> stillArgs = {
+    "ffmpeg", "-hide_banner", "-loglevel", "error",
+    "-i", mediaPath,
+    "-frames:v", "1",
+  };
+  if (complexGraphFormat) {
+    stillArgs.push_back("-filter_complex");
+    stillArgs.push_back("[0:v]" + scaleExpr + "[o]");
+    stillArgs.push_back("-map");
+    stillArgs.push_back("[o]");
+  } else {
+    stillArgs.push_back("-vf");
+    stillArgs.push_back(scaleExpr);
+  }
+  stillArgs.push_back("-f");
+  stillArgs.push_back("rawvideo");
+  stillArgs.push_back("-pix_fmt");
+  stillArgs.push_back("rgba");
+  stillArgs.push_back("pipe:1");
+
+  if (!spawnPipeProcess(imageProcess_, stillArgs)) {
+    return;
+  }
+
+  // Read the single decoded frame on a background thread
+  const size_t frameBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
+  int imageFd = imageProcess_.readFd;
+  imageThread_ = std::thread([this, w, h, frameBytes, imageFd]() {
+    DecodedFrame frame;
+    frame.width = w;
+    frame.height = h;
+    frame.index = 0;
+    frame.pixels.resize(frameBytes);
+    if (readExact(imageFd, frame.pixels.data(), frameBytes)) {
+      std::lock_guard<std::mutex> lk(imageMutex_);
+      pendingImageFrame_ = std::move(frame);
+      imageFramePending_.store(true);  // signal main thread via update()
+    } else if (!imageCancelRequested_.load(std::memory_order_acquire)) {
+      // The pipe closed before a full frame arrived and we did NOT ask for that
+      // (a cue switch would have — stopImageThread sets imageCancelRequested_
+      // before killing the process). So this is a real decode failure: ffmpeg
+      // could not produce the still. Latch it for the app to report.
+      imageDecodeFailed_.store(true, std::memory_order_release);
+    }
+  });
+}
+
+// Generate a procedural pattern frame and upload it immediately.
+// Called once on cue load for pattern cues. For animated patterns,
+// rebuildPatternFrame() is called each frame to update the animation.
+// animTime=0.0 gives the initial static state of the pattern.
+void MediaEngine::loadPatternFrame(const Cue& cue) {
+  auto [fallbackW, fallbackH] = currentOutputSizeHint();
+  auto frame = buildPatternFrame(cue, 0.0, fallbackW, fallbackH);
+  if (frame) {
+    frame->index = ++displayFrameSerial_;
+    displayFrame_ = std::move(frame);
+    uploadFrame(*displayFrame_);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// loadSourceFrame — Generate a placeholder frame for source capture cues.
+//
+// Source cues (WindowSource, Camera, Syphon) don't have media files to decode.
+// Before capture starts, we show a placeholder frame: horizontal stripes in
+// the DMG-inspired palette with a thin accent-color border inset. The color
+// palette varies by source kind so the operator can visually distinguish them:
+//   WindowSource: green tones (default DMG palette)
+//   Camera:       teal/emerald tones
+//   Syphon:       olive/khaki tones
+//
+// This frame is replaced by live capture data once startSourceCapture() runs.
+// ---------------------------------------------------------------------------
+void MediaEngine::loadSourceFrame(const Cue& cue) {
+  auto [fallbackW, fallbackH] = currentOutputSizeHint();
+  int w = cue.width > 0 ? cue.width : fallbackW;
+  int h = cue.height > 0 ? cue.height : fallbackH;
+  w = std::clamp(w, 64, 3840);
+  h = std::clamp(h, 64, 2160);
+
+  DecodedFrame frame;
+  frame.width = w;
+  frame.height = h;
+  frame.index = 0;
+  frame.pixels.resize(static_cast<size_t>(w) * static_cast<size_t>(h) * 4u, 0);
+
+  // Select color palette based on source kind
+  SDL_Color bg {48, 98, 48, 255};
+  SDL_Color stripe {15, 56, 15, 255};
+  SDL_Color accent {139, 172, 15, 255};
+  if (cue.kind == CueKind::Camera) {
+    bg = SDL_Color {36, 82, 54, 255};
+    stripe = SDL_Color {16, 38, 28, 255};
+    accent = SDL_Color {155, 208, 125, 255};
+  } else if (cue.kind == CueKind::Syphon) {
+    bg = SDL_Color {56, 62, 30, 255};
+    stripe = SDL_Color {28, 34, 16, 255};
+    accent = SDL_Color {177, 188, 94, 255};
+  }
+
+  // Fill with alternating horizontal stripes (14px each)
+  for (int y = 0; y < h; ++y) {
+    bool stripeRow = ((y / 14) % 2) == 0;
+    SDL_Color rowColor = stripeRow ? bg : stripe;
+    for (int x = 0; x < w; ++x) {
+      size_t offset = static_cast<size_t>(y * w + x) * 4u;
+      frame.pixels[offset + 0] = rowColor.r;
+      frame.pixels[offset + 1] = rowColor.g;
+      frame.pixels[offset + 2] = rowColor.b;
+      frame.pixels[offset + 3] = 255;
+    }
+  }
+
+  // Draw a 2px accent-color border inset from the edges
+  int margin = std::max(6, std::min(w, h) / 18);
+  for (int y = margin; y < h - margin; ++y) {
+    for (int x = margin; x < w - margin; ++x) {
+      bool border = (x - margin < 2) || (h - margin - 1 - y < 2)
+        || (y - margin < 2) || (w - margin - 1 - x < 2);
+      if (!border) {
+        continue;
+      }
+      size_t offset = static_cast<size_t>(y * w + x) * 4u;
+      frame.pixels[offset + 0] = accent.r;
+      frame.pixels[offset + 1] = accent.g;
+      frame.pixels[offset + 2] = accent.b;
+      frame.pixels[offset + 3] = 255;
+    }
+  }
+
+  displayFrame_ = std::move(frame);
+  displayFrame_->index = ++displayFrameSerial_;
+  uploadFrame(*displayFrame_);
+}
+
+// Flush the SDL audio queue and pause the audio device. Called during cue
+// transitions, stop, and cleanup to prevent leftover audio from bleeding
+// into the next cue or playing after the cue has stopped.
+void MediaEngine::clearAudio() {
+  // sdlTornDown(): SDL_Quit already freed this stream. See setSdlTornDown().
+  if (audioStream_ && !sdlTornDown()) {
+    SDL_ClearAudioStream(audioStream_);
+    deckboySetAudioPaused(audioStream_, true);
+  }
+  // The same for an external sink, which has a queue of its own and our
+  // overflow in front of it. Without this, a stop on ASIO played on for the
+  // depth of the sink, and the overflow came out at the start of the next cue.
+  {
+    std::lock_guard<std::mutex> lock(audioStreamMutex_);
+    pendingSinkAudio_.clear();
+    outputPaused_ = true;
+    if (!sdlTornDown()) {
+      if (externalSink_.clear) externalSink_.clear();
+      if (externalSink_.pause) externalSink_.pause(true);
+    }
+  }
+  // Safe here: callers only clear audio after decode threads are stopped,
+  // and the sync pop runs on this (main) thread.
+  audioDelayFifo_.clear();
+  audioDelayHeldFrames_.store(0, std::memory_order_relaxed);
+  // Open the limiter back up: a new cue must not start ducked by whatever
+  // transient the previous one ended on.
+  limiterGain_ = 1.0;
+  limiterTruePeak_ = {};
+  // And empty the effect tails for the same reason -- the previous cue's delay
+  // repeats arriving over the top of the next one is worse than no delay.
+  audioEffectState_.clear();
+}
+
+// ---------------------------------------------------------------------------
+// queuePocketSyncAudio — The pocket-test card's A/V sync pop.
+//
+// An 80 ms 1 kHz tone fires at the top of every wall-clock second — the same
+// clock rebuildPatternFrame animates on, and the same window in which the
+// card's buoy lamp lights. Samples are synthesized keyed to the wall time at
+// which they will actually PLAY (now + already-queued audio), so the pop
+// leaves the audio device aligned with the flash leaving the renderer; what
+// the operator then measures at the far end is the chain's own A/V offset.
+// Keeps ~120 ms queued; honors deck volume, master gain, and cue fades, and
+// feeds the VU/waveform tap like any decoded audio.
+// ---------------------------------------------------------------------------
+void MediaEngine::queuePocketSyncAudio() {
+  const int kRate = audioRate_;
+  constexpr double kBeepSeconds = 0.08;
+  constexpr int kChunkFrames = 1024;  // ~21 ms per fill
+  // The engine's own measure, not SDL's: with ASIO armed the SDL stream is
+  // not what plays, reads empty forever, and the pop would fill without end.
+  int queuedBytes = std::max(0, queuedAudioBytes());
+  double queuedSeconds = static_cast<double>(queuedBytes)
+    / (kRate * static_cast<double>(audioStreamBytesPerFrame()));
+  if (queuedSeconds > 0.12) {
+    return;
+  }
+  setOutputPaused(false);
+  const double startSeconds =
+    static_cast<double>(SDL_GetTicks()) / 1000.0 + queuedSeconds;
+  const double gain = static_cast<double>(volume_.load())
+                    * static_cast<double>(masterGain_.load())
+                    * audioCueGain_.load(std::memory_order_relaxed)
+                    // The same clock the picture rides: a HELD still sits at
+                    // position 0 forever, so a fade-in read there is pinned at
+                    // silence for as long as the cue is up. Main thread only,
+                    // which is where this generator runs.
+                    * audioFadeGainAt(fadeRidePositionSeconds()) * 0.5;
+  const double pan = static_cast<double>(audioCuePan_.load(std::memory_order_relaxed));
+  const double panL = pan > 0.0 ? 1.0 - pan : 1.0;
+  const double panR = pan < 0.0 ? 1.0 + pan : 1.0;
+  std::vector<std::int16_t> samples(static_cast<size_t>(kChunkFrames) * 2);
+  for (int i = 0; i < kChunkFrames; ++i) {
+    double phase = std::fmod(startSeconds + static_cast<double>(i) / kRate, 1.0);
+    double value = 0.0;
+    if (phase < kBeepSeconds) {
+      // 5 ms attack / 10 ms release envelope — no clicks on cheap speakers.
+      double envelope = std::min({phase / 0.005, (kBeepSeconds - phase) / 0.010, 1.0});
+      value = std::sin(phase * kTau * 1000.0) * envelope;
+    }
+    auto clip = [](double v) {
+      return static_cast<std::int16_t>(std::clamp(
+        static_cast<int>(std::lround(v)), -32768, 32767));
+    };
+    samples[static_cast<size_t>(i) * 2] = clip(value * gain * panL * 32767.0);
+    samples[static_cast<size_t>(i) * 2 + 1] = clip(value * gain * panR * 32767.0);
+  }
+  // Through the same delay line as decode audio: the beacon stays keyed to
+  // the wall clock, so adjusting the audio delay visibly/audibly shifts the
+  // pop against the flash — that's the dial-in workflow.
+  queueDelayedAudio(samples);
+}
+
+// Thread-safe query of the current frame queue depth. Used by update() to
+// detect when the decoder is starved (queue empty + EOF = playback finished).
+size_t MediaEngine::queuedFrames() {
+  std::lock_guard<std::mutex> lock(frameMutex_);
+  return frameQueue_.size();
+}
+
+// ---------------------------------------------------------------------------
+// stopDecoderThreads — Kill ffmpeg subprocesses and join decode threads.
+//
+// Uses a two-phase shutdown to avoid crashes on Windows:
+//   Phase 1: killProcessOnly() terminates the ffmpeg process. This closes
+//            the write-end of the pipe, causing readExact/readSome to return
+//            0 (EOF) in the decode thread — unblocking it cleanly.
+//   Phase 2: join the threads (now unblocked), then call stop() to close
+//            the readFd. Closing readFd before join would crash because
+//            the thread is still in _read().
+//
+// Also clears the frame queue and resets capture flags.
+// ---------------------------------------------------------------------------
+void MediaEngine::stopDecoderThreads() {
+  // A mic is a producer like the decoders, and goes with them: on a new
+  // take, on stopAll and on the engine's destruction.
+  stopMicCapture();
+  stopImageThread();
+  // Anything still parked for the tap goes out now. The decode thread is about
+  // to stop feeding, so nothing would ever come along to release the last
+  // buffer's worth and a take would end a fraction of a second early in its
+  // sound only.
+  flushTappedAudio();
+  decodersRunning_ = false;
+  audioClockValid_ = false;  // audio clock dies with the pipe
+  decoderStop_.store(true);  // signal threads to exit their loop
+  // Phase 1: kill processes to unblock the decode threads' read calls
+  videoProcess_.killProcessOnly();
+  audioProcess_.killProcessOnly();
+#if DECKBOY_INPROC_DECODE
+  // In-process equivalent of the pipe kill: trip the AVIO interrupt callback
+  // so a decode thread blocked inside av_read_frame (dead network share)
+  // returns promptly and the joins below can't hang.
+  if (videoPipeline_) {
+    videoPipeline_->requestStop();
+  }
+  if (audioPipeline_) {
+    audioPipeline_->requestStop();
+  }
+#endif
+
+  // Phase 2: wait for threads to finish, then clean up process handles
+  if (videoThread_.joinable()) {
+    videoThread_.join();
+  }
+  if (audioThread_.joinable()) {
+    audioThread_.join();
+  }
+
+  videoProcess_.stop();  // now safe to close readFd
+  audioProcess_.stop();
+
+#if DECKBOY_INPROC_DECODE
+  videoPipeline_.reset();  // threads are joined — safe to tear down
+  audioPipeline_.reset();
+#endif
+  inprocDecodeActive_ = false;
+  activeDecodeDevice_ = nullptr;
+  activeDecodeName_ = "software";
+  activeDecodeZeroCopy_ = false;
+  lastFramePushMs_.store(0);
+  decodeStallLatched_ = false;
+
+  {
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    frameQueue_.clear();  // discard any buffered frames (releases GPU surfaces)
+  }
+  decoderStop_.store(false);  // reset for next cue
+  decoderEof_ = false;
+  isSourceCapturing_ = false;
+  isBrowserCapturing_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// buildSourceCaptureArgs — Build ffmpeg command-line args for source capture.
+//
+// Delegates to the platform-specific capture backend (capture_backend.hpp)
+// which knows how to capture from cameras, windows, and app textures on each
+// OS. The backend returns a SourceCapturePlan with the full ffmpeg arg list.
+//
+// Source reference resolution:
+//   1. Try sourceCueRefFromCue (the cue's stored device/window identifier)
+//   2. Fall back to defaultSourceRefForKind (e.g. "/dev/video0" on Linux)
+//
+// On Linux/macOS, the $DISPLAY environment variable is forwarded to the
+// capture backend for X11 screen capture (not needed on Windows/Wayland).
+// ---------------------------------------------------------------------------
+bool MediaEngine::buildSourceCaptureArgs(const Cue& cue, int w, int h, std::vector<std::string>& args) const {
+  deckboy::platform::SourceCapturePlan plan;
+  if (!buildSourceCapturePlan(cue, w, h, plan)) {
+    return false;
+  }
+  args = std::move(plan.ffmpegArgs);
+  return true;
+}
+
+bool MediaEngine::buildSourceCapturePlan(const Cue& cue, int w, int h,
+                                         deckboy::platform::SourceCapturePlan& plan) const {
+  std::string sourceRef = sourceCueRefFromCue(cue);
+  if (sourceRef.empty()) {
+    sourceRef = defaultSourceRefForKind(cue.kind);
+  }
+  // Read $DISPLAY for X11 screen capture (Linux)
+  std::string displayEnv;
+  if (const char* envDisplay = std::getenv("DISPLAY"); envDisplay && *envDisplay) {
+    std::string trimmed = trim(envDisplay);
+    if (!trimmed.empty()) {
+      displayEnv = trimmed;
+    }
+  }
+
+  // Build the platform-specific capture request
+  deckboy::platform::SourceCaptureRequest request;
+  if (cue.kind == CueKind::Camera) {
+    request.kind = deckboy::platform::SourceCaptureKind::Camera;
+  } else if (cue.kind == CueKind::Syphon) {
+    request.kind = deckboy::platform::SourceCaptureKind::AppTexture;
+  } else {
+    request.kind = deckboy::platform::SourceCaptureKind::Window;
+  }
+  request.sourceRef = sourceRef;
+  request.width = w;
+  request.height = h;
+  request.frameRate = 30;
+  request.drawMouse = true;
+  request.display = displayEnv;
+  plan = deckboy::platform::planSourceCapture(request);
+  return plan.supported && !plan.ffmpegArgs.empty();
+}
+
+// ---------------------------------------------------------------------------
+// startDecoderThreads — Launch ffmpeg video + audio decode subprocesses.
+//
+// This is where the actual media decoding happens. Two ffmpeg processes are
+// spawned with piped stdout:
+//
+// Video pipeline:
+//   ffmpeg -hwaccel auto -ss <start> -i <path> -map 0:v:0 -an
+//          -vf scale=<w>:<h>:flags=fast_bilinear[,setpts=...]
+//          -f rawvideo -pix_fmt {nv12|rgba} pipe:1
+//   → videoThread_ reads raw frames via readExact() → frameQueue_
+//
+// Scaling stays inside ffmpeg so the pipe never carries more bytes than the
+// output needs (a 4K source through a 1080p output ships ~250 MB/s, not 1 GB/s).
+// The scaler is fast_bilinear, not bicubic: bicubic is ~3–4× the CPU cost and
+// indistinguishable at deck-output sizes for moving video. If a still-image
+// path ever shares this code, give it its own filter — neighbor/bicubic stays
+// in the still-image helpers further down.
+//
+// Pixel format is decided per-cue: NV12 (planar YUV, 12 bpp, ~62% less pipe
+// bandwidth than RGBA) for plain cues, RGBA for cues with chroma key or
+// color controls — the effects path mutates RGBA scratch pixels and cannot
+// operate on YUV planes without a shader rewrite.
+//
+// Audio pipeline:
+//   ffmpeg -ss <start> -i <path> -map 0:a:0 -vn
+//          -f s16le -ar 48000 -ac 2 pipe:1
+//   → audioThread_ reads raw PCM via readSome() → SDL_PutAudioStreamData()
+//
+// Special cases:
+//   - Live streams (SRT/NDI): skip -ss (no seek) and -hwaccel (latency)
+//   - NDI sources: use -f libndi_newtek -i <source_name> instead of -i <path>
+//   - Speed != 1.0: add setpts filter for video, atempo filter for audio
+//   - No audio: audio subprocess is not spawned
+//   - Unknown dimensions: ffprobe is called first (only for non-ingested cues)
+// ---------------------------------------------------------------------------
+void MediaEngine::startDecoderThreads(const Cue& cue, double mediaStartSeconds, double cueStartSeconds) {
+  // A new decode is a new timeline: no pass to wrap until the in-process
+  // decoders set one (startInprocDecoders), and frame 0 is index 0 again.
+  loopPassSeconds_ = 0.0;
+  loopPassFrames_ = 0;
+  loopPassAudioFrames_ = 0;
+  loopAtPassEnd_.store(false);
+  videoPassesStarted_.store(0);
+  audioPassesStarted_.store(0);
+  passesWrapped_ = 0;
+  indexBase_ = 0;
+  // Datamosh swaps the FILE, not just the decode flag: the prepared copy is a
+  // separate encode (no B-frames, single reference) sitting beside the
+  // original. Done here rather than in mediaPathForCue on purpose - that goes
+  // through the app resolver, which is ALSO used by waveform analysis,
+  // thumbnails, the timeline filmstrip, the missing-media scan and loudness
+  // normalize. Swapping there would quietly point all of them at the mosh file.
+  const bool moshing = datamoshActiveForCue(cue);
+  std::string mediaPath = moshing ? cue.moshPath : mediaPathForCue(cue);
+  if (mediaPath.empty()) {
+    return;
+  }
+  // ARM THE VIDEO PRIME. A file-backed video cue starts with an empty frame
+  // queue and the clock already running, which is where the measured stutter
+  // lives -- see the prime in update(). A LIVE SOURCE is never primed: a
+  // camera has no beginning to wait for and no queue to fill, and holding its
+  // clock would be holding reality.
+  if (cue.kind == CueKind::Video && !isSourceCueKind(cue.kind)) {
+    armVideoPrime();
+  }
+  int decodeW = cue.width;
+  int decodeH = cue.height;
+  // Detect live stream sources: skip ffprobe (blocks on network) and seek.
+  bool isNdiSource = (cue.kind == CueKind::NdiSource);
+  bool isLiveStream = (cue.kind == CueKind::SrtStream || cue.kind == CueKind::NdiSource);
+  // Only probe when dimensions are unknown (e.g. cue not yet ingested).
+  // Ingest (probeCue) already handles rotation and stores final rasterised
+  // dimensions in cue.width/height, so re-probing on every TAKE is redundant
+  // and blocks the main thread for 200–500 ms per take.
+  if (cue.kind == CueKind::Video && !isLiveStream && (decodeW <= 0 || decodeH <= 0)) {
+    auto probeOut = readAllText({
+      "ffprobe", "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-show_entries", "stream_side_data=rotation",
+      "-of", "default=noprint_wrappers=1",
+      mediaPath
+    });
+    if (probeOut) {
+      int pw = 0, ph = 0;
+      int rot = 0;
+      for (const auto& line : splitLines(*probeOut)) {
+        auto sep = line.find('=');
+        if (sep == std::string::npos) continue;
+        std::string key = line.substr(0, sep);
+        std::string val = line.substr(sep + 1);
+        if (key == "width") pw = std::max(0, std::atoi(val.c_str()));
+        else if (key == "height") ph = std::max(0, std::atoi(val.c_str()));
+        else if (key == "rotation") rot = std::abs(std::atoi(val.c_str()));
+      }
+      if (pw > 0 && ph > 0) {
+        if (rot == 90 || rot == 270) std::swap(pw, ph);
+        decodeW = pw;
+        decodeH = ph;
+      }
+    }
+  }
+  // Fall back to output resolution if no size is known (live streams)
+  auto [fallbackW, fallbackH] = currentOutputSizeHint();
+  if (decodeW <= 0 || decodeH <= 0) {
+    decodeW = fallbackW;
+    decodeH = fallbackH;
+  }
+  // AN AUDIO CUE HAS NO PICTURE, AND WAS BEING REFUSED FOR NOT HAVING ONE.
+  //
+  // The probe stores an audio-only cue as 1x1 -- the inspector shows it, "1
+  // Audio 1x1 01:30.0". One is not zero, so the fallback above leaves it
+  // alone; then the even-dimension rounding below turns 1 into 0, and the
+  // guard after it returns. So startDecoderThreads gave up BEFORE opening
+  // anything, and an audio cue never started a decoder, never produced a
+  // sample, never reached the tap, and never reached the speakers or the
+  // recording. It transported perfectly: Playing, position advancing,
+  // duration read from the file. It just made no sound, and said nothing.
+  //
+  // Verified as the cue KIND rather than the codec by taking mp3, WAV and M4A
+  // audio cues and an mp4 carrying MP3 audio in one recording: all three audio
+  // cues silent, the video cue with the same codec fine.
+  //
+  // The numbers are meaningless for this kind -- startInprocDecoders takes the
+  // audio-only path and never looks at them -- so give it the output raster
+  // and let it through.
+  if (cue.kind == CueKind::Audio) {
+    decodeW = fallbackW;
+    decodeH = fallbackH;
+  }
+  // NV12 needs even dimensions for its half-resolution chroma plane. Round
+  // down so the pipe byte count matches what SDL_UpdateNVTexture expects.
+  // For RGBA the same trim is a no-op in practice — sources are virtually
+  // always even — but keeping it unconditional avoids a divergence later.
+  decodeW &= ~1;
+  decodeH &= ~1;
+  if (decodeW <= 0 || decodeH <= 0) {
+    return;
+  }
+  std::string scaleFilter = "scale=" + std::to_string(decodeW) + ":" + std::to_string(decodeH)
+                          + ":flags=fast_bilinear";
+  double speed = std::clamp(cue.playbackSpeed, 0.25, 4.0);
+  if (std::abs(speed - 1.0) > 0.01) {
+    std::ostringstream pts;
+    pts << std::fixed << std::setprecision(4) << (1.0 / speed);
+    scaleFilter += ",setpts=" + pts.str() + "*PTS";
+  }
+  // Pixel format is per-cue (see cueDecodesAsRgba) and fixed for the life of
+  // this decode. A live look edit that changes the answer no longer reopens
+  // it -- see adoptLookWithoutRestart. Documented in DEVNOTES.md
+  // (`GPU Hardware Decode Note`).
+  const bool needsRgbaForEffects = cueDecodesAsRgba(cue);
+  const FramePixelFormat decodeFormat =
+    needsRgbaForEffects ? FramePixelFormat::RGBA32 : FramePixelFormat::NV12;
+  const char* ffmpegPixFmt = needsRgbaForEffects ? "rgba" : "nv12";
+  // A fresh decode is opened in the right format, so no bridge is needed.
+  activeDecodeDatamosh_ = datamoshActiveForCue(cue);
+  liveRgbaBridge_.store(false);
+
+#if DECKBOY_INPROC_DECODE
+  // In-process libav decode for file-backed cues (GPU_DECODE_PLAN §11
+  // Session 2). Live streams stay on the CLI (libndi_newtek input device,
+  // latency-sensitive open behavior). When the pipeline can't take the file
+  // (rotation metadata, undecodable), fall through to the CLI pipe path —
+  // the break-glass fallback is automatic.
+  if (!isLiveStream && !inprocDecodeDisabled() &&
+      startInprocDecoders(cue, mediaPath, mediaStartSeconds, cueStartSeconds,
+                          decodeW, decodeH, decodeFormat, speed)) {
+    return;
+  }
+#endif
+
+  // Cap subprocess decode threads so ffmpeg's pool doesn't starve the render
+  // loop on small CPUs (the Pocket has 4 threads) — counterintuitively
+  // smoother than letting it size itself.
+  const int cliDecodeThreads = std::clamp(SDL_GetNumLogicalCPUCores() / 2, 1, 4);
+  // The scale filter is a no-op for normal video cues (decode size == probed
+  // cue size) — skip it and save a per-frame CPU pass; keep it whenever the
+  // sizes differ or a speed change needs setpts.
+  //
+  // A LIVE STREAM IS NEVER PROBED, so its cue's width/height are not the
+  // stream's -- an SRT cue carries the output raster it was created with. The
+  // test above then read "3840x2160 == 3840x2160, no scale", ffmpeg sent the
+  // feed at its own 1920x1080, and the reader waited for 4x the bytes of a
+  // frame that never came: the cue sat Paused at 0:00 forever, while the
+  // sender reported Deckboy connected and reading nothing. Always scale a
+  // stream to the size the reader expects.
+  const bool needsVideoFilter =
+    isLiveStream ||
+    decodeW != cue.width || decodeH != cue.height || std::abs(speed - 1.0) > 0.01;
+#if DECKBOY_INPROC_DECODE
+  if (cue.kind == CueKind::SrtStream &&
+      startSrtDecoder(cue, mediaPath, decodeW, decodeH, decodeFormat, ffmpegPixFmt, scaleFilter)) {
+    return;
+  }
+#endif
+
+  // Build ffmpeg video args. Live streams skip seek and hwaccel (avoids latency/compat issues).
+  // NDI IS NOT DECODED HERE AT ALL any more, so the isNdiSource arms below
+  // are unreachable and kept only until the next pass through this function.
+  // It used to ask ffmpeg for the libndi_newtek input device, which upstream
+  // removed in 2021 (FFmpeg 5.0) over the NewTek SDK licence -- so the process
+  // started, ffmpeg exited immediately, and the cue sat there named and blank
+  // for ever with nothing said. It is received natively now, through the SDK,
+  // the way a DeckLink input is captured: see MediaEngine::startNdiCapture,
+  // which load() routes NdiSource cues to before reaching this code.
+  std::vector<std::string> videoArgs = {
+    "ffmpeg", "-hide_banner", "-loglevel", "error",
+    "-threads", std::to_string(cliDecodeThreads)
+  };
+  if (!isLiveStream) {
+    videoArgs.insert(videoArgs.end(), {"-hwaccel", "auto"});
+    videoArgs.insert(videoArgs.end(), {"-ss", std::to_string(mediaStartSeconds)});
+  }
+  if (isNdiSource) {
+    // Strip ndi:// prefix — the remainder is the NDI source name
+    std::string ndiName = mediaPath.substr(6);
+    videoArgs.insert(videoArgs.end(), {"-f", "libndi_newtek", "-i", ndiName});
+  } else {
+    videoArgs.insert(videoArgs.end(), {"-i", mediaPath});
+  }
+  videoArgs.insert(videoArgs.end(), {"-map", "0:v:0", "-an"});
+  if (needsVideoFilter) {
+    videoArgs.insert(videoArgs.end(), {"-vf", scaleFilter});
+  }
+  videoArgs.insert(videoArgs.end(), {
+    "-f", "rawvideo",
+    "-pix_fmt", ffmpegPixFmt,
+    "pipe:1"
+  });
+  if (!spawnPipeProcess(videoProcess_, std::move(videoArgs))) {
+    return;
+  }
+
+  const size_t frameBytes = frameBufferSize(decodeFormat, decodeW, decodeH);
+  if (frameBytes == 0) {
+    videoProcess_.stop();
+    decoderEof_ = true;
+    return;
+  }
+  int videoFd = videoProcess_.readFd;
+  decodersRunning_ = true;
+  videoThread_ = std::thread([this, decodeW, decodeH, decodeFormat, frameBytes, cueStartSeconds, videoFd]() {
+    std::uint64_t frameIndex = static_cast<std::uint64_t>(std::floor(cueStartSeconds * frameRate_));
+    while (!decoderStop_.load()) {
+      while (!decoderStop_.load()) {
+        bool hasRoom = false;
+        {
+          std::lock_guard<std::mutex> lock(frameMutex_);
+          hasRoom = frameQueue_.size() < kMaxVideoFrames;
+        }
+        if (hasRoom) {
+          break;
+        }
+        SDL_Delay(4);
+      }
+      if (decoderStop_.load()) {
+        break;
+      }
+
+      DecodedFrame frame;
+      frame.width = decodeW;
+      frame.height = decodeH;
+      frame.index = frameIndex++;
+      frame.format = decodeFormat;
+      frame.pixels.resize(frameBytes);
+
+      if (!readExact(videoFd, frame.pixels.data(), frameBytes)) {
+        decoderEof_ = true;
+        break;
+      }
+      if (liveRgbaBridge_.load()) {
+        bridgeFrameToRgba(frame);   // see adoptLookWithoutRestart
+      }
+
+      std::lock_guard<std::mutex> lock(frameMutex_);
+      frameQueue_.push_back(std::move(frame));
+    }
+    decoderEof_ = true;
+  });
+
+  audioClockValid_ = false;
+  // A CUE THAT SHOULD HAVE SOUND AND GETS NONE MUST SAY SO.
+  //
+  // Both audio paths failed into silence without a toast, a log line or a
+  // counter, which is how an audio-only cue could play with a dead VU meter
+  // and still look completely healthy.
+  // An AUDIO cue with no audio is a contradiction, so say which of the three
+  // things the gate below wants was missing rather than leaving it silent.
+  if (cue.kind == CueKind::Audio &&
+      !(audioStream_ != nullptr && cue.hasAudio && cue.audioEnabled)) {
+    latchAudioStartFailure(
+      std::string("audio not started (device=") + (audioStream_ ? "yes" : "NO") +
+      " track=" + (cue.hasAudio ? "yes" : "NO") +
+      " enabled=" + (cue.audioEnabled ? "yes" : "NO") + ")");
+  } else if (cue.hasAudio && cue.audioEnabled && audioStream_ == nullptr) {
+    latchAudioStartFailure("no audio device open on this deck");
+  }
+  // AN SRT FEED IS OPENED ONCE. The audio below is a SECOND ffmpeg on the
+  // same URL, and an SRT sender in listener mode takes one caller: the two
+  // raced, and whichever lost never connected. startSrtDecoder carries both
+  // over one connection; reaching here means it is unavailable (a build
+  // without in-process libav), so the cue is picture only, and says so.
+  const bool srtSingleConnection = cue.kind == CueKind::SrtStream;
+  if (srtSingleConnection && cue.hasAudio && cue.audioEnabled) {
+    std::cerr << "SRT cue: picture only -- one connection per feed" << std::endl;
+  }
+  if (!srtSingleConnection && audioStream_ != nullptr && cue.hasAudio && cue.audioEnabled) {
+    syncAudioFadeParams();  // publish before the audio thread spawns
+    audioFramesQueued_.store(0, std::memory_order_relaxed);
+    // The tap's accounting is measured against that counter, so it restarts
+    // with it. Otherwise the new cue's audio is held back by the previous
+    // cue's emitted total and the take opens silent.
+    { std::lock_guard<std::mutex> tl(tapMutex_); tapFifo_.clear(); tapEmittedFrames_ = 0; }
+    audioClockStartSeconds_ = cueStartSeconds;
+    lastAudioClockSeconds_ = -1.0;
+    lastAudioClockAdvanceMs_ = 0;
+    // Live streams have no deterministic mapping from queued samples to cue
+    // position — leave the wall clock in charge for them.
+    audioClockValid_ = !isLiveStream;
+    std::vector<std::string> audioArgs = {
+      "ffmpeg", "-hide_banner", "-loglevel", "error"
+    };
+    if (!isLiveStream) {
+      audioArgs.insert(audioArgs.end(), {"-ss", std::to_string(mediaStartSeconds)});
+    }
+    if (isNdiSource) {
+      std::string ndiName = mediaPath.substr(6);
+      audioArgs.insert(audioArgs.end(), {"-f", "libndi_newtek", "-i", ndiName, "-vn"});
+    } else {
+      audioArgs.insert(audioArgs.end(), {"-i", mediaPath, "-vn"});
+      if (activeCue_ && activeCue_->audioTrack > 0) {
+        audioArgs.insert(audioArgs.end(), {"-map", "0:a:" + std::to_string(activeCue_->audioTrack) + "?"});
+      }
+    }
+    if (std::abs(speed - 1.0) > 0.01) {
+      std::string atempoChain;
+      double remaining = speed;
+      while (remaining < 0.5 - 0.001) {
+        atempoChain += (atempoChain.empty() ? "" : ",") + std::string("atempo=0.5");
+        remaining /= 0.5;
+      }
+      while (remaining > 2.0 + 0.001) {
+        atempoChain += (atempoChain.empty() ? "" : ",") + std::string("atempo=2.0");
+        remaining /= 2.0;
+      }
+      {
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(4) << remaining;
+        atempoChain += (atempoChain.empty() ? std::string("") : std::string(",")) + "atempo=" + ss.str();
+      }
+      audioArgs.push_back("-af");
+      audioArgs.push_back(atempoChain);
+    }
+    audioArgs.insert(audioArgs.end(), {
+      "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "2",
+      "-ar", std::to_string(audioRate_), "pipe:1"
+    });
+    if (spawnPipeProcess(audioProcess_, audioArgs)) {
+      int audioFd = audioProcess_.readFd;
+      audioThread_ = std::thread([this, cueStartSeconds, audioFd]() {
+        std::vector<std::uint8_t> buffer(8192);
+        double audioTime = cueStartSeconds;
+        while (!decoderStop_.load()) {
+          // Backpressure: ~120 ms queued (5760 frames), whatever the stream's
+          // channel count — byte thresholds must scale with the open spec.
+          if (queuedAudioBytes() > 5760 * audioStreamBytesPerFrame()) {
+            SDL_Delay(4);
+            continue;
+          }
+
+          int bytesRead = readSome(audioFd, buffer.data(), buffer.size());
+          if (bytesRead <= 0) {
+            break;
+          }
+          // Align to s16le sample boundary: a stray trailing byte from a short
+          // read would size `scaled` too small for the subsequent memcpy and
+          // overflow by one byte. Drop the stray byte rather than paper over
+          // it — the decoder pipe will deliver it on the next iteration.
+          size_t alignedBytes = static_cast<size_t>(bytesRead) & ~size_t{1};
+          if (alignedBytes == 0) {
+            continue;
+          }
+
+          std::vector<std::int16_t> scaled(alignedBytes / sizeof(std::int16_t));
+          std::memcpy(scaled.data(), buffer.data(), alignedBytes);
+          applyGainAndQueueAudio(scaled, audioTime);
+        }
+      });
+    }
+  }
+}
+
+// Shared audio-thread tail (CLI pipe thread + in-process thread): per-sample
+// fade/volume/master gain, waveform tap, queue to the SDL stream, advance the
+// audio-clock counters. Keeping one implementation keeps the audio-master
+// A/V clock semantics identical across both decode paths.
+// ── WHAT THE PICTURE FOLLOWS ────────────────────────────────────────────────
+//
+// Two things are published here, from the finished stereo: a decimated mono
+// copy of the sound (what `audioprint` draws with) and its level on a meter's
+// scale (what an Audio LFO rides). One in eight samples is plenty -- the
+// picture is asked to lean a few pixels, not to resolve a cymbal -- and it
+// keeps the ring at a few thousand floats rather than a hundred thousand.
+//
+// ON A METER'S SCALE, not a linear one: -50dBFS reads 0 and -6dBFS reads 1.
+// Linear RMS put a quiet clip at 0.04, so a picture following it barely moved;
+// people hear in decibels and a response should too. Rises at once, falls over
+// 300ms: a picture that flickers at audio rate is noise, one that breathes with
+// the sound is a response.
+//
+// CALLED BY EVERY PRODUCER, which is the whole point of it being a function.
+// It used to live inside the decode path, so a TONE cue -- which generates its
+// own samples and writes them straight to the device -- left both halves dead:
+// audioprint drew nothing on a tone and an Audio LFO never moved. Reported from
+// the trailer shoot, where audioprint on a 2A03 tone cue produced a picture
+// pixel-identical to the un-effected one.
+void MediaEngine::noteProgrammeAudio(const std::int16_t* stereo, std::size_t frames) {
+  if (stereo == nullptr || frames == 0) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(recentAudioMutex_);
+    if (recentAudio_.size() != kRecentAudioSamples) {
+      recentAudio_.assign(kRecentAudioSamples, 0.0f);
+      recentAudioWrite_ = 0;
+    }
+    for (std::size_t f = 0; f < frames; ++f) {
+      if (recentAudioPhase_ = (recentAudioPhase_ + 1) & 7; recentAudioPhase_ != 0) {
+        continue;
+      }
+      const double summed =
+        (static_cast<double>(stereo[f * 2]) + static_cast<double>(stereo[f * 2 + 1]))
+        * 0.5 / 32768.0;
+      recentAudio_[recentAudioWrite_] = static_cast<float>(std::clamp(summed, -1.0, 1.0));
+      recentAudioWrite_ = (recentAudioWrite_ + 1) % kRecentAudioSamples;
+    }
+  }
+  double energy = 0.0;
+  for (std::size_t i = 0; i < frames * 2; ++i) {
+    const double v = static_cast<double>(stereo[i]) / 32768.0;
+    energy += v * v;
+  }
+  const double rms = std::sqrt(energy / static_cast<double>(frames * 2));
+  const double chunkSeconds =
+    static_cast<double>(frames) / static_cast<double>(audioRate_);
+  const double dbfs = rms > 1e-7 ? 20.0 * std::log10(rms) : -120.0;
+  const double meterLevel = std::clamp((dbfs + 50.0) / 44.0, 0.0, 1.0);
+  const double released = programLevelState_ * std::exp(-chunkSeconds / 0.3);
+  programLevelState_ = std::max(meterLevel, released);
+  if (programLevelState_ < 1e-6) {
+    programLevelState_ = 0.0;
+  }
+  programLevel_.store(static_cast<float>(programLevelState_), std::memory_order_relaxed);
+}
+
+void MediaEngine::applyGainAndQueueAudio(std::vector<std::int16_t>& scaled, double& audioTime) {
+  const double cueGain = audioCueGain_.load(std::memory_order_relaxed);
+  const double pan = static_cast<double>(audioCuePan_.load(std::memory_order_relaxed));
+  const bool mono = audioCueMono_.load(std::memory_order_relaxed);
+  // Balance law: panning right attenuates left, and vice versa.
+  const double panL = pan > 0.0 ? 1.0 - pan : 1.0;
+  const double panR = pan < 0.0 ? 1.0 + pan : 1.0;
+  auto clip = [](double v) {
+    return static_cast<std::int16_t>(std::clamp(
+      static_cast<int>(std::lround(v)), -32768, 32767));
+  };
+  const std::size_t frames = scaled.size() / 2;
+  const double chunkStartTime = audioTime;   // the gain loop advances audioTime
+  limiterScratch_.resize(frames * 2);
+  limiterFramePeak_.resize(frames);
+  // An outgoing tail's fade (beginTailFade), 1 on every other engine. Taken at
+  // both ends of the chunk and drawn as a line between them per frame, so a
+  // one-second fade is a ramp rather than fifty steps of twenty milliseconds.
+  const std::int64_t chunkNs = steadyNowNs();
+  const double tailFrom = tailFadeGainAtNs(chunkNs);
+  const double tailTo = tailFadeGainAtNs(
+    chunkNs + static_cast<std::int64_t>(1e9 * static_cast<double>(frames) /
+                                        static_cast<double>(std::max(1, audioRate_))));
+  // Stage 1: gain / mono / pan into a float scratch, recording the per-frame
+  // peak the limiter needs. Quantising here (as this loop used to) would throw
+  // away the overshoot the limiter exists to catch.
+  for (std::size_t f = 0; f < frames; ++f) {
+    const std::size_t index = f * 2;
+    const double tail = frames > 1
+      ? tailFrom + (tailTo - tailFrom) * static_cast<double>(f) / static_cast<double>(frames - 1)
+      : tailTo;
+    double gain = static_cast<double>(volume_.load())
+                * static_cast<double>(masterGain_.load())
+                * cueGain
+                * audioFadeGainAt(audioTime)
+                * tail;
+    double left = static_cast<double>(scaled[index]);
+    double right = static_cast<double>(scaled[index + 1]);
+    if (mono) {
+      left = right = (left + right) * 0.5;
+    }
+    left *= gain * panL;
+    right *= gain * panR;
+    limiterScratch_[index] = left;
+    limiterScratch_[index + 1] = right;
+    limiterFramePeak_[f] = std::max(std::fabs(left), std::fabs(right));
+    audioTime += 1.0 / static_cast<double>(audioRate_);
+  }
+  // Stage 1b: the cue's effect chain, on the gained float scratch. HERE, and
+  // not anywhere else, for two reasons: the samples are already doubles at
+  // full scale so nothing quantises between effects, and the limiter still
+  // gets the last word -- a delay stacking repeats or a filter's resonance can
+  // add several dB, and an effect must not be able to put a show into clipping.
+  refreshAudioEffectStack();
+  if (!audioEffectsActive_.empty()) {
+    // The context, read once per chunk rather than per sample: none of it can
+    // change faster than a video frame, and a filter cutoff that moved
+    // mid-buffer would be a discontinuity for no gain.
+    deckboy::audiofx::AudioEffectContext ctx;
+    // Every filter corner, time constant and delay length in the chain is
+    // computed against this. Left at its 48000 default it would mistune the
+    // whole chain on any other rate.
+    ctx.sampleRate = static_cast<double>(audioRate_);
+    ctx.luma = audioCtxLuma_.load(std::memory_order_relaxed);
+    ctx.motion = audioCtxMotion_.load(std::memory_order_relaxed);
+    ctx.hasPicture = audioCtxHasPicture_.load(std::memory_order_relaxed);
+    ctx.centerX = audioCtxCenterX_.load(std::memory_order_relaxed);
+    ctx.centerY = audioCtxCenterY_.load(std::memory_order_relaxed);
+    ctx.coverage = audioCtxCoverage_.load(std::memory_order_relaxed);
+    ctx.framePeriod = audioCtxFramePeriod_.load(std::memory_order_relaxed);
+    ctx.held = audioCtxHeld_.load(std::memory_order_relaxed);
+    // The finished picture counts only while it is being published. With no
+    // output armed nothing publishes it, and a value from a minute ago is not
+    // the picture on screen -- so after half a second it is treated as absent
+    // and Ouroboros falls back to the decoded frame.
+    {
+      const std::uint64_t postAt = audioCtxPostAtMs_.load(std::memory_order_relaxed);
+      const std::uint64_t now = SDL_GetTicks();
+      ctx.hasPostPicture = postAt != 0 && now >= postAt && now - postAt < 500;
+      ctx.postLuma = audioCtxPostLuma_.load(std::memory_order_relaxed);
+      ctx.postMotion = audioCtxPostMotion_.load(std::memory_order_relaxed);
+    }
+    // WHERE THESE SAMPLES ARE, not where the transport is. audioTime is the
+    // position of the chunk being processed; position() is where playback has
+    // reached, which is up to a buffer ahead of it. Seam has to resolve into
+    // the end of the SOUND, so it wants the former.
+    ctx.position = chunkStartTime;
+    ctx.duration = audioFadeDuration_.load(std::memory_order_relaxed);
+    // Who fills a Plugin slot. Null in every other build of this header --
+    // the bench, the offline dumper and the unit tests all run the chain
+    // without one, and a plugin slot there passes the audio straight through.
+    audioPluginHost_.engine = this;
+    ctx.host = &audioPluginHost_;
+    deckboy::audiofx::applyAudioEffectStack(limiterScratch_, audioEffectsActive_,
+                                            audioEffectState_, ctx);
+    // A NON-FINITE SAMPLE MUST NEVER REACH THE QUANTISER. clip() rounds with
+    // std::lround, whose result for NaN is unspecified -- on Windows' 32-bit
+    // long it is typically INT_MIN, which the clamp turns into -32768: a
+    // FULL-SCALE DC STEP out of the speakers. The limiter cannot catch it
+    // either, because every comparison with NaN is false. One unstable filter
+    // state is enough, and the bend effects deliberately flirt with those.
+    // So the whole chunk goes silent and the chain state is cleared, which
+    // costs one ~40ms dropout instead of a thump through a PA.
+    {
+      bool finite = true;
+      for (std::size_t i = 0; i < frames * 2 && finite; ++i) {
+        finite = std::isfinite(limiterScratch_[i]);
+      }
+      if (!finite) {
+        std::fill(limiterScratch_.begin(),
+                  limiterScratch_.begin() + static_cast<std::ptrdiff_t>(frames * 2),
+                  0.0);
+        audioEffectState_.clear();   // resets slots in place; no allocation here
+      }
+    }
+    // The peaks the gain stage measured describe the samples BEFORE the chain.
+    // Feeding those to the limiter would leave it guarding a waveform that no
+    // longer exists.
+    for (std::size_t f = 0; f < frames; ++f) {
+      limiterFramePeak_[f] = std::max(std::fabs(limiterScratch_[f * 2]),
+                                      std::fabs(limiterScratch_[f * 2 + 1]));
+    }
+  }
+  // Stage 2: hold the peaks under the ceiling by reducing gain, not by
+  // truncating the waveform.
+  applyPeakLimiter();
+  // Stage 3: quantise. The hard clamp stays as the last-resort safety net —
+  // the limiter should mean it never actually binds.
+  for (std::size_t i = 0; i < frames * 2; ++i) {
+    scaled[i] = clip(limiterScratch_[i]);
+  }
+  queueDelayedAudio(scaled);
+}
+
+// ── Peak limiter (v0.81.5) ──────────────────────────────────────────────────
+// R128 normalize applies the full loudness gain now, and dialogue-heavy TV/film
+// material runs a 18–22 dB peak-to-loudness ratio — so a quiet clip legitimately
+// wants +8 to +11 dB and its transients land well over full scale. The old hard
+// int16 clamp turned those into square waves. This is the standard broadcast
+// answer: gain-reduce the peaks instead of truncating them.
+//
+// ZERO ADDED LATENCY. The whole chunk is already in hand, so the "look-ahead"
+// costs nothing: the target gain at frame f is the minimum required gain over
+// the next kLimiterLookaheadFrames, so the ramp is already on its way down
+// before the peak arrives. Attack ramps over roughly that same window; release
+// is slow enough to stay inaudible under speech. The residual overshoot from
+// the exponential attack is what the −1 dBFS ceiling (rather than 0) absorbs.
+//
+// Operates on limiterScratch_/limiterFramePeak_, filled by the gain stage.
+void MediaEngine::applyPeakLimiter() {
+  constexpr int kLookaheadFrames = 72;         // 1.5 ms @ 48 kHz
+  constexpr double kAttackFrames = 24.0;       // ~0.5 ms time constant
+  constexpr double kReleaseFrames = 7200.0;    // 150 ms
+  // −1 dBFS of full scale, in the int16 units the scratch buffer carries.
+  constexpr double kCeiling = 32767.0 * 0.891250938133746;
+
+  const std::size_t frames = limiterFramePeak_.size();
+  if (frames == 0) {
+    return;
+  }
+  // The FIR peak is delayed by six input samples. Assign it to the samples
+  // that contributed to it so the existing lookahead sees inter-sample peaks.
+  for (std::size_t f = 0; f < frames; ++f) {
+    const double peak = limiterTruePeak_.push(limiterScratch_[f * 2], limiterScratch_[f * 2 + 1]);
+    const std::size_t first = f > 11 ? f - 11 : 0;
+    for (std::size_t at = first; at <= f; ++at)
+      limiterFramePeak_[at] = std::max(limiterFramePeak_[at], peak);
+  }
+  const double attackCoef = 1.0 - std::exp(-1.0 / kAttackFrames);
+  const double releaseCoef = 1.0 - std::exp(-1.0 / kReleaseFrames);
+
+  auto required = [this](std::size_t f) {
+    const double peak = limiterFramePeak_[f];
+    return peak > kCeiling ? kCeiling / peak : 1.0;
+  };
+
+  // Monotonic deque of frame indices with non-decreasing required gain, so the
+  // front is always the minimum over the live window.
+  limiterWindow_.clear();
+  std::size_t next = 0;
+  for (std::size_t f = 0; f < frames; ++f) {
+    const std::size_t windowEnd =
+      std::min(frames, f + static_cast<std::size_t>(kLookaheadFrames));
+    while (next < windowEnd) {
+      const double r = required(next);
+      while (!limiterWindow_.empty() && required(limiterWindow_.back()) >= r) {
+        limiterWindow_.pop_back();
+      }
+      limiterWindow_.push_back(next);
+      ++next;
+    }
+    while (!limiterWindow_.empty() && limiterWindow_.front() < f) {
+      limiterWindow_.pop_front();
+    }
+    const double target = limiterWindow_.empty() ? 1.0 : required(limiterWindow_.front());
+    const double coef = target < limiterGain_ ? attackCoef : releaseCoef;
+    limiterGain_ += (target - limiterGain_) * coef;
+    limiterGain_ = std::min(limiterGain_, target);
+    limiterScratch_[f * 2] *= limiterGain_;
+    limiterScratch_[f * 2 + 1] *= limiterGain_;
+  }
+}
+
+// Final audio stage shared by decode audio and the sync pop: hold samples in
+// the delay FIFO so audio reaches the device Project::audioDelayMs late —
+// the knob that lines Deckboy up with lagging displays/PA DSP. The tap sees
+// the DELAYED stream so VU meters match what the room hears.
+// Keep the tail of what was just emitted, for the on-screen scope. Sized to
+// about 40ms: a few cycles at 100Hz and plenty at 1kHz.
+//
+// Called from the tone generator on the MAIN thread and from the decode path
+// on the AUDIO thread, which is why it locks. It is a ring rather than a queue
+// because a visualiser wants the most recent 40ms whenever it happens to draw,
+// and must never be able to make the audio path wait on it.
+void MediaEngine::pushScopeSamples(const std::int16_t* interleaved,
+                                   std::size_t frames, int channels) {
+  if (!interleaved || frames == 0 || channels <= 0) {
+    return;
+  }
+  const std::size_t keep = static_cast<std::size_t>(kAudioRate) / 25;
+  std::lock_guard<std::mutex> lock(scopeMutex_);
+  if (toneScopeL_.size() != keep) {
+    toneScopeL_.assign(keep, 0);
+    toneScopeR_.assign(keep, 0);
+    toneScopePos_ = 0;
+  }
+  // A burst longer than the ring would overwrite itself; only its tail can
+  // still be seen, so only its tail is stored.
+  std::size_t first = 0;
+  if (frames > keep) {
+    first = frames - keep;
+  }
+  const std::size_t rightLane = channels > 1 ? 1u : 0u;
+  for (std::size_t f = first; f < frames; ++f) {
+    toneScopeL_[toneScopePos_] =
+      interleaved[f * static_cast<std::size_t>(channels)];
+    toneScopeR_[toneScopePos_] =
+      interleaved[f * static_cast<std::size_t>(channels) + rightLane];
+    toneScopePos_ = (toneScopePos_ + 1) % keep;
+  }
+}
+
+// Forget what the LAST cue sounded like.
+//
+// The ring is per-engine and outlives a cue, so without this a visualiser on a
+// cue that emits nothing draws the previous cue's audio -- confidently, and
+// with no sign that it is stale. That is worse than drawing nothing, because
+// there is no way to tell from the picture that it is wrong. Called whenever
+// the engine takes a new cue or stops.
+void MediaEngine::clearScopeSamples() {
+  std::lock_guard<std::mutex> lock(scopeMutex_);
+  toneScopeL_.clear();
+  toneScopeR_.clear();
+  toneScopePos_ = 0;
+}
+
+bool MediaEngine::copyScopeSamples(std::vector<std::int16_t>& left,
+                                   std::vector<std::int16_t>& right,
+                                   std::size_t& writePos) const {
+  std::lock_guard<std::mutex> lock(scopeMutex_);
+  if (toneScopeL_.empty()) {
+    return false;
+  }
+  left = toneScopeL_;
+  right = toneScopeR_;
+  writePos = toneScopePos_;
+  return true;
+}
+
+void MediaEngine::queueDelayedAudio(std::vector<std::int16_t>& samples) {
+  // WHAT THE PICTURE FOLLOWS, published here for the same reason the frame
+  // counter is: every producer that uses the delay line passes through this
+  // one function. The pocket test card generates its own samples and would
+  // otherwise drive neither audioprint nor an Audio LFO, exactly as the tone
+  // cue did. The tone generator bypasses the delay line deliberately (it
+  // addresses device channels itself) and calls this directly.
+  noteProgrammeAudio(samples.data(), samples.size() / 2);
+  // The A/V master clock counts frames at PROCESS time, before the delay
+  // line: video must anchor to the undelayed timeline so the configured
+  // audio delay produces a real skew at the device (audio late vs video)
+  // instead of dragging video along with it.
+  //
+  // COUNTED HERE, where every producer passes, rather than in the decode
+  // path that used to own it. The tap releases audio to the recorder, the
+  // streams, NDI and the VU meter only as far as this counter says the
+  // device has PLAYED, so a producer that queued sound without counting it
+  // released nothing at all. That is what the pocket test card's sync pop
+  // did: it generates its own samples rather than decoding them, so the pop
+  // came out of the speakers and was missing from every recording of it --
+  // MEASURED, a ten-second take of the card whose audio track was digital
+  // silence end to end.
+  audioFramesQueued_.fetch_add(samples.size() / 2, std::memory_order_relaxed);
+  // Frames per millisecond at the running rate, not a hardcoded 48. A 200ms
+  // delay would have been 90ms at 96k and 217ms at 44.1k.
+  const std::size_t framesPerMs = static_cast<std::size_t>(audioRate_) / 1000u;
+  const std::size_t holdValues =
+    static_cast<std::size_t>(audioDelayMs_.load(std::memory_order_relaxed)) *
+    framesPerMs * 2u;
+  if (holdValues == 0 && audioDelayFifo_.empty()) {
+    // Scope first and undelayed: the VU and waveform show what is being sent
+    // to the device, which is what the operator is riding. Only the TAP -- the
+    // recorder, the streams, NDI -- has to wait for the device to catch up.
+    pushScopeSamples(samples.data(), samples.size() / 2, 2);
+    putAudioToStream(samples);
+    tapPlayedAudio(samples);
+    return;
+  }
+  audioDelayFifo_.insert(audioDelayFifo_.end(), samples.begin(), samples.end());
+  audioDelayHeldFrames_.store(audioDelayFifo_.size() / 2,
+                              std::memory_order_relaxed);
+  if (audioDelayFifo_.size() <= holdValues) {
+    return;  // still filling the delay line
+  }
+  std::size_t emitCount = audioDelayFifo_.size() - holdValues;
+  emitCount -= emitCount % 2;  // keep stereo pairs intact
+  std::vector<std::int16_t> emit(audioDelayFifo_.begin(),
+                                 audioDelayFifo_.begin() + static_cast<std::ptrdiff_t>(emitCount));
+  audioDelayFifo_.erase(audioDelayFifo_.begin(),
+                        audioDelayFifo_.begin() + static_cast<std::ptrdiff_t>(emitCount));
+  audioDelayHeldFrames_.store(audioDelayFifo_.size() / 2,
+                              std::memory_order_relaxed);
+  pushScopeSamples(emit.data(), emit.size() / 2, 2);
+  putAudioToStream(emit);
+  tapPlayedAudio(emit);
+}
+
+// Hand the tap what the DEVICE HAS PLAYED, not what has been queued to it.
+//
+// audioFramesQueued_ counts at PROCESS time, deliberately -- it is the video
+// clock's anchor and must not move with the configured audio delay. So the
+// unplayed total here is everything still parked in the delay line PLUS
+// everything the device still holds.
+void MediaEngine::tapPlayedAudio(const std::vector<std::int16_t>& sentToDevice) {
+  if (!audioTap_) {
+    return;
+  }
+  // Read the device queue BEFORE taking the tap lock. queuedAudioBytes() takes
+  // audioStreamMutex_, and holding two audio locks at once on the decode
+  // thread is how the priority inversion in putAudioToStream was created.
+  const int bytesPerFrame = std::max(1, audioStreamBytesPerFrame());
+  const std::size_t bufferedFrames =
+    static_cast<std::size_t>(std::max(0, queuedAudioBytes())) /
+    static_cast<std::size_t>(bytesPerFrame);
+  const std::uint64_t processedFrames =
+    audioFramesQueued_.load(std::memory_order_relaxed);
+  const std::size_t delayedFrames = audioDelayFifo_.size() / 2;
+  const std::uint64_t unplayed =
+    static_cast<std::uint64_t>(bufferedFrames) +
+    static_cast<std::uint64_t>(delayedFrames);
+  const std::uint64_t played =
+    processedFrames > unplayed ? processedFrames - unplayed : 0;
+
+  std::vector<std::int16_t> ready;
+  {
+    std::lock_guard<std::mutex> lock(tapMutex_);
+    tapFifo_.insert(tapFifo_.end(), sentToDevice.begin(), sentToDevice.end());
+    if (played <= tapEmittedFrames_) {
+      return;   // device has not consumed anything new yet
+    }
+    std::size_t wanted =
+      static_cast<std::size_t>(played - tapEmittedFrames_) * 2u;
+    wanted = std::min(wanted, tapFifo_.size());
+    wanted -= wanted % 2u;   // never split a stereo pair
+    if (wanted == 0) {
+      return;
+    }
+    ready.assign(tapFifo_.begin(),
+                 tapFifo_.begin() + static_cast<std::ptrdiff_t>(wanted));
+    tapFifo_.erase(tapFifo_.begin(),
+                   tapFifo_.begin() + static_cast<std::ptrdiff_t>(wanted));
+    tapEmittedFrames_ += wanted / 2u;
+  }
+  // AT A TAPE SPEED the device played these at that ratio, so the tap hands
+  // on the same: a recording at 0.5x would otherwise get half a second of
+  // sound for every second, at the old pitch.
+  ready = tapAtTapeSpeed(std::move(ready));
+  // Outside the lock: the tap runs the recorder's ring push and the stream
+  // writers, and nothing it does should be able to block a decode thread that
+  // is holding an audio lock.
+  if (!audioTapMuted_.load(std::memory_order_relaxed)) audioTap_(ready);  // see beginTailFade
+}
+
+// Everything still parked goes out. Without this a take loses its last buffer
+// of sound -- the decoder stops feeding at EOF, so nothing would ever come
+// along to release the remainder.
+void MediaEngine::flushTappedAudio() {
+  if (!audioTap_) {
+    return;
+  }
+  std::vector<std::int16_t> ready;
+  {
+    std::lock_guard<std::mutex> lock(tapMutex_);
+    if (tapFifo_.empty()) {
+      return;
+    }
+    ready.swap(tapFifo_);
+    tapEmittedFrames_ += ready.size() / 2u;
+  }
+  if (!audioTapMuted_.load(std::memory_order_relaxed)) audioTap_(ready);  // see beginTailFade
+}
+
+// Expand processed stereo onto the cue's output pair. The engine pipeline —
+// decode, gain/pan/mono, fades, delay FIFO, VU tap — is stereo throughout;
+// only this last write knows the stream is wider. Channels outside the pair
+// carry silence. A pair beyond the opened channel count clamps to outs 1-2
+// so a routed cue is never silently dropped.
+void MediaEngine::setExternalAudioSink(ExternalAudioSink sink) {
+  // Same lock as every other audio-thread touch of the output, so arming or
+  // clearing a sink mid-show cannot race a write already in flight.
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  externalSink_ = std::move(sink);
+  // What the old sink could not take was for the old sink.
+  pendingSinkAudio_.clear();
+  // In step with the transport from the first sample, or arming mid-pause
+  // would let the paused cue play on.
+  if (externalSink_.pause) externalSink_.pause(outputPaused_);
+  // And at the deck's speed, or arming mid-ramp would play it at 1x.
+  if (externalSink_.ratio) externalSink_.ratio(tapeSpeed_);
+}
+
+void MediaEngine::setOutputPaused(bool paused) {
+  if (audioStream_) deckboySetAudioPaused(audioStream_, paused);
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  outputPaused_ = paused;
+  if (externalSink_.pause) externalSink_.pause(paused);
+}
+
+bool MediaEngine::usingExternalAudioSink() const {
+  return static_cast<bool>(externalSink_.write);
+}
+
+void MediaEngine::putWideAudioToStream(const std::vector<std::int16_t>& wide,
+                                       int channels) {
+  if (wide.empty() || channels <= 0) return;
+  // IN THE PATCH a generated sound goes through the crosspoints like any
+  // other, its first pair being the playlist's stereo. Written at the main
+  // destination's width it would reach every interface at that width and miss
+  // the patch altogether. (A tone's own channel choice is a channel number,
+  // which the patch replaces with names.)
+  if (patchRoutingActive_.load(std::memory_order_acquire)) {
+    const std::size_t frames = wide.size() / static_cast<std::size_t>(channels);
+    std::vector<std::int16_t> stereo(frames * 2);
+    for (std::size_t f = 0; f < frames; ++f) {
+      stereo[f * 2] = wide[f * static_cast<std::size_t>(channels)];
+      stereo[f * 2 + 1] = wide[f * static_cast<std::size_t>(channels) + (channels > 1 ? 1 : 0)];
+    }
+    putAudioToStream(stereo);   // takes the audio lock itself
+    return;
+  }
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  if (externalSink_.write) {
+    const std::size_t frames = wide.size() / static_cast<std::size_t>(channels);
+    const std::size_t took = externalSink_.write(wide.data(), frames);
+    if (took < frames) {
+      pendingSinkAudio_.insert(
+        pendingSinkAudio_.end(),
+        wide.begin() + static_cast<std::ptrdiff_t>(took * static_cast<std::size_t>(channels)),
+        wide.end());
+    }
+    return;
+  }
+  if (!audioStream_) return;
+  queueToDevices(wide.data(),
+                         static_cast<int>(wide.size() * sizeof(std::int16_t)));
+}
+
+// ── EVERY DEVICE THIS DECK FEEDS ────────────────────────────────────────────
+//
+// One place, because there are four paths into it -- the subprocess decoder,
+// the in-process decoder, the tone generator and the synth -- and a
+// destination added to one of them and missed by the other three is a cue
+// that reaches the PA from a file and not from a tone.
+//
+// The buffer is already finished: gain, pan, mono, the effect chain and the
+// crosspoint matrix have all run. Extra devices get exactly what the first one
+// gets, which is the point -- there is no second mix to drift.
+//
+// ON THE AUDIO THREAD. No allocation, no locking beyond what the primary
+// write already takes, and the extras are read from atomics that only ever
+// change while the decoder threads are stopped.
+void MediaEngine::queueToDevices(const void* data, int bytes) {
+  if (!data || bytes <= 0) {
+    return;
+  }
+  // THE ROOM. Gated, so a playlist that feeds a second screen can be taken
+  // out of the PA -- before this every deck defaulted to the system default
+  // device and they all arrived together, whatever their picture was doing.
+  if (!mainDeviceMuted_.load(std::memory_order_relaxed)) {
+    SDL_PutAudioStreamData(audioStream_, data, bytes);
+  }
+  // THE MONITOR. Open on every deck, written by one -- so choosing which
+  // playlist you are listening to costs a store, not a device reopen.
+  if (SDL_AudioStream* monitor = monitorStream_.load(std::memory_order_relaxed)) {
+    if (!monitorMuted_.load(std::memory_order_relaxed)) {
+      SDL_PutAudioStreamData(monitor, data, bytes);
+    }
+  }
+  for (auto& slot : extraAudioStreams_) {
+    if (SDL_AudioStream* extra = slot.load(std::memory_order_relaxed)) {
+      SDL_PutAudioStreamData(extra, data, bytes);
+    }
+  }
+}
+
+void MediaEngine::putAudioToStream(const std::vector<std::int16_t>& stereo) {
+  // Runs on the audio decode thread. The lock is what makes a device swap or a
+  // detach on the main thread safe: the owner cannot free the stream while a
+  // write to it is in flight, and after detachAudioDevice() the pointer reads
+  // null here instead of dangling.
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  // An armed external sink takes precedence over SDL. Checked FIRST so an ASIO
+  // device works even when no SDL stream was ever opened -- otherwise the early
+  // return below would silently discard every sample.
+  if (externalSink_.write) {
+    const int sinkChannels = std::max(2, externalSink_.channels);
+    const std::size_t frames = stereo.size() / 2;
+    std::vector<std::int16_t> wide(frames * static_cast<std::size_t>(sinkChannels), 0);
+    // THE MATRIX AND THE PATCH REACH ASIO TOO. Only the pair ever did, so a
+    // cue's matrix did nothing through an ASIO driver -- the one route with
+    // channels enough to need it.
+    const bool throughGains = sinkChannels <= kMaxAudioMatrixOuts &&
+                              (patchRoutingActive_.load(std::memory_order_acquire) ||
+                               audioMatrixActive_.load(std::memory_order_acquire));
+    if (throughGains) {
+      mixThroughGains(stereo.data(), frames, sinkChannels, &audioMatrixGain_[0],
+                      &audioMatrixGain_[kMaxAudioMatrixOuts], wide.data());
+    } else {
+      int pair = audioCuePairOffset_.load(std::memory_order_relaxed);
+      if (pair < 0 || pair * 2 + 1 >= sinkChannels) pair = 0;
+      const std::size_t off = static_cast<std::size_t>(pair) * 2;
+      for (std::size_t f = 0; f < frames; ++f) {
+        std::int16_t* out = wide.data() + f * static_cast<std::size_t>(sinkChannels);
+        out[off] = stereo[f * 2];
+        out[off + 1] = stereo[f * 2 + 1];
+      }
+    }
+    // NEVER BLOCK HERE. This runs on the decode thread while holding the audio
+    // lock, so sleeping to wait for ring space would stall any main-thread
+    // device swap or detach behind it for as long as the wait -- textbook
+    // priority inversion, and in a live tool it presents as a freeze.
+    //
+    // Instead: flush whatever was left over last time, write what fits now,
+    // and carry the remainder. Nothing is dropped and nothing waits, because
+    // the decode threads already pace themselves against queuedAudioBytes(),
+    // which reports the sink's own queue.
+    if (!pendingSinkAudio_.empty()) {
+      const std::size_t pendFrames =
+        pendingSinkAudio_.size() / static_cast<std::size_t>(sinkChannels);
+      const std::size_t took = externalSink_.write(pendingSinkAudio_.data(), pendFrames);
+      if (took >= pendFrames) {
+        pendingSinkAudio_.clear();
+      } else {
+        pendingSinkAudio_.erase(
+          pendingSinkAudio_.begin(),
+          pendingSinkAudio_.begin() +
+            static_cast<std::ptrdiff_t>(took * static_cast<std::size_t>(sinkChannels)));
+        // Still backed up: queue this block behind the backlog rather than
+        // letting it overtake and play out of order.
+        pendingSinkAudio_.insert(pendingSinkAudio_.end(), wide.begin(), wide.end());
+        return;
+      }
+    }
+    const std::size_t took = externalSink_.write(wide.data(), frames);
+    if (took < frames) {
+      pendingSinkAudio_.assign(
+        wide.begin() + static_cast<std::ptrdiff_t>(took * static_cast<std::size_t>(sinkChannels)),
+        wide.end());
+    }
+    return;
+  }
+  // IN THE PATCH: every destination at its own width, through its own gains.
+  if (patchRoutingActive_.load(std::memory_order_acquire)) {
+    queuePatched(stereo);
+    return;
+  }
+  if (!audioStream_) {
+    return;
+  }
+  const int deviceChannels = audioDeviceChannels_.load(std::memory_order_relaxed);
+  if (deviceChannels <= 2) {
+    queueToDevices(stereo.data(),
+                           static_cast<int>(stereo.size() * sizeof(std::int16_t)));
+    return;
+  }
+  const std::size_t frames = stereo.size() / 2;
+  std::vector<std::int16_t> wide(frames * static_cast<std::size_t>(deviceChannels), 0);
+
+  // THE CROSSPOINT MATRIX, when the cue has one.
+  //
+  // Read straight out of the atomics published by setAudioMatrix -- no vector,
+  // no cue pointer, nothing that can be reallocated under the audio thread.
+  // Acquire pairs with the release in setAudioMatrix so the gains are visible
+  // whenever the flag is.
+  if (audioMatrixActive_.load(std::memory_order_acquire)) {
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      std::int16_t* out = wide.data() + frame * static_cast<std::size_t>(deviceChannels);
+      const float left = static_cast<float>(stereo[frame * 2]);
+      const float right = static_cast<float>(stereo[frame * 2 + 1]);
+      for (int dest = 0; dest < deviceChannels && dest < kMaxAudioMatrixOuts; ++dest) {
+        const float gl = audioMatrixGain_[static_cast<std::size_t>(dest)]
+                           .load(std::memory_order_relaxed);
+        const float gr = audioMatrixGain_[static_cast<std::size_t>(kMaxAudioMatrixOuts + dest)]
+                           .load(std::memory_order_relaxed);
+        if (gl == 0.0f && gr == 0.0f) {
+          continue;
+        }
+        out[dest] = mixCrosspointSample(left, right, gl, gr);
+      }
+    }
+    queueToDevices(wide.data(),
+                           static_cast<int>(wide.size() * sizeof(std::int16_t)));
+    return;
+  }
+
+  // NO MATRIX: the stereo pair, exactly as before. This is what every show
+  // saved before the matrix existed asks for, and it has to stay byte for
+  // byte what it was.
+  int pair = audioCuePairOffset_.load(std::memory_order_relaxed);
+  if (pair < 0 || pair * 2 + 1 >= deviceChannels) {
+    pair = 0;
+  }
+  const std::size_t offset = static_cast<std::size_t>(pair) * 2;
+  for (std::size_t frame = 0; frame < frames; ++frame) {
+    std::int16_t* out = wide.data() + frame * static_cast<std::size_t>(deviceChannels);
+    out[offset] = stereo[frame * 2];
+    out[offset + 1] = stereo[frame * 2 + 1];
+  }
+  queueToDevices(wide.data(),
+                         static_cast<int>(wide.size() * sizeof(std::int16_t)));
+}
+
+// ── TAPE SPEED ──────────────────────────────────────────────────────────────
+
+void MediaEngine::setTapeSpeed(double speed) {
+  userTapeSpeed_ = std::clamp(speed, 0.25, 4.0);
+  applyEffectiveTapeSpeed(userTapeSpeed_ * screenLockTrim_);
+}
+
+// The loop's state, not the trim: update() takes the trim back to 1.0 itself
+// while the loop is not engaged.
+void MediaEngine::resetScreenLock() {
+  screenLockError_ = 0.0;
+  screenLockIntegral_ = 0.0;
+  screenLockBase_ = 1.0;
+  screenLockBaseValid_ = false;
+  screenLockPinned_ = 0;
+  screenLockEngaged_ = false;
+  screenLockOutOfReach_ = false;
+}
+
+void MediaEngine::applyEffectiveTapeSpeed(double speed) {
+  speed = std::clamp(speed, 0.25, 4.0);
+  if (std::abs(speed - tapeSpeed_) < 1e-9) {
+    return;
+  }
+  // Re-anchored at the current position, so the new rate bends the clock
+  // from here rather than rescaling the past: over a ramp the playhead
+  // integrates the speed.
+  if (state_ == TransportState::Playing) {
+    playbackStartPosition_ = position();
+    playbackClockStart_ = std::chrono::steady_clock::now();
+  }
+  tapeSpeed_ = speed;
+  tapeSpeedAudio_.store(speed, std::memory_order_relaxed);
+  applyTapeRatio();
+}
+
+// Every stream this deck writes plays at the ratio: SDL resamples on the way
+// out, which is what moves the pitch. Main thread, which owns the streams.
+void MediaEngine::applyTapeRatio() {
+  const float ratio = static_cast<float>(tapeSpeed_);
+  if (audioStream_) {
+    SDL_SetAudioStreamFrequencyRatio(audioStream_, ratio);
+  }
+  for (auto& slot : extraAudioStreams_) {
+    if (SDL_AudioStream* extra = slot.load(std::memory_order_relaxed)) {
+      SDL_SetAudioStreamFrequencyRatio(extra, ratio);
+    }
+  }
+  if (SDL_AudioStream* monitor = monitorStream_.load(std::memory_order_relaxed)) {
+    SDL_SetAudioStreamFrequencyRatio(monitor, ratio);
+  }
+  // And through ASIO, where the driver's converter for this engine does it.
+  if (externalSink_.ratio) {
+    externalSink_.ratio(tapeSpeed_);
+  }
+}
+
+// THE TAP AT THE TAPE SPEED, through SDL's own resampler -- the one the
+// deck's device streams play through -- so a recording hears what the room
+// heard. It used to interpolate linearly, which is a fractional delay that
+// sweeps through every delay as the ratio walks the samples -- 48 times a
+// second at lock to the screen's 0.1%. COMPUTED there: a 10 kHz tone came out
+// 1.3 dB down with a sideband 23 dB under it, 15 kHz 2.9 dB down with one 14 dB
+// under. Through this, 15 kHz is flat with nothing within 55 dB of it.
+// The converter holds a few frames back for its filter, so it stays in the
+// path after the ratio comes back to 1 until it has handed them on; going
+// straight back would drop them. Audio threads only: a deck's decode or its
+// generator, never both at once.
+std::vector<std::int16_t> MediaEngine::tapAtTapeSpeed(std::vector<std::int16_t> block) {
+  const double ratio = tapeSpeedAudio_.load(std::memory_order_relaxed);
+  if (ratio == 1.0 && !tapConverterLive_) {
+    return block;
+  }
+  if (tapConverter_ && tapConverterRate_ != audioRate_) {
+    SDL_DestroyAudioStream(tapConverter_);
+    tapConverter_ = nullptr;
+  }
+  if (!tapConverter_) {
+    const SDL_AudioSpec spec {SDL_AUDIO_S16, 2, audioRate_};
+    tapConverter_ = SDL_CreateAudioStream(&spec, &spec);
+    tapConverterRate_ = audioRate_;
+    if (!tapConverter_) {
+      return block;   // the sound at the wrong speed rather than none
+    }
+  }
+  tapConverterLive_ = true;
+  SDL_SetAudioStreamFrequencyRatio(tapConverter_, static_cast<float>(ratio));
+  if (!block.empty()) {
+    SDL_PutAudioStreamData(tapConverter_, block.data(),
+                           static_cast<int>(block.size() * sizeof(std::int16_t)));
+  }
+  const int available = std::max(0, SDL_GetAudioStreamAvailable(tapConverter_));
+  std::vector<std::int16_t> out(static_cast<std::size_t>(available) / (2 * sizeof(std::int16_t)) * 2);
+  const int got = out.empty() ? 0
+    : SDL_GetAudioStreamData(tapConverter_, out.data(),
+                             static_cast<int>(out.size() * sizeof(std::int16_t)));
+  out.resize(got > 0 ? static_cast<std::size_t>(got) / sizeof(std::int16_t) : 0);
+  if (ratio == 1.0 && SDL_GetAudioStreamQueued(tapConverter_) == 0) {
+    tapConverterLive_ = false;   // all of it handed on: straight through again
+  }
+  return out;
+}
+
+// ── THE PATCH ───────────────────────────────────────────────────────────────
+
+void MediaEngine::mixThroughGains(const std::int16_t* stereo, std::size_t frames, int channels,
+                                  const std::atomic<float>* gainL, const std::atomic<float>* gainR,
+                                  std::int16_t* out) {
+  for (int dest = 0; dest < channels; ++dest) {
+    const float gl = gainL[dest].load(std::memory_order_relaxed);
+    const float gr = gainR[dest].load(std::memory_order_relaxed);
+    if (gl == 0.0f && gr == 0.0f) {
+      continue;                 // the buffer arrives zeroed: silence costs nothing
+    }
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      out[frame * static_cast<std::size_t>(channels) + static_cast<std::size_t>(dest)] =
+        mixCrosspointSample(static_cast<float>(stereo[frame * 2]),
+                            static_cast<float>(stereo[frame * 2 + 1]), gl, gr);
+    }
+  }
+}
+
+// On the audio thread, under audioStreamMutex_. Each destination gets a buffer
+// of its own width through its own gains; the monitor gets the playlist's
+// stereo, because headphones are what it is for whatever the patch does.
+void MediaEngine::queuePatched(const std::vector<std::int16_t>& stereo) {
+  const std::size_t frames = stereo.size() / 2;
+  if (frames == 0) {
+    return;
+  }
+  if (audioStream_) {
+    const int channels = std::clamp(audioDeviceChannels_.load(std::memory_order_relaxed), 1,
+                                    kMaxAudioMatrixOuts);
+    std::vector<std::int16_t> wide(frames * static_cast<std::size_t>(channels), 0);
+    mixThroughGains(stereo.data(), frames, channels, &audioMatrixGain_[0],
+                    &audioMatrixGain_[kMaxAudioMatrixOuts], wide.data());
+    SDL_PutAudioStreamData(audioStream_, wide.data(),
+                           static_cast<int>(wide.size() * sizeof(std::int16_t)));
+    capturePatchBuffer(0, wide.data(), frames, channels);
+  }
+  if (SDL_AudioStream* monitor = monitorStream_.load(std::memory_order_relaxed)) {
+    if (!monitorMuted_.load(std::memory_order_relaxed)) {
+      SDL_PutAudioStreamData(monitor, stereo.data(),
+                             static_cast<int>(stereo.size() * sizeof(std::int16_t)));
+    }
+  }
+  for (int k = 0; k < kMaxExtraAudioOuts; ++k) {
+    SDL_AudioStream* extra = extraAudioStreams_[static_cast<std::size_t>(k)].load(std::memory_order_relaxed);
+    const int channels = extraChannels_[static_cast<std::size_t>(k)].load(std::memory_order_relaxed);
+    if (!extra || channels <= 0) {
+      continue;
+    }
+    const auto& gains = extraMatrixGain_[static_cast<std::size_t>(k)];
+    std::vector<std::int16_t> wide(frames * static_cast<std::size_t>(channels), 0);
+    mixThroughGains(stereo.data(), frames, channels, &gains[0], &gains[kMaxExtraMatrixChannels],
+                    wide.data());
+    SDL_PutAudioStreamData(extra, wide.data(), static_cast<int>(wide.size() * sizeof(std::int16_t)));
+    capturePatchBuffer(k + 1, wide.data(), frames, channels);
+  }
+}
+
+void MediaEngine::setPatchRouting(PatchRouting routing) {
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  patchRouting_ = std::move(routing);
+  for (int k = 0; k < kMaxExtraAudioOuts; ++k) {
+    const std::size_t dest = static_cast<std::size_t>(k) + 1;
+    const int channels = patchRouting_.active && dest < patchRouting_.destChannels.size()
+      ? std::clamp(patchRouting_.destChannels[dest], 1, kMaxExtraMatrixChannels) : 0;
+    extraChannels_[static_cast<std::size_t>(k)].store(channels, std::memory_order_relaxed);
+  }
+  if (!patchRouting_.active) {
+    patchRoutingActive_.store(false, std::memory_order_release);
+    // Back to the old way: the cue's own channel matrix, or the pair.
+    if (activeCue_ && !activeCue_->audioMatrix.empty()) {
+      setAudioMatrix(activeCue_->audioMatrix);
+    } else {
+      clearAudioMatrix();
+    }
+    return;
+  }
+  // Gains BEFORE the flag, as setAudioMatrix does it.
+  publishPatchGains(activeCue_);
+  patchRoutingActive_.store(true, std::memory_order_release);
+}
+
+// Main thread. The cue's own matrix, when it sends to any name, decides where
+// this cue goes, as it overrides the pair off the patch; otherwise the
+// playlist's crosspoints do. A named output nobody can reach right now is
+// skipped -- its sound goes nowhere, never somewhere else.
+void MediaEngine::publishPatchGains(const Cue* cue) {
+  std::array<float, kAudioMatrixSources * kMaxAudioMatrixOuts> mainGains {};
+  std::array<std::array<float, 2 * kMaxExtraMatrixChannels>, kMaxExtraAudioOuts> extraGains {};
+  const auto add = [&](int dest, int source, int channel, float gain) {
+    if (dest == 0) {
+      if (channel >= 0 && channel < kMaxAudioMatrixOuts) {
+        mainGains[static_cast<std::size_t>(source) * kMaxAudioMatrixOuts + static_cast<std::size_t>(channel)] += gain;
+      }
+    } else if (dest > 0 && dest <= kMaxExtraAudioOuts && channel >= 0 && channel < kMaxExtraMatrixChannels) {
+      extraGains[static_cast<std::size_t>(dest - 1)]
+                [static_cast<std::size_t>(source) * kMaxExtraMatrixChannels + static_cast<std::size_t>(channel)] += gain;
+    }
+  };
+  const auto findOutput = [this](const std::string& name) -> const PatchRouting::Output* {
+    for (const PatchRouting::Output& o : patchRouting_.outputs) {
+      if (o.name == name) return &o;
+    }
+    return nullptr;
+  };
+  bool byName = false;
+  if (cue) {
+    for (const AudioCrosspoint& p : cue->audioMatrix) {
+      if (!p.output.empty()) { byName = true; break; }
+    }
+  }
+  if (byName) {
+    for (const AudioCrosspoint& p : cue->audioMatrix) {
+      const PatchRouting::Output* o = p.output.empty() ? nullptr : findOutput(p.output);
+      if (!o || o->dest < 0 || p.source < 0 || p.source >= kAudioMatrixSources ||
+          p.dest < 0 || p.dest >= o->width) {
+        continue;
+      }
+      add(o->dest, p.source, o->firstChannel + p.dest, std::clamp(p.gain, 0.0f, 4.0f));
+    }
+  } else {
+    for (const PatchRouting::Output& o : patchRouting_.outputs) {
+      if (!o.on || o.dest < 0) continue;
+      const float gain = static_cast<float>(std::pow(10.0, o.gainDb / 20.0));
+      if (o.width >= 2) {
+        add(o.dest, 0, o.firstChannel, gain);
+        add(o.dest, 1, o.firstChannel + 1, gain);
+      } else {
+        // ONE CHANNEL: both sides at half, so a centred sound arrives at the
+        // level it has on a pair.
+        add(o.dest, 0, o.firstChannel, gain * 0.5f);
+        add(o.dest, 1, o.firstChannel, gain * 0.5f);
+      }
+    }
+  }
+  for (std::size_t i = 0; i < mainGains.size(); ++i) {
+    audioMatrixGain_[i].store(std::min(mainGains[i], 4.0f), std::memory_order_relaxed);
+  }
+  for (std::size_t k = 0; k < extraGains.size(); ++k) {
+    for (std::size_t i = 0; i < extraGains[k].size(); ++i) {
+      extraMatrixGain_[k][i].store(std::min(extraGains[k][i], 4.0f), std::memory_order_relaxed);
+    }
+  }
+  // The main stream goes through its gains in the patch even when they are
+  // all zero: a playlist with nothing on that device puts silence there.
+  audioMatrixActive_.store(true, std::memory_order_release);
+}
+
+void MediaEngine::setPatchCapture(const std::string& prefix) {
+  std::lock_guard<std::mutex> lock(audioStreamMutex_);
+  patchCapturePrefix_ = prefix;
+}
+
+// Tests only. On the audio thread, under the lock queuePatched runs in.
+void MediaEngine::capturePatchBuffer(int dest, const std::int16_t* data, std::size_t frames,
+                                     int channels) {
+  if (patchCapturePrefix_.empty() || dest < 0 ||
+      dest >= static_cast<int>(patchCaptureFiles_.size())) {
+    return;
+  }
+  std::FILE*& file = patchCaptureFiles_[static_cast<std::size_t>(dest)];
+  if (!file) {
+    const std::string path = patchCapturePrefix_ + "-dest" + std::to_string(dest) + ".raw";
+    file = std::fopen(path.c_str(), "wb");
+    if (!file) return;
+    const std::int32_t header[3] {0x43504244, channels, kAudioRate};   // "DBPC"
+    std::fwrite(header, sizeof(header), 1, file);
+  }
+  std::fwrite(data, sizeof(std::int16_t), frames * static_cast<std::size_t>(channels), file);
+  std::fflush(file);
+}
+
+float MediaEngine::patchGain(int dest, int source, int channel) const {
+  if (source < 0 || source >= kAudioMatrixSources || channel < 0) return 0.0f;
+  if (dest == 0) {
+    if (channel >= kMaxAudioMatrixOuts) return 0.0f;
+    return audioMatrixGain_[static_cast<std::size_t>(source) * kMaxAudioMatrixOuts +
+                            static_cast<std::size_t>(channel)].load(std::memory_order_relaxed);
+  }
+  if (dest > kMaxExtraAudioOuts || channel >= kMaxExtraMatrixChannels) return 0.0f;
+  return extraMatrixGain_[static_cast<std::size_t>(dest - 1)]
+                         [static_cast<std::size_t>(source) * kMaxExtraMatrixChannels +
+                          static_cast<std::size_t>(channel)].load(std::memory_order_relaxed);
+}
+
+#if DECKBOY_INPROC_DECODE
+// ---------------------------------------------------------------------------
+// startInprocDecoders — In-process libav decode (GPU_DECODE_PLAN §11).
+//
+// Replaces the two ffmpeg subprocess pipes with two in-process pipelines on
+// the same thread structure: the video thread pushes into frameQueue_ under
+// the same kMaxVideoFrames backpressure and frame indexing, the audio thread
+// feeds the same gain/tap/queue tail — transport, A/V clock, EOF and loop
+// semantics are unchanged.
+//
+// Zero-copy: when the cue takes the NV12 fast path and the app supplied a
+// decode-device provider (deck engines), video decodes via d3d11va directly
+// on the program output renderer's D3D11 device and frames stay GPU-resident
+// (DecodedFrame::gpu*). Otherwise frames arrive as classic CPU pixels.
+//
+// Returns false → caller falls through to the CLI pipe path (rotated files,
+// undecodable first frame, open failure).
+// ---------------------------------------------------------------------------
+#if DECKBOY_INPROC_DECODE
+// ---------------------------------------------------------------------------
+// startSrtDecoder -- an SRT feed with its sound, over ONE connection.
+//
+// This is how a switcher like vMix takes SRT: open the feed once and split it.
+// The CLI ffmpeg has the SRT protocol, so it takes the connection and writes
+// decoded picture (rawvideo, already scaled) and sound (s16 stereo) muxed as
+// NUT; PipeDemuxer sorts the packets. Sound is mapped optionally (0:a:0?), so a
+// feed without it plays picture only rather than failing.
+//
+// Live, so nothing here may BLOCK the read: a full frame queue drops its oldest
+// frame and a full audio queue drops the chunk, or the pipe backs up, ffmpeg
+// stops reading the socket and the sender starts discarding packets.
+// ---------------------------------------------------------------------------
+bool MediaEngine::startSrtDecoder(const Cue& cue, const std::string& mediaPath, int decodeW,
+                                  int decodeH, FramePixelFormat decodeFormat,
+                                  const char* pixFmt, const std::string& scaleFilter) {
+  // Never probed, so whether the feed carries sound is unknown until it
+  // connects: ask for it whenever this deck can play it.
+  // A cue that says it has NO audio track was never probed (playlist imports
+  // before 0.99.398 said so of every channel), so that is not a mute -- a muted
+  // stream still has its track. Only an explicit mute keeps the sound out.
+  const bool wantAudio = audioStream_ != nullptr && (cue.audioEnabled || !cue.hasAudio);
+  const int threads = std::clamp(SDL_GetNumLogicalCPUCores() / 2, 1, 4);
+  std::vector<std::string> args = {
+    "ffmpeg", "-hide_banner", "-loglevel", "error", "-threads", std::to_string(threads),
+    "-i", mediaPath, "-map", "0:v:0"};
+  if (wantAudio) {
+    // The cue's sound track; optional (?) so a file without it still plays.
+    args.insert(args.end(), {"-map", "0:a:" + std::to_string(std::max(0, cue.audioTrack)) + "?"});
+  }
+  // AN HDR FEED (cue.liveHdrTransfer, the operator's word for it: a stream
+  // is never probed). Left alone, ffmpeg turns it into 8-bit NV12 with the
+  // PQ or HLG curve still in it -- a dim, grey picture with no HDR left.
+  //  - Windows: 10-bit P010 tagged BT.2020 PQ, the same frame an HDR file's
+  //    zero-copy decode hands over, so an HDR output keeps the highlights
+  //    and SDL makes the SDR picture (Direct3D 11 PQ, measured for files).
+  //    HLG becomes PQ on the way (zscale: the BT.2100 OOTF at 1000 nits),
+  //    because SDL's HLG is dim (measured, check_hdr_sources).
+  //  - Elsewhere, or HLG with no zscale: 16-bit 4:4:4 converted to SDR by
+  //    core/hdr_to_sdr.hpp, exactly as an HDR file is on those platforms.
+  // A cue that needs RGBA for its effects keeps the 8-bit path.
+  namespace h = deckboy::core::hdr;
+  const int hdrFeed = decodeFormat == FramePixelFormat::NV12 ? std::clamp(cue.liveHdrTransfer, 0, 2) : 0;
+  bool hdrP010 = false;
+#ifdef _WIN32
+  hdrP010 = hdrFeed == 1 || (hdrFeed == 2 && ffmpegHasFilter("zscale"));
+#endif
+  const bool hdrToSdr = hdrFeed != 0 && !hdrP010;
+  std::string filter = scaleFilter;
+  const char* pipeFormat = pixFmt;
+  FramePixelFormat frameFormat = decodeFormat;
+  std::size_t pipeBytes = frameBufferSize(decodeFormat, decodeW, decodeH);
+  if (hdrP010) {
+    if (hdrFeed == 2) {
+      filter = "zscale=tin=arib-std-b67:t=smpte2084:npl=1000:pin=2020:p=2020:min=2020_ncl:m=2020_ncl:"
+               "rin=limited:r=limited," + filter;
+    }
+    pipeFormat = "p010le";
+    frameFormat = FramePixelFormat::P010;
+    pipeBytes = frameBufferSize(FramePixelFormat::P010, decodeW, decodeH);
+  } else if (hdrToSdr) {
+    pipeFormat = "yuv444p16le";
+    frameFormat = FramePixelFormat::RGBA32;
+    pipeBytes = static_cast<std::size_t>(decodeW) * decodeH * 6;
+  }
+  std::shared_ptr<h::Converter> toSdr;
+  if (hdrToSdr) {
+    h::Source source;
+    source.transfer = hdrFeed == 1 ? h::Transfer::Pq : h::Transfer::Hlg;
+    source.bitDepth = 10;
+    toSdr = std::make_shared<h::Converter>(source);
+  }
+  args.insert(args.end(), {"-vf", filter, "-c:v", "rawvideo", "-pix_fmt", pipeFormat});
+  if (wantAudio) {
+    args.insert(args.end(), {"-c:a", "pcm_s16le", "-ac", "2", "-ar", std::to_string(audioRate_)});
+  } else {
+    args.push_back("-an");
+  }
+  args.insert(args.end(), {"-f", "nut", "pipe:1"});
+  const std::size_t frameBytes = pipeBytes;
+  if (frameBytes == 0 || !spawnPipeProcess(videoProcess_, std::move(args))) {
+    return false;
+  }
+  if (wantAudio) {
+    syncAudioFadeParams();   // publish before the thread can queue sound
+    audioFramesQueued_.store(0, std::memory_order_relaxed);
+  }
+  const int fd = videoProcess_.readFd;
+  decodersRunning_ = true;
+  videoThread_ = std::thread([this, fd, decodeW, decodeH, frameFormat, frameBytes, hdrP010, toSdr]() {
+    deckboy::libav::PipeDemuxer demux;
+    if (!demux.open(fd)) {
+      decoderEof_ = true;
+      return;
+    }
+    std::vector<std::uint8_t> data;
+    std::uint64_t frameIndex = 0;
+    double audioTime = 0.0;
+    while (!decoderStop_.load()) {
+      const auto kind = demux.next(data);
+      if (kind == deckboy::libav::PipeDemuxer::Kind::End) {
+        break;
+      }
+      if (kind == deckboy::libav::PipeDemuxer::Kind::Audio) {
+        // Half a second of headroom. A feed delivers its sound in bursts, and
+        // the file path's 120ms cap threw away a third of the packets here --
+        // dropouts. Past this the device has stopped draining, and a live
+        // feed must lose the chunk rather than stall the picture behind it.
+        const int liveCap = (audioRate_ / 2) * audioStreamBytesPerFrame();
+        if (queuedAudioBytes() > liveCap) {
+          continue;
+        }
+        std::vector<std::int16_t> samples(data.size() / sizeof(std::int16_t));
+        std::memcpy(samples.data(), data.data(), samples.size() * sizeof(std::int16_t));
+        applyGainAndQueueAudio(samples, audioTime);
+        continue;
+      }
+      if (data.size() < frameBytes) {
+        continue;
+      }
+      DecodedFrame frame;
+      frame.width = decodeW;
+      frame.height = decodeH;
+      frame.index = frameIndex++;
+      frame.format = frameFormat;
+      data.resize(frameBytes);
+      if (toSdr) {
+        const std::size_t plane = static_cast<std::size_t>(decodeW) * decodeH;
+        const auto* planes = reinterpret_cast<const std::uint16_t*>(data.data());
+        frame.pixels.resize(plane * 4);
+        frame.colorspace = SDL_COLORSPACE_SRGB;
+        toSdr->convert(planes, planes + plane, planes + plane * 2, decodeW, decodeW, decodeH,
+                       frame.pixels.data(), decodeW * 4);
+      } else {
+        frame.pixels = std::move(data);
+        if (hdrP010) {
+          frame.colorspace = static_cast<SDL_Colorspace>(SDL_DEFINE_COLORSPACE(SDL_COLOR_TYPE_YCBCR,
+            SDL_COLOR_RANGE_LIMITED, SDL_COLOR_PRIMARIES_BT2020, SDL_TRANSFER_CHARACTERISTICS_PQ,
+            SDL_MATRIX_COEFFICIENTS_BT2020_NCL, SDL_CHROMA_LOCATION_LEFT));
+        }
+      }
+      data = {};
+      if (liveRgbaBridge_.load() && frame.format != FramePixelFormat::P010) {
+        bridgeFrameToRgba(frame);
+      }
+      lastFramePushMs_.store(SDL_GetTicks());
+      std::lock_guard<std::mutex> lock(frameMutex_);
+      if (frameQueue_.size() >= kMaxVideoFrames) {
+        frameQueue_.pop_front();   // live: the newest picture wins
+      }
+      frameQueue_.push_back(std::move(frame));
+    }
+    decoderEof_ = true;
+  });
+  return true;
+}
+#endif
+
+bool MediaEngine::startInprocDecoders(const Cue& cue, const std::string& mediaPath,
+                                      double mediaStartSeconds, double cueStartSeconds,
+                                      int decodeW, int decodeH, FramePixelFormat decodeFormat,
+                                      double speed) {
+  const bool wantVideo = cue.kind != CueKind::Audio;
+  if (wantVideo) {
+    deckboy::libav::VideoOpenParams videoParams;
+    videoParams.path = mediaPath;
+    videoParams.startSeconds = mediaStartSeconds;
+    videoParams.targetWidth = decodeW;
+    videoParams.targetHeight = decodeH;
+    videoParams.format = decodeFormat;
+    // Withhold keyframes at decode; also forces software decode (see
+    // VideoOpenParams::datamosh).
+    videoParams.datamosh = datamoshActiveForCue(cue);
+    if (decodeFormat == FramePixelFormat::NV12 && decodeDeviceProvider_ && !videoParams.datamosh) {
+      videoParams.d3dDevice = decodeDeviceProvider_();
+    }
+#if defined(__linux__)
+    // Zero-copy display, when the owner asked for it and this renderer can
+    // import a decoder's buffers. Asked once: it queries the GL context.
+    if (zeroCopyImport_ && decodeFormat == FramePixelFormat::NV12 && !videoParams.datamosh) {
+      if (zeroCopyImportCapable_ < 0) {
+        const char* why = "";
+        zeroCopyImportCapable_ =
+          deckboy::engine::DrmPrimeImporter::rendererCanImport(outputRenderer_, &why) ? 1 : 0;
+        SDL_Log("zero-copy display: %s (%s)", zeroCopyImportCapable_ == 1 ? "on" : "off", why);
+      }
+      videoParams.drmPrime = zeroCopyImportCapable_ == 1;
+    }
+#endif
+    videoPipeline_ = std::make_unique<deckboy::libav::VideoPipeline>();
+    if (!videoPipeline_->open(videoParams)) {
+      videoPipeline_.reset();
+      return false;
+    }
+    activeDecodeDevice_ = videoPipeline_->device();
+    activeDecodeName_ = videoPipeline_->hardwareDecodeName();
+    activeDecodeZeroCopy_ = videoPipeline_->zeroCopyActive();
+  } else {
+    // Audio-only cue: no video stream — mirrors the CLI video pipe's
+    // immediate EOF so end-of-playback detection still keys off audio.
+    decoderEof_ = true;
+  }
+
+  inprocDecodeActive_ = true;
+  decodersRunning_ = true;
+  decodeStallLatched_ = false;
+  lastFramePushMs_.store(SDL_GetTicks());
+
+  // THE PASS, for a seamless loop: one time round the clip, from the cue's
+  // in-point to its out-point. In frames for the picture (a whole number, so
+  // every pass has the same frames), and from that in seconds and in audio
+  // frames at the output rate, so sound and picture are cut at exactly the
+  // same place and cannot drift apart however many times the clip goes round.
+  // The decoders read it; the engine wraps its clock on it (update()).
+  if (duration_ > 0.0 && !liveSourceNoEnd_) {
+    if (wantVideo && frameRate_ > 0.0) {
+      loopPassFrames_ = static_cast<std::uint64_t>(std::ceil(duration_ * frameRate_ - 1e-6));
+      loopPassSeconds_ = static_cast<double>(loopPassFrames_) / frameRate_;
+    } else {
+      loopPassSeconds_ = duration_;
+    }
+    loopPassAudioFrames_ = static_cast<std::uint64_t>(
+      std::llround(loopPassSeconds_ / std::max(0.01, speed) * static_cast<double>(audioRate_)));
+  }
+  loopAtPassEnd_.store(seamlessLoopWanted());
+
+  if (wantVideo) {
+    videoThread_ = std::thread([this, cueStartSeconds]() {
+      const std::uint64_t startIndex =
+        static_cast<std::uint64_t>(std::floor(cueStartSeconds * frameRate_));
+      std::uint64_t frameIndex = startIndex;
+      // Where this pass's frame 0 sits in index space, and the index its first
+      // timestamp maps to (the in-point on the first pass, frame 0 after).
+      std::uint64_t passBase = 0;
+      std::uint64_t passOrigin = startIndex;
+      // The first frame's timestamp is the ORIGIN, not zero. See below.
+      double firstPresentation = -1.0;
+      while (!decoderStop_.load()) {
+        while (!decoderStop_.load()) {
+          bool hasRoom = false;
+          {
+            std::lock_guard<std::mutex> lock(frameMutex_);
+            hasRoom = frameQueue_.size() < kMaxVideoFrames;
+          }
+          if (hasRoom) {
+            break;
+          }
+          SDL_Delay(4);
+        }
+        if (decoderStop_.load()) {
+          break;
+        }
+        DecodedFrame frame;
+        const bool got = videoPipeline_->nextFrame(frame);
+        if (!got) {
+          // THE END OF THE FILE, on a cue that goes round: back to the
+          // in-point on the same pipeline and carry on, while the engine
+          // plays out what is queued. A file shorter than its pass leaves
+          // its last frame up for the difference.
+          if (loopAtPassEnd_.load() && loopPassFrames_ > 0 && videoPipeline_->rewind()) {
+            passBase += loopPassFrames_;
+            frameIndex = passBase;
+            passOrigin = passBase;
+            firstPresentation = -1.0;
+            videoPassesStarted_.fetch_add(1);
+            continue;
+          }
+          break;
+        }
+        // Index by the frame's real presentation time when we have it, so
+        // telecined / variable-rate video (3:2-pulldown DVD MPEG-2, VFR phone
+        // clips) schedules against the audio clock by its actual timestamps
+        // instead of a constant-fps counter that drifts. Kept strictly
+        // increasing; falls back to the sequential counter when PTS is absent.
+        //
+        // TWO THINGS THE TIMESTAMPS CANNOT BE TRUSTED TO DO, both found on a
+        // DivX-era XVID AVI with PACKED B-FRAMES -- the kind ffmpeg warns about
+        // with "non-standard and wasteful way to store B-frames". That format
+        // carries 7-byte dummy packets and hands the decoder's first output the
+        // timestamp of a LATER packet:
+        //
+        // 1. START AT ZERO. That file's first decoded frame arrives stamped
+        //    0.1669s, which is frame four. Indexed against absolute zero, every
+        //    picture in the cue then sits four frames later than the sound that
+        //    belongs with it -- a fixed ~170ms of the picture lagging, for the
+        //    whole cue. So the first frame's own timestamp is the origin, and
+        //    the relative spacing between frames -- the entire point of the
+        //    telecine fix -- is untouched by measuring from it.
+        //
+        // 2. BE PLAUSIBLE. One bad timestamp used to move the picture forward
+        //    permanently: the index took max(pts, sequential) and the counter
+        //    followed it, so a single spurious jump parked every later frame
+        //    ahead of the clock and the picture FROZE until the audio caught
+        //    up. That is the "stuck on a frame for a second or two, but only
+        //    now and then" report. A timestamp more than half a second from
+        //    where the sequence says we are is not a variable frame rate, it is
+        //    a broken timestamp, and the counter is the better answer.
+        if (frame.presentationSeconds >= 0.0 && frameRate_ > 0.0) {
+          if (firstPresentation < 0.0) {
+            firstPresentation = frame.presentationSeconds;
+          }
+          const double relative = frame.presentationSeconds - firstPresentation;
+          const std::int64_t ptsIndex =
+            static_cast<std::int64_t>(passOrigin) +
+            std::llround(relative * frameRate_);
+          const std::int64_t expected = static_cast<std::int64_t>(frameIndex);
+          const std::int64_t tolerance =
+            std::max<std::int64_t>(2, std::llround(frameRate_ * 0.5));
+          if (ptsIndex < 0 || std::llabs(ptsIndex - expected) > tolerance) {
+            frame.index = frameIndex++;
+          } else {
+            frame.index = std::max(static_cast<std::uint64_t>(ptsIndex), frameIndex);
+            frameIndex = frame.index + 1;
+          }
+        } else {
+          frame.index = frameIndex++;
+        }
+        // PAST THE OUT-POINT on a cue that goes round: this frame belongs to
+        // the next pass, which starts from the in-point instead.
+        if (loopAtPassEnd_.load() && loopPassFrames_ > 0 &&
+            frame.index >= passBase + loopPassFrames_ && videoPipeline_->rewind()) {
+          passBase += loopPassFrames_;
+          frameIndex = passBase;
+          passOrigin = passBase;
+          firstPresentation = -1.0;
+          videoPassesStarted_.fetch_add(1);
+          continue;
+        }
+        if (liveRgbaBridge_.load()) {
+          bridgeFrameToRgba(frame);   // see adoptLookWithoutRestart
+        }
+        lastFramePushMs_.store(SDL_GetTicks());
+        std::lock_guard<std::mutex> lock(frameMutex_);
+        frameQueue_.push_back(std::move(frame));
+      }
+      decoderEof_ = true;
+    });
+  }
+
+  audioClockValid_ = false;
+  // A CUE THAT SHOULD HAVE SOUND AND GETS NONE MUST SAY SO.
+  //
+  // Both audio paths failed into silence without a toast, a log line or a
+  // counter, which is how an audio-only cue could play with a dead VU meter
+  // and still look completely healthy.
+  // An AUDIO cue with no audio is a contradiction, so say which of the three
+  // things the gate below wants was missing rather than leaving it silent.
+  if (cue.kind == CueKind::Audio &&
+      !(audioStream_ != nullptr && cue.hasAudio && cue.audioEnabled)) {
+    latchAudioStartFailure(
+      std::string("audio not started (device=") + (audioStream_ ? "yes" : "NO") +
+      " track=" + (cue.hasAudio ? "yes" : "NO") +
+      " enabled=" + (cue.audioEnabled ? "yes" : "NO") + ")");
+  } else if (cue.hasAudio && cue.audioEnabled && audioStream_ == nullptr) {
+    latchAudioStartFailure("no audio device open on this deck");
+  }
+  if (audioStream_ != nullptr && cue.hasAudio && cue.audioEnabled) {
+    deckboy::libav::AudioOpenParams audioParams;
+    audioParams.sampleRate = audioRate_;
+    audioParams.path = mediaPath;
+    audioParams.startSeconds = mediaStartSeconds;
+    audioParams.speed = speed;
+    audioParams.audioTrack = std::max(0, cue.audioTrack);
+    audioPipeline_ = std::make_unique<deckboy::libav::AudioPipeline>();
+    if (!audioPipeline_->open(audioParams)) {
+      audioPipeline_.reset();
+      // Was a bare "run silent" comment. Silence that explains itself is a
+      // fault you can fix; silence that does not is one you argue about.
+      latchAudioStartFailure("could not open this file's audio stream");
+    } else {
+      syncAudioFadeParams();  // publish before the audio thread spawns
+      audioFramesQueued_.store(0, std::memory_order_relaxed);
+      { std::lock_guard<std::mutex> tl(tapMutex_); tapFifo_.clear(); tapEmittedFrames_ = 0; }
+      audioClockStartSeconds_ = cueStartSeconds;
+      lastAudioClockSeconds_ = -1.0;
+      lastAudioClockAdvanceMs_ = 0;
+      audioClockValid_ = true;
+      audioDecodeEnded_.store(false);
+      audioThread_ = std::thread([this, cueStartSeconds, speed]() {
+        std::vector<std::int16_t> samples(4096);
+        double audioTime = cueStartSeconds;
+        std::uint64_t produced = 0;
+        // Where this pass is, in audio frames, and how much silence is still
+        // owed to make a short audio track fill its pass (see below).
+        const std::uint64_t passFrames = loopPassAudioFrames_;
+        std::uint64_t passPos = static_cast<std::uint64_t>(std::llround(
+          cueStartSeconds / std::max(0.01, speed) * static_cast<double>(audioRate_)));
+        std::uint64_t silenceOwed = 0;
+        // ROUND AGAIN without a gap: back to the in-point on the same
+        // pipeline, the pass clock to zero, and no second fade-in.
+        auto goRound = [&]() {
+          if (!audioPipeline_->rewind()) {
+            return false;
+          }
+          passPos = 0;
+          audioTime = 0.0;
+          audioPassesStarted_.fetch_add(1);
+          return true;
+        };
+        while (!decoderStop_.load()) {
+          // ~120 ms queued (5760 frames) at the stream's channel count.
+          if (queuedAudioBytes() > 5760 * audioStreamBytesPerFrame()) {
+            SDL_Delay(4);
+            continue;
+          }
+          if (silenceOwed > 0) {
+            const std::uint64_t n = std::min<std::uint64_t>(silenceOwed, samples.size() / 2);
+            std::vector<std::int16_t> silence(static_cast<std::size_t>(n) * 2, 0);
+            applyGainAndQueueAudio(silence, audioTime);
+            silenceOwed -= n;
+            passPos += n;
+            if (silenceOwed == 0 && !goRound()) {
+              break;
+            }
+            continue;
+          }
+          int got = audioPipeline_->read(samples.data(), static_cast<int>(samples.size()));
+          if (got <= 0) {
+            // An audio thread that ends WITHOUT EVER PRODUCING A SAMPLE has
+            // not finished playing, it has failed to start -- and it used to
+            // end exactly as quietly either way.
+            if (produced == 0) {
+              latchAudioStartFailure("audio decoder produced no samples");
+              break;
+            }
+            // THE END OF THE SOUND on a cue that goes round. Each pass is cut
+            // to exactly its length in samples, so a track shorter than the
+            // picture is made up with silence: sound and picture then start
+            // every pass together, however many times the clip goes round.
+            if (loopAtPassEnd_.load() && passFrames > 0) {
+              if (passPos < passFrames) {
+                silenceOwed = passFrames - passPos;
+                continue;
+              }
+              if (goRound()) {
+                continue;
+              }
+            }
+            break;
+          }
+          produced += static_cast<std::uint64_t>(got);
+          std::size_t frames = static_cast<std::size_t>(got) / 2;
+          // PAST THE END OF THE PASS (an out-point, or a track longer than the
+          // picture) on a cue that goes round: keep exactly what belongs to
+          // this pass, then start the next.
+          bool cut = false;
+          if (loopAtPassEnd_.load() && passFrames > 0 && passPos + frames >= passFrames) {
+            frames = static_cast<std::size_t>(passFrames > passPos ? passFrames - passPos : 0);
+            cut = true;
+          }
+          if (frames > 0) {
+            std::vector<std::int16_t> scaled(samples.begin(),
+                                             samples.begin() + static_cast<std::ptrdiff_t>(frames * 2));
+            applyGainAndQueueAudio(scaled, audioTime);
+            passPos += frames;
+          }
+          if (cut && !goRound()) {
+            break;
+          }
+        }
+        audioDecodeEnded_.store(true);
+      });
+    }
+  }
+  return true;
+}
+#endif // DECKBOY_INPROC_DECODE
+
+// ---------------------------------------------------------------------------
+// decodeSingleFrame — Synchronous single-frame decode for thumbnail generation.
+//
+// Unlike loadStillFrame (async, uses imageThread_), this blocks until the frame
+// is decoded and returns it directly. Used by the thumbnail pipeline (cue list
+// preview images) which can afford to block since it runs on a background thread.
+//
+// The caller provides the ChildProcess handle to use — this allows the thumbnail
+// generator to manage multiple concurrent decodes with separate process lifetimes.
+//
+// Seeks to `seconds` if > 0 (for video thumbnails at a specific timecode).
+// Dimensions are clamped to output resolution to avoid wasting decode time.
+// ---------------------------------------------------------------------------
+std::optional<DecodedFrame> MediaEngine::decodeSingleFrame(ChildProcess& process, const std::string& path, int width, int height, double seconds) {
+  auto [capW, capH] = currentOutputSizeHint();
+  int w = width > 0 ? width : capW;
+  int h = height > 0 ? height : capH;
+  // Clamp to output resolution — thumbnails don't need to be larger
+  if (w > capW || h > capH) {
+    double scale = std::min(
+      static_cast<double>(capW) / w,
+      static_cast<double>(capH) / h
+    );
+    w = std::max(1, static_cast<int>(w * scale));
+    h = std::max(1, static_cast<int>(h * scale));
+  }
+  std::vector<std::string> args {
+    "ffmpeg",
+    "-hide_banner",
+    "-loglevel",
+    "error"
+  };
+  if (seconds > 0.0) {
+    args.push_back("-ss");
+    args.push_back(std::to_string(seconds));
+  }
+  args.insert(args.end(), {
+    "-i",
+    path,
+    "-frames:v",
+    "1",
+    "-vf",
+    "scale=" + std::to_string(w) + ":" + std::to_string(h) + ":flags=neighbor",
+    "-f",
+    "rawvideo",
+    "-pix_fmt",
+    "rgba",
+    "pipe:1"
+  });
+
+  if (!spawnPipeProcess(process, args)) {
+    return std::nullopt;
+  }
+
+  // Blocking read of the single decoded frame
+  const size_t frameBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
+  DecodedFrame frame;
+  frame.width = w;
+  frame.height = h;
+  frame.index = 0;
+  frame.pixels.resize(frameBytes);
+  bool ok = readExact(process.readFd, frame.pixels.data(), frameBytes);
+  process.stop();
+  if (!ok) {
+    return std::nullopt;
+  }
+  return frame;
+}
+
+// ── Static pattern builders ─────────────────────────────────────────────────
+// These static methods generate procedural test patterns directly into
+// DecodedFrame pixel buffers. They're CPU-rendered — no GPU shaders or
+// ffmpeg involved. Used by buildPatternFrame() and rebuildPatternFrame().
+
+// Write a single RGBA pixel at (x, y) into a DecodedFrame's pixel buffer.
+// Bounds-checked to silently ignore out-of-range coordinates (safe for
+// procedural drawing where shapes may extend past frame edges).
+void MediaEngine::writePixel(DecodedFrame& frame, int x, int y, SDL_Color color) {
+  if (x < 0 || y < 0 || x >= frame.width || y >= frame.height) {
+    return;
+  }
+  size_t offset = static_cast<size_t>(y * frame.width + x) * 4u;
+  frame.pixels[offset + 0] = color.r;
+  frame.pixels[offset + 1] = color.g;
+  frame.pixels[offset + 2] = color.b;
+  frame.pixels[offset + 3] = color.a;
+}
+
+// Fill a rectangular region with a solid color. Clamps to frame bounds so
+// callers don't need to worry about edge clipping. Used extensively by all
+// pattern builders to draw bars, blocks, and filled shapes.
+//
+// One row is written pixel by pixel and the rest are copies of it: the
+// per-pixel, per-byte version was most of a Fireside frame (its wall is the
+// whole raster, filled twice).
+void MediaEngine::fillPixelRect(DecodedFrame& frame, int x, int y, int w, int h, SDL_Color color) {
+  const int x0 = std::max(0, x), x1 = std::min(frame.width, x + w);
+  const int y0 = std::max(0, y), y1 = std::min(frame.height, y + h);
+  if (x0 >= x1 || y0 >= y1 ||
+      frame.pixels.size() < static_cast<std::size_t>(frame.width) * frame.height * 4u) {
+    return;
+  }
+  const std::uint8_t px[4] = {color.r, color.g, color.b, color.a};
+  const std::size_t stride = static_cast<std::size_t>(frame.width) * 4u;
+  const std::size_t bytes = static_cast<std::size_t>(x1 - x0) * 4u;
+  std::uint8_t* first = frame.pixels.data() + static_cast<std::size_t>(y0) * stride +
+                        static_cast<std::size_t>(x0) * 4u;
+  for (std::size_t i = 0; i < bytes; i += 4) {
+    std::memcpy(first + i, px, 4);
+  }
+  for (int py = y0 + 1; py < y1; ++py) {
+    std::memcpy(first + static_cast<std::size_t>(py - y0) * stride, first, bytes);
+  }
+}
+
+// Draw a filled heart shape using the implicit heart curve equation:
+//   (x² + y² - 1)³ - x²y³ ≤ 0
+// The radius parameter scales the heart. Used by the pocket-test pattern
+// as a decorative element. The equation produces a mathematically perfect
+// heart shape that fills solidly (no outline-only mode).
+void MediaEngine::drawHeart(DecodedFrame& frame, int centerX, int centerY, int radius, SDL_Color color) {
+  for (int y = -radius * 2; y <= radius * 2; ++y) {
+    for (int x = -radius * 2; x <= radius * 2; ++x) {
+      double fx = static_cast<double>(x) / static_cast<double>(radius);
+      double fy = static_cast<double>(y) / static_cast<double>(radius);
+      double equation = std::pow(fx * fx + fy * fy - 1.0, 3.0) - fx * fx * std::pow(fy, 3.0);
+      if (equation <= 0.0) {
+        writePixel(frame, centerX + x, centerY + y, color);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildSmpte75Bars — Generate SMPTE 75% color bar test pattern.
+//
+// Layout (standard broadcast test pattern):
+//   Top 2/3:    7 vertical bars at 75% intensity
+//               (gray, yellow, cyan, green, magenta, red, blue)
+//   Middle 1/12: complementary/reversed bar strips for alignment checking
+//   Bottom 1/4:  4 strips (black, white, near-black, super-black) for
+//                monitor setup — used to calibrate brightness/contrast
+//
+// Small colored rectangles at the bottom of each top bar act as label markers
+// (contrasting color so they're visible against the bar).
+// ---------------------------------------------------------------------------
+void MediaEngine::buildSmpte75Bars(DecodedFrame& frame) {
+  int W = frame.width, H = frame.height;
+  struct Bar { Uint8 r, g, b; };
+  // SMPTE 75% bars: each channel is either 0 or 191 (75% of 255)
+  constexpr std::array<Bar, 7> bars {{
+    {191,191,191},  // gray
+    {191,191,  0},  // yellow
+    {  0,191,191},  // cyan
+    {  0,191,  0},  // green
+    {191,  0,191},  // magenta
+    {191,  0,  0},  // red
+    {  0,  0,191},  // blue
+  }};
+  int topH   = H * 2 / 3;    // top section: main color bars
+  int midH   = H / 12;       // middle section: complementary strips
+  int botH   = H - topH - midH;  // bottom section: grayscale setup
+  int barW   = W / 7;
+  // Draw 7 main color bars (last bar extends to fill remaining width)
+  for (int i = 0; i < 7; ++i) {
+    SDL_Color c {bars[i].r, bars[i].g, bars[i].b, 255};
+    fillPixelRect(frame, i * barW, 0, barW + (i == 6 ? W - 6 * barW : 0), topH, c);
+  }
+  // Middle strips: complementary pattern for color alignment verification
+  constexpr std::array<Bar, 7> midBars {{
+    {  0,191,191},  // cyan
+    {  0,  0,  0},  // black
+    {191,  0,191},  // magenta
+    {  0,  0,  0},  // black
+    {191,191,191},  // gray
+    {  0,  0,  0},  // black
+    {  0,  0,191},  // blue
+  }};
+  for (int i = 0; i < 7; ++i) {
+    SDL_Color c {midBars[i].r, midBars[i].g, midBars[i].b, 255};
+    fillPixelRect(frame, i * barW, topH, barW + (i == 6 ? W - 6 * barW : 0), midH, c);
+  }
+  // Bottom: grayscale strips for brightness/contrast calibration
+  int botBarW = W / 4;
+  fillPixelRect(frame, 0,          topH + midH, botBarW, botH, {  0,  0,  0, 255});  // black
+  fillPixelRect(frame, botBarW,    topH + midH, botBarW, botH, {255,255,255, 255});  // white
+  fillPixelRect(frame, botBarW*2,  topH + midH, botBarW, botH, { 10, 10, 10, 255});  // near-black
+  fillPixelRect(frame, botBarW*3,  topH + midH, W - botBarW*3, botH, { 4,  4,  4, 255});  // super-black
+  // Label markers at the bottom of each top bar (contrasting color)
+  for (int i = 0; i < 7; ++i) {
+    SDL_Color label {bars[i].r > 100 ? Uint8(0) : Uint8(230),
+                     bars[i].g > 100 ? Uint8(0) : Uint8(230),
+                     bars[i].b > 100 ? Uint8(0) : Uint8(230), 255};
+    fillPixelRect(frame, i * barW + 2, topH - 14, barW - 4, 10, label);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ENGINEERING PATTERNS
+//
+// Deckboy's own LED page generates these in a browser. The app could draw
+// three of them. A site that advertises twelve charts the product does not
+// have is the "CI green isn't shipped" mistake pointed the other way, so this
+// is the same set, drawn at the output raster instead of downloaded as a PNG
+// somebody then has to import at the wrong size.
+//
+// All of them are pure functions of the frame. None animates: a reference
+// level that moves is not a reference.
+// ---------------------------------------------------------------------------
+
+// A 3x5 bitmap font. This existed twice already -- as a lambda inside
+// buildTestClock and another inside buildFrameCount, each knowing a different
+// handful of characters. Two definitions of one thing is the bug CLAUDE.md
+// warns about; a third would have been careless.
+namespace {
+
+const std::uint8_t* patternGlyphRows(char c) {
+  // Each row is three bits, MSB left. Digits first because that is what a
+  // panel map is mostly made of.
+  static const std::uint8_t digits[10][5] = {
+    {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,3,1,7}, {5,5,7,1,1},
+    {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
+  };
+  static const std::uint8_t letters[26][5] = {
+    {7,5,7,5,5}, {6,5,6,5,6}, {7,4,4,4,7}, {6,5,5,5,6}, {7,4,6,4,7},
+    {7,4,6,4,4}, {7,4,5,5,7}, {5,5,7,5,5}, {7,2,2,2,7}, {1,1,1,5,7},
+    {5,5,6,5,5}, {4,4,4,4,7}, {5,7,7,5,5}, {7,5,5,5,5}, {7,5,5,5,7},
+    {7,5,7,4,4}, {7,5,5,7,3}, {7,5,6,5,5}, {7,4,7,1,7}, {7,2,2,2,2},
+    {5,5,5,5,7}, {5,5,5,5,2}, {5,5,7,7,5}, {5,5,2,5,5}, {5,5,2,2,2},
+    {7,1,2,4,7},
+  };
+  static const std::uint8_t colon[5]   = {0,2,0,2,0};
+  static const std::uint8_t dot[5]     = {0,0,0,0,2};
+  static const std::uint8_t dash[5]    = {0,0,7,0,0};
+  static const std::uint8_t slash[5]   = {1,1,2,4,4};
+  static const std::uint8_t percent[5] = {5,1,2,4,5};
+  static const std::uint8_t plus[5]    = {0,2,7,2,0};
+  static const std::uint8_t blank[5]   = {0,0,0,0,0};
+  if (c >= '0' && c <= '9') return digits[c - '0'];
+  if (c >= 'A' && c <= 'Z') return letters[c - 'A'];
+  if (c >= 'a' && c <= 'z') return letters[c - 'a'];
+  if (c == ':') return colon;
+  if (c == '.') return dot;
+  if (c == '-') return dash;
+  if (c == '/') return slash;
+  if (c == '%') return percent;
+  if (c == '+') return plus;
+  return blank;
+}
+
+}  // namespace
+
+int MediaEngine::patternGlyphWidth(std::size_t chars, int scale) {
+  if (chars == 0) {
+    return 0;
+  }
+  return static_cast<int>(chars) * 4 * scale - scale;
+}
+
+void MediaEngine::drawPatternGlyphs(DecodedFrame& frame, int x, int y,
+                                    const std::string& text, int scale,
+                                    SDL_Color color) {
+  int cx = x;
+  for (char c : text) {
+    const std::uint8_t* rows = patternGlyphRows(c);
+    for (int ry = 0; ry < 5; ++ry) {
+      for (int rx = 0; rx < 3; ++rx) {
+        if (rows[ry] & (4 >> rx)) {
+          fillPixelRect(frame, cx + rx * scale, y + ry * scale, scale, scale, color);
+        }
+      }
+    }
+    cx += 4 * scale;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildPanelMap -- every tile numbered, with its own pixel origin inside it
+// and a corner marker that differs in each corner of the wall.
+//
+// This is the pattern that turns "something is wrong up there" into "row 3,
+// column 7". A swapped tile shows the wrong number, a rotated one shows the
+// marker on the wrong side, and a dead receiver card shows nothing at all.
+//
+// The tile size is the operator's, not a guess: a wall of 168x168 panels
+// mapped as 128x128 puts every label in the wrong place, which is worse than
+// no map.
+// ---------------------------------------------------------------------------
+// ANIMATED, ON ASK (James, 2026-11-04: "the led test pattern should be
+// animated and beautiful too, at least optionally"): the same map over a slow
+// colour wave that flows across the wall, with each tile lit in turn in
+// reading order -- R1C1, R1C2... -- so a tile cabled out of sequence shows as
+// the light jumping. Labels, origins, corners and header are drawn exactly as
+// on the plain map, over a wash kept dark enough to read them.
+void MediaEngine::buildPanelMap(DecodedFrame& frame, int panelW, int panelH, double t) {
+  const int W = frame.width;
+  const int H = frame.height;
+  panelW = std::clamp(panelW, 8, std::max(8, W));
+  panelH = std::clamp(panelH, 8, std::max(8, H));
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+
+  const int cols = (W + panelW - 1) / panelW;
+  const int rows = (H + panelH - 1) / panelH;
+  // Alternating tile wash, so the grid reads even where a label does not fit.
+  for (int r = 0; r < rows; ++r) {
+    for (int c = 0; c < cols; ++c) {
+      const int x = c * panelW;
+      const int y = r * panelH;
+      const int w = std::min(panelW, W - x);
+      const int h = std::min(panelH, H - y);
+      const bool alt = ((r + c) & 1) != 0;
+      if (t < 0.0) {
+        fillPixelRect(frame, x, y, w, h, alt ? SDL_Color {16, 16, 22, 255}
+                                             : SDL_Color {28, 28, 36, 255});
+        // Tile edges, one pixel, so a seam is visible at 1:1 and nowhere else.
+        fillPixelRect(frame, x, y, w, 1, {90, 90, 110, 255});
+        fillPixelRect(frame, x, y, 1, h, {90, 90, 110, 255});
+      } else {
+        // The wave: a hue that drifts along a diagonal across the wall, at a
+        // depth that keeps white labels readable, the checker kept as a lift.
+        const double phase = c * 0.045 + r * 0.07 - t * 0.06;
+        const double hue = (phase - std::floor(phase)) * 6.0;
+        auto channel = [&](double offset) {
+          double k = std::fmod(hue + offset, 6.0);
+          const double v = std::clamp(std::min(k, 4.0 - k), 0.0, 1.0);
+          return v;
+        };
+        const double depth = alt ? 70.0 : 92.0;
+        // Reading order: one tile at a time, about four a second, round
+        // and round the wall.
+        const int lit = static_cast<int>(std::floor(t * 4.0)) % std::max(1, cols * rows);
+        const bool hot = r * cols + c == lit;
+        const double lift = hot ? 1.0 : 0.0;
+        const SDL_Color wash {
+          static_cast<Uint8>(std::clamp(18.0 + depth * channel(5.0) + lift * 90.0, 0.0, 255.0)),
+          static_cast<Uint8>(std::clamp(18.0 + depth * channel(3.0) + lift * 90.0, 0.0, 255.0)),
+          static_cast<Uint8>(std::clamp(18.0 + depth * channel(1.0) + lift * 90.0, 0.0, 255.0)), 255};
+        fillPixelRect(frame, x, y, w, h, wash);
+        // Edges that breathe, brighter on the tile being lit.
+        const double breath = 0.5 + 0.5 * std::sin(t * 2.4 + (r + c) * 0.5);
+        const Uint8 e = static_cast<Uint8>(std::clamp(110.0 + 100.0 * breath + lift * 45.0, 0.0, 255.0));
+        fillPixelRect(frame, x, y, w, 1, {e, e, static_cast<Uint8>(std::min(255, e + 20)), 255});
+        fillPixelRect(frame, x, y, 1, h, {e, e, static_cast<Uint8>(std::min(255, e + 20)), 255});
+        if (hot) {
+          const int b = std::max(2, std::min(w, h) / 24);
+          fillPixelRect(frame, x, y, w, b, {255, 255, 255, 255});
+          fillPixelRect(frame, x, y + h - b, w, b, {255, 255, 255, 255});
+          fillPixelRect(frame, x, y, b, h, {255, 255, 255, 255});
+          fillPixelRect(frame, x + w - b, y, b, h, {255, 255, 255, 255});
+        }
+      }
+
+      // R<row>C<col> as large as the tile allows, then the pixel origin under
+      // it. The origin is what catches a panel cabled into the wrong port:
+      // the number can look plausible while the coordinates do not.
+      char label[32];
+      std::snprintf(label, sizeof(label), "R%dC%d", r + 1, c + 1);
+      const std::string text(label);
+      int scale = std::max(1, std::min((h - 6) / 7,
+                                       (w - 6) / (4 * static_cast<int>(text.size()))));
+      const int tw = patternGlyphWidth(text.size(), scale);
+      // A WALL IS RARELY A WHOLE NUMBER OF PANELS TALL, so the bottom row is
+      // often a sliver. Clamped inside the tile: centring blindly drew a short
+      // tile's label on the tile ABOVE it, which is the one thing a panel map
+      // must never do.
+      const int labelY = y + std::max(1, std::min(h - 5 * scale - 1,
+                                                  h / 2 - 5 * scale));
+      drawPatternGlyphs(frame, x + (w - tw) / 2, labelY, text, scale,
+                        {235, 235, 245, 255});
+
+      char origin[40];
+      std::snprintf(origin, sizeof(origin), "%d.%d", x, y);
+      const std::string otext(origin);
+      const int oscale = std::max(1, scale / 2);
+      const int ow = patternGlyphWidth(otext.size(), oscale);
+      const int originY = labelY + 6 * scale;
+      if (ow < w - 4 && originY + 5 * oscale < y + h) {
+        drawPatternGlyphs(frame, x + (w - ow) / 2, originY, otext, oscale,
+                          {120, 190, 255, 255});
+      }
+    }
+  }
+
+  // Corner markers, each a different shape AND colour, so a wall rotated 180
+  // degrees is obvious from the back of the room rather than from the numbers.
+  // HOLLOW, and small. Solid blocks the size of a tile hid the very numbers
+  // the map is for -- the top-right one covered R1C15 completely.
+  const int m = std::max(8, std::min(W, H) / 24);
+  const int mt = std::max(2, m / 6);
+  fillPixelRect(frame, 0, 0, m, mt, {255, 60, 60, 255});             // TL: bar
+  fillPixelRect(frame, 0, 0, mt, m, {255, 60, 60, 255});
+  fillPixelRect(frame, W - m, 0, m, mt, {60, 220, 90, 255});         // TR: box
+  fillPixelRect(frame, W - m, 0, mt, m, {60, 220, 90, 255});
+  fillPixelRect(frame, W - mt, 0, mt, m, {60, 220, 90, 255});
+  fillPixelRect(frame, W - m, m - mt, m, mt, {60, 220, 90, 255});
+  for (int i = 0; i < m; i += 2) {                                   // BL: wedge
+    fillPixelRect(frame, 0, H - 1 - i, m - i, 1, {90, 140, 255, 255});
+  }
+  for (int i = 0; i < m; i += std::max(2, m / 6)) {                  // BR: rings
+    fillPixelRect(frame, W - m + i, H - m + i, m - 2 * i, 1, {255, 210, 60, 255});
+    fillPixelRect(frame, W - m + i, H - 1 - i, m - 2 * i, 1, {255, 210, 60, 255});
+    fillPixelRect(frame, W - m + i, H - m + i, 1, m - 2 * i, {255, 210, 60, 255});
+    fillPixelRect(frame, W - 1 - i, H - m + i, 1, m - 2 * i, {255, 210, 60, 255});
+  }
+
+  // What the wall claims to be, spelled out. A map with no header is a map
+  // somebody will photograph and then not be able to identify.
+  char header[96];
+  std::snprintf(header, sizeof(header), "%dX%d  %dX%d TILE  %dC %dR",
+                W, H, panelW, panelH, cols, rows);
+  const std::string htext(header);
+  // ALONG THE BOTTOM EDGE, not the top: centred at the top it sat squarely on
+  // the first row of tiles and hid R1's labels -- the map's own header
+  // destroying the map.
+  //
+  // SIZED TO THE SLIVER. A wall is rarely a whole number of panels tall, so
+  // the last row is usually a part-tile with no room for a label of its own;
+  // a header that fits in exactly that strip costs nothing. Sized by height
+  // alone it was 126px tall on a 1080 raster and swallowed row 8 as well.
+  const int sliverH = H - (rows - 1) * panelH;
+  const int budget = (sliverH >= 18 && sliverH < panelH) ? sliverH : panelH / 3;
+  const int hscale = std::max(1, std::min(budget / 9,
+                       W / (4 * static_cast<int>(htext.size()) + 8)));
+  const int hw = patternGlyphWidth(htext.size(), hscale);
+  const int plateH = 9 * hscale;
+  const int hy = H - plateH + 2 * hscale;
+  fillPixelRect(frame, (W - hw) / 2 - 4 * hscale, H - plateH,
+                hw + 8 * hscale, plateH, {0, 0, 0, 255});
+  drawPatternGlyphs(frame, (W - hw) / 2, hy, htext, hscale,
+                    {255, 255, 255, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildMoire -- one-pixel checkerboard, plus one-pixel horizontal and vertical
+// line fields.
+//
+// This one only means anything at 1:1. If it looks soft or swims, something in
+// the chain is scaling -- which is the fact it exists to establish, before any
+// argument about the camera.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildMoire(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  const int bandH = std::max(1, H / 3);
+  for (int y = 0; y < H; ++y) {
+    const int band = std::min(2, y / std::max(1, bandH));
+    for (int x = 0; x < W; ++x) {
+      bool on = false;
+      if (band == 0) {
+        on = ((x + y) & 1) != 0;        // checker
+      } else if (band == 1) {
+        on = (y & 1) != 0;              // horizontal lines
+      } else {
+        on = (x & 1) != 0;              // vertical lines
+      }
+      writePixel(frame, x, y, on ? SDL_Color {255, 255, 255, 255}
+                                 : SDL_Color {0, 0, 0, 255});
+    }
+  }
+  // Band labels on a plate, since three fields of one-pixel detail are hard to
+  // tell apart in a photograph of the wall.
+  const int scale = std::max(1, std::min(H / 90, W / 200));
+  const char* names[3] = {"CHECKER 1PX", "H LINES 1PX", "V LINES 1PX"};
+  for (int band = 0; band < 3; ++band) {
+    const std::string t(names[band]);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    const int ty = band * bandH + bandH / 2 - 3 * scale;
+    fillPixelRect(frame, 6 * scale, ty - 2 * scale, tw + 6 * scale, 9 * scale,
+                  {0, 0, 0, 255});
+    drawPatternGlyphs(frame, 9 * scale, ty, t, scale, {255, 120, 60, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildDarkDetail -- steps from black to 12%, which is where LED walls
+// actually struggle.
+//
+// Crushed blacks, a grey floor that is not black, and tiles that disagree with
+// each other down here long before they disagree in the light. A 0-100%
+// staircase hides all of it in one step.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildDarkDetail(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  constexpr int kSteps = 13;                 // 0% .. 12% in 1% steps
+  const int stepW = std::max(1, W / kSteps);
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+  const int scale = std::max(1, std::min(H / 40, W / 140));
+  for (int i = 0; i < kSteps; ++i) {
+    const int x = i * stepW;
+    const int w = (i == kSteps - 1) ? (W - x) : stepW;
+    const Uint8 v = static_cast<Uint8>(std::lround(255.0 * i / 100.0));
+    fillPixelRect(frame, x, 0, w, H - 12 * scale, {v, v, v, 255});
+    char label[8];
+    std::snprintf(label, sizeof(label), "%d%%", i);
+    const std::string t(label);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    drawPatternGlyphs(frame, x + (w - tw) / 2, H - 9 * scale, t, scale,
+                      {200, 200, 200, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildUniformity -- flat fields at 25/50/75/100 and full R, G, B.
+//
+// Flat colour is unforgiving. A panel from a different LED batch shows up at
+// once, and so does a dead pixel, neither of which a busy picture reveals.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildUniformity(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  const SDL_Color fields[7] = {
+    { 64,  64,  64, 255}, {128, 128, 128, 255}, {191, 191, 191, 255},
+    {255, 255, 255, 255}, {255,   0,   0, 255}, {  0, 255,   0, 255},
+    {  0,   0, 255, 255},
+  };
+  const char* names[7] = {"25%", "50%", "75%", "100%", "RED", "GREEN", "BLUE"};
+  const int cellW = std::max(1, W / 4);
+  const int cellH = std::max(1, H / 2);
+  const int scale = std::max(1, std::min(cellH / 14, cellW / 40));
+  for (int i = 0; i < 7; ++i) {
+    const int cx = (i % 4) * cellW;
+    const int cy = (i / 4) * cellH;
+    const int w = (i % 4 == 3) ? (W - cx) : cellW;
+    const int h = (i / 4 == 1) ? (H - cy) : cellH;
+    fillPixelRect(frame, cx, cy, w, h, fields[i]);
+    // Ink chosen against the field it sits on, or the label vanishes on white
+    // and on the 25% patch alike.
+    const bool bright = fields[i].r + fields[i].g + fields[i].b > 300;
+    const std::string t(names[i]);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    drawPatternGlyphs(frame, cx + (w - tw) / 2, cy + h - 10 * scale, t, scale,
+                      bright ? SDL_Color {0, 0, 0, 255}
+                             : SDL_Color {235, 235, 235, 255});
+  }
+  // The eighth cell is black, which is a reference too.
+  fillPixelRect(frame, 3 * cellW, cellH, W - 3 * cellW, H - cellH, {0, 0, 0, 255});
+  const std::string t("BLACK");
+  const int tw = patternGlyphWidth(t.size(), scale);
+  drawPatternGlyphs(frame, 3 * cellW + (W - 3 * cellW - tw) / 2, H - 10 * scale,
+                    t, scale, {120, 120, 120, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildBandingRamps -- horizontal ramps per channel and in grey.
+//
+// For finding the bit depth you are REALLY getting after processing. A 10-bit
+// chain that has been quietly truncated to 8 shows its steps here and nowhere
+// else in a show.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildBandingRamps(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  const int bandH = std::max(1, H / 4);
+  for (int y = 0; y < H; ++y) {
+    const int band = std::min(3, y / bandH);
+    for (int x = 0; x < W; ++x) {
+      // Rounded, not truncated: a truncating ramp has a step at the top end
+      // that belongs to the arithmetic rather than to the display.
+      const Uint8 v = static_cast<Uint8>(std::lround(255.0 * x / std::max(1, W - 1)));
+      SDL_Color c {0, 0, 0, 255};
+      if (band == 0)      c = {v, v, v, 255};
+      else if (band == 1) c = {v, 0, 0, 255};
+      else if (band == 2) c = {0, v, 0, 255};
+      else                c = {0, 0, v, 255};
+      writePixel(frame, x, y, c);
+    }
+  }
+  const int scale = std::max(1, std::min(bandH / 10, W / 120));
+  const char* names[4] = {"GREY", "RED", "GREEN", "BLUE"};
+  for (int band = 0; band < 4; ++band) {
+    const std::string t(names[band]);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    const int ty = band * bandH + 3 * scale;
+    fillPixelRect(frame, 4 * scale, ty - 2 * scale, tw + 6 * scale, 9 * scale,
+                  {0, 0, 0, 255});
+    drawPatternGlyphs(frame, 7 * scale, ty, t, scale, {255, 255, 255, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildSafeAreas -- centre cross, thirds, and 90% / 80% boxes.
+//
+// So content can be framed against the wall's REAL aspect rather than a guess.
+// The percentages are of the raster, which on an LED wall is the only frame
+// that exists -- there is no overscan to allow for and pretending otherwise
+// wastes the top and bottom of a wall somebody paid for.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildSafeAreas(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  fillPixelRect(frame, 0, 0, W, H, {14, 14, 18, 255});
+  const int t = std::max(1, std::min(W, H) / 400 + 1);
+
+  auto box = [&](double frac, SDL_Color c) {
+    const int ix = static_cast<int>(std::lround(W * (1.0 - frac) / 2.0));
+    const int iy = static_cast<int>(std::lround(H * (1.0 - frac) / 2.0));
+    const int bw = W - ix * 2;
+    const int bh = H - iy * 2;
+    fillPixelRect(frame, ix, iy, bw, t, c);
+    fillPixelRect(frame, ix, iy + bh - t, bw, t, c);
+    fillPixelRect(frame, ix, iy, t, bh, c);
+    fillPixelRect(frame, ix + bw - t, iy, t, bh, c);
+  };
+  box(0.90, {80, 200, 110, 255});
+  box(0.80, {240, 190, 70, 255});
+
+  // Thirds, for framing rather than for safety.
+  for (int i = 1; i <= 2; ++i) {
+    fillPixelRect(frame, W * i / 3, 0, t, H, {70, 70, 90, 255});
+    fillPixelRect(frame, 0, H * i / 3, W, t, {70, 70, 90, 255});
+  }
+  // Centre cross last, over everything, because it is the reference.
+  fillPixelRect(frame, W / 2 - t, 0, t * 2, H, {230, 60, 60, 255});
+  fillPixelRect(frame, 0, H / 2 - t, W, t * 2, {230, 60, 60, 255});
+
+  const int scale = std::max(1, std::min(H / 50, W / 90));
+  // EACH LABEL INSIDE THE BOX IT NAMES, on its own corner. Both were placed at
+  // the top-left of their own box, and at 90% versus 80% those two corners are
+  // close enough that the words sat on top of one another -- which is the
+  // failure this pattern exists to help people avoid.
+  drawPatternGlyphs(frame, W / 2 - W * 45 / 100 + 3 * scale,
+                    H / 2 - H * 45 / 100 + 3 * scale, "90%", scale,
+                    {80, 200, 110, 255});
+  drawPatternGlyphs(frame, W / 2 + W * 40 / 100 - patternGlyphWidth(3, scale) - 3 * scale,
+                    H / 2 + H * 40 / 100 - 8 * scale, "80%", scale,
+                    {240, 190, 70, 255});
+  char dims[40];
+  std::snprintf(dims, sizeof(dims), "%dX%d", W, H);
+  const std::string dt(dims);
+  drawPatternGlyphs(frame, (W - patternGlyphWidth(dt.size(), scale)) / 2,
+                    H / 2 + 4 * scale, dt, scale, {200, 200, 210, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildBoresight -- the alignment chart: centre cross, concentric rings, and
+// markers at each corner and edge midpoint.
+//
+// For lining a projector or a camera up on the middle of the screen when the
+// content has not been built yet.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildBoresight(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+  const int cx = W / 2;
+  const int cy = H / 2;
+  const int t = std::max(1, std::min(W, H) / 500 + 1);
+
+  // Rings every 1/8 of the short half-side. Drawn by scanning rows rather than
+  // by stepping an angle: an angular walk leaves gaps in the near-horizontal
+  // parts of a large circle, which reads as a broken pattern.
+  const int maxR = std::min(W, H) / 2;
+  const int ringStep = std::max(4, maxR / 8);
+  for (int y = 0; y < H; ++y) {
+    const double dy = static_cast<double>(y - cy);
+    for (int x = 0; x < W; ++x) {
+      const double dx = static_cast<double>(x - cx);
+      const double r = std::sqrt(dx * dx + dy * dy);
+      const double m = std::fmod(r, static_cast<double>(ringStep));
+      if (m < t && r <= maxR) {
+        writePixel(frame, x, y, {90, 170, 255, 255});
+      }
+    }
+  }
+  // Cross and diagonals.
+  fillPixelRect(frame, cx - t, 0, t * 2, H, {255, 255, 255, 255});
+  fillPixelRect(frame, 0, cy - t, W, t * 2, {255, 255, 255, 255});
+  for (int i = 0; i < std::min(W, H); ++i) {
+    const int dx = (i - std::min(W, H) / 2);
+    writePixel(frame, cx + dx, cy + dx, {70, 70, 80, 255});
+    writePixel(frame, cx + dx, cy - dx, {70, 70, 80, 255});
+  }
+  // Centre bullseye, so the exact middle is a point and not an intersection of
+  // two lines that a lens can blur into a smudge.
+  for (int r = 0; r < std::max(3, maxR / 40); ++r) {
+    fillPixelRect(frame, cx - r, cy - r, r * 2 + 1, r * 2 + 1,
+                  {255, 60, 60, 255});
+  }
+  // Edge and corner markers.
+  const int m = std::max(6, std::min(W, H) / 20);
+  const SDL_Color mk {255, 210, 60, 255};
+  fillPixelRect(frame, 0, 0, m, t * 2, mk);
+  fillPixelRect(frame, 0, 0, t * 2, m, mk);
+  fillPixelRect(frame, W - m, 0, m, t * 2, mk);
+  fillPixelRect(frame, W - t * 2, 0, t * 2, m, mk);
+  fillPixelRect(frame, 0, H - t * 2, m, t * 2, mk);
+  fillPixelRect(frame, 0, H - m, t * 2, m, mk);
+  fillPixelRect(frame, W - m, H - t * 2, m, t * 2, mk);
+  fillPixelRect(frame, W - t * 2, H - m, t * 2, m, mk);
+  fillPixelRect(frame, cx - m / 2, 0, m, t * 2, mk);
+  fillPixelRect(frame, cx - m / 2, H - t * 2, m, t * 2, mk);
+  fillPixelRect(frame, 0, cy - m / 2, t * 2, m, mk);
+  fillPixelRect(frame, W - t * 2, cy - m / 2, t * 2, m, mk);
+}
+
+// ---------------------------------------------------------------------------
+// buildPluge -- black level. Bars just below, at, and just above black.
+//
+// Set brightness so the below-black bar is invisible and the above-black one
+// is only just visible. Everything else about a wall's picture is downstream
+// of getting this right, which is why it is its own chart and not a strip.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildPluge(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  fillPixelRect(frame, 0, 0, W, H, {16, 16, 16, 255});
+  // -2%, 0, +2%, +4% around a 16-code black, in 8-bit terms.
+  const int levels[4] = {12, 16, 21, 26};
+  const char* names[4] = {"-2%", "BLACK", "+2%", "+4%"};
+  const int barW = std::max(1, W / 6);
+  const int barH = std::max(1, H * 3 / 5);
+  const int y0 = (H - barH) / 2;
+  const int scale = std::max(1, std::min(H / 40, W / 110));
+  for (int i = 0; i < 4; ++i) {
+    const int x = W / 2 - barW * 2 + i * barW;
+    const Uint8 v = static_cast<Uint8>(levels[i]);
+    fillPixelRect(frame, x, y0, barW, barH, {v, v, v, 255});
+    const std::string t(names[i]);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    drawPatternGlyphs(frame, x + (barW - tw) / 2, y0 + barH + 4 * scale, t,
+                      scale, {170, 170, 170, 255});
+  }
+  // A 100% white patch for the other end of the range, so peak and floor are
+  // set from one chart.
+  fillPixelRect(frame, W / 2 + barW * 2, y0, barW, barH, {255, 255, 255, 255});
+  const std::string wt("100%");
+  drawPatternGlyphs(frame, W / 2 + barW * 2 +
+                      (barW - patternGlyphWidth(wt.size(), scale)) / 2,
+                    y0 + barH + 4 * scale, wt, scale, {170, 170, 170, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildGreyscaleSteps -- an 11-step staircase, 0 to 100 in tens.
+//
+// Gamma and grey tracking. A wall that goes green in the mids or loses the top
+// two steps shows it here in a second.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildGreyscaleSteps(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  constexpr int kSteps = 11;
+  const int stepW = std::max(1, W / kSteps);
+  const int scale = std::max(1, std::min(H / 30, W / 130));
+  for (int i = 0; i < kSteps; ++i) {
+    const int x = i * stepW;
+    const int w = (i == kSteps - 1) ? (W - x) : stepW;
+    const Uint8 v = static_cast<Uint8>(std::lround(255.0 * i / (kSteps - 1)));
+    fillPixelRect(frame, x, 0, w, H, {v, v, v, 255});
+    char label[8];
+    std::snprintf(label, sizeof(label), "%d", i * 10);
+    const std::string t(label);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    drawPatternGlyphs(frame, x + (w - tw) / 2, H - 10 * scale, t, scale,
+                      v > 128 ? SDL_Color {0, 0, 0, 255}
+                              : SDL_Color {230, 230, 230, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildConvergence -- a fine white grid on black, one pixel wide.
+//
+// Distinct from crosshatch, which is a 64px geometry grid with a safe area on
+// it. This is tight and plain: it is for looking at colour fringing on an
+// edge, so anything else in the frame is a distraction.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildConvergence(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+  const int step = std::max(8, std::min(W, H) / 36);
+  // Anchored to the centre so the middle lines land on the exact centre at any
+  // raster -- the same fix buildCrosshatch needed.
+  for (int x = ((W / 2) % step); x < W; x += step) {
+    fillPixelRect(frame, x, 0, 1, H, {255, 255, 255, 255});
+  }
+  for (int y = ((H / 2) % step); y < H; y += step) {
+    fillPixelRect(frame, 0, y, W, 1, {255, 255, 255, 255});
+  }
+  // Pure R, G and B crosses along the top and bottom: fringing is a colour
+  // fault, and a white grid alone does not say WHICH channel is off.
+  const int m = std::max(10, std::min(W, H) / 10);
+  const SDL_Color rgb[3] = {{255, 0, 0, 255}, {0, 255, 0, 255}, {0, 0, 255, 255}};
+  const int px[3] = {m, W / 2, W - m};
+  for (int i = 0; i < 3; ++i) {
+    fillPixelRect(frame, px[i] - m / 2, m - 1, m, 2, rgb[i]);
+    fillPixelRect(frame, px[i] - 1, m - m / 2, 2, m, rgb[i]);
+    fillPixelRect(frame, px[i] - m / 2, H - m - 1, m, 2, rgb[i]);
+    fillPixelRect(frame, px[i] - 1, H - m - m / 2, 2, m, rgb[i]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildMultiburst -- vertical bar packets at rising frequencies.
+//
+// Bandwidth and scaling. The finest packet going grey means detail is being
+// lost somewhere between here and the panel, and WHICH packet fails says
+// roughly where.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildMultiburst(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  fillPixelRect(frame, 0, 0, W, H, {128, 128, 128, 255});
+  // Bar half-periods in pixels. 1 is the Nyquist case and the one that
+  // actually catches a scaler.
+  const int periods[6] = {16, 8, 4, 3, 2, 1};
+  const int packW = std::max(1, W / 6);
+  const int packH = std::max(1, H * 3 / 4);
+  const int y0 = (H - packH) / 2;
+  const int scale = std::max(1, std::min(H / 34, W / 130));
+  for (int p = 0; p < 6; ++p) {
+    const int x0 = p * packW;
+    const int w = (p == 5) ? (W - x0) : packW;
+    for (int x = x0; x < x0 + w; ++x) {
+      const bool on = ((x - x0) / periods[p]) % 2 == 0;
+      fillPixelRect(frame, x, y0, 1, packH,
+                    on ? SDL_Color {255, 255, 255, 255}
+                       : SDL_Color {0, 0, 0, 255});
+    }
+    char label[16];
+    std::snprintf(label, sizeof(label), "%dPX", periods[p]);
+    const std::string t(label);
+    const int tw = patternGlyphWidth(t.size(), scale);
+    drawPatternGlyphs(frame, x0 + (w - tw) / 2, y0 + packH + 4 * scale, t,
+                      scale, {20, 20, 20, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildWindowPattern -- a white window of a given area on black.
+//
+// For peak brightness at a realistic average picture level. A wall that hits
+// its rated nits on a 10% window and nowhere near it on a full field is
+// behaving normally, and this is how that gets measured rather than argued
+// about.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildWindowPattern(DecodedFrame& frame, int percent) {
+  const int W = frame.width;
+  const int H = frame.height;
+  percent = std::clamp(percent, 1, 100);
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+  // A window of `percent` AREA, keeping the raster's aspect so the shape does
+  // not change as the size does.
+  const double side = std::sqrt(percent / 100.0);
+  const int ww = std::max(1, static_cast<int>(std::lround(W * side)));
+  const int wh = std::max(1, static_cast<int>(std::lround(H * side)));
+  fillPixelRect(frame, (W - ww) / 2, (H - wh) / 2, ww, wh,
+                {255, 255, 255, 255});
+  char label[16];
+  std::snprintf(label, sizeof(label), "%d%% WINDOW", percent);
+  const std::string t(label);
+  const int scale = std::max(1, std::min(H / 40, W / 130));
+  const int tw = patternGlyphWidth(t.size(), scale);
+  drawPatternGlyphs(frame, (W - tw) / 2, H - 12 * scale, t, scale,
+                    {150, 150, 150, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildCrosshatch — Generate a crosshatch grid test pattern.
+//
+// White grid lines on black background at 64px intervals, plus:
+//   - Red crosshair at the exact center (for alignment)
+//   - Green safe-area rectangle at 10% inset (title-safe zone guide)
+//
+// phaseX/phaseY shift the grid for the -motion animated variant.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildCrosshatch(DecodedFrame& frame, int phaseX, int phaseY) {
+  int W = frame.width;
+  int H = frame.height;
+  constexpr int kStep = 64;  // grid spacing in pixels
+  // Wrap phase to grid period to prevent drift accumulation
+  int shiftX = ((phaseX % kStep) + kStep) % kStep;
+  int shiftY = ((phaseY % kStep) + kStep) % kStep;
+  // Black background
+  fillPixelRect(frame, 0, 0, W, H, {0, 0, 0, 255});
+  // Grid anchored to the CENTER so lines coincide with the red crosshair at
+  // every raster (the old 0,0-anchored grid only lined up when W/2 and H/2
+  // happened to be multiples of the step — at 1920x1080 the horizontal
+  // center line floated 28px off the grid).
+  int firstX = ((W / 2 - 1 - shiftX) % kStep + kStep) % kStep - kStep;
+  for (int x = firstX; x < W; x += kStep) {
+    fillPixelRect(frame, x, 0, 2, H, {255, 255, 255, 255});
+  }
+  int firstY = ((H / 2 - 1 - shiftY) % kStep + kStep) % kStep - kStep;
+  for (int y = firstY; y < H; y += kStep) {
+    fillPixelRect(frame, 0, y, W, 2, {255, 255, 255, 255});
+  }
+  // Red center crosshair (alignment reference)
+  fillPixelRect(frame, W / 2 - 1, 0,     2, H, {220,  40,  40, 255});
+  fillPixelRect(frame, 0,     H / 2 - 1, W, 2, {220,  40,  40, 255});
+  // Green safe-area rectangle at 10% inset (broadcast title-safe zone)
+  int sx = W / 10;
+  int sy = H / 10;
+  fillPixelRect(frame, sx, sy, W - sx * 2, 2, {60, 180, 60, 200});
+  fillPixelRect(frame, sx, sy, 2, H - sy * 2, {60, 180, 60, 200});
+  fillPixelRect(frame, W - sx - 2, sy, 2, H - sy * 2, {60, 180, 60, 200});
+  fillPixelRect(frame, sx, H - sy - 2, W - sx * 2, 2, {60, 180, 60, 200});
+}
+
+// ---------------------------------------------------------------------------
+// buildCheckerboard — Generate a black-and-white checkerboard test pattern.
+//
+// 64px cells in a standard checkerboard layout. phaseX/phaseY scroll the
+// pattern for the -motion animated variant. cellOffsetX/Y track which
+// cell-parity we're in so the checkerboard pattern remains consistent
+// as it scrolls (otherwise the phase shift would flip black/white cells).
+// ---------------------------------------------------------------------------
+void MediaEngine::buildCheckerboard(DecodedFrame& frame, int phaseX, int phaseY) {
+  int W = frame.width;
+  int H = frame.height;
+  constexpr int cell = 64;
+  int shiftX = ((phaseX % cell) + cell) % cell;
+  int shiftY = ((phaseY % cell) + cell) % cell;
+  // Track cell-level offset so parity is maintained during scrolling
+  int cellOffsetX = (phaseX - shiftX) / cell;
+  int cellOffsetY = (phaseY - shiftY) / cell;
+  for (int row = 0;; ++row) {
+    int y = row * cell - shiftY;
+    if (y >= H) {
+      break;
+    }
+    int y0 = std::max(0, y);
+    int y1 = std::min(H, y + cell);
+    if (y1 <= y0) {
+      continue;
+    }
+    for (int col = 0;; ++col) {
+      int x = col * cell - shiftX;
+      if (x >= W) {
+        break;
+      }
+      int x0 = std::max(0, x);
+      int x1 = std::min(W, x + cell);
+      if (x1 <= x0) {
+        continue;
+      }
+      bool white = ((row + col + cellOffsetX + cellOffsetY) % 2) == 0;
+      SDL_Color c = white ? SDL_Color{255, 255, 255, 255}
+                          : SDL_Color{0, 0, 0, 255};
+      fillPixelRect(frame, x0, y0, x1 - x0, y1 - y0, c);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildPocketTest — Generate animated pixel-art island scene.
+//
+// This is the signature "pocket test" pattern — a charming animated beach
+// scene rendered entirely in code with pixel-art aesthetics. It cycles
+// through 4 time-of-day scenes (14 seconds each):
+//   Scene 0: Day      — bright blue sky, yellow sun, full color
+//   Scene 1: Sunset   — orange/pink sky, warm lighting
+//   Scene 2: Night    — dark blue sky, moon with craters, twinkling stars
+//   Scene 3: Storm    — grey-teal sky, lightning bolts, rain streaks
+//
+// Scene elements (all drawn with rect/disc primitives):
+//   - Sky gradient with sun/moon and clouds
+//   - Ocean with animated wave crests
+//   - Island with vegetation
+//   - Beach with sand texture and surf line
+//   - Palm trees with animated sway
+//   - Brick platforms and pipes (retro game homage)
+//   - Animated characters: hero, crab, turtle, dinosaur, parrot, fish, puff friend
+//   - Collectible coins
+//   - Rainbow bar strip at the bottom (audio visualizer homage)
+//   - Stars and lightning (night/storm scenes)
+//
+// The time parameter t drives all animation (position, phase, scene selection).
+// forcedScene overrides the auto-cycling scene index (for pocket-day, etc.).
+// All coordinates are proportional to frame dimensions for resolution independence.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildPocketTest(DecodedFrame& frame, double t, int forcedScene) {
+  const int W = frame.width;
+  const int H = frame.height;
+
+  // Local drawing helpers — capture W, H, and frame by reference.
+  // These avoid the overhead of calling the class-level writePixel/fillPixelRect
+  // methods (which do member lookups) for the tight inner loops of the scene.
+
+  // Single pixel write with bounds check
+  auto put = [&](int x, int y, const SDL_Color& color) {
+    if (x < 0 || y < 0 || x >= W || y >= H) {
+      return;
+    }
+    size_t idx = (static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x)) * 4u;
+    frame.pixels[idx + 0] = color.r;
+    frame.pixels[idx + 1] = color.g;
+    frame.pixels[idx + 2] = color.b;
+    frame.pixels[idx + 3] = color.a;
+  };
+
+  // Filled rectangle with bounds clamping
+  auto rect = [&](int x, int y, int w, int h, const SDL_Color& color) {
+    if (w <= 0 || h <= 0) {
+      return;
+    }
+    int x0 = std::max(0, x);
+    int y0 = std::max(0, y);
+    int x1 = std::min(W, x + w);
+    int y1 = std::min(H, y + h);
+    for (int yy = y0; yy < y1; ++yy) {
+      for (int xx = x0; xx < x1; ++xx) {
+        put(xx, yy, color);
+      }
+    }
+  };
+
+  // Linear color interpolation (for sky/ocean/sand gradients)
+  auto lerpColor = [&](const SDL_Color& a, const SDL_Color& b, double v) -> SDL_Color {
+    double tClamped = std::clamp(v, 0.0, 1.0);
+    auto mix = [&](Uint8 aa, Uint8 bb) -> Uint8 {
+      return static_cast<Uint8>(std::round(static_cast<double>(aa) * (1.0 - tClamped) + static_cast<double>(bb) * tClamped));
+    };
+    return SDL_Color {mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), 255};
+  };
+
+  // Filled circle (for sun, moon, coins, character bodies)
+  auto disc = [&](int cx, int cy, int radius, const SDL_Color& color) {
+    int r2 = radius * radius;
+    for (int dy = -radius; dy <= radius; ++dy) {
+      for (int dx = -radius; dx <= radius; ++dx) {
+        if (dx * dx + dy * dy <= r2) {
+          put(cx + dx, cy + dy, color);
+        }
+      }
+    }
+  };
+
+  // Scene layout: proportional vertical zones
+  const int oceanTop = H * 52 / 100;   // sky ends / ocean starts at 52%
+  const int beachTop = H * 83 / 100;   // ocean ends / beach starts at 83%
+
+  // Scene selection: cycles 0→1→2→3 every 14 seconds, or forced for pocket-day/sunset/night/storm
+  int scene = forcedScene;
+  if (scene < 0 || scene > 3) {
+    scene = static_cast<int>(std::floor(t / 14.0)) % 4;
+    if (scene < 0) {
+      scene += 4;
+    }
+  }
+
+  // Scene 0 (Day) color palette — defaults, overridden per-scene below
+  SDL_Color skyTop {60, 170, 225, 255};
+  SDL_Color skyBottom {190, 245, 255, 255};
+  SDL_Color oceanNear {15, 95, 170, 255};
+  SDL_Color oceanFar {25, 130, 195, 255};
+  SDL_Color sandTop {248, 226, 154, 255};
+  SDL_Color sandBottom {226, 186, 108, 255};
+  SDL_Color sunCore {255, 241, 150, 255};
+  SDL_Color sunGlow {255, 226, 120, 120};
+  SDL_Color cloudMain {245, 255, 255, 255};
+  SDL_Color cloudShadow {205, 235, 245, 255};
+  bool drawMoon = false;
+
+  // Scene 1 (Sunset): warm orange/pink palette
+  if (scene == 1) {
+    skyTop = SDL_Color {246, 134, 98, 255};
+    skyBottom = SDL_Color {255, 205, 142, 255};
+    oceanNear = SDL_Color {40, 82, 156, 255};
+    oceanFar = SDL_Color {76, 122, 198, 255};
+    sandTop = SDL_Color {255, 214, 144, 255};
+    sandBottom = SDL_Color {234, 172, 108, 255};
+    sunCore = SDL_Color {255, 216, 114, 255};
+    sunGlow = SDL_Color {255, 145, 92, 140};
+    cloudMain = SDL_Color {255, 235, 224, 255};
+    cloudShadow = SDL_Color {236, 193, 183, 255};
+  // Scene 2 (Night): deep blue palette, moon with craters, stars
+  } else if (scene == 2) {
+    skyTop = SDL_Color {24, 38, 102, 255};
+    skyBottom = SDL_Color {92, 136, 206, 255};
+    oceanNear = SDL_Color {10, 50, 110, 255};
+    oceanFar = SDL_Color {25, 76, 150, 255};
+    sandTop = SDL_Color {164, 148, 115, 255};
+    sandBottom = SDL_Color {132, 114, 90, 255};
+    sunCore = SDL_Color {235, 242, 255, 255};
+    sunGlow = SDL_Color {170, 198, 255, 120};
+    cloudMain = SDL_Color {170, 188, 240, 255};
+    cloudShadow = SDL_Color {120, 136, 188, 255};
+    drawMoon = true;
+  // Scene 3 (Storm): grey-teal palette, extra clouds, rain + lightning
+  } else if (scene == 3) {
+    skyTop = SDL_Color {34, 78, 108, 255};
+    skyBottom = SDL_Color {102, 166, 180, 255};
+    oceanNear = SDL_Color {22, 86, 124, 255};
+    oceanFar = SDL_Color {38, 122, 156, 255};
+    sandTop = SDL_Color {198, 184, 142, 255};
+    sandBottom = SDL_Color {164, 142, 108, 255};
+    sunCore = SDL_Color {230, 236, 245, 255};
+    sunGlow = SDL_Color {184, 206, 238, 124};
+    cloudMain = SDL_Color {186, 216, 224, 255};
+    cloudShadow = SDL_Color {140, 168, 176, 255};
+    drawMoon = true;
+  }
+
+  // ── Draw sky gradient (top → ocean boundary) ──
+  for (int y = 0; y < oceanTop; ++y) {
+    double v = oceanTop > 1 ? static_cast<double>(y) / static_cast<double>(oceanTop - 1) : 0.0;
+    rect(0, y, W, 1, lerpColor(skyTop, skyBottom, v));
+  }
+
+  // ── Stars (night and storm scenes only) ──
+  if (scene >= 2) {
+    int starCount = std::max(18, W / 54);
+    for (int i = 0; i < starCount; ++i) {
+      int sx = (i * 73 + 19) % std::max(1, W);
+      int sy = 4 + ((i * 47 + 13) % std::max(8, oceanTop - 10));
+      double twinkle = 0.5 + 0.5 * std::sin(t * 2.8 + static_cast<double>(i) * 0.71);
+      Uint8 a = static_cast<Uint8>(120 + twinkle * 120.0);
+      rect(sx, sy, 1, 1, SDL_Color {236, 242, 255, a});
+      if ((i % 3) == 0) {
+        rect(sx - 1, sy, 3, 1, SDL_Color {210, 226, 255, static_cast<Uint8>(a / 2)});
+      }
+    }
+  }
+
+  // ── Sun / moon (gently bobs with sine/cosine oscillation) ──
+  int sunX = static_cast<int>(W * 0.78 + std::sin(t * 0.14) * (W * 0.04));
+  int sunY = static_cast<int>(H * 0.17 + std::cos(t * 0.11) * (H * 0.03));
+  int sunR = std::max(12, H / 16);
+  disc(sunX, sunY, sunR + 6, sunGlow);
+  disc(sunX, sunY, sunR, sunCore);
+  if (drawMoon) {
+    disc(sunX + sunR / 3, sunY - sunR / 4, std::max(5, sunR / 2), skyTop);
+    disc(sunX - sunR / 3, sunY + sunR / 5, std::max(2, sunR / 8), SDL_Color {210, 216, 226, 200});
+    disc(sunX, sunY - sunR / 6, std::max(2, sunR / 10), SDL_Color {190, 202, 214, 200});
+  }
+
+  // ── Clouds (3 overlapping discs + shadow strip, scrolling horizontally) ──
+  auto drawCloud = [&](int x, int y, int scale) {
+    rect(x + scale, y + scale * 2, scale * 9, scale * 2, cloudShadow);
+    disc(x + scale * 2, y + scale * 2, scale * 2, cloudMain);
+    disc(x + scale * 5, y + scale * 2, scale * 3, cloudMain);
+    disc(x + scale * 8, y + scale * 2, scale * 2, cloudMain);
+    rect(x + scale * 2, y + scale * 2, scale * 6, scale * 2, cloudMain);
+  };
+
+  int cloudCount = scene == 3 ? 6 : (scene >= 2 ? 3 : 4);
+  for (int i = 0; i < cloudCount; ++i) {
+    int cx = ((i * 280) - static_cast<int>(t * (16.0 + i * 3.0))) % (W + 260) - 180;
+    int cy = H / 10 + i * (H / 18);
+    drawCloud(cx, cy, std::max(2, H / 120));
+  }
+
+  // ── Ocean gradient (far → near, with animated wave crests) ──
+  for (int y = oceanTop; y < beachTop; ++y) {
+    double v = beachTop > oceanTop + 1
+      ? static_cast<double>(y - oceanTop) / static_cast<double>(beachTop - oceanTop - 1)
+      : 0.0;
+    rect(0, y, W, 1, lerpColor(oceanFar, oceanNear, v));
+  }
+
+  for (int x = -8; x < W + 8; x += 6) {
+    double waveA = std::sin(static_cast<double>(x) * 0.035 + t * 1.8);
+    double waveB = std::sin(static_cast<double>(x) * 0.018 + t * 1.1 + 1.8);
+    int y = oceanTop + 14 + static_cast<int>((waveA + waveB) * 4.0);
+    rect(x, y, 4, 2, SDL_Color {184, 244, 255, 190});
+  }
+
+  // ── Island (parabolic silhouette with vegetation highlights) ──
+  int islandCenter = W / 2 + static_cast<int>(std::sin(t * 0.09) * (W * 0.03));
+  int islandHalfW = std::max(40, W / 5);
+  int islandBaseY = beachTop - 4;
+  SDL_Color islandDark {36, 92, 64, 255};
+  SDL_Color islandLight {62, 135, 88, 255};
+  for (int dx = -islandHalfW; dx <= islandHalfW; ++dx) {
+    double u = std::abs(static_cast<double>(dx)) / static_cast<double>(islandHalfW);
+    int height = std::max(2, static_cast<int>((1.0 - u * u) * (H * 0.11)));
+    rect(islandCenter + dx, islandBaseY - height, 1, height, islandDark);
+    if (height > 5 && dx % 3 == 0) {
+      rect(islandCenter + dx, islandBaseY - height, 1, 2, islandLight);
+    }
+  }
+
+  // ── Beach (sand gradient with animated surf line) ──
+  for (int y = beachTop; y < H; ++y) {
+    double v = H > beachTop + 1
+      ? static_cast<double>(y - beachTop) / static_cast<double>(H - beachTop - 1)
+      : 0.0;
+    SDL_Color sand = lerpColor(sandTop, sandBottom, v);
+    rect(0, y, W, 1, sand);
+  }
+  for (int x = 0; x < W; x += 5) {
+    int y = beachTop + 2 + static_cast<int>(std::sin(static_cast<double>(x) * 0.09 + t * 0.8) * 2.0);
+    rect(x, y, 3, 1, SDL_Color {255, 240, 186, 170});
+  }
+
+  // ── Palm trees (curved trunk + frond cluster, swaying in the wind) ──
+  auto drawPalm = [&](int baseX, int baseY, int trunkH, double sway, bool backLayer) {
+    SDL_Color trunkA = backLayer ? SDL_Color{96, 72, 44, 255} : SDL_Color{116, 84, 52, 255};
+    SDL_Color trunkB = backLayer ? SDL_Color{130, 95, 58, 255} : SDL_Color{148, 108, 65, 255};
+    SDL_Color leafA = backLayer ? SDL_Color{38, 118, 70, 255} : SDL_Color{46, 146, 82, 255};
+    SDL_Color leafB = backLayer ? SDL_Color{64, 154, 90, 255} : SDL_Color{82, 176, 108, 255};
+
+    int x = baseX;
+    for (int i = 0; i < trunkH; ++i) {
+      double bend = std::sin(static_cast<double>(i) * 0.18 + sway) * 0.7;
+      x = baseX + static_cast<int>(bend * (1.0 + static_cast<double>(i) / static_cast<double>(trunkH)));
+      rect(x - 1, baseY - i, 3, 1, (i % 3 == 0) ? trunkB : trunkA);
+    }
+
+    int crownX = x;
+    int crownY = baseY - trunkH;
+    for (int frond = 0; frond < 6; ++frond) {
+      double angle = (-1.25 + frond * 0.48) + std::sin(t * 0.9 + frond) * 0.08;
+      int len = std::max(12, H / 14) + (frond % 2 == 0 ? 2 : -1);
+      for (int step = 0; step < len; ++step) {
+        double s = static_cast<double>(step) / static_cast<double>(len);
+        int fx = crownX + static_cast<int>(std::cos(angle) * step);
+        int fy = crownY + static_cast<int>(std::sin(angle) * step + s * s * 3.0);
+        rect(fx, fy, 2, 1, (step % 2 == 0) ? leafA : leafB);
+      }
+    }
+  };
+
+  // Place 4 palm trees: 2 background (smaller) on the island, 2 foreground (larger) on the beach
+  drawPalm(W / 2 - W / 7, beachTop + 3, std::max(26, H / 7), t * 0.8 + 0.6, true);
+  drawPalm(W / 2 + W / 8, beachTop + 3, std::max(24, H / 8), t * 0.85 + 1.8, true);
+  drawPalm(W / 4, H - std::max(16, H / 8), std::max(28, H / 6), t * 0.9 + 0.2, false);
+  drawPalm(W * 3 / 4, H - std::max(18, H / 8), std::max(30, H / 6), t * 0.95 + 2.1, false);
+
+  // ── Retro game elements: brick platforms and pipes ──
+  int blockSize = std::max(5, H / 34);
+  // Brick platform: row of textured blocks (glow in sunset scene)
+  auto drawBrickPlatform = [&](int x, int y, int blocks, bool glowing) {
+    SDL_Color a = glowing ? SDL_Color {232, 188, 92, 255} : SDL_Color {176, 108, 66, 255};
+    SDL_Color b = glowing ? SDL_Color {255, 228, 136, 255} : SDL_Color {214, 140, 84, 255};
+    SDL_Color stroke = glowing ? SDL_Color {132, 82, 42, 255} : SDL_Color {104, 62, 36, 255};
+    for (int i = 0; i < blocks; ++i) {
+      int bx = x + i * blockSize;
+      rect(bx, y, blockSize - 1, blockSize - 1, ((i + static_cast<int>(t * 2.0)) & 1) ? a : b);
+      rect(bx, y + blockSize / 2, blockSize - 1, 1, stroke);
+      rect(bx + blockSize / 2, y, 1, blockSize - 1, stroke);
+    }
+  };
+
+  // Pipe: vertical tube with lip cap (green = enemy, blue = friendly)
+  auto drawPipe = [&](int x, int baseY, int height, bool enemyPipe) {
+    int pipeW = std::max(16, blockSize * 3);
+    SDL_Color body = enemyPipe ? SDL_Color {80, 188, 98, 255} : SDL_Color {70, 168, 208, 255};
+    SDL_Color lip = enemyPipe ? SDL_Color {122, 236, 128, 255} : SDL_Color {118, 218, 252, 255};
+    SDL_Color dark = enemyPipe ? SDL_Color {38, 110, 56, 255} : SDL_Color {30, 108, 142, 255};
+    rect(x, baseY - height, pipeW, height, body);
+    rect(x + pipeW / 2 - 1, baseY - height, 2, height, lip);
+    rect(x - 3, baseY - height - 4, pipeW + 6, 5, lip);
+    rect(x + 1, baseY - height - 2, pipeW - 2, 1, dark);
+  };
+
+  int platformY = beachTop - std::max(20, H / 9);
+  drawBrickPlatform(W / 8, platformY, 6, scene == 1);
+  drawBrickPlatform(W / 2 + W / 16, platformY - blockSize * 2, 5, scene == 1);
+  drawPipe(W / 3, beachTop + std::max(8, H / 40), std::max(18, H / 11), true);
+  drawPipe(W * 3 / 5, beachTop + std::max(9, H / 38), std::max(15, H / 12), false);
+
+  // ── Animated characters ──
+  // Crab: red body with animated claws (up/down), walks across the beach
+  auto drawCrab = [&](int x, int y, bool clawsUp) {
+    SDL_Color shellA {214, 78, 68, 255};
+    SDL_Color shellB {242, 118, 98, 255};
+    disc(x, y, std::max(4, H / 55), shellA);
+    rect(x - 4, y - 1, 8, 3, shellB);
+    rect(x - 6, y + 2, 2, 2, shellA);
+    rect(x + 4, y + 2, 2, 2, shellA);
+    rect(x - 5, y + 4, 2, 1, SDL_Color {84, 42, 30, 255});
+    rect(x + 3, y + 4, 2, 1, SDL_Color {84, 42, 30, 255});
+    if (clawsUp) {
+      rect(x - 8, y - 5, 2, 4, shellA);
+      rect(x + 6, y - 5, 2, 4, shellA);
+    } else {
+      rect(x - 9, y - 2, 3, 2, shellA);
+      rect(x + 6, y - 2, 3, 2, shellA);
+    }
+    rect(x - 2, y - 5, 1, 2, SDL_Color {255, 255, 255, 255});
+    rect(x + 1, y - 5, 1, 2, SDL_Color {255, 255, 255, 255});
+    rect(x - 2, y - 4, 1, 1, SDL_Color {0, 0, 0, 255});
+    rect(x + 1, y - 4, 1, 1, SDL_Color {0, 0, 0, 255});
+  };
+
+  // Fish: simple body + tail + eye, jumps out of the ocean periodically
+  auto drawFish = [&](int x, int y, bool facingRight, SDL_Color body) {
+    auto toneDown = [](Uint8 v) -> Uint8 {
+      return static_cast<Uint8>(std::max(0, static_cast<int>(v) - 30));
+    };
+    SDL_Color fin {toneDown(body.r), toneDown(body.g), toneDown(body.b), 255};
+    rect(x - 4, y - 2, 8, 4, body);
+    rect(x - 2, y - 3, 4, 1, body);
+    rect(x - 1, y + 2, 2, 1, body);
+    if (facingRight) {
+      rect(x - 6, y - 1, 2, 2, fin);
+      rect(x + 3, y - 1, 2, 2, fin);
+      rect(x + 2, y - 1, 1, 1, SDL_Color {255, 255, 255, 255});
+    } else {
+      rect(x + 4, y - 1, 2, 2, fin);
+      rect(x - 5, y - 1, 2, 2, fin);
+      rect(x - 3, y - 1, 1, 1, SDL_Color {255, 255, 255, 255});
+    }
+  };
+
+  // Parrot: green body + orange beak, animated wing flap, flies across sky
+  auto drawParrot = [&](int x, int y, bool wingUp) {
+    SDL_Color body {70, 214, 120, 255};
+    SDL_Color beak {246, 182, 78, 255};
+    rect(x - 4, y - 3, 8, 6, body);
+    rect(x + 3, y - 1, 3, 2, beak);
+    rect(x - 2, y - 1, 1, 1, SDL_Color {0, 0, 0, 255});
+    if (wingUp) {
+      rect(x - 7, y - 6, 3, 4, SDL_Color {52, 166, 98, 255});
+      rect(x + 1, y - 6, 3, 4, SDL_Color {52, 166, 98, 255});
+    } else {
+      rect(x - 7, y + 0, 3, 4, SDL_Color {52, 166, 98, 255});
+      rect(x + 1, y + 0, 3, 4, SDL_Color {52, 166, 98, 255});
+    }
+    rect(x - 1, y + 3, 1, 2, SDL_Color {170, 102, 54, 255});
+    rect(x + 1, y + 3, 1, 2, SDL_Color {170, 102, 54, 255});
+  };
+
+  // Turtle: green shell with dark pattern, animated leg movement
+  auto drawTurtle = [&](int x, int y, bool stepA) {
+    SDL_Color shell {66, 172, 80, 255};
+    SDL_Color shellDark {36, 116, 58, 255};
+    SDL_Color skin {176, 214, 122, 255};
+    rect(x - 7, y - 4, 14, 8, shell);
+    rect(x - 5, y - 2, 10, 4, shellDark);
+    rect(x + 7, y - 2, 3, 3, skin);
+    rect(x + 8, y - 1, 1, 1, SDL_Color {0, 0, 0, 255});
+    rect(x - 6, y + 4, 3, 2, skin);
+    rect(x + 2, y + 4, 3, 2, skin);
+    rect(x - 6 + (stepA ? 0 : 1), y + 6, 3, 1, SDL_Color {88, 72, 46, 255});
+    rect(x + 2 + (stepA ? 1 : 0), y + 6, 3, 1, SDL_Color {88, 72, 46, 255});
+  };
+
+  // Dinosaur: green body + belly + tail, occasional blink animation
+  auto drawDino = [&](int x, int y, bool blink) {
+    SDL_Color body {102, 198, 98, 255};
+    SDL_Color belly {186, 236, 154, 255};
+    rect(x - 8, y - 8, 16, 10, body);
+    rect(x - 4, y - 3, 8, 5, belly);
+    rect(x + 6, y - 11, 8, 7, body);
+    rect(x + 10, y - 9, 1, 1, blink ? SDL_Color {80, 110, 80, 255} : SDL_Color {0, 0, 0, 255});
+    rect(x - 9, y + 2, 4, 4, body);
+    rect(x + 1, y + 2, 4, 4, body);
+    rect(x - 8, y + 6, 3, 1, SDL_Color {88, 72, 46, 255});
+    rect(x + 1, y + 6, 3, 1, SDL_Color {88, 72, 46, 255});
+    rect(x - 12, y - 5, 4, 2, body);
+  };
+
+  // Puff friend: pink bouncing companion that follows the hero
+  auto drawPuffFriend = [&](int x, int y) {
+    disc(x, y, std::max(5, H / 62), SDL_Color {255, 152, 198, 255});
+    rect(x - 3, y + 4, 2, 2, SDL_Color {220, 76, 126, 255});
+    rect(x + 1, y + 4, 2, 2, SDL_Color {220, 76, 126, 255});
+    rect(x - 2, y - 1, 1, 1, SDL_Color {20, 20, 20, 255});
+    rect(x + 1, y - 1, 1, 1, SDL_Color {20, 20, 20, 255});
+    rect(x - 1, y + 1, 2, 1, SDL_Color {224, 82, 122, 255});
+  };
+
+  // Collectible coin: golden disc with cross highlight, scrolls across sky
+  auto drawCoin = [&](int cx, int cy, int radius) {
+    disc(cx, cy, radius, SDL_Color {255, 206, 62, 255});
+    disc(cx, cy, std::max(1, radius - 2), SDL_Color {255, 236, 132, 255});
+    rect(cx - 1, cy - radius + 2, 2, radius * 2 - 3, SDL_Color {244, 180, 46, 255});
+    rect(cx - radius + 2, cy - 1, radius * 2 - 3, 2, SDL_Color {255, 248, 188, 255});
+  };
+
+  // ── Place animated elements ──
+
+  // 5 coins bouncing above the beach
+  for (int i = 0; i < 5; ++i) {
+    int cx = ((i * (W / 4) + static_cast<int>(t * 34.0)) % (W + 60)) - 30;
+    int cy = beachTop - 18 + static_cast<int>(std::sin(t * 2.4 + i * 1.3) * 6.0);
+    drawCoin(cx, cy, std::max(4, H / 48));
+  }
+
+  // ── Hero character (walking sprite with hat, shirt, shorts, boots) ──
+  int heroX = static_cast<int>(std::fmod(t * 26.0, static_cast<double>(W + 24))) - 12;
+  int heroY = beachTop - std::max(16, H / 12);
+  int step = (static_cast<int>(t * 8.0) & 1);
+  SDL_Color skin {255, 224, 189, 255};
+  SDL_Color hat {212, 62, 68, 255};
+  SDL_Color shirt {46, 124, 222, 255};
+  SDL_Color shorts {34, 78, 138, 255};
+  SDL_Color boots {88, 60, 34, 255};
+  rect(heroX + 3, heroY + 0, 6, 2, hat);
+  rect(heroX + 2, heroY + 2, 8, 2, hat);
+  rect(heroX + 3, heroY + 4, 6, 3, skin);
+  rect(heroX + 2, heroY + 7, 8, 4, shirt);
+  rect(heroX + 3, heroY + 11, 6, 3, shorts);
+  rect(heroX + 1, heroY + 8, 2, 4, skin);
+  rect(heroX + 9, heroY + 8, 2, 4, skin);
+  rect(heroX + 3, heroY + 14, 2, 3, shorts);
+  rect(heroX + 7, heroY + 14, 2, 3, shorts);
+  rect(heroX + 2 + step, heroY + 17, 3, 2, boots);
+  rect(heroX + 6 - step, heroY + 17, 3, 2, boots);
+
+  // Crab: walks right-to-left across the beach
+  int crabX = (static_cast<int>(t * 24.0) % (W + 80)) - 40;
+  drawCrab(crabX, beachTop + std::max(8, H / 40), (static_cast<int>(t * 4.0) & 1) != 0);
+
+  // Turtle: walks left-to-right (opposite direction to crab)
+  int turtleX = W - ((static_cast<int>(t * 18.0) + 20) % (W + 90)) + 24;
+  drawTurtle(turtleX, beachTop + std::max(5, H / 52), (static_cast<int>(t * 6.0) & 1) != 0);
+
+  // Dinosaur: walks slowly across the platform area
+  int dinoX = ((static_cast<int>(t * 11.0) + W / 3) % (W + 120)) - 60;
+  drawDino(dinoX, beachTop - std::max(18, H / 11), (static_cast<int>(t * 2.4) % 5) == 0);
+
+  // Puff friend: bounces alongside the hero with slight offset
+  int puffX = heroX + 28 + static_cast<int>(std::sin(t * 1.7) * 10.0);
+  int puffY = heroY + 6 + static_cast<int>(std::fabs(std::sin(t * 3.4)) * 4.0);
+  drawPuffFriend(puffX, puffY);
+
+  // Parrot: flies across the sky with wing flapping
+  int parrotX = W - ((static_cast<int>(t * 34.0) + 60) % (W + 120));
+  int parrotY = std::max(12, H / 9) + static_cast<int>(std::sin(t * 2.1) * (H / 28.0));
+  drawParrot(parrotX, parrotY, (static_cast<int>(t * 8.0) & 1) == 0);
+
+  // 4 fish: jump out of the ocean periodically (sine-driven arc)
+  for (int i = 0; i < 4; ++i) {
+    int fishX = ((i * (W / 4) + static_cast<int>(t * 28.0)) % (W + 80)) - 40;
+    double jump = std::sin(t * 2.5 + static_cast<double>(i) * 1.2);
+    if (jump > -0.2) {
+      int fishY = oceanTop + 20 - static_cast<int>(std::max(0.0, jump) * 16.0);
+      SDL_Color fishColor = (i % 2 == 0) ? SDL_Color {255, 178, 88, 255} : SDL_Color {96, 230, 220, 255};
+      drawFish(fishX, fishY, (i % 2) == 0, fishColor);
+    }
+  }
+
+  // ── Storm effects (scene 3 only): rain streaks + occasional lightning bolt ──
+  if (scene == 3) {
+    for (int i = 0; i < W; i += 14) {
+      int rx = (i + static_cast<int>(t * 220.0)) % std::max(1, W);
+      int ry = oceanTop / 2 + (i % 24);
+      rect(rx, ry, 1, std::max(8, H / 28), SDL_Color {178, 222, 244, 140});
+    }
+    if (std::sin(t * 3.2) > 0.93) {
+      int boltX = W / 3 + static_cast<int>(std::sin(t * 4.4) * (W / 10.0));
+      rect(boltX, 0, 3, oceanTop + 24, SDL_Color {242, 248, 255, 170});
+      rect(boltX + 3, oceanTop / 3, 2, oceanTop / 3, SDL_Color {242, 248, 255, 140});
+    }
+  }
+
+  // ── Bottom rainbow strip (audio visualizer homage with pulsing bars) ──
+  int stripH = std::max(16, H / 14);
+  int stripY = H - stripH;
+  rect(0, stripY, W, stripH, SDL_Color {12, 30, 56, 230});  // dark background
+
+  // 8 rainbow-colored bars with a sine-wave pulse animation
+  const std::array<SDL_Color, 8> bars {{
+    SDL_Color{232, 78, 72, 255},
+    SDL_Color{246, 160, 70, 255},
+    SDL_Color{252, 226, 96, 255},
+    SDL_Color{104, 202, 108, 255},
+    SDL_Color{78, 198, 212, 255},
+    SDL_Color{70, 144, 244, 255},
+    SDL_Color{152, 116, 232, 255},
+    SDL_Color{244, 244, 244, 255},
+  }};
+  int barW = std::max(10, (W - 24) / static_cast<int>(bars.size()));
+  for (int i = 0; i < static_cast<int>(bars.size()); ++i) {
+    rect(8 + i * barW, stripY + 4, barW - 2, stripH - 8, bars[i]);
+    int pulseY = stripY + stripH / 2 + static_cast<int>(std::sin(t * 3.0 + i * 0.7) * (stripH / 4));
+    rect(8 + i * barW + 2, pulseY, barW - 6, 1, SDL_Color {255, 255, 255, 255});
+  }
+
+}
+
+// ---------------------------------------------------------------------------
+// buildPocketTestCard — The Pocket Test, PM5544 edition v2 (v0.78.8).
+//
+// Performance architecture (the v0.78.7 card pegged a core):
+//   - The STATIC layer (grid, bars, grayscale, ramp, PLUGE/detail patches,
+//     border, corner marks, center crosshair) is rendered once per raster
+//     size into a process-wide cache and memcpy'd each rebuild.
+//   - The island scene renders at a fixed internal 640x360 raster (it's
+//     chunky pixel art — nearest sampling into the porthole is on-brand),
+//     so scene cost is constant regardless of output raster.
+//   - Only the dynamics draw per rebuild: diagonal sweep, the bouncing
+//     porthole ball, the shimmer patch, and the ID box.
+//   - Rebuild cadence is locked to the selected display's refresh rate
+//     (rebuildPatternFrame), so motion is as smooth as the output itself.
+//
+// The ball: the scene behaves as the full background BEHIND the card, and
+// the ball is a slow DVD-style bouncing porthole revealing whatever it
+// floats over — sky up top, beach and characters at the bottom. It doubles
+// as a burn-in rover and a smooth-motion object; the A/V sync beacon rides
+// at its 12 o'clock.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildPocketTestCard(DecodedFrame& frame, double t) {
+  constexpr double kSceneSeconds = 14.0;
+  constexpr double kBlendSeconds = 1.4;
+  constexpr int kSceneW = 640;
+  constexpr int kSceneH = 360;
+  double cycle = std::fmod(std::max(0.0, t), kSceneSeconds * 4.0);
+  int scene = static_cast<int>(cycle / kSceneSeconds) % 4;
+  double inScene = cycle - scene * kSceneSeconds;
+
+  // Static layer, cached PER RASTER SIZE and shared process-wide.
+  //
+  // This was a single cache entry, which meant it only worked while exactly one
+  // raster asked for it. Deckboy runs at least two pattern engines — the
+  // programme output and the cue-preview runtime — and when their rasters
+  // differ the single entry was invalidated on EVERY call: a full-raster
+  // reallocation (33 MB at 4K) plus a complete redraw of the static card, twice
+  // per displayed frame. That churned tens of gigabytes of committed memory per
+  // minute, exhausted the system commit limit, and dragged the whole machine
+  // into paging — reported as "pocket-test is laggy" and "my computer is slow".
+  // No other pattern has this cache, which is why only this one misbehaved.
+  //
+  // A tiny keyed cache fixes it: each distinct raster keeps its own card, so
+  // both engines hit rather than evict. Bounded, because the set of live
+  // rasters is small (outputs + preview) and must never grow without limit.
+  {
+    struct CachedCard {
+      int width = 0;
+      int height = 0;
+      std::vector<std::uint8_t> pixels;
+    };
+    constexpr std::size_t kMaxCachedCards = 4;
+    static std::mutex cacheMutex;
+    static std::vector<CachedCard> cardCaches;
+
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    CachedCard* hit = nullptr;
+    for (auto& entry : cardCaches) {
+      if (entry.width == frame.width && entry.height == frame.height) {
+        hit = &entry;
+        break;
+      }
+    }
+    if (hit == nullptr) {
+      if (cardCaches.size() >= kMaxCachedCards) {
+        // Evict oldest; rasters change rarely, so simple FIFO is enough.
+        cardCaches.erase(cardCaches.begin());
+      }
+      cardCaches.push_back(CachedCard {});
+      hit = &cardCaches.back();
+      hit->width = frame.width;
+      hit->height = frame.height;
+      // Build the static layer once, into a scratch frame that borrows the
+      // cache's buffer, then keep it.
+      DecodedFrame scratch;
+      scratch.width = frame.width;
+      scratch.height = frame.height;
+      scratch.pixels.assign(frame.pixels.size(), 255);
+      drawPocketTestCardStatic(scratch);
+      hit->pixels = std::move(scratch.pixels);
+    }
+    // Same size on both sides, so this reuses the destination's capacity.
+    frame.pixels = hit->pixels;
+  }
+
+  // The living scene at its fixed internal raster (with the crossfade).
+  DecodedFrame sceneFrame;
+  sceneFrame.width = kSceneW;
+  sceneFrame.height = kSceneH;
+  sceneFrame.pixels.assign(static_cast<size_t>(kSceneW) * kSceneH * 4u, 255);
+  buildPocketTest(sceneFrame, t, scene);
+  if (inScene > kSceneSeconds - kBlendSeconds) {
+    double alpha = (inScene - (kSceneSeconds - kBlendSeconds)) / kBlendSeconds;
+    DecodedFrame next;
+    next.width = kSceneW;
+    next.height = kSceneH;
+    next.pixels.assign(sceneFrame.pixels.size(), 255);
+    buildPocketTest(next, t, (scene + 1) % 4);
+    const int mix = static_cast<int>(std::lround(alpha * 256.0));
+    for (std::size_t i = 0; i + 3 < sceneFrame.pixels.size(); i += 4) {
+      sceneFrame.pixels[i + 0] = static_cast<Uint8>((sceneFrame.pixels[i + 0] * (256 - mix) + next.pixels[i + 0] * mix) >> 8);
+      sceneFrame.pixels[i + 1] = static_cast<Uint8>((sceneFrame.pixels[i + 1] * (256 - mix) + next.pixels[i + 1] * mix) >> 8);
+      sceneFrame.pixels[i + 2] = static_cast<Uint8>((sceneFrame.pixels[i + 2] * (256 - mix) + next.pixels[i + 2] * mix) >> 8);
+    }
+    if (alpha > 0.5) {
+      scene = (scene + 1) % 4;
+    }
+  }
+
+  drawPocketTestCard(frame, sceneFrame, t, scene);
+}
+
+// ---------------------------------------------------------------------------
+// drawPocketTestCardStatic — The cacheable layer. Every element is a real
+// output check: 1px checker border + corner marks (pixel mapping, crop),
+// grid field (geometry), 75% bars (color), grayscale staircase (levels),
+// ramp (banding), PLUGE 0/2/4% + 100/98/96% (crush/clip), 1px checker +
+// stripe patches (fine detail), center crosshair (alignment).
+// ---------------------------------------------------------------------------
+void MediaEngine::drawPocketTestCardStatic(DecodedFrame& frame) {
+  const int W = frame.width;
+  const int H = frame.height;
+  const int u = std::max(1, H / 240);
+
+  auto put = [&](int x, int y, const SDL_Color& color) {
+    if (x < 0 || y < 0 || x >= W || y >= H) {
+      return;
+    }
+    size_t idx = (static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x)) * 4u;
+    frame.pixels[idx + 0] = color.r;
+    frame.pixels[idx + 1] = color.g;
+    frame.pixels[idx + 2] = color.b;
+    frame.pixels[idx + 3] = color.a;
+  };
+  auto rect = [&](int x, int y, int w, int h, const SDL_Color& color) {
+    int x0 = std::max(0, x);
+    int y0 = std::max(0, y);
+    int x1 = std::min(W, x + w);
+    int y1 = std::min(H, y + h);
+    for (int yy = y0; yy < y1; ++yy) {
+      for (int xx = x0; xx < x1; ++xx) {
+        put(xx, yy, color);
+      }
+    }
+  };
+  const SDL_Color white {255, 255, 255, 255};
+  const SDL_Color black {0, 0, 0, 255};
+
+  // Grid field, anchored to frame center.
+  {
+    int cell = std::max(16, (H * 8 / 100) & ~1);
+    rect(0, 0, W, H, SDL_Color {104, 104, 104, 255});
+    for (int x = W / 2 % cell; x < W; x += cell) {
+      rect(x, 0, 1, H, white);
+    }
+    for (int y = H / 2 % cell; y < H; y += cell) {
+      rect(0, y, W, 1, white);
+    }
+  }
+
+  const int inset = 8;
+  const int barsY = H * 4 / 100;
+  const int barsH = H * 10 / 100;
+  const int stepsY = barsY + barsH + 2;
+  const int stepsH = H * 7 / 100;
+  const int rampY = H * 745 / 1000;
+  const int rampH = H * 6 / 100;
+  const int patchY = rampY + rampH + 2;
+  const int patchH = H * 7 / 100;
+  const int innerW = W - inset * 2;
+
+  auto inkFrame = [&](int x, int y, int w, int h) {
+    rect(x - 1, y - 1, w + 2, 1, black);
+    rect(x - 1, y + h, w + 2, 1, black);
+    rect(x - 1, y, 1, h, black);
+    rect(x + w, y, 1, h, black);
+  };
+
+  // Color bars: 100% white, 75% set, black.
+  {
+    const std::array<SDL_Color, 8> bars {{
+      {255, 255, 255, 255}, {191, 191, 0, 255}, {0, 191, 191, 255}, {0, 191, 0, 255},
+      {191, 0, 191, 255}, {191, 0, 0, 255}, {0, 0, 191, 255}, {0, 0, 0, 255},
+    }};
+    int bw = innerW / static_cast<int>(bars.size());
+    for (int i = 0; i < static_cast<int>(bars.size()); ++i) {
+      int x0 = inset + i * bw;
+      int x1 = (i + 1 == static_cast<int>(bars.size())) ? inset + innerW : x0 + bw;
+      rect(x0, barsY, x1 - x0, barsH, bars[i]);
+    }
+    inkFrame(inset, barsY, innerW, barsH);
+  }
+
+  // Grayscale staircase 0..100%.
+  {
+    int sw = innerW / 11;
+    for (int i = 0; i < 11; ++i) {
+      Uint8 v = static_cast<Uint8>(std::lround(i * 255.0 / 10.0));
+      int x0 = inset + i * sw;
+      int x1 = (i == 10) ? inset + innerW : x0 + sw;
+      rect(x0, stepsY, x1 - x0, stepsH, SDL_Color {v, v, v, 255});
+    }
+    inkFrame(inset, stepsY, innerW, stepsH);
+  }
+
+  // Continuous ramp (banding).
+  {
+    for (int x = 0; x < innerW; ++x) {
+      Uint8 v = static_cast<Uint8>(std::lround(x * 255.0 / std::max(1, innerW - 1)));
+      rect(inset + x, rampY, 1, rampH, SDL_Color {v, v, v, 255});
+    }
+    inkFrame(inset, rampY, innerW, rampH);
+  }
+
+  // Patch row: PLUGE black | PLUGE white | 1px checker | 1px stripes
+  // (slot 5 belongs to the dynamic shimmer).
+  {
+    int pw = innerW / 5;
+    auto patchX = [&](int i) { return inset + i * pw; };
+    rect(patchX(0), patchY, pw - 1, patchH, black);
+    int ph = std::max(2, patchH / 2);
+    int py = patchY + (patchH - ph) / 2;
+    int pq = std::max(3, (pw - 16) / 3);
+    rect(patchX(0) + 4, py, pq, ph, SDL_Color {5, 5, 5, 255});
+    rect(patchX(0) + 8 + pq, py, pq, ph, SDL_Color {10, 10, 10, 255});
+    rect(patchX(1), patchY, pw - 1, patchH, white);
+    rect(patchX(1) + 4, py, pq, ph, SDL_Color {250, 250, 250, 255});
+    rect(patchX(1) + 8 + pq, py, pq, ph, SDL_Color {245, 245, 245, 255});
+    for (int y = 0; y < patchH; ++y) {
+      for (int x = 0; x < pw - 1; ++x) {
+        Uint8 v = (((x + y) & 1) != 0) ? 255 : 0;
+        put(patchX(2) + x, patchY + y, SDL_Color {v, v, v, 255});
+      }
+      Uint8 s = ((y & 1) != 0) ? 255 : 0;
+      rect(patchX(3), patchY + y, pw - 1, 1, SDL_Color {s, s, s, 255});
+    }
+    for (int i = 0; i < 4; ++i) {
+      inkFrame(patchX(i), patchY, pw - 1, patchH);
+    }
+  }
+
+  // Center crosshair (alignment) — frame center; the ball roams free.
+  {
+    int cx = W / 2;
+    int cy = H / 2;
+    rect(cx - 8 * u, cy - 1, 16 * u + 1, 3, black);
+    rect(cx - 1, cy - 8 * u, 3, 16 * u + 1, black);
+    rect(cx - 8 * u, cy, 16 * u + 1, 1, white);
+    rect(cx, cy - 8 * u, 1, 16 * u + 1, white);
+  }
+
+  // Pixel-mapping border + corner marks.
+  for (int x = 0; x < W; ++x) {
+    Uint8 v = (x & 1) ? 255 : 0;
+    put(x, 0, SDL_Color {v, v, v, 255});
+    put(x, H - 1, SDL_Color {v, v, v, 255});
+  }
+  for (int y = 0; y < H; ++y) {
+    Uint8 v = (y & 1) ? 255 : 0;
+    put(0, y, SDL_Color {v, v, v, 255});
+    put(W - 1, y, SDL_Color {v, v, v, 255});
+  }
+  rect(1, 1, W - 2, 1, black);
+  rect(1, H - 2, W - 2, 1, black);
+  rect(1, 1, 1, H - 2, black);
+  rect(W - 2, 1, 1, H - 2, black);
+  {
+    int arm = 8 * u;
+    int th = u;
+    auto corner = [&](int x, int y, int dx, int dy) {
+      rect(std::min(x, x + dx * arm), y - (dy < 0 ? th - 1 : 0), arm + 1, th, white);
+      rect(x - (dx < 0 ? th - 1 : 0), std::min(y, y + dy * arm), th, arm + 1, white);
+    };
+    corner(3, 3, 1, 1);
+    corner(W - 4, 3, -1, 1);
+    corner(3, H - 4, 1, -1);
+    corner(W - 4, H - 4, -1, -1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// drawPocketTestCard — The dynamic layer, drawn over the cached static card
+// each rebuild: diagonal sweep (judder), the bouncing porthole ball with the
+// scene behind it + sync beacon, the cadence shimmer patch, and the ID box.
+// ---------------------------------------------------------------------------
+void MediaEngine::drawPocketTestCard(DecodedFrame& frame, const DecodedFrame& sceneFrame,
+                                     double t, int scene) {
+  const int W = frame.width;
+  const int H = frame.height;
+  const int u = std::max(1, H / 240);
+
+  auto put = [&](int x, int y, const SDL_Color& color) {
+    if (x < 0 || y < 0 || x >= W || y >= H) {
+      return;
+    }
+    size_t idx = (static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x)) * 4u;
+    frame.pixels[idx + 0] = color.r;
+    frame.pixels[idx + 1] = color.g;
+    frame.pixels[idx + 2] = color.b;
+    frame.pixels[idx + 3] = color.a;
+  };
+  auto rect = [&](int x, int y, int w, int h, const SDL_Color& color) {
+    int x0 = std::max(0, x);
+    int y0 = std::max(0, y);
+    int x1 = std::min(W, x + w);
+    int y1 = std::min(H, y + h);
+    for (int yy = y0; yy < y1; ++yy) {
+      for (int xx = x0; xx < x1; ++xx) {
+        put(xx, yy, color);
+      }
+    }
+  };
+  const SDL_Color white {255, 255, 255, 255};
+  const SDL_Color black {0, 0, 0, 255};
+  const SDL_Color gbCream {252, 252, 252, 255};
+  const SDL_Color gbInk {64, 64, 72, 255};
+  const SDL_Color gbTextShadow {200, 204, 208, 255};
+  const SDL_Color gbRed {216, 72, 64, 255};
+
+  const int inset = 8;
+  const int barsY = H * 4 / 100;
+  const int barsH = H * 10 / 100;
+  const int stepsY = barsY + barsH + 2;
+  const int stepsH = H * 7 / 100;
+  const int rampY = H * 745 / 1000;
+  const int rampH = H * 6 / 100;
+  const int patchY = rampY + rampH + 2;
+  const int patchH = H * 7 / 100;
+  const int innerW = W - inset * 2;
+
+  // ── Diagonal sweep (12 s per pass) across the grid field ──
+  {
+    int bandY0 = stepsY + stepsH + 2;
+    int bandY1 = rampY - 2;
+    int span = W + (bandY1 - bandY0);
+    double progress = std::fmod(std::max(0.0, t) / 12.0, 1.0);
+    int c = static_cast<int>(std::floor(progress * span));
+    for (int y = bandY0; y < bandY1; ++y) {
+      int x = (c - (y - bandY0)) % span;
+      if (x < 0) x += span;
+      rect(x - 1, y, 2 * u, 1, white);
+      rect(x - 1 + 2 * u, y, u, 1, black);
+    }
+  }
+
+  // ── Cadence shimmer patch (~30 Hz phase-inverting 1px checker) ──
+  {
+    int pw = innerW / 5;
+    int x0 = inset + 4 * pw;
+    int flickPhase = static_cast<int>(static_cast<long long>(std::floor(t * 30.0)) & 1);
+    int w = innerW - 4 * pw;
+    for (int y = 0; y < patchH; ++y) {
+      for (int x = 0; x < w; ++x) {
+        Uint8 v = (((x + y) & 1) == flickPhase) ? 255 : 0;
+        put(x0 + x, patchY + y, SDL_Color {v, v, v, 255});
+      }
+    }
+    rect(x0 - 1, patchY - 1, w + 2, 1, black);
+    rect(x0 - 1, patchY + patchH, w + 2, 1, black);
+    rect(x0 - 1, patchY, 1, patchH, black);
+    rect(x0 + w, patchY, 1, patchH, black);
+  }
+
+  // ── The ball: a slow DVD-style bouncing porthole. The scene is the full
+  // background BEHIND the card; the ball reveals whatever it floats over.
+  // Constant-velocity edges-bounce = smooth-motion object + burn-in rover.
+  {
+    int r = H * 22 / 100;
+    int ringW = 3 * u;
+    auto bounce = [](double tt, double speed, double lo, double hi) {
+      double range = hi - lo;
+      if (range <= 1.0) {
+        return lo;
+      }
+      double x = std::fmod(tt * speed / range, 2.0);
+      if (x < 0) x += 2.0;
+      return lo + (x < 1.0 ? x : 2.0 - x) * range;
+    };
+    int margin = ringW + 4;
+    int cx = static_cast<int>(std::lround(bounce(t, H * 0.055, r + margin, W - r - margin)));
+    int cy = static_cast<int>(std::lround(bounce(t, H * 0.043, r + margin, H - r - margin)));
+
+    for (int dy = -(r + ringW + 1); dy <= r + ringW + 1; ++dy) {
+      int y = cy + dy;
+      if (y < 0 || y >= H) continue;
+      auto halfAt = [&](int radius) {
+        return (std::abs(dy) > radius)
+          ? -1
+          : static_cast<int>(std::floor(std::sqrt(static_cast<double>(radius) * radius - static_cast<double>(dy) * dy)));
+      };
+      int hOuterEdge = halfAt(r + ringW + 1);
+      int hOuter = halfAt(r + ringW);
+      int hInner = halfAt(r);
+      int hInnerEdge = halfAt(r - 1);
+      if (hOuterEdge >= 0) {
+        rect(cx - hOuterEdge, y, hOuterEdge * 2 + 1, 1, black);
+      }
+      if (hOuter >= 0) {
+        rect(cx - hOuter, y, hOuter * 2 + 1, 1, white);
+      }
+      if (hInnerEdge >= 0) {
+        rect(cx - hInnerEdge, y, hInnerEdge * 2 + 1, 1, black);
+      }
+      if (hInner >= 0) {
+        // Reveal the scene "behind" the card: nearest-sample the internal
+        // scene raster at this frame position.
+        int srcY = std::clamp(y * sceneFrame.height / H, 0, sceneFrame.height - 1);
+        const std::uint8_t* srcRow =
+          sceneFrame.pixels.data() + static_cast<size_t>(srcY) * sceneFrame.width * 4u;
+        std::uint8_t* dstRow =
+          frame.pixels.data() + (static_cast<size_t>(y) * W + (cx - hInner)) * 4u;
+        for (int x = cx - hInner; x <= cx + hInner; ++x, dstRow += 4) {
+          int srcX = std::clamp(x * sceneFrame.width / W, 0, sceneFrame.width - 1);
+          const std::uint8_t* s = srcRow + static_cast<size_t>(srcX) * 4u;
+          dstRow[0] = s[0];
+          dstRow[1] = s[1];
+          dstRow[2] = s[2];
+          dstRow[3] = 255;
+        }
+      }
+    }
+
+    // Sync beacon rides at the ball's 12 o'clock: lit for exactly the 80 ms
+    // window in which the 1 kHz pop plays.
+    bool pop = std::fmod(std::max(0.0, t), 1.0) < 0.08;
+    int by = cy - r - ringW / 2;
+    for (int dy = -(4 * u); dy <= 4 * u; ++dy) {
+      int half = static_cast<int>(std::floor(std::sqrt(std::max(0.0, static_cast<double>(4 * u) * (4 * u) - static_cast<double>(dy) * dy))));
+      rect(cx - half, by + dy, half * 2 + 1, 1, black);
+    }
+    for (int dy = -(3 * u); dy <= 3 * u; ++dy) {
+      int half = static_cast<int>(std::floor(std::sqrt(std::max(0.0, static_cast<double>(3 * u) * (3 * u) - static_cast<double>(dy) * dy))));
+      rect(cx - half, by + dy, half * 2 + 1, 1, pop ? white : SDL_Color {70, 70, 70, 255});
+    }
+  }
+
+  // ── ID box (Emerald chrome): version, raster, clock, scene ──
+  {
+    auto glyphRows = [](char c) -> const std::uint8_t* {
+      static const std::uint8_t digits[10][5] = {
+        {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,3,1,7}, {5,5,7,1,1},
+        {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,2,2}, {7,5,7,5,7}, {7,5,7,1,7},
+      };
+      static const std::uint8_t letters[26][5] = {
+        {2,5,7,5,5}, {6,5,6,5,6}, {3,4,4,4,3}, {6,5,5,5,6}, {7,4,6,4,7},
+        {7,4,6,4,4}, {3,4,5,5,3}, {5,5,7,5,5}, {7,2,2,2,7}, {1,1,1,5,2},
+        {5,6,4,6,5}, {4,4,4,4,7}, {5,7,7,5,5}, {6,5,5,5,5}, {2,5,5,5,2},
+        {6,5,6,4,4}, {2,5,5,6,3}, {6,5,6,6,5}, {3,4,2,1,6}, {7,2,2,2,2},
+        {5,5,5,5,7}, {5,5,5,5,2}, {5,5,7,7,5}, {5,5,2,5,5}, {5,5,2,2,2},
+        {7,1,2,4,7},
+      };
+      static const std::uint8_t colon[5] = {0,2,0,2,0};
+      static const std::uint8_t dot[5]   = {0,0,0,0,2};
+      static const std::uint8_t dash[5]  = {0,0,7,0,0};
+      static const std::uint8_t blank[5] = {0,0,0,0,0};
+      if (c >= '0' && c <= '9') return digits[c - '0'];
+      if (c >= 'A' && c <= 'Z') return letters[c - 'A'];
+      if (c >= 'a' && c <= 'z') return letters[c - 'a'];
+      if (c == ':') return colon;
+      if (c == '.') return dot;
+      if (c == '-') return dash;
+      return blank;
+    };
+    auto drawText = [&](int x, int y, int scale, const std::string& s, const SDL_Color& color) {
+      int cx = x;
+      for (char c : s) {
+        const std::uint8_t* rows = glyphRows(c);
+        for (int ry = 0; ry < 5; ++ry) {
+          for (int rx = 0; rx < 3; ++rx) {
+            if (rows[ry] & (4 >> rx)) {
+              rect(cx + rx * scale + scale, y + ry * scale + scale, scale, scale, gbTextShadow);
+              rect(cx + rx * scale, y + ry * scale, scale, scale, color);
+            }
+          }
+        }
+        cx += 4 * scale;
+      }
+    };
+    auto gbBox = [&](int x, int y, int w, int h) {
+      const int b = u;
+      const SDL_Color bandLight {168, 224, 216, 255};
+      const SDL_Color bandDeep {88, 168, 160, 255};
+      rect(x + b, y + b, w - 2 * b, h - 2 * b, gbCream);
+      rect(x + 2 * b, y, w - 4 * b, b, gbInk);
+      rect(x + 2 * b, y + h - b, w - 4 * b, b, gbInk);
+      rect(x, y + 2 * b, b, h - 4 * b, gbInk);
+      rect(x + w - b, y + 2 * b, b, h - 4 * b, gbInk);
+      rect(x + b, y + b, b, b, gbInk);
+      rect(x + w - 2 * b, y + b, b, b, gbInk);
+      rect(x + b, y + h - 2 * b, b, b, gbInk);
+      rect(x + w - 2 * b, y + h - 2 * b, b, b, gbInk);
+      rect(x + 2 * b, y + b, w - 4 * b, b, bandLight);
+      rect(x + b, y + 2 * b, b, h - 4 * b, bandLight);
+      rect(x + 2 * b, y + h - 2 * b, w - 4 * b, b, bandDeep);
+      rect(x + w - 2 * b, y + 2 * b, b, h - 4 * b, bandDeep);
+    };
+
+    static const char* kSceneNames[4] = {"DAY", "SUNSET", "NIGHT", "STORM"};
+    int scale = u;
+    int pd = 2 * u + 3;
+    int totalSeconds = static_cast<int>(t);
+    int tenths = static_cast<int>(t * 10.0) % 10;
+    char clock[24];
+    std::snprintf(clock, sizeof(clock), "%02d:%02d.%d", (totalSeconds / 60) % 100, totalSeconds % 60, tenths);
+    std::string line = std::string("DECKBOY ") + deckboy::core::version::kVersionTag +
+                       "  " + std::to_string(W) + "X" + std::to_string(H) +
+                       "  " + clock + "  " + kSceneNames[std::clamp(scene, 0, 3)];
+    int boxW = static_cast<int>(line.size()) * 4 * scale - scale + pd * 2 + 6 * scale;
+    int boxH = 5 * scale + pd * 2 + 2;
+    int boxX = (W - boxW) / 2;
+    int boxY = H * 89 / 100;
+    gbBox(boxX, boxY, boxW, boxH);
+    drawText(boxX + pd, boxY + pd, scale, line, gbInk);
+    if ((static_cast<long long>(std::floor(t * 2.0)) & 1) == 0) {
+      int ax = boxX + boxW - pd - 5 * scale;
+      int ay = boxY + boxH - pd - 3 * scale + 2;
+      for (int row = 0; row < 3; ++row) {
+        rect(ax + row * scale, ay + row * scale, (5 - 2 * row) * scale, scale, gbRed);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildTestBars — testsrc2-homage motion diagnostics ("Test Bars").
+//
+// The owner took a shine to ffmpeg's testsrc2 during decoder testing, so this is
+// the Deckboy edition: six saturated bars for color checks, a bouncing
+// rainbow diagonal for motion/tearing, a dissolving checker patch for
+// deinterlace/scaler artefacts, a sliding grey reference block for judder,
+// and a running clock + frame counter for latency / dropped-frame checks.
+// Always animated (patternTypeIsAnimated) — motion is the whole point.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildTestBars(DecodedFrame& frame, double t) {
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0) {
+    return;
+  }
+  t = std::max(0.0, t);
+  auto rect = [&](int x, int y, int w, int h, SDL_Color c) {
+    fillPixelRect(frame, x, y, w, h, c);
+  };
+
+  // ── 1. Saturated vertical bars (full frame background) ──
+  static const SDL_Color kBars[6] = {
+    {255, 0, 0, 255}, {0, 255, 0, 255}, {255, 255, 0, 255},
+    {0, 0, 255, 255}, {255, 0, 255, 255}, {0, 255, 255, 255},
+  };
+  for (int i = 0; i < 6; ++i) {
+    int x0 = W * i / 6;
+    int x1 = W * (i + 1) / 6;
+    rect(x0, 0, x1 - x0, H, kBars[i]);
+  }
+
+  // ── 2. Dissolving checker patch (scaler/deinterlace artefact magnet) ──
+  {
+    int px0 = W * 62 / 100, py0 = H * 60 / 100;
+    int px1 = W * 92 / 100, py1 = H * 86 / 100;
+    int cell = std::max(4, W / 120);
+    int tick = static_cast<int>(t * 2.0);           // reseed twice a second
+    int drift = static_cast<int>(t * cell) % (2 * cell);
+    for (int y = py0; y < py1; y += cell) {
+      for (int x = px0; x < px1; x += cell) {
+        int cxI = (x - px0 + drift) / cell;
+        int cyI = (y - py0 + drift) / cell;
+        std::uint32_t h32 = static_cast<std::uint32_t>(cxI) * 73856093u
+                          ^ static_cast<std::uint32_t>(cyI) * 19349663u
+                          ^ static_cast<std::uint32_t>(tick) * 83492791u;
+        bool checker = ((cxI + cyI) & 1) != 0;
+        bool dissolve = (h32 & 7u) == 0u;            // ~12% of cells flip per tick
+        bool lit = checker != dissolve;
+        SDL_Color c = lit ? SDL_Color {230, 230, 230, 255} : SDL_Color {26, 26, 26, 255};
+        int cw = std::min(cell, px1 - x);
+        int ch = std::min(cell, py1 - y);
+        rect(x, y, cw, ch, c);
+      }
+    }
+  }
+
+  // ── 3. Sliding grey reference block (judder check) ──
+  {
+    int side = std::max(12, H / 5);
+    double slide = 0.5 + 0.5 * std::sin(t * kTau / 9.0);
+    int gx = static_cast<int>((W * 0.08) + slide * (W * 0.35));
+    int gy = H * 58 / 100;
+    rect(gx, gy, side, side, {128, 128, 128, 255});
+    rect(gx + side / 4, gy + side / 4, side / 2, side / 2, {96, 96, 96, 255});
+  }
+
+  // ── 4. Bouncing rainbow diagonal (motion / tearing / latency line) ──
+  {
+    double amp = H * 0.42;
+    double midY = H * 0.5;
+    int thickness = std::max(2, H / 240);
+    double y0 = midY + amp * std::sin(t * kTau / 7.3);
+    double y1 = midY + amp * std::sin(t * kTau / 5.1 + 1.7);
+    auto hsvToRgb = [](double h) {
+      double r = std::clamp(std::abs(std::fmod(h * 6.0 + 0.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+      double g = std::clamp(std::abs(std::fmod(h * 6.0 + 4.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+      double b = std::clamp(std::abs(std::fmod(h * 6.0 + 2.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+      return SDL_Color {static_cast<Uint8>(r * 255), static_cast<Uint8>(g * 255),
+                        static_cast<Uint8>(b * 255), 255};
+    };
+    for (int x = 0; x < W; ++x) {
+      double frac = static_cast<double>(x) / std::max(1, W - 1);
+      int y = static_cast<int>(y0 + (y1 - y0) * frac);
+      SDL_Color c = hsvToRgb(std::fmod(frac + t * 0.08, 1.0));
+      rect(x, y - thickness / 2, 1, thickness, c);
+    }
+  }
+
+  // ── 5. Clock + frame counter box (latency / drop diagnostics) ──
+  {
+    auto glyphRows = [](char c) -> const std::uint8_t* {
+      static const std::uint8_t digits[10][5] = {
+        {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,3,1,7}, {5,5,7,1,1},
+        {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,2,2}, {7,5,7,5,7}, {7,5,7,1,7},
+      };
+      static const std::uint8_t colon[5] = {0,2,0,2,0};
+      static const std::uint8_t dot[5]   = {0,0,0,0,2};
+      static const std::uint8_t letterF[5] = {7,4,6,4,4};
+      static const std::uint8_t letterT[5] = {7,2,2,2,2};
+      static const std::uint8_t blank[5] = {0,0,0,0,0};
+      if (c >= '0' && c <= '9') return digits[c - '0'];
+      if (c == ':') return colon;
+      if (c == '.') return dot;
+      if (c == 'F') return letterF;
+      if (c == 'T') return letterT;
+      return blank;
+    };
+    int scale = std::max(1, H / 240);
+    auto drawText = [&](int x, int y, const std::string& s, SDL_Color color) {
+      int cx = x;
+      for (char c : s) {
+        const std::uint8_t* rows = glyphRows(c);
+        for (int ry = 0; ry < 5; ++ry) {
+          for (int rx = 0; rx < 3; ++rx) {
+            if (rows[ry] & (4 >> rx)) {
+              rect(cx + rx * scale, y + ry * scale, scale, scale, color);
+            }
+          }
+        }
+        cx += 4 * scale;
+      }
+    };
+    int totalSeconds = static_cast<int>(t);
+    int millis = static_cast<int>(t * 1000.0) % 1000;
+    long long frameNo = static_cast<long long>(t * 30.0);   // nominal 30 fps counter
+    char clockLine[32];
+    std::snprintf(clockLine, sizeof(clockLine), "T %02d:%02d:%02d.%03d",
+                  (totalSeconds / 3600) % 100, (totalSeconds / 60) % 60,
+                  totalSeconds % 60, millis);
+    char frameLine[24];
+    std::snprintf(frameLine, sizeof(frameLine), "F %06lld", frameNo);
+    int pad = 3 * scale;
+    int lineW = 14 * 4 * scale;
+    int boxW = lineW + pad * 2;
+    int boxH = (5 + 2 + 5) * scale + pad * 2;
+    rect(8, 8, boxW, boxH, {58, 12, 12, 255});
+    drawText(8 + pad, 8 + pad, clockLine, {255, 214, 92, 255});
+    drawText(8 + pad, 8 + pad + 7 * scale, frameLine, {255, 214, 92, 255});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildTestClock — testsrc-homage sync card ("Test Clock").
+//
+// The card that proved the program-monitor tap: a big, readable seconds
+// counter you can photograph on two screens at once and compare. Where Test
+// Bars stresses the scaler, this one answers "is that display/preview/encoder
+// showing me the same frame as everything else?".
+//
+//   - 8 saturated bars: quick colour + bar-boundary reference
+//   - a TRUE circle (aspect-corrected): reads as an egg the instant the
+//     raster's pixel aspect or a stretch mode is wrong
+//   - a continuously scrolling hue band: sub-second phase reference, so two
+//     captures a few frames apart are visibly different
+//   - huge 2-digit seconds + a 3-digit frame counter: the sync read itself
+//   - full timecode + frame number in the corner for exact comparisons
+//
+// Always animated (patternTypeIsAnimated) — a still sync card is useless.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// buildTimerFrame - stage/speaker countdown.
+//
+// Digits are drawn as SEVEN-SEGMENT geometry, not text. A timer on a stage
+// screen must render identically on every machine regardless of which fonts are
+// installed, and the cue-row icons already taught us that leaning on font
+// coverage for a glyph is how you get tofu. Segments also scale to any raster
+// without hinting artefacts, which a bitmap font would not.
+//
+// Format matches the source app: m:ss under an hour, h:mm:ss at or above it,
+// and a "+" while in overtime. The ceiling/floor asymmetry is deliberate and
+// load-bearing: counting DOWN rounds up so the final second reads 0:01 rather
+// than 0:00, and overtime rounds down so it starts at +0:00. Get it wrong and
+// the clock looks a second off all the way through.
+// ---------------------------------------------------------------------------
+namespace {
+
+// Segment order: a(top) b(upper right) c(lower right) d(bottom) e(lower left)
+// f(upper left) g(middle). Index 10 is a bare middle bar, used as "+".
+const bool kSevenSeg[11][7] = {
+  {1,1,1,1,1,1,0},  // 0
+  {0,1,1,0,0,0,0},  // 1
+  {1,1,0,1,1,0,1},  // 2
+  {1,1,1,1,0,0,1},  // 3
+  {0,1,1,0,0,1,1},  // 4
+  {1,0,1,1,0,1,1},  // 5
+  {1,0,1,1,1,1,1},  // 6
+  {1,1,1,0,0,0,0},  // 7
+  {1,1,1,1,1,1,1},  // 8
+  {1,1,1,1,0,1,1},  // 9
+  {0,0,0,0,0,0,1},  // 10 = plus
+};
+
+void fillTimerRect(DecodedFrame& f, int x, int y, int w, int h, SDL_Color c) {
+  for (int py = std::max(0, y); py < std::min(f.height, y + h); ++py) {
+    for (int px = std::max(0, x); px < std::min(f.width, x + w); ++px) {
+      const std::size_t o = (static_cast<std::size_t>(py) * f.width + px) * 4;
+      f.pixels[o + 0] = c.r;
+      f.pixels[o + 1] = c.g;
+      f.pixels[o + 2] = c.b;
+      f.pixels[o + 3] = 255;
+    }
+  }
+}
+
+// 5x7 bitmap font for the timer message line. Bundled as data rather than
+// drawn from a TTF for the same reason the digits are seven-segment: a stage
+// screen must render identically wherever it runs.
+const std::uint8_t* timerGlyph5x7(unsigned char c) {
+  switch (c) {
+    case ' ': { static const std::uint8_t g[7] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00}; return g; }
+    case '!': { static const std::uint8_t g[7] = {0x04,0x04,0x04,0x04,0x04,0x00,0x04}; return g; }
+    case '\'': { static const std::uint8_t g[7] = {0x04,0x04,0x00,0x00,0x00,0x00,0x00}; return g; }
+    case ',': { static const std::uint8_t g[7] = {0x00,0x00,0x00,0x00,0x00,0x04,0x08}; return g; }
+    case '-': { static const std::uint8_t g[7] = {0x00,0x00,0x00,0x1F,0x00,0x00,0x00}; return g; }
+    case '.': { static const std::uint8_t g[7] = {0x00,0x00,0x00,0x00,0x00,0x0C,0x0C}; return g; }
+    case '0': { static const std::uint8_t g[7] = {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E}; return g; }
+    case '1': { static const std::uint8_t g[7] = {0x04,0x0C,0x04,0x04,0x04,0x04,0x0E}; return g; }
+    case '2': { static const std::uint8_t g[7] = {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F}; return g; }
+    case '3': { static const std::uint8_t g[7] = {0x1F,0x02,0x04,0x02,0x01,0x11,0x0E}; return g; }
+    case '4': { static const std::uint8_t g[7] = {0x02,0x06,0x0A,0x12,0x1F,0x02,0x02}; return g; }
+    case '5': { static const std::uint8_t g[7] = {0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E}; return g; }
+    case '6': { static const std::uint8_t g[7] = {0x06,0x08,0x10,0x1E,0x11,0x11,0x0E}; return g; }
+    case '7': { static const std::uint8_t g[7] = {0x1F,0x01,0x02,0x04,0x08,0x08,0x08}; return g; }
+    case '8': { static const std::uint8_t g[7] = {0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E}; return g; }
+    case '9': { static const std::uint8_t g[7] = {0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C}; return g; }
+    case ':': { static const std::uint8_t g[7] = {0x00,0x0C,0x0C,0x00,0x0C,0x0C,0x00}; return g; }
+    case '?': { static const std::uint8_t g[7] = {0x0E,0x11,0x01,0x02,0x04,0x00,0x04}; return g; }
+    case 'A': { static const std::uint8_t g[7] = {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}; return g; }
+    case 'B': { static const std::uint8_t g[7] = {0x1E,0x11,0x1E,0x11,0x11,0x11,0x1E}; return g; }
+    case 'C': { static const std::uint8_t g[7] = {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E}; return g; }
+    case 'D': { static const std::uint8_t g[7] = {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E}; return g; }
+    case 'E': { static const std::uint8_t g[7] = {0x1F,0x10,0x1E,0x10,0x10,0x10,0x1F}; return g; }
+    case 'F': { static const std::uint8_t g[7] = {0x1F,0x10,0x1E,0x10,0x10,0x10,0x10}; return g; }
+    case 'G': { static const std::uint8_t g[7] = {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F}; return g; }
+    case 'H': { static const std::uint8_t g[7] = {0x11,0x11,0x1F,0x11,0x11,0x11,0x11}; return g; }
+    case 'I': { static const std::uint8_t g[7] = {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E}; return g; }
+    case 'J': { static const std::uint8_t g[7] = {0x07,0x02,0x02,0x02,0x02,0x12,0x0C}; return g; }
+    case 'K': { static const std::uint8_t g[7] = {0x11,0x12,0x14,0x18,0x14,0x12,0x11}; return g; }
+    case 'L': { static const std::uint8_t g[7] = {0x10,0x10,0x10,0x10,0x10,0x10,0x1F}; return g; }
+    case 'M': { static const std::uint8_t g[7] = {0x11,0x1B,0x15,0x15,0x11,0x11,0x11}; return g; }
+    case 'N': { static const std::uint8_t g[7] = {0x11,0x19,0x15,0x13,0x11,0x11,0x11}; return g; }
+    case 'O': { static const std::uint8_t g[7] = {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}; return g; }
+    case 'P': { static const std::uint8_t g[7] = {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}; return g; }
+    case 'Q': { static const std::uint8_t g[7] = {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D}; return g; }
+    case 'R': { static const std::uint8_t g[7] = {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}; return g; }
+    case 'S': { static const std::uint8_t g[7] = {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}; return g; }
+    case 'T': { static const std::uint8_t g[7] = {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}; return g; }
+    case 'U': { static const std::uint8_t g[7] = {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}; return g; }
+    case 'V': { static const std::uint8_t g[7] = {0x11,0x11,0x11,0x11,0x11,0x0A,0x04}; return g; }
+    case 'W': { static const std::uint8_t g[7] = {0x11,0x11,0x11,0x15,0x15,0x1B,0x11}; return g; }
+    case 'X': { static const std::uint8_t g[7] = {0x11,0x0A,0x04,0x04,0x04,0x0A,0x11}; return g; }
+    case 'Y': { static const std::uint8_t g[7] = {0x11,0x0A,0x04,0x04,0x04,0x04,0x04}; return g; }
+    case 'Z': { static const std::uint8_t g[7] = {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F}; return g; }
+    default: return nullptr;
+  }
+}
+void drawSevenSeg(DecodedFrame& f, int digit, int x, int y, int w, int h,
+                  int thick, SDL_Color on) {
+  if (digit < 0 || digit > 10) return;
+  const bool* s = kSevenSeg[digit];
+  const int half = h / 2;
+  if (s[0]) fillTimerRect(f, x, y, w, thick, on);
+  if (s[1]) fillTimerRect(f, x + w - thick, y, thick, half, on);
+  if (s[2]) fillTimerRect(f, x + w - thick, y + half, thick, half, on);
+  if (s[3]) fillTimerRect(f, x, y + h - thick, w, thick, on);
+  if (s[4]) fillTimerRect(f, x, y + half, thick, half, on);
+  if (s[5]) fillTimerRect(f, x, y, thick, half, on);
+  if (s[6]) fillTimerRect(f, x, y + half - thick / 2, w, thick, on);
+}
+
+}  // namespace
+
+// Timer logo cache. buildTimerFrame is static, so this lives at file scope.
+// Decoded ONCE per path+size: the decode is a synchronous ffmpeg call, which is
+// fine as a one-off when the operator sets a logo, and unacceptable per frame.
+// Failures are remembered too, so a missing file does not respawn ffmpeg 60
+// times a second.
+namespace {
+
+struct TimerLogoCache {
+  std::string path;
+  int targetH = 0;
+  int w = 0;
+  int h = 0;
+  bool failed = false;
+  std::vector<std::uint8_t> rgba;   // tightly packed, w*h*4, R first
+};
+
+// A FEW SIZES, NOT ONE. The output draws the logo at a fifth of 2160 and the
+// inspector's preview at a fifth of a thumbnail; with one entry the two took
+// turns evicting each other and ffmpeg ran twice a second. Shared, because the
+// output thread and the UI both hold one while drawing.
+std::mutex gTimerLogoMutex;
+std::vector<std::shared_ptr<const TimerLogoCache>> gTimerLogos;   // most recent first
+
+std::shared_ptr<const TimerLogoCache> timerLogoFor(const std::string& path, int targetH) {
+  if (path.empty() || targetH <= 0) return nullptr;
+  {
+    std::lock_guard<std::mutex> lock(gTimerLogoMutex);
+    for (std::size_t i = 0; i < gTimerLogos.size(); ++i) {
+      if (gTimerLogos[i]->path == path && gTimerLogos[i]->targetH == targetH) {
+        auto hit = gTimerLogos[i];
+        gTimerLogos.erase(gTimerLogos.begin() + static_cast<std::ptrdiff_t>(i));
+        gTimerLogos.insert(gTimerLogos.begin(), hit);
+        return hit->failed ? nullptr : hit;
+      }
+    }
+  }
+  auto made = std::make_shared<TimerLogoCache>();
+  made->path = path;
+  made->targetH = targetH;
+  auto remember = [&](std::shared_ptr<TimerLogoCache> entry) {
+    std::lock_guard<std::mutex> lock(gTimerLogoMutex);
+    gTimerLogos.insert(gTimerLogos.begin(), entry);
+    if (gTimerLogos.size() > 6) gTimerLogos.resize(6);
+  };
+
+  // Height is fixed and width follows the source aspect, so a wordmark is not
+  // squashed into a square.
+  const std::vector<std::string> probeArgs {
+    "ffprobe", "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=width,height", "-of", "csv=p=0", path
+  };
+  int srcW = 0, srcH = 0;
+  if (auto probe = readAllText(probeArgs)) {
+    std::sscanf(probe->c_str(), "%d,%d", &srcW, &srcH);
+  }
+  if (srcW <= 0 || srcH <= 0) { made->failed = true; remember(made); return nullptr; }
+  const int outH = targetH;
+  const int outW = std::max(1, static_cast<int>(std::llround(
+    static_cast<double>(srcW) * outH / static_cast<double>(srcH))));
+
+  ChildProcess proc;
+  const std::vector<std::string> args {
+    "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path,
+    "-frames:v", "1",
+    "-vf", "scale=" + std::to_string(outW) + ":" + std::to_string(outH),
+    "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"
+  };
+  if (!spawnPipeProcess(proc, args)) { made->failed = true; remember(made); return nullptr; }
+  const std::size_t want = static_cast<std::size_t>(outW) * outH * 4;
+  made->rgba.resize(want);
+  const bool ok = readExact(proc.readFd, made->rgba.data(), want);
+  proc.stop();
+  if (!ok) { made->failed = true; made->rgba.clear(); remember(made); return nullptr; }
+  made->w = outW;
+  made->h = outH;
+  remember(made);
+  return made;
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Tone generator
+// ---------------------------------------------------------------------------
+
+// Pink noise via the Voss-McCartney update: cheap, and flat to within a
+// fraction of a dB across the audio band, which white-noise-through-a-filter
+// is not without a much longer filter than a live tool wants to run.
+namespace {
+
+inline double nextWhite(std::uint32_t& seed) {
+  // xorshift32: no allocation, no locking, and identical on every platform,
+  // which matters because a test signal that differs between machines is not
+  // a reference.
+  seed ^= seed << 13;
+  seed ^= seed >> 17;
+  seed ^= seed << 5;
+  return (static_cast<double>(seed) / 2147483648.0) - 1.0;
+}
+
+inline double nextPink(double* rows, double& running, std::uint32_t& counter,
+                       std::uint32_t& seed) {
+  // Only ONE row changes per sample -- which row is given by the lowest set
+  // bit of the counter. That is the whole trick: 1/f without a filter.
+  counter++;
+  unsigned index = 0;
+  std::uint32_t n = counter;
+  while ((n & 1u) == 0u && index < 15u) { n >>= 1; ++index; }
+  running -= rows[index];
+  rows[index] = nextWhite(seed) * 0.25;
+  running += rows[index];
+  return running;
+}
+
+}  // namespace
+
+
+// ---------------------------------------------------------------------------
+// FDS wavetable voice
+//
+// Built from the DOCUMENTED behaviour of the Famicom Disk System sound
+// hardware. The carrier is a 64-entry, 6-bit table; the modulator is a
+// 32-entry table of signed increments that accumulate into a frequency BEND
+// applied to the carrier. That bend, not any mixing of the two oscillators, is
+// what makes FDS sound like FDS.
+// ---------------------------------------------------------------------------
+namespace {
+
+// 64 steps, values 0..63, exactly the hardware's wave RAM shape.
+void fdsBuildCarrier(FdsCarrier kind, double* table) {
+  for (int i = 0; i < 64; ++i) {
+    const double t = static_cast<double>(i) / 64.0;
+    double v = 0.0;
+    switch (kind) {
+      case FdsCarrier::Triangle:
+        v = (t < 0.5) ? (4.0 * t - 1.0) : (3.0 - 4.0 * t);
+        break;
+      case FdsCarrier::Pulse25:
+        v = (t < 0.25) ? 1.0 : -1.0;
+        break;
+      case FdsCarrier::Saw:
+        v = 2.0 * t - 1.0;
+        break;
+      case FdsCarrier::Additive:
+        // First four harmonics at 1/n. Organ-like, and the closest thing the
+        // hardware has to a "rich" preset.
+        v = std::sin(2.0 * 3.14159265358979323846 * t)
+          + std::sin(4.0 * 3.14159265358979323846 * t) / 2.0
+          + std::sin(6.0 * 3.14159265358979323846 * t) / 3.0
+          + std::sin(8.0 * 3.14159265358979323846 * t) / 4.0;
+        v /= 2.083;   // normalise the harmonic sum back to +/-1
+        break;
+      default:
+        v = std::sin(2.0 * 3.14159265358979323846 * t);
+        break;
+    }
+    // Quantise to the hardware's 6 bits. This is audible -- it is part of the
+    // sound, not an imperfection to smooth away.
+    const double q = std::round((v * 0.5 + 0.5) * 63.0);
+    table[i] = (q / 63.0) * 2.0 - 1.0;
+  }
+}
+
+// 32 signed increments. The hardware stores 3-bit codes meaning
+// +0 +1 +2 +4 reset -4 -2 -1; these presets are built from that vocabulary.
+void fdsBuildModulator(FdsModulator kind, double* table) {
+  for (int i = 0; i < 32; ++i) {
+    double v = 0.0;
+    switch (kind) {
+      case FdsModulator::Ramp:    v = (i < 16) ? 1.0 : -1.0; break;
+      case FdsModulator::Square:  v = (i < 16) ? 4.0 : -4.0; break;
+      case FdsModulator::Vibrato: v = std::sin(2.0 * 3.14159265358979323846 * i / 32.0) * 2.0; break;
+      case FdsModulator::Growl:   v = ((i / 4) % 2 == 0) ? 4.0 : -4.0; break;
+      default:                    v = 0.0; break;
+    }
+    table[i] = v;
+  }
+}
+
+}  // namespace
+
+// One sample of the 2A03 voice. Implemented from the documented behaviour of
+// the chip: duty-cycled pulse, a 4-bit stepped triangle with NO volume
+// control, and noise from a 15-bit linear feedback shift register.
+double MediaEngine::nesNextSample(const ToneSettings& tone, double dt) {
+  // A played note overrides the cue's pitch; without a keyboard the cue's own
+  // setting stands, so a drone still works untouched.
+  const double note = std::clamp(
+    chipGated_ ? chipNoteHz_ : tone.synth.noteHz, 20.0, 8000.0);
+  double sample = 0.0;
+
+  switch (tone.synth.nesVoice) {
+    case NesVoice::Triangle: {
+      nesPhase_ += note * dt;
+      while (nesPhase_ >= 1.0) nesPhase_ -= 1.0;
+      // 32 steps up and down, exactly like the hardware's sequencer. The
+      // stepping is audible and is why the NES triangle sounds like a NES
+      // triangle rather than a synth triangle.
+      const int step = static_cast<int>(nesPhase_ * 32.0) & 31;
+      const int level = (step < 16) ? (15 - step) : (step - 16);
+      sample = (level / 7.5) - 1.0;
+      break;
+    }
+    case NesVoice::Noise: {
+      // The LFSR is clocked at a RATE derived from the note rather than being
+      // an oscillator: noise has no pitch, only a period.
+      nesNoiseAccum_ += note * dt * 16.0;
+      while (nesNoiseAccum_ >= 1.0) {
+        nesNoiseAccum_ -= 1.0;
+        // Tap 1 normally, tap 6 in short mode. Short mode's period is brief
+        // enough to read as pitched metal, which is what trackers call
+        // "periodic noise".
+        const unsigned tap = tone.synth.nesNoiseShort ? 6u : 1u;
+        const unsigned bit = ((nesLfsr_ ^ (nesLfsr_ >> tap)) & 1u);
+        nesLfsr_ = (nesLfsr_ >> 1) | (bit << 14);
+      }
+      sample = (nesLfsr_ & 1u) ? 1.0 : -1.0;
+      break;
+    }
+    default: {
+      nesPhase_ += note * dt;
+      while (nesPhase_ >= 1.0) nesPhase_ -= 1.0;
+      double duty = 0.5;
+      switch (tone.synth.nesDuty) {
+        case NesDuty::Eighth:       duty = 0.125; break;
+        case NesDuty::Quarter:      duty = 0.25;  break;
+        case NesDuty::ThreeQuarter: duty = 0.75;  break;
+        default:                    duty = 0.5;   break;
+      }
+      sample = (nesPhase_ < duty) ? 1.0 : -1.0;
+      break;
+    }
+  }
+
+  // 4-bit output. Optional, but on by default: the steps ARE the sound, and
+  // smoothing them makes a chiptune voice sound like a synth imitating one.
+  if (tone.synth.nesQuantise) {
+    sample = std::round(sample * 7.5) / 7.5;
+  }
+  sample *= chipEnvelope(tone, dt);
+
+  // TAKE THE DC OUT, which the real chip's output stage does and this did not.
+  //
+  // An asymmetric duty cycle does not sit around zero. A 12.5% pulse is high
+  // for one eighth of its period and low for seven, so its mean is a long way
+  // off centre; a 50% pulse is symmetrical and comes out at nothing. Measured
+  // across four thirty-second passes, same cue, timbre changed between takes:
+  //
+  //   lead   12.5% pulse    mean -2630.5    8.0% of headroom gone
+  //   harm   50%  pulse     mean    -0.3    0.0%
+  //   bass   triangle       mean   -58.2    0.2%
+  //   drums  noise          mean    +1.1    0.0%
+  //
+  // The correlation with duty is the whole diagnosis, and it is arithmetic
+  // rather than a defect in the oscillator -- the defect is that nothing
+  // removed it afterwards. It costs headroom before a note is played, it makes
+  // two pulse voices at different duties sum their offsets instead of
+  // cancelling, and a note starting or stopping becomes a STEP in the DC
+  // level, which is the classic source of a thump on take.
+  //
+  // The NES put its APU through first-order RC high-pass filters at 90Hz and
+  // 440Hz; every serious 2A03 emulation models at least the first. One pole at
+  // 35Hz is gentler than the hardware on purpose: it is low enough to leave a
+  // triangle bass alone -- C2 is 65Hz, and that part already measures nearly
+  // centred -- while removing an offset that is, by definition, at 0Hz.
+  {
+    const double corner = 35.0;
+    const double rc = 1.0 / (2.0 * 3.14159265358979323846 * corner);
+    const double alpha = rc / (rc + std::max(1e-9, dt));
+    const double filtered = alpha * (chipDcPrevOut_ + sample - chipDcPrevIn_);
+    chipDcPrevIn_ = sample;
+    chipDcPrevOut_ = filtered;
+    sample = filtered;
+  }
+  return sample;
+}
+
+// Shared envelope. Pitch and envelope belong to the NOTE, not to whichever
+// oscillator happens to be playing it, so both chips use this.
+
+// ---------------------------------------------------------------------------
+// Played notes
+// ---------------------------------------------------------------------------
+// A NOTE IS PLAYED ON WHATEVER IS LOADED TO PLAY IT.
+//
+// Deckboy already had three ways to play one -- the computer keyboard, MIDI in
+// with its own play-or-fire switch, and SYNTHNOTEON over the wire -- and all
+// three land here. They drove only the built-in chip synth, so hosting an
+// instrument plugin produced something that loaded, processed, and could not
+// be played. This is the hop that was missing.
+//
+// Sent to EVERY instrument in the chain, on the main thread, where opening and
+// talking to a plugin already happens; each instance queues the note for its
+// own audio thread. An effect never sees it -- it has no event input, and a
+// note means nothing to a reverb.
+void MediaEngine::sendNoteToPlugins(bool on, double hz, int velocity) {
+  if (audioPluginsPending_.empty()) {
+    return;
+  }
+  // Hertz is what a cue deck speaks (tuning and reference pitch are per cue);
+  // a plugin wants a MIDI key. 12-TET against the cue's own A, so an
+  // instrument agrees with the chip synth about what middle C is.
+  const int key = std::clamp(
+    static_cast<int>(std::lround(69.0 + 12.0 * std::log2(hz / 440.0))), 0, 127);
+  for (const auto& instance : audioPluginsPending_) {
+    if (!instance || !instance->descriptor().isInstrument) {
+      continue;
+    }
+    if (on) {
+      instance->noteOn(0, key, std::clamp(velocity / 127.0, 0.0, 1.0));
+    } else {
+      instance->noteOff(0, key);
+    }
+  }
+}
+
+// Run the live cue's audio chain over generated device-width audio, in place.
+//
+// Separate from applyGainAndQueueAudio because the generator has already done
+// that function's other jobs -- level is in the tone's own amplitude, and the
+// routing is per channel rather than a stereo pan. What is missing is only the
+// chain and the safety net after it.
+void MediaEngine::applyAudioEffectsToGeneratedAudio(std::vector<std::int16_t>& out,
+                                                    std::size_t frames,
+                                                    int channels) {
+  if (frames == 0 || channels < 1) {
+    return;
+  }
+  refreshAudioEffectStack();
+  if (audioEffectsActive_.empty()) {
+    return;
+  }
+  const std::size_t stride = static_cast<std::size_t>(channels);
+  const std::size_t right = channels > 1 ? 1 : 0;
+  limiterScratch_.resize(frames * 2);
+  for (std::size_t f = 0; f < frames; ++f) {
+    limiterScratch_[f * 2]     = static_cast<double>(out[f * stride]);
+    limiterScratch_[f * 2 + 1] = static_cast<double>(out[f * stride + right]);
+  }
+
+  deckboy::audiofx::AudioEffectContext ctx;
+  ctx.sampleRate = static_cast<double>(audioRate_);
+  ctx.luma = audioCtxLuma_.load(std::memory_order_relaxed);
+  ctx.motion = audioCtxMotion_.load(std::memory_order_relaxed);
+  ctx.hasPicture = audioCtxHasPicture_.load(std::memory_order_relaxed);
+  ctx.centerX = audioCtxCenterX_.load(std::memory_order_relaxed);
+  ctx.centerY = audioCtxCenterY_.load(std::memory_order_relaxed);
+  ctx.coverage = audioCtxCoverage_.load(std::memory_order_relaxed);
+  ctx.framePeriod = audioCtxFramePeriod_.load(std::memory_order_relaxed);
+  ctx.held = audioCtxHeld_.load(std::memory_order_relaxed);
+  ctx.position = currentPosition_;
+  ctx.duration = audioFadeDuration_.load(std::memory_order_relaxed);
+  audioPluginHost_.engine = this;
+  ctx.host = &audioPluginHost_;
+
+  deckboy::audiofx::applyAudioEffectStack(limiterScratch_, audioEffectsActive_,
+                                          audioEffectState_, ctx);
+
+  // The same rule as the decode path: a non-finite sample must never reach the
+  // quantiser, because std::lround of a NaN is a full-scale DC step out of the
+  // speakers and no comparison the limiter makes can catch it.
+  bool finite = true;
+  for (std::size_t i = 0; i < frames * 2 && finite; ++i) {
+    finite = std::isfinite(limiterScratch_[i]);
+  }
+  if (!finite) {
+    audioEffectState_.clear();
+    return;   // leave the generated audio as it was rather than emit a thump
+  }
+
+  for (std::size_t f = 0; f < frames; ++f) {
+    const std::int16_t l = static_cast<std::int16_t>(
+      std::clamp(static_cast<int>(std::lround(limiterScratch_[f * 2])), -32768, 32767));
+    const std::int16_t r = static_cast<std::int16_t>(
+      std::clamp(static_cast<int>(std::lround(limiterScratch_[f * 2 + 1])), -32768, 32767));
+    out[f * stride] = l;
+    out[f * stride + right] = r;
+  }
+}
+
+bool MediaEngine::hasInstrumentPlugin() const {
+  for (const auto& instance : audioPluginsPending_) {
+    if (instance && instance->descriptor().isInstrument) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void MediaEngine::synthNoteOn(double hz, int velocity) {
+  if (hz <= 0.0) return;
+  sendNoteToPlugins(true, hz, velocity);
+  chipGated_ = true;
+  chipGateOpen_ = true;
+  chipNoteHz_ = hz;
+  // Velocity scales level. A chip had no velocity, but a keyboard does, and
+  // ignoring it makes every note identical in a way that feels broken to
+  // anyone playing rather than programming.
+  chipVelocity_ = std::clamp(velocity / 127.0, 0.05, 1.0);
+  fdsEnvSeconds_ = 0.0;   // restart the attack
+}
+
+void MediaEngine::synthNoteOff(double hz) {
+  // Sent to the plugins BEFORE the chip synth's roll-off rule below, which
+  // deliberately ignores the release of a note that is no longer sounding on a
+  // monophonic voice. A plugin is polyphonic and owns its own voices, so it
+  // must hear every release or a key stays down forever.
+  sendNoteToPlugins(false, hz, 0);
+  // Ignore the release of a note that is no longer the one sounding. On a
+  // monophonic voice, rolling from one key to the next means the first key's
+  // release arrives AFTER the second key's press, and honouring it would cut
+  // off the note just started.
+  if (!chipGated_) return;
+  if (hz > 0.0 && std::abs(hz - chipNoteHz_) > 0.01) return;
+  chipGateOpen_ = false;
+  chipReleaseLevel_ = 1.0;
+  fdsEnvSeconds_ = 0.0;   // release timing starts now
+}
+
+void MediaEngine::synthAllNotesOff() {
+  // Every key, because panic has to mean panic: a plugin holding a note when
+  // the operator hits stop is a drone through the PA.
+  for (int key = 0; key < 128; ++key) {
+    for (const auto& instance : audioPluginsPending_) {
+      if (instance && instance->descriptor().isInstrument) {
+        instance->noteOff(0, key);
+      }
+    }
+  }
+  chipGateOpen_ = false;
+  chipGated_ = false;
+  chipReleaseLevel_ = 0.0;
+}
+double MediaEngine::chipEnvelope(const ToneSettings& tone, double dt) {
+  // Gated: the envelope follows the key rather than the cue's retrigger.
+  if (chipGated_) {
+    fdsEnvSeconds_ += dt;
+    const double a = std::max(0.001, tone.synth.attackSeconds);
+    const double r = std::max(0.001, tone.synth.releaseSeconds);
+    if (chipGateOpen_) {
+      // Attack, then HOLD. A held key sustains -- this is the difference
+      // between an instrument and a one-shot.
+      const double env = (fdsEnvSeconds_ < a) ? (fdsEnvSeconds_ / a) : 1.0;
+      return env * chipVelocity_;
+    }
+    const double env = std::max(0.0, chipReleaseLevel_ - fdsEnvSeconds_ / r);
+    return env * chipVelocity_;
+  }
+  if (tone.synth.retriggerSeconds > 0.0) {
+    fdsEnvSeconds_ += dt;
+    if (fdsEnvSeconds_ >= tone.synth.retriggerSeconds) fdsEnvSeconds_ = 0.0;
+  } else {
+    fdsEnvSeconds_ = std::min(fdsEnvSeconds_ + dt, 1e6);
+  }
+  const double a = std::max(0.001, tone.synth.attackSeconds);
+  const double r = std::max(0.001, tone.synth.releaseSeconds);
+  if (fdsEnvSeconds_ < a) return fdsEnvSeconds_ / a;
+  if (tone.synth.retriggerSeconds > 0.0) {
+    return std::max(0.0, 1.0 - (fdsEnvSeconds_ - a) / r);
+  }
+  return 1.0;
+}
+
+double MediaEngine::fdsNextSample(const ToneSettings& tone, double dt) {
+  // Cached. These were rebuilt EVERY SAMPLE -- 96 doubles including four sin()
+  // calls per entry, 48,000 times a second, to produce a table that only
+  // changes when the operator turns a knob. Rebuild on change only.
+  if (!fdsTablesValid_ ||
+      fdsCachedCarrier_ != static_cast<int>(tone.synth.carrier) ||
+      fdsCachedModulator_ != static_cast<int>(tone.synth.modulator)) {
+    fdsBuildCarrier(tone.synth.carrier, fdsCarrierTable_);
+    fdsBuildModulator(tone.synth.modulator, fdsModTable_);
+    fdsCachedCarrier_ = static_cast<int>(tone.synth.carrier);
+    fdsCachedModulator_ = static_cast<int>(tone.synth.modulator);
+    fdsTablesValid_ = true;
+  }
+  const double* carrier = fdsCarrierTable_;
+  const double* modulator = fdsModTable_;
+
+  // A played note overrides the cue's pitch; without a keyboard the cue's
+  // own setting stands, so a drone still works untouched.
+  const double note = std::clamp(
+    chipGated_ ? chipNoteHz_ : tone.synth.noteHz, 20.0, 8000.0);
+  const double depth = std::clamp(tone.synth.modDepth, 0, 63) / 63.0;
+
+  // Modulator runs at a RATIO of the note, which is what makes the bend track
+  // pitch instead of turning into a fixed wobble as you play up the keyboard.
+  const double modHz = note * std::clamp(tone.synth.modRatio, 0.0, 8.0);
+  fdsModPhase_ += modHz * 32.0 * dt;
+  while (fdsModPhase_ >= 32.0) fdsModPhase_ -= 32.0;
+  const int modIndex = static_cast<int>(fdsModPhase_) & 31;
+
+  // Accumulate, then decay slightly. Without the decay the accumulator walks
+  // off and the pitch never returns, which the hardware avoids by resetting.
+  fdsModAccum_ = fdsModAccum_ * 0.999 + modulator[modIndex] * dt * 60.0;
+  fdsModAccum_ = std::clamp(fdsModAccum_, -8.0, 8.0);
+
+  // The bend: a multiplier on the carrier frequency, scaled by depth.
+  const double bend = 1.0 + fdsModAccum_ * depth * 0.25;
+  fdsCarrierPhase_ += note * bend * 64.0 * dt;
+  while (fdsCarrierPhase_ >= 64.0) fdsCarrierPhase_ -= 64.0;
+  while (fdsCarrierPhase_ < 0.0) fdsCarrierPhase_ += 64.0;
+
+  const int idx = static_cast<int>(fdsCarrierPhase_) & 63;
+  double sample = carrier[idx];
+
+  return sample * chipEnvelope(tone, dt);
+}
+
+void MediaEngine::pumpToneAudio(const Cue& cue, double aheadSeconds) {
+  if (cue.kind != CueKind::Tone) return;
+
+  const int channels = std::max(2, audioDeviceChannels_.load(std::memory_order_relaxed));
+  // Keep roughly a fifth of a second queued. Enough that a slow frame cannot
+  // starve the device, short enough that a level or frequency change is heard
+  // immediately rather than after the old buffer drains.
+  // A tone on oscillators asks for less (see the caller), so a change is
+  // heard within a frame or two.
+  const int aheadFrames = static_cast<int>(kAudioRate * std::clamp(aheadSeconds, 0.03, 0.5));
+  const int targetBytes = aheadFrames * channels * static_cast<int>(sizeof(std::int16_t));
+  const int queued = queuedAudioBytes();
+  if (queued >= targetBytes) return;
+
+  const int bytesPerFrame = channels * static_cast<int>(sizeof(std::int16_t));
+  const std::size_t frames =
+    static_cast<std::size_t>((targetBytes - queued) / std::max(1, bytesPerFrame));
+  if (frames == 0) return;
+
+  // dBFS -> linear, clamped. The ceiling is -1 dBFS rather than 0: a test tone
+  // goes into a live PA and there is never a reason to push a generated signal
+  // to full scale.
+  const double db = std::clamp(cue.tone.levelDbfs, -60.0, -1.0);
+  const double amplitude = std::pow(10.0, db / 20.0) * 32767.0;
+
+  std::vector<std::int16_t> out(frames * static_cast<std::size_t>(channels), 0);
+  const double dt = 1.0 / static_cast<double>(kAudioRate);
+
+  for (std::size_t f = 0; f < frames; ++f) {
+    double sample = 0.0;
+    switch (cue.tone.waveform) {
+      case ToneWaveform::Sine: {
+        const double hz = std::clamp(cue.tone.frequencyHz, 20.0, 20000.0);
+        tonePhase_ += 2.0 * 3.14159265358979323846 * hz * dt;
+        if (tonePhase_ > 6.283185307179586) tonePhase_ -= 6.283185307179586;
+        sample = std::sin(tonePhase_);
+        break;
+      }
+      case ToneWaveform::White:
+        sample = nextWhite(toneSeed_);
+        break;
+      case ToneWaveform::Sting: {
+        // ── A STRUCK, SWEPT, DECAYING GESTURE ─────────────────────────
+        //
+        // stingElapsed_ is the cue's own clock rather than the transport's,
+        // because this is generated on the audio thread and the transport
+        // position is not safe to read there -- the same rule every other
+        // generated waveform here follows.
+        const double len = std::clamp(cue.tone.stingSeconds, 0.05, 10.0);
+        const double t = std::clamp(stingElapsed_ / len, 0.0, 1.0);
+        // The sweep is in SEMITONES, so it is musical at any pitch: seven
+        // semitones is a fifth whether it starts at 220Hz or 880Hz. A ratio
+        // in Hz would be a different interval at every pitch.
+        const double semis = cue.tone.stingSweepSemitones * t;
+        const double hz = std::clamp(cue.tone.stingPitchHz, 20.0, 12000.0) *
+                          std::pow(2.0, semis / 12.0);
+        stingPhase_ += 2.0 * 3.14159265358979323846 * hz * dt;
+        if (stingPhase_ > 6.283185307179586) stingPhase_ -= 6.283185307179586;
+        // BODY IS HARMONICS, not a filter: odd partials at falling weight,
+        // which takes a pure sine to something with brass in it without
+        // needing a filter that would have to be stable on the audio thread.
+        const double body = std::clamp(cue.tone.stingBody, 0.0, 1.0);
+        sample = std::sin(stingPhase_);
+        if (body > 0.0) {
+          sample += body * 0.50 * std::sin(stingPhase_ * 2.0);
+          sample += body * 0.28 * std::sin(stingPhase_ * 3.0);
+          sample += body * 0.14 * std::sin(stingPhase_ * 5.0);
+          sample /= (1.0 + body * 0.92);   // keep the peak where it was
+        }
+        // A fast attack and an exponential tail: struck, not faded in. A
+        // linear decay reads as a machine turning something down.
+        const double attack = std::min(1.0, stingElapsed_ / 0.008);
+        sample *= attack * std::exp(-3.2 * t);
+        stingElapsed_ += dt;
+        break;
+      }
+      case ToneWaveform::Fds:
+        sample = (cue.tone.synth.chip == SynthChip::Nes)
+                   ? nesNextSample(cue.tone, dt)
+                   : fdsNextSample(cue.tone, dt);
+        break;
+      case ToneWaveform::Pink:
+        sample = nextPink(tonePinkRows_, tonePinkRunning_, tonePinkCounter_, toneSeed_);
+        break;
+      case ToneWaveform::Sweep: {
+        // Logarithmic, because a room's response is heard in octaves. A linear
+        // sweep spends most of its time above 10kHz and tells you little.
+        const double span = std::max(0.5, cue.tone.sweepSeconds);
+        const double lo = std::clamp(cue.tone.sweepLowHz, 20.0, 19000.0);
+        const double hi = std::clamp(cue.tone.sweepHighHz, lo + 1.0, 20000.0);
+        toneSweepSeconds_ += dt;
+        if (toneSweepSeconds_ > span) toneSweepSeconds_ -= span;
+        const double t = toneSweepSeconds_ / span;
+        const double hz = lo * std::pow(hi / lo, t);
+        tonePhase_ += 2.0 * 3.14159265358979323846 * hz * dt;
+        if (tonePhase_ > 6.283185307179586) tonePhase_ -= 6.283185307179586;
+        sample = std::sin(tonePhase_);
+        break;
+      }
+      case ToneWaveform::Identify: {
+        const double hold = std::max(0.25, cue.tone.identifySecondsPerChannel);
+        toneSweepSeconds_ += dt;
+        if (toneSweepSeconds_ >= hold) {
+          toneSweepSeconds_ -= hold;
+          toneIdentifyChannel_ = (toneIdentifyChannel_ + 1) % channels;
+        }
+        tonePhase_ += 2.0 * 3.14159265358979323846 * 1000.0 * dt;
+        if (tonePhase_ > 6.283185307179586) tonePhase_ -= 6.283185307179586;
+        // Gate the last quarter second so consecutive channels are separated
+        // by silence; without it a walk sounds like one unbroken tone.
+        const bool gap = toneSweepSeconds_ > (hold - 0.25);
+        sample = gap ? 0.0 : std::sin(tonePhase_);
+        break;
+      }
+    }
+
+    const std::int16_t v = static_cast<std::int16_t>(
+      std::clamp(sample * amplitude, -32767.0, 32767.0));
+    if (cue.tone.waveform == ToneWaveform::Identify) {
+      out[f * channels + toneIdentifyChannel_] = v;   // one channel at a time
+    } else if (cue.tone.channel >= 0 && cue.tone.channel < channels) {
+      out[f * channels + cue.tone.channel] = v;       // a single named output
+    } else {
+      for (int c = 0; c < channels; ++c) out[f * channels + c] = v;
+    }
+  }
+
+  // ── THE CUE'S AUDIO CHAIN, ON GENERATED SOUND TOO ────────────────────────
+  //
+  // A generated tone goes straight to the device rather than through
+  // applyGainAndQueueAudio, which is where the chain runs -- so every effect,
+  // every bend and every plugin slot on a Tone cue did nothing at all. The
+  // inspector drew the rack, the operator set it, and the sound was untouched.
+  //
+  // The same shape as the metering tap immediately below, which was retrofitted
+  // here for exactly the same reason and whose comment tells the same story:
+  // this path was written before there was anything else to hand the samples
+  // to, and each new consumer has had to be brought to it.
+  //
+  // The chain is stereo by contract, so it treats the first output pair -- the
+  // programme -- and leaves a tone deliberately routed elsewhere alone, which
+  // is the rule the tap already follows. An INSTRUMENT plugin is why this
+  // matters beyond effects: its sound arrives as the chain's wet output, so
+  // without this a hosted instrument could be played and never heard.
+  applyAudioEffectsToGeneratedAudio(out, frames, channels);
+
+  // Keep the tail of what we just produced for the on-screen scope. Sized to
+  // about 40ms, which is a few cycles at 100Hz and plenty at 1kHz.
+  pushScopeSamples(out.data(), frames, channels);
+
+  // Feed the metering/egress tap. The tap is invoked from queueDelayedAudio,
+  // which ONLY the decode path goes through -- a generated tone went straight
+  // to putWideAudioToStream, the last write, which deliberately knows nothing
+  // about metering. So the tone was audible while the VU meter sat still, and
+  // the stream/record mix never saw a sample: every recording of a tone
+  // measured -91 dBFS, digital silence.
+  //
+  // The tap is STEREO by contract (see queueDelayedAudio), so hand it the
+  // first output pair. A tone deliberately routed to some other channel is
+  // genuinely not in the stereo programme and correctly reads as silence.
+  if (audioTap_ && !audioTapMuted_.load(std::memory_order_relaxed)) {
+    std::vector<std::int16_t> stereo(frames * 2, 0);
+    for (std::size_t f = 0; f < frames; ++f) {
+      stereo[f * 2]     = out[f * static_cast<std::size_t>(channels)];
+      stereo[f * 2 + 1] = out[f * static_cast<std::size_t>(channels) +
+                              (channels > 1 ? 1 : 0)];
+    }
+    // At a tape speed the device plays this at that ratio; so does the tap.
+    audioTap_(tapAtTapeSpeed(std::move(stereo)));
+  }
+  // The same stereo the tap gets, to the picture side: without this a tone
+  // cue drives neither audioprint nor an Audio LFO.
+  {
+    std::vector<std::int16_t> stereo(frames * 2, 0);
+    for (std::size_t f = 0; f < frames; ++f) {
+      stereo[f * 2]     = out[f * static_cast<std::size_t>(channels)];
+      stereo[f * 2 + 1] = out[f * static_cast<std::size_t>(channels) +
+                              (channels > 1 ? 1 : 0)];
+    }
+    noteProgrammeAudio(stereo.data(), frames);
+  }
+
+  // Device-width already: the generator addresses channels individually, so it
+  // must NOT go through the stereo-and-widen path.
+  putWideAudioToStream(out, channels);
+}
+
+void MediaEngine::rebuildToneFrame(const Cue& cue) {
+  auto [w, h] = currentOutputSizeHint();
+  const int W = std::max(64, w);
+  const int H = std::max(64, h);
+  DecodedFrame frame;
+  frame.width = W;
+  frame.height = H;
+  frame.format = FramePixelFormat::RGBA32;
+  frame.pixels.assign(static_cast<std::size_t>(W) * H * 4, 0);
+  for (std::size_t i = 0; i < frame.pixels.size(); i += 4) {
+    frame.pixels[i + 3] = 255;
+  }
+
+  // The card says what is actually going out. An engineer at the far end of a
+  // room needs to read the level and the channel from the screen, because the
+  // whole point is that they are NOT at the machine.
+  const char* name = "SINE";
+  switch (cue.tone.waveform) {
+    case ToneWaveform::Pink:     name = "PINK NOISE"; break;
+    case ToneWaveform::White:    name = "WHITE NOISE"; break;
+    case ToneWaveform::Sweep:    name = "SWEEP"; break;
+    case ToneWaveform::Identify: name = "IDENTIFY"; break;
+    case ToneWaveform::Fds:      name = "FDS SYNTH"; break;
+    default: break;
+  }
+  char levelText[48];
+  std::snprintf(levelText, sizeof(levelText), "%.1f dBFS", cue.tone.levelDbfs);
+
+  std::string detail;
+  if (cue.tone.waveform == ToneWaveform::Sine) {
+    char hz[32];
+    std::snprintf(hz, sizeof(hz), "%.0f Hz", cue.tone.frequencyHz);
+    detail = hz;
+  } else if (cue.tone.waveform == ToneWaveform::Sweep) {
+    char sw[48];
+    std::snprintf(sw, sizeof(sw), "%.0f-%.0f Hz", cue.tone.sweepLowHz, cue.tone.sweepHighHz);
+    detail = sw;
+  } else if (cue.tone.waveform == ToneWaveform::Identify) {
+    detail = "CH " + std::to_string(toneIdentifyChannel_ + 1);
+  } else if (cue.tone.channel >= 0) {
+    detail = "CH " + std::to_string(cue.tone.channel + 1);
+  } else {
+    detail = "ALL CH";
+  }
+
+  const int cell = std::max(3, W / 120);
+  auto drawLine = [&](const std::string& text, int y, SDL_Color ink, int scale) {
+    const int c = cell * scale;
+    const int charW = c * 6;
+    const int textW = static_cast<int>(text.size()) * charW;
+    int x = (W - textW) / 2;
+    for (char raw : text) {
+      const unsigned char ch = static_cast<unsigned char>(std::toupper(raw));
+      if (const std::uint8_t* rows = timerGlyph5x7(ch)) {
+        for (int r = 0; r < 7; ++r) {
+          for (int b = 0; b < 5; ++b) {
+            if (rows[r] & (1 << (4 - b))) {
+              fillTimerRect(frame, x + b * c, y + r * c, c, c, ink);
+            }
+          }
+        }
+      }
+      x += charW;
+    }
+  };
+
+  const SDL_Color amber {255, 190, 40, 255};
+  const SDL_Color white {255, 255, 255, 255};
+  const SDL_Color green {80, 255, 140, 255};
+  const SDL_Color dim   {60, 90, 70, 255};
+
+  // Draw the diagnostic BEHIND the text, so the card stays readable across it.
+  std::vector<std::int16_t> scopeL, scopeR;
+  std::size_t scopePos = 0;
+  const bool haveScope = copyScopeSamples(scopeL, scopeR, scopePos);
+  if (cue.tone.visualEnabled && cue.tone.visual != ToneVisual::None && haveScope) {
+    const int plotH = H / 3;
+    const int plotY = H / 2 - plotH / 2;
+    const std::size_t n = scopeL.size();
+    const int dot = std::max(1, W / 400);
+
+    if (cue.tone.visual == ToneVisual::Scope) {
+      // Centre line first: without a reference an operator cannot see DC
+      // offset or asymmetric clipping, which is half the point of a scope.
+      fillTimerRect(frame, 0, plotY + plotH / 2, W, std::max(1, dot / 2), dim);
+      for (int x = 0; x < W; ++x) {
+        const std::size_t i = (scopePos + (static_cast<std::size_t>(x) * n) / W) % n;
+        const double v = scopeL[i] / 32768.0;
+        const int y = plotY + plotH / 2 - static_cast<int>(v * (plotH / 2 - 2));
+        fillTimerRect(frame, x, y, dot, dot, green);
+      }
+    } else if (cue.tone.visual == ToneVisual::Lissajous) {
+      // X = channel 1, Y = channel 2. A diagonal means in phase, the opposite
+      // diagonal means one channel is POLARITY INVERTED, and a circle means
+      // 90 degrees out. This finds a miswired cable in seconds.
+      const int size = plotH;
+      const int cx = W / 2;
+      const int cy = plotY + plotH / 2;
+      fillTimerRect(frame, cx - size / 2, cy, size, std::max(1, dot / 2), dim);
+      fillTimerRect(frame, cx, cy - size / 2, std::max(1, dot / 2), size, dim);
+      for (std::size_t i = 0; i < n; ++i) {
+        const double lx = scopeL[i] / 32768.0;
+        const double ly = scopeR[i] / 32768.0;
+        const int px = cx + static_cast<int>(lx * (size / 2 - 2));
+        const int py = cy - static_cast<int>(ly * (size / 2 - 2));
+        fillTimerRect(frame, px, py, dot, dot, green);
+      }
+    } else if (cue.tone.visual == ToneVisual::Spectrum) {
+      // Goertzel per band rather than an FFT: 16 third-octave bands is a tiny
+      // amount of work, needs no window, no buffer of a power-of-two length,
+      // and third-octaves are how a PA is actually measured.
+      const int bands = 16;
+      const int barW = std::max(2, W / (bands * 2));
+      const int gap = barW;
+      const int totalW = bands * (barW + gap) - gap;
+      int bx = (W - totalW) / 2;
+      for (int b = 0; b < bands; ++b) {
+        const double hz = 31.5 * std::pow(2.0, b / 3.0 * 1.0);
+        if (hz > kAudioRate / 2.0) break;
+        const double omega = 2.0 * 3.14159265358979323846 * hz / kAudioRate;
+        const double coeff = 2.0 * std::cos(omega);
+        double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+        for (std::size_t i = 0; i < n; ++i) {
+          s0 = (scopeL[i] / 32768.0) + coeff * s1 - s2;
+          s2 = s1;
+          s1 = s0;
+        }
+        const double power = s1 * s1 + s2 * s2 - coeff * s1 * s2;
+        const double mag = std::sqrt(std::max(0.0, power)) / static_cast<double>(n);
+        // dB, floored at -60 so a silent band is a stub rather than nothing.
+        const double db = 20.0 * std::log10(std::max(mag, 1e-6));
+        const double norm = std::clamp((db + 60.0) / 60.0, 0.0, 1.0);
+        const int barH = std::max(1, static_cast<int>(norm * plotH));
+        fillTimerRect(frame, bx, plotY + plotH - barH, barW, barH, green);
+        bx += barW + gap;
+      }
+    }
+  }
+
+  drawLine(name,      H / 2 - cell * 22, amber, 3);
+  drawLine(levelText, H / 2 + cell * 2,  white, 2);
+  drawLine(detail,    H / 2 + cell * 20, white, 2);
+
+  displayFrame_ = std::move(frame);
+  displayFrame_->index = ++displayFrameSerial_;
+  uploadFrame(*displayFrame_);
+}
+
+
+bool MediaEngine::timerLogoPixels(const std::string& path, int height, int& width,
+                                  std::vector<std::uint8_t>& rgba) {
+  const auto logo = timerLogoFor(path, height);
+  if (!logo) return false;
+  width = logo->w;
+  rgba = logo->rgba;
+  return true;
+}
+
+void MediaEngine::buildTimerFrame(DecodedFrame& frame, const TimerSettings& cfg,
+                                  double elapsedSeconds, bool running) {
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0 || frame.pixels.size() < static_cast<std::size_t>(W) * H * 4) {
+    return;
+  }
+
+  // MODE decides what the clock shows. It was previously declared and cycled in
+  // the inspector but never read here, so count-up and time-of-day rendered
+  // identically to a countdown -- the same "wired to state but not to effect"
+  // bug the encoder format picker had, found by auditing for it.
+  double remaining = 0.0;
+  bool overtime = false;
+  int totalSeconds = 0;
+  if (cfg.mode == TimerMode::TimeOfDay) {
+    const std::time_t nowT = std::time(nullptr);
+    std::tm local {};
+#ifdef _WIN32
+    localtime_s(&local, &nowT);
+#else
+    localtime_r(&nowT, &local);
+#endif
+    totalSeconds = local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
+    remaining = 1e9;              // a wall clock never runs low
+  } else if (cfg.mode == TimerMode::CountUp) {
+    totalSeconds = std::max(0, static_cast<int>(std::floor(elapsedSeconds)));
+    remaining = static_cast<double>(cfg.durationSeconds) - elapsedSeconds;
+    overtime = remaining < 0.0;
+  } else {
+    remaining = static_cast<double>(cfg.durationSeconds) - elapsedSeconds;
+    overtime = remaining < 0.0;
+    const double rawSeconds = overtime ? std::floor(-remaining) : std::ceil(remaining);
+    totalSeconds = std::max(0, static_cast<int>(rawSeconds));
+  }
+  const int hours = totalSeconds / 3600;
+  const int minutes = (totalSeconds % 3600) / 60;
+  const int seconds = totalSeconds % 60;
+
+  // Thresholds are SECONDS REMAINING, so amber 60 means "a minute left".
+  // A packed override of -1 means "keep the built-in", so a show that predates
+  // custom colours renders exactly as it always did.
+  auto pick = [](int packed, SDL_Color fallback) {
+    if (packed < 0) return fallback;
+    return SDL_Color {static_cast<Uint8>((packed >> 16) & 0xFF),
+                      static_cast<Uint8>((packed >> 8) & 0xFF),
+                      static_cast<Uint8>(packed & 0xFF), 255};
+  };
+  SDL_Color ink = pick(cfg.colorNormal, SDL_Color {255, 255, 255, 255});
+  if (overtime || remaining <= static_cast<double>(cfg.redSeconds)) {
+    ink = pick(cfg.colorRed, SDL_Color {255, 64, 64, 255});
+  } else if (remaining <= static_cast<double>(cfg.amberSeconds)) {
+    ink = pick(cfg.colorAmber, SDL_Color {255, 190, 40, 255});
+  }
+  const SDL_Color bg = pick(cfg.colorBackground, SDL_Color {0, 0, 0, 255});
+  const bool clearBackdrop = cfg.colorBackground == kTimerBackdropTransparent;
+
+  // Blink keyed to wall-clock elapsed, so an overtime clock keeps flashing even
+  // while the ticker is held. The source app is explicit that a stopped
+  // overtime clock must still be visibly angry.
+  bool blankThisFrame = false;
+  if (cfg.blinkAtZero && overtime) {
+    blankThisFrame = (static_cast<int>(std::floor(elapsedSeconds * 2.0)) % 2) == 1;
+  }
+
+  for (std::size_t i = 0; i < frame.pixels.size(); i += 4) {
+    // RGBA32, so byte 0 is RED. This wrote blue into the red slot and vice
+    // versa, which transposed every custom background: amber came out cyan
+    // and blue came out amber. fillTimerRect three hundred lines up writes
+    // r,g,b in order -- so the digits were right and only the background was
+    // wrong, which is exactly how it presented.
+    frame.pixels[i + 0] = bg.r;
+    frame.pixels[i + 1] = bg.g;
+    frame.pixels[i + 2] = bg.b;
+    frame.pixels[i + 3] = clearBackdrop ? 0 : 255;
+  }
+  if (blankThisFrame) {
+    return;
+  }
+
+  std::vector<int> glyphs;            // 0-9 digit, 10 plus, -1 colon
+  // Time of day never shows a "+" and always shows h:mm:ss.
+  if (overtime && cfg.mode != TimerMode::TimeOfDay) glyphs.push_back(10);
+  if (hours > 0 || cfg.mode == TimerMode::TimeOfDay) {
+    glyphs.push_back(hours % 10);
+    glyphs.push_back(-1);
+    glyphs.push_back(minutes / 10);
+    glyphs.push_back(minutes % 10);
+  } else {
+    if (minutes >= 10) glyphs.push_back(minutes / 10);
+    glyphs.push_back(minutes % 10);
+  }
+  glyphs.push_back(-1);
+  glyphs.push_back(seconds / 10);
+  glyphs.push_back(seconds % 10);
+
+  int colonCount = 0;
+  for (int g : glyphs) {
+    if (g == -1) ++colonCount;
+  }
+  const int digitCount = std::max(1, static_cast<int>(glyphs.size()) - colonCount);
+  const int usableW = W * 82 / 100;
+  const int gap = std::max(2, W / 120);
+  int digitW = (usableW - gap * (static_cast<int>(glyphs.size()) - 1) -
+                colonCount * (usableW / 24)) / digitCount;
+  digitW = std::max(4, digitW);
+  int digitH = std::min(H * 55 / 100, digitW * 9 / 5);
+  digitW = std::min(digitW, std::max(4, digitH * 5 / 9));
+  const int thick = std::max(2, digitH / 8);
+  const int colonW = std::max(thick, digitW / 3);
+
+  int totalW = 0;
+  for (std::size_t i = 0; i < glyphs.size(); ++i) {
+    totalW += (glyphs[i] == -1 ? colonW : digitW);
+    if (i + 1 < glyphs.size()) totalW += gap;
+  }
+  int x = (W - totalW) / 2;
+  const int y = (H - digitH) / 2;
+
+  // ── A REAL TYPEFACE ─────────────────────────────────────────────────────
+  //
+  // Drawn as ONE STRING, not glyph by glyph into the cells above. A
+  // proportional face laid out in fixed-width cells is not typesetting, it is
+  // a grid with a font in it -- the digits would float and the colons would
+  // sit wrong. So the geometric path keeps its cell arithmetic and this takes
+  // its own measurement.
+  bool drewTypeface = false;
+  if (cfg.face == TimerFace::Typeface) {
+    std::string clock;
+    for (int g : glyphs) {
+      clock += (g == -1) ? ':' : (g == 10 ? '+' : static_cast<char>('0' + g));
+    }
+    // Sized to the same height the geometric faces use, so switching face does
+    // not change how big the clock is on the wall.
+    const int pt = std::max(8, digitH);
+    const int textW = frameTextCachedWidth(clock, cfg.fontPath, pt);
+    if (textW > 0) {
+      drawFrameTextCached(frame, clock, cfg.fontPath, pt, (W - textW) / 2, y, ink);
+      drewTypeface = true;
+    }
+    // If no face would open at all it falls through to seven segments rather
+    // than drawing nothing: a clock that is not there is worse than a clock in
+    // the wrong font.
+  }
+
+  // NOT `return` when the typeface drew: the progress bar, the message and the
+  // logo all come AFTER this loop, and returning here silently dropped every
+  // one of them. Skip the loop, not the rest of the function.
+  for (std::size_t i = 0; !drewTypeface && i < glyphs.size(); ++i) {
+    if (glyphs[i] == -1) {
+      const int dotH = std::max(thick, digitH / 10);
+      fillTimerRect(frame, x + (colonW - thick) / 2, y + digitH / 3 - dotH / 2,
+                    thick, dotH, ink);
+      fillTimerRect(frame, x + (colonW - thick) / 2, y + digitH * 2 / 3 - dotH / 2,
+                    thick, dotH, ink);
+      x += colonW + gap;
+    } else if (glyphs[i] == 10) {
+      // Plus, drawn as a cross. Seven segments cannot express one -- a bare
+      // middle bar reads as a MINUS, which states the opposite of the truth:
+      // "-0:20" looks like twenty seconds remaining when the speaker is twenty
+      // seconds over.
+      const int armW = digitW * 3 / 4;
+      const int cx = x + digitW / 2;
+      const int cy = y + digitH / 2;
+      fillTimerRect(frame, cx - armW / 2, cy - thick / 2, armW, thick, ink);
+      fillTimerRect(frame, cx - thick / 2, cy - armW / 2, thick, armW, ink);
+      x += digitW + gap;
+    } else if (cfg.face == TimerFace::Blocky) {
+      // Same 5x7 table the message line uses, scaled to digit height. Kept
+      // because it renders identically on every machine whatever is installed
+      // -- not, as this comment used to claim, because the engine cannot see a
+      // TTF. It can, and TimerFace::Typeface above uses one.
+      const std::uint8_t* rows =
+        timerGlyph5x7(static_cast<unsigned char>(48 + glyphs[i]));
+      if (rows) {
+        const int cw = std::max(1, digitW / 5);
+        const int ch = std::max(1, digitH / 7);
+        for (int r = 0; r < 7; ++r) {
+          for (int b = 0; b < 5; ++b) {
+            if (rows[r] & (1 << (4 - b))) {
+              fillTimerRect(frame, x + b * cw, y + r * ch, cw, ch, ink);
+            }
+          }
+        }
+      }
+      x += digitW + gap;
+    } else {
+      drawSevenSeg(frame, glyphs[i], x, y, digitW, digitH, thick, ink);
+      x += digitW + gap;
+    }
+  }
+
+  // Progress bar across the foot of the frame. Stagetimer charges for this and
+  // it is genuinely useful: from the back of a room the bar is readable when
+  // the digits are not, because length is easier to judge at distance than a
+  // number is to read.
+  if (cfg.showProgressBar && cfg.durationSeconds > 0 &&
+      cfg.mode != TimerMode::TimeOfDay) {
+    const double fraction =
+      std::clamp(elapsedSeconds / static_cast<double>(cfg.durationSeconds), 0.0, 1.0);
+    const int barH = std::max(4, H / 36);
+    const int barY = H - barH - H / 24;
+    const int inset = W / 12;
+    const int barW = W - inset * 2;
+    // Track first, then fill, so the remaining portion still reads as "space
+    // left" rather than as empty background.
+    SDL_Color track {40, 40, 40, 255};
+    fillTimerRect(frame, inset, barY, barW, barH, track);
+    const int fillW = static_cast<int>(barW * (1.0 - fraction));
+    if (fillW > 0) {
+      fillTimerRect(frame, inset, barY, fillW, barH, ink);
+    }
+  }
+
+  // Message under the clock. Drawn as a blocky 5x7 bitmap for the same reason
+  // the digits are seven-segment: a stage screen must not depend on which fonts
+  // happen to be installed on the machine driving it.
+  if (!cfg.message.empty()) {
+    const int cell = std::max(2, W / 200);
+    const int charW = cell * 6;
+    // Placeholders, so one message can serve a whole show: "{remaining} left"
+    // reads correctly at every point in the talk without the operator retyping
+    // it. Substituted here rather than when the message is set, because the
+    // values change every frame.
+    std::string expanded = cfg.message;
+    {
+      auto two = [](int v) {
+        char b[8];
+        std::snprintf(b, sizeof(b), "%02d", v);
+        return std::string(b);
+      };
+      const int remSecs = std::max(0, static_cast<int>(std::llround(std::fabs(remaining))));
+      const int elaSecs = std::max(0, static_cast<int>(std::llround(elapsedSeconds)));
+      auto clockText = [&](int total) {
+        const int h = total / 3600;
+        const std::string ms = two((total % 3600) / 60) + ":" + two(total % 60);
+        return h > 0 ? (std::to_string(h) + ":" + ms) : ms;
+      };
+      std::time_t nowT = std::time(nullptr);
+      char wall[16] = "";
+      if (std::tm* lt = std::localtime(&nowT)) {
+        std::strftime(wall, sizeof(wall), "%H:%M", lt);
+      }
+      const std::pair<const char*, std::string> kTokens[] = {
+        {"{remaining}", clockText(remSecs)},
+        {"{elapsed}",   clockText(elaSecs)},
+        {"{duration}",  clockText(std::max(0, cfg.durationSeconds))},
+        {"{time}",      wall},
+      };
+      for (const auto& [token, value] : kTokens) {
+        for (std::size_t at = expanded.find(token);
+             at != std::string::npos;
+             at = expanded.find(token, at + value.size())) {
+          expanded.replace(at, std::strlen(token), value);
+        }
+      }
+    }
+    const int my = H - H / 5;
+    SDL_Color msgInk = cfg.messageIsUrgent ? SDL_Color {255, 64, 64, 255}
+                                           : SDL_Color {255, 255, 255, 255};
+    // THE MESSAGE FOLLOWS THE CLOCK'S FACE. On a typeface timer it is the
+    // operator's own text in the operator's own font -- mixed case, accents and
+    // all -- rather than being folded to upper case and cut at forty
+    // characters, which is what the 5x7 table can express and nothing more.
+    bool drewMessage = false;
+    if (cfg.face == TimerFace::Typeface) {
+      const int msgPt = std::max(8, H / 16);
+      const int msgW = frameTextCachedWidth(expanded, cfg.fontPath, msgPt);
+      if (msgW > 0) {
+        drawFrameTextCached(frame, expanded, cfg.fontPath, msgPt,
+                            (W - msgW) / 2, my, msgInk);
+        drewMessage = true;
+      }
+    }
+    if (!drewMessage) {
+    const std::string msg = expanded.size() > 40 ? expanded.substr(0, 40) : expanded;
+    const int textW = static_cast<int>(msg.size()) * charW;
+    int mx = (W - textW) / 2;
+    for (char raw : msg) {
+      const unsigned char c = static_cast<unsigned char>(std::toupper(raw));
+      const std::uint8_t* rows = timerGlyph5x7(c);
+      if (rows) {
+        for (int r = 0; r < 7; ++r) {
+          for (int b = 0; b < 5; ++b) {
+            if (rows[r] & (1 << (4 - b))) {
+              fillTimerRect(frame, mx + b * cell, my + r * cell, cell, cell, msgInk);
+            }
+          }
+        }
+      }
+      mx += charW;
+    }
+    }
+  }
+
+  // Event logo above the clock. Alpha-composited over whatever is already
+  // there, so a PNG with transparency keeps its shape against the backdrop.
+  if (!cfg.logoPath.empty()) {
+    const int logoH = std::max(1, H * std::clamp(cfg.logoHeightPercent, 2, 40) / 100);
+    if (const auto logo = timerLogoFor(cfg.logoPath, logoH)) {
+      const int lx = (W - logo->w) / 2;
+      const int ly = H / 24;
+      for (int ry = 0; ry < logo->h; ++ry) {
+        const int dy = ly + ry;
+        if (dy < 0 || dy >= H) continue;
+        for (int rx = 0; rx < logo->w; ++rx) {
+          const int dx = lx + rx;
+          if (dx < 0 || dx >= W) continue;
+          const std::size_t s = (static_cast<std::size_t>(ry) * logo->w + rx) * 4;
+          const int a = logo->rgba[s + 3];
+          if (a == 0) continue;
+          const std::size_t o = (static_cast<std::size_t>(dy) * W + dx) * 4;
+          // On a transparent backdrop the logo brings its own alpha, or it
+          // would be painted into pixels nobody draws.
+          //
+          // RGBA ON BOTH SIDES: the frame is RGBA32 (byte 0 is red, as
+          // fillTimerRect writes it) and so is the decoded logo. This copied
+          // byte 2 into byte 0, so every logo came out with red and blue
+          // exchanged -- the same fault the message line had (see above).
+          if (frame.pixels[o + 3] == 0) {
+            frame.pixels[o + 0] = logo->rgba[s + 0];
+            frame.pixels[o + 1] = logo->rgba[s + 1];
+            frame.pixels[o + 2] = logo->rgba[s + 2];
+            frame.pixels[o + 3] = static_cast<std::uint8_t>(a);
+            continue;
+          }
+          frame.pixels[o + 0] = static_cast<std::uint8_t>(
+            (logo->rgba[s + 0] * a + frame.pixels[o + 0] * (255 - a)) / 255);
+          frame.pixels[o + 1] = static_cast<std::uint8_t>(
+            (logo->rgba[s + 1] * a + frame.pixels[o + 1] * (255 - a)) / 255);
+          frame.pixels[o + 2] = static_cast<std::uint8_t>(
+            (logo->rgba[s + 2] * a + frame.pixels[o + 2] * (255 - a)) / 255);
+        }
+      }
+    }
+  }
+
+  // Paused marker: two bars top-left, so an operator glancing at the stage
+  // screen can tell a held clock from a running one.
+  if (!running) {
+    const int bw = std::max(3, W / 90);
+    const int bh = bw * 4;
+    fillTimerRect(frame, W / 40, H / 40, bw, bh, ink);
+    fillTimerRect(frame, W / 40 + bw * 2, H / 40, bw, bh, ink);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildSwirl - a slow spiral of melting pixel greens.
+//
+// The trailer's background, which James asked to have as a pattern: a field
+// twisted into a spiral, domain-warped five times, cut into four bands of
+// green with a yellow crest and a dark outline where the bands meet. Ported
+// from the trailer's GLSL (james-04's, original code) to the CPU: the field is
+// evaluated ONCE per cell on a fixed 480-cell-wide grid and the outline taken
+// by comparing neighbouring cells -- what the shader did with two extra field
+// evaluations per pixel -- then each cell is drawn as a square block, so the
+// pixels are as chunky at 4K as at 1080p.
+// ---------------------------------------------------------------------------
+namespace {
+double swirlField(double px, double py, double cw, double ch, double t, double twist,
+                  double zoom, double flow, double centreX, double centreY) {
+  const double s = std::min(cw, ch);
+  // The field's own y runs up the screen, so the centre's does too.
+  double ux = (px - centreX * cw) / s * 2.4 / zoom;
+  double uy = (py - (1.0 - centreY) * ch) / s * 2.4 / zoom;
+  const double r = std::sqrt(ux * ux + uy * uy);
+  double a = std::atan2(uy, ux) + t * 0.40 - r * twist;
+  ux = std::cos(a) * r;
+  uy = std::sin(a) * r;
+  for (int i = 0; i < 5; ++i) {
+    const double fi = static_cast<double>(i);
+    const double nx = ux + 0.40 * flow * std::sin(uy * 1.30 + t * 0.85 + fi);
+    const double ny = uy + 0.40 * flow * std::cos(ux * 1.10 - t * 0.65 + fi * 1.7);
+    ux = nx;
+    uy = ny;
+  }
+  return std::sin(ux * 1.15 + uy * 0.9 + t * 0.3) * 0.62 +
+         std::sin(std::sqrt(ux * ux + uy * uy) * 1.7 - t * 0.5) * 0.38;
+}
+}  // namespace
+
+void buildSwirl(DecodedFrame& frame, double seconds, const SwirlSettings& settings) {
+  const int W = frame.width, H = frame.height;
+  if (W <= 0 || H <= 0) return;
+  frame.format = FramePixelFormat::RGBA32;
+  frame.pixels.resize(static_cast<std::size_t>(W) * static_cast<std::size_t>(H) * 4u);
+  // A fixed field grid keeps both the look and the work independent of the
+  // output raster, including widths that are not multiples of the cell count.
+  const int cw = std::min(W, std::clamp(settings.cells, 64, 960));
+  const int ch = std::clamp((H * cw + W / 2) / W, 1, H);
+  // A little slower than real time, and well into the motion from the start.
+  // Negative speed runs the field backwards from the same starting point.
+  const double t = seconds * 0.9 * std::clamp(settings.speed, -3.0, 3.0) + 40.0;
+  const double twist = std::clamp(settings.twist, 0.0, 4.0);
+  const double zoom = std::clamp(settings.zoom, 0.25, 4.0);
+  const double flow = std::clamp(settings.flow, 0.0, 3.0);
+  const double centreX = std::clamp(settings.centreX, 0.0, 1.0);
+  const double centreY = std::clamp(settings.centreY, 0.0, 1.0);
+  const int bands = std::clamp(settings.bands, 2, 8);
+  // One field value per cell, plus a column and a row more for the outline.
+  std::vector<double> field(static_cast<std::size_t>((cw + 1) * (ch + 1)));
+  // TELL parallelRows THE REAL WORK. It runs on one thread below 120,000
+  // units, and a cell is ~23 trig calls, not one: at the example show's 320
+  // cells the bare grid (58k) fell under that line, and a Swirl on a 4K screen
+  // played at 36 fps where 480 cells (130k, threaded) played at 60.
+  deckboy::effects::detail::parallelRows(ch + 1, (cw + 1) * 16, [&](int r0, int r1) {
+    for (int y = r0; y < r1; ++y) {
+      for (int x = 0; x <= cw; ++x) {
+        // The shader's y runs up the screen; ours runs down.
+        field[static_cast<std::size_t>(y * (cw + 1) + x)] =
+          swirlField(x + 0.5, (ch - 1 - y) + 0.5, cw, ch, t, twist, zoom, flow, centreX, centreY);
+      }
+    }
+  });
+  auto band = [bands](double v) {
+    return std::clamp(static_cast<int>(std::floor((v * 0.5 + 0.5) * bands)), 0, bands - 1);
+  };
+  // Four stops dark to light, then the crest and the outline. Classic is the
+  // original green, and the bands are spread evenly along the four stops, so
+  // four bands of Classic are exactly the original four greens.
+  static constexpr std::uint8_t kStops[kSwirlPaletteCount][6][3] = {
+    {{12, 41, 12}, {23, 74, 23}, {51, 117, 42}, {84, 143, 38}, {252, 254, 31}, {7, 26, 7}},
+    {{24, 4, 0}, {120, 22, 0}, {220, 92, 12}, {255, 196, 48}, {255, 250, 210}, {10, 0, 0}},
+    {{2, 10, 30}, {10, 50, 110}, {40, 130, 200}, {150, 220, 255}, {240, 255, 255}, {0, 4, 15}},
+    {{20, 0, 40}, {120, 0, 160}, {240, 30, 170}, {40, 240, 255}, {255, 255, 255}, {5, 0, 15}},
+    {{16, 16, 16}, {72, 72, 72}, {150, 150, 150}, {230, 230, 230}, {255, 255, 255}, {0, 0, 0}},
+  };
+  const auto& stops = kStops[std::clamp(settings.palette, 0, kSwirlPaletteCount - 1)];
+  // The band colours, then the crest at [bands] and the outline at [bands + 1].
+  std::array<std::array<std::uint8_t, 3>, 10> palette {};
+  for (int k = 0; k < bands; ++k) {
+    const double at = static_cast<double>(k) / (bands - 1) * 3.0;
+    const int lo = std::min(2, static_cast<int>(at));
+    const double f = at - lo;
+    for (int c = 0; c < 3; ++c) {
+      palette[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)] = static_cast<std::uint8_t>(
+        std::lround(stops[lo][c] + (stops[lo + 1][c] - stops[lo][c]) * f));
+    }
+  }
+  for (int c = 0; c < 3; ++c) {
+    palette[static_cast<std::size_t>(bands)][static_cast<std::size_t>(c)] = stops[4][c];
+    palette[static_cast<std::size_t>(bands + 1)][static_cast<std::size_t>(c)] = stops[5][c];
+  }
+  const double hue = std::clamp(settings.hue, 0.0, 1.0);
+  // Turn six palette entries once, retaining their brightness and saturation.
+  // Doing colour work per output pixel would multiply the cost at 4K.
+  if (hue > 0.0 && hue < 1.0) {
+    for (auto& colour : palette) {
+      const double r = colour[0] / 255.0, g = colour[1] / 255.0, b = colour[2] / 255.0;
+      const double hi = std::max({r, g, b}), lo = std::min({r, g, b}), delta = hi - lo;
+      if (delta <= 0.0) continue;
+      double h = hi == r ? (g - b) / delta : hi == g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+      h = std::fmod(h + hue * 6 + 6, 6);
+      const double f = h - std::floor(h), p = lo;
+      const double q = hi - delta * f, u = lo + delta * f;
+      const double sectors[6][3] {{hi,u,p},{q,hi,p},{p,hi,u},{p,q,hi},{u,p,hi},{hi,p,q}};
+      for (int c = 0; c < 3; ++c)
+        colour[c] = static_cast<std::uint8_t>(std::lround(sectors[static_cast<int>(h)][c] * 255));
+    }
+  }
+  // Each row of cells fills H / ch whole output rows.
+  deckboy::effects::detail::parallelRows(ch, W * std::max(1, H / ch), [&](int r0, int r1) {
+    for (int cy = r0; cy < r1; ++cy) {
+      for (int cx = 0; cx < cw; ++cx) {
+        const double v = field[static_cast<std::size_t>(cy * (cw + 1) + cx)];
+        const int b = band(v);
+        const bool edge =
+          band(field[static_cast<std::size_t>(cy * (cw + 1) + cx + 1)]) != b ||
+          band(field[static_cast<std::size_t>((cy + 1) * (cw + 1) + cx)]) != b;
+        const auto& c = palette[static_cast<std::size_t>(edge ? bands + 1 : (v > 0.965 ? bands : b))];
+        for (int py = cy * H / ch; py < (cy + 1) * H / ch; ++py) {
+          std::uint8_t* row = frame.pixels.data() + (static_cast<std::size_t>(py) * W) * 4u;
+          for (int px = cx * W / cw; px < (cx + 1) * W / cw; ++px) {
+            std::uint8_t* p = row + static_cast<std::size_t>(px) * 4u;
+            p[0] = c[0];
+            p[1] = c[1];
+            p[2] = c[2];
+            p[3] = 255;
+          }
+        }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildMoireField - a phase field folded through a rainbow-and-grey ramp.
+//
+// James's references are interference pictures: fine rainbow bands with grey
+// zebra stripes, so fine that they beat against the pixel grid and throw up
+// rings and crosses of their own. Six shapes, ported from the approved
+// prototype (designs, 2026-10-16), each a smooth field F(u, v, t):
+//
+//     phase = F * density * rasterGain + scroll(t)
+//
+// and the colour is a function of the phase alone, so it is one table.
+//
+// THE FIELD IS SMOOTH; ONLY THE PHASE IS FINE. Every shape's F varies over a
+// good fraction of the screen -- it is the density multiplier that makes the
+// bands a pixel or two wide. So F is evaluated on a grid every kMoireStep
+// pixels and interpolated per pixel, which is exact along each grid line for
+// the quadratic shapes and within a few hundredths of a band for the others at
+// their default density: trig per pixel at 4K was the frame budget several
+// times over.
+//
+// rasterGain = min(W, H) / 540 keeps the band WIDTH IN PIXELS what the
+// prototype's was at 540 px, so the beating looks the same on any raster:
+// a bigger screen shows more bands, not fatter ones.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr int kMoireStep = 4;
+
+// The speed control may be on an oscillator, so the field's time is
+// INTEGRATED, not seconds * rate -- a rate that moved under a fixed clock
+// would jump the whole picture each frame. One integrator per cue; the output
+// and the preview call with the same cue clock, and a call that does not move
+// it forward adds nothing.
+double moireFieldTime(const std::string& cueId, double animTime, double rate) {
+  struct Clock { double last = 0.0; double t = 0.0; };
+  static std::mutex mutex;
+  static std::map<std::string, Clock> clocks;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (clocks.size() > 64) clocks.clear();
+  auto [it, fresh] = clocks.try_emplace(cueId);
+  Clock& c = it->second;
+  // A fresh cue, a restart or a scrub: start from where the clock says.
+  if (fresh || animTime < c.last - 0.25 || animTime > c.last + 2.0) {
+    c.t = animTime * rate;
+    c.last = animTime;
+  } else if (animTime > c.last) {
+    c.t += (animTime - c.last) * rate;
+    c.last = animTime;
+  }
+  return c.t;
+}
+
+std::array<std::uint8_t, 3> moireHueRgb(double h6) {
+  // h6 in 0-6 round the wheel, full saturation (the prototype's ramp).
+  const double r = std::clamp(std::fabs(h6 - 3.0) - 1.0, 0.0, 1.0);
+  const double g = std::clamp(2.0 - std::fabs(h6 - 2.0), 0.0, 1.0);
+  const double b = std::clamp(2.0 - std::fabs(h6 - 4.0), 0.0, 1.0);
+  return {static_cast<std::uint8_t>(std::lround(r * 255)), static_cast<std::uint8_t>(std::lround(g * 255)),
+          static_cast<std::uint8_t>(std::lround(b * 255))};
+}
+
+std::array<std::uint8_t, 3> moireTurnHue(std::uint32_t rgb, double turn) {
+  double r = ((rgb >> 16) & 255) / 255.0, g = ((rgb >> 8) & 255) / 255.0, b = (rgb & 255) / 255.0;
+  const double hi = std::max({r, g, b}), lo = std::min({r, g, b}), delta = hi - lo;
+  if (delta > 0.0 && turn > 0.0) {
+    double h = hi == r ? (g - b) / delta : hi == g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+    h = std::fmod(h + turn * 6 + 6, 6);
+    const double f = h - std::floor(h), q = hi - delta * f, u = lo + delta * f;
+    const double sectors[6][3] {{hi, u, lo}, {q, hi, lo}, {lo, hi, u}, {lo, q, hi}, {u, lo, hi}, {hi, lo, q}};
+    const int k = std::clamp(static_cast<int>(h), 0, 5);
+    r = sectors[k][0]; g = sectors[k][1]; b = sectors[k][2];
+  }
+  return {static_cast<std::uint8_t>(std::lround(r * 255)), static_cast<std::uint8_t>(std::lround(g * 255)),
+          static_cast<std::uint8_t>(std::lround(b * 255))};
+}
+}  // namespace
+
+void buildMoireField(DecodedFrame& frame, double animTime, const MoireSettings& base,
+                     const std::string& cueId) {
+  const int W = frame.width, H = frame.height;
+  if (W <= 0 || H <= 0) return;
+  frame.format = FramePixelFormat::RGBA32;
+  frame.pixels.resize(static_cast<std::size_t>(W) * static_cast<std::size_t>(H) * 4u);
+
+  // The oscillators, on the show's one LFO clock.
+  const auto clock = deckboy::effects::readLfoClock();
+  auto mod = [&](int slot, double value) {
+    const auto& lfo = base.lfo[static_cast<std::size_t>(slot)];
+    return static_cast<double>(deckboy::effects::lfoApply(lfo, static_cast<float>(std::clamp(value, 0.0, 1.0)),
+                                                          clock.seconds, clock.beats, clock.audio01));
+  };
+  const double density = mod(kMoireLfoDensity, base.density);
+  const double speed = mod(kMoireLfoSpeed, base.speed);
+  const double warp = mod(kMoireLfoWarp, base.warp) * 2.0;     // 1 = the prototype
+  const double turn = mod(kMoireLfoTurn, base.turn) * 6.283185307179586;
+  const double centreX = mod(kMoireLfoCentreX, base.centreX);
+  const double centreY = mod(kMoireLfoCentreY, base.centreY);
+  const double grey = mod(kMoireLfoGrey, base.grey) * 0.9;
+  const double hue = mod(kMoireLfoHue, base.hue);
+  const int shape = std::clamp(base.shape, 0, kMoireShapeCount - 1);
+  const int palette = std::clamp(base.palette, 0, kMoirePaletteCount - 1);
+
+  const double S = static_cast<double>(std::min(W, H));
+  const double freq = std::pow(4.0, density * 2.0 - 1.0) * (S / 540.0);
+  const double t = moireFieldTime(cueId, animTime, speed * 3.0);
+  const double cosT = std::cos(turn), sinT = std::sin(turn);
+  const double cosTime = std::cos(t), sinTime = std::sin(t);
+
+  // The phase that scrolls the bands outward, in cycles: added after the
+  // density, so speed means the same thing at any density.
+  double scroll = 0.0;
+  switch (shape) {
+    case 0: case 1: scroll = t; break;
+    case 3: scroll = std::sin(t) * 20.0; break;
+    case 4: scroll = t * 3.0; break;
+    default: break;
+  }
+
+  // ---- The field, every kMoireStep pixels -----------------------------------
+  const int gw = W / kMoireStep + 2;
+  const int gh = H / kMoireStep + 2;
+  std::vector<float> field(static_cast<std::size_t>(gw) * static_cast<std::size_t>(gh));
+  const double sep = 0.15 + 0.15 * warp;      // twin: 0.3 at the prototype's warp
+  // Weighted: a grid point is up to seven trig calls (see buildSwirl).
+  deckboy::effects::detail::parallelRows(gh, gw * 8, [&](int r0, int r1) {
+    for (int gy = r0; gy < r1; ++gy) {
+      for (int gx = 0; gx < gw; ++gx) {
+        const double px = (gx * kMoireStep - centreX * W) / S;
+        const double py = (gy * kMoireStep - centreY * H) / S;
+        const double u = px * cosT + py * sinT;
+        const double v = -px * sinT + py * cosT;
+        double f = 0.0;
+        switch (shape) {
+          case 0:  // zone: a zone plate, r squared
+            f = (u * u + v * v) * 90.0;
+            break;
+          case 1:  // twin: two centres interfering
+            f = (-4.0 * sep * u) * 40.0 + v * v * 60.0;
+            break;
+          case 2: {  // flow: a domain-warped field, islands and crosses
+            const double wu = u + warp * (0.15 * std::sin(v * 7 + t * 0.7) + 0.1 * std::sin(u * 11 - t * 0.4));
+            const double wv = v + warp * (0.15 * std::sin(u * 6 - t * 0.5) + 0.1 * std::cos(v * 9 + t * 0.3));
+            f = (std::sin(wu * 9) + std::cos(wv * 8) + std::sin((wu + wv) * 5 + t)) * 7.0;
+            break;
+          }
+          case 3:  // saddle: x^2 - y^2, warp leans it
+            f = (u * u - v * v) * 120.0 + (warp - 1.0) * 120.0 * u * v;
+            break;
+          case 4: {  // ripple: radial with a four-fold wobble (no atan2: z^4)
+            const double u2 = u * u, v2 = v * v, r2 = u2 + v2;
+            const double re = u2 * u2 - 6.0 * u2 * v2 + v2 * v2;
+            const double im = 4.0 * u * v * (u2 - v2);
+            const double wobble = r2 > 1e-12 ? (im * cosTime + re * sinTime) / r2 : 0.0;
+            f = 150.0 * (r2 + 0.08 * warp * wobble);
+            break;
+          }
+          default:  // shear: a diagonal flow, crossed
+            f = (u + v) * 30.0 + 8.0 * warp * std::sin(u * 13 + t) * std::cos(v * 9 - t * 0.7);
+            break;
+        }
+        field[static_cast<std::size_t>(gy) * gw + gx] = static_cast<float>(f);
+      }
+    }
+  });
+
+  // ---- The colour, one table over two cycles --------------------------------
+  // Two cycles because the grey stripes alternate with the cycle's parity
+  // (the prototype's floor(phase * 7) % 2).
+  constexpr int kPerCycle = 1024;
+  std::vector<std::array<std::uint8_t, 4>> lut(kPerCycle * 2);
+  std::array<std::array<std::uint8_t, 3>, 4> inks {};
+  for (std::size_t i = 0; i < 4; ++i) inks[i] = moireTurnHue(base.themeInks[i], hue);
+  const double greyShare = palette == 1 ? 0.0 : grey;
+  for (int i = 0; i < kPerCycle * 2; ++i) {
+    const double phase = (i + 0.5) / kPerCycle;          // 0-2
+    const double q = phase - std::floor(phase);
+    const bool stripe = (static_cast<int>(std::floor(phase * 7.0)) & 1) != 0;
+    std::array<std::uint8_t, 3> c {};
+    if (q > 1.0 - greyShare) {
+      if (palette == 2) {
+        c = stripe ? inks[3] : inks[0];
+      } else {
+        const auto g = static_cast<std::uint8_t>(std::lround((0.45 + 0.35 * (stripe ? 1 : 0)) * 255));
+        c = {g, g, g};
+      }
+    } else {
+      const double along = std::clamp(q / std::max(1e-6, 1.0 - greyShare), 0.0, 0.999);
+      if (palette == 3) {
+        // Mono: dark to light and back, so the band has no seam.
+        const double tri = along < 0.5 ? along * 2.0 : 2.0 - along * 2.0;
+        const auto g = static_cast<std::uint8_t>(std::lround((0.08 + 0.9 * tri) * 255));
+        c = {g, g, g};
+      } else if (palette == 2) {
+        // The theme's four inks round the cycle, joined back to the first.
+        const double at = along * 4.0;
+        const int k = static_cast<int>(at) % 4;
+        const double fr = at - std::floor(at);
+        const auto& a = inks[static_cast<std::size_t>(k)];
+        const auto& b = inks[static_cast<std::size_t>((k + 1) % 4)];
+        for (std::size_t ch = 0; ch < 3; ++ch)
+          c[ch] = static_cast<std::uint8_t>(std::lround(a[ch] + (b[ch] - a[ch]) * fr));
+      } else {
+        c = moireHueRgb(std::fmod(along * 6.0 + hue * 6.0, 6.0));
+      }
+    }
+    lut[static_cast<std::size_t>(i)] = {c[0], c[1], c[2], 255};
+  }
+
+  // ---- Per pixel: interpolate the field, look up the colour ------------------
+  const double lutScale = freq * kPerCycle;
+  const double lutOffset = scroll * kPerCycle;
+  deckboy::effects::detail::parallelRows(H, W, [&](int r0, int r1) {
+    std::vector<float> row(static_cast<std::size_t>(gw));
+    for (int y = r0; y < r1; ++y) {
+      const int gy = y / kMoireStep;
+      const float fy = static_cast<float>(y - gy * kMoireStep) / kMoireStep;
+      const float* a = field.data() + static_cast<std::size_t>(gy) * gw;
+      const float* b = a + gw;
+      for (int gx = 0; gx < gw; ++gx) row[static_cast<std::size_t>(gx)] = a[gx] + (b[gx] - a[gx]) * fy;
+      std::uint8_t* out = frame.pixels.data() + static_cast<std::size_t>(y) * W * 4u;
+      // Along a row the phase is linear between grid points, so each run of
+      // kMoireStep pixels is a start and a step in 16.16 fixed point: integer
+      // adds, and an arithmetic shift that floors negatives too. 13 ms a 4K
+      // frame with a floor per pixel; a fraction of that this way.
+      for (int gx = 0, x = 0; x < W; ++gx) {
+        const double p0 = row[static_cast<std::size_t>(gx)] * lutScale + lutOffset;
+        const double p1 = row[static_cast<std::size_t>(gx) + 1] * lutScale + lutOffset;
+        long long fixed = std::llround(p0 * 65536.0);
+        const long long step = std::llround((p1 - p0) * (65536.0 / kMoireStep));
+        const int end = std::min(W, x + kMoireStep);
+        for (; x < end; ++x, fixed += step) {
+          const auto idx = static_cast<std::size_t>((fixed >> 16) & (kPerCycle * 2 - 1));
+          std::memcpy(out + static_cast<std::size_t>(x) * 4u, lut[idx].data(), 4);
+        }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildPortal - a swarm of particles melted into metaballs, each blob a window
+// into deep space with a neon rim.
+//
+// Made after a Unity "VFX portal": particles born inside a circle, drifting
+// out and growing then shrinking over their life, smooth-unioned so that
+// neighbours melt into one shape, the edge drawn as a glowing line whose
+// colour runs round the wheel, and a starfield through the middle. Outside the
+// shapes it is TRANSPARENT, because the point of it is to sit on a layer over
+// something else.
+//
+// THE DISTANCE FIELD IS COMPUTED SMALL AND SHADED LARGE. Every pixel against
+// every blob is two million times eighteen smooth-mins a frame; a quarter-
+// resolution grid is a sixteenth of that. The grid holds DISTANCE, not colour,
+// and distance interpolates bilinearly without losing anything -- so the rim
+// is still drawn at full resolution, one pixel sharp. (The CLAUDE.md rule: a
+// field whose job is to be smooth can be computed small; sample it back
+// bilinearly or it shows squares.)
+//
+// Deterministic in t. Every blob's life is a function of the clock and a hash
+// of its index and generation, so the same t is the same picture: dumpable,
+// and two outputs showing it cannot disagree.
+// ---------------------------------------------------------------------------
+namespace {
+
+inline std::uint64_t portalHash(std::uint64_t x) {
+  x += 0x9e3779b97f4a7c15ull;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+  return x ^ (x >> 31);
+}
+
+inline double portalRand(std::uint64_t seed, int k) {
+  return static_cast<double>(portalHash(seed * 131ull + static_cast<std::uint64_t>(k)) >> 11) *
+         (1.0 / 9007199254740992.0);
+}
+
+// Polynomial smooth minimum: the metaball melt. k is the distance over which
+// two shapes start to merge; 0 is a hard union.
+inline float portalSmin(float a, float b, float k) {
+  if (k <= 0.0f) {
+    return a < b ? a : b;
+  }
+  const float h = std::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+  return b + (a - b) * h - k * h * (1.0f - h);
+}
+
+// exp(-x*x) without the exp: close enough for a glow, and this runs for every
+// pixel in the rim band.
+inline float portalBell(float x) {
+  const float x2 = x * x;
+  return 1.0f / (1.0f + x2 + 0.5f * x2 * x2);
+}
+
+// Smooth value noise on a lattice, for the nebula inside. Two octaves.
+inline float portalNoise(float x, float y, std::uint64_t salt) {
+  auto lattice = [salt](int ix, int iy) {
+    return static_cast<float>(portalRand(salt ^ (static_cast<std::uint64_t>(
+             static_cast<std::uint32_t>(ix)) << 32 | static_cast<std::uint32_t>(iy)), 0));
+  };
+  float total = 0.0f;
+  float amp = 0.65f;
+  for (int octave = 0; octave < 2; ++octave) {
+    const int ix = static_cast<int>(std::floor(x));
+    const int iy = static_cast<int>(std::floor(y));
+    const float fx = x - static_cast<float>(ix);
+    const float fy = y - static_cast<float>(iy);
+    const float sx = fx * fx * (3.0f - 2.0f * fx);
+    const float sy = fy * fy * (3.0f - 2.0f * fy);
+    const float a = lattice(ix, iy);
+    const float b = lattice(ix + 1, iy);
+    const float c = lattice(ix, iy + 1);
+    const float d = lattice(ix + 1, iy + 1);
+    total += amp * ((a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy);
+    x *= 2.03f;
+    y *= 2.03f;
+    amp *= 0.5f;
+  }
+  return total / 0.975f;
+}
+
+// The rim's colour wheel: green, yellow, pink, violet, blue, back to green,
+// tabled. Shared by the Portal source and the Portal transition so the two are
+// one look.
+inline void portalWheel(float (&wheel)[256][3]) {
+  static const float kStops[6][3] = {
+    {60, 255, 80}, {255, 244, 90}, {255, 150, 228},
+    {175, 125, 255}, {70, 120, 255}, {60, 255, 80},
+  };
+  for (int i = 0; i < 256; ++i) {
+    const float u = static_cast<float>(i) / 256.0f * 5.0f;
+    const int s = std::min(4, static_cast<int>(u));
+    const float f = u - static_cast<float>(s);
+    for (int c = 0; c < 3; ++c) {
+      wheel[i][c] = kStops[s][c] + (kStops[s + 1][c] - kStops[s][c]) * f;
+    }
+  }
+}
+
+}  // namespace
+
+void MediaEngine::buildPortal(DecodedFrame& frame, double t, const PortalSettings& in) {
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0 || frame.pixels.size() < static_cast<std::size_t>(W) * H * 4u) {
+    return;
+  }
+  const int blobs = std::clamp(in.blobs, 3, 48);
+  const double size = std::clamp(in.size, 0.0, 1.0);
+  const double blend = std::clamp(in.blend, 0.0, 1.0);
+  const double outline = std::clamp(in.outline, 0.0, 1.0);
+  const double speed = std::clamp(in.speed, 0.05, 4.0);
+  const double hue = in.hue - std::floor(in.hue);
+
+  const double unit = static_cast<double>(std::min(W, H));
+  const double cx = W * 0.5;
+  const double cy = H * 0.5;
+  const double clock = t * speed;
+
+  // ── THE PARTICLES ─────────────────────────────────────────────────────
+  //
+  // Each index is a slot that is reborn every `life` seconds as a new
+  // generation, staggered so births are spread out rather than in waves.
+  struct Blob { float x, y, r; };
+  std::vector<Blob> live;
+  live.reserve(static_cast<std::size_t>(blobs));
+  const double life = 7.0;
+  const double emitR = unit * 0.30;
+  const double travel = unit * 0.20;
+  const double maxR = unit * (0.045 + 0.16 * size);
+  for (int i = 0; i < blobs; ++i) {
+    const double at = clock / life + static_cast<double>(i) / blobs;
+    const double generation = std::floor(at);
+    const double age = at - generation;
+    const std::uint64_t seed = portalHash(static_cast<std::uint64_t>(i) * 7919ull +
+                                          static_cast<std::uint64_t>(
+                                            static_cast<std::int64_t>(generation) + (1ll << 40)));
+    const double angle0 = portalRand(seed, 1) * 6.283185307179586;
+    const double born = std::sqrt(portalRand(seed, 2)) * emitR;
+    // A slow sideways sway, so they drift in curves rather than rays.
+    const double angle = angle0 + 0.55 * std::sin(clock * 0.6 + portalRand(seed, 3) * 6.283) * age;
+    const double dist = born + travel * age * (0.4 + portalRand(seed, 4));
+    // Size over life: up quickly, down slowly -- the same hump as the clip's
+    // size-over-lifetime curve.
+    const double hump = std::pow(std::sin(3.141592653589793 * std::pow(age, 0.7)), 0.8);
+    const double r = maxR * (0.35 + 0.65 * portalRand(seed, 5)) * hump;
+    if (r < 0.75) {
+      continue;
+    }
+    live.push_back({static_cast<float>(cx + std::cos(angle) * dist),
+                    static_cast<float>(cy + std::sin(angle) * dist),
+                    static_cast<float>(r)});
+  }
+
+  // ── THE FIELD, SMALL ──────────────────────────────────────────────────
+  const int step = unit >= 480.0 ? 4 : 2;
+  const int gw = W / step + 2;
+  const int gh = H / step + 2;
+  std::vector<float> field(static_cast<std::size_t>(gw) * gh);
+  std::vector<float> nebula(static_cast<std::size_t>(gw) * gh);
+  const float meltK = static_cast<float>(unit * (0.004 + 0.13 * blend));
+  // NOT `far`: that is a macro in the Windows headers, with near, min, max
+  // and small, and a local by that name silently stops being C++ there.
+  const float outOfReach = static_cast<float>(unit * 4.0);
+  const float nebScale = static_cast<float>(3.2 / unit);
+  const float nebDrift = static_cast<float>(t * 0.035);
+  deckboy::effects::detail::parallelRows(gh, gw * 8, [&](int y0, int y1) {
+    for (int gy = y0; gy < y1; ++gy) {
+      const float py = static_cast<float>(gy * step);
+      for (int gx = 0; gx < gw; ++gx) {
+        const float px = static_cast<float>(gx * step);
+        float d = outOfReach;
+        for (const Blob& b : live) {
+          const float dx = px - b.x;
+          const float dy = py - b.y;
+          const float di = std::sqrt(dx * dx + dy * dy) - b.r;
+          if (di < d + meltK) {
+            d = portalSmin(d, di, meltK);
+          }
+        }
+        const std::size_t at = static_cast<std::size_t>(gy) * gw + gx;
+        field[at] = d;
+        nebula[at] = portalNoise(px * nebScale + nebDrift, py * nebScale, 0x5eedull);
+      }
+    }
+  });
+
+  // ── THE RIM'S COLOURS ─────────────────────────────────────────────────
+  //
+  // Green, yellow, pink, violet, blue, back to green -- a wheel, tabled, and
+  // looked up from a smooth field over the frame rather than from the angle
+  // round the centre. The angle has a singularity in the middle: every
+  // colour met at one point and the glow there drew a little pinwheel.
+  float wheel[256][3];
+  portalWheel(wheel);
+
+  const float rimW = static_cast<float>(unit * (0.0018 + 0.010 * outline));
+  const float glowW = rimW * 3.5f + static_cast<float>(unit * 0.006);
+  const float cutoff = glowW * 5.0f;
+  const float spin = static_cast<float>(hue + clock * 0.015);
+  const float hueFx = static_cast<float>(3.1 / unit);
+  const float hueFy = static_cast<float>(2.6 / unit);
+  const float invStep = 1.0f / static_cast<float>(step);
+  const double starShift = t * unit * 0.012;   // the stars drift, slowly
+  const int starCell = std::max(10, static_cast<int>(unit / 46.0));
+
+  // ── SHADED LARGE ──────────────────────────────────────────────────────
+  deckboy::effects::detail::parallelRows(H, W, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+      std::uint8_t* row = frame.pixels.data() + static_cast<std::size_t>(y) * W * 4u;
+      const float gyf = static_cast<float>(y) * invStep;
+      const int gy = std::min(gh - 2, static_cast<int>(gyf));
+      const float fy = gyf - static_cast<float>(gy);
+      for (int x = 0; x < W; ++x) {
+        const float gxf = static_cast<float>(x) * invStep;
+        const int gx = std::min(gw - 2, static_cast<int>(gxf));
+        const float fx = gxf - static_cast<float>(gx);
+        const std::size_t a = static_cast<std::size_t>(gy) * gw + gx;
+        const float d0 = field[a] + (field[a + 1] - field[a]) * fx;
+        const float d1 = field[a + gw] + (field[a + gw + 1] - field[a + gw]) * fx;
+        const float d = d0 + (d1 - d0) * fy;
+        std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+        if (d > cutoff) {
+          px[0] = px[1] = px[2] = px[3] = 0;   // outside: nothing, for the layer below
+          continue;
+        }
+        // The rim: a bright line on the boundary, a white-hot core, and a
+        // glow that falls away outside.
+        float rimR = 0.0f;
+        float rimG = 0.0f;
+        float rimB = 0.0f;
+        float core = 0.0f;
+        float glow = 0.0f;
+        if (d > -rimW * 4.0f) {
+          float u = 0.5f + 0.32f * std::sin(static_cast<float>(x) * hueFx + spin * 6.2831853f) +
+                    0.32f * std::cos(static_cast<float>(y) * hueFy - spin * 4.3982297f);
+          u -= std::floor(u);
+          const float* wc = wheel[std::min(255, static_cast<int>(u * 256.0f))];
+          core = portalBell(d / rimW);
+          const float hot = portalBell(d / (rimW * 0.45f)) * 0.55f;
+          rimR = wc[0] + (255.0f - wc[0]) * hot;
+          rimG = wc[1] + (255.0f - wc[1]) * hot;
+          rimB = wc[2] + (255.0f - wc[2]) * hot;
+          if (d > 0.0f) {
+            glow = 0.6f * portalBell(d / glowW);
+          }
+        } else if (d > 0.0f) {
+          glow = 0.0f;
+        }
+        if (d >= 0.0f) {
+          // Outside the shape: the rim's colour, as much of it as shows.
+          const float alpha = std::max(core, glow);
+          px[0] = static_cast<std::uint8_t>(std::min(255.0f, rimR));
+          px[1] = static_cast<std::uint8_t>(std::min(255.0f, rimG));
+          px[2] = static_cast<std::uint8_t>(std::min(255.0f, rimB));
+          px[3] = static_cast<std::uint8_t>(std::clamp(alpha * 255.0f, 0.0f, 255.0f));
+          continue;
+        }
+        // INSIDE: deep space. Navy into indigo on the nebula, lifting toward
+        // blue near the edge so the rim reads as light spilling in.
+        const float n = nebula[a] + (nebula[a + 1] - nebula[a]) * fx;
+        float r = 10.0f + 34.0f * n;
+        float g = 6.0f + 10.0f * n;
+        float b = 42.0f + 88.0f * n;
+        const float edge = std::clamp(1.0f + d / (rimW * 22.0f), 0.0f, 1.0f);
+        const float edge2 = edge * edge;
+        r += 26.0f * edge2;
+        g += 50.0f * edge2;
+        b += 118.0f * edge2;
+        // Stars: one candidate per cell of a slowly drifting grid.
+        {
+          const double sx = static_cast<double>(x) + starShift;
+          const int cxs = static_cast<int>(std::floor(sx / starCell));
+          const int cys = y / starCell;
+          const std::uint64_t cell = portalHash((static_cast<std::uint64_t>(
+                                         static_cast<std::uint32_t>(cxs)) << 32) |
+                                       static_cast<std::uint32_t>(cys));
+          if ((cell & 0xff) < 110) {
+            const double ox = cxs * static_cast<double>(starCell) +
+                              ((cell >> 8) & 0xff) / 255.0 * starCell;
+            const double oy = cys * static_cast<double>(starCell) +
+                              ((cell >> 16) & 0xff) / 255.0 * starCell;
+            const float dx = static_cast<float>(sx - ox);
+            const float dy = static_cast<float>(y - oy);
+            if (std::abs(dx) < 4.0f && std::abs(dy) < 4.0f) {
+              const float twinkle = 0.55f + 0.45f * std::sin(static_cast<float>(t) * 2.6f +
+                                                             static_cast<float>((cell >> 24) & 0xff));
+              const float big = ((cell >> 32) & 0xff) < 40 ? 1.6f : 1.0f;
+              float s = portalBell(std::sqrt(dx * dx + dy * dy) / (0.9f * big)) * twinkle;
+              // The odd one sparkles: a little cross, as in the clip.
+              if (((cell >> 40) & 0xff) < 12) {
+                s = std::max(s, twinkle * 0.7f *
+                                  std::max(portalBell(dy * 1.6f) * portalBell(dx * 0.35f),
+                                           portalBell(dx * 1.6f) * portalBell(dy * 0.35f)));
+              }
+              r += 225.0f * s;
+              g += 225.0f * s;
+              b += 240.0f * s;
+            }
+          }
+        }
+        // The rim over the inside of the edge.
+        r += (rimR - r) * core;
+        g += (rimG - g) * core;
+        b += (rimB - b) * core;
+        px[0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 255.0f));
+        px[1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 255.0f));
+        px[2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 255.0f));
+        px[3] = 255;
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildPortalTransition - the Portal as a way from one cue to the next.
+//
+// The outgoing picture has holes melted through it: a heart at the centre that
+// grows until it has swallowed every corner, and a ring of smaller blobs that
+// open late, further out, and run into it. Every edge carries the source's neon
+// rim, and just inside it a band of deep space before the incoming picture
+// shows. What is drawn is the OUTGOING layer only -- the incoming cue is already
+// on the output underneath, live, so this costs one pass over one frame.
+//
+// It must END on the incoming picture, never on a stray island of the old one,
+// so the heart's final radius is sized to the far corner with room to spare;
+// the satellites are decoration on the way.
+//
+// Deterministic in (progress, elapsed, seed): two outputs showing one deck
+// draw the same frame.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildPortalTransition(const DecodedFrame& outgoing,
+                                        std::vector<std::uint8_t>& dst,
+                                        double progress, double elapsedSeconds,
+                                        std::uint64_t seed) {
+  const int W = outgoing.width;
+  const int H = outgoing.height;
+  const std::size_t pixelsN = static_cast<std::size_t>(std::max(0, W)) *
+                              static_cast<std::size_t>(std::max(0, H));
+  const std::size_t bytes = pixelsN * 4u;
+  const bool rgba = outgoing.format == FramePixelFormat::RGBA32 &&
+                    outgoing.pixels.size() >= bytes;
+  // A video cue's held frame is very often NV12 -- the pipe hands it over that
+  // way whenever the cue needs no CPU work -- so it is converted here rather
+  // than turned away; turning it away would make the Portal a dissolve on
+  // exactly the cues it is most likely to be used on.
+  const bool nv12 = outgoing.format == FramePixelFormat::NV12 &&
+                    (W % 2) == 0 && (H % 2) == 0 &&
+                    outgoing.pixels.size() >= pixelsN + pixelsN / 2;
+  if (W <= 0 || H <= 0 || (!rgba && !nv12)) {
+    dst.clear();
+    return;
+  }
+  dst.resize(bytes);
+  const std::uint8_t* src = outgoing.pixels.data();
+  std::vector<std::uint8_t> converted;
+  if (nv12) {
+    converted.resize(bytes);
+    if (!SDL_ConvertPixelsAndColorspace(W, H, SDL_PIXELFORMAT_NV12,
+        frameColorspace(outgoing), 0, src, W, SDL_PIXELFORMAT_RGBA32,
+        SDL_COLORSPACE_SRGB, 0, converted.data(), W * 4)) {
+      dst.clear();
+      return;
+    }
+    src = converted.data();
+  }
+  auto fetch = [&](int x, int y, std::uint8_t* o) {
+    std::memcpy(o, src + (static_cast<std::size_t>(y) * W + x) * 4u, 4);
+  };
+
+  const double p = std::clamp(progress, 0.0, 1.0);
+  const double t = std::max(0.0, elapsedSeconds);
+  const double unit = static_cast<double>(std::min(W, H));
+  const double cx = W * 0.5;
+  const double cy = H * 0.5;
+  const double reach = std::sqrt(cx * cx + cy * cy);   // centre to corner
+
+  auto smooth = [](double a, double b, double x) {
+    const double k = std::clamp((x - a) / (b - a), 0.0, 1.0);
+    return k * k * (3.0 - 2.0 * k);
+  };
+
+  struct Blob { float x, y, r; };
+  std::vector<Blob> live;
+  live.reserve(24);
+  // THE HEART. Seen opening from the first frames, and reaching the last
+  // corner only at the very end: a steeper curve left the first third looking
+  // like nothing had happened and the last third with nothing left to open.
+  {
+    const double s = smooth(0.0, 1.0, p);
+    // FAR ENOUGH PAST THE CORNER THAT THE ALPHA RAMP FINISHES TOO.
+    //
+    // 1.04 * reach put the corners only about fifteen pixels inside the hole at
+    // progress 1, while the shading takes `spaceW` -- nearer forty at 1080p --
+    // to bring alpha down to nothing. So the four corners still held a little
+    // of the outgoing picture on the last frame: --transition-dump measured
+    // maxAlpha 85 of 255 there, against the promise three paragraphs up that
+    // this ends on the incoming picture and never on an island of the old one.
+    //
+    // The overshoot is now DERIVED from the ramp that has to complete inside
+    // it, plus a couple of pixels, rather than being a constant that happened
+    // to look right. spaceW is computed further down from rimW; both come from
+    // `unit`, so this repeats the arithmetic rather than reordering the file.
+    const double rampInside = unit * 0.0065 * 16.0;
+    const double overshoot = reach + rampInside + 2.0;
+    const double r = overshoot * std::pow(s, 1.35);
+    if (r >= 0.75) {
+      live.push_back({static_cast<float>(cx), static_cast<float>(cy), static_cast<float>(r)});
+    }
+  }
+  // THE SATELLITES: born further out the later they open, so the opening reads
+  // as spreading rather than as twenty holes appearing at once.
+  const std::uint64_t salt = portalHash(seed ^ 0x9072a1ull);
+  for (int i = 0; i < 20; ++i) {
+    const std::uint64_t bs = portalHash(salt + static_cast<std::uint64_t>(i) * 7919ull);
+    const double out01 = 0.2 + 0.8 * std::sqrt(portalRand(bs, 1));
+    const double start = 0.04 + 0.42 * out01 + 0.10 * portalRand(bs, 2);
+    const double grow = smooth(start, start + 0.34, p);
+    if (grow <= 0.0) {
+      continue;
+    }
+    const double angle = portalRand(bs, 3) * 6.283185307179586 +
+                         0.18 * std::sin(t * 1.3 + portalRand(bs, 4) * 6.283);
+    const double dist = out01 * reach * 0.88 * (1.0 + 0.12 * p);
+    const double r = unit * (0.06 + 0.09 * portalRand(bs, 5)) * grow * (1.0 + 0.8 * p);
+    if (r < 0.75) {
+      continue;
+    }
+    live.push_back({static_cast<float>(cx + std::cos(angle) * dist),
+                    static_cast<float>(cy + std::sin(angle) * dist),
+                    static_cast<float>(r)});
+  }
+
+  // ── THE FIELD, SMALL (as the source does it) ─────────────────────────
+  // The same grid in picture terms at every raster: a 4K frame on the 1080p
+  // step would compute four times the cells for nothing the eye can see.
+  const int step = unit >= 1400.0 ? 8 : (unit >= 480.0 ? 4 : 2);
+  const int gw = W / step + 2;
+  const int gh = H / step + 2;
+  const float outOfReach = static_cast<float>(unit * 4.0);
+  std::vector<float> field(static_cast<std::size_t>(gw) * gh, outOfReach);
+  std::vector<float> hueField(static_cast<std::size_t>(gw) * gh, 0.0f);
+  const float meltK = static_cast<float>(unit * 0.08);
+  // A slow ripple on every edge, so a growing circle never looks like a
+  // compass drew it.
+  const float rippleAmp = static_cast<float>(unit * 0.006);
+  const float rippleFx = static_cast<float>(9.0 / unit);
+  const float rippleFy = static_cast<float>(7.0 / unit);
+  const float tf = static_cast<float>(t);
+  const float spin = static_cast<float>(t * 0.12);
+  const float hueFx = static_cast<float>(3.1 / unit);
+  const float hueFy = static_cast<float>(2.6 / unit);
+  if (!live.empty()) {
+    deckboy::effects::detail::parallelRows(gh, gw * 8, [&](int y0, int y1) {
+      for (int gy = y0; gy < y1; ++gy) {
+        const float py = static_cast<float>(gy * step);
+        for (int gx = 0; gx < gw; ++gx) {
+          const float px = static_cast<float>(gx * step);
+          float d = outOfReach;
+          for (const Blob& b : live) {
+            const float dx = px - b.x;
+            const float dy = py - b.y;
+            const float di = std::sqrt(dx * dx + dy * dy) - b.r;
+            if (di < d + meltK) {
+              d = portalSmin(d, di, meltK);
+            }
+          }
+          d += rippleAmp * std::sin(px * rippleFx + tf * 2.1f) *
+               std::cos(py * rippleFy - tf * 1.7f);
+          const std::size_t at = static_cast<std::size_t>(gy) * gw + gx;
+          field[at] = d;
+          // NOT wrapped here: interpolating between 0.95 and 0.05 lands on 0.5,
+          // a thin line of the wrong colour wherever the wheel comes round.
+          // Wrapped per pixel, after the interpolation.
+          hueField[at] = 0.5f + 0.32f * std::sin(px * hueFx + spin * 6.2831853f) +
+                         0.32f * std::cos(py * hueFy - spin * 4.3982297f);
+        }
+      }
+    });
+  }
+
+  float wheel[256][3];
+  portalWheel(wheel);
+  const float rimW = static_cast<float>(unit * 0.0065);
+  const float glowW = rimW * 3.5f + static_cast<float>(unit * 0.006);
+  const float spaceW = rimW * 16.0f;
+  // Where each side's light has fallen below a level of the eight bits.
+  const float outsideCut = glowW * 3.5f;
+  const float insideCut = std::max(spaceW, glowW * 3.5f);
+  const float invStep = 1.0f / static_cast<float>(step);
+  // Deep space just inside the edge, the source's navy, fading into the
+  // incoming picture.
+  const float navyR = 12.0f;
+  const float navyG = 10.0f;
+  const float navyB = 58.0f;
+
+  // THE EDGE'S PROFILE, TABLED. Everything the shading needs except the
+  // picture and the colour depends only on the distance to the edge, and the
+  // band is a few hundred pixels wide -- so it is worked out once per frame
+  // rather than three divisions per pixel, which was most of the 4K cost.
+  struct Profile { float core, hot, light, space; };
+  constexpr int kProfileN = 2048;
+  std::array<Profile, kProfileN> profile {};
+  const float profileSpan = insideCut + outsideCut;
+  const float profileScale = static_cast<float>(kProfileN - 1) / profileSpan;
+  for (int i = 0; i < kProfileN; ++i) {
+    const float d = -insideCut + static_cast<float>(i) / profileScale;
+    Profile& pr = profile[static_cast<std::size_t>(i)];
+    pr.core = portalBell(d / rimW);
+    pr.hot = portalBell(d / (rimW * 0.45f)) * 0.55f;
+    if (d >= 0.0f) {
+      pr.light = 0.6f * portalBell(d / glowW);   // glow over the old picture
+      pr.space = 0.0f;
+    } else {
+      pr.light = std::max(pr.core, 0.45f * portalBell(d / glowW));
+      const float sp = std::clamp(1.0f + d / spaceW, 0.0f, 1.0f);
+      pr.space = sp * sp * 0.8f;
+    }
+  }
+
+  // ── WHICH CELLS NEED SHADING ─────────────────────────────────────────
+  //
+  // Bilinear interpolation never leaves the range of its four corners, so a
+  // grid cell whose corners are all clear of the edge is clear everywhere
+  // inside it: the old picture untouched, or a hole with nothing in it. Only
+  // cells ON an edge are shaded per pixel. Shading every pixel measured 15-20ms
+  // a frame at 1080p mid-transition, which is a dropped frame at 60.
+  enum : std::uint8_t { kKeep = 0, kClear = 1, kShade = 2 };
+  const int cw = gw - 1;
+  const int ch = gh - 1;
+  std::vector<std::uint8_t> cellKind(static_cast<std::size_t>(cw) * ch, kKeep);
+  if (!live.empty()) {
+    deckboy::effects::detail::parallelRows(ch, cw * 8, [&](int y0, int y1) {
+      for (int gy = y0; gy < y1; ++gy) {
+        for (int gx = 0; gx < cw; ++gx) {
+          const std::size_t a = static_cast<std::size_t>(gy) * gw + gx;
+          const float c0 = field[a];
+          const float c1 = field[a + 1];
+          const float c2 = field[a + gw];
+          const float c3 = field[a + gw + 1];
+          const float lo = std::min(std::min(c0, c1), std::min(c2, c3));
+          const float hi = std::max(std::max(c0, c1), std::max(c2, c3));
+          cellKind[static_cast<std::size_t>(gy) * cw + gx] =
+            lo > outsideCut ? kKeep : (hi < -insideCut ? kClear : kShade);
+        }
+      }
+    });
+  }
+
+  // ── SHADED LARGE ──────────────────────────────────────────────────────
+  deckboy::effects::detail::parallelRows(H, W, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+      std::uint8_t* row = dst.data() + static_cast<std::size_t>(y) * W * 4u;
+      const float gyf = static_cast<float>(y) * invStep;
+      const int gy = std::min(gh - 2, static_cast<int>(gyf));
+      const float fy = gyf - static_cast<float>(gy);
+      const std::uint8_t* kinds = cellKind.data() + static_cast<std::size_t>(gy) * cw;
+      for (int gx = 0; gx * step < W; ++gx) {
+        const int x0 = gx * step;
+        const int x1 = std::min(W, x0 + step);
+        const int cgx = std::min(cw - 1, gx);
+        const std::uint8_t kind = kinds[cgx];
+        if (kind == kClear) {
+          std::memset(row + static_cast<std::size_t>(x0) * 4u, 0,
+                      static_cast<std::size_t>(x1 - x0) * 4u);
+          continue;
+        }
+        if (kind == kKeep) {
+          if (rgba) {
+            std::memcpy(row + static_cast<std::size_t>(x0) * 4u,
+                        src + (static_cast<std::size_t>(y) * W + x0) * 4u,
+                        static_cast<std::size_t>(x1 - x0) * 4u);
+          } else {
+            for (int x = x0; x < x1; ++x) {
+              fetch(x, y, row + static_cast<std::size_t>(x) * 4u);
+            }
+          }
+          continue;
+        }
+        for (int x = x0; x < x1; ++x) {
+          const float fx = static_cast<float>(x) * invStep - static_cast<float>(cgx);
+          const std::size_t a = static_cast<std::size_t>(gy) * gw + cgx;
+          const float d0 = field[a] + (field[a + 1] - field[a]) * fx;
+          const float d1 = field[a + gw] + (field[a + gw + 1] - field[a + gw]) * fx;
+          const float d = d0 + (d1 - d0) * fy;
+          std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+          if (d > outsideCut) {
+            fetch(x, y, px);   // untouched old picture
+            continue;
+          }
+          if (d < -insideCut) {
+            px[0] = px[1] = px[2] = px[3] = 0;
+            continue;
+          }
+          const float h0 = hueField[a] + (hueField[a + 1] - hueField[a]) * fx;
+          const float h1 = hueField[a + gw] + (hueField[a + gw + 1] - hueField[a + gw]) * fx;
+          float hu = h0 + (h1 - h0) * fy;
+          hu -= std::floor(hu);
+          const float* wc = wheel[std::min(255, static_cast<int>(hu * 256.0f))];
+          const Profile& pr = profile[static_cast<std::size_t>(std::clamp(
+            static_cast<int>((d + insideCut) * profileScale + 0.5f), 0, kProfileN - 1))];
+          const float core = pr.core;
+          const float hot = pr.hot;
+          const float rimR = wc[0] + (255.0f - wc[0]) * hot;
+          const float rimG = wc[1] + (255.0f - wc[1]) * hot;
+          const float rimB = wc[2] + (255.0f - wc[2]) * hot;
+          if (d >= 0.0f) {
+            // Still the old picture: the rim laid over it, and its glow added
+            // as light.
+            std::uint8_t s[4];
+            fetch(x, y, s);
+            const float glow = pr.light;
+            const float r = s[0] + (rimR - s[0]) * core + rimR * glow * 0.6f;
+            const float g = s[1] + (rimG - s[1]) * core + rimG * glow * 0.6f;
+            const float b = s[2] + (rimB - s[2]) * core + rimB * glow * 0.6f;
+            px[0] = static_cast<std::uint8_t>(std::min(255.0f, r));
+            px[1] = static_cast<std::uint8_t>(std::min(255.0f, g));
+            px[2] = static_cast<std::uint8_t>(std::min(255.0f, b));
+            px[3] = 255;
+            continue;
+          }
+          // Through the hole: space, then the rim's light over it, both with
+          // their own alpha so the incoming picture shows through what is left.
+          const float space = pr.space;
+          const float light = pr.light;
+          const float alpha = light + space * (1.0f - light);
+          if (alpha <= 0.002f) {
+            px[0] = px[1] = px[2] = px[3] = 0;
+            continue;
+          }
+          const float under = space * (1.0f - light);
+          const float inv = 1.0f / alpha;
+          px[0] = static_cast<std::uint8_t>(std::min(255.0f, (rimR * light + navyR * under) * inv));
+          px[1] = static_cast<std::uint8_t>(std::min(255.0f, (rimG * light + navyG * under) * inv));
+          px[2] = static_cast<std::uint8_t>(std::min(255.0f, (rimB * light + navyB * under) * inv));
+          px[3] = static_cast<std::uint8_t>(std::clamp(alpha * 255.0f, 0.0f, 255.0f));
+        }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// THREE MORE WAYS OUT OF A CUE, all built the way the Portal is: one pass over
+// the OUTGOING frame, producing an RGBA picture whose alpha says how much of
+// the old cue still shows. The incoming cue is already live on the output
+// underneath, so nothing here has to know about it.
+//
+// Every one of them obeys the same three rules, and each rule is there because
+// breaking it is a fault an operator sees in front of an audience:
+//
+//   1. AT p=1 NOTHING OF THE OUTGOING PICTURE IS LEFT. Not a shard, not a
+//      wisp, not one stubborn pixel. A transition that ends on an island of
+//      the old cue is a transition that has to be cut out of the show.
+//   2. DETERMINISTIC in (progress, elapsed, seed). Two outputs showing one
+//      deck must draw the same frame, or the same transition runs twice in
+//      front of two screens and they disagree.
+//   3. NV12 IS CONVERTED, NOT TURNED AWAY. A video cue's held frame is very
+//      often NV12, so refusing it would make each of these a plain dissolve on
+//      exactly the cues they are most likely to be used on.
+//
+// tools/check_transitions.py holds all three rules to every style.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The outgoing frame as something that can be read a pixel at a time in RGBA,
+// whichever way it arrived. Portal grew its own copy of this before there was
+// more than one caller; this is the shared one, and Portal is deliberately left
+// alone rather than rewritten under a shipped transition.
+struct OutgoingPicture {
+  std::vector<std::uint8_t> converted;
+  const std::uint8_t* rgba = nullptr;
+  int w = 0;
+  int h = 0;
+  bool ok = false;
+
+  void fetch(int x, int y, std::uint8_t* o) const {
+    x = x < 0 ? 0 : (x >= w ? w - 1 : x);
+    y = y < 0 ? 0 : (y >= h ? h - 1 : y);
+    std::memcpy(o, rgba + (static_cast<std::size_t>(y) * w + x) * 4u, 4);
+  }
+};
+
+OutgoingPicture openOutgoing(const DecodedFrame& f) {
+  OutgoingPicture p;
+  p.w = f.width;
+  p.h = f.height;
+  const std::size_t n = static_cast<std::size_t>(std::max(0, p.w)) *
+                        static_cast<std::size_t>(std::max(0, p.h));
+  if (p.w <= 0 || p.h <= 0) return p;
+  if (f.format == FramePixelFormat::RGBA32 && f.pixels.size() >= n * 4u) {
+    p.rgba = f.pixels.data();
+    p.ok = true;
+  } else if (f.format == FramePixelFormat::NV12 && (p.w % 2) == 0 && (p.h % 2) == 0 &&
+             f.pixels.size() >= n + n / 2) {
+    p.converted.resize(n * 4u);
+    p.ok = SDL_ConvertPixelsAndColorspace(p.w, p.h, SDL_PIXELFORMAT_NV12,
+      frameColorspace(f), 0, f.pixels.data(), p.w, SDL_PIXELFORMAT_RGBA32,
+      SDL_COLORSPACE_SRGB, 0, p.converted.data(), p.w * 4);
+    if (p.ok) p.rgba = p.converted.data();
+  } else if (f.format == FramePixelFormat::P010 && (p.w % 2) == 0 && (p.h % 2) == 0 &&
+             f.pixels.size() >= n * 3u) {
+    // An HDR stream's frame: SDL converts it, PQ to SDR, like NV12 above.
+    p.converted.resize(n * 4u);
+    p.ok = SDL_ConvertPixelsAndColorspace(p.w, p.h, SDL_PIXELFORMAT_P010,
+      frameColorspace(f), 0, f.pixels.data(), p.w * 2, SDL_PIXELFORMAT_RGBA32,
+      SDL_COLORSPACE_SRGB, 0, p.converted.data(), p.w * 4);
+    if (p.ok) p.rgba = p.converted.data();
+  }
+  return p;
+}
+
+// Smoothstep between two edges.
+inline double tSmooth(double a, double b, double x) {
+  const double k = std::clamp((x - a) / (b - a), 0.0, 1.0);
+  return k * k * (3.0 - 2.0 * k);
+}
+
+// Value noise on a lattice, bilinear, and its two-octave sum. Cheap, smooth,
+// and stable in the seed -- which is what rule 2 needs.
+inline float tLattice(std::uint64_t seed, int xi, int yi) {
+  std::uint64_t h = seed ^ (static_cast<std::uint64_t>(xi) * 0x9E3779B97F4A7C15ull) ^
+                    (static_cast<std::uint64_t>(yi) * 0xC2B2AE3D27D4EB4Full);
+  h ^= h >> 33; h *= 0xFF51AFD7ED558CCDull;
+  h ^= h >> 33; h *= 0xC4CEB9FE1A85EC53ull;
+  h ^= h >> 33;
+  return static_cast<float>((h >> 11) & 0x1FFFFF) / 2097151.0f;
+}
+
+inline float tNoise(std::uint64_t seed, float x, float y) {
+  const int xi = static_cast<int>(std::floor(x));
+  const int yi = static_cast<int>(std::floor(y));
+  const float fx = x - xi;
+  const float fy = y - yi;
+  const float ux = fx * fx * (3.0f - 2.0f * fx);
+  const float uy = fy * fy * (3.0f - 2.0f * fy);
+  const float a = tLattice(seed, xi, yi);
+  const float b = tLattice(seed, xi + 1, yi);
+  const float c = tLattice(seed, xi, yi + 1);
+  const float d = tLattice(seed, xi + 1, yi + 1);
+  return (a + (b - a) * ux) + ((c + (d - c) * ux) - (a + (b - a) * ux)) * uy;
+}
+
+inline float tFbm(std::uint64_t seed, float x, float y) {
+  return 0.62f * tNoise(seed, x, y) +
+         0.26f * tNoise(seed ^ 0xA5A5ull, x * 2.03f, y * 2.11f) +
+         0.12f * tNoise(seed ^ 0x5A5Aull, x * 4.07f, y * 4.13f);
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// buildShatterTransition - the outgoing picture as a dropped pane.
+//
+// The SHATTER effect breaks a picture up and keeps every pixel: shards slide
+// and turn and sample from where they used to be, and the frame stays opaque
+// because an effect has nowhere to go. A transition does: the shards have to
+// LEAVE, so each one flies off on its own line, turning as it goes, and takes
+// its alpha down with it.
+//
+// Shards go in waves rather than all at once -- a pane does not leave the frame
+// as one sheet -- and the wave a shard belongs to comes from its own hash, so
+// the same shard leaves at the same moment every time the transition runs.
+//
+// The last wave finishes at p=0.92 rather than 1.0. Rule 1 is not "arrive at
+// zero", it is "be at zero before the end": the alpha curve of the slowest
+// shard has to have bottomed out with frames to spare, or the final frame of a
+// short transition still has glass in it.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildShatterTransition(const DecodedFrame& outgoing,
+                                         std::vector<std::uint8_t>& dst,
+                                         double progress, double elapsedSeconds,
+                                         std::uint64_t seed) {
+  const OutgoingPicture pic = openOutgoing(outgoing);
+  if (!pic.ok) { dst.clear(); return; }
+  const int W = pic.w;
+  const int H = pic.h;
+  dst.resize(static_cast<std::size_t>(W) * H * 4u);
+
+  const double p = std::clamp(progress, 0.0, 1.0);
+  const double t = std::max(0.0, elapsedSeconds);
+  const double unit = static_cast<double>(std::min(W, H));
+
+  // SHARDS SIZED TO THE PICTURE, not to a pixel count: the same break at
+  // 720p and at 4K. Around fourteen across the short side reads as broken
+  // glass; far more looks like sand and far fewer like a sliding puzzle.
+  const int shard = std::max(8, static_cast<int>(unit / 14.0));
+  const double fly = unit * 0.85;
+  const std::uint64_t salt = portalHash(seed ^ 0x5A17E12ull);
+
+  // ONE SET OF SHARD NUMBERS PER SHARD, NOT PER PIXEL. Everything below up to
+  // the rotation depends only on which shard a pixel is in, and it was all
+  // evaluated inside the pixel loop: a hash, four random draws, a sqrt and
+  // three trig pairs for each of ~8 million pixels at 4K, for ~600 shards.
+  // A 2-second Shatter cost 18-20 ms a frame and dropped frames at 60 Hz
+  // (found 2026-11-08 measuring Ghastly's sister builders). Same expressions,
+  // computed once per shard, so the pixels are identical.
+  struct Shard { double gone, ox, oy, ca, sa, ccx, ccy; };
+  const int shardsX = (W + shard - 1) / shard;
+  const int shardsY = (H + shard - 1) / shard;
+  std::vector<Shard> shards(static_cast<std::size_t>(shardsX) * shardsY);
+  for (int gy = 0; gy < shardsY; ++gy) {
+    for (int gx = 0; gx < shardsX; ++gx) {
+      Shard& sh = shards[static_cast<std::size_t>(gy) * shardsX + gx];
+      const std::uint64_t h = portalHash(salt +
+        static_cast<std::uint64_t>(gx) * 73856093ull +
+        static_cast<std::uint64_t>(gy) * 19349663ull);
+      // WHEN THIS SHARD GOES. Waves, not a single sheet: the start is spread
+      // over the first two thirds and every shard is gone by 0.92.
+      const double start = 0.58 * portalRand(h, 1);
+      sh.gone = tSmooth(start, std::min(0.92, start + 0.40), p);
+      if (sh.gone >= 1.0) continue;
+      // Its own line out of the frame, biased away from the centre so the
+      // pane opens outward instead of milling about.
+      const double ang = portalRand(h, 2) * 6.283185307179586;
+      const double awayX = (gx * shard + shard * 0.5) - W * 0.5;
+      const double awayY = (gy * shard + shard * 0.5) - H * 0.5;
+      const double awayLen = std::sqrt(awayX * awayX + awayY * awayY) + 1e-6;
+      const double dirX = 0.45 * std::cos(ang) + 0.55 * (awayX / awayLen);
+      const double dirY = 0.45 * std::sin(ang) + 0.55 * (awayY / awayLen);
+      // Gravity, because a dropped pane falls. Quadratic in the shard's own
+      // travel rather than in p, so late shards fall from where they broke.
+      const double travel = sh.gone * sh.gone;
+      sh.ox = dirX * fly * travel;
+      sh.oy = dirY * fly * travel + unit * 0.35 * travel * travel;
+      // BOTH TERMS SCALE WITH `gone`, including the wobble. The wobble used
+      // to be added ungated, so at progress 0 every shard was already turned
+      // a little: --transition-dump measured meanAlpha 0.9998 and 42 pixels
+      // already gone on the first frame, which on an output is the picture
+      // twitching the instant the take lands. The first frame of a transition
+      // has to be the last frame of the cue, exactly.
+      const double spin = sh.gone * ((portalRand(h, 3) - 0.5) * 2.2 +
+                                     0.05 * std::sin(t * 1.7 + portalRand(h, 4) * 6.283));
+      sh.ccx = gx * shard + shard * 0.5;
+      sh.ccy = gy * shard + shard * 0.5;
+      sh.ca = std::cos(spin);
+      sh.sa = std::sin(spin);
+    }
+  }
+
+  // The glint's falloff by whole pixels from the shard's edge: the same
+  // expression the pixel loop used, so the result is identical.
+  std::vector<double> glintFalloff(static_cast<std::size_t>(shard));
+  for (int e = 0; e < shard; ++e) {
+    glintFalloff[static_cast<std::size_t>(e)] =
+      std::clamp(1.0 - static_cast<double>(e) / std::max(1.0, unit * 0.010), 0.0, 1.0);
+  }
+  // std::lround, inline. It was a library call twice per pixel. The fraction
+  // v - trunc(v) is exact in double, so this rounds half away from zero exactly
+  // as lround does, for every value a shard can reach.
+  const auto roundHalfAway = [](double v) {
+    const long long whole = static_cast<long long>(v);
+    const double frac = v - static_cast<double>(whole);
+    return static_cast<int>(whole + (frac >= 0.5 ? 1 : (frac <= -0.5 ? -1 : 0)));
+  };
+
+  deckboy::effects::detail::parallelRows(H, W * 6, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+      std::uint8_t* row = dst.data() + static_cast<std::size_t>(y) * W * 4u;
+      const int gy = y / shard;
+      const Shard* shardRow = shards.data() + static_cast<std::size_t>(gy) * shardsX;
+      const int edgeY = std::min(y - gy * shard, (gy + 1) * shard - 1 - y);
+      // ONE SHARD'S RUN OF THIS ROW AT A TIME, so what is constant across the
+      // shard is read once per run rather than once per pixel.
+      for (int gx = 0; gx < shardsX; ++gx) {
+        const int xa = gx * shard;
+        const int xb = std::min(W, xa + shard);
+        std::uint8_t* run = row + static_cast<std::size_t>(xa) * 4u;
+        const Shard& sh = shardRow[gx];
+        const double gone = sh.gone;
+        if (gone >= 1.0) {
+          std::memset(run, 0, static_cast<std::size_t>(xb - xa) * 4u);
+          continue;
+        }
+        if (gone <= 0.0) {
+          // Not broken yet: no offset, no spin (cos 1, sin 0, exactly) and no
+          // glint, so every pixel samples itself, opaque. The same bytes the
+          // general case below writes for it, without the arithmetic.
+          for (int x = xa; x < xb; ++x) {
+            std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+            pic.fetch(x, y, px);
+            px[3] = 255;
+          }
+          continue;
+        }
+        const double ox = sh.ox;
+        const double oy = sh.oy;
+        const double ccx = sh.ccx;
+        const double ccy = sh.ccy;
+        const double ry = y - ccy;
+        const double ca = sh.ca;
+        const double sa = sh.sa;
+        const double glintScale = 0.55 * gone;
+        const std::uint8_t alpha =
+          static_cast<std::uint8_t>(std::clamp((1.0 - gone) * 255.0, 0.0, 255.0));
+        for (int x = xa; x < xb; ++x) {
+          std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+          const double rx = x - ccx;
+          // Sample from where this pixel WOULD have been before the shard
+          // moved, which is what makes the seams show a piece of somewhere else.
+          const int sx = roundHalfAway(ccx + rx * ca - ry * sa - ox);
+          const int sy = roundHalfAway(ccy + rx * sa + ry * ca - oy);
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) {
+            px[0] = px[1] = px[2] = px[3] = 0;
+            continue;
+          }
+          std::uint8_t s[4];
+          pic.fetch(sx, sy, s);
+          // A glint along the break: the leading edge of a turning shard
+          // catches the light, which is what makes glass look like glass
+          // rather than like a grid of moving squares. The distance to the
+          // shard's edge is a whole number of pixels, so the falloff is read
+          // from a table.
+          const int edge = std::min(edgeY, std::min(x - xa, (gx + 1) * shard - 1 - x));
+          const double glint = glintFalloff[static_cast<std::size_t>(edge)] * glintScale;
+          px[0] = static_cast<std::uint8_t>(std::min(255.0, s[0] + (255.0 - s[0]) * glint));
+          px[1] = static_cast<std::uint8_t>(std::min(255.0, s[1] + (255.0 - s[1]) * glint));
+          px[2] = static_cast<std::uint8_t>(std::min(255.0, s[2] + (255.0 - s[2]) * glint));
+          px[3] = alpha;
+        }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildCloudsTransition - the cue goes behind weather.
+//
+// A two-octave noise field rises through the frame and eats the outgoing
+// picture where it is thickest. The threshold falls with progress, so the holes
+// open where the cloud is densest and spread from there: nothing about it is a
+// circle or an edge, which is the entire point of having it next to the iris
+// and the wipes.
+//
+// The field DRIFTS with elapsed time as well as opening with progress, so a
+// long transition billows instead of sitting still while a threshold slides
+// over it. Both terms are in the signature, so it stays deterministic.
+//
+// Where the cloud is thinning the picture behind it is lifted towards white
+// before it goes -- the bright fringe of a cloud edge with light behind it.
+// Without that the effect reads as a dissolve through a noise mask.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildCloudsTransition(const DecodedFrame& outgoing,
+                                        std::vector<std::uint8_t>& dst,
+                                        double progress, double elapsedSeconds,
+                                        std::uint64_t seed) {
+  const OutgoingPicture pic = openOutgoing(outgoing);
+  if (!pic.ok) { dst.clear(); return; }
+  const int W = pic.w;
+  const int H = pic.h;
+  dst.resize(static_cast<std::size_t>(W) * H * 4u);
+
+  const double p = std::clamp(progress, 0.0, 1.0);
+  const float t = static_cast<float>(std::max(0.0, elapsedSeconds));
+  const double unit = static_cast<double>(std::min(W, H));
+
+  // THE FIELD IS COMPUTED SMALL and read back bilinearly, the way the grain
+  // and wavefront effects do it: cloud is a smear, and a smear does not need
+  // to be evaluated per pixel at 4K. A quarter-scale lattice is visually
+  // identical here and a quarter of the arithmetic.
+  const int step = unit >= 1400.0 ? 4 : (unit >= 480.0 ? 2 : 1);
+  const int gw = W / step + 2;
+  const int gh = H / step + 2;
+  const float scale = static_cast<float>(3.4 / unit) * static_cast<float>(step);
+  const std::uint64_t salt = portalHash(seed ^ 0xC10D5ull);
+  std::vector<float> field(static_cast<std::size_t>(gw) * gh, 0.0f);
+  deckboy::effects::detail::parallelRows(gh, gw * 4, [&](int y0, int y1) {
+    for (int gy = y0; gy < y1; ++gy) {
+      for (int gx = 0; gx < gw; ++gx) {
+        const float nx = gx * scale;
+        const float ny = gy * scale - t * 0.22f;     // the weather comes up
+        field[static_cast<std::size_t>(gy) * gw + gx] =
+          tFbm(salt, nx + 0.13f * t, ny);
+      }
+    }
+  });
+
+  // The threshold sweeps past the whole range of the field with a margin at
+  // each end, so p=0 opens nothing and p=1 opens everything -- rule 1 by
+  // construction rather than by hoping the noise never peaks.
+  const float cut = static_cast<float>(-0.12 + 1.24 * p);
+  const float band = 0.16f;                 // how soft the cloud edge is
+  const float invStep = 1.0f / static_cast<float>(step);
+
+  // ── WHICH CELLS NEED SHADING (as the Portal does it) ──────────────────
+  //
+  // Bilinear interpolation stays inside the range of its four corners, so a
+  // lattice cell whose corners are all well clear of the cloud's soft edge is
+  // either untouched picture (open 0: the pixel is the source, opaque) or
+  // gone (open 1: transparent). Only cells ON the edge are shaded per pixel.
+  // The margin keeps a cell within rounding of the edge on the per-pixel
+  // path, so the result is identical to shading every pixel -- which cost
+  // 11-12 ms a 4K frame (2026-11-08, measured with DECKBOY_TRANSITION_BENCH).
+  enum : std::uint8_t { kKeep = 0, kClear = 1, kShade = 2 };
+  const int cw = gw - 1;
+  const int ch = gh - 1;
+  const float keepAbove = cut + band * 0.5f + 1e-3f;
+  const float clearBelow = cut - band * 0.5f - 1e-3f;
+  std::vector<std::uint8_t> cellKind(static_cast<std::size_t>(cw) * ch, kShade);
+  deckboy::effects::detail::parallelRows(ch, cw * 2, [&](int y0, int y1) {
+    for (int gy = y0; gy < y1; ++gy) {
+      for (int gx = 0; gx < cw; ++gx) {
+        const std::size_t a = static_cast<std::size_t>(gy) * gw + gx;
+        const float c0 = field[a];
+        const float c1 = field[a + 1];
+        const float c2 = field[a + gw];
+        const float c3 = field[a + gw + 1];
+        const float lo = std::min(std::min(c0, c1), std::min(c2, c3));
+        const float hi = std::max(std::max(c0, c1), std::max(c2, c3));
+        cellKind[static_cast<std::size_t>(gy) * cw + gx] =
+          lo > keepAbove ? kKeep : (hi < clearBelow ? kClear : kShade);
+      }
+    }
+  });
+
+  deckboy::effects::detail::parallelRows(H, W * 4, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+      const float fy = y * invStep;
+      const int gy = static_cast<int>(fy);
+      const float wy = fy - gy;
+      std::uint8_t* row = dst.data() + static_cast<std::size_t>(y) * W * 4u;
+      const std::uint8_t* kinds = cellKind.data() + static_cast<std::size_t>(gy) * cw;
+      for (int x = 0; x < W; ++x) {
+        const float fx = x * invStep;
+        const int gx = static_cast<int>(fx);
+        const std::uint8_t kind = kinds[std::min(cw - 1, gx)];
+        if (kind == kClear) {
+          // The rest of this cell along the row, in one go.
+          const int x1 = std::min(W, (gx + 1) * step);
+          std::memset(row + static_cast<std::size_t>(x) * 4u, 0,
+                      static_cast<std::size_t>(x1 - x) * 4u);
+          x = x1 - 1;
+          continue;
+        }
+        if (kind == kKeep) {
+          const int x1 = std::min(W, (gx + 1) * step);
+          for (; x < x1; ++x) {
+            std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+            pic.fetch(x, y, px);
+            px[3] = 255;
+          }
+          x = x1 - 1;
+          continue;
+        }
+        const float wx = fx - gx;
+        const std::size_t at = static_cast<std::size_t>(gy) * gw + gx;
+        const float a = field[at];
+        const float b = field[at + 1];
+        const float c = field[at + gw];
+        const float d = field[at + gw + 1];
+        const float top = a + (b - a) * wx;
+        const float bot = c + (d - c) * wx;
+        const float density = top + (bot - top) * wy;
+
+        // How much of the old picture is still here. 1 outside the cloud,
+        // 0 well inside it, soft across `band`.
+        const float open = std::clamp((cut - density) / band + 0.5f, 0.0f, 1.0f);
+        const float keep = 1.0f - open;
+        std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+        if (keep <= 0.0f) {
+          px[0] = px[1] = px[2] = px[3] = 0;
+          continue;
+        }
+        std::uint8_t s[4];
+        pic.fetch(x, y, s);
+        // The bright fringe: strongest where the cloud is halfway through this
+        // pixel, gone where it has not arrived and where it has finished.
+        const float fringe = 4.0f * open * (1.0f - open) * 0.55f;
+        px[0] = static_cast<std::uint8_t>(std::min(255.0f, s[0] + (255.0f - s[0]) * fringe));
+        px[1] = static_cast<std::uint8_t>(std::min(255.0f, s[1] + (255.0f - s[1]) * fringe));
+        px[2] = static_cast<std::uint8_t>(std::min(255.0f, s[2] + (255.0f - s[2]) * fringe));
+        px[3] = static_cast<std::uint8_t>(std::clamp(keep * 255.0f, 0.0f, 255.0f));
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildGhastlyTransition - the cue gives up the ghost.
+//
+// Three things happen at once, and none of them is a fade:
+//
+//   * the colour drains out, towards a cold blue-grey rather than towards
+//     grey, because a ghost is not a black-and-white photograph;
+//   * the picture SMEARS UPWARD, each pixel sampling from further below itself
+//     as the transition runs, so the image stretches away instead of thinning;
+//   * wisps -- narrow vertical noise columns -- eat it from the bottom, rising
+//     faster than the smear, and carry a pale edge where they bite.
+//
+// The smear samples from below, so the bottom rows run out of picture. They are
+// the first to go transparent, which is what puts the ghost's feet in the fog
+// and stops it looking like the frame is being scrolled.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildGhastlyTransition(const DecodedFrame& outgoing,
+                                         std::vector<std::uint8_t>& dst,
+                                         double progress, double elapsedSeconds,
+                                         std::uint64_t seed) {
+  const OutgoingPicture pic = openOutgoing(outgoing);
+  if (!pic.ok) { dst.clear(); return; }
+  const int W = pic.w;
+  const int H = pic.h;
+  dst.resize(static_cast<std::size_t>(W) * H * 4u);
+
+  const double p = std::clamp(progress, 0.0, 1.0);
+  const float t = static_cast<float>(std::max(0.0, elapsedSeconds));
+  const double unit = static_cast<double>(std::min(W, H));
+  const std::uint64_t salt = portalHash(seed ^ 0x6405Full);
+
+  const float drain = static_cast<float>(tSmooth(0.0, 0.72, p));   // colour out
+  const float lift = static_cast<float>(unit * 0.55 * p * p);      // smear up
+  // The wisp line rises past the top with margin, so by p=1 every row is
+  // inside it -- rule 1 without relying on the noise.
+  // WHERE THE WISP LINE STARTS AND ENDS, IN PIXELS, DERIVED.
+  //
+  // It has to begin far enough below the frame that no column's wobble and no
+  // part of the soft edge reaches the bottom row, and end far enough above it
+  // that none of either is left on the top row. Written as fractions of H
+  // (1.22 down to -0.12) it was neither: check_transitions measured
+  // fromOutgoing=0.0031 at progress 0, which is the bottom row already
+  // slightly see-through before the transition had begun. Deriving both ends
+  // from the two widths that actually intrude also keeps it right when the
+  // frame is portrait, where `unit` is the WIDTH and a fraction of H means
+  // something different.
+  const float wispSoft = static_cast<float>(unit * 0.16);
+  const float wispWob = static_cast<float>(unit * 0.34);
+  const float lineAtStart = static_cast<float>(H) + wispSoft + wispWob;
+  const float lineAtEnd = -(wispSoft + wispWob);
+  const float wispLine = lineAtStart + (lineAtEnd - lineAtStart) * static_cast<float>(p);
+  // TWO FREQUENCIES, or it is not a wisp.
+  //
+  // At one low frequency this was a single smooth wave rolling up the frame --
+  // fog, not a ghost. The slow term still does the big shape; the fast one, at
+  // roughly forty cycles across the picture, is what makes neighbouring columns
+  // reach different heights and read as separate tendrils.
+  const float wispSlow = static_cast<float>(7.0 / unit);
+  const float wispFast = static_cast<float>(41.0 / unit);
+
+  // ONE WISP LINE PER COLUMN, NOT PER PIXEL. The wobble depends on x and t
+  // only, and it was evaluated inside the row loop: two fBm calls for every
+  // pixel, ~16 million a 4K frame for 7680 distinct values. That made a
+  // 2-second Ghastly take 18-22 ms a frame and drop frames at 60 Hz (James,
+  // 2026-11-08, TAKE ALL with a Lower Third on deck 2). Same expression,
+  // computed once per column, so the pixels are identical.
+  std::vector<float> columnLine(static_cast<std::size_t>(W));
+  deckboy::effects::detail::parallelRows(W, 1, [&](int x0, int x1) {
+    for (int x = x0; x < x1; ++x) {
+      const float slow = tFbm(salt, x * wispSlow, t * 0.6f) - 0.5f;
+      const float fast = tFbm(salt ^ 0x77ull, x * wispFast, t * 1.9f) - 0.5f;
+      const float wob = slow * 0.62f + fast * 0.38f;
+      columnLine[static_cast<std::size_t>(x)] = wispLine + wob * wispWob;
+    }
+  });
+  // Constant for the whole frame.
+  const float thin = static_cast<float>(1.0 - tSmooth(0.35, 1.0, p) * 0.55);
+
+  deckboy::effects::detail::parallelRows(H, W * 5, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+      std::uint8_t* row = dst.data() + static_cast<std::size_t>(y) * W * 4u;
+      // Where this row samples from. It depends on the row alone, so it is
+      // rounded once here rather than once per pixel.
+      const int sy = static_cast<int>(std::lround(y + lift));
+      for (int x = 0; x < W; ++x) {
+        std::uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+        // A per-column wobble so the wisps are columns of different heights
+        // rather than one ragged line (computed above, once per column).
+        const float line = columnLine[static_cast<std::size_t>(x)];
+        // HOW FAR THIS ROW IS ABOVE THE WISP LINE. y grows downward, so a row
+        // above the line has (line - y) positive, and keep runs 0 at the line
+        // to 1 a soft distance above it.
+        //
+        // This was written as a clamp and then inverted, which produced exactly
+        // the opposite: keep was 0 wherever the picture should have been whole.
+        // --transition-dump caught it in one line -- meanAlpha 0 at progress 0,
+        // so the cue vanished the instant the take landed, and 0.20 at progress
+        // 1, so it never finished either. Neither is visible in a screenshot of
+        // a running transition.
+        float keep = std::clamp((line - static_cast<float>(y)) / wispSoft, 0.0f, 1.0f);
+        // Anything at or below the line has gone.
+        if (keep <= 0.0f) {
+          px[0] = px[1] = px[2] = px[3] = 0;
+          continue;
+        }
+        if (sy >= H) {
+          px[0] = px[1] = px[2] = px[3] = 0;
+          continue;
+        }
+        std::uint8_t s[4];
+        pic.fetch(x, sy, s);
+        // Drain towards a cold blue-grey, not towards grey.
+        const float luma = 0.299f * s[0] + 0.587f * s[1] + 0.114f * s[2];
+        const float cr = luma * 0.82f;
+        const float cg = luma * 0.90f;
+        const float cb = std::min(255.0f, luma * 1.12f + 10.0f);
+        float r = s[0] + (cr - s[0]) * drain;
+        float g = s[1] + (cg - s[1]) * drain;
+        float b = s[2] + (cb - s[2]) * drain;
+        // The pale bite at the wisp edge.
+        const float bite = 4.0f * keep * (1.0f - keep) * 0.5f;
+        r += (235.0f - r) * bite;
+        g += (240.0f - g) * bite;
+        b += (255.0f - b) * bite;
+        px[0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 255.0f));
+        px[1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 255.0f));
+        px[2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 255.0f));
+        // The ghost thins overall as well as being eaten from below.
+        px[3] = static_cast<std::uint8_t>(std::clamp(keep * thin * 255.0f, 0.0f, 255.0f));
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// buildFireside - a hearth that burns, for a fireside chat.
+//
+// Set dressing rather than a test card. A talking-head show wants something
+// warm behind it that moves without asking for attention, and a loop of real
+// fire is a large file that visibly repeats. Generated, it never repeats and
+// costs nothing to ship.
+//
+// THE FIRE IS SIMULATED ON A COARSE GRID and scaled up, which is the whole
+// trick. Per-pixel flame at 1080p is two million cells a frame; on this grid it
+// is a few thousand, and the chunky result is the look we want anyway rather
+// than a compromise. Classic bottom-up propagation: seed the base hot, average
+// each cell from the row below, cool it, let it drift sideways.
+//
+// The ramp is six steps on purpose. The app's own face is four greens on a
+// handheld; a smooth 256-step gradient would sit outside that. Six reads as
+// fire and stays graphic.
+// ---------------------------------------------------------------------------
+// ── WHAT IS THROUGH THE WINDOW ──────────────────────────────────────────────
+//
+// Drawn AFTER the brickwork and BEFORE the hearth opening is darkened, so the
+// fire and its sparks are never covered by glass.
+//
+// Everything sits on the same coarse cell grid the flame uses. A smooth
+// gradient sky beside a six-step fire would read as two pictures stuck
+// together rather than as one room.
+void MediaEngine::buildFiresideWindow(DecodedFrame& frame, double t, int view) {
+  if (view <= 0 || view >= kFiresideViewCount) {
+    return;
+  }
+  const int W = frame.width;
+  const int H = frame.height;
+
+  // High on the wall and left of the hearth, where a window goes. Sized from
+  // the raster, so it is the same window at any resolution -- and it clears
+  // the arch horizontally, which is why the fire and the view never compete
+  // for the same pixels.
+  const int cell = std::max(2, W / 200);
+  const int winW = std::max(20, W / 6);
+  const int winH = std::max(16, H / 5);
+  const int winX = std::max(cell * 2, W / 12);
+  const int winY = std::max(cell * 2, H / 7);
+
+  const SDL_Color kSash {46, 30, 24, 255};
+  const SDL_Color kSill {62, 42, 32, 255};
+
+  fillPixelRect(frame, winX - cell * 2, winY - cell * 2,
+                winW + cell * 4, winH + cell * 4, kSash);
+
+  const int cols = std::max(1, winW / cell);
+  const int rows = std::max(1, winH / cell);
+  auto glass = [&](int gx, int gy, SDL_Color c) {
+    fillPixelRect(frame, winX + gx * cell, winY + gy * cell, cell, cell, c);
+  };
+  // A drifted column can go negative and C++'s % keeps the sign, which would
+  // break the flake pattern along one edge rather than wrap it.
+  auto wrap = [](int v, int n) { return ((v % n) + n) % n; };
+
+  for (int gy = 0; gy < rows; ++gy) {
+    const double v = static_cast<double>(gy) / std::max(1, rows - 1);
+    for (int gx = 0; gx < cols; ++gx) {
+      const double u = static_cast<double>(gx) / std::max(1, cols - 1);
+      SDL_Color c {18, 22, 34, 255};
+      switch (view) {
+        case 1: {   // GARDEN -- sky above, planting below, swaying slowly
+          // The slowest thing on screen. A garden through glass is the calmest
+          // possible background for a talking head, so the sway runs well
+          // under the rate of the fire beside it.
+          const double sway = std::sin(t * 0.55 + v * 4.0) * 0.045;
+          const double leafLine = 0.42 + std::sin(u * 7.0 + t * 0.35) * 0.06;
+          if (v < leafLine) {
+            c = (v < leafLine * 0.45) ? SDL_Color {120, 150, 178, 255}
+                                      : SDL_Color {150, 172, 190, 255};
+          } else {
+            const double n = std::sin((u + sway) * 23.0) *
+                             std::cos(v * 19.0 + t * 0.4);
+            c = (n > 0.35)  ? SDL_Color {58, 104, 58, 255}
+              : (n > -0.15) ? SDL_Color {40, 82, 46, 255}
+                            : SDL_Color {26, 58, 34, 255};
+          }
+          break;
+        }
+        case 2: {   // RAIN -- streaks through a grey evening
+          // No lightning, deliberately: a flash behind a presenter is a
+          // distraction, and it would fight the fire's own flicker.
+          const double base = 44.0 + v * 26.0;
+          c = SDL_Color {static_cast<Uint8>(base * 0.72),
+                         static_cast<Uint8>(base * 0.80),
+                         static_cast<Uint8>(base), 255};
+          // Each column falls at its own rate. That is the whole of why rain
+          // has depth instead of being one sliding texture.
+          //
+          // v RUNS 0 AT THE TOP OF THE WINDOW TO 1 AT THE BOTTOM, and the
+          // fall position has to DECREASE t's contribution for a tracked drop
+          // to move from low v to high v as t grows -- i.e. the clock term is
+          // SUBTRACTED. Added, as this was, a drop's v decreases as t grows:
+          // rain climbing the glass. floor-based mod, not std::fmod: the
+          // subtraction drives the argument negative once t grows past v,
+          // and std::fmod keeps a negative dividend's sign in C++, which
+          // would latch every cell past that point as a permanent drop.
+          const double speed = 5.5 + static_cast<double>(wrap(gx * 37, 11)) * 0.65;
+          const double dropRaw = v - t * speed * 0.1 +
+                                 static_cast<double>(wrap(gx * 53, 17)) * 0.11;
+          const double drop = dropRaw - std::floor(dropRaw);
+          if (drop < 0.07 && wrap(gx * 29, 5) == 0) {
+            c = SDL_Color {150, 168, 190, 255};
+          }
+          break;
+        }
+        case 3: {   // SNOW -- flakes drifting sideways as they fall
+          const double base = 58.0 + v * 22.0;
+          c = SDL_Color {static_cast<Uint8>(base * 0.86),
+                         static_cast<Uint8>(base * 0.90),
+                         static_cast<Uint8>(base), 255};
+          // THE DRIFT IS WHAT MAKES IT SNOW; straight down is rain in a
+          // lighter colour.
+          //
+          // It asks "is there a flake HERE", reading back along the drift,
+          // rather than drawing one into a neighbouring cell -- because the
+          // sky for that cell is written after, and would paint over any flake
+          // the drift rounded to nothing. Half the snow would silently
+          // disappear, which is exactly the kind of fault a screenshot of a
+          // snowstorm does not show.
+          const double drift = std::sin(t * 0.5 + v * 6.28) * 2.2;
+          const int src = gx - static_cast<int>(std::lround(drift));
+          // Same fix, same reason as RAIN just above: the clock term must be
+          // SUBTRACTED for v (0 top, 1 bottom) to increase with t, and
+          // floor-based mod rather than std::fmod because that subtraction
+          // goes negative once t outgrows v. Reported as snow falling up,
+          // which is exactly what the added form draws.
+          const double fallRaw = v - t * 0.16 +
+                                 static_cast<double>(wrap(src * 41, 13)) * 0.08;
+          const double fall = fallRaw - std::floor(fallRaw);
+          if (fall < 0.06 && wrap(src * 31, 7) == 0) {
+            c = SDL_Color {224, 232, 240, 255};
+          }
+          break;
+        }
+        default: {  // SEA -- a horizon, and bands that slide at their own pace
+          const double horizon = 0.46;
+          if (v < horizon) {
+            const double k = v / horizon;
+            c = SDL_Color {static_cast<Uint8>(96 + k * 54),
+                           static_cast<Uint8>(120 + k * 50),
+                           static_cast<Uint8>(152 + k * 38), 255};
+          } else {
+            const double d = (v - horizon) / (1.0 - horizon);
+            // Nearer bands move faster. Parallax is the only cue that sells
+            // flat colour as water.
+            const double wave = std::sin(u * 12.0 + t * (0.5 + d * 1.9) + d * 5.0);
+            c = (wave > 0.55) ? SDL_Color {104, 146, 168, 255}
+              : (wave > -0.2) ? SDL_Color {46, 88, 118, 255}
+                              : SDL_Color {28, 60, 88, 255};
+          }
+          break;
+        }
+      }
+      glass(gx, gy, c);
+    }
+  }
+
+  // Glazing bars and a sill, so it reads as a window rather than as a picture
+  // hung on the wall.
+  fillPixelRect(frame, winX + winW / 2 - cell / 2, winY,
+                std::max(1, cell), winH, kSash);
+  fillPixelRect(frame, winX, winY + winH / 2 - cell / 2,
+                winW, std::max(1, cell), kSash);
+  fillPixelRect(frame, winX - cell * 3, winY + winH + cell * 2,
+                winW + cell * 6, cell * 2, kSill);
+}
+
+void MediaEngine::buildFireside(DecodedFrame& frame, double t,
+                                double intensity, int sparks, int view) {
+  intensity = intensity < 0.2 ? 0.2 : (intensity > 2.0 ? 2.0 : intensity);
+  sparks = sparks < 0 ? 0 : (sparks > 160 ? 160 : sparks);
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0 || frame.pixels.empty()) {
+    return;
+  }
+
+  const SDL_Color kNight   {14, 10, 14, 255};
+  const SDL_Color kBrick   {58, 26, 26, 255};
+  const SDL_Color kBrickHi {84, 38, 32, 255};
+  const SDL_Color kMortar  {30, 16, 18, 255};
+  const SDL_Color kStone   {40, 20, 22, 255};
+
+  fillPixelRect(frame, 0, 0, W, H, kNight);
+
+  // Hearth opening: a tall arch, centred.
+  const int openW = std::max(16, W / 3);
+  const int openH = std::max(16, (H * 55) / 100);
+  const int openX = (W - openW) / 2;
+  const int openY = (H - openH) - H / 8;
+  const int archR = openW / 2;
+
+  auto insideOpening = [&](int x, int y) {
+    if (x < openX || x >= openX + openW || y >= openY + openH || y < openY) {
+      return false;
+    }
+    const int archCy = openY + archR;
+    if (y >= archCy) {
+      return true;
+    }
+    const int dx = x - (openX + archR);
+    const int dy = y - archCy;
+    return dx * dx + dy * dy <= archR * archR;
+  };
+
+  // Brick courses, offset every other row so it reads as masonry rather than
+  // graph paper, with the tone varied per brick so the wall is not flat.
+  const int bh = std::max(4, H / 26);
+  const int bw = std::max(8, W / 14);
+  for (int y = 0; y < H; y += bh) {
+    const int row = y / bh;
+    const int off = (row & 1) ? bw / 2 : 0;
+    for (int x = -off; x < W; x += bw) {
+      const unsigned h = static_cast<unsigned>(row * 73856093) ^
+                         static_cast<unsigned>((x + off) * 19349663);
+      const int tone = static_cast<int>((h >> 13) % 3u);
+      const SDL_Color c = (tone == 0) ? kBrick : (tone == 1) ? kBrickHi : kStone;
+      fillPixelRect(frame, x, y, bw - 1, bh - 1, c);
+      fillPixelRect(frame, x + bw - 1, y, 1, bh, kMortar);
+    }
+    fillPixelRect(frame, 0, y + bh - 1, W, 1, kMortar);
+  }
+
+  buildFiresideWindow(frame, t, view);
+
+  // The opening is dark; the fire is drawn into it next.
+  //
+  // THE PER-PIXEL PASSES RUN ON EVERY CORE: each pixel is written from its own
+  // value alone, so rows are independent. One thread took 15 ms a frame at
+  // 1080p and 61 ms at 4K (16 fps on a 60 Hz 4K screen).
+  {
+    const int y0 = std::max(0, openY);
+    const int y1 = std::min(H, openY + openH);
+    deckboy::effects::detail::parallelRows(std::max(0, y1 - y0), openW * 2, [&](int r0, int r1) {
+      for (int y = y0 + r0; y < y0 + r1; ++y) {
+        for (int x = openX; x < std::min(W, openX + openW); ++x) {
+          if (insideOpening(x, y)) {
+            writePixel(frame, x, y, SDL_Color {10, 6, 8, 255});
+          }
+        }
+      }
+    });
+  }
+
+  const int kCell = std::max(2, W / 150);
+  const int gw = std::max(8, openW / kCell);
+  const int gh = std::max(8, openH / kCell);
+
+  // Held between frames -- reseeding every frame gives static, not fire.
+  //
+  // thread_local rather than a member, because the pattern builders are static
+  // and called from whichever decoder thread owns the deck. That is exactly the
+  // ownership we want: two decks showing a hearth each get their own fire
+  // instead of sharing one buffer across threads.
+  // THE FIRE IS A PURE FUNCTION OF THE CLOCK, rebuilt from nothing each frame.
+  //
+  // It used to carry its heat grid between calls, which is the obvious way to
+  // write a fire and was wrong here. `--pattern-dump` runs a whole process per
+  // frame, and tools/build_test_patterns.py renders a clip by calling it in a
+  // loop -- so every frame got a freshly primed grid and the "animation" would
+  // have been incoherent flicker rather than a flame. The live path would have
+  // looked right and the rendered clip would not.
+  //
+  // Instead each frame replays a fixed window of history whose randomness is
+  // keyed to the frame index. Consecutive frames share all but one step of that
+  // window, so they evolve smoothly, and any frame can be rendered alone, in
+  // any order, in any process, and come out identical. It also means no state
+  // to own and nothing shared between decks or threads.
+  const int kWarm = 20;
+  const int frameIndex = static_cast<int>(t * 60.0);
+  std::vector<std::uint8_t> heat(static_cast<std::size_t>(gw) *
+                                 static_cast<std::size_t>(gh), 0);
+
+  std::uint32_t seed = 1u;
+  auto rnd = [&seed]() -> std::uint32_t {
+    seed ^= seed << 13;
+    seed ^= seed >> 17;
+    seed ^= seed << 5;
+    return seed;
+  };
+
+  // The bed breathes at two rates, so the fire surges and settles rather than
+  // roaring flat. Sampled at the frame being drawn, for the light and sparks.
+  // INTENSITY RIDES THE BREATH rather than replacing it, so embers still
+  // surge and settle instead of sitting at a flat low -- a fire that does not
+  // move reads as a photograph of a fire.
+  const double breath = (0.72 + 0.28 * std::sin(t * 1.7) * std::sin(t * 0.63))
+                        * intensity;
+
+  for (int step = 0; step <= kWarm; ++step) {
+  const int stepFrame = frameIndex - (kWarm - step);
+  const double stepT = stepFrame / 60.0;
+  // Keyed to the ABSOLUTE frame, so a given frame of history is the same
+  // whichever frame is asking for it -- that is what makes the sequence
+  // continuous across independent renders.
+  seed = static_cast<std::uint32_t>(stepFrame) * 2654435761u + 1u;
+  const double stepBreath =
+    0.72 + 0.28 * std::sin(stepT * 1.7) * std::sin(stepT * 0.63);
+  for (int x = 0; x < gw; ++x) {
+    // The fuel bed is the middle of the grate, not the whole opening -- fire
+    // comes off the logs, and seeding edge to edge is what made it a dome.
+    const double dx = (x - gw * 0.5) / (gw * 0.34);
+    if (std::abs(dx) > 1.0) {
+      heat[static_cast<std::size_t>(gh - 1) * gw + x] = 0;
+      continue;
+    }
+    // Hot spots along the bed rather than an even glow, so tongues form where
+    // the logs actually are.
+    const double lumps = 0.62 + 0.38 * std::sin(x * 1.9 + stepT * 0.8) *
+                                       std::sin(x * 0.7 - stepT * 1.3);
+    const double bed = (1.0 - dx * dx * 0.55) * stepBreath * lumps;
+    const int base = std::clamp(static_cast<int>(bed * 255.0), 0, 255);
+    const int jitter = static_cast<int>(rnd() % 60u);
+    heat[static_cast<std::size_t>(gh - 1) * gw + x] =
+      static_cast<std::uint8_t>(std::clamp(base - jitter, 0, 255));
+  }
+
+  for (int y = 0; y < gh - 1; ++y) {
+    for (int x = 0; x < gw; ++x) {
+      const int xl = std::max(0, x - 1);
+      const int xr = std::min(gw - 1, x + 1);
+      const std::size_t below = static_cast<std::size_t>(y + 1) * gw;
+      const int sum = heat[below + xl] + heat[below + x] + heat[below + xr];
+      int v = sum / 3;
+      // Cooling rises near the top, so the flame has a tip rather than a
+      // ceiling of colour.
+      // Cooling scales with how far up the cell is, which is what gives the
+      // flame a tapering tip instead of a ceiling.
+      const int height = gh - y;
+      v -= 1 + static_cast<int>(rnd() % 4u) + (height * 5) / std::max(1, gh);
+      const int drift = static_cast<int>(rnd() % 3u) - 1;
+      const int dst = std::clamp(x + drift, 0, gw - 1);
+      heat[static_cast<std::size_t>(y) * gw + dst] =
+        static_cast<std::uint8_t>(std::clamp(v, 0, 255));
+    }
+  }
+  }
+
+  static const SDL_Color kFlame[6] = {
+    { 10,   6,   8, 255},
+    { 96,  18,  12, 255},
+    {178,  44,  16, 255},
+    {232,  96,  22, 255},
+    {250, 168,  52, 255},
+    {255, 232, 150, 255},
+  };
+
+  const int fireY = openY + openH - gh * kCell;
+  for (int gy = 0; gy < gh; ++gy) {
+    for (int gx = 0; gx < gw; ++gx) {
+      const int v = heat[static_cast<std::size_t>(gy) * gw + gx];
+      if (v < 24) {
+        continue;                       // the back of the hearth stays dark
+      }
+      // Gamma, not a linear split. Linearly, almost every live cell landed in
+      // the bottom two steps and the whole hearth read as a dull red mound --
+      // the top of the ramp existed and was never reached.
+      const double n = v / 255.0;
+      const int step = std::clamp(static_cast<int>(std::pow(n, 0.62) * 5.99), 0, 5);
+      const int px0 = openX + gx * kCell;
+      const int py0 = fireY + gy * kCell;
+      for (int oy = 0; oy < kCell; ++oy) {
+        for (int ox = 0; ox < kCell; ++ox) {
+          const int sx = px0 + ox;
+          const int sy = py0 + oy;
+          // Clipped to the arch, so flame never paints over the masonry.
+          if (insideOpening(sx, sy)) {
+            writePixel(frame, sx, sy, kFlame[step]);
+          }
+        }
+      }
+    }
+  }
+
+  // The back of the hearth, lit by what is burning in front of it. Without
+  // this the flame floats in a black void, which is the one thing a real fire
+  // never does.
+  {
+    const int hx = openX + openW / 2;
+    const int hy = openY + openH - openH / 5;
+    const int hr = std::max(6, openH * 3 / 4);
+    const int stride0 = W * 4;
+    const int gy0 = std::max(0, hy - hr);
+    const int gy1 = std::min(H, hy + hr);
+    deckboy::effects::detail::parallelRows(std::max(0, gy1 - gy0), hr * 2 * 4, [&](int r0, int r1) {
+    for (int y = gy0 + r0; y < gy0 + r1; ++y) {
+      for (int x = std::max(0, hx - hr); x < std::min(W, hx + hr); ++x) {
+        if (!insideOpening(x, y)) {
+          continue;
+        }
+        const double ddx = static_cast<double>(x - hx) / hr;
+        const double ddy = static_cast<double>(y - hy) / hr;
+        const double dd = ddx * ddx + ddy * ddy;
+        if (dd >= 1.0) {
+          continue;
+        }
+        const std::size_t i0 = static_cast<std::size_t>(y) * stride0 +
+                               static_cast<std::size_t>(x) * 4;
+        if (i0 + 2 >= frame.pixels.size() || frame.pixels[i0] > 40) {
+          continue;                       // already flame; leave it alone
+        }
+        const double g = (1.0 - dd) * (1.0 - dd) * 0.9 * breath;
+        writePixel(frame, x, y, SDL_Color {
+          static_cast<Uint8>(std::min(255.0, 14 + 96.0 * g)),
+          static_cast<Uint8>(std::min(255.0, 8 + 34.0 * g)),
+          static_cast<Uint8>(std::min(255.0, 10 + 16.0 * g)),
+          255});
+      }
+    }
+    });
+  }
+
+  // Grate.
+  const int grateY = openY + openH - std::max(2, openH / 10);
+  for (int x = openX + 2; x < openX + openW - 2; x += std::max(3, openW / 14)) {
+    for (int y = grateY; y < openY + openH; ++y) {
+      if (insideOpening(x, y)) {
+        writePixel(frame, x, y, SDL_Color {22, 14, 16, 255});
+      }
+    }
+  }
+  fillPixelRect(frame, openX + 1, grateY, openW - 2, 1, SDL_Color {30, 18, 18, 255});
+
+  // Firelight thrown onto the brick, breathing with the fire so the whole room
+  // flickers together rather than the hearth flickering inside a static wall.
+  const int glowR = std::max(8, openW);
+  const int cx = openX + openW / 2;
+  const int cy = openY + openH - openH / 4;
+  const double lift = 0.35 + 0.35 * breath;
+  const int stride = W * 4;
+  const int ly0 = std::max(0, cy - glowR);
+  const int ly1 = std::min(H, cy + glowR);
+  deckboy::effects::detail::parallelRows(std::max(0, ly1 - ly0), glowR * 2 * 4, [&](int r0, int r1) {
+  for (int y = ly0 + r0; y < ly0 + r1; ++y) {
+    for (int x = std::max(0, cx - glowR); x < std::min(W, cx + glowR); ++x) {
+      if (insideOpening(x, y)) {
+        continue;
+      }
+      const double dx = static_cast<double>(x - cx) / glowR;
+      const double dy = static_cast<double>(y - cy) / glowR;
+      const double d = dx * dx + dy * dy;
+      if (d >= 1.0) {
+        continue;
+      }
+      const double f = (1.0 - d) * (1.0 - d) * lift;
+      const std::size_t i = static_cast<std::size_t>(y) * stride +
+                            static_cast<std::size_t>(x) * 4;
+      if (i + 2 >= frame.pixels.size()) {
+        continue;
+      }
+      writePixel(frame, x, y, SDL_Color {
+        static_cast<Uint8>(std::min(255.0, frame.pixels[i + 0] + 150.0 * f)),
+        static_cast<Uint8>(std::min(255.0, frame.pixels[i + 1] +  62.0 * f)),
+        static_cast<Uint8>(std::min(255.0, frame.pixels[i + 2] +  24.0 * f)),
+        255});
+    }
+  }
+  });
+
+  // ---- Sparks -------------------------------------------------------------
+  //
+  // Stateless on purpose: an ember's whole life is a function of its index and
+  // the clock, so there is no particle list to own, grow, or keep in step with
+  // a resized raster. Cheap, deterministic, and it cannot leak.
+  const int kSparks = sparks;
+  for (int i = 0; i < kSparks; ++i) {
+    const std::uint32_t sh = static_cast<std::uint32_t>(i + 1) * 2654435761u;
+    const double life = 1.4 + ((sh >> 3) % 100u) / 100.0 * 1.8;   // 1.4-3.2s
+    const double birth = ((sh >> 11) % 1000u) / 1000.0 * life;
+    const double age = std::fmod(t + birth, life);
+    const double k = age / life;
+    if (k > 0.98) {
+      continue;
+    }
+    // Rises fast then slows as it cools, wandering on the draught.
+    const double rise = 1.0 - (1.0 - k) * (1.0 - k);
+    const double sway = std::sin(t * 1.9 + i * 1.7) * (6.0 + (sh % 9u));
+    const double sx = openX + openW * (0.28 + ((sh >> 17) % 45u) / 100.0) + sway * k;
+    const double sy = (openY + openH - openH * 0.18) - rise * (openH * 0.85 + (sh % 40u));
+    if (sy < 1.0) {
+      continue;
+    }
+    const double heatK = 1.0 - k;
+    const SDL_Color sc = (heatK > 0.66) ? SDL_Color {255, 236, 176, 255}
+                       : (heatK > 0.33) ? SDL_Color {250, 158, 52, 255}
+                                        : SDL_Color {168, 52, 18, 255};
+    const int size = (k < 0.5 && (sh % 5u) == 0) ? 2 : 1;
+    for (int oy = 0; oy < size; ++oy) {
+      for (int ox = 0; ox < size; ++ox) {
+        writePixel(frame, static_cast<int>(sx) + ox, static_cast<int>(sy) + oy, sc);
+      }
+    }
+  }
+
+  // ---- The posh part ------------------------------------------------------
+  //
+  // A mantel with real moulding, a keystone, andirons and a pair of sconces.
+  // Without them this is a hole in a wall with a fire in it; with them it is a
+  // room somebody chose to sit in.
+  const SDL_Color kStoneL {96, 74, 66, 255};
+  const SDL_Color kStoneM {74, 52, 48, 255};
+  const SDL_Color kStoneD {48, 32, 32, 255};
+  const SDL_Color kGold   {186, 140, 62, 255};
+
+  const int jamb = std::max(4, openW / 12);
+  fillPixelRect(frame, openX - jamb, openY, jamb, openH, kStoneM);
+  fillPixelRect(frame, openX + openW, openY, jamb, openH, kStoneM);
+  fillPixelRect(frame, openX - jamb, openY, 2, openH, kStoneL);
+  fillPixelRect(frame, openX + openW, openY, 2, openH, kStoneL);
+
+  // Voussoirs round the arch, so the opening is built rather than cut.
+  for (int a = 0; a <= 180; a += 10) {
+    const double rr = archR + jamb * 0.5;
+    const double rad = a * 3.14159265358979 / 180.0;
+    const int vx = static_cast<int>(openX + archR - std::cos(rad) * rr);
+    const int vy = static_cast<int>(openY + archR - std::sin(rad) * rr);
+    fillPixelRect(frame, vx - 2, vy - 2, 5, 5, ((a / 10) % 2) ? kStoneM : kStoneL);
+  }
+  fillPixelRect(frame, openX + archR - 4, openY - jamb - 2, 9, jamb + 4, kStoneL);
+  fillPixelRect(frame, openX + archR - 2, openY - jamb, 5, jamb + 2, kStoneM);
+
+  // Mantel shelf: three bands of moulding, overhanging the surround.
+  const int mantelY = std::max(1, openY - jamb - 8);
+  const int mantelW = openW + jamb * 4;
+  const int mantelX = openX - jamb * 2;
+  const int mh = std::max(6, H / 30);
+  fillPixelRect(frame, mantelX, mantelY, mantelW, mh, kStoneM);
+  fillPixelRect(frame, mantelX, mantelY, mantelW, std::max(2, mh / 3), kStoneL);
+  fillPixelRect(frame, mantelX + 2, mantelY + mh, mantelW - 4, std::max(2, mh / 3), kStoneD);
+  fillPixelRect(frame, mantelX, mantelY, mantelW, 1, kGold);
+  fillPixelRect(frame, mantelX, mantelY + mh - 1, mantelW, 1, kGold);
+
+  // Andirons, standing in front of the flame.
+  for (int side = 0; side < 2; ++side) {
+    const int ax = side ? openX + openW - openW / 5 : openX + openW / 5;
+    const int top = grateY - openH / 9;
+    for (int y = top; y < openY + openH - 2; ++y) {
+      if (insideOpening(ax, y)) {
+        writePixel(frame, ax, y, SDL_Color {30, 22, 24, 255});
+        writePixel(frame, ax + 1, y, SDL_Color {44, 32, 30, 255});
+      }
+    }
+    writePixel(frame, ax, top - 1, kGold);
+    writePixel(frame, ax + 1, top - 1, kGold);
+  }
+
+  // Sconces, one each side, each throwing its own pool of light.
+  for (int side = 0; side < 2; ++side) {
+    const int lx = side ? (openX + openW + jamb + (W - openX - openW) / 3)
+                        : (openX - jamb - openX / 3);
+    const int ly = std::max(6, mantelY - H / 7);
+    if (lx < 8 || lx > W - 8) {
+      continue;
+    }
+    const double flick = 0.78 + 0.22 * std::sin(t * 6.1 + side * 2.0);
+    // Bracket, then the lantern, sized off the raster so it reads at any size.
+    const int sw = std::max(7, W / 52);
+    fillPixelRect(frame, lx - 1, ly, 3, H / 9, SDL_Color {36, 28, 22, 255});
+    fillPixelRect(frame, lx - sw / 2 - 1, ly - sw, sw + 2, sw + 2,
+                  SDL_Color {52, 40, 28, 255});
+    fillPixelRect(frame, lx - sw / 2, ly - sw + 1, sw, sw,
+                  SDL_Color {static_cast<Uint8>(250 * flick),
+                             static_cast<Uint8>(198 * flick),
+                             static_cast<Uint8>(108 * flick), 255});
+    fillPixelRect(frame, lx - sw / 2 - 2, ly - sw - 1, sw + 4, 2, kGold);
+    fillPixelRect(frame, lx - 2, ly - sw - 4, 5, 3, SDL_Color {40, 32, 24, 255});
+
+    const int gr = std::max(10, W / 9);
+    const int sy0 = std::max(0, ly - gr);
+    const int sy1 = std::min(H, ly + gr);
+    deckboy::effects::detail::parallelRows(std::max(0, sy1 - sy0), gr * 2 * 4, [&](int r0, int r1) {
+    for (int y = sy0 + r0; y < sy0 + r1; ++y) {
+      for (int x = std::max(0, lx - gr); x < std::min(W, lx + gr); ++x) {
+        const double ddx = static_cast<double>(x - lx) / gr;
+        const double ddy = static_cast<double>(y - ly) / gr;
+        const double dd = ddx * ddx + ddy * ddy;
+        if (dd >= 1.0 || insideOpening(x, y)) {
+          continue;
+        }
+        const double g = (1.0 - dd) * (1.0 - dd) * 0.5 * flick;
+        const std::size_t i2 = static_cast<std::size_t>(y) * stride +
+                               static_cast<std::size_t>(x) * 4;
+        if (i2 + 2 >= frame.pixels.size()) {
+          continue;
+        }
+        writePixel(frame, x, y, SDL_Color {
+          static_cast<Uint8>(std::min(255.0, frame.pixels[i2 + 0] + 120.0 * g)),
+          static_cast<Uint8>(std::min(255.0, frame.pixels[i2 + 1] +  76.0 * g)),
+          static_cast<Uint8>(std::min(255.0, frame.pixels[i2 + 2] +  34.0 * g)),
+          255});
+      }
+    }
+    });
+  }
+
+  // Hearth slab, then a vignette so the corners fall away into the room.
+  fillPixelRect(frame, mantelX, openY + openH, mantelW, std::max(3, H / 40), kStoneD);
+  fillPixelRect(frame, mantelX, openY + openH, mantelW, 1, kStoneM);
+  deckboy::effects::detail::parallelRows(H, W * 4, [&](int r0, int r1) {
+  for (int y = r0; y < r1; ++y) {
+    for (int x = 0; x < W; ++x) {
+      const double ddx = (x - W * 0.5) / (W * 0.5);
+      const double ddy = (y - H * 0.5) / (H * 0.5);
+      const double dd = ddx * ddx + ddy * ddy;
+      if (dd <= 0.55) {
+        continue;
+      }
+      const double v = std::min(1.0, dd - 0.55) * 0.55;
+      const std::size_t i3 = static_cast<std::size_t>(y) * stride +
+                             static_cast<std::size_t>(x) * 4;
+      if (i3 + 2 >= frame.pixels.size()) {
+        continue;
+      }
+      writePixel(frame, x, y, SDL_Color {
+        static_cast<Uint8>(frame.pixels[i3 + 0] * (1.0 - v)),
+        static_cast<Uint8>(frame.pixels[i3 + 1] * (1.0 - v)),
+        static_cast<Uint8>(frame.pixels[i3 + 2] * (1.0 - v)),
+        255});
+    }
+  }
+  });
+}
+
+void MediaEngine::buildTestClock(DecodedFrame& frame, double t) {
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0) {
+    return;
+  }
+  t = std::max(0.0, t);
+  auto rect = [&](int x, int y, int w, int h, SDL_Color c) {
+    fillPixelRect(frame, x, y, w, h, c);
+  };
+  auto hueToRgb = [](double h) {
+    h = h - std::floor(h);
+    double r = std::clamp(std::abs(std::fmod(h * 6.0 + 0.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    double g = std::clamp(std::abs(std::fmod(h * 6.0 + 4.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    double b = std::clamp(std::abs(std::fmod(h * 6.0 + 2.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return SDL_Color {static_cast<Uint8>(r * 255), static_cast<Uint8>(g * 255),
+                      static_cast<Uint8>(b * 255), 255};
+  };
+
+  // ── 1. Saturated bars ──
+  static const SDL_Color kBars[8] = {
+    {0, 0, 0, 255},     {255, 0, 0, 255},   {255, 0, 255, 255}, {0, 0, 255, 255},
+    {255, 255, 0, 255}, {0, 255, 0, 255},   {0, 255, 255, 255}, {255, 255, 255, 255},
+  };
+  for (int i = 0; i < 8; ++i) {
+    int x0 = W * i / 8;
+    int x1 = W * (i + 1) / 8;
+    rect(x0, 0, x1 - x0, H, kBars[i]);
+  }
+
+  // ── 2. Aspect-truth circle ──
+  // Drawn from the true pixel radius, not a fraction of each axis, so a
+  // stretched raster shows an ellipse. Column-wise so it costs one rect per x.
+  {
+    double cxF = W * 0.5;
+    double cyF = H * 0.5;
+    double radius = H * 0.46;
+    int thickness = std::max(2, H / 150);
+    SDL_Color ring {255, 255, 255, 255};
+    SDL_Color shadow {0, 0, 0, 255};
+    int x0 = std::max(0, static_cast<int>(cxF - radius) - thickness);
+    int x1 = std::min(W - 1, static_cast<int>(cxF + radius) + thickness);
+    for (int x = x0; x <= x1; ++x) {
+      double dx = x + 0.5 - cxF;
+      double inside = radius * radius - dx * dx;
+      if (inside < 0.0) {
+        continue;
+      }
+      int dy = static_cast<int>(std::lround(std::sqrt(inside)));
+      // A thin dark rim under the white keeps the ring legible where it
+      // crosses the white bar.
+      rect(x, static_cast<int>(cyF) - dy - thickness, 1, thickness, shadow);
+      rect(x, static_cast<int>(cyF) - dy, 1, thickness, ring);
+      rect(x, static_cast<int>(cyF) + dy - thickness, 1, thickness, ring);
+      rect(x, static_cast<int>(cyF) + dy, 1, thickness, shadow);
+    }
+  }
+
+  // ── 3. Scrolling hue band ──
+  {
+    int bandH = std::max(4, H * 11 / 100);
+    int bandY = (H - bandH) / 2;
+    double scroll = t * 0.25;   // one full wrap every 4s
+    for (int x = 0; x < W; ++x) {
+      double frac = static_cast<double>(x) / std::max(1, W - 1);
+      rect(x, bandY, 1, bandH, hueToRgb(frac + scroll));
+    }
+  }
+
+  // ── 4. The sync read: huge seconds + frame counter ──
+  {
+    auto glyphRows = [](char c) -> const std::uint8_t* {
+      static const std::uint8_t digits[10][5] = {
+        {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,3,1,7}, {5,5,7,1,1},
+        {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,2,2}, {7,5,7,5,7}, {7,5,7,1,7},
+      };
+      static const std::uint8_t colon[5] = {0,2,0,2,0};
+      static const std::uint8_t dot[5]   = {0,0,0,0,2};
+      static const std::uint8_t letterF[5] = {7,4,6,4,4};
+      static const std::uint8_t letterT[5] = {7,2,2,2,2};
+      static const std::uint8_t blank[5] = {0,0,0,0,0};
+      if (c >= '0' && c <= '9') return digits[c - '0'];
+      if (c == ':') return colon;
+      if (c == '.') return dot;
+      if (c == 'F') return letterF;
+      if (c == 'T') return letterT;
+      return blank;
+    };
+    auto drawGlyphs = [&](int x, int y, const std::string& s, int scale, SDL_Color color) {
+      int cx = x;
+      for (char c : s) {
+        const std::uint8_t* rows = glyphRows(c);
+        for (int ry = 0; ry < 5; ++ry) {
+          for (int rx = 0; rx < 3; ++rx) {
+            if (rows[ry] & (4 >> rx)) {
+              rect(cx + rx * scale, y + ry * scale, scale, scale, color);
+            }
+          }
+        }
+        cx += 4 * scale;
+      }
+    };
+
+    int totalSeconds = static_cast<int>(t);
+    long long frameNo = static_cast<long long>(t * 30.0);   // nominal 30 fps counter
+
+    // Big block: seconds (2 digits) over the frame counter (3 digits), on a
+    // black plate so it stays readable over every bar colour.
+    char bigSeconds[8];
+    std::snprintf(bigSeconds, sizeof(bigSeconds), "%02d", totalSeconds % 100);
+    char bigFrames[8];
+    std::snprintf(bigFrames, sizeof(bigFrames), "%03lld", frameNo % 1000);
+    int bigScale = std::max(2, H / 26);
+    int smallScale = std::max(1, bigScale / 2);
+    int bigW = 2 * 4 * bigScale - bigScale;
+    int smallW = 3 * 4 * smallScale - smallScale;
+    int plateW = std::max(bigW, smallW) + bigScale * 2;
+    int plateH = (5 * bigScale) + bigScale + (5 * smallScale) + bigScale * 2;
+    int plateX = std::clamp(static_cast<int>(W * 0.5 + H * 0.46) - plateW - bigScale,
+                            0, std::max(0, W - plateW));
+    int plateY = std::clamp((H - plateH) / 2, 0, std::max(0, H - plateH));
+    rect(plateX, plateY, plateW, plateH, {0, 0, 0, 255});
+    drawGlyphs(plateX + (plateW - bigW) / 2, plateY + bigScale, bigSeconds, bigScale,
+               {255, 255, 255, 255});
+    drawGlyphs(plateX + (plateW - smallW) / 2, plateY + bigScale + 5 * bigScale + bigScale,
+               bigFrames, smallScale, {255, 214, 92, 255});
+
+    // Corner readout: exact timecode + absolute frame, for frame-accurate
+    // comparison between two captures.
+    int millis = static_cast<int>(t * 1000.0) % 1000;
+    char clockLine[32];
+    std::snprintf(clockLine, sizeof(clockLine), "T %02d:%02d:%02d.%03d",
+                  (totalSeconds / 3600) % 100, (totalSeconds / 60) % 60,
+                  totalSeconds % 60, millis);
+    char frameLine[24];
+    std::snprintf(frameLine, sizeof(frameLine), "F %06lld", frameNo);
+    int scale = std::max(1, H / 240);
+    int pad = 3 * scale;
+    int boxW = 14 * 4 * scale + pad * 2;
+    int boxH = (5 + 2 + 5) * scale + pad * 2;
+    rect(8, 8, boxW, boxH, {12, 12, 12, 255});
+    drawGlyphs(8 + pad, 8 + pad, clockLine, scale, {255, 214, 92, 255});
+    drawGlyphs(8 + pad, 8 + pad + 7 * scale, frameLine, scale, {255, 214, 92, 255});
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// The doodles behind "Frame Count (emoji)".
+//
+// Drawn rather than typed. A pattern is built as raw pixels with no font in
+// reach, and a system emoji font would put a different picture on each of the
+// three platforms -- which is the one thing a card used to compare two screens
+// must never do. Eight 8x8 sprites, a shape mask and a detail mask each, so
+// every machine scatters exactly the same doodles.
+// ---------------------------------------------------------------------------
+struct FrameCountDoodle {
+  std::uint8_t shape[8];
+  std::uint8_t detail[8];
+  SDL_Color fill;
+};
+
+static const FrameCountDoodle kFrameCountDoodles[] = {
+  // smiley
+  {{0x3C,0x7E,0xFF,0xFF,0xFF,0xFF,0x7E,0x3C},
+   {0x00,0x00,0x42,0x00,0x00,0x81,0x7E,0x00}, {255, 214,  92, 255}},
+  // heart
+  {{0x66,0xFF,0xFF,0xFF,0x7E,0x3C,0x18,0x00},
+   {0x00,0x18,0x00,0x00,0x00,0x00,0x00,0x00}, {244,  87, 108, 255}},
+  // star
+  {{0x18,0x18,0xFF,0x7E,0x3C,0x66,0x42,0x00},
+   {0x00,0x00,0x18,0x18,0x00,0x00,0x00,0x00}, {255, 238, 130, 255}},
+  // ghost
+  {{0x3C,0x7E,0xFF,0xFF,0xFF,0xFF,0xFF,0xAB},
+   {0x00,0x00,0x42,0x42,0x00,0x00,0x00,0x00}, {238, 244, 255, 255}},
+  // cat
+  {{0xC3,0xE7,0xFF,0xFF,0xFF,0x7E,0x3C,0x00},
+   {0x00,0x00,0x42,0x00,0x18,0x00,0x00,0x00}, {255, 168,  76, 255}},
+  // flower
+  {{0x3C,0x7E,0xFF,0xE7,0xE7,0xFF,0x7E,0x3C},
+   {0x00,0x00,0x00,0x18,0x18,0x00,0x00,0x00}, {236, 130, 214, 255}},
+  // lightning
+  {{0x0E,0x1C,0x38,0x7E,0x1C,0x38,0x70,0xE0},
+   {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, {255, 226,  74, 255}},
+  // skull
+  {{0x3C,0x7E,0xFF,0xFF,0xFF,0x7E,0x56,0x00},
+   {0x00,0x00,0x42,0x42,0x00,0x00,0x00,0x00}, {236, 240, 236, 255}},
+};
+
+// ---------------------------------------------------------------------------
+// buildFrameCount — "Frame Count", a drop/duplicate and latency card.
+//
+// test-clock answers "are these two feeds in sync"; this answers a blunter
+// question: "did every frame arrive, and how far behind is the far end". The
+// whole field changes colour on every tick, so a repeated or missing frame is
+// visible from across a room and survives a phone photo of two screens -- point
+// a camera at the source and the output and the two numbers ARE the latency.
+//
+// Deliberately legible rather than pretty: one enormous number, one colour, and
+// a small exact readout for when a still is being measured properly.
+// ---------------------------------------------------------------------------
+void MediaEngine::buildFrameCount(DecodedFrame& frame, double t,
+                                  bool emojiBackdrop) {
+  const int W = frame.width;
+  const int H = frame.height;
+  if (W <= 0 || H <= 0) {
+    return;
+  }
+  t = std::max(0.0, t);
+
+  auto rect = [&](int x, int y, int w, int h, SDL_Color c) {
+    fillPixelRect(frame, x, y, w, h, c);
+  };
+
+  // Ten ticks a second: fast enough that a dropped frame shows, slow enough
+  // that the number stays readable on a moving camera.
+  const long long tick = static_cast<long long>(t * 10.0);
+
+  // A big hue step per tick rather than a slow sweep -- consecutive ticks have
+  // to be told apart at a glance, so neighbouring values must not be
+  // neighbouring colours.
+  auto hueToRgb = [](double h) {
+    h = h - std::floor(h);
+    double r = std::clamp(std::abs(std::fmod(h * 6.0 + 0.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    double g = std::clamp(std::abs(std::fmod(h * 6.0 + 4.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    double b = std::clamp(std::abs(std::fmod(h * 6.0 + 2.0, 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    // Held off full saturation so the black number stays readable on every
+    // step, including the ones that would otherwise come out near-black.
+    auto mix = [](double v) {
+      return static_cast<Uint8>(std::lround((0.30 + 0.62 * v) * 255.0));
+    };
+    return SDL_Color {mix(r), mix(g), mix(b), 255};
+  };
+
+  const SDL_Color field = hueToRgb(static_cast<double>(tick % 17) / 17.0);
+  rect(0, 0, W, H, field);
+
+  // The doodle backdrop, when this is the emoji variant. Scattered from a hash
+  // of the tick, so every number gets its own arrangement and the same number
+  // always gets the SAME arrangement -- a card used to compare two screens has
+  // to be reproducible, or it is decoration.
+  if (emojiBackdrop) {
+    const int cellPx = std::max(2, H / 90);          // one sprite pixel
+    const int spriteW = cellPx * 8;
+    const int count = std::max(8, (W * H) / (spriteW * spriteW * 9));
+    for (int i = 0; i < count; ++i) {
+      // A cheap deterministic hash. Mixing the index INTO the tick rather than
+      // seeding once keeps neighbouring frames from sharing a layout.
+      std::uint64_t hash = static_cast<std::uint64_t>(tick) * 0x9E3779B97F4A7C15ull
+                         + static_cast<std::uint64_t>(i) * 0xBF58476D1CE4E5B9ull;
+      hash ^= hash >> 31;
+      hash *= 0x94D049BB133111EBull;
+      hash ^= hash >> 29;
+      const int px = static_cast<int>(hash % static_cast<std::uint64_t>(
+                       std::max(1, W - spriteW)));
+      const int py = static_cast<int>((hash >> 20) % static_cast<std::uint64_t>(
+                       std::max(1, H - spriteW)));
+      const FrameCountDoodle& doodle =
+        kFrameCountDoodles[(hash >> 40) % (sizeof(kFrameCountDoodles) /
+                                           sizeof(kFrameCountDoodles[0]))];
+      for (int ry = 0; ry < 8; ++ry) {
+        for (int rx = 0; rx < 8; ++rx) {
+          const std::uint8_t bit = static_cast<std::uint8_t>(0x80 >> rx);
+          if (doodle.detail[ry] & bit) {
+            rect(px + rx * cellPx, py + ry * cellPx, cellPx, cellPx,
+                 SDL_Color {24, 20, 28, 255});
+          } else if (doodle.shape[ry] & bit) {
+            rect(px + rx * cellPx, py + ry * cellPx, cellPx, cellPx, doodle.fill);
+          }
+        }
+      }
+    }
+  }
+
+
+  // 3x5 glyphs, scaled -- the same shapes the sync card uses, so the two
+  // patterns read as a matched pair.
+  auto glyphRows = [](char c) -> const std::uint8_t* {
+    static const std::uint8_t digits[10][5] = {
+      {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,3,1,7}, {5,5,7,1,1},
+      {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,2,2}, {7,5,7,5,7}, {7,5,7,1,7},
+    };
+    static const std::uint8_t colon[5]   = {0,2,0,2,0};
+    static const std::uint8_t dot[5]     = {0,0,0,0,2};
+    static const std::uint8_t letterF[5] = {7,4,6,4,4};
+    static const std::uint8_t letterT[5] = {7,2,2,2,2};
+    static const std::uint8_t blank[5]   = {0,0,0,0,0};
+    if (c >= '0' && c <= '9') return digits[c - '0'];
+    if (c == ':') return colon;
+    if (c == '.') return dot;
+    if (c == 'F') return letterF;
+    if (c == 'T') return letterT;
+    return blank;
+  };
+  auto glyphWidth = [](std::size_t chars, int scale) {
+    return static_cast<int>(chars) * 4 * scale - scale;
+  };
+  auto drawGlyphs = [&](int x, int y, const std::string& s, int scale, SDL_Color color) {
+    int cx = x;
+    for (char c : s) {
+      const std::uint8_t* rows = glyphRows(c);
+      for (int ry = 0; ry < 5; ++ry) {
+        for (int rx = 0; rx < 3; ++rx) {
+          if (rows[ry] & (4 >> rx)) {
+            rect(cx + rx * scale, y + ry * scale, scale, scale, color);
+          }
+        }
+      }
+      cx += 4 * scale;
+    }
+  };
+
+  // The count, as large as the raster allows.
+  char big[16];
+  std::snprintf(big, sizeof(big), "%04lld", tick % 10000);
+  const std::string bigText(big);
+  int bigScale = std::max(2, std::min(H / 9, W / (4 * static_cast<int>(bigText.size()))));
+  int bigW = glyphWidth(bigText.size(), bigScale);
+  int bigH = 5 * bigScale;
+  drawGlyphs((W - bigW) / 2, (H - bigH) / 2 - bigScale, bigText, bigScale,
+             {16, 16, 16, 255});
+
+  // Exact timecode and absolute count underneath, on a plate, for when the
+  // measurement is being taken off a still rather than by eye.
+  int totalSeconds = static_cast<int>(t);
+  int millis = static_cast<int>(t * 1000.0) % 1000;
+  char line[40];
+  std::snprintf(line, sizeof(line), "T %02d:%02d:%02d.%03d F %06lld",
+                (totalSeconds / 3600) % 100, (totalSeconds / 60) % 60,
+                totalSeconds % 60, millis, tick);
+  const std::string readout(line);
+  int smallScale = std::max(1, H / 240);
+  int smallW = glyphWidth(readout.size(), smallScale);
+  int pad = 3 * smallScale;
+  int plateX = std::clamp((W - smallW) / 2 - pad, 0, std::max(0, W - smallW - pad * 2));
+  int plateY = std::clamp((H + bigH) / 2 + bigScale, 0,
+                          std::max(0, H - 5 * smallScale - pad * 2));
+  rect(plateX, plateY, smallW + pad * 2, 5 * smallScale + pad * 2, {0, 0, 0, 255});
+  drawGlyphs(plateX + pad, plateY + pad, readout, smallScale, {255, 255, 255, 255});
+
+  // A corner tally block that moves one step per tick: a second, purely
+  // positional read of the same number for when the picture is too small or
+  // too far away for the digits.
+  int cell = std::max(3, H / 40);
+  int cells = std::max(4, W / cell);
+  int marchX = static_cast<int>(tick % cells) * cell;
+  rect(marchX, H - cell, cell, cell, {16, 16, 16, 255});
+}
+
+// ---------------------------------------------------------------------------
+// buildPatternFrame — Static factory: generate a procedural test pattern frame.
+//
+// This is the main dispatch function for all pattern types. It:
+//   1. Determines frame dimensions (from cue, or fallback to output size)
+//   2. Normalizes the pattern type ID (handles aliases, -motion suffix)
+//   3. Dispatches to the appropriate builder (SMPTE bars, crosshatch, etc.)
+//   4. For -motion variants, applies animation overlays (scan lines, scrolling)
+//   5. For solid color patterns (-motion), applies a pulsing brightness effect
+//
+// Returns nullopt only if something goes wrong (shouldn't happen in practice).
+// The animTime parameter drives all animation — 0.0 gives the static initial state.
+// ---------------------------------------------------------------------------
+// Fill a CALLER-OWNED frame. This exists so the per-frame path can reuse one
+// buffer forever instead of allocating a new full-raster one every rebuild.
+//
+// That allocation was a genuine bug, not a micro-optimisation: at 3840x2160 a
+// pattern frame is 33 MB, and rebuildPatternFrame runs once per output frame,
+// so an animated pattern churned ~2 GB/s. Committed memory ballooned to 40+ GB
+// (oscillating, not leaking — the allocator simply could not recycle pages that
+// fast), the system commit limit was exhausted, available RAM hit zero, and the
+// WHOLE MACHINE started paging. It presented as "Deckboy is laggy" and as
+// "my computer is slow", and it made every performance measurement meaningless.
+//
+// vector::assign on a vector that is already the right size reuses its capacity,
+// so once the raster settles this allocates nothing at all.
+void MediaEngine::buildPatternFrameInto(DecodedFrame& frame, const Cue& cue, double animTime,
+                                        int fallbackWidth, int fallbackHeight) {
+  const std::string patternType = normalizePatternTypeId(cue.path);
+  const std::string basePatternType = stripPatternMotionSuffix(patternType);
+  const deckboy::code::CompiledSource* codeProgram = nullptr;
+  if (basePatternType == "code") {
+    static thread_local std::map<std::string, deckboy::code::CompiledSource> cache;
+    auto found = cache.find(cue.codeExpression);
+    if (found == cache.end()) {
+      if (cache.size() > 8) cache.clear();
+      found = cache.emplace(cue.codeExpression,
+                            deckboy::code::compile(cue.codeExpression)).first;
+    }
+    // Validate before touching the previous successful frame.
+    if (!found->second.ok()) return;
+    codeProgram = &found->second;
+  }
+  // Diagnostic patterns remain pixel-mapped. Code sources honour their own
+  // raster so a 1080p source does not evaluate four times the pixels at 4K.
+  int sourceW = codeProgram && cue.width > 0 ? cue.width :
+                (fallbackWidth > 0 ? fallbackWidth : cue.width);
+  int sourceH = codeProgram && cue.height > 0 ? cue.height :
+                (fallbackHeight > 0 ? fallbackHeight : cue.height);
+  // THE SWIRL IS BLOCKS, so it is drawn at half the raster (or a quarter) on a
+  // big screen and the nearest-neighbour upscale puts every block back where
+  // it was: at most 960 cells across, a cell is 2+ pixels at 1080p. At 4K the
+  // full raster cost four times the pixels for the same picture -- and an
+  // effect on the cue (the example show's kaleidoscope) ran over all of them,
+  // 39 fps on a 60 Hz 4K screen. Halved only while it divides evenly.
+  if (basePatternType == "swirl" || basePatternType == "fireside") {
+    // Never below the frame's 320x180 floor on either side: the floor clamps
+    // each axis on its own, so 480x1920 halved to 240x960 came back 320x960
+    // and the picture changed shape (Codex audit #6).
+    while (sourceH > 1200 && sourceW % 2 == 0 && sourceH % 2 == 0 &&
+           sourceW / 2 >= 320 && sourceH / 2 >= 180) {
+      sourceW /= 2;
+      sourceH /= 2;
+    }
+  }
+
+  // ── Reset EVERY non-pixel field before reuse ──────────────────────────────
+  // The caller's frame may be the one that previously held a hardware-decoded
+  // VIDEO frame, because displayFrame_ persists across a cue change. Leaving
+  // that state behind is not cosmetic:
+  //   * gpuTexture non-null makes isGpu() true, so the compositor would render
+  //     a stale decoder surface instead of this pattern;
+  //   * gpuFrameRef would pin that decoder surface alive indefinitely;
+  //   * a leftover NV12 `format` would send RGBA bytes through
+  //     SDL_UpdateNVTexture.
+  // A freshly-constructed DecodedFrame got these defaults for free; a reused
+  // one must be given them explicitly.
+  frame.gpuFrameRef.reset();
+  frame.gpuTexture = nullptr;
+  frame.gpuSubresource = 0;
+  frame.gpuDevice = nullptr;
+  frame.format = FramePixelFormat::RGBA32;
+  frame.colorspace = SDL_COLORSPACE_SRGB;
+  frame.presentationSeconds = -1.0;
+  frame.index = 0;
+
+  // Size + clear. Every pattern is drawn over an opaque white ground, so this
+  // also guarantees no stale pixels survive from the previous frame when the
+  // buffer is reused.
+  frame.width  = codeProgram ? std::clamp(sourceW, 64, 3840) : std::max(320, sourceW);
+  frame.height = codeProgram ? std::clamp(sourceH, 64, 2160) : std::max(180, sourceH);
+  frame.index  = 0;
+  frame.pixels.assign(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4u, 255);
+
+  // A generator this build carries as a private extra draws the whole frame.
+  if (const auto* extra = deckboy::extras::findGenerator(basePatternType)) {
+    extra->render(frame.pixels.data(), frame.width, frame.height, animTime);
+    return;
+  }
+
+  // ── CODE SOURCE ─────────────────────────────────────────────────────────
+  //
+  // The expression is compiled ONCE and cached against its own text, so a
+  // frame costs only the evaluation. Recompiling per frame would be the
+  // dominant cost and typing would stutter the picture.
+  //
+  // A compile error holds the last good picture
+  // and the error is reported to the inspector. Someone editing live is
+  // mid-keystroke most of the time, and a source that blacks out on every
+  // half-typed function is unusable on a stage.
+  if (basePatternType == "code") {
+    const deckboy::code::CompiledSource& program = *codeProgram;
+    const int w = frame.width, h = frame.height;
+    const double t = animTime;
+    const bool usesR = program.usesR;
+    const bool usesA = program.usesA;
+    // Split the frame across cores, the way the effect stack does. Every pixel
+    // here is a pure function of x, y and t, so the rows are independent and
+    // this is the shape parallelRows is for -- code_source.hpp has said as
+    // much since it was written ("that viable already exists: the effect
+    // stack's parallelRows splits a frame"), but the loop was never handed to
+    // it and ran on one core. At 4K that is 8.3 million pixels evaluating a
+    // prelude and three channel programs each, single file.
+    //
+    // The scratch buffers move INSIDE the band. One shared stack and one
+    // shared named-value vector are correct for a single thread and a data
+    // race for several -- the rule the effect stack already documents.
+    deckboy::effects::detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+    std::vector<double> stack;
+    stack.reserve(32);
+    // Scratch for the source's own named values, one slot per name. Allocated
+    // once per band rather than per pixel, and rewritten by the prelude on
+    // each one.
+    std::vector<double> named(program.names.size(), 0.0);
+    for (int py = firstRow; py < lastRow; ++py) {
+      std::uint8_t* row = frame.pixels.data() + static_cast<std::size_t>(py) * w * 4;
+      const double y = (py + 0.5) / h;
+      const double cy = y * 2.0 - 1.0;
+      for (int px = 0; px < w; ++px) {
+        const double x = (px + 0.5) / w;
+        const double cx = x * 2.0 - 1.0;
+        // r and a are only paid for when the source reads them. An expression
+        // that never mentions them was still buying a sqrt and an atan2 per
+        // pixel; at 4K that is 8.3 million of each, for nothing.
+        const double vars[7] = {x, y, cx, cy,
+                                usesR ? std::sqrt(cx * cx + cy * cy) : 0.0,
+                                usesA ? std::atan2(cy, cx) : 0.0, t};
+        std::uint8_t* p = row + static_cast<std::size_t>(px) * 4;
+        // The named values first: computed once here and then read by whichever
+        // channels want them, instead of the old form's only option, which was
+        // to repeat the sub-expression in all three.
+        if (!program.prelude.empty()) {
+          deckboy::code::evaluate(program.prelude, vars, stack, &named);
+        }
+        for (int c = 0; c < 3; ++c) {
+          double v = deckboy::code::evaluate(program.channel[c], vars, stack,
+                                             &named);
+          // Clamped, and NaN forced to zero: an expression can produce
+          // anything and a NaN cast to a byte is undefined.
+          if (!(v == v)) v = 0.0;
+          v = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
+          p[c] = static_cast<std::uint8_t>(v * 255.0 + 0.5);
+        }
+        // THE FOURTH CHANNEL, which is what lets a source be a shape over a
+        // picture rather than a picture of its own. A source that wrote three
+        // expressions has no alpha program and stays opaque, exactly as it
+        // was before there was a fourth channel to write.
+        if (program.hasAlpha) {
+          double av = deckboy::code::evaluate(program.alpha, vars, stack, &named);
+          if (!(av == av)) av = 0.0;
+          av = av < 0.0 ? 0.0 : (av > 1.0 ? 1.0 : av);
+          p[3] = static_cast<std::uint8_t>(av * 255.0 + 0.5);
+        } else {
+          p[3] = 255;
+        }
+      }
+    }
+    });
+    return;
+  }
+  bool motion = endsWith(patternType, "-motion");
+
+  // ── Pattern dispatch ──
+  // Each branch builds the base pattern, then adds motion overlays if -motion is active.
+
+  // Motion policy (the owner, v0.78.7): ALL pattern motion is slow, smooth and
+  // DIAGONAL — a 45° drift reads as motion on any raster; axis-only scroll
+  // barely registers on a grid.
+  if (basePatternType == "smpte-bars") {
+    buildSmpte75Bars(frame);
+    if (motion) {
+      // Slow diagonal sweep line (12 s per pass) — the bars stay put as the
+      // color reference; the sweep is the motion/judder element.
+      int span = frame.width + frame.height;
+      int c = static_cast<int>(std::floor(normalizedLoopProgress(animTime, 12.0) * span));
+      for (int y = 0; y < frame.height; ++y) {
+        int x = (c - y) % span;
+        if (x < 0) x += span;
+        fillPixelRect(frame, x - 1, y, 3, 1, {255, 255, 255, 255});
+        fillPixelRect(frame, x + 2, y, 1, 1, {8, 8, 8, 255});
+      }
+    }
+  } else if (basePatternType == "crosshatch") {
+    // Diagonal drift: one grid cell every 8 s, X and Y in lockstep (45°).
+    int phase = motion ? phaseFromProgress(normalizedLoopProgress(animTime, 8.0), 64) : 0;
+    buildCrosshatch(frame, phase, phase);
+  } else if (basePatternType == "checkerboard" || basePatternType == "checker") {
+    // Diagonal drift: one checker period every 10 s, X and Y in lockstep.
+    int phase = motion ? phaseFromProgress(normalizedLoopProgress(animTime, 10.0), 128) : 0;
+    buildCheckerboard(frame, phase, phase);
+  // Solid color patterns are always static (no motion variant — a pulsing
+  // reference level is a contradiction).
+  } else if (basePatternType == "full-white") {
+    fillPixelRect(frame, 0, 0, frame.width, frame.height, {255, 255, 255, 255});
+  } else if (basePatternType == "full-black") {
+    fillPixelRect(frame, 0, 0, frame.width, frame.height, {0, 0, 0, 255});
+  } else if (basePatternType == "full-red") {
+    fillPixelRect(frame, 0, 0, frame.width, frame.height, {255, 0, 0, 255});
+  } else if (basePatternType == "full-green") {
+    fillPixelRect(frame, 0, 0, frame.width, frame.height, {0, 255, 0, 255});
+  } else if (basePatternType == "full-blue") {
+    fillPixelRect(frame, 0, 0, frame.width, frame.height, {0, 0, 255, 255});
+  // The engineering set. None of them animates: a reference that moves is not
+  // a reference, so there is no -motion variant and the flag is ignored.
+  } else if (basePatternType == "panel-map") {
+    // panel-map-motion is the animated map; the plain one holds still.
+    buildPanelMap(frame, cue.ledPanelWidth, cue.ledPanelHeight,
+                  patternType != basePatternType ? std::max(0.0, animTime) : -1.0);
+  } else if (basePatternType == "moire") {
+    buildMoire(frame);
+  } else if (basePatternType == "dark-detail") {
+    buildDarkDetail(frame);
+  } else if (basePatternType == "uniformity") {
+    buildUniformity(frame);
+  } else if (basePatternType == "ramps") {
+    buildBandingRamps(frame);
+  } else if (basePatternType == "safe-areas") {
+    buildSafeAreas(frame);
+  } else if (basePatternType == "boresight") {
+    buildBoresight(frame);
+  } else if (basePatternType == "pluge") {
+    buildPluge(frame);
+  } else if (basePatternType == "greyscale") {
+    buildGreyscaleSteps(frame);
+  } else if (basePatternType == "convergence") {
+    buildConvergence(frame);
+  } else if (basePatternType == "multiburst") {
+    buildMultiburst(frame);
+  } else if (basePatternType == "window-10") {
+    buildWindowPattern(frame, 10);
+  } else if (basePatternType == "window-50") {
+    buildWindowPattern(frame, 50);
+  } else if (basePatternType == "test-bars") {
+    // Broadcast motion diagnostics — always animated, no -motion variant.
+    buildTestBars(frame, animTime);
+  } else if (basePatternType == "frame-count-emoji") {
+    // Same card, doodles behind the number.
+    buildFrameCount(frame, animTime, true);
+  } else if (basePatternType == "frame-count") {
+    // Drop/duplicate + latency card -- always animated.
+    buildFrameCount(frame, animTime, false);
+  } else if (basePatternType == "swirl") {
+    // Always animated: the spiral turns and the bands melt.
+    buildSwirl(frame, animTime, cue.swirl);
+  } else if (basePatternType == "moire-field") {
+    // Always animated: the bands scroll and the field drifts.
+    buildMoireField(frame, animTime, cue.moire, cue.id);
+  } else if (basePatternType == "draw") {
+    // What was drawn (core/drawing.hpp), through a raster kept per cue so a
+    // stroke being drawn costs only the pixels near its newest point.
+    // `animTime` is how long the cue has played, for the flipbook and replay.
+    static thread_local std::map<std::string, deckboy::draw::Raster> rasters;
+    if (rasters.size() > 16 && rasters.find(cue.id) == rasters.end()) rasters.clear();
+    deckboy::draw::Raster& raster = rasters[cue.id];
+    const auto moment = deckboy::draw::momentAt(cue.drawing, animTime);
+    const auto& frames = cue.drawing.frames;
+    if (moment.frame >= 0 && moment.frame < static_cast<int>(frames.size())) {
+      raster.update(frames[static_cast<std::size_t>(moment.frame)], moment.strokes, moment.lastPoints,
+                    frame.width, frame.height, cue.drawing.revision, moment.frame);
+    }
+    frame.format = FramePixelFormat::RGBA32;
+    if (raster.width() == frame.width && raster.height() == frame.height) {
+      frame.pixels = raster.pixels();
+    } else {
+      frame.pixels.assign(static_cast<std::size_t>(frame.width) * static_cast<std::size_t>(frame.height) * 4u, 0);
+    }
+  } else if (basePatternType == "portal") {
+    // Always animated: the blobs are born, drift, melt and fade.
+    buildPortal(frame, animTime, cue.portal);
+  } else if (basePatternType == "fireside") {
+    // Always animated: a still fire is a photograph of a fire.
+    buildFireside(frame, animTime, cue.firesideIntensity, cue.firesideSparks,
+                  cue.firesideView);
+  } else if (basePatternType == "critters") {
+    // Always animated: critters bloom from a pixel, at whole scales only.
+    frame.format = FramePixelFormat::RGBA32;
+    frame.pixels.resize(static_cast<std::size_t>(frame.width) * static_cast<std::size_t>(frame.height) * 4u);
+    deckboy::core::crittercard::draw(frame.pixels.data(), frame.width, frame.height, animTime);
+  } else if (basePatternType == "test-clock") {
+    // Sync/latency card — always animated, no -motion variant.
+    buildTestClock(frame, animTime);
+  } else if (basePatternType == "terrarium") {
+    // Native Terrarium — the living ecosystem, ticking at its own 9 TPS.
+    //
+    // The world is a fixed 200x112 CELL grid, so the raster can only be a whole
+    // number of pixels per cell. Derive that from the requested width instead
+    // of hardcoding 8: this pattern used to ignore the size it was asked for
+    // entirely (--pattern-dump terrarium out.ppm 320x180 produced 1600x896,
+    // while every other pattern honoured the argument), and on a 4K output it
+    // was upscaling a 1600px image rather than rendering closer to native.
+    // Still quantised to whole cells — 200x112 is the grid, not a suggestion.
+    const int terraCellPx = std::clamp(frame.width / terra::W, 1, 24);
+    buildTerrariumFrame(frame, animTime, terraCellPx);
+  } else if (basePatternType == "terrarium-pico") {
+    // The same world, one pixel per cell — exactly the picture on the Pi's LED
+    // panel. Deliberately tiny (200x112); Deckboy's textures are nearest-
+    // filtered, so it scales up to the output as crisp hard-edged pixels.
+    buildTerrariumFrame(frame, animTime, 1);
+  // Pocket scene variants: force a specific scene index (0=day, 1=sunset, 2=night, 3=storm)
+  } else if (basePatternType == "pocket-day") {
+    buildPocketTest(frame, animTime, 0);
+  } else if (basePatternType == "pocket-sunset") {
+    buildPocketTest(frame, animTime, 1);
+  } else if (basePatternType == "pocket-night") {
+    buildPocketTest(frame, animTime, 2);
+  } else if (basePatternType == "pocket-storm") {
+    buildPocketTest(frame, animTime, 3);
+  } else {
+    // Default / "pocket-test": the test card — scene cycle with crossfade
+    // plus the diegetic instrumentation overlay.
+    buildPocketTestCard(frame, animTime);
+  }
+}
+
+// One-shot convenience wrapper. Used by --pattern-dump, --pattern-bench, the
+// smoke suite and loadPatternFrame — places that build a single frame and do
+// not care about reuse. The per-frame path must use buildPatternFrameInto.
+std::optional<DecodedFrame> MediaEngine::buildPatternFrame(const Cue& cue, double animTime,
+                                                           int fallbackWidth, int fallbackHeight) {
+  DecodedFrame frame;
+  buildPatternFrameInto(frame, cue, animTime, fallbackWidth, fallbackHeight);
+  if (frame.pixels.empty()) {
+    return std::nullopt;
+  }
+  return frame;
+}
+
+// ── MIC CUE ──────────────────────────────────────────────────────────────────
+//
+// The input is opened as a RECORDING stream at the engine's rate, stereo (SDL
+// duplicates a mono device into both), and read on its own thread every two
+// milliseconds. Each block takes the cue's channel choice, is metered, and
+// then goes through applyGainAndQueueAudio -- the same gain, fade, effect,
+// limiter, delay, tap and routing path a decoded file takes -- so a mic cue
+// cannot behave differently from every other audio cue in any of those ways.
+//
+// LATENCY. Nothing is held on purpose: a block is queued the moment it is
+// read. The two clocks (the input's and the output's) drift apart by tens of
+// parts per million, so the queue would creep; whatever is queued beyond two
+// capture blocks is dropped, which keeps the delay at the two device buffers
+// plus a block. An empty queue simply plays the next block as it arrives.
+
+void MediaEngine::setMicDefaultDevice(const std::string& name) {
+  std::lock_guard<std::mutex> lock(micInfoMutex_);
+  micDefaultDevice_ = name;
+}
+
+std::string MediaEngine::micDeviceInUse() const {
+  std::lock_guard<std::mutex> lock(micInfoMutex_);
+  return micDeviceInUse_;
+}
+
+std::string MediaEngine::micError() const {
+  std::lock_guard<std::mutex> lock(micInfoMutex_);
+  return micError_;
+}
+
+void MediaEngine::pumpMic() {
+  if (!activeCue_ || activeCue_->kind != CueKind::Mic) {
+    micLive_.store(false, std::memory_order_relaxed);
+    return;
+  }
+  micLive_.store(state_ == TransportState::Playing, std::memory_order_relaxed);
+}
+
+void MediaEngine::releaseMic(double seconds) {
+  micReleaseDone_.store(false, std::memory_order_relaxed);
+  micReleaseSeconds_.store(std::clamp(seconds, 0.01, 30.0), std::memory_order_relaxed);
+}
+
+void MediaEngine::startMicCapture(const Cue& cue) {
+  stopMicCapture();
+  std::string wanted = cue.path.rfind("mic://", 0) == 0 ? cue.path.substr(6) : std::string();
+  {
+    std::lock_guard<std::mutex> lock(micInfoMutex_);
+    if (wanted.empty()) wanted = micDefaultDevice_;
+    micError_.clear();
+    micDeviceInUse_.clear();
+  }
+  micPeak_.store(0.0f, std::memory_order_relaxed);
+  micLatencyMs_.store(0, std::memory_order_relaxed);
+  micDriftPpm_.store(0, std::memory_order_relaxed);
+  micUnderruns_.store(0, std::memory_order_relaxed);
+  micDropped_.store(0, std::memory_order_relaxed);
+  micReleaseSeconds_.store(0.0, std::memory_order_relaxed);
+  micReleaseDone_.store(false, std::memory_order_relaxed);
+  micChannel_.store(static_cast<int>(cue.micChannel), std::memory_order_relaxed);
+  const bool testSignal = wanted == kMicTestSignal;
+  if (!testSignal) {
+    // A NAMED DEVICE THAT IS ABSENT IS REPORTED, never swapped for another:
+    // a mic cue that quietly opened the laptop's built-in mic instead of the
+    // lectern would be live in the room with the wrong sound.
+    SDL_AudioDeviceID target = SDL_AUDIO_DEVICE_DEFAULT_RECORDING;
+    if (!wanted.empty()) {
+      target = 0;
+      int count = 0;
+      if (SDL_AudioDeviceID* ids = SDL_GetAudioRecordingDevices(&count)) {
+        for (int i = 0; i < count && !target; ++i) {
+          const char* name = SDL_GetAudioDeviceName(ids[i]);
+          if (name && wanted == name) target = ids[i];
+        }
+        SDL_free(ids);
+      }
+      if (!target) {
+        std::lock_guard<std::mutex> lock(micInfoMutex_);
+        micError_ = "input not found: " + wanted;
+        return;
+      }
+    }
+    SDL_AudioSpec spec {};
+    spec.format = SDL_AUDIO_S16;
+    spec.channels = 2;
+    spec.freq = audioRate_;
+    micStream_ = SDL_OpenAudioDeviceStream(target, &spec, nullptr, nullptr);
+    if (!micStream_) {
+      std::lock_guard<std::mutex> lock(micInfoMutex_);
+      micError_ = std::string("input would not open: ") + SDL_GetError();
+      return;
+    }
+    // A recording stream opens PAUSED like any other.
+    SDL_ResumeAudioStreamDevice(micStream_);
+    std::lock_guard<std::mutex> lock(micInfoMutex_);
+    micDeviceInUse_ = wanted.empty() ? std::string("system default") : wanted;
+  } else {
+    std::lock_guard<std::mutex> lock(micInfoMutex_);
+    micDeviceInUse_ = "test signal";
+  }
+  micRun_.store(true, std::memory_order_relaxed);
+  micThread_ = std::thread([this, wanted, testSignal]() { micThreadMain(wanted, testSignal); });
+}
+
+void MediaEngine::stopMicCapture() {
+  micRun_.store(false, std::memory_order_relaxed);
+  if (micThread_.joinable()) micThread_.join();
+  if (micStream_) {
+    SDL_DestroyAudioStream(micStream_);
+    micStream_ = nullptr;
+  }
+  micPeak_.store(0.0f, std::memory_order_relaxed);
+  micLatencyMs_.store(0, std::memory_order_relaxed);
+  micReleaseSeconds_.store(0.0, std::memory_order_relaxed);
+}
+
+void MediaEngine::micThreadMain(std::string device, bool testSignal) {
+  const int rate = audioRate_;
+  std::vector<std::int16_t> block;
+  double audioTime = 0.0;
+  double releaseGain = 1.0;
+  double phaseL = 0.0, phaseR = 0.0;
+  auto generatedAt = std::chrono::steady_clock::now();
+  int captureFrames = 0;   // the input's own block, once seen
+  if (micStream_) {
+    SDL_AudioSpec spec {};
+    int frames = 0;
+    if (SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(micStream_), &spec, &frames) && spec.freq > 0)
+      captureFrames = static_cast<int>(static_cast<long long>(frames) * rate / spec.freq);
+  }
+  float peakHold = 0.0f;
+  // The test signal can be given a clock that runs fast or slow, in parts per
+  // million, so the drift correction below can be measured from a known error
+  // (tools/check_mic_cue.py). A real input's error is usually under 200.
+  double testClock = 1.0;
+  if (const char* ppm = std::getenv("DECKBOY_MIC_TEST_PPM"); ppm && testSignal)
+    testClock = 1.0 + std::clamp(std::atof(ppm), -5000.0, 5000.0) / 1e6;
+
+  // DRIFT. The input and the output each run on their own crystal, and no two
+  // agree: one is always a little fast, so the queue between them slowly
+  // fills or slowly empties. This used to let a whole block go when it got
+  // long (and did nothing when it ran dry), which is a click every few
+  // seconds -- unnoticed on speech, plain on music. Now the input is
+  // resampled by a hair to the output's clock, steered from the time-averaged
+  // queue so the delay holds at about two input blocks: the pitch moves by
+  // tens of parts per million, far below anything heard.
+  std::vector<float> rsIn {0.0f, 0.0f};    // input frames awaiting resampling, one of history first
+  double rsPos = 1.0;                      // read position in rsIn, in frames
+  std::vector<std::int16_t> rsOut;
+  double driftStep = 0.0;                  // input frames per output frame, minus one
+  double driftInteg = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(micInfoMutex_);
+    if (micDriftDevice_ == device) driftInteg = driftStep = micDriftLearned_;
+  }
+  int outputFrames = 0;                    // the output's own block, once seen
+  double queueAvg = -1.0;                  // below zero: not yet primed
+  bool starved = false;
+  auto lastSteer = std::chrono::steady_clock::now();
+  while (micRun_.load(std::memory_order_relaxed)) {
+    const int channels = std::max(2, audioDeviceChannels_.load(std::memory_order_relaxed));
+    const int bytesPerFrame = channels * static_cast<int>(sizeof(std::int16_t));
+    // The delay held: one block of each side, which the queue swings through
+    // as they arrive and leave, and 5 ms for the thread being late.
+    const int targetFrames = std::max(2 * rate / 100, captureFrames + outputFrames + rate / 200);
+    {
+      // Steer on every pass, from the queue averaged over about a second, so
+      // the steps of the input's and the output's blocks average out.
+      const auto now = std::chrono::steady_clock::now();
+      const double dt = std::clamp(std::chrono::duration<double>(now - lastSteer).count(), 0.0, 0.05);
+      lastSteer = now;
+      if (!micLive_.load(std::memory_order_relaxed)) {
+        queueAvg = -1.0;
+        starved = false;
+      } else if (queueAvg >= 0.0) {
+        const int queued = queuedAudioBytes() / bytesPerFrame;
+        if (queued == 0 && !starved) micUnderruns_.fetch_add(1, std::memory_order_relaxed);
+        starved = queued == 0;
+        queueAvg += (queued - queueAvg) * std::min(1.0, dt);
+        const double error = (queueAvg - targetFrames) / rate;   // seconds of delay over the target
+        // Gains from a simulation of the two clocks and their blocks
+        // (settles in about twenty seconds, the pitch held within a quarter
+        // of a cent), then confirmed by tools/check_mic_cue.py.
+        driftInteg = std::clamp(driftInteg + 0.03 * error * dt, -0.005, 0.005);
+        driftStep = std::clamp(0.3 * error + driftInteg, -0.005, 0.005);
+        micDriftPpm_.store(static_cast<int>(std::lround(driftInteg * 1e6)), std::memory_order_relaxed);
+      }
+    }
+    std::size_t frames = 0;
+    if (testSignal) {
+      // Real time, from the clock: as many frames as have elapsed.
+      const auto now = std::chrono::steady_clock::now();
+      frames = static_cast<std::size_t>(
+        std::chrono::duration<double>(now - generatedAt).count() * rate * testClock);
+      if (frames >= 96) {
+        generatedAt += std::chrono::nanoseconds(
+          static_cast<long long>(frames * 1e9 / (rate * testClock)));
+        block.resize(frames * 2);
+        const double aL = std::pow(10.0, -18.0 / 20.0) * 32767.0;
+        const double aR = std::pow(10.0, -24.0 / 20.0) * 32767.0;
+        for (std::size_t f = 0; f < frames; ++f) {
+          phaseL += 2.0 * 3.14159265358979323846 * 1000.0 / rate;
+          phaseR += 2.0 * 3.14159265358979323846 * 500.0 / rate;
+          if (phaseL > 6.283185307179586) phaseL -= 6.283185307179586;
+          if (phaseR > 6.283185307179586) phaseR -= 6.283185307179586;
+          block[f * 2] = static_cast<std::int16_t>(std::lround(std::sin(phaseL) * aL));
+          block[f * 2 + 1] = static_cast<std::int16_t>(std::lround(std::sin(phaseR) * aR));
+        }
+        captureFrames = 480;
+      } else {
+        frames = 0;
+      }
+    } else if (micStream_) {
+      const int avail = SDL_GetAudioStreamAvailable(micStream_);
+      if (avail >= 4) {
+        block.resize(static_cast<std::size_t>(avail) / sizeof(std::int16_t));
+        const int got = SDL_GetAudioStreamData(micStream_, block.data(), avail);
+        frames = got > 0 ? static_cast<std::size_t>(got) / 4 : 0;
+        block.resize(frames * 2);
+      }
+    }
+    if (frames == 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      continue;
+    }
+    // The channel choice, then the meter on what the cue will actually play
+    // with its gain -- the level the inspector's CLIP warns about.
+    const int channel = micChannel_.load(std::memory_order_relaxed);
+    const double gain = audioCueGain_.load(std::memory_order_relaxed);
+    float peak = 0.0f;
+    for (std::size_t f = 0; f < frames; ++f) {
+      std::int16_t& l = block[f * 2];
+      std::int16_t& r = block[f * 2 + 1];
+      if (channel == static_cast<int>(MicChannel::MonoLeft)) r = l;
+      else if (channel == static_cast<int>(MicChannel::MonoRight)) l = r;
+      const float level = static_cast<float>(
+        std::max(std::abs(static_cast<int>(l)), std::abs(static_cast<int>(r))) * gain / 32768.0);
+      peak = std::max(peak, level);
+    }
+    if (peak >= 0.999f) micClipped_.store(true, std::memory_order_relaxed);
+    // A meter that falls back about 20 dB a second, so a word is readable.
+    peakHold = std::max(peak, peakHold * static_cast<float>(std::pow(0.1, static_cast<double>(frames) / rate)));
+    micPeak_.store(peakHold, std::memory_order_relaxed);
+
+    if (!micLive_.load(std::memory_order_relaxed)) {
+      rsIn.assign(2, 0.0f);
+      rsPos = 1.0;
+      continue;   // racked or paused: metered, never heard
+    }
+    // STOP's fade: a ramp over the block, then done.
+    const double release = micReleaseSeconds_.load(std::memory_order_relaxed);
+    if (release > 0.0) {
+      const double step = 1.0 / (release * rate);
+      for (std::size_t f = 0; f < frames; ++f) {
+        releaseGain = std::max(0.0, releaseGain - step);
+        block[f * 2] = static_cast<std::int16_t>(std::lround(block[f * 2] * releaseGain));
+        block[f * 2 + 1] = static_cast<std::int16_t>(std::lround(block[f * 2 + 1] * releaseGain));
+      }
+      if (releaseGain <= 0.0) micReleaseDone_.store(true, std::memory_order_relaxed);
+    } else {
+      releaseGain = 1.0;
+    }
+    // Resample by (1 + driftStep), Catmull-Rom between the four nearest input
+    // frames. The position carries across blocks, so there is no seam.
+    for (std::size_t i = 0; i < frames * 2; ++i) rsIn.push_back(static_cast<float>(block[i]));
+    rsOut.clear();
+    const std::size_t have = rsIn.size() / 2;
+    const double step = 1.0 + driftStep;
+    while (rsPos + 2.0 < static_cast<double>(have)) {
+      const auto i = static_cast<std::size_t>(rsPos);
+      const double t = rsPos - static_cast<double>(i);
+      for (std::size_t ch = 0; ch < 2; ++ch) {
+        const double y0 = rsIn[(i - 1) * 2 + ch], y1 = rsIn[i * 2 + ch];
+        const double y2 = rsIn[(i + 1) * 2 + ch], y3 = rsIn[(i + 2) * 2 + ch];
+        const double v = y1 + 0.5 * t * (y2 - y0 + t * (2.0 * y0 - 5.0 * y1 + 4.0 * y2 - y3 +
+                                                       t * (3.0 * (y1 - y2) + y3 - y0)));
+        rsOut.push_back(static_cast<std::int16_t>(std::clamp(std::lround(v), -32768L, 32767L)));
+      }
+      rsPos += step;
+    }
+    const auto consumed = static_cast<std::size_t>(rsPos) - 1;
+    rsIn.erase(rsIn.begin(), rsIn.begin() + static_cast<std::ptrdiff_t>(consumed * 2));
+    rsPos -= static_cast<double>(consumed);
+
+    // The backstop, for a stall the steering cannot absorb (the machine
+    // froze for a moment): let the queue go rather than keep the delay.
+    int queuedFrames = queuedAudioBytes() / bytesPerFrame;
+    if (queuedFrames > 4 * targetFrames + static_cast<int>(frames)) {
+      micDropped_.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+    if (!rsOut.empty()) applyGainAndQueueAudio(rsOut, audioTime);
+    if (queueAvg < 0.0) {
+      queueAvg = targetFrames;   // primed: steer from here
+      starved = false;
+    }
+    queuedFrames = queuedAudioBytes() / bytesPerFrame;
+    if (audioStream_) {
+      SDL_AudioSpec spec {};
+      int devFrames = 0;
+      if (SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(audioStream_), &spec, &devFrames) && spec.freq > 0)
+        outputFrames = static_cast<int>(static_cast<long long>(devFrames) * rate / spec.freq);
+    }
+    micLatencyMs_.store(static_cast<int>(std::lround(
+      1000.0 * (captureFrames + queuedFrames + outputFrames) / rate)), std::memory_order_relaxed);
+  }
+  if (driftInteg != 0.0) {
+    std::lock_guard<std::mutex> lock(micInfoMutex_);
+    micDriftDevice_ = device;
+    micDriftLearned_ = driftInteg;
+  }
+}
+
+void MediaEngine::videoSynthKeyOn(int note, int velocity) {
+  const double octaves = (std::clamp(note, 0, 127) - 60) / 12.0;
+  vsKeyScale_.store(std::clamp(std::pow(2.0, octaves), 0.125, 8.0), std::memory_order_relaxed);
+  vsKeyBloom_.store(std::clamp(velocity, 0, 127) / 127.0, std::memory_order_relaxed);
+  vsKeyHeld_.store(note, std::memory_order_relaxed);
+}
+
+void MediaEngine::videoSynthKeyOff(int note) {
+  // Only the key that is sounding lets go: legato playing (the next key down
+  // before the last is up) must not drop back between notes.
+  if (vsKeyHeld_.load(std::memory_order_relaxed) != note) return;
+  vsKeyScale_.store(1.0, std::memory_order_relaxed);
+  vsKeyBloom_.store(0.0, std::memory_order_relaxed);
+  vsKeyHeld_.store(-1, std::memory_order_relaxed);
+}

@@ -1,0 +1,125 @@
+#name Kanienʼkéha
+#english Mohawk
+#unverified
+# UNREVIEWED. No speaker of this language has read this file.
+#
+# The entries below were produced without a speaker's review, and some of
+# them are wrong in ways only a speaker would catch -- a real word used for
+# the wrong thing reads as confidently as a right one. The rest of the
+# interface is deliberately NOT filled in: a line left out falls through to
+# English, and English is better than invented technical vocabulary put into
+# the mouth of a living language.
+#
+# So this is a starting point for a speaker to correct, not a translation.
+# The picker says so, so that choosing it is an informed choice.
+#
+# To help: each line is english<TAB>translation, and tools/add_translations.py
+# checks the file every way it can be broken silently.
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	ASE
+OPEN	RATIRÒNTAHKWE
+SAVE	TESATKÁHTHOS
+SAVE AS	
+BUNDLE	
+IMPORT	TESAHTENTÍ
+SOURCE	TSI NIIÓHT
+PATTERN	
+SETTINGS	TSI NIYOHTÓNHA
+TAKE	TAKE
+STOP	SATÁHSAWEN
+REBOOT	
+BLACKOUT	AHSONTHÉNHNE
+CLEAR	TEKAHÍ
+RECORD	KAHIÁTON
+PLAYLIST	KAHIATONHSERÁ
+TIMELINE	
+MEDIA	KARÒNTA
+TRANSPORT	
+OUTPUT	IÓTHARE
+PROGRAM	PROGRAM
+WARP	
+LIVE	IONKWÉ
+DECODE	
+STREAM	
+System	Tsi niiohtónha
+Audio	Kawennáhkwa
+Network	Tekaniateráhkwa
+Video Outputs	
+About	Né tsi
+Encoder	
+Screen	Kanáktote
+Geometry	
+Devices	Kaienthóhsera
+Streaming	
+APPEARANCE	TSI NIIÓHT
+REMOTE CONTROL	
+INTEGRATION ADAPTERS	
+DISCOVERY / NOTES	
+DISPLAY & RASTER	
+CONNECTED DISPLAYS	
+EDGE FEATHERING	
+MATTE & OVERLAY	
+AREA OF INTEREST	
+DEFAULT TRANSITION	
+NMC IN & OUT	
+OSC QUERY / FEEDBACK	
+CUE INSPECTOR	
+SELECTED CUE	
+PLAYBACK	TESAHÍ
+COPY	TESAHIÁTON
+PASTE	
+RESET	ÁSE TESAHÍ
+Theme	Tsi niiót
+Language	Owenna
+Resolution	
+Orientation	
+Toggle Fullscreen	
+IDENTIFY	
+REGION SIZE	
+POSITION	
+CENTRE	AHSÓTHA
+FULL	ÁKTA
+duration	
+transition	
+fade in	
+fade out	
+ON	IÓHTON
+OFF	IÁH
+Stopped	WAHÁTHSAWEN
+Playing	IONTÓRI
+Paused	
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Shé:kon!
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	SHÉ:KON
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Shé:kon! I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me. Corn soup after.
+*shakes head* That means yes. Bravo.	*shakes head* That means hen. Niá:wen.
+Wonderful! Lovely signal flow.	Niá:wen! Lovely signal flow.
+Yes! Have a gold star. It's a dot.	Hen! Have a gold star. It's a dot.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson. Then corn soup.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Every show deserves one. Niá:wen.
+SAFE TRAVELS	Ó:NEN KIʼ WÁHI
+Same time next week. Bring a bigger pen. And a turducken.	Same time next week. Bring a bigger pen. And a pot of corn soup.
+LEFT! Ye call that a corner? I've seen straighter gulls.	LEFT! You call that a corner? I've seen ironworkers walk straighter steel forty floors up.
+Welcome to the show! Let's spin that wheel!	Shé:kon, welcome to the show! Let's spin that wheel!
+And the number is... three!	And the number is... áhsen!
+Buzz! We have a winner!	Buzz! Hen! We have a winner!
+Goodnight, everybody! Keep spinning!	Ó:nen kiʼ wáhi, everybody! Keep spinning!
+Ten... nine... ooh, I do love a countdown.	Oié:ri... tióhton... ooh, I do love a countdown.
+A grand day out, Grommet! Pass the crackers.	A grand day out, Grommet! Pass the corn bread.
+Thank you! I'm here all week! The chicken is here forever.	Niá:wen! I'm here all week! The chicken is here forever.
+Hi! I'm the one doing all of this, by the way.	Shé:kon! I'm the one doing all of this, by the way.
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Now go and fix real bugs. Niá:wen.
+# --- end of tutorials ---
+NO	IAH
+YES	HEN

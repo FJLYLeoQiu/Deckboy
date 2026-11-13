@@ -1,0 +1,3491 @@
+// ============================================================================
+// app_render_control.ipp — Cue list row rendering and transport controls.
+//
+// Renders individual cue rows in the deck's cue list panel:
+//
+//   renderDeckPanelCueRow()  — draw one cue row with:
+//     - Color chip (cue.color)
+//     - Cue ID label (user-assigned or auto-generated)
+//     - Cue name (ellipsized to fit available width)
+//     - Kind badge (Video, Image, Pattern, etc.)
+//     - Duration display
+//     - Status indicator (playing, paused, selected, next)
+//     - Selection highlight and live/next state colors
+//
+//   Row colors follow a state hierarchy:
+//     Live (playing) → deep background, light text
+//     Selected       → mid background
+//     Next           → light background
+//     Default        → shell inner background
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Render a single cue row in the deck panel's scrollable cue list.
+  void renderDeckPanelCueRow(const SDL_Rect& row, int deckIndex, int cueIndex) {
+    const Deck& deck = project_.decks[deckIndex];
+    const Cue& cue = deck.cues[cueIndex];
+    bool isSelected = cueIndexSelected(deck, cueIndex);
+    bool isLive     = (cueIndex == deck.activeIndex);
+    bool isNext     = !isLive && (cueIndex == nextCueIndexForDeck(deckIndex));
+
+    SDL_Color fill   = isLive     ? pal.deep
+                     : isSelected ? pal.mid
+                     : isNext     ? pal.light
+                                  : pal.shellInner;
+    SDL_Color ink    = isLive ? pal.light : pal.deep;
+    SDL_Color subInk = isLive ? pal.mid   : pal.dark;
+
+    drawUIPanel(row, fill, pal.deep, pal.mid);
+
+    // Color chip
+    SDL_Rect chip {row.x + 2, row.y + 3, 4, row.h - 6};
+    SDL_Color chipColor = !cue.colorTag.empty() ? colorTagToSdl(cue.colorTag) : cue.color;
+    Primitives::fillRect(controlRenderer_, chip, chipColor);
+
+    // Status glyph
+    const char* glyph = isLive ? "\xe2\x97\x8f" : (isSelected ? "\xe2\x96\xb8" : (isNext ? "N" : " "));
+    SDL_Rect glyphR {row.x + 8, row.y + (row.h - 18) / 2, 18, 18};
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, glyphR, glyph, ink);
+
+    // Cue token
+    std::string token = cueDisplayToken(cue, cueIndex);
+    SDL_Rect tokenR {row.x + 26, row.y + (row.h - 18) / 2, 44, 18};
+    drawTextSafe(controlRenderer_, fontMono_, tokenR, token, subInk);
+
+    // Remaining-time badge geometry is resolved FIRST, because the cue name
+    // needs to know how much room it actually loses. The old code hardcoded a
+    // 58px badge and reserved 66px from the name; "-00:15.2" is eight
+    // monospace glyphs, which fits Consolas on Windows but not the wider
+    // Liberation/DejaVu Mono on Linux, where it rendered as "-00...".
+    // Measuring keeps one layout correct on every platform, and 58 stays the
+    // floor so Windows geometry is unchanged.
+    std::string remStr;
+    int remBadgeW = 0;
+    if (isLive) {
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      if (engine && engine->duration() > 0.0) {
+        remStr = "-" + formatSeconds(std::max(0.0, engine->duration() - engine->position()));
+        int remTextW = 0, remTextH = 0;
+        textSizeShown(fontMono_, remStr.c_str(), remStr.size(), &remTextW, &remTextH);
+        // +12 for the badge fill and drawCenteredTextSafe's inset — measuring
+        // exactly and padding thinly is what reproduced the truncation in the
+        // timeline chips.
+        remBadgeW = std::max(58, remTextW + 12);
+        // Never let the badge crowd the name off the row entirely.
+        remBadgeW = std::min(remBadgeW, std::max(58, row.w - 72 - 40));
+      }
+    }
+
+    // Cue name — narrower when live (leaves room for remaining-time badge)
+    int nameX = row.x + 72;
+    int nameW = remBadgeW > 0 ? std::max(10, row.w - 72 - (remBadgeW + 8))
+                              : std::max(10, row.w - 72 - 4);
+    std::string name = ellipsizeToPixelWidth(fontSmall_, cue.name, nameW);
+    SDL_Rect nameR {nameX, row.y + (row.h - 18) / 2, nameW, 18};
+    drawTextSafe(controlRenderer_, fontSmall_, nameR, name, ink, /*localise=*/false);
+
+    if (remBadgeW > 0) {
+      SDL_Rect remR {row.x + row.w - (remBadgeW + 4), row.y + 2, remBadgeW, row.h - 4};
+      Primitives::fillRect(controlRenderer_, remR, pal.dark);
+      drawCenteredTextSafe(controlRenderer_, fontMono_, remR, remStr, pal.light);
+    }
+
+    decksPanelCueHits_.push_back({deckIndex, cueIndex, row});
+  }
+
+  void renderDeckPanelColumn(const SDL_Rect& col, int deckIndex) {
+    const Deck& deck = project_.decks[deckIndex];
+    bool focused = (deckIndex == project_.focusedDeckIndex);
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    TransportState state = engine ? engine->state() : TransportState::Stopped;
+
+    // Column background
+    SDL_Color colBg = focused ? pal.light : pal.shellInner;
+    drawUIPanel(col, colBg, pal.deep, pal.mid);
+
+    // --- HEADER (52px) ---
+    constexpr int kColHdrH = 52;
+    SDL_Rect hdr {col.x + 2, col.y + 2, col.w - 4, kColHdrH};
+    SDL_Color hdrFill = focused ? pal.mid : pal.shellOuter;
+    drawUIPanel(hdr, hdrFill, pal.deep, pal.dark);
+
+    SDL_Color hdrInk = focused ? pal.light : pal.mid;
+
+    // State badge (top-right)
+    const char* stateLabel = (state == TransportState::Playing) ? "PLAY"
+                           : (state == TransportState::Paused)  ? "PAUSE" : "STOP";
+    SDL_Color stateFill = (state == TransportState::Playing) ? SDL_Color{30, 120, 30, 255}
+                        : (state == TransportState::Paused)  ? SDL_Color{120, 100, 0, 255}
+                                                             : pal.dark;
+    SDL_Rect stateBadge {hdr.x + hdr.w - 60, hdr.y + 4, 54, 22};
+    Primitives::fillRect(controlRenderer_, stateBadge, stateFill);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, stateBadge, stateLabel,
+                         pal.light);
+
+    // Deck name
+    std::string deckName = deck.name.empty() ? deckDefaultName(deckIndex) : deck.name;
+    drawTextSafe(controlRenderer_, fontBase_,
+                 SDL_Rect {hdr.x + 6, hdr.y + 5, hdr.w - 62, 20},
+                 deckName, hdrInk);
+
+    // Route info
+    auto primaryOut = primaryOutputIndexForDeck(deckIndex);
+    int layerIdx    = primaryLayerIndexForDeck(deckIndex);
+    std::string layerStr = layerIdx <= 0 ? "BG" : "L" + std::to_string(layerIdx);
+    std::string routeStr = primaryOut
+      ? ("\xe2\x86\x92 Out " + std::to_string(*primaryOut + 1) + "  " + layerStr)
+      : "\xe2\x86\x92 Unrouted";
+    SDL_Color routeInk = focused ? pal.mid : pal.dark;
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {hdr.x + 6, hdr.y + 28, hdr.w - 12, 20},
+                 routeStr, routeInk);
+
+    int y = hdr.y + hdr.h + 4;
+
+    // --- PROGRESS + TIME (52px) ---
+    constexpr int kProgressAreaH = 52;
+    SDL_Rect progressArea {col.x + 4, y, col.w - 8, kProgressAreaH};
+
+    double pos = engine ? engine->position() : 0.0;
+    double dur = engine ? engine->duration() : 0.0;
+
+    // Bar
+    SDL_Rect rail {progressArea.x + 2, progressArea.y + 4, progressArea.w - 4, 10};
+    Primitives::drawFramedPanel(controlRenderer_, rail, pal.light,
+                                pal.deep, pal.mid);
+    if (dur > 0.0) {
+      int fillW = static_cast<int>((pos / dur) * (rail.w - 4));
+      fillW = std::clamp(fillW, 0, rail.w - 4);
+      SDL_Rect barFill {rail.x + 2, rail.y + 2, fillW, rail.h - 4};
+      Primitives::fillRect(controlRenderer_, barFill, pal.dark);
+    }
+
+    // Current / remaining time
+    SDL_Color timeInk = pal.deep;
+    drawTextSafe(controlRenderer_, fontMono_,
+                 SDL_Rect {progressArea.x + 2, progressArea.y + 18, 72, 16},
+                 formatSeconds(pos), timeInk);
+    std::string remStr = dur > 0.0
+      ? ("-" + formatSeconds(std::max(0.0, dur - pos))) : "--:--";
+    drawTextSafe(controlRenderer_, fontMono_,
+                 SDL_Rect {progressArea.x + progressArea.w - 74, progressArea.y + 18, 72, 16},
+                 remStr, timeInk);
+
+    // Active cue name
+    std::string activeToken = activeCue ? cueDisplayToken(*activeCue, deck.activeIndex) : "";
+    std::string activeName  = activeCue ? activeCue->name : "---";
+    std::string activeStr   = activeToken.empty() ? activeName : (activeToken + "  " + activeName);
+    activeStr = ellipsizeToPixelWidth(fontSmall_, activeStr, progressArea.w - 4);
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {progressArea.x + 2, progressArea.y + 36, progressArea.w - 4, 14},
+                 activeStr, pal.dark, /*localise=*/false);
+
+    y += kProgressAreaH + 4;
+
+    // --- TRANSPORT BUTTONS (44px) ---
+    constexpr int kTransportH = 44;
+    constexpr int kBtnGap = 6;
+    constexpr int kSmallBtnW = 38;
+    SDL_Rect transArea {col.x + 4, y, col.w - 8, kTransportH};
+    int largeBtnW = std::max(60, transArea.w - 2 * (kSmallBtnW + kBtnGap) - kBtnGap);
+    int btnH  = 32;
+    int btnY  = transArea.y + (transArea.h - btnH) / 2;
+    SDL_Rect takeBtn {transArea.x, btnY, largeBtnW, btnH};
+    SDL_Rect stopBtn {takeBtn.x + largeBtnW + kBtnGap, btnY, kSmallBtnW, btnH};
+    SDL_Rect playBtn {stopBtn.x + kSmallBtnW + kBtnGap, btnY, kSmallBtnW, btnH};
+
+    // TAKE — icon
+    drawUIPanel(takeBtn, pal.dark, pal.deep, pal.mid);
+    if (uiBtnTake_.texture) {
+      int sz = std::min(20, std::min(takeBtn.w - 8, takeBtn.h - 8));
+      SDL_Rect ir {takeBtn.x + (takeBtn.w - sz) / 2, takeBtn.y + (takeBtn.h - sz) / 2, sz, sz};
+      drawUiImageContain(uiBtnTake_, ir, 255, pal.light);
+    } else {
+      drawCenteredTextSafe(controlRenderer_, fontBase_, takeBtn, "TAKE", pal.light);
+    }
+    decksPanelDeckButtonHits_.push_back({deckIndex, kDecksPanelDeckActionTake, takeBtn});
+
+    // STOP — icon
+    drawUIPanel(stopBtn, pal.mid, pal.deep, pal.light);
+    if (uiBtnStop_.texture) {
+      int sz = std::min(18, std::min(stopBtn.w - 8, stopBtn.h - 8));
+      SDL_Rect ir {stopBtn.x + (stopBtn.w - sz) / 2, stopBtn.y + (stopBtn.h - sz) / 2, sz, sz};
+      drawUiImageContain(uiBtnStop_, ir, 255, pal.deep);
+    } else {
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, stopBtn, "\xe2\x96\xa0", pal.deep);
+    }
+    decksPanelDeckButtonHits_.push_back({deckIndex, kDecksPanelDeckActionStop, stopBtn});
+
+    // PLAY — icon (lit when playing)
+    SDL_Color playFill = (state == TransportState::Playing) ? pal.dark : pal.mid;
+    SDL_Color playInk = (state == TransportState::Playing) ? pal.light : pal.deep;
+    drawUIPanel(playBtn, playFill, pal.deep, pal.light);
+    if (uiBtnPlay_.texture) {
+      int sz = std::min(18, std::min(playBtn.w - 8, playBtn.h - 8));
+      SDL_Rect ir {playBtn.x + (playBtn.w - sz) / 2, playBtn.y + (playBtn.h - sz) / 2, sz, sz};
+      drawUiImageContain(uiBtnPlay_, ir, 255, playInk);
+    } else {
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, playBtn, "\xe2\x96\xb6", pal.deep);
+    }
+    decksPanelDeckButtonHits_.push_back({deckIndex, kDecksPanelDeckActionPlay, playBtn});
+
+    y += kTransportH + 4;
+
+    // --- CUE LIST (fills remaining height) ---
+    constexpr int kFooterH = 36;
+    constexpr int kCueRowH = 80;
+    constexpr int kCueRowGap = 2;
+    int listH = std::max(0, col.y + col.h - y - kFooterH - 8);
+    SDL_Rect listRect {col.x + 4, y, col.w - 8, listH};
+    drawUIPanel(listRect, pal.tile,
+                pal.deep, pal.mid);
+
+    if (deckScrolls_.size() <= static_cast<size_t>(deckIndex))
+      deckScrolls_.resize(deckIndex + 1, 0);
+
+    SDL_Rect listClip {listRect.x + 4, listRect.y + 4, listRect.w - 8, listRect.h - 8};
+    deckListClipRects_[deckIndex] = listClip;
+    SDL_SetRenderClipRect(controlRenderer_, &listClip);
+
+    int cueCount = static_cast<int>(deck.cues.size());
+    if (cueCount == 0) {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {listClip.x + 4, listClip.y + 8, listClip.w - 8, 16},
+                   "(empty — import media)", pal.inkSoft);
+
+    } else {
+      int totalCueH = cueCount * (kCueRowH + kCueRowGap) - kCueRowGap;
+      int scrollMax = std::max(0, totalCueH - listClip.h);
+      // Clamp before drawing so the wheel can never scroll past the last cue
+      // into empty space (that over-scroll was easy to get lost in).
+      deckScrolls_[deckIndex] = std::clamp(deckScrolls_[deckIndex], 0, scrollMax);
+      int rowY = listClip.y - deckScrolls_[deckIndex];
+      for (int ci = 0; ci < cueCount; ++ci) {
+        if (rowY + kCueRowH >= listClip.y && rowY <= listClip.y + listClip.h) {
+          SDL_Rect cueRow {listClip.x, rowY, listClip.w, kCueRowH};
+          renderDeckPanelCueRow(cueRow, deckIndex, ci);
+        }
+        rowY += kCueRowH + kCueRowGap;
+      }
+    }
+    SDL_SetRenderClipRect(controlRenderer_, nullptr);
+
+    y += listH + 4;
+
+    // --- FOOTER (36px) ---
+    SDL_Rect footer {col.x + 4, col.y + col.h - kFooterH - 2, col.w - 8, kFooterH};
+    drawUIPanel(footer, pal.shellOuter,
+                pal.deep, pal.shellInner);
+
+    // Cue end behavior follows the selected/active cue rather than a deck toggle.
+    int autoW = (footer.w - 12) / 2;
+    SDL_Rect endBtn {footer.x + 4, footer.y + 6, autoW, 24};
+    const Cue* footerCue = nullptr;
+    if (deck.selectedIndex >= 0 && deck.selectedIndex < cueCount) {
+      footerCue = &deck.cues[deck.selectedIndex];
+    } else if (deck.activeIndex >= 0 && deck.activeIndex < cueCount) {
+      footerCue = &deck.cues[deck.activeIndex];
+    }
+    CueEndAction footerEndAction = footerCue ? resolvedCueEndAction(*footerCue) : CueEndAction::Inherit;
+    SDL_Color endFill = (footerEndAction == CueEndAction::PauseOnLast || footerEndAction == CueEndAction::Loop)
+      ? pal.dark
+      : pal.light;
+    SDL_Color endInk = (footerEndAction == CueEndAction::PauseOnLast || footerEndAction == CueEndAction::Loop)
+      ? pal.light
+      : pal.deep;
+    Primitives::drawFramedPanel(controlRenderer_, endBtn, endFill, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, endBtn, footerCue ? cueEndStatusLabel(*footerCue) : "END CUE", endInk);
+    // Shuffle indicator
+    SDL_Rect shuffleBtn {endBtn.x + autoW + 4, footer.y + 6, autoW, 24};
+    Primitives::drawFramedPanel(controlRenderer_, shuffleBtn,
+                                deck.shuffle ? pal.dark : pal.light,
+                                pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, shuffleBtn,
+                         deck.shuffle ? "SHUFFLE" : "ORDER",
+                         deck.shuffle ? pal.light : pal.deep);
+    shuffleBtnRect_ = shuffleBtn;
+    if (pointInRect(mouseX_, mouseY_, shuffleBtn)) {
+      drawHoverTip(deck.shuffle ? "SHUFFLE - the next cue is picked at random"
+                                : "ORDER - cues advance down the list",
+                   shuffleBtn.x + shuffleBtn.w / 2, shuffleBtn.y);
+    } else if (pointInRect(mouseX_, mouseY_, endBtn)) {
+      drawHoverTip("What this cue does when it ends - click to change",
+                   endBtn.x + endBtn.w / 2, endBtn.y);
+    }
+
+    SDL_Rect opRail {footer.x + 4, footer.y + footer.h - 14, footer.w - 8, 8};
+    Primitives::drawFramedPanel(controlRenderer_, opRail, pal.light,
+                                pal.deep, pal.shellOuter);
+    int opFillW = static_cast<int>(
+      std::lround(std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * (opRail.w - 4)));
+    opFillW = std::clamp(opFillW, 0, opRail.w - 4);
+    SDL_Rect opFill {opRail.x + 2, opRail.y + 2, opFillW, opRail.h - 4};
+    Primitives::fillRect(controlRenderer_, opFill, pal.dark);
+    if (deckOpacityFaderRects_.size() <= static_cast<size_t>(deckIndex))
+      deckOpacityFaderRects_.resize(deckIndex + 1, SDL_Rect{});
+    deckOpacityFaderRects_[deckIndex] = opRail;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Monitors window — one tile per output, program frame + preview + controls
+  // ---------------------------------------------------------------------------
+
+  void renderMonitorsTile(const SDL_Rect& tile, int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) return;
+    const OutputTarget& output = project_.outputs[outputIndex];
+    bool focused = (outputIndex == project_.focusedOutputIndex);
+
+    // Tile background
+    SDL_Color tileBg = focused ? pal.light : pal.shellInner;
+    drawUIPanel(tile, tileBg, pal.deep, pal.mid);
+
+    // --- Header strip (28px) ---
+    constexpr int kTileHdrH = 28;
+    SDL_Rect hdr {tile.x + 2, tile.y + 2, tile.w - 4, kTileHdrH};
+    SDL_Color hdrBg = focused ? pal.mid : pal.shellOuter;
+    drawUIPanel(hdr, hdrBg, pal.deep, pal.dark);
+
+    // Health badge
+    OutputHealthState health = outputHealthStateForDisplay(outputIndex);
+    SDL_Color healthFill = (health == OutputHealthState::Live)       ? SDL_Color{30,140,30,255}
+                         : (health == OutputHealthState::Error)      ? SDL_Color{160,40,40,255}
+                         : (health == OutputHealthState::Recovering) ? SDL_Color{160,120,40,255}
+                                                                     : pal.dark;
+    SDL_Rect healthBadge {hdr.x + 4, hdr.y + 4, 58, 22};
+    Primitives::fillRect(controlRenderer_, healthBadge, healthFill);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, healthBadge,
+                         outputHealthLabelToken(health), pal.light);
+
+    // Output name
+    std::string outName = "O" + std::to_string(outputIndex + 1) + "  " + outputLabel(outputIndex);
+    SDL_Color hdrInk = focused ? pal.light : pal.mid;
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {hdr.x + 60, hdr.y + (hdr.h - 20) / 2, hdr.w - 130, 20},
+                 outName, hdrInk);
+
+    // FPS (top-right of header)
+    if (outputFpsCounterEnabled_) {
+      std::string fpsStr = (output.enabled ? outputFpsLabel(outputIndex) : "--.-") + "fps";
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {hdr.x + hdr.w - 68, hdr.y + (hdr.h - 20) / 2, 64, 20},
+                   fpsStr, pal.dark);
+    }
+
+    // --- Bottom strip for buttons (30px) ---
+    constexpr int kTileBtnH = 30;
+    SDL_Rect btnStrip {tile.x + 2, tile.y + tile.h - kTileBtnH - 2, tile.w - 4, kTileBtnH};
+    constexpr int kBtnW = 68;
+    constexpr int kBtnGap = 6;
+    int bx = btnStrip.x + (btnStrip.w - 2 * kBtnW - kBtnGap) / 2;
+    int bby = btnStrip.y + (btnStrip.h - 28) / 2;
+
+    // GO / LIVE
+    SDL_Color goFill = output.enabled ? SDL_Color{30,140,30,255} : pal.mid;
+    SDL_Color goInk  = output.enabled ? pal.light : pal.deep;
+    SDL_Rect goBtn {bx, bby, kBtnW, 28};
+    drawUIPanel(goBtn, goFill, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, goBtn, output.enabled ? "LIVE" : "GO", goInk);
+    outputMenuButtons_.push_back({goBtn, -1, outputIndex, kOutputMenuActionRecover});
+
+    // OFF
+    SDL_Color offFill = output.enabled ? pal.light : pal.dark;
+    SDL_Color offInk  = output.enabled ? pal.dark  : pal.mid;
+    SDL_Rect offBtn {bx + kBtnW + kBtnGap, bby, kBtnW, 28};
+    drawUIPanel(offBtn, offFill, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, offBtn, "OFF", offInk);
+    outputMenuButtons_.push_back({offBtn, -1, outputIndex, kOutputMenuActionDisarm});
+
+    // Register tile click for focus
+    outputMenuButtons_.push_back({tile, -1, outputIndex, kOutputMenuActionFocus});
+
+    // --- Program frame area ---
+    int programTop    = hdr.y + hdr.h + 2;
+    int programBottom = btnStrip.y - 2;
+    SDL_Rect programRect {tile.x + 4, programTop, tile.w - 8, std::max(0, programBottom - programTop)};
+    drawUIPanel(programRect, pal.deep,
+                pal.deep, pal.mid);
+
+    bool hasTex = outputIndex < static_cast<int>(monitorsOutputTextures_.size()) &&
+                  monitorsOutputTextures_[outputIndex] != nullptr &&
+                  monitorsOutputTexW_[outputIndex] > 0;
+    if (hasTex && output.enabled) {
+      SDL_Texture* tex = monitorsOutputTextures_[outputIndex];
+      int texW = monitorsOutputTexW_[outputIndex];
+      int texH = monitorsOutputTexH_[outputIndex];
+      // Letterbox scale
+      float scaleW = static_cast<float>(programRect.w) / texW;
+      float scaleH = static_cast<float>(programRect.h) / texH;
+      float scale  = std::min(scaleW, scaleH);
+      int dstW = static_cast<int>(texW * scale);
+      int dstH = static_cast<int>(texH * scale);
+      SDL_Rect dst {programRect.x + (programRect.w - dstW) / 2,
+                    programRect.y + (programRect.h - dstH) / 2,
+                    dstW, dstH};
+      SDL_RenderTexture(controlRenderer_, tex, nullptr, &dst);
+    } else {
+      // No signal label
+      std::string noSigLabel = output.enabled ? "NO SIGNAL" : "OFFLINE";
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, programRect,
+                           noSigLabel, pal.mid);
+    }
+
+    // Next cue info bar (inside program area, bottom-left overlay)
+    {
+      auto stackEntries = layeredDeckEntriesForOutput(outputIndex);
+      if (!stackEntries.empty()) {
+        int bgDeck = stackEntries[0].second;
+        int nextIdx = nextCueIndexForDeck(bgDeck);
+        if (nextIdx >= 0 && nextIdx < static_cast<int>(project_.decks[bgDeck].cues.size())) {
+          const Cue& nxt = project_.decks[bgDeck].cues[nextIdx];
+          std::string nxtStr = "NEXT  " + cueDisplayToken(nxt, nextIdx) + "  " + nxt.name;
+          nxtStr = ellipsizeToPixelWidth(fontSmall_, nxtStr, programRect.w - 8);
+          SDL_Rect nxtBar {programRect.x, programRect.y + programRect.h - 18,
+                           programRect.w, 18};
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+          SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 160);
+          SDL_RenderFillRect(controlRenderer_, &nxtBar);
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+          drawTextSafe(controlRenderer_, fontSmall_,
+                       SDL_Rect {nxtBar.x + 4, nxtBar.y + 2, nxtBar.w - 8, 14},
+                       nxtStr, pal.light);
+        }
+      }
+    }
+  }
+
+  void renderMonitorsWindow() {
+    if (!monitorsWindow_ || !monitorsRenderer_) return;
+    if (!monitorsVisible()) return;
+
+    monitorsTileHits_.clear();
+
+    // Swap renderer context
+    SDL_Renderer* savedRenderer = controlRenderer_;
+    SDL_Window*   savedWindow   = controlWindow_;
+    int savedMouseX = mouseX_, savedMouseY = mouseY_;
+    controlRenderer_ = monitorsRenderer_;
+    controlWindow_   = monitorsWindow_;
+    mouseX_ = -10000; mouseY_ = -10000;
+
+    int W = 0, H = 0;
+    SDL_GetWindowSize(monitorsWindow_, &W, &H);
+
+    SDL_SetRenderDrawColor(controlRenderer_,
+      red(kShellShadowColor), green(kShellShadowColor), blue(kShellShadowColor), 255);
+    SDL_RenderClear(controlRenderer_);
+    Primitives::beginSurfaceFrame(controlRenderer_, paletteColorFromRgba(kShellShadowColor));
+
+    SDL_Rect shell {kLayoutSpacingUnit, kLayoutSpacingUnit,
+                    std::max(0, W - kLayoutSpacingUnit * 2),
+                    std::max(0, H - kLayoutSpacingUnit * 2)};
+    drawUIPanel(shell, pal.shellOuter,
+                pal.deep, pal.shellInner);
+
+    // --- Window header ---
+    constexpr int kWinHdrH = 44;
+    constexpr int kHBtnH   = 32;
+    constexpr int kHBtnGap = 6;
+    SDL_Rect winHdr {shell.x + 4, shell.y + 4, shell.w - 8, kWinHdrH};
+    drawUIPanel(winHdr, pal.shellInner,
+                pal.deep, pal.shellOuter);
+
+    int outCount = static_cast<int>(project_.outputs.size());
+    std::string title = "MONITORS";
+    drawTextSafe(controlRenderer_, fontPixelSmall_ ? fontPixelSmall_ : fontBase_,
+                 SDL_Rect {winHdr.x + 10, winHdr.y + (winHdr.h - 22) / 2, 100, 22},
+                 title, pal.fg);
+    std::string countStr = std::to_string(outCount) + (outCount == 1 ? " output" : " outputs");
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {winHdr.x + 112, winHdr.y + (winHdr.h - 20) / 2, 80, 20},
+                 countStr, pal.dark);
+
+    // Right buttons: FPS toggle, + OUTPUT
+    int btnY = winHdr.y + (winHdr.h - kHBtnH) / 2;
+    SDL_Rect addOutBtn  {winHdr.x + winHdr.w - 80,              btnY, 74, kHBtnH};
+    SDL_Rect fpsTogBtn  {addOutBtn.x - 92 - kHBtnGap,           btnY, 86, kHBtnH};
+
+    SDL_Color fpsFill = outputFpsCounterEnabled_ ? pal.dark : pal.shellOuter;
+    SDL_Color fpsInk  = outputFpsCounterEnabled_ ? pal.light : pal.mid;
+    drawUIPanel(fpsTogBtn, fpsFill, pal.deep, pal.mid);
+    drawCenteredText(controlRenderer_, fontSmall_,
+                     outputFpsCounterEnabled_ ? "FPS: ON" : "FPS: OFF", fpsInk, fpsTogBtn);
+    outputMenuButtons_.push_back({fpsTogBtn, -1, -1, kOutputMenuActionToggleFps});
+
+    drawUIPanel(addOutBtn, pal.shellOuter,
+                pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, addOutBtn, "+ OUTPUT",
+                         pal.mid);
+    outputMenuButtons_.push_back({addOutBtn, -1, -1, kOutputMenuActionAddOutput});
+
+    // --- Tile grid ---
+    int gridTop = winHdr.y + winHdr.h + 6;
+    int gridH   = shell.y + shell.h - gridTop - 4;
+    int gridX   = shell.x + 4;
+    int gridW   = shell.w - 8;
+
+    if (outCount == 0) {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {gridX + 20, gridTop + 20, gridW - 40, 18},
+                   "No outputs — click + OUTPUT to add one.",
+                   pal.inkSoft);
+    } else {
+      // Auto grid: cols = ceil(sqrt(N)), rows = ceil(N / cols)
+      int cols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(outCount)))));
+      int rows = (outCount + cols - 1) / cols;
+      constexpr int kTileGap = 8;
+      int tileW = (gridW - (cols - 1) * kTileGap) / cols;
+      int tileH = (gridH - (rows - 1) * kTileGap) / rows;
+
+      for (int oi = 0; oi < outCount; ++oi) {
+        int col = oi % cols;
+        int row = oi / cols;
+        SDL_Rect tileRect {
+          gridX + col * (tileW + kTileGap),
+          gridTop + row * (tileH + kTileGap),
+          tileW, tileH
+        };
+        renderMonitorsTile(tileRect, oi);
+        monitorsTileHits_.push_back({oi, tileRect});
+      }
+    }
+
+    if (scanlineOverlay_ && pal.scanlineAlpha > 0) {
+      int ww, wh;
+      SDL_GetCurrentRenderOutputSize(controlRenderer_, &ww, &wh);
+      SDL_Rect dst {0, 0, ww, wh};
+      SDL_RenderTexture(controlRenderer_, scanlineOverlay_, nullptr, &dst);
+    }
+    presentTraced(controlRenderer_, "monitors");
+
+    controlRenderer_ = savedRenderer;
+    controlWindow_   = savedWindow;
+    mouseX_ = savedMouseX;
+    mouseY_ = savedMouseY;
+  }
+
+  void renderControlWindow() {
+    auto uiFrameStart = std::chrono::steady_clock::now();
+    beginLiveTextFrame();
+    int numDecks = static_cast<int>(project_.decks.size());
+    deckScrolls_.resize(numDecks, 0);
+    deckOverlayScrolls_.resize(numDecks, 0);
+    deckColumnRects_.resize(numDecks);
+    deckRoutingChipRects_.assign(static_cast<std::size_t>(numDecks), SDL_Rect {});
+    deckListClipRects_.resize(numDecks);
+    deckOverlayClipRects_.resize(numDecks);
+    outputMenuButtons_.clear();
+    deckSidebarToggleRect_ = SDL_Rect {};
+    std::fill(deckColumnRects_.begin(), deckColumnRects_.end(), SDL_Rect {0, 0, 0, 0});
+    std::fill(deckListClipRects_.begin(), deckListClipRects_.end(), SDL_Rect {0, 0, 0, 0});
+    std::fill(deckOverlayClipRects_.begin(), deckOverlayClipRects_.end(), SDL_Rect {0, 0, 0, 0});
+
+    int width = 0, height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+    layoutButtons(width, height);
+    auto uiLayoutDone = std::chrono::steady_clock::now();
+
+    SDL_SetRenderDrawColor(controlRenderer_, red(kShellShadowColor), green(kShellShadowColor), blue(kShellShadowColor), 255);
+    SDL_RenderClear(controlRenderer_);
+    Primitives::beginSurfaceFrame(controlRenderer_, paletteColorFromRgba(kShellShadowColor));
+
+    SDL_Rect shell {kLayoutSpacingUnit, kLayoutSpacingUnit,
+                    std::max(0, width - kLayoutSpacingUnit * 2),
+                    std::max(0, height - kLayoutSpacingUnit * 2)};
+    drawUIPanel(shell,
+                pal.shellOuter,
+                pal.deep,
+                pal.shellInner);
+
+    // ─── Toolbar: full-width button row ──────────────────────────────────────
+    constexpr int kToolbarH = 52;
+    SDL_Rect toolbar {shell.x + kLayoutPanelBorder * 2,
+                      shell.y + kLayoutPanelBorder * 2,
+                      shell.w - kLayoutPanelBorder * 4,
+                      kToolbarH};
+    drawUIPanel(toolbar, pal.shellInner,
+                pal.deep, pal.shellOuter);
+    {
+      TTF_Font* btnFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+      // The tip is part of the button, not a separate registry that can drift
+      // out of step with it: a button drawn without one simply has none.
+      auto drawTBtn = [&](SDL_Rect& r, const std::string& label,
+                          bool lit = false, bool danger = false,
+                          const char* tip = nullptr) {
+        SDL_Color fill = danger ? SDL_Color{160,18,18,255}
+                       : (lit ? pal.dark : pal.tile);
+        SDL_Color ink  = danger ? SDL_Color{255,200,200,255}
+                       : (lit ? pal.light : pal.fg);
+        drawUIPanel(r, fill, pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, btnFont, r, label, ink);
+        if (tip && tip[0] && pointInRect(mouseX_, mouseY_, r)) {
+          toolbarHoverTip_ = tip;
+          toolbarHoverAt_ = r;
+        }
+      };
+      toolbarHoverTip_.clear();
+
+      constexpr int kTBtnH = kToolbarH - 8;
+      constexpr int kTBtnGap = 6;
+      constexpr int kTGrpGap = 14;
+      int ty = toolbar.y + (toolbar.h - kTBtnH) / 2;
+
+      // Place right-anchored buttons first so fader can fill what's left
+      int rx = toolbar.x + toolbar.w - 8;
+      // MEASURE WITH THE FONT THAT DRAWS. This sized every toolbar button with
+      // fontSmall_ while drawTBtn renders with btnFont (the pixel face), so the
+      // moment those two differed in width the label no longer fitted the
+      // button that was sized for it -- at Pocket/touch scale NEW, OPEN, SAVE
+      // and BUNDLE came out completely blank, ellipsized away to nothing.
+      // MEASURE WHAT WILL ACTUALLY BE DRAWN, not the English it was written in.
+      //
+      // These buttons already sized themselves to their labels -- and then the
+      // interface learned other languages, and the label being measured stopped
+      // being the label being drawn. German SICHERN was laid out as if it still
+      // said SAVE and came out "S...", which looks like a layout bug and is
+      // really a measurement taken in the wrong language.
+      auto autoW = [&](const char* text, int minW = 60) -> int {
+        return std::max(uiScaled(minW), measuredTextWidth(btnFont, text) + uiScaled(20));
+      };
+      bool isFullscreen = isAnyOutputFullscreen();
+      constexpr int kIconBtnW = 44;
+
+      // ─── The wall clock ────────────────────────────────────────────────
+      //
+      // OFF BY DEFAULT. The toolbar belongs to the show, and most operators
+      // have a clock on the wall behind them; this is for the ones who do not.
+      //
+      // Rightmost, so it never moves. Everything else on this end of the bar
+      // comes and goes with the state of the show -- the record badge, the
+      // input meter -- and a clock that shuffles sideways when a recording
+      // starts is a clock you have to find again.
+      //
+      // Four states from one control: off, 24-hour, 12-hour, and a round face.
+      // Offering only "on" would make somebody's convention the default, and a
+      // lot of desks genuinely do have an analogue clock on them.
+      {
+        const std::string clockMode =
+          project_.clockMode.empty() ? std::string("off") : project_.clockMode;
+        if (clockMode != "off") {
+          const std::time_t now = std::time(nullptr);
+          std::tm local {};
+#ifdef _WIN32
+          localtime_s(&local, &now);
+#else
+          localtime_r(&now, &local);
+#endif
+          if (clockMode == "analog") {
+            // A round face the height of the toolbar row. Small, but the
+            // question it answers -- roughly what time is it -- does not need
+            // precision, and the second hand is what tells you it is live.
+            const int dia = kTBtnH;
+            SDL_Rect face {rx - dia, ty, dia, dia};
+            rx -= dia + kTBtnGap;
+            drawUIPanel(face, pal.light, pal.deep, pal.mid);
+            const int cxp = face.x + face.w / 2;
+            const int cyp = face.y + face.h / 2;
+            const double r = dia / 2.0 - uiScaled(3);
+            // A BEZEL, so it reads as a clock and not as three lines in a box.
+            // Drawn as a ring of short chords: SDL has no circle, and at this
+            // size 48 segments is already smoother than the pixels can show.
+            SDL_SetRenderDrawColor(controlRenderer_, pal.deep.r, pal.deep.g, pal.deep.b, 255);
+            {
+              constexpr int kSeg = 48;
+              float px = 0.0f, py = 0.0f;
+              for (int i = 0; i <= kSeg; ++i) {
+                const double a = i * 2.0 * 3.14159265358979 / kSeg;
+                const float nx = static_cast<float>(cxp + std::sin(a) * r);
+                const float ny = static_cast<float>(cyp - std::cos(a) * r);
+                if (i > 0) SDL_RenderLine(controlRenderer_, px, py, nx, ny);
+                px = nx; py = ny;
+              }
+            }
+            // Quarter ticks only. At this size twelve of them is a smudge.
+            for (int t = 0; t < 4; ++t) {
+              const double a = t * 3.14159265358979 / 2.0;
+              const double sx = std::sin(a) * r, sy = -std::cos(a) * r;
+              SDL_RenderLine(controlRenderer_,
+                             static_cast<float>(cxp + sx * 0.72), static_cast<float>(cyp + sy * 0.72),
+                             static_cast<float>(cxp + sx * 0.92), static_cast<float>(cyp + sy * 0.92));
+            }
+            auto hand = [&](double turns, double len, SDL_Color col, int thick) {
+              const double a = turns * 2.0 * 3.14159265358979;
+              const double hx = std::sin(a) * r * len;
+              const double hy = -std::cos(a) * r * len;
+              SDL_SetRenderDrawColor(controlRenderer_, col.r, col.g, col.b, 255);
+              for (int o = 0; o < thick; ++o) {
+                // Thickness by drawing neighbouring lines: SDL has no width.
+                const int off = o - thick / 2;
+                SDL_RenderLine(controlRenderer_,
+                               static_cast<float>(cxp + off), static_cast<float>(cyp),
+                               static_cast<float>(cxp + hx + off), static_cast<float>(cyp + hy));
+              }
+            };
+            const double secs = local.tm_sec;
+            const double mins = local.tm_min + secs / 60.0;
+            const double hours = (local.tm_hour % 12) + mins / 60.0;
+            hand(hours / 12.0, 0.48, pal.deep, std::max(2, uiScaled(2)));
+            hand(mins / 60.0,  0.68, pal.deep, std::max(1, uiScaled(2) - 1));
+            hand(secs / 60.0,  0.76, SDL_Color{200, 60, 60, 255}, 1);
+            if (pointInRect(mouseX_, mouseY_, face)) {
+              toolbarHoverTip_ = "Wall clock - change or hide it in Settings > System > Appearance";
+              toolbarHoverAt_ = face;
+            }
+            if (isFourTwenty()) {
+              drawFourTwentyHaze(face, SDL_GetTicks());
+            }
+          } else {
+            char stamp[32];
+            if (clockMode == "12h") {
+              const int h12 = (local.tm_hour % 12) == 0 ? 12 : (local.tm_hour % 12);
+              std::snprintf(stamp, sizeof(stamp), "%d:%02d:%02d %s", h12,
+                            local.tm_min, local.tm_sec,
+                            local.tm_hour < 12 ? "AM" : "PM");
+            } else {
+              std::snprintf(stamp, sizeof(stamp), "%02d:%02d:%02d",
+                            local.tm_hour, local.tm_min, local.tm_sec);
+            }
+            // Sized to the widest reading it can ever show, not to the current
+            // one -- a clock whose box changes width as the digits change is a
+            // clock that twitches once a second.
+            const char* widest = (clockMode == "12h") ? "12:00:00 PM" : "00:00:00";
+            const int clockW = measuredTextWidth(fontMono_, widest) + uiScaled(16);
+            SDL_Rect clockRect {rx - clockW, ty, clockW, kTBtnH};
+            rx -= clockW + kTBtnGap;
+            drawUIPanel(clockRect, pal.light, pal.deep, pal.mid);
+            drawCenteredTextSafe(controlRenderer_, fontMono_, clockRect, stamp, pal.deep);
+            if (isFourTwenty()) {
+              drawFourTwentyHaze(clockRect, SDL_GetTicks());
+            }
+            if (pointInRect(mouseX_, mouseY_, clockRect)) {
+              toolbarHoverTip_ = "Wall clock - change or hide it in Settings > System > Appearance";
+              toolbarHoverAt_ = clockRect;
+            }
+          }
+        }
+      }
+
+
+      // ─── Recording indicator ───────────────────────────────────────────
+      // On the TOOLBAR, not in the settings modal. An operator running a show
+      // is on the deck firing cues -- nobody sits in a settings page during a
+      // take, so a record readout there is a readout nobody sees.
+      //
+      // Only takes space while recording. A permanent "not recording" badge is
+      // noise on every other show.
+      if (recordingActive()) {
+          const int secs = static_cast<int>(recordingElapsedSeconds());
+          char t[32];
+          std::snprintf(t, sizeof(t), "REC %d:%02d:%02d",
+                        secs / 3600, (secs / 60) % 60, secs % 60);
+          const int recW = autoW(t, 130);
+          SDL_Rect recRect {rx - recW, ty, recW, kTBtnH};
+          rx -= recW + kTBtnGap;
+
+          // Pulsing border, same language as blackout: this is a state the
+          // operator must not lose track of.
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+          const double pulse =
+            0.5 + 0.5 * std::sin(static_cast<double>(animationNow_) * 0.006);
+          SDL_SetRenderDrawColor(controlRenderer_, 230, 40, 40,
+                                 static_cast<Uint8>(80 + 140 * pulse));
+          SDL_Rect glow {recRect.x - 2, recRect.y - 2, recRect.w + 4, recRect.h + 4};
+          SDL_RenderRect(controlRenderer_, &glow);
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+          drawUIPanel(recRect, SDL_Color{150, 20, 20, 255}, pal.deep, pal.light);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, recRect, t,
+                               SDL_Color{255, 210, 210, 255});
+
+          // Input level beside it, when a microphone is open. Elapsed time
+          // alone cannot tell an operator the recording is capturing anything;
+          // a level that moves can, and that is the question actually being
+          // asked mid-take.
+          if (audioInputRunning()) {
+            const int meterW = 90;
+            SDL_Rect meter {rx - meterW, ty, meterW, kTBtnH};
+            rx -= meterW + kTBtnGap;
+            drawUIPanel(meter, pal.dark, pal.deep, pal.mid);
+            const int inset = 4;
+            const int barMax = meter.w - inset * 2;
+            const int barW = std::clamp(
+              static_cast<int>(audioInputPeak_ * barMax), 0, barMax);
+            if (barW > 0) {
+              // Green until it is close to clipping, then red. The number an
+              // operator needs at a glance is "is this about to distort".
+              const bool hot = audioInputPeak_ > 0.89;
+              SDL_Color lvl = hot ? SDL_Color{240, 60, 60, 255}
+                                  : SDL_Color{60, 220, 110, 255};
+              SDL_SetRenderDrawColor(controlRenderer_, lvl.r, lvl.g, lvl.b, 255);
+              SDL_Rect fill {meter.x + inset, meter.y + inset,
+                             barW, meter.h - inset * 2};
+              SDL_RenderFillRect(controlRenderer_, &fill);
+            }
+            if (project_.audioInputClipLatch) {
+              drawCenteredTextSafe(controlRenderer_, fontSmall_, meter, "CLIP",
+                                   SDL_Color{255, 230, 230, 255});
+            }
+        }
+      }
+
+      settingsGearRect_  = SDL_Rect {}; // settings moved to bottom bar
+      blackoutBtnRect_   = {rx - kIconBtnW, ty, kIconBtnW, kTBtnH}; rx -= kIconBtnW + kTBtnGap;
+      fullscreenBtnRect_ = {rx - kIconBtnW, ty, kIconBtnW, kTBtnH}; rx -= kIconBtnW + kTGrpGap;
+      // Blackout — icon only, with pulsing glow when active
+      {
+        bool blkOn = masterDimmerTarget_ < 0.5;
+        SDL_Color fill = blkOn ? SDL_Color{160,18,18,255} : pal.light;
+        SDL_Color ink  = blkOn ? SDL_Color{255,200,200,255} : pal.deep;
+        // Pulsing red border glow when blackout is on
+        if (blkOn) {
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+          double pulse = 0.5 + 0.5 * std::sin(static_cast<double>(animationNow_) * 0.006);
+          Uint8 glowA = static_cast<Uint8>(80 + 140 * pulse);
+          SDL_SetRenderDrawColor(controlRenderer_, 220, 30, 30, glowA);
+          SDL_Rect glow {blackoutBtnRect_.x - 2, blackoutBtnRect_.y - 2,
+                         blackoutBtnRect_.w + 4, blackoutBtnRect_.h + 4};
+          SDL_RenderRect(controlRenderer_, &glow);
+          SDL_Rect glow2 {blackoutBtnRect_.x - 3, blackoutBtnRect_.y - 3,
+                          blackoutBtnRect_.w + 6, blackoutBtnRect_.h + 6};
+          SDL_SetRenderDrawColor(controlRenderer_, 220, 30, 30, static_cast<Uint8>(glowA / 2));
+          SDL_RenderRect(controlRenderer_, &glow2);
+          SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+        }
+        drawUIPanel(blackoutBtnRect_, fill, pal.deep, pal.mid);
+        if (uiBtnBlackout_.texture) {
+          int sz = std::min(20, kTBtnH - 12);
+          SDL_Rect ir {blackoutBtnRect_.x + (blackoutBtnRect_.w - sz) / 2,
+                       blackoutBtnRect_.y + (blackoutBtnRect_.h - sz) / 2, sz, sz};
+          drawUiImageContain(uiBtnBlackout_, ir, 255, ink);
+        }
+      }
+      // Fullscreen — icon only
+      {
+        SDL_Color fill = isFullscreen ? pal.dark : pal.light;
+        SDL_Color ink  = isFullscreen ? pal.light : pal.deep;
+        drawUIPanel(fullscreenBtnRect_, fill, pal.deep, pal.mid);
+        UiImageAsset& fsIcon = isFullscreen ? uiBtnWindow_ : uiBtnFullscreen_;
+        if (fsIcon.texture) {
+          int sz = std::min(20, kTBtnH - 12);
+          SDL_Rect ir {fullscreenBtnRect_.x + (fullscreenBtnRect_.w - sz) / 2,
+                       fullscreenBtnRect_.y + (fullscreenBtnRect_.h - sz) / 2, sz, sz};
+          drawUiImageContain(fsIcon, ir, 255, ink);
+        }
+      }
+
+      // Left-anchored buttons
+      // MEASURED, not guessed. These were 60, 72 and 92 raw pixels, which is
+      // what a 1x pixel font needs and nothing like what a doubled one does --
+      // at Pocket scale NEW, OPEN, SAVE and BUNDLE were drawn as four empty
+      // boxes, their labels ellipsized away to nothing inside them.
+      int ax = toolbar.x + uiScaled(8);
+      const int newW    = autoW("NEW", 60);
+      const int openW   = autoW("OPEN", 72);
+      const int saveW   = autoW("SAVE", 60);
+      const int saveAsW = autoW("SAVE AS", 84);
+      const int bundleW = autoW("BUNDLE", 92);
+      fileNewBtnRect_    = {ax, ty, newW, kTBtnH};    ax += newW + kTBtnGap;
+      fileOpenBtnRect_   = {ax, ty, openW, kTBtnH};   ax += openW + kTBtnGap;
+      fileSaveBtnRect_   = {ax, ty, saveW, kTBtnH};   ax += saveW + kTBtnGap;
+      // SAVE AS is a separate button again now that SAVE overwrites in place.
+      // The two are different acts and the toolbar should not make you guess
+      // which one you are about to get.
+      fileSaveAsBtnRect_ = {ax, ty, saveAsW, kTBtnH}; ax += saveAsW + kTGrpGap;
+      fileBundleBtnRect_ = {ax, ty, bundleW, kTBtnH}; ax += bundleW + kTGrpGap;
+      drawTBtn(fileNewBtnRect_,  "NEW", false, false,
+               "Start an empty show (the open one is left on disk)");
+      drawTBtn(fileOpenBtnRect_, "OPEN", false, false,
+               "Open a .deckboy show file");
+      drawTBtn(fileSaveBtnRect_, "SAVE", false, false,
+               "Ctrl+S - write back over the show that is open");
+      drawTBtn(fileSaveAsBtnRect_, "SAVE AS", false, false,
+               "Ctrl+Shift+S - write the show to a NEW file");
+      drawTBtn(fileBundleBtnRect_, "BUNDLE", false, false,
+               "Copy the show AND its media into one portable folder");
+
+      // RELINK — only exists while media is missing; red so it reads as a
+      // warning, not another file action.
+      fileRelinkBtnRect_ = SDL_Rect {};
+      if (missingMediaCount_ > 0) {
+        // Measured like its neighbours: 104 raw pixels held "RELINK 3" at 1x
+        // and showed "RELI..." at Pocket scale. The count makes the label a
+        // variable width, so guessing was never right for long.
+        const std::string relinkLabel = "RELINK " + std::to_string(missingMediaCount_);
+        const int relinkW = autoW(relinkLabel.c_str(), 104);
+        fileRelinkBtnRect_ = {ax, ty, relinkW, kTBtnH}; ax += relinkW + kTGrpGap;
+        drawUIPanel(fileRelinkBtnRect_, SDL_Color {160, 18, 18, 255}, pal.deep, pal.mid);
+        // Drawn with the font it was measured with -- see autoW.
+        drawCenteredTextSafe(controlRenderer_, btnFont, fileRelinkBtnRect_,
+                             relinkLabel, SDL_Color {255, 210, 210, 255});
+      }
+
+      // CHECK -- everything wrong with the show, before doors rather than at
+      // take. Same shape as RELINK: it only exists when there is something to
+      // say, so an unbroken show carries no clutter. Amber, not red: these are
+      // things to fix, where a missing file is already broken.
+      //
+      // Rescanned on a cadence rather than every frame -- it walks every cue on
+      // every deck and stats files, which is not a per-frame cost.
+      fileCheckBtnRect_ = SDL_Rect {};
+      const Uint64 nowMs = SDL_GetTicks();
+      if (nowMs - lastShowCheckMs_ > 4000) {
+        lastShowCheckMs_ = nowMs;
+        showProblemCount_ = static_cast<int>(scanShowForProblems().size());
+      }
+      if (showProblemCount_ > 0) {
+        const std::string checkLabel = "CHECK " + std::to_string(showProblemCount_);
+        const int checkW = autoW(checkLabel.c_str(), 104);
+        fileCheckBtnRect_ = {ax, ty, checkW, kTBtnH}; ax += checkW + kTGrpGap;
+        drawUIPanel(fileCheckBtnRect_, SDL_Color {150, 104, 16, 255}, pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, btnFont, fileCheckBtnRect_,
+                             checkLabel, SDL_Color {255, 236, 200, 255});
+      }
+
+      SDL_Rect sep1 {ax, ty + 4, 2, kTBtnH - 8};
+      Primitives::fillRect(controlRenderer_, sep1, pal.mid);
+      ax += 2 + kTGrpGap;
+
+      // Deck loop and shuffle toggles — icon buttons
+      const Deck& focDeck = focusedDeck();
+      {
+        // Scaled like everything else on this bar: a raw 44 stayed 44 at 2x
+        // and shrank relative to its neighbours at every other scale.
+        const int kModeBtnW = uiScaled(44);
+        deckLoopBtnRect_    = {ax, ty, kModeBtnW, kTBtnH}; ax += kModeBtnW + kTBtnGap;
+        deckShuffleBtnRect_ = {ax, ty, kModeBtnW, kTBtnH}; ax += kModeBtnW + kTGrpGap;
+
+        // THE FACE IS THE FALLBACK. An icon-only button with no icon is a
+        // blank rectangle, and these two have no label to read: an operator
+        // cannot tell loop from once, or shuffle from order, by looking at
+        // nothing. The word is worse-looking than the glyph and infinitely
+        // better than an empty box.
+        auto drawModeBtn = [&](const SDL_Rect& rect, UiImageAsset& icon, bool lit,
+                               const char* face) {
+          SDL_Color fill = lit ? pal.dark : pal.light;
+          SDL_Color ink  = lit ? pal.light : pal.deep;
+          drawUIPanel(rect, fill, pal.deep, pal.mid);
+          // ensureUiImageLoaded is what actually decodes, and it is called by
+          // drawUiImageContain -- so ASK it, rather than reading a texture
+          // that is null until the first attempt has been made.
+          int iconSize = std::min(20, std::min(rect.w - 12, rect.h - 12));
+          SDL_Rect iconRect {
+            rect.x + (rect.w - iconSize) / 2,
+            rect.y + (rect.h - iconSize) / 2,
+            iconSize, iconSize
+          };
+          if (!drawUiImageContain(icon, iconRect, 255, ink)) {
+            drawCenteredTextSafe(controlRenderer_, fontSmall_, rect,
+                                 ellipsizeToPixelWidth(fontSmall_, face,
+                                                       rect.w - uiScaled(4)),
+                                 ink);
+          }
+        };
+        UiImageAsset& loopIcon = focDeck.playlistLoop ? uiModeLoopOn_ : uiModeOnce_;
+        UiImageAsset& shuffIcon = focDeck.shuffle ? uiModeShuffleOn_ : uiModeOrder_;
+        drawModeBtn(deckLoopBtnRect_, loopIcon, focDeck.playlistLoop,
+                    focDeck.playlistLoop ? "LOOP" : "ONCE");
+        drawModeBtn(deckShuffleBtnRect_, shuffIcon, focDeck.shuffle,
+                    focDeck.shuffle ? "RND" : "ORD");
+        // These two are ICON ONLY, which is where a tip is worth most: there
+        // is no label to read and no way to tell loop from once by looking.
+        if (pointInRect(mouseX_, mouseY_, deckLoopBtnRect_)) {
+          toolbarHoverTip_ = focDeck.playlistLoop
+            ? "Playlist LOOP - the list restarts at the top"
+            : "Playlist ONCE - the list stops at the end";
+          toolbarHoverAt_ = deckLoopBtnRect_;
+        } else if (pointInRect(mouseX_, mouseY_, deckShuffleBtnRect_)) {
+          toolbarHoverTip_ = focDeck.shuffle
+            ? "SHUFFLE - the next cue is picked at random"
+            : "ORDER - cues advance down the list";
+          toolbarHoverAt_ = deckShuffleBtnRect_;
+        }
+      }
+
+      SDL_Rect sep2 {ax, ty + 4, 2, kTBtnH - 8};
+      Primitives::fillRect(controlRenderer_, sep2, pal.mid);
+      ax += 2 + kTGrpGap;
+
+      // Volume fader fills remaining space
+      int faderAreaW = std::max(80, rx - ax - kTGrpGap);
+      {
+        int volPct = static_cast<int>(std::round(project_.masterVolume * 100.0));
+        std::string volText = (faderAreaW > 160)
+          // The word on its own goes through the catalogue: "VOLUME 100%" as a
+          // whole is in no catalogue, so it stayed English in every language.
+          ? deckboy::core::i18n::translate("VOLUME") + " " + std::to_string(volPct) + "%"
+          : std::to_string(volPct) + "%";
+        int volTextW = 0;
+        textSizeShown(fontSmall_, volText.c_str(), 0, &volTextW, nullptr);
+        int kVolLblW = std::min(volTextW + 24, faderAreaW - 44);
+        SDL_Rect volLbl {ax, ty, kVolLblW, kTBtnH};
+        drawUIPanel(volLbl, pal.mid, pal.deep, pal.light);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, volLbl, volText, pal.deep);
+        int trackX = ax + kVolLblW + 4;
+        int trackW = std::max(40, faderAreaW - kVolLblW - 4);
+        masterFaderRect_ = {trackX, ty + kTBtnH/2 - 7, trackW, 14};
+        SDL_Rect track = masterFaderRect_;
+        Primitives::fillRect(controlRenderer_, track, pal.deep);
+        int fillW = static_cast<int>(std::clamp(project_.masterVolume, 0.0, 2.0) / 2.0 * track.w);
+        SDL_Rect fillR {track.x, track.y, fillW, track.h};
+        SDL_Color fCol = project_.masterVolume > 1.0 ? SDL_Color{180,80,20,255} : pal.dark;
+        Primitives::fillRect(controlRenderer_, fillR, fCol);
+        Primitives::strokeRect(controlRenderer_, track, pal.mid);
+        // Grabber thumb at current position
+        int thumbX = track.x + fillW;
+        int thumbW = 6;
+        int thumbH = track.h + 6;
+        SDL_Rect thumb {thumbX - thumbW / 2, track.y - 3, thumbW, thumbH};
+        Primitives::fillRect(controlRenderer_, thumb, pal.light);
+        Primitives::strokeRect(controlRenderer_, thumb, pal.mid);
+      }
+
+      // Shuffle sparkle — fast twinkling when shuffle is on
+      if (focDeck.shuffle) {
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+        double phase = static_cast<double>(animationNow_) * 0.004;
+        int sx = deckShuffleBtnRect_.x + deckShuffleBtnRect_.w + 4;
+        int sy = deckShuffleBtnRect_.y + deckShuffleBtnRect_.h / 2;
+        SDL_Color sc = pal.deep;
+        sc.a = static_cast<Uint8>(160 + 95 * std::abs(std::sin(phase * 0.8)));
+        drawStar(controlRenderer_, sx, sy, 3, sc);
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+      }
+    }
+
+    deckSidebarToggleRect_ = SDL_Rect {};
+
+    // Content area: below toolbar
+    int contentY = toolbar.y + toolbar.h + kLayoutPanelGap;
+    int controlsTop = bottomBarRect_.w > 0 ? bottomBarRect_.y : (height - kLayoutBottomBarHeight - kLayoutPanelPadding);
+    int contentBottom = controlsTop - kLayoutPanelGap;
+    int contentH = std::max(120, contentBottom - contentY);
+    int contentLeft  = shell.x + kLayoutPanelBorder * 2;
+    int contentRight = shell.x + shell.w - kLayoutPanelBorder * 2;
+    int contentW = std::max(0, contentRight - contentLeft);
+
+    // Layout: playlist column (left) | program + inspector (right), with draggable splitters.
+    SDL_Rect contentArea {contentLeft, contentY, contentW, contentH};
+    playlistSplitterRect_ = {};
+    inspectorSplitterRect_ = {};
+    constexpr int kPlaylistMinW = 236;
+    int playlistMaxW = std::max(kPlaylistMinW, contentW - 520);
+    int playlistW = playlistPaneWidth_ > 0
+      ? std::clamp(playlistPaneWidth_, kPlaylistMinW, playlistMaxW)
+      : std::clamp(contentW / 5, kPlaylistMinW, 336);
+    // VJ MODE SHOWS BOTH DECKS AT ONCE, side by side, so the column takes the
+    // width for two. A mixer where you can only see the playlist you are
+    // fading away from is not a mixer -- and those two lists are exactly what
+    // the crossfader is choosing between, so they belong next to each other.
+    const bool vjSplitDecks = project_.vjModeEnabled && project_.decks.size() > 1;
+    // A SECOND PLAYLIST IS SHOWN, NOT HIDDEN BEHIND A TAB (James, 2026-11-07:
+    // "the 2nd deck should be visible if space allow instead of having to
+    // drag out to reveal it"). With two or more playlists the column widens
+    // to fit two side by side whenever the window leaves the monitor its
+    // room -- unless the operator has dragged the splitter since, with the
+    // second playlist there to see. The 280 matches `comfortable` below.
+    if (!vjSplitDecks && project_.decks.size() >= 2 && playlistDraggedAtDecks_ < 2) {
+      const int twoColumns = uiScaled(280) * 2 + kLayoutPanelGap;
+      if (twoColumns <= playlistMaxW) playlistW = std::max(playlistW, twoColumns);
+    }
+    if (vjSplitDecks) {
+      // TWO DECKS, NOT TWICE THE WIDTH.
+      //
+      // This used to DOUBLE the playlist area, which is what made VJ mode
+      // unusable on a laptop: at 1470 it took ~590px for cue lists and left the
+      // monitor row about 360, below the 420 gate that shows the A/B previews.
+      // So the previews never appeared, the hecklers with them, and the VJ bar
+      // had nowhere to put its controls -- all from this one line.
+      //
+      // Three halves instead of two, so each deck's column is about 75% of the
+      // single-deck width. Cue names stay readable, and the ~150px that frees
+      // is what lets the monitor row carry both previews AND a programme worth
+      // looking at. Never below the minimum for two columns, which is what the
+      // lower clamp is for.
+      // A VJ COLUMN IS ALLOWED TO BE TIGHTER THAN A SOLO ONE.
+      //
+      // kPlaylistMinW (236) is sized for the single list you EDIT in -- names,
+      // thumbnails, per-cue buttons. In VJ mode the lists are there to be
+      // chosen from, not worked in, and the previews above them carry the
+      // picture. Holding both columns to the editing minimum left the monitor
+      // row at 392px, still under the 420 it needs to show the previews at all,
+      // so the whole feature stayed invisible on a laptop for the sake of 36px
+      // of cue list.
+      constexpr int kVjPlaylistMinW = 170;
+      // Six fifths, not three halves and certainly not double. Two VJ columns
+      // together take only a fifth more room than the single list did, which is
+      // what leaves the monitor row enough to carry both previews AND a
+      // programme -- the thing VJ mode exists to show.
+      playlistW = std::clamp(playlistW * 6 / 5 + kLayoutPanelGap,
+                             kVjPlaylistMinW * 2 + kLayoutPanelGap,
+                             std::max(kVjPlaylistMinW * 2 + kLayoutPanelGap,
+                                      contentW - 460));
+    }
+    SDL_Rect playlistCol {contentArea.x, contentArea.y, playlistW, contentArea.h};
+    SDL_Rect mainPanel {contentArea.x + playlistW + kLayoutPanelGap, contentArea.y,
+                        std::max(0, contentArea.w - playlistW - kLayoutPanelGap), contentArea.h};
+    contentAreaRect_ = contentArea;
+    mainPanelLayoutRect_ = mainPanel;
+    playlistSplitterRect_ = {playlistCol.x + playlistCol.w, contentArea.y, kLayoutPanelGap, contentArea.h};
+    cueRowActionHits_.clear();
+    visiblePlaylistDecks_.clear();
+    // CLEARED BEFORE THE BRANCH. Both reset sites for the tabs were inside
+    // the non-VJ arm, so turning VJ mode ON left the previous frame's tab
+    // rects in place for ever -- and they are tested above the deck-column
+    // loop, so they would go on swallowing presses in the playlist area and
+    // selecting decks instead of cues. The rule this file already follows for
+    // every other hit list: reset where the frame starts, not where the thing
+    // is drawn.
+    deckTabRects_.clear();
+    deckAddTabRect_ = SDL_Rect {};
+    deckRemoveTabRect_ = SDL_Rect {};
+
+    if (vjSplitDecks) {
+      // A on the left and B on the right, matching the bar above and the way
+      // a hand moves across a fader.
+      const int deckCount = static_cast<int>(project_.decks.size());
+      const int deckA = std::clamp(project_.vjDeckA, 0, deckCount - 1);
+      const int deckB = std::clamp(project_.vjDeckB, 0, deckCount - 1);
+      const int halfW = (playlistCol.w - kLayoutPanelGap) / 2;
+      SDL_Rect colA {playlistCol.x, playlistCol.y, halfW, playlistCol.h};
+      SDL_Rect colB {playlistCol.x + halfW + kLayoutPanelGap, playlistCol.y,
+                     playlistCol.w - halfW - kLayoutPanelGap, playlistCol.h};
+      renderPlaylistColumn(colA, deckA);
+      if (deckB != deckA) {
+        renderPlaylistColumn(colB, deckB);
+      }
+    } else {
+      // ── A TAB PER PLAYLIST ─────────────────────────────────────────────
+      //
+      // Splitting the column side by side is the right thing when it fits,
+      // and at the default width it does not -- so on its own it left an
+      // operator who had just added a playlist looking at the same single
+      // column, with the second one reachable only by dragging a splitter
+      // they have no reason to think is involved.
+      //
+      // The tabs are the answer that works at every width. They appear only
+      // with more than one playlist, so a single-deck show is untouched.
+      const int deckCountForTabs = static_cast<int>(project_.decks.size());
+      // ── ALWAYS, AND WITH A + ON THE END ────────────────────────────────
+      //
+      // This used to appear only when the playlists did not all fit, on the
+      // reasoning that tabs selecting what you can already see are noise.
+      // True as far as it went, and it left a one-playlist show with NO
+      // visible way to make a second one -- which James asked about four
+      // times: "a clear way to add decks", "i dont see a way".
+      //
+      // The strip is where playlists live, so the + belongs on it, and a row
+      // that is always there is a row somebody can learn. The cost is one
+      // row of height; the thing it buys is the feature being findable at
+      // all.
+      {
+        const int tabH = uiScaled(22);
+        const int count = deckCountForTabs;
+        const bool canAddDeck = count < kMaxDecks;
+        deckTabRects_.assign(static_cast<std::size_t>(count), SDL_Rect {});
+        const int gap = uiScaled(2);
+        // The + takes a fixed narrow slot; the tabs share what is left.
+        // A + and, once there is more than one playlist, a - beside it.
+        // "how do i remove decks?" was asked with the + already on screen,
+        // which is the answer: the place you add them is the only place
+        // anybody will look for taking one away.
+        const bool canRemoveDeck = count > 1;
+        const int addW = canAddDeck ? uiScaled(26) : 0;
+        const int remW = canRemoveDeck ? uiScaled(26) : 0;
+        const int trailW = (canAddDeck ? addW + gap : 0) + (canRemoveDeck ? remW + gap : 0);
+        const int tabsW = playlistCol.w - trailW;
+        const int each = (tabsW - gap * (count - 1)) / std::max(1, count);
+        for (int d = 0; d < count; ++d) {
+          SDL_Rect tab {playlistCol.x + d * (each + gap), playlistCol.y,
+                        (d == count - 1)
+                          ? playlistCol.x + tabsW - (playlistCol.x + d * (each + gap) - playlistCol.x) - playlistCol.x + playlistCol.x
+                          : each,
+                        tabH};
+          if (d == count - 1) {
+            tab.w = playlistCol.x + tabsW - tab.x;
+          }
+          const bool focused = d == project_.focusedDeckIndex;
+          // The tab the armed - would take goes red with it, so the operator
+          // sees WHICH playlist the second press removes, not just that one
+          // will go.
+          const bool doomed = d == deckRemoveArmedIndex_ &&
+                              animationNow_ - deckRemoveArmedAtMs_ <= 4000;
+          drawUIPanel(tab, doomed ? SDL_Color {170, 40, 40, 255}
+                                  : (focused ? pal.light : pal.dark),
+                      pal.deep, pal.mid);
+          // The NAME, ellipsized, because a playlist that has been named
+          // "Lower thirds" is worth far more than "2" -- and the number is
+          // still there in front of it.
+          // THE NUMBER ALWAYS, the name only when it fits whole. Five tabs
+          // across the default panel gave each about sixty pixels, so every
+          // one of them read "1 Dec..." -- five identical stubs, which is
+          // worse than no label at all because it looks like information.
+          const std::string name =
+            project_.decks[d].name.empty() ? deckDefaultName(d) : project_.decks[d].name;
+          // NOT "1 Deck 1". A playlist still called by its default name
+          // already says its number, so it is shown alone; a named one keeps
+          // the number in front ("2 Lower thirds").
+          const bool defaultName = name == deckDefaultName(d);
+          const std::string full = defaultName ? name : std::to_string(d + 1) + " " + name;
+          const bool nameFits =
+            measuredTextWidth(fontSmall_, full) <= tab.w - uiScaled(8);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, tab,
+                               nameFits ? full : std::to_string(d + 1),
+                               focused ? pal.deep : pal.fg);
+          deckTabRects_[d] = tab;
+        }
+        int trailX = playlistCol.x + tabsW + gap;
+        if (canAddDeck) {
+          SDL_Rect add {trailX, playlistCol.y, addW, tabH};
+          drawUIPanel(add, pal.tile, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, add, "+", pal.fg);
+          deckAddTabRect_ = add;
+          trailX += addW + gap;
+        } else {
+          deckAddTabRect_ = SDL_Rect {};
+        }
+        if (canRemoveDeck) {
+          // ARMED IS RED AND SAYS SO. This discards a playlist and its cues
+          // and stops playback; one press beside a + that is one press is
+          // exactly the mis-tap worth spending a second press to prevent.
+          const bool armed = deckRemoveArmedIndex_ == project_.focusedDeckIndex &&
+                             animationNow_ - deckRemoveArmedAtMs_ <= 4000;
+          SDL_Rect rem {trailX, playlistCol.y, remW, tabH};
+          drawUIPanel(rem, armed ? SDL_Color {170, 40, 40, 255} : pal.tile,
+                      pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, rem, "-",
+                               armed ? SDL_Color {255, 220, 220, 255} : pal.fg);
+          deckRemoveTabRect_ = rem;
+        } else {
+          deckRemoveTabRect_ = SDL_Rect {};
+        }
+        playlistCol.y += tabH + gap;
+        playlistCol.h -= tabH + gap;
+      }
+
+      // ── ONE COLUMN PER PLAYLIST ────────────────────────────────────────
+      //
+      // This said `renderPlaylistColumn(playlistCol, 0)` -- deck 0, always.
+      // Outside VJ mode the column drew DECK 1 whatever the focused deck was
+      // and however many decks existed, so adding a second playlist changed
+      // nothing visible: the deck was there, it decoded, it played, and it
+      // had no column. The compositor had the identical fault a layer down.
+      //
+      // SIDE BY SIDE while they fit, because that is the whole point of
+      // having two: a camera playlist and a lower-thirds playlist are worked
+      // TOGETHER, and a tab strip would mean looking away from one to touch
+      // the other. Below a readable width the focused one takes the column on
+      // its own -- a row of 90px columns is not two playlists, it is neither.
+      // Reserve room for cue names and duration before adding another column.
+      // The tabs keep every deck reachable when the panel is narrow.
+      const int deckCount = static_cast<int>(project_.decks.size());
+      const int comfortable = uiScaled(280);
+      const int columns = std::max(1, std::min(deckCount,
+        (playlistCol.w + kLayoutPanelGap) / (comfortable + kLayoutPanelGap)));
+      if (columns <= 1) {
+        renderPlaylistColumn(playlistCol, std::clamp(project_.focusedDeckIndex,
+                                                     0, deckCount - 1));
+      } else {
+        // THE FOCUSED DECK IS ALWAYS ONE OF THEM. With more playlists than
+        // fit, the window shows a run of them starting at the focused one,
+        // so selecting a deck can never leave the operator looking at a set
+        // of columns that does not contain the one they are working on.
+        int first = std::clamp(project_.focusedDeckIndex, 0, deckCount - 1);
+        first = std::min(first, std::max(0, deckCount - columns));
+        const int gaps = kLayoutPanelGap * (columns - 1);
+        const int each = (playlistCol.w - gaps) / columns;
+        for (int i = 0; i < columns; ++i) {
+          const int deckIndex = first + i;
+          if (deckIndex >= deckCount) {
+            break;
+          }
+          SDL_Rect col {playlistCol.x + i * (each + kLayoutPanelGap),
+                        playlistCol.y,
+                        // The last one takes the remainder, so integer
+                        // division never leaves a sliver of background down
+                        // the right-hand edge.
+                        (i == columns - 1) ? playlistCol.x + playlistCol.w -
+                                               (playlistCol.x + i * (each + kLayoutPanelGap))
+                                           : each,
+                        playlistCol.h};
+          renderPlaylistColumn(col, deckIndex);
+        }
+      }
+    }
+    if (mainPanel.w > 60 && mainPanel.h > 60) {
+      renderMainPanel(mainPanel);
+    } else {
+      mainPanelLayoutRect_ = {};
+    }
+    if (playlistSplitterRect_.w > 0 && playlistSplitterRect_.h > 0) {
+      bool active = layoutDragMode_ == LayoutDragMode::Playlist;
+      // Touch mode skips the hover highlight — a tap can't hover, and the
+      // sticky highlight after a drag is more distracting than helpful.
+      bool hover = !inTouchMode() && pointInRect(mouseX_, mouseY_, playlistSplitterRect_);
+      SDL_Rect rail {playlistSplitterRect_.x + playlistSplitterRect_.w / 2 - 1,
+                     playlistSplitterRect_.y + 12, 2, std::max(0, playlistSplitterRect_.h - 24)};
+      SDL_Color railColor = active ? pal.light
+                                   : (hover ? pal.dark : pal.mid);
+      Primitives::fillRect(controlRenderer_, rail, railColor);
+      SDL_Rect grip {playlistSplitterRect_.x + 1,
+                     playlistSplitterRect_.y + playlistSplitterRect_.h / 2 - 18,
+                     std::max(0, playlistSplitterRect_.w - 2), 36};
+      drawUIPanel(grip,
+                  active ? pal.dark : pal.shellInner,
+                  pal.deep,
+                  hover || active ? pal.light : pal.mid);
+      for (int dot = 0; dot < 3; ++dot) {
+        SDL_Rect pip {grip.x + grip.w / 2 - 1, grip.y + 9 + dot * 8, 2, 2};
+        Primitives::fillRect(controlRenderer_, pip,
+                             active ? pal.light : pal.dark);
+      }
+    }
+
+    renderButtons();
+    // The theme's creatures, on the chrome between the panels.
+    //
+    // AFTER the panels, so they are not painted over, and BEFORE every popup,
+    // toast and modal, so nothing they do can obscure something the operator
+    // needs to read. Their habitat is the strip of shell along the bottom,
+    // which carries no information at all -- and they steer toward the program
+    // monitor, because a moth that ignored the brightest thing in the room
+    // would not be a moth.
+    // The empty part of the playlist, when there is enough of it. That space
+    // is inside a panel but contains NOTHING -- no control, no value, no cue
+    // -- and it is the part of the window an operator looks at between cues.
+    // The first attempt used the strip above the bottom bar, which turned out
+    // to overlap the transport row: a firefly ended up sitting on a button,
+    // which is exactly what these are not allowed to do.
+    //
+    // Below about 70px there is not enough room to move, so they stay away
+    // rather than jitter in a slot.
+    if (playlistFreeRect_.h >= 70 && playlistFreeRect_.w >= 80) {
+      creatureHabitat_ = deckboy::creatures::Habitat {
+        playlistFreeRect_.x, playlistFreeRect_.y,
+        playlistFreeRect_.w, playlistFreeRect_.h, true};
+    } else {
+      creatureHabitat_ = deckboy::creatures::Habitat {};
+    }
+    // Repopulate once there is somewhere to live -- which may be several
+    // frames after the theme loaded, because the habitat is measured from a
+    // laid-out playlist.
+    {
+      std::size_t wanted = 0;
+      for (const auto& r : themeCreatures_) wanted += r.count;
+      // The count, and whether the places they live still exist. The second
+      // is what ends a colony's tenancy on a monitor that now has a picture
+      // in it.
+      if (placedCreatureCount() != wanted || reconcileCreatureHabitats()) {
+        rebuildCreatures();
+      }
+    }
+    creatureLureX_ = programAreaRect_.w > 0
+      ? programAreaRect_.x + programAreaRect_.w * 0.5 : width * 0.5;
+    creatureLureY_ = programAreaRect_.h > 0
+      ? programAreaRect_.y + programAreaRect_.h * 0.5 : height * 0.4;
+    updateCreatures(static_cast<double>(animationNow_) / 1000.0);
+    renderCreatures();
+    // THE BUSY CRITTERS ARE NOT DRAWN HERE. See below, above the popups: the
+    // update one lives inside the settings modal and was painted over by it
+    // every frame, so nobody ever saw one.
+    renderSlideRenderCard(width, height);
+    renderImportProgress(width, height);
+    if (confirmQuit_) {
+      renderQuitConfirm();
+    }
+    if (showStartupDialog_ && !showSplashOverlay_) {
+      renderStartupDialog();
+    }
+    // Dependency prompts sit above the settings modal so the operator sees
+    // them right where the toggle they just clicked lives.
+    renderDependencyPrompt();
+    // Popups rendered last (on top)
+    renderContextMenu();
+    renderSettingsModal();
+    // Over Settings, where INSTALL & RESTART is pressed, and under the busy
+    // critters so its animal walks on it.
+    renderUpdateInstallCard(width, height);
+    // ABOVE THE POPUPS, for the reason the toast below is: a critter says
+    // which control is working right now, and the control it is sitting on
+    // can be inside the settings modal -- the update download is exactly
+    // that. Drawn before the modal, it was painted over every frame and the
+    // feature was invisible for its whole life.
+    //
+    // Also AFTER the modal has run, so a markBusy issued while the modal drew
+    // is honoured on this frame rather than the next one.
+    //
+    // Safe on top because markBusy clamps every critter to the rect it was
+    // handed; none of them can wander into the chrome.
+    renderBusyCritters();
+    // The tour points at controls inside the settings modal too, so it draws
+    // above it; the toast still goes over the top, as it does for everything.
+    // The DASH is a popup like the others: under a lesson's card (a lesson
+    // points at its buttons) and under the toast.
+    renderDashboardOverlay();
+    renderTutorial(width, height);
+    renderFaceDropIn(width, height);
+    // Bug Swat (app_bugswat.ipp) covers the desk while it is up.
+    renderBugSwat(width, height);
+    renderLessonsList(width, height);
+    // THE TOAST GOES ABOVE THE POPUPS, not below them.
+    //
+    // It used to be drawn before this block, so any message raised by a
+    // control INSIDE a menu or the settings modal was painted underneath the
+    // thing the operator was looking at. The worst case was the UPDATES card:
+    // its download button explains every refusal by toast -- "nothing to
+    // install", "stop playback and disarm outputs first" -- and every one of
+    // those explanations was hidden behind the settings panel the button lives
+    // in. From the outside the button did nothing at all, which is precisely
+    // how it was reported on macOS.
+    //
+    // A toast is a reply to something the operator just did. It has to be
+    // legible from wherever they did it.
+    renderToast(width);
+    // One decode per frame, after the list has said what it is missing.
+    servicePendingRowThumbnail();
+    servicePendingRowWaveform();
+    renderShortcutsOverlay();
+    renderInputMonitor();
+    // A DROPDOWN BELONGS ON TOP OF WHATEVER OPENED IT.
+    //
+    // This drew before the dashboard, so the dashboard's action picker
+    // opened -- correctly -- and then the modal that asked for it was drawn
+    // straight over the top. From the outside that is a button that does
+    // nothing, which is exactly how it was reported. Anything an overlay can
+    // open has to be drawn after EVERY overlay, not in the middle of them.
+    // The colour picker opens the typing box, so it draws under that.
+    renderColourPicker(width, height);
+    renderDropdownPopover();
+    renderInlineTextEditor();
+    renderWebMonitorQr(width, height);
+    // The toolbar's tip opens downwards; requested here so it beats the
+    // controls underneath it when both are under the pointer.
+    if (!toolbarHoverTip_.empty() && toolbarHoverAt_.w > 0) {
+      drawHoverTip(toolbarHoverTip_, toolbarHoverAt_.x + toolbarHoverAt_.w / 2,
+                   toolbarHoverAt_.y + toolbarHoverAt_.h, true);
+    }
+    paintHoverTip();
+    // One frame behind, for the mascot: it is drawn well before most of the
+    // controls that can carry a tip.
+    hoverTipLast_ = hoverTipPending_;
+    hoverTipPending_.clear();
+    // Last, and over everything: it is modal.
+    renderCodeEditor();
+    renderSplashOverlay();
+    if (scanlineOverlay_ && pal.scanlineAlpha > 0) {
+      int ww, wh;
+      SDL_GetCurrentRenderOutputSize(controlRenderer_, &ww, &wh);
+      SDL_Rect dst {0, 0, ww, wh};
+      SDL_RenderTexture(controlRenderer_, scanlineOverlay_, nullptr, &dst);
+    }
+    // VJ MODE FRAMES THE WHOLE WINDOW.
+    //
+    // The bar alone is visible, but an operator glancing at a rack from the
+    // other side of a room needs to know which mode this machine is in before
+    // they touch it -- VJ mode puts a second deck live and makes a fader, not
+    // a take, decide what the audience sees. Running a normal show in it by
+    // accident is the failure worth designing against, so the entire window
+    // is edged in a colour that appears nowhere else.
+    //
+    // Drawn BEFORE the present, which is the whole of why it never appeared:
+    // it sat after SDL_RenderPresent, painting onto a back buffer nothing ever
+    // showed and the next frame cleared. It rendered perfectly, every frame,
+    // into nothing.
+    //
+    // It breathes on the beat: alive enough to catch the eye, slow enough to
+    // ignore while working, and it doubles as a tempo readout you can see
+    // without looking directly at it.
+    if (project_.vjModeEnabled) {
+      int winW = 0, winH = 0;
+      SDL_GetCurrentRenderOutputSize(controlRenderer_, &winW, &winH);
+      const double pulse = std::pow(1.0 - vjBeatPhase(), 3.0);
+      const int thickness = 3 + static_cast<int>(std::lround(pulse * 2.0));
+      SDL_Color edge {255, 176, 32,
+                      static_cast<Uint8>(170 + static_cast<int>(pulse * 85))};
+      for (int t = 0; t < thickness; ++t) {
+        SDL_Rect ring {t, t, winW - t * 2, winH - t * 2};
+        Primitives::strokeRect(controlRenderer_, ring, edge);
+      }
+    }
+    // The title names the show and follows the deck count (Super Deckboy),
+    // and the one-shot evolution draws over everything while it is playing.
+    refreshWindowTitle();
+    renderSuperDeckboyEvolution();
+    drawPressFeedback();
+    finishLiveTextFrame();   // reads the window back, so before present
+    paceBeforePresent(controlWindow_);
+    const auto uiPresentStart = std::chrono::steady_clock::now();
+    presentTraced(controlRenderer_, "desk");
+    revealControlWindow();  // the main control-window frame
+    auto uiFrameEnd = std::chrono::steady_clock::now();
+    lastUiPresentMs_ = std::chrono::duration<double, std::milli>(uiFrameEnd - uiPresentStart).count();
+    lastUiLayoutMs_ = std::chrono::duration<double, std::milli>(uiLayoutDone - uiFrameStart).count();
+    lastUiRenderMs_ = std::chrono::duration<double, std::milli>(uiFrameEnd - uiLayoutDone).count();
+    // A hitch is a gap over 1.5 frames of the desk screen's refresh.
+    const Uint64 presentNs = SDL_GetTicksNS();
+    if (deskLastPresentNs_ != 0) {
+      const double gapMs = static_cast<double>(presentNs - deskLastPresentNs_) / 1.0e6;
+      double refresh = 60.0;
+      if (const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(controlWindow_))) {
+        if (mode->refresh_rate > 1.0f) refresh = mode->refresh_rate;
+      }
+      deskPresents_ += 1;
+      if (gapMs > 1.5 * 1000.0 / refresh) deskHitches_ += 1;
+      deskWorstGapMs_ = std::max(deskWorstGapMs_, gapMs);
+    }
+    deskLastPresentNs_ = presentNs;
+    deskLayoutMsAvg_ = deskLayoutMsAvg_ * 0.95 + lastUiLayoutMs_ * 0.05;
+  }
+
+  // What a playlist column calls itself. In VJ mode two of them are on screen
+  // and both saying "PLAYLIST" is the ambiguity that puts the wrong clip in
+  // front of an audience, so each says which side of the crossfader it is.
+  std::string playlistColumnTitle(int deckIndex) const {
+    if (project_.decks.size() < 2) {
+      return "PLAYLIST";
+    }
+    if (!project_.vjModeEnabled) {
+      // WHICH ONE, not what it is. With two columns side by side, two headers
+      // both reading PLAYLIST say nothing, and at that width the word was
+      // being ellipsized to "P|" anyway -- which reads as a fault.
+      const std::string& name = project_.decks[deckIndex].name;
+      return name.empty() ? deckDefaultName(deckIndex) : name;
+    }
+    const int deckCount = static_cast<int>(project_.decks.size());
+    if (deckIndex == std::clamp(project_.vjDeckA, 0, deckCount - 1)) {
+      return "A - DECK " + std::to_string(deckIndex + 1);
+    }
+    if (deckIndex == std::clamp(project_.vjDeckB, 0, deckCount - 1)) {
+      return "B - DECK " + std::to_string(deckIndex + 1);
+    }
+    return "PLAYLIST";
+  }
+
+  void renderPlaylistColumn(const SDL_Rect& col, int deckIndex) {
+    // Recorded here rather than at the call sites so a column can never be
+    // drawn without being counted.
+    if (std::find(visiblePlaylistDecks_.begin(), visiblePlaylistDecks_.end(), deckIndex)
+        == visiblePlaylistDecks_.end()) {
+      visiblePlaylistDecks_.push_back(deckIndex);
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deckOpacityFaderRects_.size() < project_.decks.size()) {
+      deckOpacityFaderRects_.resize(project_.decks.size(), SDL_Rect {});
+    }
+    if (deckIndex >= 0 && deckIndex < static_cast<int>(deckColumnRects_.size())) {
+      deckColumnRects_[deckIndex] = col;
+    }
+
+    // --- Simple playlist header ---
+    constexpr int kPlaylistHeaderH = 28;
+    SDL_Rect colHeader {col.x, col.y, col.w, kPlaylistHeaderH};
+    drawUIPanel(colHeader, pal.dark,
+                pal.deep, pal.mid);
+    // "Jump to live cue" button — snaps the (possibly huge) list back to the
+    // cue that's playing. Only for the focused deck's column (the one the
+    // keyboard acts on). Sized to its label so the text never ellipsizes
+    // into a mystery ">..." chip.
+    // ── WHERE THIS PLAYLIST GOES ────────────────────────────────────────
+    //
+    // On the header, on every column, always: the question "which output does
+    // this one reach?" has no other answer anywhere in the program, and the
+    // menu behind it is the only way to add a playlist or move one between
+    // outputs without a socket.
+    if (deckRoutingChipRects_.size() < project_.decks.size()) {
+      deckRoutingChipRects_.resize(project_.decks.size(), SDL_Rect {});
+    }
+    int routingChipW = 0;
+    {
+      // The header's own face: the body face is taller than the header strip,
+      // so the label stood out of the top and bottom of its chip.
+      TTF_Font* rcFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+      const std::string routing = playlistRoutingChipLabel(deckIndex);
+      int txtW = 0;
+      if (rcFont) {
+        textSizeShown(rcFont, routing.c_str(), routing.size(), &txtW, nullptr);
+      }
+      routingChipW = std::max(uiScaled(44), txtW + uiScaled(18));
+      SDL_Rect chip {colHeader.x + colHeader.w - routingChipW - uiScaled(6),
+                     colHeader.y + uiScaled(3), routingChipW,
+                     colHeader.h - uiScaled(6)};
+      // UNROUTED IS A WARNING COLOUR. A playlist nobody can see is a fault
+      // that otherwise announces itself only as "the output is black".
+      // Asked of the routing, not read off the label: this compared the label
+      // with "--" after the label had become "no output", so the warning
+      // never showed.
+      bool routed = false;
+      for (int o = 0; o < static_cast<int>(project_.outputs.size()) && !routed; ++o) {
+        routed = assignmentIndexForDeckOutput(deckIndex, o).has_value();
+      }
+      if (routed) {
+        drawUIPanel(chip, pal.light, pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, rcFont, chip, routing, paletteInkOnFill(pal.light));
+      } else {
+        const PaletteNotice look = paletteNotice(true);
+        drawUIPanel(chip, look.fill, look.border, look.border);
+        drawCenteredTextSafe(controlRenderer_, rcFont, chip, routing, look.ink);
+      }
+      deckRoutingChipRects_[deckIndex] = chip;
+      playlistHeaderLeftEdge_ = chip.x;
+    }
+
+    // ONLY WHEN IT DOES NOT COST THE TITLE. >LIVE is a convenience; a column
+    // that cannot say which playlist it is is not one.
+    //
+    // MEASURED, both of them. This was "room >= 150", a guess at what the
+    // title and the button need together; with the pixel face at 0.9x it was
+    // short, and the column read "PLA..." beside a >LIVE button that had fit.
+    const int roomLeftOfChip = playlistHeaderLeftEdge_ - colHeader.x;
+    TTF_Font* jbFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+    int jumpTxtW = 0;
+    int titleTxtW = 0;
+    if (jbFont) {
+      textSizeShown(jbFont, ">LIVE", 0, &jumpTxtW, nullptr);
+      // drawPanelHeaderTitle draws in this same face, inset 8 each side.
+      const std::string title = playlistColumnTitle(deckIndex);
+      textSizeShown(jbFont, title.c_str(), title.size(), &titleTxtW, nullptr);
+    }
+    const int jumpBtnNeeds = std::max(uiScaled(56), jumpTxtW + uiScaled(16));
+    const int titleNeeds = titleTxtW + 16 + uiScaled(4);
+    bool jumpBtnShown = deckIndex == project_.focusedDeckIndex &&
+                        !deck.cues.empty() &&
+                        roomLeftOfChip - jumpBtnNeeds - uiScaled(4) >= titleNeeds;
+    int jumpBtnW = 0;
+    if (jumpBtnShown) {
+      jumpBtnW = jumpBtnNeeds;
+      // LEFT OF THE ROUTING CHIP, which is pinned to the right edge. Two
+      // controls measured from the same edge is how one ends up drawn on top
+      // of the other, and the one underneath then looks like it does nothing.
+      SDL_Rect jb {playlistHeaderLeftEdge_ - jumpBtnW - uiScaled(4),
+                   colHeader.y + 3, jumpBtnW, colHeader.h - 6};
+      playlistHeaderLeftEdge_ = jb.x;
+      drawUIPanel(jb, pal.light, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, jbFont, jb, ">LIVE", pal.deep);
+      playlistJumpBtnRect_ = jb;
+    } else if (deckIndex == project_.focusedDeckIndex) {
+      playlistJumpBtnRect_ = SDL_Rect {};
+    }
+
+    // THE COLUMN ALWAYS SAYS WHICH PLAYLIST IT IS.
+    //
+    // It was dropped whenever the tabs were showing, on the reasoning that
+    // the tabs already name the decks. They do not: the tabs name the
+    // FOCUSED one and number the rest, so two columns side by side were two
+    // unlabelled lists and there was no way to tell which was which. The
+    // >LIVE button gives up its space instead -- it is a convenience, and a
+    // column that does not say what it is is not.
+    // DRAWN LAST, INTO WHAT IS LEFT. The title used to be drawn across the
+    // whole header while the chip and the >LIVE button were pinned to the
+    // right of it, so at two columns all three sat on top of each other:
+    // ">LIVE" clipped at the left edge, "Deck 2" cut in half by the chip.
+    // Whoever draws across somebody else's pixels is the bug, so the title
+    // is given a rect that already excludes them.
+    {
+      const int rightTaken = (colHeader.x + colHeader.w) - playlistHeaderLeftEdge_;
+      SDL_Rect titleRect {colHeader.x, colHeader.y,
+                          std::max(0, colHeader.w - rightTaken - uiScaled(4)),
+                          colHeader.h};
+      if (titleRect.w >= uiScaled(24)) {
+        drawPanelHeaderTitle(titleRect, playlistColumnTitle(deckIndex));
+      }
+    }
+
+    // Playlist header — scrolling dot animation (like a marquee). The track
+    // stops short of the >LIVE button so the dots never crawl across it.
+    {
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+      int dotRightEdge = colHeader.x + colHeader.w - 12 - routingChipW - 6
+                       - (jumpBtnShown ? jumpBtnW + 10 : 0);
+      int dotTrack = dotRightEdge - (colHeader.x + 80);
+      if (dotTrack > 20) {
+        for (int d = 0; d < 3; ++d) {
+          double phase = static_cast<double>(animationNow_) * 0.001 + d * 0.33;
+          double frac = std::fmod(phase, 1.0);
+          int dx = dotRightEdge - static_cast<int>(frac * dotTrack);
+          int dy = colHeader.y + colHeader.h / 2;
+          SDL_Color dotC = pal.mid;
+          dotC.a = static_cast<Uint8>(80 + 175 * (1.0 - frac));
+          SDL_Rect dot {dx - 1, dy - 1, 2, 2};
+          Primitives::fillRect(controlRenderer_, dot, dotC);
+        }
+      }
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+    }
+
+    auto primaryIndices = cueIndicesForOverlayRole(deck, false);
+    auto overlayIndices = cueIndicesForOverlayRole(deck, true);
+    bool showOverlayBin = !overlayIndices.empty();
+    if (deckOverlayScrolls_.size() <= static_cast<size_t>(deckIndex)) {
+      deckOverlayScrolls_.resize(deckIndex + 1, 0);
+    }
+
+    // Cue list area
+    int listAreaY = col.y + kPlaylistHeaderH + 4;
+    int listAreaH = col.h - kPlaylistHeaderH - 4 - kColFooterH - 4;
+    int overlayPanelH = 0;
+    if (showOverlayBin) {
+      overlayPanelH = 112;
+      overlayPanelH = std::clamp(44 + static_cast<int>(overlayIndices.size()) * (kRowHeight + 8), 120, 232);
+      overlayPanelH = std::min(overlayPanelH, std::max(96, listAreaH / 2));
+    }
+    int primaryPanelH = std::max(120, listAreaH - overlayPanelH - 8);
+    if (showOverlayBin && primaryPanelH + overlayPanelH + 8 > listAreaH) {
+      overlayPanelH = std::max(96, listAreaH - primaryPanelH - 8);
+    }
+    if (!showOverlayBin) {
+      primaryPanelH = listAreaH;
+    }
+
+    SDL_Rect primaryFrame {col.x + 4, listAreaY, col.w - 8, std::max(0, primaryPanelH)};
+    SDL_Rect overlayFrame {0, 0, 0, 0};
+    if (showOverlayBin) {
+      overlayFrame = {col.x + 4, primaryFrame.y + primaryFrame.h + 8, col.w - 8,
+                      std::max(0, listAreaH - primaryFrame.h - 8)};
+    }
+    deckListClipRects_[deckIndex] = primaryFrame;
+    deckOverlayClipRects_[deckIndex] = overlayFrame;
+
+    drawUIPanel(primaryFrame, pal.tile, pal.deep, pal.mid);
+    SDL_Rect primaryClip {primaryFrame.x + 8, primaryFrame.y + 8, primaryFrame.w - 16, std::max(0, primaryFrame.h - 16)};
+    SDL_SetRenderClipRect(controlRenderer_, &primaryClip);
+    int primaryTotalH = static_cast<int>(primaryIndices.size()) * (kRowHeight + 8) - 8;
+    int primaryScrollMax = std::max(0, primaryTotalH - primaryClip.h);
+    if (static_cast<int>(deckScrollMax_.size()) <= deckIndex) {
+      deckScrollMax_.resize(deckIndex + 1, 0);
+    }
+    if (static_cast<int>(deckScrollSettleMs_.size()) <= deckIndex) {
+      deckScrollSettleMs_.resize(deckIndex + 1, 0);
+    }
+    deckScrollMax_[deckIndex] = primaryScrollMax;
+    // Rubber-band at the BOTTOM only: the wheel may push a little past the last
+    // cue (capped), then this eases it back once the wheel is idle. Time-based
+    // decay so the spring is visible regardless of the high render rate.
+    Uint64 nowMs = SDL_GetTicks();
+    Uint64 lastMs = deckScrollSettleMs_[deckIndex];
+    deckScrollSettleMs_[deckIndex] = nowMs;
+    if (deckScrolls_[deckIndex] > primaryScrollMax && nowMs - lastDeckScrollMs_ > 90) {
+      double dt = (lastMs == 0) ? 16.0 : std::min(100.0, static_cast<double>(nowMs - lastMs));
+      double over = static_cast<double>(deckScrolls_[deckIndex] - primaryScrollMax);
+      int next = primaryScrollMax + static_cast<int>(std::lround(over * std::exp(-dt / 71.0)));
+      deckScrolls_[deckIndex] = (next <= primaryScrollMax + 1) ? primaryScrollMax : next;
+    }
+    deckScrolls_[deckIndex] = std::clamp(deckScrolls_[deckIndex], 0,
+                                         primaryScrollMax + kDeckScrollOverscroll);
+    // What is left of the list below the last cue.
+    //
+    // This is where the theme's creatures live: genuinely empty, containing
+    // no control and no value, and the part of the window an operator's eye
+    // rests on between cues. It shrinks as the playlist grows, and when there
+    // is nothing left they simply have nowhere to be.
+    // EVERY PLAYLIST'S FREE SPACE, not just the focused one's. This was
+    // gated on the focused deck, so with several playlists up the animals
+    // only ever used one column -- James: "do critters only appear in the
+    // first deck?" They appeared in whichever had focus, which with deck 1
+    // focused is indistinguishable from the first.
+    //
+    // The cast is DEALT ROUND the habitats rather than copied into each, so
+    // more columns spreads the same animals wider rather than breeding them.
+    playlistFreeRects_.resize(project_.decks.size());
+    {
+      const int used = std::max(0, primaryTotalH - deckScrolls_[deckIndex]);
+      const SDL_Rect freeRect {
+        primaryClip.x, primaryClip.y + used + 8,
+        primaryClip.w, std::max(0, primaryClip.h - used - 12)};
+      if (deckIndex < static_cast<int>(playlistFreeRects_.size())) {
+        playlistFreeRects_[deckIndex] = freeRect;
+      }
+      if (deckIndex == project_.focusedDeckIndex) {
+        playlistFreeRect_ = freeRect;   // kept: other callers read this one
+      }
+    }
+    int y = primaryClip.y - deckScrolls_[deckIndex];
+    for (int cueIndex : primaryIndices) {
+      SDL_Rect row {primaryClip.x, y, primaryClip.w, kRowHeight};
+      renderCueRow(row, deckIndex, cueIndex);
+      // A cue under the loudness needle gets a critter on its own row. Marked
+      // from here because this is where the row's rect is known; the critter
+      // stops as soon as the cue stops being marked.
+      // Only the part of the row the list actually shows: critters draw after
+      // everything else, outside this list's clip, so a row scrolled half out
+      // of view put its critter over the header and the panels around it.
+      SDL_Rect visibleRow {};
+      if (cueIndex >= 0 && cueIndex < static_cast<int>(deck.cues.size()) &&
+          cueIsNormalizing(deck.cues[cueIndex].id) &&
+          SDL_GetRectIntersection(&row, &primaryClip, &visibleRow)) {
+        markBusy("norm:" + deck.cues[cueIndex].id, nullptr, visibleRow);
+      }
+      y += kRowHeight + 8;
+    }
+    if (primaryIndices.empty()) {
+      // THE KEYS AS THEY ARE BOUND, not as they once were. This said
+      // "B  browser" long after B became BLACKOUT (v0.82.0) and the browser
+      // cue moved to Shift+B -- so a new operator doing what the empty deck
+      // told them blacked out the output. Check app_input.ipp before changing
+      // a key here.
+      //
+      // Kept to one-key actions and one gesture: "Shift+B" was accurate and
+      // read badly in the middle of an otherwise short column (James). A
+      // browser cue is one click away in SOURCE anyway.
+      //
+      // Two measured columns: the sans face is proportional, so "Drag" cannot
+      // be lined up with "I" by padding with spaces.
+      static const std::pair<const char*, const char*> kHints[] = {
+        {"I", "import"},
+        {"P", "pattern"},
+        {"Drag", "media in"},
+      };
+      const int emptyLineH = textLineHeight(fontSmall_) + 4;
+      const int gap = uiScaled(10);
+      int keyW = 0;
+      int labelW = 0;
+      for (const auto& hint : kHints) {
+        keyW = std::max(keyW, measuredTextWidth(fontSmall_, hint.first));
+        labelW = std::max(labelW, measuredTextWidth(fontSmall_, hint.second));
+      }
+      const int blockW = keyW + gap + labelW;
+      const int avail = primaryClip.w - uiScaled(8);
+      int hy = primaryClip.y + primaryClip.h / 2 - emptyLineH;
+      if (blockW <= avail) {
+        const int hx = primaryClip.x + (primaryClip.w - blockW) / 2;
+        for (const auto& hint : kHints) {
+          drawText(controlRenderer_, fontSmall_, hint.first, pal.fg, hx, hy);
+          drawText(controlRenderer_, fontSmall_, hint.second, pal.fg, hx + keyW + gap, hy);
+          hy += emptyLineH;
+        }
+      } else {
+        // ── TOO NARROW FOR TWO COLUMNS ──────────────────────────────────
+        //
+        // These were drawn with raw drawText at a CENTRED x, so the moment
+        // the block was wider than the column -- which is the moment a second
+        // playlist appears and halves it -- hx went negative and the hint ran
+        // off both edges at once. Reported twice: "the i for import text in
+        // the decks gets fucked up and cut off the moment 2nd deck appears".
+        //
+        // One column, drawn into the clip rect through the safe helper, so
+        // the worst case is an ellipsis rather than text over the border.
+        for (const auto& hint : kHints) {
+          drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                               SDL_Rect {primaryClip.x + uiScaled(4), hy,
+                                         primaryClip.w - uiScaled(8), emptyLineH},
+                               std::string(hint.first) + "  " + hint.second, pal.fg);
+          hy += emptyLineH;
+        }
+      }
+    }
+    SDL_SetRenderClipRect(controlRenderer_, nullptr);
+
+    // THE PLAYLIST'S SCROLLBAR.
+    //
+    // The wheel was the only way down a deck, at 36 pixels a notch. That is
+    // fine for the twenty-cue show it was written against and useless for a
+    // thousand: forty thousand pixels of list is over a thousand notches, and
+    // nothing on screen said where in the show you were or how much of it was
+    // below you. An operator with a long rundown could not get to the bottom,
+    // and could not see that there WAS a bottom.
+    //
+    // Same shape as the inspector's: the whole rail is the target, a press
+    // anywhere on it jumps there, and the thumb is sized by how much of the
+    // list is showing -- so on a very long deck it becomes a small thumb,
+    // which is itself the information that the list is very long.
+    if (static_cast<int>(deckListScrollRails_.size()) <= deckIndex) {
+      deckListScrollRails_.resize(deckIndex + 1, SDL_Rect {0, 0, 0, 0});
+      deckListScrollThumbH_.resize(deckIndex + 1, 0);
+    }
+    if (primaryScrollMax > 0 && primaryClip.h > 0) {
+      // SCALED, like everything else the operator has to hit. These were raw
+      // pixels: a 4px bar 10px from the edge, with a 16px target. At a 150%
+      // desktop -- the Windows default on a 4K panel -- that is a hairline
+      // with a target a third the width of a finger, and it was reported as
+      // "I cannot click the playlist scrollbar". The hit test was always
+      // right; there was just nothing to aim at.
+      const int railW = uiScaled(6);
+      const int railInset = uiScaled(12);
+      SDL_Rect rail {primaryFrame.x + primaryFrame.w - railInset, primaryClip.y,
+                     railW, primaryClip.h};
+      Primitives::fillRect(controlRenderer_, rail, pal.mid);
+      int thumbH = std::max(uiScaled(24),
+                            (primaryClip.h * primaryClip.h) /
+                              std::max(1, primaryClip.h + primaryScrollMax));
+      thumbH = std::min(thumbH, rail.h);
+      const int travel = std::max(1, rail.h - thumbH);
+      // Clamped against the scroll maximum rather than the live scroll value,
+      // which overshoots during the bottom rubber-band -- the thumb must stop
+      // at the end of the rail while the list springs back.
+      const int shown = std::clamp(deckScrolls_[deckIndex], 0, primaryScrollMax);
+      const int thumbOffset = static_cast<int>(std::lround(
+        static_cast<double>(shown) / static_cast<double>(primaryScrollMax) * travel));
+      SDL_Rect thumb {rail.x - 1, rail.y + thumbOffset, rail.w + 2, thumbH};
+      Primitives::drawFramedPanel(controlRenderer_, thumb, pal.dark, pal.deep,
+                                  pal.light);
+      // Widened for the input layer: the bar is a drawing, not a target.
+      const int grab = uiScaled(9);
+      deckListScrollRails_[deckIndex] = SDL_Rect {rail.x - grab, rail.y,
+                                                  rail.w + grab * 2, rail.h};
+      deckListScrollThumbH_[deckIndex] = thumbH;
+    } else {
+      deckListScrollRails_[deckIndex] = SDL_Rect {0, 0, 0, 0};
+      deckListScrollThumbH_[deckIndex] = 0;
+    }
+
+    if (showOverlayBin) {
+      drawUIPanel(overlayFrame, pal.shellInner, pal.deep, pal.mid);
+      SDL_Rect overlayHeader {overlayFrame.x + 6, overlayFrame.y + 6, overlayFrame.w - 12, 22};
+      drawTextSafe(controlRenderer_, fontSmall_, overlayHeader, "OVERLAY BIN", pal.light);
+      SDL_Rect overlayHint {overlayFrame.x + 8, overlayFrame.y + 24, overlayFrame.w - 16, 14};
+      drawTextSafe(controlRenderer_, fontSmall_, overlayHint,
+                   "Lower Third and PIP fire independently",
+                   pal.mid);
+      SDL_Rect overlayClip {overlayFrame.x + 8, overlayFrame.y + 42, overlayFrame.w - 16, std::max(0, overlayFrame.h - 50)};
+      SDL_SetRenderClipRect(controlRenderer_, &overlayClip);
+      int totalOverlayH = static_cast<int>(overlayIndices.size()) * (kRowHeight + 8) - 8;
+      int overlayScrollMax = std::max(0, totalOverlayH - overlayClip.h);
+      deckOverlayScrolls_[deckIndex] = std::clamp(deckOverlayScrolls_[deckIndex], 0, overlayScrollMax);
+      int overlayY = overlayClip.y - deckOverlayScrolls_[deckIndex];
+      for (int cueIndex : overlayIndices) {
+        SDL_Rect row {overlayClip.x, overlayY, overlayClip.w, kRowHeight};
+        renderCueRow(row, deckIndex, cueIndex);
+        overlayY += kRowHeight + 8;
+      }
+      SDL_SetRenderClipRect(controlRenderer_, nullptr);
+    } else {
+      deckOverlayScrolls_[deckIndex] = 0;
+    }
+
+    // Column footer (playlist settings)
+    int footerY = col.y + col.h - kColFooterH;
+    SDL_Rect footer {col.x, footerY, col.w, kColFooterH};
+    drawUIPanel(footer, pal.shellInner, pal.deep, pal.shellOuter);
+    
+    std::string playlistInfo = std::string(deck.playlistLoop ? "LOOP" : "ONCE")
+      + std::string("  |  ") + (deck.shuffle ? "SHUFFLE" : "ORDER");
+    // Height derived from the live font, not a literal 24 — scaled/HiDPI
+    // faces are taller and the hardcoded rect clipped the descenders.
+    // ── TWO TEXTS, NEVER ONE RECT ─────────────────────────────────────────
+    //
+    // The mode and the layer readout were both handed the FULL footer width:
+    // the mode ellipsized against the column edge as though it were alone,
+    // and the readout was then drawn over the top of it. On a wide column
+    // they happened to miss each other. With five playlists the column is
+    // about 130px and they land on the same pixels -- "LAYER 99%" printed
+    // straight through the middle of "ORDER".
+    //
+    // So measure both and give each its own rect. They share a line while
+    // they fit; the readout drops to a line of its own when they do not; and
+    // if even that has no room the mode gives up its width, rather than the
+    // two of them overlapping. Ellipsized text is readable; two strings on
+    // one baseline are not.
+    const int lineH = textLineHeight(fontSmall_);
+    const bool showLayer = project_.decks.size() > 1;
+    std::string opacityLabel;
+    int layerLabelW = 0;
+    if (showLayer) {
+      const int opacityPct = static_cast<int>(std::lround(
+        std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * 100.0f));
+      opacityLabel = "LAYER " + std::to_string(opacityPct) + "%";
+      layerLabelW = measuredTextWidth(fontSmall_, opacityLabel);
+    }
+    const int footerInnerW = footer.w - 12;
+    const int footerGapW = uiScaled(8);
+    // The rail is the floor: a second line may only be used above it.
+    const int layerRailTop = footerY + kColFooterH - 12;
+    const bool roomForTwoLines = footer.y + 6 + lineH * 2 <= layerRailTop - 2;
+    const bool shareOneLine =
+      !showLayer ||
+      measuredTextWidth(fontSmall_, playlistInfo) + footerGapW + layerLabelW
+        <= footerInnerW ||
+      !roomForTwoLines;
+    SDL_Rect infoRect {footer.x + 6, footer.y + 6,
+                       (showLayer && shareOneLine)
+                         ? std::max(0, footerInnerW - layerLabelW - footerGapW)
+                         : footerInnerW,
+                       lineH};
+    drawTextSafe(controlRenderer_, fontSmall_, infoRect,
+                 ellipsizeToPixelWidth(fontSmall_, playlistInfo, infoRect.w),
+                 pal.dark);
+    // Deck LAYER fader — the compositing opacity for stacking multiple
+    // decks on one output (the multi-deck "Super Deckboy" model). It is not
+    // a per-cue control, so in a single-deck show it's meaningless clutter:
+    // hide it entirely and let multi-deck shows get it back, labeled.
+    if (showLayer) {
+      // Same row as LOOP|ORDER (the 50px footer only fits one text line),
+      // right-aligned in fg ink — reads on the shellInner footer fill in
+      // light themes (fg = deep) and on black in terminal themes.
+      SDL_Rect layerRect {footer.x + footer.w - layerLabelW - 6,
+                          shareOneLine ? footer.y + 6 : footer.y + 6 + lineH,
+                          layerLabelW, lineH};
+      drawTextSafe(controlRenderer_, fontSmall_, layerRect, opacityLabel, pal.fg);
+      SDL_Rect opacityRail {col.x + 8, layerRailTop, col.w - 16, 8};
+      Primitives::drawFramedPanel(controlRenderer_, opacityRail, pal.light,
+                      pal.deep, pal.shellOuter);
+      int fillW = static_cast<int>(std::lround(std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * (opacityRail.w - 4)));
+      fillW = std::clamp(fillW, 0, opacityRail.w - 4);
+      SDL_Rect opacityFill {opacityRail.x + 2, opacityRail.y + 2, fillW, opacityRail.h - 4};
+      Primitives::fillRect(controlRenderer_, opacityFill, pal.dark);
+      deckOpacityFaderRects_[deckIndex] = opacityRail;
+    } else {
+      deckOpacityFaderRects_[deckIndex] = SDL_Rect {};  // no invisible click target
+    }
+  }
+
+  // The empty place in the list where a cue used to sit. Three faint marks,
+  // which is all a perch needs to be.
+  void drawEmptyPerch(const SDL_Rect& row) {
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, pal.fgSoft.r, pal.fgSoft.g, pal.fgSoft.b, 70);
+    for (int d = 0; d < 3; ++d) {
+      const SDL_Rect mark {row.x + 16 + d * 6, row.y + row.h / 2, 3, 2};
+      SDL_RenderFillRect(controlRenderer_, &mark);
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+  }
+
+  // A pair of wings, beating, either side of the row it is carrying.
+  //
+  // Drawn as filled quills rather than single points: at a playlist row's
+  // scale a one-pixel line reads as a scratch on the screen, and the whole
+  // point is that you can see it flapping.
+  void drawFlightWings(const SDL_Rect& row, double flap, double alpha) {
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    const Uint8 a = static_cast<Uint8>(std::clamp(alpha, 0.0, 1.0) * 210.0);
+    SDL_SetRenderDrawColor(controlRenderer_, pal.fg.r, pal.fg.g, pal.fg.b, a);
+    const int midY = row.y + row.h / 2;
+    const int span = 10 + static_cast<int>(std::abs(flap) * 16.0);
+    for (int w = 1; w <= span; ++w) {
+      // The further out along the wing, the more it lifts -- which is what
+      // makes it beat rather than merely extend.
+      const int lift = static_cast<int>(std::lround(flap * w * 0.75));
+      const int thick = (w < span / 2) ? 3 : 2;
+      const SDL_Rect left {row.x - 6 - w, midY - lift, thick, thick};
+      const SDL_Rect right {row.x + row.w + 4 + w, midY - lift, thick, thick};
+      SDL_RenderFillRect(controlRenderer_, &left);
+      SDL_RenderFillRect(controlRenderer_, &right);
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+  }
+
+  void renderCueRow(const SDL_Rect& rowIn, int deckIndex, int index) {
+    if (rowIn.y + rowIn.h < 0 || rowIn.y > 2000) {
+      return;
+    }
+
+    const Deck& deck = project_.decks[deckIndex];
+    const auto& cue = deck.cues[index];
+
+    // ── IT SAID IT COULD, AND IT DOES ───────────────────────────────────
+    //
+    // The WHOLE CUE leaves -- thumbnail, name, buttons, the panel itself --
+    // beating its wings, rising off the list and away. Not the name alone,
+    // which is what this used to do and which reads as a text effect rather
+    // than as a bird.
+    //
+    // Entirely in the operator's chrome. Deckboy is used in front of
+    // audiences, so an easter egg that could reach the programme output is not
+    // an easter egg, it is a fault somebody discovers mid-keynote. Nothing
+    // here touches the output, the engine or the show file.
+    //
+    // THE NAME IS THE STATE. There is nothing to persist and nothing to clean
+    // up: rename the cue and it settles back onto the perch, delete it and it
+    // is gone. And it does not come back -- a cue that circles is a cue you
+    // are still looking at, and this one has left.
+    SDL_Rect row = rowIn;
+    double flightAlpha = 1.0;
+    double flap = 0.0;
+    bool flying = false;
+    if (cueBelievesItCanFly(cue)) {
+      flying = true;
+      auto& takeoff = flightTakeoffMs_[cue.id];
+      if (takeoff == 0) {
+        takeoff = animationNow_;
+      }
+      const double t = static_cast<double>(animationNow_ - takeoff) / 1000.0;
+      flap = std::sin(t * 9.0);
+      // Eased so it gathers itself, then goes. Linear from a standing start
+      // looks like a slide; this looks like something deciding to leave.
+      constexpr double kFlightSeconds = 3.2;
+      const double u = std::clamp(t / kFlightSeconds, 0.0, 1.0);
+      const double eased = u * u;
+      // Up and to the right, with the wingbeat rocking it as it climbs.
+      row.x = rowIn.x + static_cast<int>(std::lround(eased * (rowIn.w + 240.0)));
+      row.y = rowIn.y - static_cast<int>(std::lround(eased * 420.0 - flap * 6.0));
+      flightAlpha = std::clamp(1.0 - eased * 1.15, 0.0, 1.0);
+      if (flightAlpha <= 0.01) {
+        // Gone. The row keeps its place in the list, empty, so the playlist
+        // does not reshuffle itself around a joke.
+        drawEmptyPerch(rowIn);
+        return;
+      }
+    }
+    bool isOverlay = std::any_of(deck.overlayActiveIndices.begin(), deck.overlayActiveIndices.end(),
+                                  [&](int i) { return i == index; });
+    bool isSelected = cueIndexSelected(deck, index);
+    bool isLive = index == deck.activeIndex;
+    bool isQueued = !isLive && index == nextCueIndexForDeck(deckIndex);
+    // THE STANDBY: the cue GO will fire. Deliberately its own state and not a
+    // shade of "selected" -- the whole point of a standby is that it is NOT
+    // the selection, so drawing it as a variant of one would undo the idea.
+    const bool isStandby = deck.standbyIndex == index;
+    
+    // Idle/queued rows use the tile fill (bright in light themes, near-black in
+    // terminal themes); selected stays a bright inverse-video highlight, live
+    // stays deep. Text ink follows: dark on the bright selected/light-theme
+    // tiles, bright (fg) on dark terminal tiles.
+    SDL_Color fill = pal.tile;
+    SDL_Color border = pal.deep;
+    SDL_Color accent = pal.shellInner;
+
+    if (isLive) {
+      fill = pal.deep;
+      border = pal.mid;
+      accent = pal.dark;
+    } else if (isSelected) {
+      fill = pal.mid;
+    } else if (isStandby) {
+      // Not filled: a standby is armed, not current, and filling it would make
+      // the list read as though two cues were up. The rail on the left edge,
+      // added below, is what says so.
+      border = pal.light;
+    } else if (isQueued) {
+      fill = pal.tile;
+      border = pal.dark;
+    } else if (isOverlay) {
+      fill = {48, 80, 48, 255};
+    }
+
+    if (flying) {
+      // Behind the row, so the panel rides between them.
+      drawFlightWings(row, flap, flightAlpha);
+      const Uint8 fa = static_cast<Uint8>(flightAlpha * 255.0);
+      fill.a = fa;
+      border.a = fa;
+      accent.a = fa;
+    }
+    drawUIPanel(row, fill, border, accent);
+    // A rail down the left edge for the armed cue, and only when it is not
+    // also the live one -- a cue that is both would otherwise wear two marks
+    // for one fact.
+    if (isStandby && !isLive) {
+      Primitives::fillRect(controlRenderer_,
+                           SDL_Rect {row.x, row.y, uiScaled(4), row.h}, pal.light);
+    }
+
+    // Color tag chip
+    // ── The clip's own picture, at the head of its row ──────────────────
+    //
+    // A playlist of filenames is a playlist you have to READ. A still turns it
+    // into one you can scan, which is what it is for during a show.
+    //
+    // Sits after the state indicator, and the whole top line of the row --
+    // placed at x+14 first, which is where those already live, and the number
+    // drew straight through the picture.
+    //
+    // Drawn only from the shared cache; a row never blocks on a decode. If it
+    // has no still yet it asks for one -- the first row to ask each frame wins,
+    // so a thousand-cue list spawns one ffmpeg at a time and fills in as it is
+    // looked at, rather than all at once.
+    // THE BOX IS THE PICTURE'S SHAPE, so there is nothing to letterbox.
+    //
+    // Drawn into a 44x74 slot a 16:9 still came out portrait. Fitting it
+    // inside that slot fixed the squash but left bars above and below,
+    // which is the wrong fix: the thumbnails are decoded to 320x180 and
+    // padded there, so they are ALWAYS 16:9 and a 16:9 box holds one
+    // exactly. The fit below stays as the guard for the day that changes.
+    //
+    // WHAT YIELDS WHEN THE COLUMN NARROWS.
+    //
+    // The per-cue commands used to vanish below row.w 326 -- and 124px of that
+    // budget is this still plus the margin it needs. That is backwards. The
+    // toggles are what the row is FOR; the picture is what makes it pleasant to
+    // read. So the picture yields first, then the name, and only then do the
+    // buttons narrow. They do not disappear.
+    // Scaled, like everything else in the row. At 1.5x these stayed 1x-sized
+    // beside 1.5x text, so the icons crowded the name they were meant to sit
+    // clear of.
+    // NARROW DECKS GIVE THE TOGGLES THEIR OWN LINE. Below this width the
+    // heading folds onto one line (state, ID, kind, duration), the name gets
+    // the middle, and the five toggles take the whole bottom line -- growing as
+    // the deck narrows rather than shrinking, because they are what a narrow
+    // deck is still FOR.
+    const bool compactRow = row.w < uiScaled(420);
+    const int kCueActionBtnW = uiScaled(24);
+    const int kCueActionBtnH = uiScaled(compactRow ? 22 : 16);
+    const int kCueActionBtnGap = uiScaled(4);
+    constexpr int kCueActionCount = 5;
+    const int kCueActionBtnMinW = uiScaled(18);  // below this icons stop being icons
+    const int kCueStripMargin = uiScaled(6);
+    // Wide enough for the NAME on line two and the DURATION on line three --
+    // "00:08.0" came out "00:0..." when this only budgeted for the name, and a
+    // cue list that will not tell you how long a cue is has lost the argument.
+    const int kCueMinNameW = uiScaled(56);
+    auto cueStripWidthFor = [&](int bw) {
+      return kCueActionCount * bw + (kCueActionCount - 1) * kCueActionBtnGap;
+    };
+    const int kNameXWithThumb = uiScaled(124);   // clear of the still
+    const int kNameXNoThumb = uiScaled(56);      // clear of the state indicator
+
+    auto stripFits = [&](int nameOffset, int bw) {
+      return row.w - nameOffset - kCueMinNameW - 8 - kCueStripMargin
+               >= cueStripWidthFor(bw);
+    };
+    const bool showRowThumb = !compactRow && stripFits(kNameXWithThumb, kCueActionBtnMinW);
+    const int nameXOffset = compactRow ? uiScaled(14)
+                            : (showRowThumb ? kNameXWithThumb : kNameXNoThumb);
+
+    int cueActionBtnW = kCueActionBtnW;
+    if (compactRow) {
+      // Shared out across the row, up to a size that still reads as a button
+      // rather than a bar.
+      const int forStrip = row.w - kCueStripMargin * 2 - uiScaled(8);
+      cueActionBtnW = std::clamp(
+        (forStrip - (kCueActionCount - 1) * kCueActionBtnGap) / kCueActionCount,
+        kCueActionBtnMinW, uiScaled(44));
+    } else if (!stripFits(nameXOffset, cueActionBtnW)) {
+      const int forStrip = row.w - nameXOffset - kCueMinNameW - 8 - kCueStripMargin;
+      cueActionBtnW = std::clamp(
+        (forStrip - (kCueActionCount - 1) * kCueActionBtnGap) / kCueActionCount,
+        kCueActionBtnMinW, kCueActionBtnW);
+    }
+    const int actionStripW = cueStripWidthFor(cueActionBtnW);
+    const bool showActionStrip = row.w >= actionStripW + kCueStripMargin * 2;
+    const int actionStripX = row.x + row.w - actionStripW - kCueStripMargin;
+
+    // The still keeps its 16:9 shape and grows with the row. It was a fixed
+    // 68x38 in a row that now scales, so at a 1.5x desktop it was a postage
+    // stamp beside text half again as large.
+    const int thumbH = uiScaled(38);
+    SDL_Rect thumbBox {row.x + uiScaled(50), row.y + (row.h - thumbH) / 2,
+                       thumbH * 16 / 9, thumbH};
+    if (showRowThumb && cueUsesFilesystemMedia(cue) &&
+        (cue.kind == CueKind::Video || cue.kind == CueKind::Image) &&
+        thumbBox.w > 8 && thumbBox.h > 6) {
+      const std::string key = cueVisualCacheKey(cue);
+      SDL_Texture* tex = nullptr;
+      auto found = rowThumbTex_.find(key);
+      if (found != rowThumbTex_.end()) {
+        tex = found->second;
+      } else {
+        std::lock_guard<std::mutex> lk(thumbnailMutex_);
+        auto cached = selectedThumbnailCache_.find(key);
+        if (cached != selectedThumbnailCache_.end() && !cached->second.pixels.empty()) {
+          tex = uploadRowThumbTexture(key, cached->second);
+        }
+      }
+      if (tex) {
+        Primitives::fillRect(controlRenderer_, thumbBox, pal.deep);
+        float texW = 0.0f, texH = 0.0f;
+        SDL_GetTextureSize(tex, &texW, &texH);
+        const double aspect = (texW > 0.0f && texH > 0.0f)
+                            ? static_cast<double>(texW) / texH : 16.0 / 9.0;
+        int fitW = thumbBox.w;
+        int fitH = static_cast<int>(std::lround(fitW / aspect));
+        if (fitH > thumbBox.h) {
+          fitH = thumbBox.h;
+          fitW = static_cast<int>(std::lround(fitH * aspect));
+        }
+        SDL_Rect fitted {thumbBox.x + (thumbBox.w - fitW) / 2,
+                         thumbBox.y + (thumbBox.h - fitH) / 2,
+                         std::max(1, fitW), std::max(1, fitH)};
+        SDL_RenderTexture(controlRenderer_, tex, nullptr, &fitted);
+      } else {
+        Primitives::fillRect(controlRenderer_, thumbBox, pal.dark);
+        if (rowThumbWantedKey_.empty()) {
+          rowThumbWantedKey_ = key;
+          rowThumbWantedDeck_ = deckIndex;
+          rowThumbWantedCue_ = index;
+        }
+      }
+      Primitives::strokeRect(controlRenderer_, thumbBox, pal.deep);
+    } else if (showRowThumb && thumbBox.w > 8 && thumbBox.h > 6) {
+      // NOTHING IS WORSE THAN A HOLE.
+      //
+      // The still is only drawn for file-backed video and stills, but the name
+      // column steps past the slot on EVERY row -- so an audio cue, a pattern,
+      // a browser or a live source carried a blank 68x38 gap where its
+      // neighbours have a picture, and a list of mixed kinds read as broken
+      // rather than varied.
+      //
+      // An audio cue already has peaks measured, so it gets its own waveform,
+      // which is genuinely the most useful thing that slot could show. Every
+      // other kind gets its type icon, big, in the same box.
+      Primitives::fillRect(controlRenderer_, thumbBox, pal.deep);
+      bool filled = false;
+      if (cue.kind == CueKind::Audio && cueUsesFilesystemMedia(cue)) {
+        bool pending = false;
+        const std::string wavePath =
+          resolvedCueFilesystemPathString(cue, currentProjectFile_);
+        WaveformPeaks peaks = getWaveformPeaks(wavePath, pending);
+        if (peaks.left.empty() && !pending && rowWaveWantedPath_.empty()) {
+          // ONE ANALYSIS PER FRAME, like the thumbnails right above.
+          // triggerWaveformAnalysis spawns a thread and an ffmpeg per call, so
+          // asking for every visible audio row at once is the import freeze
+          // again in a different costume. The list fills in as it is looked at.
+          rowWaveWantedPath_ = wavePath;
+        }
+        if (!peaks.left.empty()) {
+          // Inset by a pixel so the trace never touches the frame.
+          SDL_Rect inner {thumbBox.x + 1, thumbBox.y + 1, thumbBox.w - 2, thumbBox.h - 2};
+          drawWaveform(controlRenderer_, inner, peaks, false, -1.0f, 0.0f, 1.0f,
+                       {}, cue.duration > 0.0 ? cue.duration : 1.0,
+                       waveformGainScale(cue));
+          filled = true;
+        }
+      }
+      if (!filled) {
+        UiImageAsset* icon = cueIconAssetForKind(cue.kind);
+        const int side = std::min(thumbBox.h - 8, thumbBox.w - 8);
+        SDL_Rect iconRect {thumbBox.x + (thumbBox.w - side) / 2,
+                           thumbBox.y + (thumbBox.h - side) / 2, side, side};
+        // LIGHT INK ON A DEEP BOX. drawUiImageContainTinted tints with
+        // pal.deep, which is right for a bright row and invisible here.
+        if (!icon || !drawUiImageContain(*icon, iconRect, 255, pal.light)) {
+          // No art for this kind: the kind's own word, which still beats a
+          // blank box.
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, thumbBox,
+                               toUpper(cueDisplayKindLabel(cue)), pal.light);
+        }
+      }
+      Primitives::strokeRect(controlRenderer_, thumbBox, pal.deep);
+    }
+    SDL_Rect chip {row.x + 4, row.y + 4, 6, row.h - 8};
+    SDL_Color chipColor = !cue.colorTag.empty() ? colorTagToSdl(cue.colorTag) : cue.color;
+    Primitives::fillRect(controlRenderer_, chip, chipColor);
+
+    // Bright fill (selected highlight, light-theme rows) wants dark ink; dark
+    // fill (terminal idle rows) wants bright fg ink. isSelected keeps the
+    // dark-on-bright highlight; idle/queued follow fg (= deep in light themes).
+    SDL_Color ink = isLive ? pal.light : (isSelected ? pal.deep : pal.fg);
+    // Idle-row subtext uses the secondary-ink role (reads on both bright
+    // light-theme rows and dark terminal tiles); selected keeps dark subink.
+    SDL_Color subInk = isLive ? pal.mid : (isSelected ? pal.dark : pal.fgSoft);
+
+    // Indicator area (vertically centered in row)
+    int indSize = uiScaled(36);
+    SDL_Rect indicatorRect {row.x + uiScaled(10), row.y + (row.h - indSize) / 2,
+                            indSize, indSize};
+    if (compactRow) {
+      indSize = uiScaled(18);
+      indicatorRect = {row.x + uiScaled(10), row.y + uiScaled(4), indSize, indSize};
+    }
+    if (isLive) {
+      drawUIPanel(indicatorRect, pal.dark, pal.light, pal.mid);
+      if (uiBtnPlay_.texture) {
+        int sz = std::min(22, std::min(indicatorRect.w - 8, indicatorRect.h - 8));
+        SDL_Rect ir {indicatorRect.x + (indicatorRect.w - sz) / 2, indicatorRect.y + (indicatorRect.h - sz) / 2, sz, sz};
+        drawUiImageContain(uiBtnPlay_, ir, 255, pal.light);
+      } else {
+        drawCenteredTextSafe(controlRenderer_, fontBase_, indicatorRect, "\xe2\x96\xb6", pal.light);
+      }
+    } else if (isQueued) {
+      drawUIPanel(indicatorRect, pal.mid, pal.deep, pal.dark);
+      if (uiBtnPlay_.texture) {
+        int sz = std::min(18, std::min(indicatorRect.w - 10, indicatorRect.h - 10));
+        SDL_Rect ir {indicatorRect.x + (indicatorRect.w - sz) / 2, indicatorRect.y + (indicatorRect.h - sz) / 2, sz, sz};
+        drawUiImageContain(uiBtnPlay_, ir, 160, pal.deep);
+      } else {
+        drawCenteredTextSafe(controlRenderer_, fontBase_, indicatorRect, "\xe2\x96\xb6", pal.dark);
+      }
+    } else if (isSelected) {
+      drawCenteredTextSafe(controlRenderer_, fontBase_, indicatorRect, "\xe2\x96\xb8", ink); // ▸
+    }
+
+    // Clear of the still when there is one. Moved for every row at that width,
+    // including the ones whose picture has not decoded yet, because a name
+    // column that steps in and out as thumbnails arrive is worse than a wider
+    // margin. It steps only when the COLUMN is resized -- a deliberate act,
+    // whose result you can see while you are doing it.
+    const int nameX = row.x + nameXOffset;
+    // The action strip used to sit on the NAME line, right-aligned, which cost
+    // the name 144px and truncated most real filenames to "Rick and Mo...".
+    // It now sits on the metadata line, so the name gets the full row width and
+    // the toggles read as a group under it rather than floating beside it.
+    int nameW = row.w - nameX - 10 + row.x;
+
+    // Cached display strings — avoids TTF loop in ellipsizeToPixelWidth every frame
+    bool isProbing = cue.width == 0 && cue.height == 0 && !cue.path.empty()
+                     && cue.kind != CueKind::Pattern && cue.kind != CueKind::LowerThird
+                     && cue.kind != CueKind::Mic;
+    auto& dc = cueRowDisplayCache_[cue.id];
+    if (dc.name != cue.name || dc.nameW != nameW || dc.cueId != cue.cueId
+        || dc.cueNumber != cue.cueNumber || dc.index != index || dc.kind != cue.kind
+        || dc.duration != cue.duration || dc.stillDurationSeconds != cue.stillDurationSeconds
+        || dc.endAction != cue.endAction || dc.width != cue.width || dc.height != cue.height
+        || dc.pathEmpty != cue.path.empty()) {
+      dc.name = cue.name;
+      dc.nameW = nameW;
+      dc.cueId = cue.cueId;
+      dc.cueNumber = cue.cueNumber;
+      dc.index = index;
+      dc.kind = cue.kind;
+      dc.duration = cue.duration;
+      dc.stillDurationSeconds = cue.stillDurationSeconds;
+      dc.endAction = cue.endAction;
+      dc.width = cue.width;
+      dc.height = cue.height;
+      dc.pathEmpty = cue.path.empty();
+      // Recompute cached strings
+      dc.token = cueDisplayToken(cue, index);
+      dc.kindUpper = toUpper(cueDisplayKindLabel(cue));
+      dc.ellipsizedName = ellipsizeToPixelWidth(fontSmall_, cue.name, nameW);
+      if (isProbing) {
+        dc.meta = "probing...";
+      } else if (cue.kind == CueKind::Mic) {
+        dc.meta = "LIVE";   // a live input has no length
+      } else if (cue.kind == CueKind::Video || cue.kind == CueKind::Audio) {
+        dc.meta = cue.duration > 0.0 ? formatSeconds(cue.duration) : "hold";
+      } else {
+        dc.meta = cue.stillDurationSeconds > 0.0 ? formatSeconds(cue.stillDurationSeconds) : "hold";
+      }
+      if (!isProbing && cue.endAction != CueEndAction::Inherit && cue.endAction != CueEndAction::Stop) {
+        dc.meta += "  " + toUpper(cueEndActionLabel(cue.endAction));
+      }
+    }
+
+    // Cue ID and Type — line 1 (top of row)
+    // EVERY OFFSET IN THIS ROW SCALES. They were raw pixels while the fonts
+    // grew with the UI scale, so at 1.5x "Pattern" was ellipsized to "PA..."
+    // inside a box still sized for 1x text, and the three lines ran together.
+    const int lineH = std::max(uiScaled(18), textLineHeight(fontSmall_));
+    const int headingX = compactRow ? indicatorRect.x + indicatorRect.w + uiScaled(4) : nameX;
+    const int compactMetaW = std::min(nameW / 2,
+      std::max(uiScaled(80), measuredTextWidth(fontMono_, dc.meta) + uiScaled(12)));
+    SDL_Rect tokenRect {headingX, row.y + uiScaled(4), uiScaled(50), lineH};
+    drawTextSafe(controlRenderer_, fontMono_, tokenRect, dc.token, subInk);
+
+    {
+      UiImageAsset* cueIcon = cueIconAssetForKind(cue.kind);
+      const int iconSide = uiScaled(22);
+      SDL_Rect iconRect {headingX + uiScaled(54), row.y + uiScaled(3), iconSide, iconSide};
+      // The kind label runs to the right edge of the name column rather than a
+      // fixed width: "Window Source" and "Lower Third" are longer than the 72px
+      // this used to budget, and what it does with the overflow is ellipsize.
+      const int typeRight = nameX + nameW - (compactRow ? compactMetaW + uiScaled(6) : 0);
+      const bool iconDrawn = cueIcon && iconRect.x + iconRect.w <= typeRight &&
+                             drawUiImageContainTinted(*cueIcon, iconRect);
+      const int typeX = headingX + uiScaled(iconDrawn ? 78 : 54);
+      SDL_Rect typeRect {typeX, row.y + uiScaled(5),
+                         std::max(0, typeRight - typeX), lineH};
+      // A folded heading has no room to spare, and a kind cut to "P..." says
+      // nothing the icon beside it does not -- so there the word is drawn
+      // only when it fits whole, and the icon speaks for it otherwise.
+      if (!compactRow || !iconDrawn ||
+          measuredTextWidth(fontSmall_, dc.kindUpper) <= typeRect.w) {
+        drawTextSafe(controlRenderer_, fontSmall_, typeRect, dc.kindUpper, subInk);
+      }
+    }
+
+    // Name — line 2 (middle of row, prominent)
+    int nameY = row.y + uiScaled(26);
+    SDL_Rect nameRect {nameX, nameY, nameW, std::max(uiScaled(24), lineH)};
+    {
+
+      drawTextSafe(controlRenderer_, fontSmall_, nameRect, dc.ellipsizedName, ink, /*localise=*/false);
+    }
+
+    // Metadata — line 3 (bottom of row, within bounds)
+    // Metadata shares the bottom line with the action strip, so it stops short
+    // of it instead of running underneath.
+    const int metaW = showActionStrip ? std::max(0, actionStripX - nameX - uiScaled(8)) : nameW;
+    SDL_Rect metaRect {nameX, row.y + uiScaled(50), metaW, lineH};
+    if (compactRow) metaRect = {nameX + nameW - compactMetaW, row.y + uiScaled(4), compactMetaW, lineH};
+    drawTextSafe(controlRenderer_, fontSmall_, metaRect, dc.meta, isProbing ? pal.inkSoft : subInk);
+
+    // Missing-media badge — right end of the name column, drawn live (not
+    // via the display cache) so a relink clears it the same frame.
+    if (cue.mediaMissing && nameW > 120) {
+      SDL_Rect missRect {nameX + nameW - uiScaled(66), row.y + uiScaled(4),
+                         uiScaled(62), lineH};
+      Primitives::fillRect(controlRenderer_, missRect, SDL_Color {160, 18, 18, 255});
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, missRect, "MISSING",
+                           SDL_Color {255, 210, 210, 255});
+    }
+
+    auto drawCueRowActionIcon = [&](const SDL_Rect& rect, QuickAction action, SDL_Color inkColor, bool enabled) {
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(controlRenderer_, inkColor.r, inkColor.g, inkColor.b, inkColor.a);
+      switch (action) {
+        case QuickAction::ToggleFadeIn: {
+          // Filled rising wedge — 1px outline ramps read as stray marks at
+          // 20px button sizes; a solid shape reads as "fade up" at a glance.
+          int left = rect.x + 3;
+          int right = rect.x + rect.w - 4;
+          int bottom = rect.y + rect.h - 5;
+          int top = rect.y + 4;
+          int span = std::max(1, right - left);
+          for (int x = left; x <= right; ++x) {
+            int h = (x - left) * (bottom - top) / span;
+            SDL_RenderLine(controlRenderer_, x, bottom - h, x, bottom);
+          }
+          break;
+        }
+        case QuickAction::ToggleFadeOut: {
+          // Filled falling wedge — mirror of fade-in.
+          int left = rect.x + 3;
+          int right = rect.x + rect.w - 4;
+          int bottom = rect.y + rect.h - 5;
+          int top = rect.y + 4;
+          int span = std::max(1, right - left);
+          for (int x = left; x <= right; ++x) {
+            int h = (right - x) * (bottom - top) / span;
+            SDL_RenderLine(controlRenderer_, x, bottom - h, x, bottom);
+          }
+          break;
+        }
+        case QuickAction::ToggleLoop: {
+          // Drawn, not typed. This used to render the Unicode infinity glyph
+          // through the UI font; Press Start 2P has no U+221E, so it came out
+          // as tofu spilling out of the top-left of the button. Every icon in
+          // this strip is now geometry, which cannot depend on font coverage.
+          const int cx = rect.x + rect.w / 2;
+          const int cy = rect.y + rect.h / 2;
+          // SIZED BY BOTH AXES. The figure of eight is two circles of radius r
+          // centred at cx +/- r, so it spans FOUR r across and only two down --
+          // and r was taken from the height alone. On a button as wide as it is
+          // tall that is twice the width of its own box, and the loop glyph
+          // hung out over both edges while every other icon in the strip sat
+          // inside: reported as "the loop icon is outside its box".
+          const int rByWidth = (rect.w - uiScaled(4)) / 4;
+          const int rByHeight = static_cast<int>((rect.h - uiScaled(4)) / 2 / 0.9);
+          const int r = std::max(2, std::min(rByWidth, rByHeight));
+          for (int lobe = -1; lobe <= 1; lobe += 2) {
+            const int ox = cx + lobe * r;
+            for (int a = 0; a < 360; a += 12) {
+              const double rad = a * 3.14159265 / 180.0;
+              SDL_RenderPoint(controlRenderer_,
+                              static_cast<float>(ox + std::cos(rad) * r),
+                              static_cast<float>(cy + std::sin(rad) * r * 0.9));
+            }
+          }
+          break;
+        }
+        case QuickAction::ToggleHold: {
+          // 3px pause bars — 2px reads as hairlines next to the solid wedges.
+          SDL_Rect barL {rect.x + rect.w / 2 - 5, rect.y + 4, 3, rect.h - 8};
+          SDL_Rect barR {rect.x + rect.w / 2 + 2, rect.y + 4, 3, rect.h - 8};
+          Primitives::fillRect(controlRenderer_, barL, inkColor);
+          Primitives::fillRect(controlRenderer_, barR, inkColor);
+          break;
+        }
+        case QuickAction::ToggleCueAudio: {
+          // Speaker box — taller, starts 2px from left
+          int bw = std::max(3, rect.w / 6);
+          int bh = std::max(5, rect.h * 5 / 9);
+          int bx = rect.x + 2;
+          int by = rect.y + (rect.h - bh) / 2;
+          SDL_Rect box {bx, by, bw, bh};
+          // Horn — triangle from box right edge to ~55% of button width
+          int hornX = rect.x + rect.w * 55 / 100;
+          int hornTopY = rect.y + 2;
+          int hornBotY = rect.y + rect.h - 2;
+          Primitives::fillRect(controlRenderer_, box, inkColor);
+          // Fill the horn (outline-only didn't read as a speaker at this size)
+          int hornSpan = std::max(1, hornX - (box.x + box.w));
+          for (int x = box.x + box.w; x <= hornX; ++x) {
+            int frac = (x - (box.x + box.w)) * 100 / hornSpan;
+            int topY = by + (hornTopY - by) * frac / 100;
+            int botY = by + bh + (hornBotY - (by + bh)) * frac / 100;
+            SDL_RenderLine(controlRenderer_, x, topY, x, botY);
+          }
+          if (enabled) {
+            // Two short wave lines at right side of button
+            int wx = hornX + 3;
+            int my = rect.y + rect.h / 2;
+            SDL_RenderLine(controlRenderer_, wx, my - 3, wx + 2, my - 1);
+            SDL_RenderLine(controlRenderer_, wx, my + 3, wx + 2, my + 1);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+    };
+
+    bool toggleHover = false;
+    auto drawCueActionButton = [&](int buttonX, QuickAction action, bool on, bool enabled, const std::string& tip) {
+      // ON THE METADATA LINE, which moves with the scale like everything
+      // else in the row. A raw 48 put the strip on the NAME line the moment
+      // the row grew, so the icons sat on top of the cue's own name.
+      // A folded row anchors its toggle line to the row's own bottom edge.
+      const int btnY = compactRow ? row.y + row.h - kCueActionBtnH - uiScaled(5)
+                                  : row.y + uiScaled(48);
+      SDL_Rect btn {buttonX, btnY, cueActionBtnW, kCueActionBtnH};
+      SDL_Color btnFill = !enabled
+        ? pal.mid
+        : (paletteToggleFill(on));
+      SDL_Color btnAccent = enabled && on ? pal.mid : pal.mid;
+      SDL_Color iconInk = !enabled ? paletteInkOnFill(btnFill) : paletteToggleInk(on);
+      drawUIPanel(btn, btnFill, pal.deep, btnAccent);
+      // The icon must use the SAME rect the button was painted with. This used
+      // to pass snapRectToGrid(btn) while drawUIPanel painted btn unsnapped, so
+      // box and glyph lived in different coordinate spaces and every icon sat up
+      // to 7px up-and-left of its box -- "outside their box", as it looked.
+      // Same class as the v0.81.0 text-placement fix: when drawUIPanel stopped
+      // grid-snapping, this call was missed.
+      drawCueRowActionIcon(btn, action, iconInk, on);
+      SDL_Rect visibleButton = btn;
+      SDL_Rect listClip {};
+      if (SDL_RenderClipEnabled(controlRenderer_)) {
+        SDL_GetRenderClipRect(controlRenderer_, &listClip);
+        if (!SDL_GetRectIntersection(&btn, &listClip, &visibleButton)) visibleButton = {};
+      }
+      if (enabled && visibleButton.w > 0 && visibleButton.h > 0) {
+        cueRowActionHits_.push_back({visibleButton, deckIndex, index, action, true, tip});
+      }
+      if (pointInRect(mouseX_, mouseY_, visibleButton)) {
+        drawHoverTip(tip, btn.x + btn.w / 2, btn.y);
+        toggleHover = true;
+      }
+    };
+
+    if (showActionStrip) {
+      int bx = actionStripX;
+      drawCueActionButton(bx, QuickAction::ToggleFadeIn, cue.fadeInSeconds > 0.001,
+                          true, "Toggle fade in");
+      bx += cueActionBtnW + kCueActionBtnGap;
+      drawCueActionButton(bx, QuickAction::ToggleFadeOut, cue.fadeOutSeconds > 0.001,
+                          true, "Toggle fade out");
+      bx += cueActionBtnW + kCueActionBtnGap;
+      drawCueActionButton(bx, QuickAction::ToggleLoop, cueLoopsAtEnd(cue),
+                          true, "Toggle loop");
+      bx += cueActionBtnW + kCueActionBtnGap;
+      drawCueActionButton(bx, QuickAction::ToggleHold, cueHoldsAtEnd(cue),
+                          true, "Toggle hold on last frame");
+      bx += cueActionBtnW + kCueActionBtnGap;
+      drawCueActionButton(bx, QuickAction::ToggleCueAudio, cue.audioEnabled,
+                          cue.hasAudio, cue.hasAudio ? "Toggle cue audio" : "Cue has no audio");
+    }
+
+    // Remaining time badge for live row.
+    // Width is measured, not the old fixed 80px: "-00:15.2" is eight monospace
+    // glyphs, which fits Consolas on Windows but not the wider Liberation/DejaVu
+    // Mono on Linux, where it rendered "-00...". drawUIPanel's bevel AND
+    // drawCenteredTextSafe's inset both eat into the rect, hence the generous
+    // pad — measuring exactly and padding thinly is precisely what reproduced
+    // this bug in the timeline chips. 80 stays the floor, so Windows is
+    // unchanged.
+    if (isLive) {
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      if (engine && engine->duration() > 0.0) {
+        double remaining = std::max(0.0, engine->duration() - engine->position());
+        std::string remStr = "-" + formatSeconds(remaining);
+        int remTextW = 0, remTextH = 0;
+        textSizeShown(fontMono_, remStr.c_str(), remStr.size(), &remTextW, &remTextH);
+        int badgeW = std::max(uiScaled(80), remTextW + uiScaled(16));
+        badgeW = std::min(badgeW, std::max(uiScaled(80), row.w - uiScaled(24)));
+        SDL_Rect badge {row.x + row.w - (badgeW + uiScaled(4)), row.y + uiScaled(4),
+                        badgeW,
+                        std::max(uiScaled(24), textLineHeight(fontMono_) + uiScaled(4))};
+        drawUIPanel(badge, pal.dark, pal.light, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontMono_, badge, remStr, pal.light);
+      }
+    }
+    
+    // A MIC CUE SHOWS ITS INPUT, racked or not, so a dead mic is seen before
+    // GO: a thin meter along the foot of the row.
+    if (cue.kind == CueKind::Mic) {
+      const SDL_Rect meter {row.x + uiScaled(6), row.y + row.h - uiScaled(7),
+                            row.w - uiScaled(12), uiScaled(4)};
+      drawMicMeter(meter, micCueLevel(cue, nullptr));
+    }
+
+    // A DISARMED CUE IS WASHED OUT, in one place, over the finished row.
+    //
+    // Deliberately a scrim rather than a dimmer ink on each element: a row
+    // draws a number, a name, a still, a kind chip, badges and a duration, and
+    // dimming them one at a time is exactly how a control ends up looking
+    // half-disabled -- the thing that gets fixed systemically or not at all.
+    // Painted in the row's own fill so it washes toward the panel it sits in
+    // on every theme, light or dark, instead of toward a fixed grey.
+    if (!cue.armed) {
+      SDL_Color scrim = fill;
+      scrim.a = 165;
+      Primitives::fillRect(controlRenderer_, insetRect(row, 1), scrim);
+      // And one mark that survives the wash, so a disarmed row is readable as
+      // a decision rather than as a rendering fault.
+      const SDL_Rect tag {row.x + row.w - uiScaled(26), row.y + uiScaled(4),
+                          uiScaled(20), std::max(uiScaled(14), textLineHeight(fontMono_))};
+      drawCenteredTextSafe(controlRenderer_, fontMono_, tag, "--", pal.fgSoft);
+    }
+
+    // Selection pulse
+    if (project_.uiTransitionsEnabled && isSelected) {
+      double pulse = 0.5 + 0.5 * std::sin(static_cast<double>(animationNow_ - selectionChangedAt_) / 95.0);
+      SDL_Color glow {155, 188, 15, static_cast<Uint8>(40 + pulse * 60.0)};
+      Primitives::strokeRect(controlRenderer_, insetRect(row, 1), glow);
+    }
+
+    // Hover tooltip logic preserved...
+    if (!toggleHover && pointInRect(mouseX_, mouseY_, row)) {
+      std::string rowTip = cue.name + "  |  " + cueDisplayKindLabel(cue);
+      drawHoverTip(rowTip, row.x + row.w / 2, row.y);
+    }
+  }
+
+  // Draw a small floating tooltip panel anchored below/above (ax, ay).
+  // `below` puts the panel under the anchor instead of over it, for controls
+  // that live at the top of the window where there is nothing above them.
+  // ONE TIP PER FRAME, DRAWN LAST.
+  //
+  // This used to paint where it was called, which put two things wrong. The
+  // dwell timer was shared, so any two controls that both matched the pointer
+  // in one frame -- and several regions overlap -- handed it back and forth and
+  // it never reached the threshold. And a tip painted mid-frame is painted over
+  // by everything drawn after it, which for a tooltip is most of the window.
+  //
+  // So callers REQUEST, the last request in the frame wins (that is the
+  // topmost control, since it drew last), and paintHoverTip draws it after
+  // everything else.
+  void drawHoverTip(const std::string& tip, int ax, int ay, bool below = false) {
+    if (tip.empty() || !project_.hoverTipsEnabled
+        || dropdown_.open || contextMenuOpen_
+        || settingsOpen_ || showStartupDialog_) {
+      return;
+    }
+    hoverTipPending_ = tip;
+    hoverTipReqAnchorX_ = ax;
+    hoverTipReqAnchorY_ = ay;
+    hoverTipReqBelow_ = below;
+  }
+
+  void paintHoverTip() {
+    const std::string tip = hoverTipPending_;
+    const int ax = hoverTipReqAnchorX_;
+    const int ay = hoverTipReqAnchorY_;
+    const bool below = hoverTipReqBelow_;
+    if (tip.empty() || !project_.hoverTipsEnabled) {
+      hoverTipDwellText_.clear();
+      return;
+    }
+
+    // ---- DWELL, THEN FADE ------------------------------------------------
+    //
+    // Appearing the instant the pointer touches a control makes the whole desk
+    // twitch as you move across it. The tip waits a beat, then eases in; a new
+    // control restarts the wait, so crossing five buttons on the way to a sixth
+    // shows nothing at all.
+    if (tip != hoverTipDwellText_) {
+      hoverTipDwellText_ = tip;
+      hoverTipDwellSinceMs_ = animationNow_;
+    }
+    constexpr Uint64 kDwellMs = 340;
+    constexpr Uint64 kFadeMs = 130;
+    const Uint64 held = animationNow_ - hoverTipDwellSinceMs_;
+    if (held < kDwellMs) {
+      return;
+    }
+    const float appear = std::clamp(
+      static_cast<float>(held - kDwellMs) / static_cast<float>(kFadeMs), 0.0f, 1.0f);
+    // Eased, so it arrives rather than snaps.
+    const float ease = appear * appear * (3.0f - 2.0f * appear);
+    const Uint8 alpha = static_cast<Uint8>(std::lround(255.0f * ease));
+
+    // ---- The panel -------------------------------------------------------
+    //
+    // AN INVERTED CHIP: deep fill, light ink.
+    //
+    // Theme roles rather than the hard-coded {15,56,15} it used to paint --
+    // that was a Game Boy green baked into every theme, and muddy on the OLED
+    // terminal ones. But the first attempt used shellInner/fg, the ordinary
+    // panel pair, and a tip floating over the bottom bar was then
+    // shell-on-shell: painting 39 times a second and completely invisible.
+    //
+    // A tooltip floats over EVERYTHING, so it cannot borrow the colours of any
+    // one surface. deep/light is the one pair guaranteed to be the far ends of
+    // the range, which is why the screens use it.
+    TTF_Font* font = fontSmall_;
+    if (!font) {
+      return;
+    }
+    int textW = 0;
+    int textH = 0;
+    textSizeShown(font, tip.c_str(), 0, &textW, &textH);
+    const int padX = uiScaled(10);
+    const int padY = uiScaled(5);
+    const int w = textW + padX * 2;
+    const int h = std::max(textH + padY * 2, uiScaled(22));
+    const int lift = uiScaled(7);
+
+    int winW = 0, winH = 0;
+    SDL_GetWindowSize(controlWindow_, &winW, &winH);
+    int x = std::clamp(ax - w / 2, 6, std::max(6, winW - w - 6));
+    int y = std::clamp(below ? ay + lift : ay - h - lift, 6, std::max(6, winH - h - 6));
+    // Slides the last couple of pixels into place as it fades in.
+    y += static_cast<int>(std::lround((1.0f - ease) * (below ? -3.0 : 3.0)));
+
+    const SDL_Rect panel {x, y, w, h};
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    // A soft drop shadow gives it somewhere to float above, which is most of
+    // what makes a tooltip read as ON TOP rather than drawn into the panel.
+    SDL_Color shadow {pal.shellShadow.r, pal.shellShadow.g, pal.shellShadow.b,
+                      static_cast<Uint8>(alpha / 2)};
+    Primitives::fillRect(controlRenderer_,
+                         SDL_Rect{panel.x + 2, panel.y + 2, panel.w, panel.h}, shadow);
+    SDL_Color fill {pal.deep.r, pal.deep.g, pal.deep.b, alpha};
+    Primitives::fillRect(controlRenderer_, panel, fill);
+    // A notch pointing at the control, so a tip that has been nudged sideways
+    // to stay on screen still says which button it belongs to.
+    const int notch = uiScaled(4);
+    const int nx = std::clamp(ax, panel.x + notch + 2, panel.x + panel.w - notch - 2);
+    for (int i = 0; i < notch; ++i) {
+      const int ny = below ? (panel.y - notch + i) : (panel.y + panel.h + notch - 1 - i);
+      Primitives::fillRect(controlRenderer_,
+                           SDL_Rect{nx - (below ? (notch - i) : (notch - i)), ny,
+                                    (notch - i) * 2, 1}, fill);
+    }
+    SDL_Color edge {pal.light.r, pal.light.g, pal.light.b, static_cast<Uint8>(alpha / 2)};
+    Primitives::strokeRect(controlRenderer_, panel, edge);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    SDL_Color ink {pal.light.r, pal.light.g, pal.light.b, alpha};
+    drawCenteredTextSafe(controlRenderer_, font, panel, tip, ink);
+  }
+
+  void renderButtons() {
+    if (bottomBarRect_.w > 0 && bottomBarRect_.h > 0) {
+      drawUIPanel(bottomBarRect_,
+                  pal.shellInner,
+                  pal.deep,
+                  pal.shellOuter);
+    }
+    auto drawGroupFrame = [&](const SDL_Rect& rect, const std::string& label) {
+      if (rect.w <= 0 || rect.h <= 0) {
+        return;
+      }
+      // Structural chrome uses the tile/fg pair rather than light/deep. Both
+      // roles fall back to exactly what was here before (tile -> screen_light,
+      // fg_soft -> screen_dark), so themes that don't define them are
+      // unchanged — but a theme that does can finally make the shell dark
+      // while keeping screen_light bright for ink. screen_light does double
+      // duty as ink AND fill, which is why no theme could be dark before.
+      drawUIPanel(rect,
+                  pal.tile,
+                  pal.deep,
+                  pal.mid);
+      SDL_Rect labelRect {rect.x + 10, rect.y + 6, rect.w - 20, 22};
+      drawTextSafe(controlRenderer_, fontPixelSmall_ ? fontPixelSmall_ : fontSmall_, labelRect, label,
+                   pal.fgSoft);
+      // (no divider — label alone provides group separation)
+    };
+    drawGroupFrame(mediaGroupRect_, "MEDIA");
+    drawGroupFrame(transportGroupRect_, "TRANSPORT");
+    drawGroupFrame(outputGroupRect_, "OUTPUT");
+    drawGroupFrame(deskGroupRect_, "DESK");
+
+    // ── On-air row ────────────────────────────────────────────────────────
+    // One transmitting badge per stream type, on the OUTPUT group header where
+    // the operator already looks. Settings is the wrong place to learn you are
+    // live: by the time you have opened a modal to check, you are not looking
+    // at the show. The rings only animate while frames are genuinely going
+    // out, so a frozen badge is itself the warning.
+    {
+      struct OnAirEntry { const char* label; bool configured; bool live; OutputHealthState health; };
+      std::vector<OnAirEntry> entries;
+      auto streamEntry = [&](const char* label, const char* protocol) {
+        const int idx = findStreamOutputForProtocol(protocol);
+        if (idx < 0) {
+          return;  // never configured: don't clutter the bar with it
+        }
+        const OutputTarget& o = project_.outputs[idx];
+        entries.push_back({label, true, o.enabled && o.streamEnabled,
+                           outputHealthStateForDisplay(idx)});
+      };
+      streamEntry("SRT", "srt");
+      streamEntry("RTMP", "rtmp");
+      for (std::size_t i = 0; i < project_.outputs.size(); ++i) {
+        const OutputTarget& o = project_.outputs[i];
+        if (o.st2110Enabled) {
+          entries.push_back({"2110", true, o.enabled,
+                             outputHealthStateForDisplay(static_cast<int>(i))});
+          break;
+        }
+      }
+      for (std::size_t i = 0; i < project_.outputs.size(); ++i) {
+        const OutputTarget& o = project_.outputs[i];
+        if (o.ndiEnabled) {
+          entries.push_back({"NDI", true, o.enabled,
+                             outputHealthStateForDisplay(static_cast<int>(i))});
+          break;
+        }
+      }
+
+      if (!entries.empty() && outputGroupRect_.w > 0) {
+        const int badgeH = 14;
+        const int gap = 6;
+        TTF_Font* onAirFont = fontSmall_;
+        int totalW = 0;
+        std::vector<int> textW(entries.size(), 0);
+        for (std::size_t i = 0; i < entries.size(); ++i) {
+          int w = 0, h = 0;
+          if (onAirFont) {
+            textSizeShown(onAirFont, entries[i].label,
+                              std::strlen(entries[i].label), &w, &h);
+          }
+          // drawTextSafe insets the rect it is given before laying out, so a
+          // rect measured to the exact string width ellipsizes ("2110" became
+          // "21..."). Pad past the inset.
+          textW[i] = w + 10;
+          totalW += badgeH + 3 + textW[i] + gap;
+        }
+        // Right-aligned in the group header, so it never collides with the
+        // "OUTPUT" label on the left however many badges appear.
+        int x = outputGroupRect_.x + outputGroupRect_.w - 12 - totalW + gap;
+        const int y = outputGroupRect_.y + 6;
+        for (std::size_t i = 0; i < entries.size(); ++i) {
+          SDL_Rect badge {x, y + 1, badgeH, badgeH};
+          // Bottom-bar groups fill with pal.tile, so the live tint is pal.fg —
+          // pal.light here would be light-on-light and invisible.
+          drawStreamOnAirBadge(badge, entries[i].configured, entries[i].live,
+                               entries[i].health, pal.fg);
+          SDL_Rect lab {x + badgeH + 3, y, textW[i], badgeH + 4};
+          drawTextSafe(controlRenderer_, onAirFont, lab, entries[i].label,
+                       entries[i].live ? pal.fg : pal.fgSoft);
+          x += badgeH + 3 + textW[i] + gap;
+        }
+      }
+    }
+
+    auto buttonIconForLabel = [&](const std::string& label) -> UiImageAsset* {
+      if (label == "IMPORT")   return &uiBtnImport_;
+      if (label == "BROWSER")  return &uiCueIconBrowser_;
+      if (label == "SOURCE")   return &uiCueIconSource_;
+      if (label == "PATTERN")  return &uiCueIconPattern_;
+      if (label == "TAKE" || label == "TAKE ALL") return &uiBtnTake_;
+      if (label == "STOP")     return &uiBtnStop_;
+      if (label == "RERACK")   return &uiBtnRerack_;
+      if (label == "CLEAR")    return &uiBtnClear_;
+      if (label == "MENU" || label == "SETUP" || label == "SETTINGS") return &uiBtnSettings_;
+      return nullptr;
+    };
+
+    for (const auto& button : buttons_) {
+      bool emphasized = button.label == "TAKE";
+      UiImageAsset* icon = buttonIconForLabel(button.label);
+      // Pulsing red border while rolling — the same language blackout uses,
+      // because it is the same kind of state: one the operator must not lose
+      // track of, and one whose cost of not noticing is the whole show.
+      if (button.label == "RECORD" && recordingActive()) {
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+        double pulse = 0.5 + 0.5 * std::sin(static_cast<double>(animationNow_) * 0.006);
+        Uint8 glowA = static_cast<Uint8>(80 + 140 * pulse);
+        SDL_SetRenderDrawColor(controlRenderer_, 220, 30, 30, glowA);
+        SDL_Rect glow {button.rect.x - 2, button.rect.y - 2,
+                       button.rect.w + 4, button.rect.h + 4};
+        SDL_RenderRect(controlRenderer_, &glow);
+        SDL_SetRenderDrawColor(controlRenderer_, 220, 30, 30,
+                               static_cast<Uint8>(glowA / 2));
+        SDL_Rect glow2 {button.rect.x - 3, button.rect.y - 3,
+                        button.rect.w + 6, button.rect.h + 6};
+        SDL_RenderRect(controlRenderer_, &glow2);
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+      }
+      // Draw button chrome (bevel lines in drawUIPanel provide the raised look)
+      SDL_Color accent = emphasized ? pal.light : pal.dark;
+      drawUIPanel(button.rect, button.fill, pal.deep, accent);
+      // OPEN STAYS PRESSED. MENU looked the same whether or not it had done
+      // anything; while what it opened is open, it stays pushed in.
+      if (((button.label == "MENU" || button.label == "SETUP" || button.label == "SETTINGS") &&
+           settingsOpen_) ||
+          (button.label == "DASH" && dashboardOverlayOpen_)) {
+        drawSunkControl(button.rect);
+      }
+
+      // KEEP THE ICON AND THE WORD. James asked for the gear beside MENU, and
+      // an earlier fix here dropped the icon whenever the pair would not fit --
+      // which at a scaled-up interface was always. So the layout is TIGHTENED
+      // before anything is given up: normal spacing first, then close spacing,
+      // then a smaller icon, and only then the icon goes. A gear beside "..."
+      // would tell an operator less than the word alone, so the word is what
+      // survives at the very end.
+      //
+      // ONE GEOMETRY, used to DECIDE and to DRAW. That decision was once made
+      // in a different coordinate space from the drawing -- the probe measured
+      // a 24px icon with 8px insets while the draw used uiScaled() ones -- so
+      // above 1x the probe believed there was room, kept the icon, and the draw
+      // then ellipsized the word. MENU came out as "..." beside a gear on
+      // exactly the machines whose interface is scaled up, which includes the
+      // 150% a 4K panel defaults to. Whatever changes here must move both.
+      //
+      // Icon+text buttons take the pixel face, matching the text-only branch:
+      // these are short fixed labels (TAKE, STOP, IMPORT, MENU), the half of
+      // the UI the pixel font is actually good at.
+      TTF_Font* btnFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+      int labelW = 0;
+      if (btnFont) {
+        textSizeShown(btnFont, button.label.c_str(), button.label.size(),
+                          &labelW, nullptr);
+      }
+      int iconSize = std::min(uiScaled(24), button.rect.h - uiScaled(16));
+      int padLeft = uiScaled(8);
+      int iconGap = uiScaled(4);
+      int padRight = uiScaled(6);
+      // Centred on the button's full height, like the text-only branch: the
+      // 8-above/14-total inset was a 1x offset and rode the label high once the
+      // font grew. safeTextRect is applied HERE because drawCenteredTextSafe
+      // applies it too -- comparing against the raw width was why an earlier
+      // attempt at this changed nothing.
+      // THE RAW RECT IS WHAT GETS DRAWN INTO, the safe one what gets measured
+      // against. Passing the safe rect to drawCenteredTextSafe inset it a
+      // second time, so a label that measured as fitting was drawn into less
+      // room than it was measured for -- invisible with slack, and "C..." for
+      // CLEAR once a small window took the slack away.
+      auto labelRawFor = [&](int size, int left, int gap, int right) {
+        const int textX = button.rect.x + left + size + gap;
+        return SDL_Rect {
+          textX, button.rect.y,
+          button.rect.x + button.rect.w - textX - right,
+          button.rect.h};
+      };
+      auto labelRectFor = [&](int size, int left, int gap, int right) {
+        return safeTextRect(labelRawFor(size, left, gap, right));
+      };
+      SDL_Rect labelRect = labelRectFor(iconSize, padLeft, iconGap, padRight);
+      if (icon && icon->texture && labelW > labelRect.w) {
+        // Close the spacing up first: padding is the cheapest thing to lose.
+        padLeft = uiScaled(4);
+        iconGap = uiScaled(3);
+        padRight = uiScaled(4);
+        labelRect = labelRectFor(iconSize, padLeft, iconGap, padRight);
+      }
+      if (icon && icon->texture && labelW > labelRect.w) {
+        // Then shrink the icon, down to two thirds. A smaller gear still reads
+        // as a gear; half a word does not read as a word.
+        iconSize = std::max(uiScaled(14), iconSize * 2 / 3);
+        labelRect = labelRectFor(iconSize, padLeft, iconGap, padRight);
+      }
+      if (icon && icon->texture && labelW > labelRect.w) {
+        icon = nullptr;
+        labelRect = labelRectFor(0, 0, 0, 0);
+      }
+      const int iconX = button.rect.x + padLeft;
+      if (icon && icon->texture) {
+        // Icon on left, label on right. Scaled: a 24px icon in a doubled button
+        // looked like a speck, and a fixed 8px inset left the label starting in
+        // the wrong place.
+        int iconY = button.rect.y + (button.rect.h - iconSize) / 2;
+        SDL_Rect iconRect {iconX, iconY, iconSize, iconSize};
+        drawUiImageContainTinted(*icon, iconRect);
+        // The label is known to FIT by the test above, so this cannot ellipsize
+        // -- it is kept as the backstop for a face whose measurement and
+        // rendering disagree.
+        std::string clipped =
+          ellipsizeToPixelWidth(btnFont, button.label, std::max(0, labelRect.w));
+        drawCenteredTextSafe(controlRenderer_, btnFont,
+                             labelRawFor(iconSize, padLeft, iconGap, padRight),
+                             clipped, button.text);
+      } else {
+        // Text only — centered, prefer pixel font for that Nintendo feel
+        // "Is this button small?" is a question about the LAYOUT, so the
+        // thresholds have to move with it. At 2x every button is over 112px
+        // wide and was judged roomy while carrying a doubled font.
+        TTF_Font* titleFont = fontPixelSmall_ ? fontPixelSmall_ :
+                              ((button.rect.h < uiScaled(34) || button.rect.w < uiScaled(112)
+                                || button.label.size() > 7)
+                              ? fontSmall_ : fontBase_);
+        // Centred on the button, so the label does not ride high in it when
+        // the font grows: the 8-above/14-total inset was a 1x offset.
+        SDL_Rect titleRect {button.rect.x + uiScaled(4), button.rect.y,
+                            button.rect.w - uiScaled(8), button.rect.h};
+        // Measured against the room drawCenteredTextSafe will actually leave,
+        // for the reason given at labelRawFor above.
+        const int titleRoom = std::max(0, safeTextRect(titleRect).w);
+        // A SMALLER FACE BEFORE AN ELLIPSIS. At a small window's scale the
+        // buttons narrow and "PATTERN" became "PAT..." in the pixel face while
+        // the small one had room for the whole word.
+        {
+          int titleW = 0;
+          if (titleFont && fontSmall_ && titleFont != fontSmall_ &&
+              textSizeShown(titleFont, button.label.c_str(), button.label.size(),
+                                &titleW, nullptr) &&
+              titleW > titleRoom) {
+            titleFont = fontSmall_;
+          }
+        }
+        std::string clipped = ellipsizeToPixelWidth(titleFont, button.label, titleRoom);
+        drawCenteredTextSafe(controlRenderer_, titleFont, titleRect, clipped, button.text);
+      }
+    }
+    // Hover tip for bottom-bar buttons
+    for (const auto& button : buttons_) {
+      if (!button.tip.empty() && pointInRect(mouseX_, mouseY_, button.rect)) {
+        drawHoverTip(button.tip, button.rect.x + button.rect.w / 2, button.rect.y);
+        break;
+      }
+    }
+
+    // ─── Bottom bar sparkle area ───
+    // Ambient sparkles + state-indicating animations in the empty space
+    // within the output group, after the 2 buttons
+    if (bottomBarRect_.w > 0 && bottomBarRect_.h > 0 && !buttons_.empty()) {
+      // After the last button IN OUTPUT. This read buttons_[9], which was
+      // MENU until DASH arrived in front of it -- and then the sparkles
+      // started after DASH and were drawn across MENU's label. Then it read
+      // the last button of all, which is DESK's now, not OUTPUT's.
+      SDL_Rect lastOutBtn {outputGroupRect_.x, outputGroupRect_.y, 0, 0};
+      for (const Button& button : buttons_) {
+        const SDL_Rect& r = button.rect;
+        const bool inOutput = r.w > 0 && r.x >= outputGroupRect_.x &&
+                              r.x + r.w <= outputGroupRect_.x + outputGroupRect_.w;
+        if (inOutput && r.x + r.w > lastOutBtn.x + lastOutBtn.w) {
+          lastOutBtn = r;
+        }
+      }
+      int sparkleAreaX = lastOutBtn.x + lastOutBtn.w + 12;
+      int sparkleAreaW = outputGroupRect_.x + outputGroupRect_.w - sparkleAreaX - 8;
+      if (sparkleAreaW < 40) {
+        // No room: draw nothing. The old fallback re-anchored to the whole
+        // group and drew the sparkles straight over the buttons, since they
+        // are painted after them — decoration on top of controls.
+        sparkleAreaW = 0;
+      }
+      if (sparkleAreaW > 30) {
+        int sparkleAreaCY = bottomBarRect_.y + bottomBarRect_.h / 2;
+
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+
+        // Ambient orbiting stars
+        {
+          SDL_Color starC = pal.dark;
+          for (int s = 0; s < 5; ++s) {
+            double phase = static_cast<double>(animationNow_) * 0.0015 + s * 1.257;
+            int orbitR = std::min(sparkleAreaW / 3, 60);
+            int sx = sparkleAreaX + sparkleAreaW / 2 + static_cast<int>(std::sin(phase) * orbitR);
+            int sy = sparkleAreaCY + static_cast<int>(std::cos(phase * 0.8) * 18.0);
+            int arm = 3 + (s % 3);
+            starC.a = static_cast<Uint8>(100 + 155 * std::abs(std::sin(phase * 0.5)));
+            drawStar(controlRenderer_, sx, sy, arm, starC);
+          }
+        }
+
+        // Blackout warning — pulsing red stars when blacked out
+        if (masterDimmerTarget_ < 0.5) {
+          SDL_Color rc {180, 40, 40, 255};
+          for (int s = 0; s < 4; ++s) {
+            double phase = static_cast<double>(animationNow_) * 0.005 + s * 1.57;
+            int sx = sparkleAreaX + 20 + s * (sparkleAreaW / 5);
+            int sy = sparkleAreaCY + static_cast<int>(std::sin(phase) * 14.0);
+            rc.a = static_cast<Uint8>(120 + 135 * std::abs(std::sin(phase * 1.2)));
+            drawStar(controlRenderer_, sx, sy, 3 + (s % 2), rc);
+          }
+        }
+
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+      }
+    }
+  }
+
+  // Page shares stay readable on a long deck without one-pixel slivers.
+  // Paper fills and outlines use the panel's palette on every theme.
+  //
+  // A FIXED NUMBER OF CARDS, not one per slide -- a hundred-page deck would
+  // give a row of one-pixel slivers. Each card is a SHARE of the deck and the
+  // one currently filling is drawn part-full, so the motion stays smooth on a
+  // long deck and stays exact on a short one.
+  void drawSlideProgressRow(const SDL_Rect& bar, Uint64 nowMs, int done, int total) {
+    const SDL_Color paper = pal.light;
+    const SDL_Color edge = pal.deep;
+    const SDL_Color soft = pal.fgSoft;
+
+    const int gap = std::max(1, uiScaled(2));
+    // Room above each card for the landing one to hop into, and LANDSCAPE:
+    // sized off the height at 4:3, because a card the shape of a slide reads
+    // as one and the portrait version read as a row of dominoes.
+    const int hopRoom = uiScaled(3);
+    const int cardH = std::max(uiScaled(6), bar.h - hopRoom);
+    const int cardW = std::max(uiScaled(8), (cardH * 4) / 3);
+    const int cards = std::max(1, (bar.w + gap) / (cardW + gap));
+    // Centred, so a row that does not divide the bar exactly does not sit off
+    // to one side.
+    const int rowW = cards * cardW + (cards - 1) * gap;
+    const int x0 = bar.x + (bar.w - rowW) / 2;
+    const double t = static_cast<double>(nowMs) * 0.001;
+
+    const double progress =
+      (total > 0) ? std::clamp(static_cast<double>(done) /
+                                 static_cast<double>(total), 0.0, 1.0)
+                  : 0.0;
+    const double filled = progress * cards;
+    // Which card is being worked on. A job with nothing to measure yet has no
+    // such card, so one hops ALONG the row instead of the row filling up --
+    // the same distinction the bar used to make between a percentage and a
+    // pacing lozenge, kept because inventing a number would still be a lie.
+    const int landing =
+      (total > 0)
+        ? std::min(cards - 1, static_cast<int>(filled))
+        : static_cast<int>(std::fmod(t * 5.0, static_cast<double>(cards)));
+
+    for (int i = 0; i < cards; ++i) {
+      const bool isLanding = (i == landing);
+      const double share = (total > 0) ? std::clamp(filled - i, 0.0, 1.0)
+                                       : (isLanding ? 1.0 : 0.0);
+      // The newest card BOUNCES as it arrives, which is the whole reason to
+      // draw cards rather than a bar: you can see one land.
+      const int hop = isLanding
+        ? static_cast<int>(std::fabs(std::sin(t * 6.0)) * hopRoom)
+        : 0;
+      const SDL_Rect card {x0 + i * (cardW + gap),
+                           bar.y + (bar.h - cardH) - hop, cardW, cardH};
+      if (share > 0.0) {
+        SDL_Rect fill = card;
+        fill.w = std::max(1, static_cast<int>(std::lround(cardW * share)));
+        Primitives::fillRect(controlRenderer_, fill, paper);
+      }
+      Primitives::strokeRect(controlRenderer_, card, share >= 1.0 ? edge : soft);
+      // One ruled line, so a landed card reads as a slide and not a block --
+      // the same two-lines trick the sheets in flight use, at half the size.
+      if (share >= 1.0 && cardW >= uiScaled(6) && cardH >= uiScaled(6)) {
+        Primitives::fillRect(
+          controlRenderer_,
+          SDL_Rect {card.x + 1, card.y + cardH / 2, cardW - 2, 1}, soft);
+      }
+    }
+  }
+
+  // ── "IT IS DOING SOMETHING" ──────────────────────────────────────────────
+  //
+  // Two long jobs that used to happen in silence: walking a dropped folder, and
+  // probing what came out of it. A couple of thousand cues meant a long quiet
+  // pause, and a quiet pause is indistinguishable from a crash.
+  //
+  // Deliberately a STRIP and not the slide card: the cues are already in the
+  // list and already playable while their metadata fills in, so this must not
+  // sit over the show. The folder walk is indeterminate (nobody knows the file
+  // count until the walk ends) and gets a sweep; probing knows its denominator
+  // and gets a real bar.
+  void renderImportProgress(int windowWidth, int windowHeight) {
+    const bool scanning = importScanBusy_.load(std::memory_order_acquire);
+    const int outstanding = probesOutstanding();
+    if (!scanning && outstanding <= 0) {
+      return;
+    }
+
+    const int barW = std::min(uiScaled(340), std::max(uiScaled(180), windowWidth - uiScaled(60)));
+    const int barH = uiScaled(30);
+    SDL_Rect strip {(windowWidth - barW) / 2, windowHeight - barH - uiScaled(18), barW, barH};
+    Primitives::drawFramedPanel(controlRenderer_, strip, pal.shellInner, pal.shellShadow, pal.mid);
+
+    SDL_Rect track {strip.x + uiScaled(8), strip.y + strip.h - uiScaled(9),
+                    strip.w - uiScaled(16), uiScaled(4)};
+    Primitives::fillRect(controlRenderer_, track, pal.deep);
+    // This one already had an honest bar; the critter is company, not the
+    // information. It swims the length of the strip while the walk runs.
+    markBusy("import", nullptr, strip);
+
+    std::string label;
+    if (scanning) {
+      const int found = importScanFound_.load(std::memory_order_relaxed);
+      label = "reading " + (importScanLabel_.empty() ? std::string("folder") : importScanLabel_)
+            + "  -  " + std::to_string(found) + " found";
+      // Indeterminate: a lozenge that runs the track, because a percentage we
+      // do not have is a lie and a bar stuck at zero reads as stuck.
+      const double sweep = std::fmod(static_cast<double>(animationNow_) / 1400.0, 1.0);
+      const int runW = std::max(uiScaled(24), track.w / 5);
+      const int rx = track.x + static_cast<int>(sweep * (track.w + runW)) - runW;
+      SDL_Rect run {std::max(track.x, rx), track.y,
+                    std::min(runW, track.x + track.w - std::max(track.x, rx)), track.h};
+      if (run.w > 0) {
+        Primitives::fillRect(controlRenderer_, run, pal.light);
+      }
+    } else {
+      const int total = std::max(probeBatchTotal_, outstanding);
+      const int done = std::max(0, total - outstanding);
+      label = "reading media  -  " + std::to_string(done) + " of " + std::to_string(total);
+      SDL_Rect fill = track;
+      fill.w = static_cast<int>(track.w * std::clamp(
+        total > 0 ? static_cast<double>(done) / static_cast<double>(total) : 0.0, 0.0, 1.0));
+      if (fill.w > 0) {
+        Primitives::fillRect(controlRenderer_, fill, pal.light);
+      }
+    }
+
+    if (fontSmall_) {
+      SDL_Rect textRect {strip.x + uiScaled(8), strip.y + uiScaled(4),
+                         strip.w - uiScaled(16), uiScaled(16)};
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, textRect, label, pal.fgSoft);
+    }
+  }
+
+  void renderSlideRenderCard(int windowWidth, int windowHeight) {
+    if (slideRenderJobs_ <= 0) {
+      return;
+    }
+    const int done = slideRenderPage_.load(std::memory_order_relaxed);
+    const int total = slideRenderTotal_.load(std::memory_order_relaxed);
+
+    const int cardW = std::min(uiScaled(360), std::max(uiScaled(220), windowWidth - uiScaled(80)));
+    const int cardH = uiScaled(112);
+    SDL_Rect card {(windowWidth - cardW) / 2, (windowHeight - cardH) / 2, cardW, cardH};
+    Primitives::drawFramedPanel(controlRenderer_, card, pal.shellInner, pal.shellShadow, pal.mid);
+
+    // Use the same busy critter as other jobs; page counts remain measured
+    // progress, including the conversion stage where no count is known yet.
+    const SDL_Rect critterLane {card.x + uiScaled(12), card.y + uiScaled(8),
+                               card.w - uiScaled(24), uiScaled(34)};
+    markBusy("slide-render", nullptr, critterLane);
+    // Counting pages only once the renderer has reported one: before that the
+    // honest thing to say is that the converter is still running, because it
+    // is, and a "0 of 0" would look stuck.
+    std::string tip;
+    if (total > 0) {
+      tip = "rendering slide " + std::to_string(std::min(done + 1, total)) +
+            " of " + std::to_string(total);
+    } else {
+      tip = slideRenderTitle_.empty() ? std::string("converting the deck...")
+                                      : ("converting " + slideRenderTitle_ + "...");
+    }
+    if (slideRenderJobs_ > 1) {
+      tip += "  (" + std::to_string(slideRenderJobs_) + " decks)";
+    }
+    const SDL_Rect caption {card.x + uiScaled(12), card.y + uiScaled(44),
+                            card.w - uiScaled(24), uiScaled(20)};
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, caption, tip, pal.fg);
+
+    // Taller than the old bar by the hop room the landing card needs.
+    const SDL_Rect bar {card.x + uiScaled(20), card.y + cardH - uiScaled(34),
+                        card.w - uiScaled(40), uiScaled(18)};
+    drawSlideProgressRow(bar, animationNow_, done, total);
+  }
+
+  // INSTALL & RESTART's card, from the frame the press lands until the window
+  // closes. serviceUpdateInstall counts the frames it was drawn in, so nothing
+  // that can take time starts before it has been seen.
+  void renderUpdateInstallCard(int windowWidth, int windowHeight) {
+    if (updateInstallStage_ == UpdateInstallStage::None) {
+      return;
+    }
+    ++updateInstallFramesShown_;
+    ++updateInstallCardFrames_;
+    SDL_Color dim = pal.deep;
+    dim.a = 180;   // as the dependency prompt's
+    Primitives::fillRect(controlRenderer_, SDL_Rect {0, 0, windowWidth, windowHeight}, dim);
+
+    const std::string title = updateInstallVersion_.empty()
+      ? std::string("Installing the update")
+      : "Installing Deckboy " + updateInstallVersion_;
+    const char* doing = updateInstallStage_ == UpdateInstallStage::Closing
+      ? "Closing Deckboy..." : "Starting the installer...";
+#if defined(_WIN32)
+    const char* then = "Click through the installer; Deckboy opens again when it finishes.";
+#else
+    const char* then = "Deckboy opens again by itself once the update is in. "
+                       "It can take a minute.";
+#endif
+    const int pad = uiScaled(16);
+    const int cardW = std::min(uiScaled(420), std::max(uiScaled(240), windowWidth - uiScaled(48)));
+    const int innerW = cardW - pad * 2;
+    const int critterH = uiScaled(34);
+    const int titleH = textLineHeight(fontBase_) + uiScaled(4);
+    const int lineH = textLineHeight(fontSmall_) + uiScaled(3);
+    const std::vector<std::string> thenLines = codeWrapText(fontSmall_, then, innerW - uiScaled(16));
+    const int cardH = uiScaled(8) + critterH + titleH + lineH + uiScaled(6) +
+                      static_cast<int>(thenLines.size()) * lineH + pad;
+    SDL_Rect card {(windowWidth - cardW) / 2, (windowHeight - cardH) / 2, cardW, cardH};
+    Primitives::drawFramedPanel(controlRenderer_, card, pal.shellInner, pal.shellShadow, pal.mid);
+
+    const SDL_Rect critterLane {card.x + pad, card.y + uiScaled(8), innerW, critterH};
+    markBusy("update-install", nullptr, critterLane);
+    int y = critterLane.y + critterH;
+    drawCenteredTextSafe(controlRenderer_, fontBase_, SDL_Rect {card.x + pad, y, innerW, titleH},
+                         title, pal.fg);
+    y += titleH;
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, SDL_Rect {card.x + pad, y, innerW, lineH},
+                         doing, pal.fg);
+    y += lineH + uiScaled(6);
+    for (const auto& line : thenLines) {
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, SDL_Rect {card.x + pad, y, innerW, lineH},
+                           line, pal.fgSoft);
+      y += lineH;
+    }
+  }
+
+  void renderToast(int windowWidth) {
+    if (!toast_.active) {
+      return;
+    }
+
+    Uint64 elapsed = animationNow_ - toast_.startedAt;
+    if (elapsed >= toast_.durationMs) {
+      toast_.active = false;
+      return;
+    }
+
+    double progress = static_cast<double>(elapsed) / static_cast<double>(toast_.durationMs);
+    double intro = easeOutCubic(std::min(progress / 0.2, 1.0));
+    double outro = progress > 0.78 ? 1.0 - easeOutCubic((progress - 0.78) / 0.22) : 1.0;
+    // Transitions off means no slide: the toast is simply there for its time.
+    double visibility = project_.uiTransitionsEnabled ? std::min(intro, outro) : 1.0;
+    const bool warning = toast_.kind == ToastKind::Warning;
+
+    // Size the panel to its message rather than a fixed 300px. Several toasts
+    // are legitimately long — "normalized: -0.9 dB (was -25.7 LUFS) -
+    // peak-limited at -0.1 dBFS", "display connected: <name> (2 total)" — and
+    // the fixed panel cut them off mid-sentence, which is the worst possible
+    // outcome for a message whose entire job is to explain something.
+    // Bounded so it can never span the whole header, and routed through
+    // drawTextSafe so it ellipsizes rather than bleeding past the frame.
+    int textW = 0;
+    int textH = 0;
+    if (fontBase_) {
+      textSizeShown(fontBase_, toast_.message.c_str(), 0, &textW, &textH);
+    }
+    // The badge column: a solid bar for help, a "!" plate for a warning --
+    // the shape says which kind it is before the colour or the words do.
+    const int accentW = warning ? uiScaled(26) : uiScaled(6);
+    const int toastPadX = uiScaled(14);
+    const int minToastW = uiScaled(220);
+    int maxToastW = std::max(minToastW, windowWidth - uiScaled(88));
+    int panelW = std::clamp(textW + toastPadX * 2 + accentW, minToastW, maxToastW);
+    int panelH = std::max(uiScaled(58), textH + uiScaled(24));
+
+    SDL_Rect panel {0, uiScaled(36) + static_cast<int>((1.0 - visibility) * -uiScaled(24)),
+                    panelW, panelH};
+    panel.x = windowWidth - uiScaled(44) - static_cast<int>(panelW * visibility);
+
+    const PaletteNotice look = paletteNotice(warning);
+    // A drop shadow lifts it off whatever it floats over, as the hover tip's does.
+    SDL_Color shadow = pal.shellShadow;
+    shadow.a = 150;
+    Primitives::fillRect(controlRenderer_,
+                         SDL_Rect {panel.x + uiScaled(3), panel.y + uiScaled(3), panel.w, panel.h},
+                         shadow);
+    Primitives::fillRect(controlRenderer_, panel, look.fill);
+    // Border weight scales with the UI, and a warning's pulses for its first
+    // two seconds -- it is the one that has to be noticed.
+    const int borderW = std::max(1, uiScaled(warning ? 3 : 2));
+    SDL_Color border = look.border;
+    if (warning && project_.uiTransitionsEnabled && elapsed < 2000) {
+      const double pulse = 0.5 + 0.5 * std::cos(static_cast<double>(elapsed) * 0.012566);
+      border = paletteMix(look.border, look.fill, 0.55 * (1.0 - pulse));
+    }
+    for (int i = 0; i < borderW; ++i) {
+      Primitives::strokeRect(controlRenderer_, insetRect(panel, i), border);
+    }
+
+    const SDL_Rect badge {panel.x + borderW, panel.y + borderW, accentW,
+                          std::max(0, panel.h - borderW * 2)};
+    Primitives::fillRect(controlRenderer_, badge, look.accent);
+    if (warning) {
+      TTF_Font* badgeFont = fontPixel_ ? fontPixel_ : fontBase_;
+      drawCenteredTextSafe(controlRenderer_, badgeFont, badge, "!", look.fill);
+    }
+    const SDL_Rect textRect {badge.x + badge.w, panel.y,
+                             std::max(0, panel.x + panel.w - badge.x - badge.w), panel.h};
+    drawTextSafe(controlRenderer_, fontBase_, textRect, toast_.message, look.ink);
+  }
+
+  // Draws a tiny 4-pointed pixel star centered at (cx, cy), arm half-length S.
+  void drawStar(SDL_Renderer* r, int cx, int cy, int S, SDL_Color c) {
+    // Center pixel
+    SDL_Rect center {cx - 1, cy - 1, 2, 2};
+    Primitives::fillRect(r, center, c);
+    // Four arms
+    for (int i = 1; i <= S; ++i) {
+      Uint8 fade = static_cast<Uint8>(c.a * (S - i + 1) / (S + 1));
+      SDL_Color arm {c.r, c.g, c.b, fade};
+      SDL_Rect h {cx + i, cy - 1, 2, 2}; Primitives::fillRect(r, h, arm);
+      SDL_Rect hl{cx - i - 1, cy - 1, 2, 2}; Primitives::fillRect(r, hl, arm);
+      SDL_Rect v {cx - 1, cy + i, 2, 2}; Primitives::fillRect(r, v, arm);
+      SDL_Rect vt{cx - 1, cy - i - 1, 2, 2}; Primitives::fillRect(r, vt, arm);
+    }
+  }
+
+  // Character-art rendering has been intentionally removed from operational UI paths.

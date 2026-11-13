@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deckboy examples — start here</title>
+<style>
+  :root{color-scheme:dark;font:18px/1.55 system-ui,sans-serif;background:#101719;color:#e8f0e4}
+  body{max-width:880px;margin:auto;padding:36px 22px 60px}
+  h1{font-size:clamp(32px,6vw,52px);line-height:1.12;margin:12px 0 24px}
+  h2{font-size:24px;margin:0 0 10px}p{margin:10px 0}
+  .brand{color:#9bbc0f;font-weight:750;letter-spacing:.1em}
+  .setup,article{border:1px solid #45603e;border-radius:12px;padding:22px;margin:18px 0;background:#17231a}
+  .setup{border-left:6px solid #9bbc0f}
+  .number{color:#b9d94b;font-size:15px;font-weight:750;letter-spacing:.08em}
+  kbd{display:inline-block;background:#e8f0e4;color:#101719;padding:1px 9px;border-radius:5px;box-shadow:0 3px #829c72;font-weight:700}
+  code{overflow-wrap:anywhere;color:#c8e59b}
+  .small{font-size:16px;color:#b6c7b6}img{width:100%;height:auto;border-radius:8px;margin-top:18px}
+  a{color:#c8e59b}li{margin:8px 0}
+</style>
+<body>
+  <div class="brand">DECKBOY / EXAMPLE SHOWS</div>
+  <h1>Five shows, one step at a time.<br>Start with a picture on a screen.</h1>
+  <div class="setup">
+    <h2>Open the first show</h2>
+    <p>In Deckboy, <strong>EXAMPLE SHOWS</strong> on the startup screen opens
+    <code>01-picture-on-screen.deckboy</code> for you. Or extract this folder,
+    keep the <code>media</code> folder beside the shows, and choose
+    <strong>OPEN</strong>.</p>
+    <p>Deckboy saves your changes as you go. To keep the original, choose
+    <strong>SAVE AS</strong> (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd>) first.</p>
+    <p class="small">New to Deckboy? <strong>LEARN THE BASICS</strong> on the startup
+    screen is a five-minute guided tour of the same first steps.</p>
+  </div>
+  <article>
+    <div class="number">STEP 1 / TURN THE OUTPUT ON</div>
+    <h2>MENU → Video Outputs → OUTPUT OFF</h2>
+    <p>Click it so it reads <strong>OUTPUT ON</strong>. The output window opens,
+    black until you take a cue. In DASH (<kbd>Ctrl</kbd> + <kbd>D</kbd>),
+    <strong>1 Output on</strong> does the same.</p>
+    <p class="small">For a projector or second screen, choose it on the same page first.</p>
+  </article>
+  <article>
+    <div class="number">STEP 2 / PUT A PICTURE ON IT</div>
+    <h2>Click cue 01, then press <kbd>Enter</kbd></h2>
+    <p><strong>TAKE</strong> sends the selected cue to the output. It now reads
+    <strong>YOUR OUTPUT IS LIVE</strong>.</p>
+  </article>
+  <article>
+    <div class="number">STEP 3 / THE NEXT CUE</div>
+    <h2>Press <kbd>Page Down</kbd></h2>
+    <p>The next cue goes live: a clip, then a picture Deckboy draws itself.
+    The last cue shows you <strong>BLACK</strong> (<kbd>B</kbd>), which clears
+    the screen at any time.</p>
+  </article>
+  <h2>Then work up</h2>
+  <ul>
+    <li><strong>02 — Running a show:</strong> a running order with a crossfade, a clip
+    that goes to black at its end, one that loops and one that fades out by itself.</li>
+    <li><strong>03 — Layers and titles:</strong> three playlists in one picture: backdrop,
+    inset and a Lower Third. Choose the named scenes in DASH.</li>
+    <li><strong>04 — Looks and effects:</strong> one picture, six looks, with oscillators
+    you can switch off to compare.</li>
+    <li><strong>05 — One-button show:</strong> everything above, run from one DASH button
+    with original music.</li>
+  </ul>
+  <p class="small">Every cue has a short note in the inspector. The full guide is in
+  <a href="README.md">README.md</a>.</p>
+  <img src="overview.png" alt="Programme output from the five example shows" width="1281" height="520">
+  <p class="small">Footage: <a href="https://mango.blender.org/">Tears of Steel</a>,
+  (CC) Blender Foundation | mango.blender.org, licensed
+  <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p>
+</body>
+</html>

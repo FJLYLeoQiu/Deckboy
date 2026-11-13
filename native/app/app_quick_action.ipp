@@ -1,0 +1,1774 @@
+// ============================================================================
+// app_quick_action.ipp — Quick-action command palette (Ctrl+K).
+//
+// Implements the quick-action system for rapid keyboard-driven operations:
+//
+//   dispatchQuickAction()     — execute a QuickAction enum value
+//   renderQuickActionPalette() — render the searchable command palette overlay
+//   filterQuickActions()      — filter available actions by search query
+//
+// Quick actions provide fast access to common operations without navigating
+// menus: toggle loop, toggle hold, copy/paste cue settings, set transition
+// style, change cue kind, add patterns, etc.
+//
+// The palette is opened with Ctrl+K and supports fuzzy search filtering.
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Execute a quick action. Most actions modify the selected cue's properties.
+  // `param` carries a payload for the actions that need one (the effect stack's
+  // index, the numeric-parameter id). -1 for everything else, which is most.
+  void dispatchQuickAction(QuickAction action, int param = -1) {
+    noteInspectorSectionTouched(action);   // a header click: the section keeps its state
+    if (handleMaskQuickAction(action)) {
+      return;
+    }
+    if (handleDrawQuickAction(action, param)) {
+      return;
+    }
+    switch (action) {
+      case QuickAction::EditNumericParam: editNumericParam(param); return;
+      case QuickAction::RunExtraDeskCommand:   // a private extra's inspector button
+        if (param >= 0 && param < static_cast<int>(extraDeskCommands_.size())) {
+          playUiSound(UiSoundEffect::Navigate);
+          handleRemoteCommand(extraDeskCommands_[static_cast<std::size_t>(param)]);
+        }
+        return;
+      case QuickAction::NumericParamDec: nudgeNumericParam(param, -1); return;
+      case QuickAction::NumericParamInc: nudgeNumericParam(param, +1); return;
+      case QuickAction::ScopesToggleBig: toggleScopeBig(param); return;
+      // ── Dashboard tiles ──────────────────────────────────────────────
+      //
+      // The slot index rides in QuickButton::param, so one action serves any
+      // number of tiles rather than needing an action apiece.
+      case QuickAction::TrackerToggle:
+        project_.dashboardMode = project_.dashboardMode == 1 ? 0 : 1;
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Navigate);
+        break;
+
+      case QuickAction::TrackerAddStep: {
+        // A step lives IN THE TRACKER. It used to be a master cue added to
+        // a playlist, so every "+ step" grew a cue list the operator had not
+        // touched, and that playlist was the one deck the step could never
+        // fire. James: "the tracker IS the master cue."
+        pushUndoSnapshot();
+        addTrackerStep();
+        trackerSquishRow_ = static_cast<int>(masterTrackerRows().size()) - 1;
+        trackerSquishAtMs_ = SDL_GetTicks();
+        break;
+      }
+
+      case QuickAction::TrackerFire: {
+        const auto rows = masterTrackerRows();
+        if (param < 0 || param >= static_cast<int>(rows.size())) {
+          break;
+        }
+        // Through the transport, so a step picked by hand while PLAY runs
+        // restarts the countdown from THIS step rather than the one before.
+        fireTrackerRow(param);
+        break;
+      }
+
+      case QuickAction::TrackerCell: {
+        // The param carries both coordinates; unpack before anything else.
+        const int rowIndex = param / kMaxDecks;
+        const int targetDeck = param % kMaxDecks;
+        const auto rows = masterTrackerRows();
+        if (rowIndex < 0 || rowIndex >= static_cast<int>(rows.size()) ||
+            targetDeck < 0 || targetDeck >= static_cast<int>(project_.decks.size())) {
+          break;
+        }
+        const int masterDeck = rows[rowIndex].first;
+        const int masterCue = rows[rowIndex].second;
+        // A click puts the pattern view's cursor where the eye already is.
+        trackerCursorRow_ = rowIndex;
+        {
+          const std::vector<int> shown = trackerShownDecks();
+          const auto at = std::find(shown.begin(), shown.end(), targetDeck);
+          if (at != shown.end()) {
+            trackerCursorCol_ = static_cast<int>(at - shown.begin());
+          }
+        }
+        if (targetDeck == masterDeck) {
+          triggerToast("a step cannot fire the playlist it lives on");
+          break;
+        }
+        const Deck& target = project_.decks[targetDeck];
+
+        // A LIST, not a cycle. James on the output's source-deck row:
+        // "clicking 7 times to select the right deck sucks" -- a cell in a
+        // grid has exactly the same problem and a longer list to walk.
+        std::vector<std::pair<std::string, std::string>> choices;
+        choices.emplace_back("-1", "nothing on this playlist");
+        // What a step can do to the playlist itself (the tracker's S F V O).
+        // Typing digits on one of these with EDIT on changes its value.
+        choices.emplace_back("S", "STOP the playlist");
+        choices.emplace_back("F", "FADE OUT over 2.0s, then stop");
+        choices.emplace_back("V", "VOLUME 100%");
+        choices.emplace_back("O", "OPACITY 100%");
+        for (int c = 0; c < static_cast<int>(target.cues.size()); ++c) {
+          // A master firing a master is not the model, so it is not offered.
+          if (target.cues[c].kind == CueKind::Master) {
+            continue;
+          }
+          const std::string& name = target.cues[c].name;
+          choices.emplace_back(
+            std::to_string(c),
+            std::to_string(c + 1) + "  " +
+              (name.empty() ? std::string("(unnamed)") : name));
+        }
+        // Anchored on the cell, so the list opens where the eye already is.
+        SDL_Rect anchorRect {};
+        for (const auto& button : dashButtons_) {
+          if (button.action == QuickAction::TrackerCell && button.param == param) {
+            anchorRect = button.rect;
+            break;
+          }
+        }
+        std::string current = "-1";
+        if (const Cue* master = masterTrackerCue(masterDeck, masterCue)) {
+          for (const MasterAssignment& a : master->masterAssignments) {
+            if (a.deckIndex == targetDeck) {
+              const int idx = findCueIndexById(targetDeck, a.cueId);
+              if (a.action != 'G') {
+                current = std::string(1, a.action);
+              } else if (idx >= 0) {
+                current = std::to_string(idx);
+              }
+              break;
+            }
+          }
+        }
+        openDropdown("tracker.cell", anchorRect, choices, current,
+                     [this, masterDeck, masterCue, targetDeck](const std::string& value) {
+                       if (value == "S" || value == "F" || value == "V" || value == "O") {
+                         pushUndoSnapshot();
+                         setMasterTrackerCellAction(masterDeck, masterCue, targetDeck, value[0],
+                                                    value == "F" ? 20 : 100);
+                         triggerToast(deckLabel(targetDeck) + ": " +
+                                      masterTrackerCellLabel(masterDeck, masterCue, targetDeck));
+                         return;
+                       }
+                       const int picked = std::atoi(value.c_str());
+                       if (!setMasterTrackerCell(masterDeck, masterCue,
+                                                 targetDeck, picked)) {
+                         triggerToast("that cue cannot be fired by a step");
+                         return;
+                       }
+                       triggerToast(picked < 0
+                         ? (deckLabel(targetDeck) + ": nothing")
+                         : (deckLabel(targetDeck) + ": " +
+                            masterTrackerCellLabel(masterDeck, masterCue, targetDeck)));
+                     });
+        break;
+      }
+
+      case QuickAction::LowerThirdLayoutToggle: toggleLowerThirdLayout(); return;
+      case QuickAction::LowerThirdCycle:        cycleLowerThird(param); return;
+      case QuickAction::LowerThirdEditTitle:    editLowerThirdLine(0); return;
+      case QuickAction::LowerThirdEditSub:      editLowerThirdLine(1); return;
+      case QuickAction::LowerThirdOut:
+        if (lowerThirdTakeOutAnywhere() == 0) {
+          triggerToast("no Lower Third on air");
+        }
+        return;
+      case QuickAction::TrackerGo:
+        trackerGo();
+        return;
+      case QuickAction::TrackerBack:
+        trackerBack();
+        return;
+      case QuickAction::TrackerPlay:
+        if (trackerPlaying_) {
+          trackerStop();
+        } else {
+          trackerPlay();
+        }
+        return;
+      case QuickAction::TrackerLoopToggle:
+        project_.trackerLoop = !project_.trackerLoop;
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Toggle);
+        triggerToast(project_.trackerLoop ? "sequence loops" : "sequence stops at the end");
+        return;
+      case QuickAction::TrackerClickerToggle:
+        project_.clickerDrivesTracker = !project_.clickerDrivesTracker;
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Toggle);
+        triggerToast(project_.clickerDrivesTracker
+                       ? "Page Down / Page Up step the tracker"
+                       : "Page Down / Page Up step the focused playlist");
+        return;
+      case QuickAction::TrackerStop:
+        if (trackerPlaying_) {
+          trackerStop();
+        }
+        return;
+      case QuickAction::TrackerMuteToggle:
+      case QuickAction::TrackerSoloToggle:
+        toggleTrackerColumn(param, action == QuickAction::TrackerSoloToggle);
+        return;
+      case QuickAction::TrackerViewToggle:
+        project_.trackerClassicView = !project_.trackerClassicView;
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Navigate);
+        return;
+      case QuickAction::TrackerEditToggle:
+        trackerEditMode_ = !trackerEditMode_;
+        trackerDigits_.clear();
+        playUiSound(UiSoundEffect::Toggle);
+        triggerToast(trackerEditMode_ ? "EDIT on: typing changes the tracker's cells"
+                                      : "EDIT off: the keyboard only moves and fires");
+        return;
+      case QuickAction::TrackerCursorTo:
+        trackerCursorRow_ = std::max(0, param);
+        return;
+      case QuickAction::TrackerSectionAdd: {
+        Cue* step = trackerStepCueMutable(trackerCursorRow_);
+        if (!step) {
+          triggerToast("make a step first: a section starts at a step");
+          return;
+        }
+        const std::string stepId = step->id;
+        openInlineTextEditor("tracker.section", "Section at row " + std::to_string(trackerCursorRow_ + 1),
+                             "a name for the section this row starts (empty: none)", step->trackerSection,
+                             [this, stepId](const std::string& value) {
+          if (Cue* cue = masterStepById(stepId)) {
+            pushUndoSnapshot();
+            cue->trackerSection = trim(value);
+            markProjectDirty();
+          }
+        });
+        return;
+      }
+      case QuickAction::TrackerLength: {
+        SDL_Rect anchorRect = lastInlineEditorAnchorRect_;
+        for (const auto& button : dashButtons_) {
+          if (button.action == QuickAction::TrackerLength && button.param == param) {
+            anchorRect = button.rect;
+            break;
+          }
+        }
+        openTrackerLengthMenu(param, anchorRect);
+        return;
+      }
+
+      case QuickAction::DashSlotFire: {
+        const int at = param;
+        if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) break;
+        dashPressedSlot_ = at;
+        dashPressedAtMs_ = SDL_GetTicks();
+        const std::string command = project_.dashboard[at].command;
+        if (command.empty()) {
+          triggerToast("that button has no command yet");
+          return;
+        }
+        // THE SAME PATH DASH <n> TAKES. A tile and a Companion button must do
+        // the same thing, or the dashboard on screen and the one on the desk
+        // are two different dashboards.
+        sequenceOwnerHint_ = at;          // a SEQ on this tile belongs to it
+        handleRemoteCommand(command);
+        sequenceOwnerHint_ = -1;
+        return;
+      }
+      case QuickAction::DashSlotColor: {
+        const int at = param;
+        if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) break;
+        DashboardSlot& slot = project_.dashboard[at];
+        slot.colorIndex = (slot.colorIndex + 1) % 8;
+        markProjectDirty();
+        return;
+      }
+      case QuickAction::DashSlotAdd: {
+        project_.dashboard.push_back(DashboardSlot{});
+        markProjectDirty();
+        // Straight into editing it: a button that appears blank and unexplained
+        // is a worse outcome than one more dialog.
+        editDashboardSlot(static_cast<int>(project_.dashboard.size()) - 1);
+        return;
+      }
+      case QuickAction::DashSlotEdit: {
+        editDashboardSlot(param);
+        return;
+      }
+      // A master cue IS a show state: every playlist set to the cue it should
+      // be on. The dashboard is where an operator reaches for a show state.
+      // This is the one press that connects them.
+      case QuickAction::StingPitchDec:
+      case QuickAction::StingPitchInc:
+      case QuickAction::StingLenDec:
+      case QuickAction::StingLenInc:
+      case QuickAction::StingSweepDec:
+      case QuickAction::StingSweepInc:
+      case QuickAction::StingBodyDec:
+      case QuickAction::StingBodyInc: {
+        Cue* cue = selectedCueMutable();
+        if (!cue || cue->kind != CueKind::Tone) {
+          return;
+        }
+        ToneSettings& t = cue->tone;
+        switch (action) {
+          // Pitch steps in SEMITONES, not in Hz: a fixed number of Hz is a
+          // different interval at every pitch, so a stepper in Hz walks fast
+          // low down and barely moves up top.
+          case QuickAction::StingPitchDec:
+            t.stingPitchHz = std::clamp(t.stingPitchHz / 1.059463, 20.0, 12000.0); break;
+          case QuickAction::StingPitchInc:
+            t.stingPitchHz = std::clamp(t.stingPitchHz * 1.059463, 20.0, 12000.0); break;
+          case QuickAction::StingLenDec:
+            t.stingSeconds = std::clamp(t.stingSeconds - 0.05, 0.05, 10.0); break;
+          case QuickAction::StingLenInc:
+            t.stingSeconds = std::clamp(t.stingSeconds + 0.05, 0.05, 10.0); break;
+          case QuickAction::StingSweepDec:
+            t.stingSweepSemitones = std::clamp(t.stingSweepSemitones - 1.0, -24.0, 24.0); break;
+          case QuickAction::StingSweepInc:
+            t.stingSweepSemitones = std::clamp(t.stingSweepSemitones + 1.0, -24.0, 24.0); break;
+          case QuickAction::StingBodyDec:
+            t.stingBody = std::clamp(t.stingBody - 0.05, 0.0, 1.0); break;
+          default:
+            t.stingBody = std::clamp(t.stingBody + 0.05, 0.0, 1.0); break;
+        }
+        markProjectDirty();
+        // The length is the cue's duration, so the engine has to be told --
+        // otherwise the sting keeps the length it was taken with.
+        refreshAllLiveCueRuntimes();
+        return;
+      }
+      case QuickAction::MultiviewToggle:
+        project_.multiviewMode = project_.multiviewMode ? 0 : 1;
+        if (project_.multiviewMode == 0) {
+          // Give the textures back rather than holding one per playlist for
+          // the rest of the session.
+          clearDeckPreviewTextures();
+        }
+        markProjectDirty();
+        triggerToast(project_.multiviewMode ? "multiview on" : "multiview off");
+        playUiSound(UiSoundEffect::Toggle);
+        return;
+      case QuickAction::MasterToDashboard: {
+        const Cue* cue = selectedCuePtr();
+        if (!cue || cue->kind != CueKind::Master) {
+          triggerToast("select a master cue first");
+          return;
+        }
+        // BY ID, not by name: a rename must not break the button, and two
+        // masters may legitimately share a name.
+        for (const DashboardSlot& existing : project_.dashboard) {
+          if (existing.command == "MASTER FIRE " + cue->id) {
+            triggerToast("already on the dashboard");
+            return;
+          }
+        }
+        DashboardSlot slot;
+        slot.label = cue->name;
+        slot.command = "MASTER FIRE " + cue->id;
+        slot.glyph = "*";
+        slot.colorIndex = static_cast<int>(project_.dashboard.size()) % 8;
+        project_.dashboard.push_back(slot);
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Import);
+        triggerToast("on the dashboard - Ctrl+D or the DASH button");
+        return;
+      }
+      // ── DELETING A BUTTON ────────────────────────────────────────────
+      //
+      // There was no way to remove one at all: you could add, edit and
+      // recolour a tile, and a tile you regretted was permanent.
+      //
+      // TWO PRESSES, because the tile next to it FIRES A COMMAND -- a single
+      // small x beside a live GO button is a mis-tap that stops a show. The
+      // first press arms and says so; the second, within four seconds,
+      // removes it. Anything else disarms it.
+      case QuickAction::DashSlotDelete: {
+        const int at = param;
+        if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) break;
+        const Uint64 now = SDL_GetTicks();
+        if (dashDeleteArmedSlot_ != at || now - dashDeleteArmedAtMs_ > 4000) {
+          dashDeleteArmedSlot_ = at;
+          dashDeleteArmedAtMs_ = now;
+          triggerToast("press again to delete this button");
+          return;
+        }
+        dashDeleteArmedSlot_ = -1;
+        project_.dashboard.erase(project_.dashboard.begin() + at);
+        markProjectDirty();
+        playUiSound(UiSoundEffect::Delete);
+        triggerToast("button deleted");
+        return;
+      }
+      case QuickAction::ToggleBrowserInteract: {
+        auto* page = liveBrowserRenderer();
+        if (!page) {
+          triggerToast("no browser cue is live on this deck");
+          return;
+        }
+        const bool want = !page->isInteractive();
+        if (!page->setInteractive(want)) {
+          triggerToast("this browser backend cannot show a window");
+          return;
+        }
+#if defined(__linux__)
+        triggerToast(want ? "hands-on: clicks and keys go to the page"
+                          : "hands-on off");
+#else
+        triggerToast(want ? "browser window open - click, type, log in"
+                          : "browser window closed");
+#endif
+        return;
+      }
+      case QuickAction::EffectAdd:        effectStackAdd(); return;
+      case QuickAction::MotionDriverPick:  pickMotionDriver(); return;
+      case QuickAction::MotionDriverClear: clearMotionDriver(); return;
+      case QuickAction::MotionDriverSpeedDec: nudgeMotionDriverSpeed(-0.1f); return;
+      case QuickAction::MotionDriverSpeedInc: nudgeMotionDriverSpeed(+0.1f); return;
+      case QuickAction::MotionDriverPauseToggle: toggleMotionDriverPaused(); return;
+      case QuickAction::MotionDriverRestart: restartSelectedMotionDriver(); return;
+      case QuickAction::MotionDriverRestartOnTakeToggle:
+        toggleMotionDriverRestartOnTake(); return;
+      case QuickAction::EffectRemove:     effectStackRemove(param); return;
+      case QuickAction::EffectCycleKind:  effectStackCycleKind(param); return;
+      case QuickAction::EffectToggleBypass: effectStackToggleBypass(param); return;
+      // Master assignments: the param is the DECK being assigned, the same way
+      // the effect rows below use it for which effect.
+      case QuickAction::MasterAssignPrev:   stepMasterAssignment(param, -1); return;
+      case QuickAction::MasterAssignNext:   stepMasterAssignment(param, +1); return;
+      case QuickAction::MasterAssignClear:  clearMasterAssignment(param); return;
+      case QuickAction::MasterBypassToggle: toggleMasterBypass(param); return;
+      // The matrix packs source and destination into one param, the same way
+      // the effect rows pack an index.
+      case QuickAction::MatrixCellCycle:  cycleCueMatrixCell(param); return;
+      case QuickAction::EffectAmountDec:  effectStackNudge(param, -0.05f); return;
+      case QuickAction::EffectAmountInc:  effectStackNudge(param, +0.05f); return;
+      case QuickAction::EffectEditAmount: effectStackEditAmount(param); return;
+      case QuickAction::EffectMoveUp:     effectStackMove(param, -1); return;
+      case QuickAction::EffectMoveDown:   effectStackMove(param, +1); return;
+      case QuickAction::EffectParamADec:  effectStackNudgeParam(param, 0, -0.05f); return;
+      case QuickAction::EffectParamAInc:  effectStackNudgeParam(param, 0, +0.05f); return;
+      case QuickAction::EffectParamAEdit: effectStackEditParam(param, 0); return;
+      case QuickAction::EffectParamBDec:  effectStackNudgeParam(param, 1, -0.05f); return;
+      case QuickAction::EffectParamBInc:  effectStackNudgeParam(param, 1, +0.05f); return;
+      case QuickAction::EffectParamBEdit: effectStackEditParam(param, 1); return;
+      case QuickAction::EffectParamCDec:  effectStackNudgeParam(param, 2, -0.05f); return;
+      case QuickAction::EffectParamCInc:  effectStackNudgeParam(param, 2, +0.05f); return;
+      case QuickAction::EffectParamCEdit: effectStackEditParam(param, 2); return;
+      case QuickAction::EffectParamDDec:  effectStackNudgeParam(param, 3, -0.05f); return;
+      case QuickAction::EffectParamDInc:  effectStackNudgeParam(param, 3, +0.05f); return;
+      case QuickAction::EffectParamDEdit: effectStackEditParam(param, 3); return;
+      case QuickAction::CueSectionCodeToggle:
+        cueSectionCodeOpen_ = !cueSectionCodeOpen_; return;
+      case QuickAction::AudioEffectAdd:         audioEffectStackAdd(); return;
+      case QuickAction::AudioEffectRemove:      audioEffectStackRemove(param); return;
+      case QuickAction::AudioEffectCycleKind:   audioEffectStackCycleKind(param); return;
+      case QuickAction::AudioEffectToggleBypass: audioEffectStackToggleBypass(param); return;
+      case QuickAction::AudioEffectAmountDec:   audioEffectStackNudge(param, -0.05f); return;
+      case QuickAction::AudioEffectAmountInc:   audioEffectStackNudge(param, +0.05f); return;
+      case QuickAction::AudioEffectEditAmount:  audioEffectStackEditAmount(param); return;
+      case QuickAction::AudioEffectChoosePlugin: audioEffectStackChoosePlugin(param); return;
+      case QuickAction::AudioEffectMoveUp:      audioEffectStackMove(param, -1); return;
+      case QuickAction::AudioEffectMoveDown:    audioEffectStackMove(param, +1); return;
+      case QuickAction::AudioEffectParamADec:   audioEffectStackNudgeParam(param, 0, -0.05f); return;
+      case QuickAction::AudioEffectParamAInc:   audioEffectStackNudgeParam(param, 0, +0.05f); return;
+      case QuickAction::AudioEffectParamAEdit:  audioEffectStackEditParam(param, 0); return;
+      case QuickAction::AudioEffectParamBDec:   audioEffectStackNudgeParam(param, 1, -0.05f); return;
+      case QuickAction::AudioEffectParamBInc:   audioEffectStackNudgeParam(param, 1, +0.05f); return;
+      case QuickAction::AudioEffectParamBEdit:  audioEffectStackEditParam(param, 1); return;
+      case QuickAction::AudioEffectParamCDec:   audioEffectStackNudgeParam(param, 2, -0.05f); return;
+      case QuickAction::AudioEffectParamCInc:   audioEffectStackNudgeParam(param, 2, +0.05f); return;
+      case QuickAction::AudioEffectParamCEdit:  audioEffectStackEditParam(param, 2); return;
+      case QuickAction::AudioEffectParamDDec:   audioEffectStackNudgeParam(param, 3, -0.05f); return;
+      case QuickAction::AudioEffectParamDInc:   audioEffectStackNudgeParam(param, 3, +0.05f); return;
+      case QuickAction::AudioEffectParamDEdit:  audioEffectStackEditParam(param, 3); return;
+      case QuickAction::CodeOpenEditor:     openCodeEditor(); return;
+      case QuickAction::EffectLfoToggle:    effectLfoToggle(param); return;
+      case QuickAction::EffectColourPick:   openColourPicker(param); return;
+      case QuickAction::CueBackdropPreset:  setCueBackdropPreset(param); return;
+      case QuickAction::DmxFixtureInclude:  toggleDmxFixtureIncluded(param); return;
+      case QuickAction::DmxFixtureLevelDec: nudgeDmxFixtureLevel(param, -0.05f); return;
+      case QuickAction::DmxFixtureLevelInc: nudgeDmxFixtureLevel(param, 0.05f); return;
+      case QuickAction::DmxFixtureColourCycle: cycleDmxFixtureColour(param); return;
+      case QuickAction::DmxModeToggle:      dmxShowChannels_ = !dmxShowChannels_; return;
+      case QuickAction::EffectLfoShape:     effectLfoCycleShape(param); return;
+      case QuickAction::EffectLfoRateDec:   effectLfoNudgeRate(param, -1); return;
+      case QuickAction::EffectLfoRateInc:   effectLfoNudgeRate(param, +1); return;
+      case QuickAction::EffectLfoDepthDec:  effectLfoNudgeDepth(param, -0.05f); return;
+      case QuickAction::EffectLfoDepthInc:  effectLfoNudgeDepth(param, +0.05f); return;
+      case QuickAction::EffectLfoSync:      effectLfoToggleSync(param); return;
+      case QuickAction::EffectChladniListen: effectChladniListen(param); return;
+      // The pad draws on press and on drag, both handled in the input layer
+      // where the pointer position is known. A plain click on it has already
+      // written a point by the time this is reached, so there is nothing left
+      // to do -- but the case must exist or the action audit calls it dead.
+      case QuickAction::EffectLfoDraw:      return;
+      case QuickAction::VjCycleBlend:
+        // ONE ORDER, shared with the remote verb and the label, so the cycle
+        // cannot offer a mode the renderer does not know or skip one it does.
+        // A chain of ternaries had to be edited in three places to add a mode
+        // and silently ended at "dissolve" if any of them disagreed.
+        setVjBlend(vjBlendModeAfter(project_.vjBlendMode));
+        return;
+      case QuickAction::VjTapTempo:      tapVjTempo(); return;
+      case QuickAction::VjToggleQuantise:
+        project_.vjQuantiseTakes = !project_.vjQuantiseTakes;
+        triggerToast(project_.vjQuantiseTakes ? "takes land on the beat"
+                                              : "takes are immediate");
+        markProjectDirty();
+        return;
+      case QuickAction::EffectChainCopy:  copySelectedEffectChain(); return;
+      case QuickAction::EffectChainPaste: pasteSelectedEffectChain(); return;
+      default: break;
+    }
+    dispatchQuickActionPlain(action);
+  }
+
+  void dispatchQuickActionPlain(QuickAction action) {
+    if (action == QuickAction::CopyCueSettings) {
+      copySelectedCueSettings();
+      return;
+    }
+    if (action == QuickAction::PasteCueSettings) {
+      pasteSelectedCueSettings();
+      return;
+    }
+    if (action == QuickAction::ResetCueSettings) {
+      resetSelectedCueSettings();
+      return;
+    }
+    if (action == QuickAction::ConvertCueMedia) {
+      convertSelectedCueMedia();
+      return;
+    }
+    pushUndoSnapshot();
+    switch (action) {
+      case QuickAction::ToggleLoop:      toggleSelectedLoop(); break;
+      case QuickAction::ToggleHold:      toggleSelectedPauseOnLastFrame(); break;
+      case QuickAction::TogglePauseBegin: toggleSelectedPauseAtBeginning(); break;
+      case QuickAction::ToggleLockToScreen: {
+        const Cue* cue = selectedCuePtr();
+        if (cue) setSelectedLockToScreen(!cue->lockToScreen);
+        break;
+      }
+      case QuickAction::ToggleCueAudio:   toggleSelectedAudioEnabled(); break;
+      case QuickAction::ToggleNextTransition: toggleSelectedTransitionToNext(); break;
+      case QuickAction::ToggleFadeIn:    toggleSelectedFadeEnabled(true); break;
+      case QuickAction::ToggleFadeOut:   toggleSelectedFadeEnabled(false); break;
+      case QuickAction::EditGotoTarget: {
+        Cue* sel = selectedCueMutable();
+        if (!sel) {
+          break;
+        }
+        openInlineTextEditor("cue.goto_target", "Cue Goto",
+                             "Target cue token on end (blank = next):", sel->gotoTarget,
+                             [this](const std::string& value) {
+                               setSelectedGotoTarget(value);
+                             });
+        break;
+      }
+      case QuickAction::CycleEndAction:  cycleSelectedEndAction(); break;
+      case QuickAction::FadeInDec:       adjustSelectedFade(true,  -0.25); break;
+      case QuickAction::FadeInInc:       adjustSelectedFade(true,   0.25); break;
+      case QuickAction::FadeOutDec:      adjustSelectedFade(false, -0.25); break;
+      case QuickAction::FadeOutInc:      adjustSelectedFade(false,  0.25); break;
+      case QuickAction::InDec:           adjustSelectedIn(-0.5); break;
+      case QuickAction::InInc:           adjustSelectedIn( 0.5); break;
+      case QuickAction::OutDec:          adjustSelectedOut(-0.5); break;
+      case QuickAction::OutInc:          adjustSelectedOut( 0.5); break;
+      case QuickAction::TransDec:        adjustSelectedCueTransition(-0.25); break;
+      case QuickAction::TransInc:        adjustSelectedCueTransition( 0.25); break;
+      case QuickAction::LowerBgDec:      adjustSelectedLowerAlpha(-16); break;
+      case QuickAction::LowerBgInc:      adjustSelectedLowerAlpha( 16); break;
+      case QuickAction::DurDec:          adjustSelectedStillDuration(-1.0); break;
+      case QuickAction::DurInc:          adjustSelectedStillDuration( 1.0); break;
+      case QuickAction::LoopCountDec:    adjustSelectedLoopCount(-1); break;
+      case QuickAction::LoopCountInc:    adjustSelectedLoopCount( 1); break;
+      case QuickAction::SpeedDec:        adjustSelectedSpeed(-0.25); break;
+      case QuickAction::SpeedInc:        adjustSelectedSpeed( 0.25); break;
+      case QuickAction::AudioGainDec:    adjustSelectedAudioGain(-1.0); break;
+      case QuickAction::AudioGainInc:    adjustSelectedAudioGain( 1.0); break;
+      case QuickAction::AudioPanDec:     adjustSelectedAudioPan(-0.05); break;
+      case QuickAction::AudioPanInc:     adjustSelectedAudioPan( 0.05); break;
+      case QuickAction::ToggleCueMono:   toggleSelectedCueMono(); break;
+      case QuickAction::NormalizeCueAudio: normalizeSelectedCueAudio(); break;
+      case QuickAction::CycleNormalizeTarget: cycleNormalizeTarget(); break;
+      case QuickAction::AudioFadeInDec:  adjustSelectedAudioFade(true,  -0.25); break;
+      case QuickAction::AudioFadeInInc:  adjustSelectedAudioFade(true,   0.25); break;
+      case QuickAction::AudioFadeOutDec: adjustSelectedAudioFade(false, -0.25); break;
+      case QuickAction::AudioFadeOutInc: adjustSelectedAudioFade(false,  0.25); break;
+      case QuickAction::AudioOutPairDec: adjustSelectedAudioOutPair(-1); break;
+      case QuickAction::AudioOutPairInc: adjustSelectedAudioOutPair(1); break;
+      case QuickAction::AudioVisualPrev: cycleSelectedAudioVisual(-1); break;
+      case QuickAction::AudioVisualNext: cycleSelectedAudioVisual(1); break;
+      case QuickAction::CycleColorTag:   cycleSelectedColorTag(); break;
+      case QuickAction::CycleScaleMode:  cycleSelectedScaleMode(); break;
+      case QuickAction::CycleScaleModePrevious: cycleSelectedScaleMode(-1); break;
+      case QuickAction::ScopesCycleView: cycleMonitorView(); break;
+      case QuickAction::ScopesSourceCycle: cycleScopesSource(); break;
+      case QuickAction::MicInputCycle: cycleSelectedMicInput(); break;
+      case QuickAction::MicChannelCycle: cycleSelectedMicChannel(); break;
+      case QuickAction::StreamHdrCycle:
+        if (const Cue* cue = selectedCueMutable()) setSelectedStreamHdr((cue->liveHdrTransfer + 1) % 3);
+        break;
+      case QuickAction::MicGainDec: adjustSelectedMicGain(-1.0f); break;
+      case QuickAction::MicGainInc: adjustSelectedMicGain(1.0f); break;
+      case QuickAction::MicClipReset: resetSelectedMicClip(); break;
+      case QuickAction::CueSectionMicToggle: cueSectionMicOpen_ = !cueSectionMicOpen_; break;
+      case QuickAction::ScopesFreeze:
+        setScopesFrozen(!scopesFrozen_);
+        triggerToast(scopesFrozen_ ? "scopes: frozen" : "scopes: live");
+        break;
+      case QuickAction::EditNotes: {
+        Cue* sel = selectedCueMutable();
+        if (sel) {
+          openInlineTextEditor("cue.notes", "Cue Notes",
+                               "Enter notes for selected cue(s):", sel->notes,
+                               [this](const std::string& value) {
+            if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) { cue.notes = value; })) {
+              markProjectDirty();
+            }
+          });
+        }
+        break;
+      }
+      case QuickAction::EditSourceRef: {
+        Cue* sel = selectedCueMutable();
+        if (!sel || !isSourceCueKind(sel->kind)) {
+          break;
+        }
+        std::string initial = sourceCueRefFromCue(*sel);
+        initial = sourceCueEditorInputDefault(sel->kind, initial);
+        std::string title = cueKindLabel(sel->kind) + " Source";
+        std::string prompt = sourceCueEditorPrompt(sel->kind);
+        openInlineTextEditor(
+          "cue.source_ref",
+          title,
+          prompt,
+          initial,
+          [this](const std::string& value) {
+            setSelectedSourceCueRef(value);
+          });
+        break;
+      }
+      case QuickAction::EditBrowserUrl: {
+        Cue* sel = selectedCueMutable();
+        if (!sel) {
+          break;
+        }
+        if (sel->kind == CueKind::SrtStream) {
+          openInlineTextEditor("cue.stream_url", "Stream URL",
+                               "Stream URL (srt://, rtmp://, rtsp://...):", sel->path,
+                               [this](const std::string& value) {
+                                 std::string url = trim(value);
+                                 if (url.empty()) { triggerToast("stream url: required"); return; }
+                                 forEachFocusedSelectedCueMutable([&](Cue& c, int) {
+                                   if (c.kind == CueKind::SrtStream) c.path = url;
+                                 });
+                                 markProjectDirty();
+                               });
+        } else if (sel->kind == CueKind::NdiSource) {
+          std::string current = sel->path.rfind("ndi://", 0) == 0 ? sel->path.substr(6) : sel->path;
+          openInlineTextEditor("cue.ndi_source", "NDI Source Name",
+                               "NDI source name (e.g. LAPTOP (source 1)):", current,
+                               [this](const std::string& value) {
+                                 std::string name = trim(value);
+                                 forEachFocusedSelectedCueMutable([&](Cue& c, int) {
+                                   if (c.kind == CueKind::NdiSource) {
+                                     c.path = "ndi://" + name;
+                                     if (c.name == "NDI Source" || c.name.empty()) c.name = name.empty() ? "NDI Source" : name;
+                                   }
+                                 });
+                                 markProjectDirty();
+                               });
+        } else if (sel->kind == CueKind::Browser) {
+          openInlineTextEditor("cue.browser_url", "Browser URL",
+                               "Enter URL or local file path:", sel->path,
+                               [this](const std::string& value) {
+                                 setSelectedBrowserCueUrl(value);
+                               });
+        }
+        break;
+      }
+      case QuickAction::ToggleRefreshOnTake: {
+        Cue* sel = selectedCueMutable();
+        if (!sel || sel->kind != CueKind::Browser) {
+          break;
+        }
+        sel->refreshOnTake = !sel->refreshOnTake;
+        markProjectDirty();
+        break;
+      }
+      case QuickAction::GotoMinus10:
+      case QuickAction::GotoMinus20:
+      case QuickAction::GotoMinus30: {
+        MediaEngine* eng = focusedMediaEngine();
+        if (eng) {
+          double dur = eng->duration();
+          double offset = (action == QuickAction::GotoMinus10) ? 10.0
+                        : (action == QuickAction::GotoMinus20) ? 20.0 : 30.0;
+          double target = std::max(0.0, dur - offset);
+          eng->seek(target);
+          triggerToast("jumped to -" + std::to_string(static_cast<int>(offset)) + "s");
+        }
+        break;
+      }
+      case QuickAction::TransportSkipStart: {
+        MediaEngine* eng = focusedMediaEngine();
+        if (eng) { eng->seek(0.0); triggerToast("start"); }
+        break;
+      }
+      case QuickAction::TransportSkipBack: {
+        MediaEngine* eng = focusedMediaEngine();
+        if (eng) { eng->seek(std::max(0.0, eng->position() - 10.0)); triggerToast("-10s"); }
+        break;
+      }
+      case QuickAction::TransportPlayPause:
+        toggleTransport();
+        break;
+      case QuickAction::TransportSkipForward: {
+        MediaEngine* eng = focusedMediaEngine();
+        if (eng) { eng->seek(std::min(eng->duration(), eng->position() + 10.0)); triggerToast("+10s"); }
+        break;
+      }
+      case QuickAction::TransportSkipEnd: {
+        MediaEngine* eng = focusedMediaEngine();
+        if (eng && eng->duration() > 0.0) { eng->seek(eng->duration() - 0.1); triggerToast("end"); }
+        break;
+      }
+      case QuickAction::TransportSkipNext:
+        skipToNextCue();
+        break;
+      case QuickAction::TransportSkipPrev:
+        skipToPrevCue();
+        break;
+      case QuickAction::TrimReset: {
+        if (Cue* cue = activeCueMutable()) {
+          cue->inPointSeconds = 0.0;
+          cue->outPointSeconds = 0.0;
+          triggerToast("trim cleared");
+          markProjectDirty();
+        }
+        break;
+      }
+      case QuickAction::ToggleAspectLink:
+        project_.geometryAspectLinked = !project_.geometryAspectLinked;
+        triggerToast(project_.geometryAspectLinked ? "aspect link on" : "aspect link off");
+        playUiSound(UiSoundEffect::Toggle);
+        markProjectDirty();
+        break;
+      case QuickAction::ScaleXDec:
+        adjustSelectedScaleX(-0.05f);
+        break;
+      case QuickAction::ScaleXInc:
+        adjustSelectedScaleX(0.05f);
+        break;
+      case QuickAction::ScaleYDec:
+        adjustSelectedScaleY(-0.05f);
+        break;
+      case QuickAction::ScaleYInc:
+        adjustSelectedScaleY(0.05f);
+        break;
+      case QuickAction::EditScaleX:
+        editSelectedScaleX();
+        break;
+      case QuickAction::EditScaleY:
+        editSelectedScaleY();
+        break;
+      case QuickAction::OffsetXDec:
+        adjustSelectedOffsetX(-1.0f);
+        break;
+      case QuickAction::OffsetXInc:
+        adjustSelectedOffsetX(1.0f);
+        break;
+      case QuickAction::OffsetYDec:
+        adjustSelectedOffsetY(-1.0f);
+        break;
+      case QuickAction::OffsetYInc:
+        adjustSelectedOffsetY(1.0f);
+        break;
+      case QuickAction::EditOffsetX:
+        editSelectedOffsetX();
+        break;
+      case QuickAction::EditOffsetY:
+        editSelectedOffsetY();
+        break;
+      case QuickAction::RotDec:
+        adjustSelectedRotation(-1.0f);
+        break;
+      case QuickAction::RotInc:
+        adjustSelectedRotation(1.0f);
+        break;
+      case QuickAction::EditRotation:
+        editSelectedRotation();
+        break;
+      case QuickAction::CropLDec:
+        adjustSelectedCrop('L', -0.01f);
+        break;
+      case QuickAction::CropLInc:
+        adjustSelectedCrop('L', 0.01f);
+        break;
+      case QuickAction::CropRDec:
+        adjustSelectedCrop('R', -0.01f);
+        break;
+      case QuickAction::CropRInc:
+        adjustSelectedCrop('R', 0.01f);
+        break;
+      case QuickAction::CropTDec:
+        adjustSelectedCrop('T', -0.01f);
+        break;
+      case QuickAction::CropTInc:
+        adjustSelectedCrop('T', 0.01f);
+        break;
+      case QuickAction::CropBDec:
+        adjustSelectedCrop('B', -0.01f);
+        break;
+      case QuickAction::CropBInc:
+        adjustSelectedCrop('B', 0.01f);
+        break;
+      case QuickAction::KeyToggle:
+        toggleSelectedChromaKey();
+        break;
+      case QuickAction::TimerChimeAmberToggle:
+        toggleTimerFlag(&TimerSettings::chimeAtAmber, "chime amber"); break;
+      case QuickAction::TimerChimeRedToggle:
+        toggleTimerFlag(&TimerSettings::chimeAtRed, "chime red"); break;
+      case QuickAction::TimerChimeZeroToggle:
+        toggleTimerFlag(&TimerSettings::chimeAtZero, "chime zero"); break;
+      case QuickAction::TimerCycleChimeSound:   cycleTimerChimeSound(); break;
+      case QuickAction::TimerPickLogo:          pickTimerLogo(); break;
+      case QuickAction::CueSectionToneToggle:
+        cueSectionToneOpen_ = !cueSectionToneOpen_; break;
+      case QuickAction::ToneCycleWaveform: cycleToneWaveform(); break;
+      case QuickAction::ToneFreqDec:    adjustToneFrequency(-1); break;
+      case QuickAction::ToneFreqInc:    adjustToneFrequency(1); break;
+      case QuickAction::ToneLevelDec:   adjustToneLevel(-1.0); break;
+      case QuickAction::ToneLevelInc:   adjustToneLevel(1.0); break;
+      case QuickAction::ToneChannelDec: adjustToneChannel(-1); break;
+      case QuickAction::ToneChannelInc: adjustToneChannel(1); break;
+      case QuickAction::ToneCycleVisual: cycleToneVisual(); break;
+      case QuickAction::FdsCycleCarrier:   cycleFdsCarrier(); break;
+      case QuickAction::FdsCycleModulator: cycleFdsModulator(); break;
+      case QuickAction::FdsDepthDec:  adjustFdsDepth(-4); break;
+      case QuickAction::FdsDepthInc:  adjustFdsDepth(4); break;
+      case QuickAction::FdsRatioDec:  adjustFdsRatio(-1); break;
+      case QuickAction::FdsRatioInc:  adjustFdsRatio(1); break;
+      case QuickAction::FdsNoteDec:   adjustFdsNote(-1); break;
+      case QuickAction::FdsNoteInc:   adjustFdsNote(1); break;
+      case QuickAction::FdsRetrigDec: adjustFdsRetrigger(-0.05); break;
+      case QuickAction::FdsRetrigInc: adjustFdsRetrigger(0.05); break;
+      case QuickAction::CueSectionVideoSynthToggle:
+        cueSectionVideoSynthOpen_ = !cueSectionVideoSynthOpen_; break;
+      case QuickAction::VsCycleShape:   cycleVsEnum(0); break;
+      case QuickAction::VsCycleMirror:  cycleVsEnum(1); break;
+      case QuickAction::VsCyclePalette: cycleVsEnum(2); break;
+      case QuickAction::VsSpeedDec:    scaleVsSpeed(1.0 / 1.3); break;
+      case QuickAction::VsSpeedInc:    scaleVsSpeed(1.3); break;
+      case QuickAction::VsScaleDec:    adjustVs(&VideoSynthSettings::scale, -0.1, 0.1, 8.0, "scale"); break;
+      case QuickAction::VsScaleInc:    adjustVs(&VideoSynthSettings::scale, 0.1, 0.1, 8.0, "scale"); break;
+      case QuickAction::VsFeedbackDec: adjustVs(&VideoSynthSettings::feedbackAmount, -0.05, 0.0, 0.95, "feedback"); break;
+      case QuickAction::VsFeedbackInc: adjustVs(&VideoSynthSettings::feedbackAmount, 0.05, 0.0, 0.95, "feedback"); break;
+      case QuickAction::VsZoomDec:     adjustVs(&VideoSynthSettings::feedbackZoom, -0.01, 0.90, 1.15, "zoom"); break;
+      case QuickAction::VsZoomInc:     adjustVs(&VideoSynthSettings::feedbackZoom, 0.01, 0.90, 1.15, "zoom"); break;
+      case QuickAction::VsReactDec:    adjustVs(&VideoSynthSettings::audioReactivity, -0.1, 0.0, 1.0, "audio"); break;
+      case QuickAction::VsReactInc:    adjustVs(&VideoSynthSettings::audioReactivity, 0.1, 0.0, 1.0, "audio"); break;
+      case QuickAction::VsSortDec:    adjustVs(&VideoSynthSettings::pixelSort, -0.1, 0.0, 1.0, "smear"); break;
+      case QuickAction::VsSortInc:    adjustVs(&VideoSynthSettings::pixelSort, 0.1, 0.0, 1.0, "smear"); break;
+      case QuickAction::VsGlitchDec:  adjustVs(&VideoSynthSettings::glitch, -0.1, 0.0, 1.0, "glitch"); break;
+      case QuickAction::VsGlitchInc:  adjustVs(&VideoSynthSettings::glitch, 0.1, 0.0, 1.0, "glitch"); break;
+      case QuickAction::VsResDec:     adjustVsInt(&VideoSynthSettings::resolution, -1, 1, 5, "detail"); break;
+      case QuickAction::VsResInc:     adjustVsInt(&VideoSynthSettings::resolution, 1, 1, 5, "detail"); break;
+      case QuickAction::VsAsciiColsDec: adjustVsInt(&VideoSynthSettings::asciiCols, -10, 20, 200, "columns", true); break;
+      case QuickAction::VsAsciiColsInc: adjustVsInt(&VideoSynthSettings::asciiCols, 10, 20, 200, "columns", true); break;
+      case QuickAction::VsCrtDec: adjustVs(&VideoSynthSettings::crt, -0.1, 0.0, 1.0, "crt"); break;
+      case QuickAction::VsCrtInc: adjustVs(&VideoSynthSettings::crt, 0.1, 0.0, 1.0, "crt"); break;
+      case QuickAction::VsCharSetCycle:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          // An explicit order rather than modulo arithmetic: sheet mode is
+          // only offered once a sheet exists, so the cycle never lands on a
+          // mode that cannot draw anything, and the sets that are always
+          // available no longer have to be contiguous with it.
+          static const int kWithoutSheet[] = {0, 1, 2, 3, 4, 6, 7};
+          static const int kWithSheet[]    = {0, 1, 2, 3, 4, 6, 7, 5};
+          const bool sheet = !c->videoSynth.spriteSheetPath.empty();
+          const int* order = sheet ? kWithSheet : kWithoutSheet;
+          const int count = sheet ? 8 : 7;
+          // On a cue carrying the EFFECT the glyph set lives in paramC and the
+          // cue's own field is overwritten before it reaches the renderer, so
+          // this cycled a number nothing read. A sprite sheet is not reachable
+          // from an effect either -- it has no sheet path -- so that arm cycles
+          // the six sets that can actually draw.
+          deckboy::effects::CueEffect* fx = textModeEffectMutable(*c);
+          int current = c->videoSynth.asciiCharSet;
+          if (fx) {
+            VideoSynthSettings shown = c->videoSynth;
+            applyTextModeParams(*fx, shown);
+            current = shown.asciiCharSet;
+            order = kWithoutSheet;
+          }
+          const int steps = fx ? 7 : count;
+          int at = 0;
+          for (int i = 0; i < steps; ++i) {
+            if (order[i] == current) { at = i; break; }
+          }
+          const int next = order[(at + 1) % steps];
+          if (fx) {
+            fx->paramC = textModeParamForCharSet(next);
+          } else {
+            c->videoSynth.asciiCharSet = next;
+          }
+          // A custom set overrides this row entirely, so changing the set while
+          // one is loaded moved a label and nothing else. Clearing it is what
+          // makes the control mean what it says; the preset row puts one back.
+          std::string cleared;
+          if (!c->videoSynth.asciiGlyphs.empty()) {
+            c->videoSynth.asciiGlyphs.clear();
+            cleared = "  (custom glyphs cleared)";
+          }
+          markProjectDirty();
+          triggerToast(std::string("characters: ") + vsCharSetLabel(next) + cleared);
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsAsciiWobbleDec:
+        adjustVs(&VideoSynthSettings::asciiWobble, -0.05, 0.0, 1.0, "wobble", true);
+        break;
+      case QuickAction::VsAsciiWobbleInc:
+        adjustVs(&VideoSynthSettings::asciiWobble, 0.05, 0.0, 1.0, "wobble", true);
+        break;
+      case QuickAction::VsAsciiWobbleModeCycle:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          c->videoSynth.asciiWobbleMode = (c->videoSynth.asciiWobbleMode + 1) % 3;
+          markProjectDirty();
+          triggerToast(std::string("wobble: ") +
+                       vsWobbleModeLabel(c->videoSynth.asciiWobbleMode));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsAsciiPresetPrev:
+      case QuickAction::VsAsciiPresetNext:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          const auto& presets = glyphPresets();
+          const int count = static_cast<int>(presets.size());
+          // Position 0 is "none" -- the built-in glyph sets. It has to be
+          // reachable, because a preset fills the custom glyph field and the
+          // custom field OVERRIDES the set chosen on the glyphs row above; once
+          // a preset was picked there was no way back to the built-in sets
+          // except clearing the field by hand, which made that row look broken.
+          //
+          // Worked out from the glyph string rather than remembered, so the
+          // cycle follows what the cue actually holds.
+          //
+          // A set typed by hand matches no preset and so sits at 0 alongside
+          // "none" -- stepping from it lands on the first or last preset and
+          // overwrites what was typed. That is the same trade the glyph-set
+          // row makes, and it says so when it does it; saying nothing here
+          // meant an operator's own glyphs vanished with a toast naming the
+          // preset that replaced them and no hint that anything was lost.
+          int at = 0;                                   // 0 = none
+          bool matched = false;
+          for (int i = 0; i < count; ++i) {
+            if (c->videoSynth.asciiGlyphs == presets[i].glyphs) {
+              at = i + 1; matched = true; break;
+            }
+          }
+          const std::string replaced =
+            (!matched && !c->videoSynth.asciiGlyphs.empty())
+              ? "  (replaced your glyphs)" : std::string();
+          const int step = action == QuickAction::VsAsciiPresetNext ? 1 : -1;
+          const int total = count + 1;
+          const int next = ((at + step) % total + total) % total;
+          if (next == 0) {
+            c->videoSynth.asciiGlyphs.clear();
+            triggerToast(std::string("glyphs: the built-in set (") +
+                         vsCharSetLabel(c->videoSynth.asciiCharSet) + ")" + replaced);
+          } else {
+            c->videoSynth.asciiGlyphs = presets[next - 1].glyphs;
+            triggerToast(std::string("glyphs: ") + presets[next - 1].name + replaced);
+          }
+          markProjectDirty();
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsAsciiFontPick:
+        pickAsciiFont();
+        break;
+      case QuickAction::VsAsciiChaosDec:
+        adjustVs(&VideoSynthSettings::asciiChaos, -0.05, 0.0, 1.0, "chaos", true);
+        break;
+      case QuickAction::VsAsciiChaosInc:
+        adjustVs(&VideoSynthSettings::asciiChaos, 0.05, 0.0, 1.0, "chaos", true);
+        break;
+      case QuickAction::VsShuffleCycle:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          // Steps through seeds rather than randomising live: the same seed
+          // must give the same look every time the show is opened.
+          c->videoSynth.asciiShuffle = (c->videoSynth.asciiShuffle + 1) % 9;
+          markProjectDirty();
+          triggerToast(c->videoSynth.asciiShuffle == 0
+            ? "glyphs: by density"
+            : "glyphs: shuffle " + std::to_string(c->videoSynth.asciiShuffle));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsZalgoUpDec:
+        adjustVs(&VideoSynthSettings::asciiZalgoUp, -0.05, 0.0, 1.0, "glitch up", true);
+        break;
+      case QuickAction::VsZalgoUpInc:
+        adjustVs(&VideoSynthSettings::asciiZalgoUp, 0.05, 0.0, 1.0, "glitch up", true);
+        break;
+      case QuickAction::VsZalgoDownDec:
+        adjustVs(&VideoSynthSettings::asciiZalgoDown, -0.05, 0.0, 1.0, "glitch down", true);
+        break;
+      case QuickAction::VsZalgoDownInc:
+        adjustVs(&VideoSynthSettings::asciiZalgoDown, 0.05, 0.0, 1.0, "glitch down", true);
+        break;
+      case QuickAction::VsZalgoMidDec:
+        adjustVs(&VideoSynthSettings::asciiZalgoMid, -0.02, 0.0, 1.0, "glitch through", true);
+        break;
+      case QuickAction::VsZalgoMidInc:
+        adjustVs(&VideoSynthSettings::asciiZalgoMid, 0.02, 0.0, 1.0, "glitch through", true);
+        break;
+      case QuickAction::VsZalgoDriftDec:
+        adjustVs(&VideoSynthSettings::asciiZalgoDrift, -0.05, 0.0, 1.0, "glitch drift", true);
+        break;
+      case QuickAction::VsZalgoDriftInc:
+        adjustVs(&VideoSynthSettings::asciiZalgoDrift, 0.05, 0.0, 1.0, "glitch drift", true);
+        break;
+      case QuickAction::VsZalgoReachDec:
+      case QuickAction::VsZalgoReachInc:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          const int step = action == QuickAction::VsZalgoReachInc ? 1 : -1;
+          c->videoSynth.asciiZalgoReach =
+            std::clamp(c->videoSynth.asciiZalgoReach + step, 1, 6);
+          markProjectDirty();
+          triggerToast("glitch reach: " +
+                       std::to_string(c->videoSynth.asciiZalgoReach));
+        }
+        break;
+      case QuickAction::VsAsciiGlyphsEdit: editAsciiGlyphs(); break;
+      case QuickAction::VsAsciiPhrasesEdit: editAsciiPhrases(); break;
+      case QuickAction::VsAsciiHoldDec:
+        adjustVs(&VideoSynthSettings::asciiPhraseHold, -0.5, 0.0, 60.0, "phrase hold", true);
+        break;
+      case QuickAction::VsAsciiHoldInc:
+        adjustVs(&VideoSynthSettings::asciiPhraseHold, 0.5, 0.0, 60.0, "phrase hold", true);
+        break;
+      case QuickAction::VsSpriteSetPrev: cycleSpriteSet(-1); break;
+      case QuickAction::VsSpriteSetNext: cycleSpriteSet(1); break;
+      case QuickAction::VsRotateCycle:
+        if (Cue* c = selectedVideoSynthCueMutable()) {
+          c->videoSynth.spriteRotate = (c->videoSynth.spriteRotate + 1) % 6;
+          markProjectDirty();
+          triggerToast(std::string("rotate: ") + vsRotateLabel(c->videoSynth.spriteRotate));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsFlipCycle:
+        if (Cue* c = selectedVideoSynthCueMutable()) {
+          c->videoSynth.spriteFlip = (c->videoSynth.spriteFlip + 1) % 4;
+          markProjectDirty();
+          triggerToast(std::string("flip: ") + vsFlipLabel(c->videoSynth.spriteFlip));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsJitterDec: adjustVs(&VideoSynthSettings::spriteJitter, -0.1, 0.0, 1.0, "jitter"); break;
+      case QuickAction::VsJitterInc: adjustVs(&VideoSynthSettings::spriteJitter, 0.1, 0.0, 1.0, "jitter"); break;
+      case QuickAction::VsChaosDec:  adjustVs(&VideoSynthSettings::spriteChaos, -0.1, 0.0, 1.0, "chaos"); break;
+      case QuickAction::VsChaosInc:  adjustVs(&VideoSynthSettings::spriteChaos, 0.1, 0.0, 1.0, "chaos"); break;
+      case QuickAction::VsFreeAngleDec: adjustVs(&VideoSynthSettings::spriteFreeAngle, -15.0, -720.0, 720.0, "spin"); break;
+      case QuickAction::VsFreeAngleInc: adjustVs(&VideoSynthSettings::spriteFreeAngle, 15.0, -720.0, 720.0, "spin"); break;
+      case QuickAction::VsSheetPick:  pickSpriteSheet(); break;
+      case QuickAction::VsSheetClear:
+        if (Cue* c = selectedVideoSynthCueMutable()) {
+          c->videoSynth.spriteSheetPath.clear();
+          // Fall back to blocks rather than leaving the cue pointed at sheet
+          // mode with no sheet, which would silently draw the fallback and
+          // look like the clear did nothing.
+          if (c->videoSynth.asciiCharSet == 5) c->videoSynth.asciiCharSet = 0;
+          markProjectDirty();
+          triggerToast("sprite sheet cleared");
+        }
+        break;
+      case QuickAction::VsTileWDec:
+        adjustVsInt(&VideoSynthSettings::spriteTileW, -8, 8, 128, "tile w");
+        // The cached slice is keyed on tile size, so a change invalidates it.
+        if (Cue* c = selectedVideoSynthCueMutable()) loadSpriteSetForCue(*c);
+        break;
+      case QuickAction::VsTileWInc: adjustVsInt(&VideoSynthSettings::spriteTileW, 8, 8, 128, "tile w"); break;
+      case QuickAction::VsTileHDec: adjustVsInt(&VideoSynthSettings::spriteTileH, -8, 8, 128, "tile h"); break;
+      case QuickAction::VsTileHInc: adjustVsInt(&VideoSynthSettings::spriteTileH, 8, 8, 128, "tile h"); break;
+      case QuickAction::VsInkCycle:
+        if (Cue* c = selectedTextModeCueMutable()) {
+          // Ink lives in paramD on a cue carrying the effect. This wrote the
+          // cue's field, which the renderer then overwrote -- so the row read
+          // "green" while the picture came out in full colour, because paramD
+          // was still sitting at its default.
+          int nextInk = (c->videoSynth.asciiInk + 1) % 6;
+          if (deckboy::effects::CueEffect* fx = textModeEffectMutable(*c)) {
+            VideoSynthSettings shown = c->videoSynth;
+            applyTextModeParams(*fx, shown);
+            nextInk = (shown.asciiInk + 1) % 6;
+            fx->paramD = textModeParamForInk(nextInk);
+          } else {
+            c->videoSynth.asciiInk = nextInk;
+          }
+          markProjectDirty();
+          triggerToast(std::string("ink: ") + vsInkLabel(nextInk));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::VsAsciiToggle:
+        // ADDS OR REMOVES THE EFFECT, on any cue. This flipped a flag that
+        // only a video synth cue had, which is why text mode had two switches
+        // and every control had to work through both.
+        if (Cue* c = selectedCueMutable()) {
+          const bool on = toggleTextModeEffect(*c);
+          markProjectDirty();
+          refreshAllLiveCueRuntimes();
+          triggerToast(on ? "text mode" : "pixels");
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::CueSectionSynthToggle:
+        cueSectionSynthOpen_ = !cueSectionSynthOpen_; break;
+      case QuickAction::SynthCycleChip:      cycleSynthChip(); break;
+      case QuickAction::SynthKeyboardToggle:
+        project_.synthKeyboardEnabled = !project_.synthKeyboardEnabled;
+        markProjectDirty();
+        if (!project_.synthKeyboardEnabled) {
+          // Release anything held, or a note sustains forever after the mode
+          // is switched off mid-press.
+          if (MediaEngine* e = liveSynthEngine()) e->synthAllNotesOff();
+        }
+        triggerToast(project_.synthKeyboardEnabled
+          ? "computer keyboard: PLAYING (letter keys are notes)"
+          : "computer keyboard off");
+        playUiSound(UiSoundEffect::Toggle);
+        break;
+      case QuickAction::SynthMidiToggle:
+        project_.midiToSynth = !project_.midiToSynth;
+        markProjectDirty();
+        triggerToast(project_.midiToSynth ? "MIDI plays the synth"
+                                          : "MIDI fires cues");
+        playUiSound(UiSoundEffect::Toggle);
+        break;
+      case QuickAction::SynthCycleTuning:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.synth.tuning = static_cast<SynthTuning>(
+            (static_cast<int>(c->tone.synth.tuning) + 1) % 7);
+          markProjectDirty();
+          triggerToast(std::string("tuning: ") + synthTuningLabel(c->tone.synth.tuning));
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::SynthRefDec:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.synth.referenceHz = std::clamp(c->tone.synth.referenceHz - 1.0, 380.0, 480.0);
+          markProjectDirty();
+          triggerToast("A = " + fmtFloat(c->tone.synth.referenceHz, 0) + " Hz");
+        }
+        break;
+      case QuickAction::SynthRefInc:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.synth.referenceHz = std::clamp(c->tone.synth.referenceHz + 1.0, 380.0, 480.0);
+          markProjectDirty();
+          triggerToast("A = " + fmtFloat(c->tone.synth.referenceHz, 0) + " Hz");
+        }
+        break;
+      case QuickAction::SynthCycleNesVoice:  cycleNesVoice(); break;
+      case QuickAction::SynthCycleNesDuty:   cycleNesDuty(); break;
+      case QuickAction::SynthToggleNoiseShort:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.synth.nesNoiseShort = !c->tone.synth.nesNoiseShort;
+          markProjectDirty();
+          triggerToast(c->tone.synth.nesNoiseShort ? "periodic noise" : "noise");
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::SynthToggleQuantise:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.synth.nesQuantise = !c->tone.synth.nesQuantise;
+          markProjectDirty();
+          triggerToast(c->tone.synth.nesQuantise ? "4-bit steps" : "smooth");
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::SynthAttackDec:  adjustSynthEnv(true, -0.01); break;
+      case QuickAction::SynthAttackInc:  adjustSynthEnv(true, 0.01); break;
+      case QuickAction::SynthReleaseDec: adjustSynthEnv(false, -0.05); break;
+      case QuickAction::SynthReleaseInc: adjustSynthEnv(false, 0.05); break;
+      case QuickAction::ToneVisualToggle:
+        if (Cue* c = selectedToneCueMutable()) {
+          c->tone.visualEnabled = !c->tone.visualEnabled;
+          markProjectDirty();
+          triggerToast(c->tone.visualEnabled ? "display on" : "display off");
+          playUiSound(UiSoundEffect::Toggle);
+        }
+        break;
+      case QuickAction::TimerClearLogo:         clearTimerLogo(); break;
+      case QuickAction::TimerLogoSizeDec:       nudgeTimerLogoSize(-2); break;
+      case QuickAction::TimerLogoSizeInc:       nudgeTimerLogoSize(+2); break;
+      case QuickAction::CueBackdropPick:        openBackdropPicker(); break;
+      case QuickAction::TimerCycleColorNormal:
+        cycleTimerColor(&TimerSettings::colorNormal, "colour"); break;
+      case QuickAction::TimerCycleColorAmber:
+        cycleTimerColor(&TimerSettings::colorAmber, "amber colour"); break;
+      case QuickAction::TimerCycleColorRed:
+        cycleTimerColor(&TimerSettings::colorRed, "red colour"); break;
+      case QuickAction::DatamoshLookPrev: cycleSelectedDatamoshLook(-1); break;
+      case QuickAction::DatamoshLookNext: cycleSelectedDatamoshLook(+1); break;
+      case QuickAction::CueSectionEffectsToggle:
+        cueSectionEffectsOpen_ = !cueSectionEffectsOpen_;
+        break;
+      case QuickAction::CueSectionSequenceToggle:
+        cueSectionSequenceOpen_ = !cueSectionSequenceOpen_;
+        break;
+      case QuickAction::CueSectionMasterToggle:
+        cueSectionMasterOpen_ = !cueSectionMasterOpen_;
+        break;
+      case QuickAction::CuePreWaitDec:  nudgeSelectedWait(true, -0.5); break;
+      case QuickAction::CuePreWaitInc:  nudgeSelectedWait(true, +0.5); break;
+      case QuickAction::CuePostWaitDec: nudgeSelectedWait(false, -0.5); break;
+      case QuickAction::CuePostWaitInc: nudgeSelectedWait(false, +0.5); break;
+      case QuickAction::CueContinueCycle: cycleSelectedContinueMode(); break;
+      case QuickAction::CueStandbySet: setStandbyToSelected(); break;
+      case QuickAction::CueArmToggle: toggleSelectedCueArmed(); break;
+      case QuickAction::CueSectionTextToggle:
+        cueSectionTextOpen_ = !cueSectionTextOpen_;
+        break;
+      case QuickAction::CueSectionPortalToggle:
+        cueSectionPortalOpen_ = !cueSectionPortalOpen_;
+        return;
+      case QuickAction::CueSectionExtraToggle:
+        cueSectionExtraOpen_ = !cueSectionExtraOpen_;
+        return;
+      case QuickAction::CueSectionMoireToggle:
+        cueSectionMoireOpen_ = !cueSectionMoireOpen_;
+        return;
+      case QuickAction::CueSectionSwirlToggle:
+        cueSectionSwirlOpen_ = !cueSectionSwirlOpen_;
+        return;
+      case QuickAction::CueSectionFiresideToggle:
+        cueSectionFiresideOpen_ = !cueSectionFiresideOpen_;
+        break;
+      case QuickAction::CueSectionMidiFileToggle:
+        cueSectionMidiFileOpen_ = !cueSectionMidiFileOpen_;
+        break;
+      case QuickAction::MidiFilePortCycle:
+        cycleMidiPortForSelectedCue();
+        break;
+      case QuickAction::FireIntensityDec: nudgeFireside(0, -1); break;
+      case QuickAction::FireIntensityInc: nudgeFireside(0, +1); break;
+      case QuickAction::FireSparksDec:    nudgeFireside(1, -1); break;
+      case QuickAction::FireSparksInc:    nudgeFireside(1, +1); break;
+      case QuickAction::FireViewCycle:    nudgeFireside(2, +1); break;
+
+      case QuickAction::LowerStyleCycle: {
+        Cue* cue = selectedCueMutable();
+        if (!cue || cue->kind != CueKind::LowerThird) {
+          break;
+        }
+        cue->lowerThirdStyle =
+          (cue->lowerThirdStyle + 1) % kLowerThirdStyleCount;
+        triggerToast(std::string("Lower Third: ") +
+                     lowerThirdStyleLabel(cue->lowerThirdStyle));
+        markProjectDirty();
+        break;
+      }
+      case QuickAction::LowerAnimDec:
+      case QuickAction::LowerAnimInc: {
+        Cue* cue = selectedCueMutable();
+        if (!cue || cue->kind != CueKind::LowerThird) {
+          break;
+        }
+        const double step = (action == QuickAction::LowerAnimInc) ? 0.05 : -0.05;
+        cue->lowerThirdAnimSeconds =
+          std::clamp(cue->lowerThirdAnimSeconds + step, 0.0, 5.0);
+        markProjectDirty();
+        break;
+      }
+      case QuickAction::TextEditBody:   editTextBody(); break;
+      case QuickAction::TextAnimCycle:  cycleTextAnimation(); break;
+      case QuickAction::TextAlignCycle: cycleTextAlign(); break;
+      case QuickAction::TextSizeDec:    nudgeTextField(0, -1); break;
+      case QuickAction::TextSizeInc:    nudgeTextField(0, +1); break;
+      case QuickAction::TextSpeedDec:   nudgeTextField(1, -1); break;
+      case QuickAction::TextSpeedInc:   nudgeTextField(1, +1); break;
+      case QuickAction::TextBgDec:      nudgeTextField(2, -1); break;
+      case QuickAction::TextBgInc:      nudgeTextField(2, +1); break;
+      case QuickAction::CueSectionMatrixToggle:
+        cueSectionMatrixOpen_ = !cueSectionMatrixOpen_;
+        break;
+      case QuickAction::MatrixSeed:  seedCueMatrixFromPair(); break;
+      case QuickAction::MatrixClear: clearCueMatrix(); break;
+      case QuickAction::CueSectionDmxToggle:
+        cueSectionDmxOpen_ = !cueSectionDmxOpen_;
+        break;
+      case QuickAction::DmxEditChannels: editDmxChannels(); break;
+      case QuickAction::DmxEditHost:     editDmxHost(); break;
+      case QuickAction::DmxFadeDec:      nudgeDmxField(1, -1); break;
+      case QuickAction::DmxFadeInc:      nudgeDmxField(1, +1); break;
+      case QuickAction::DmxUniverseDec:  nudgeDmxField(0, -1); break;
+      case QuickAction::DmxUniverseInc:  nudgeDmxField(0, +1); break;
+      case QuickAction::DmxFireNow:      fireSelectedDmxCue(); break;
+      case QuickAction::DmxBlackout:     (void)dmxBlackout(); break;
+      case QuickAction::DmxProtocolCycle:
+        if (Cue* dmx = selectedCueMutable(); dmx && dmx->kind == CueKind::Dmx) {
+          dmx->dmxProtocol = dmx->dmxProtocol == "sacn" ? "artnet" : "sacn";
+          // sACN has no universe 0; Art-Net's 0 becomes sACN's 1.
+          if (dmx->dmxProtocol == "sacn" && dmx->dmxUniverse < 1) dmx->dmxUniverse = 1;
+          triggerToast(dmx->dmxProtocol == "sacn" ? "DMX over sACN (E1.31)" : "DMX over Art-Net");
+          markProjectDirty();
+        }
+        break;
+      case QuickAction::CueSectionScriptToggle:
+        cueSectionScriptOpen_ = !cueSectionScriptOpen_;
+        break;
+      // The code source's editor, which is already multi-line -- a script that
+      // has to be typed on one line is a script nobody writes.
+      case QuickAction::ScriptEdit:   openCodeEditor(); break;
+      case QuickAction::ScriptRunNow: runSelectedScriptCue(); break;
+      case QuickAction::CueSectionTimecodeToggle:
+        cueSectionTimecodeOpen_ = !cueSectionTimecodeOpen_;
+        break;
+      case QuickAction::TcActionCycle: cycleTimecodeAction(); break;
+      case QuickAction::TcJamDec:      nudgeTimecodeJam(-1.0); break;
+      case QuickAction::TcJamInc:      nudgeTimecodeJam(+1.0); break;
+      case QuickAction::TcEditJam:     editTimecodeJam(); break;
+      case QuickAction::TcFireNow:     fireSelectedTimecodeCue(); break;
+      case QuickAction::CueSectionNetworkToggle:
+        cueSectionNetworkOpen_ = !cueSectionNetworkOpen_;
+        break;
+      case QuickAction::NetProtocolCycle: cycleNetworkProtocol(); break;
+      case QuickAction::NetEditHost:      editNetworkHost(); break;
+      case QuickAction::NetPortDec:       nudgeNetworkPort(-1); break;
+      case QuickAction::NetPortInc:       nudgeNetworkPort(+1); break;
+      case QuickAction::NetEditAddress:   editNetworkAddress(); break;
+      case QuickAction::NetEditPayload:   editNetworkPayload(); break;
+      case QuickAction::NetSendNow:       sendSelectedNetworkCueNow(); break;
+      case QuickAction::CueSectionMidiToggle:
+        cueSectionMidiOpen_ = !cueSectionMidiOpen_;
+        break;
+      case QuickAction::MidiKindCycle:     cycleMidiCueKind(); break;
+      case QuickAction::MidiPortCycle:     cycleMidiCuePort(); break;
+      case QuickAction::MidiChannelDec:    nudgeMidiCueField(0, -1); break;
+      case QuickAction::MidiChannelInc:    nudgeMidiCueField(0, +1); break;
+      case QuickAction::MidiData1Dec:      nudgeMidiCueField(1, -1); break;
+      case QuickAction::MidiData1Inc:      nudgeMidiCueField(1, +1); break;
+      case QuickAction::MidiData2Dec:      nudgeMidiCueField(2, -1); break;
+      case QuickAction::MidiData2Inc:      nudgeMidiCueField(2, +1); break;
+      case QuickAction::MidiMscDeviceDec:  nudgeMidiCueField(3, -1); break;
+      case QuickAction::MidiMscDeviceInc:  nudgeMidiCueField(3, +1); break;
+      case QuickAction::MidiEditCueNumber: editMidiCueNumber(); break;
+      case QuickAction::MidiEditRawHex:    editMidiCueRawHex(); break;
+      case QuickAction::MidiSendNow:       sendSelectedMidiCueNow(); break;
+      case QuickAction::PreloadSelected:
+        // A toggle for the same reason audition is: whoever racked it is the
+        // one who wants it gone, and should not need a second control.
+        if (deckIsPreloading(project_.focusedDeckIndex)) {
+          clearPreload(true);
+        } else {
+          (void)preloadSelected(0.0);
+        }
+        break;
+      case QuickAction::AuditionSelected:
+        // A toggle, because the operator who started it is the one who wants
+        // it to stop and should not need a second control to say so.
+        if (anyDeckAuditioning()) {
+          endAudition();
+        } else {
+          (void)auditionSelected();
+        }
+        break;
+      case QuickAction::CueSectionFadeToggle:
+        cueSectionFadeOpen_ = !cueSectionFadeOpen_;
+        break;
+      case QuickAction::FadeWhatCycle:  cycleFadeWhat(); break;
+      case QuickAction::FadeCurveCycle: cycleFadeCurve(); break;
+      case QuickAction::FadeToDec:      nudgeFadeTo(-0.05); break;
+      case QuickAction::FadeToInc:      nudgeFadeTo(+0.05); break;
+      case QuickAction::FadeOverDec:    nudgeFadeOver(-0.5); break;
+      case QuickAction::FadeOverInc:    nudgeFadeOver(+0.5); break;
+      case QuickAction::FadeDeckPrev:   stepFadeDeck(-1); break;
+      case QuickAction::FadeDeckNext:   stepFadeDeck(+1); break;
+      case QuickAction::FadeStopToggle: toggleFadeStopWhenDone(); break;
+      case QuickAction::FadeFire:       fireSelectedFadeCue(); break;
+      case QuickAction::FadeEffectSlotPrev: stepFadeEffectSlot(-1); break;
+      case QuickAction::FadeEffectSlotNext: stepFadeEffectSlot(+1); break;
+      case QuickAction::FadeEffectKnobCycle: cycleFadeEffectKnob(); break;
+      case QuickAction::FadeRestoreToggle: toggleFadeRestoreAtEnd(); break;
+
+      case QuickAction::CueSectionTargetToggle:
+        cueSectionTargetOpen_ = !cueSectionTargetOpen_;
+        break;
+      case QuickAction::CueSectionTriggersToggle:
+        cueSectionTriggersOpen_ = !cueSectionTriggersOpen_;
+        break;
+      case QuickAction::TriggerEditTime:     editSelectedTriggerTime(); break;
+      case QuickAction::TriggerEditTimecode: editSelectedTriggerTimecode(); break;
+      case QuickAction::TriggerLearnKey:     beginTriggerKeyLearn(); break;
+      case QuickAction::TriggerEditMidi:     editSelectedTriggerMidi(); break;
+      case QuickAction::TriggerEditOsc:      editSelectedTriggerOsc(); break;
+      case QuickAction::MemoEditText:        editSelectedMemoText(); break;
+      case QuickAction::CueSectionCaptionsToggle:
+        cueSectionCaptionsOpen_ = !cueSectionCaptionsOpen_;
+        break;
+      case QuickAction::CaptionsToggle:
+        if (Cue* cue = selectedCueMutable()) {
+          cue->subtitleEnabled = !cue->subtitleEnabled;
+          markProjectDirty();
+          triggerToast(cue->subtitleEnabled ? "captions on" : "captions off");
+        }
+        break;
+      case QuickAction::CaptionsGenerate: generateCaptionsForSelected(); break;
+      case QuickAction::AudioTrackCycle: cycleSelectedAudioTrack(); break;
+      case QuickAction::CaptionsModelCycle: cycleCaptionsModel(); break;
+      case QuickAction::TargetDeckPrev:  stepTargetDeck(-1); break;
+      case QuickAction::TargetDeckNext:  stepTargetDeck(+1); break;
+      case QuickAction::TargetCuePrev:   stepTargetCue(-1); break;
+      case QuickAction::TargetCueNext:   stepTargetCue(+1); break;
+      case QuickAction::TargetVerbCycle: cycleTargetVerb(); break;
+      case QuickAction::TargetFire:      fireSelectedTargetCue(); break;
+
+      case QuickAction::CueSectionAudioFxToggle:
+        cueSectionAudioFxOpen_ = !cueSectionAudioFxOpen_;
+        break;
+      case QuickAction::CueSectionTimerToggle:
+        cueSectionTimerOpen_ = !cueSectionTimerOpen_;
+        break;
+      case QuickAction::TimerRunToggle:   timerToggleRun(); break;
+      case QuickAction::TimerResetAction: timerReset(); break;
+      case QuickAction::TimerNudgeUp:     timerNudge(60.0); break;
+      case QuickAction::TimerNudgeDown:   timerNudge(-60.0); break;
+      case QuickAction::TimerNudgeSecUp:   timerNudge(10.0); break;
+      case QuickAction::TimerNudgeSecDown: timerNudge(-10.0); break;
+      case QuickAction::TimerDurDec:      adjustTimerField(&TimerSettings::durationSeconds, -300); break;
+      case QuickAction::TimerDurInc:      adjustTimerField(&TimerSettings::durationSeconds, 300); break;
+      case QuickAction::TimerAmberDec:    adjustTimerField(&TimerSettings::amberSeconds, -15); break;
+      case QuickAction::TimerAmberInc:    adjustTimerField(&TimerSettings::amberSeconds, 15); break;
+      case QuickAction::TimerRedDec:      adjustTimerField(&TimerSettings::redSeconds, -5); break;
+      case QuickAction::TimerRedInc:      adjustTimerField(&TimerSettings::redSeconds, 5); break;
+      case QuickAction::TimerCycleMode:   cycleTimerMode(); break;
+      case QuickAction::TimerCycleFace:   cycleTimerFace(); break;
+      case QuickAction::TimerPickFont:    pickTimerFont(); break;
+      case QuickAction::TimerCountUpToggle: toggleTimerCountUp(); break;
+      case QuickAction::TimerEditMessage: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::Timer) {
+          openInlineTextEditor("timer.message", "Timer Message",
+                               "Message shown under the clock:", sel->timer.message,
+                               [this](const std::string& value) {
+            if (Cue* c = selectedCueMutable()) {
+              c->timer.message = value;
+              markProjectDirty();
+            }
+          });
+        }
+        break;
+      }
+      case QuickAction::TimerUrgentToggle: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::Timer) {
+          sel->timer.messageIsUrgent = !sel->timer.messageIsUrgent;
+          triggerToast(sel->timer.messageIsUrgent ? "message: URGENT (red)"
+                                                  : "message: normal");
+          playUiSound(UiSoundEffect::Toggle);
+          markProjectDirty();
+        }
+        break;
+      }
+      case QuickAction::TimerProgressToggle: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::Timer) {
+          sel->timer.showProgressBar = !sel->timer.showProgressBar;
+          triggerToast(sel->timer.showProgressBar ? "progress bar on" : "progress bar off");
+          playUiSound(UiSoundEffect::Toggle);
+          markProjectDirty();
+        }
+        break;
+      }
+      case QuickAction::KeyTolDec:
+        adjustSelectedKeyTolerance(-5.0f);
+        break;
+      case QuickAction::KeyTolInc:
+        adjustSelectedKeyTolerance(5.0f);
+        break;
+      case QuickAction::KeySoftDec:
+        adjustSelectedKeySoftness(-2.0f);
+        break;
+      case QuickAction::KeySoftInc:
+        adjustSelectedKeySoftness(2.0f);
+        break;
+      case QuickAction::EditKeyColor:
+        editSelectedKeyColor();
+        break;
+      case QuickAction::PickKeyColor:
+        armSelectedKeyColorPicker();
+        break;
+      case QuickAction::BrightnessDec:
+        adjustSelectedBrightness(-0.05f);
+        break;
+      case QuickAction::BrightnessInc:
+        adjustSelectedBrightness(0.05f);
+        break;
+      case QuickAction::ContrastDec:
+        adjustSelectedContrast(-0.05f);
+        break;
+      case QuickAction::ContrastInc:
+        adjustSelectedContrast(0.05f);
+        break;
+      case QuickAction::SaturationDec:
+        adjustSelectedSaturation(-0.05f);
+        break;
+      case QuickAction::SaturationInc:
+        adjustSelectedSaturation(0.05f);
+        break;
+      case QuickAction::HueShiftDec:
+        adjustSelectedHueShift(-5.0f);
+        break;
+      case QuickAction::HueShiftInc:
+        adjustSelectedHueShift(5.0f);
+        break;
+      case QuickAction::TogglePatternMotion:
+        toggleSelectedPatternMotion();
+        break;
+      case QuickAction::CueSectionPlaybackToggle:
+        cueSectionPlaybackOpen_ = !cueSectionPlaybackOpen_;
+        break;
+      case QuickAction::CueSectionMetadataToggle:
+        cueSectionMetadataOpen_ = !cueSectionMetadataOpen_;
+        break;
+      case QuickAction::CueSectionGeometryToggle:
+        cueSectionGeometryOpen_ = !cueSectionGeometryOpen_;
+        break;
+      case QuickAction::CueSectionKeyToggle:
+        cueSectionKeyOpen_ = !cueSectionKeyOpen_;
+        break;
+      case QuickAction::CueSectionAudioToggle:
+        cueSectionAudioOpen_ = !cueSectionAudioOpen_;
+        break;
+      case QuickAction::CueSectionRoutingToggle:
+        cueSectionRoutingOpen_ = !cueSectionRoutingOpen_;
+        break;
+      case QuickAction::ClearOverlay:
+        clearOverlay();
+        break;
+      case QuickAction::EditLowerThirdText: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::LowerThird) {
+          std::string initial = sel->lowerThirdText.empty() ? sel->name : sel->lowerThirdText;
+          openInlineTextEditor("cue.lowertext", "Lower Third Title",
+                               "Text shown on the main Lower Third line:", initial,
+                               [this](const std::string& value) {
+            if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+                  if (cue.kind == CueKind::LowerThird) {
+                    cue.lowerThirdText = trim(value);
+                  }
+                })) {
+              markProjectDirty();
+            }
+          });
+        }
+        break;
+      }
+      case QuickAction::EditLowerThirdSubtext: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::LowerThird) {
+          openInlineTextEditor("cue.lowersub", "Lower Third Subtext",
+                               "Optional second line under the title:", sel->lowerThirdSubtext,
+                               [this](const std::string& value) {
+            if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+                  if (cue.kind == CueKind::LowerThird) {
+                    cue.lowerThirdSubtext = trim(value);
+                  }
+                })) {
+              markProjectDirty();
+            }
+          });
+        }
+        break;
+      }
+      case QuickAction::EditPipTarget: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::Pip) {
+          openInlineTextEditor("cue.piptarget", "PIP Target Cue",
+                               "Cue token/id/number/name to show in the PIP window:",
+                               sel->pipTargetCue,
+                               [this](const std::string& value) {
+            setSelectedPipCueTarget(value);
+          });
+        }
+        break;
+      }
+      case QuickAction::EditPipSourcePath: {
+        Cue* sel = selectedCueMutable();
+        if (sel && sel->kind == CueKind::Pip) {
+          std::string sourceType = pipSourceTypeTokenFromCue(*sel);
+          std::string title = "PIP Source";
+          std::string prompt = "Set the source for this PIP overlay:";
+          std::string initialValue;
+          if (sourceType == "browser") {
+            title = "PIP Browser URL";
+            prompt = "URL or local page path to show in the PIP window:";
+            initialValue = sel->path;
+          } else if (pipSourceTypeUsesSourceRef(sourceType)) {
+            Cue tempCue;
+            tempCue.kind = sourceCueKindFromToken(sourceType);
+            tempCue.path = sel->path;
+            title = "PIP Source Input";
+            prompt = "Source name/id for this live PIP input:";
+            initialValue = sourceCueRefFromCue(tempCue);
+          } else {
+            title = "PIP Media File";
+            prompt = "Path to a video clip or still image for this PIP:";
+            initialValue = sel->path == "graphic://pip"
+              ? std::string()
+              : resolvedCueFilesystemPathString(*sel, currentProjectFile_);
+          }
+          openInlineTextEditor("cue.pipsource", title, prompt, initialValue,
+                               [this](const std::string& value) {
+            setSelectedPipSourceValue(value);
+          });
+        }
+        break;
+      }
+      case QuickAction::EditAttachedLowerThirdCue:
+      case QuickAction::EditAttachedPipCue: {
+        Cue* sel = selectedCueMutable();
+        if (!sel || cueIsOverlayOnly(*sel)) {
+          break;
+        }
+        bool lowerThird = action == QuickAction::EditAttachedLowerThirdCue;
+        std::string initialValue = lowerThird ? sel->attachedLowerThirdCue : sel->attachedPipCue;
+        openInlineTextEditor(lowerThird ? "cue.attach_lower" : "cue.attach_pip",
+                             lowerThird ? "Attach Lower Third" : "Attach PIP Overlay",
+                             lowerThird
+                               ? "Overlay cue token/id/number/name to fire with TAKE:"
+                               : "PIP overlay cue token/id/number/name to fire with TAKE:",
+                             initialValue,
+                             [this, lowerThird](const std::string& value) {
+            setSelectedAttachedOverlayCue(lowerThird ? CueKind::LowerThird : CueKind::Pip, value);
+          });
+        break;
+      }
+      case QuickAction::EditCompositeSlot1Source:
+      case QuickAction::EditCompositeSlot2Source:
+      case QuickAction::EditCompositeSlot3Source:
+      case QuickAction::EditCompositeSlot4Source: {
+        Cue* sel = selectedCueMutable();
+        if (!sel || sel->kind != CueKind::Composite) {
+          break;
+        }
+        int slotIndex =
+          action == QuickAction::EditCompositeSlot1Source ? 0 :
+          action == QuickAction::EditCompositeSlot2Source ? 1 :
+          action == QuickAction::EditCompositeSlot3Source ? 2 : 3;
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(sel->compositeSlots.size())) {
+          break;
+        }
+        const CompositeSlot& slot = sel->compositeSlots[slotIndex];
+        std::string initialValue;
+        if (!trim(slot.source).empty()) {
+          initialValue = trim(slot.sourceType).empty() ? slot.source : (slot.sourceType + ":" + slot.source);
+        }
+        openInlineTextEditor(
+          "cue.composite.slot" + std::to_string(slotIndex + 1),
+          slot.name.empty() ? compositeSlotDefaultName(slotIndex) : slot.name,
+          "Enter media path or browser:/window:/camera:/syphon: source",
+          initialValue,
+          [this, slotIndex](const std::string& value) {
+            setSelectedCompositeSlotSource(slotIndex, value);
+          });
+        break;
+      }
+      case QuickAction::CompositePreset2Up:
+        applySelectedCompositePreset("2up", "2-up");
+        break;
+      case QuickAction::CompositePreset7030:
+        applySelectedCompositePreset("7030", "70/30");
+        break;
+      case QuickAction::CompositePresetQuad:
+        applySelectedCompositePreset("quad", "quad");
+        break;
+      case QuickAction::CycleCompositeAudioSlot:
+        cycleSelectedCompositeAudioSlot();
+        break;
+      case QuickAction::PipPresetCornerTL:
+        applySelectedPipCornerPreset(-1, -1, "top left");
+        break;
+      case QuickAction::PipPresetCornerTR:
+        applySelectedPipCornerPreset(1, -1, "top right");
+        break;
+      case QuickAction::PipPresetCornerBL:
+        applySelectedPipCornerPreset(-1, 1, "bottom left");
+        break;
+      case QuickAction::PipPresetCornerBR:
+        applySelectedPipCornerPreset(1, 1, "bottom right");
+        break;
+      case QuickAction::PipPresetSmall:
+        applySelectedPipSizePreset(0.26f, "small");
+        break;
+      case QuickAction::PipPresetBig:
+        applySelectedPipSizePreset(0.42f, "big");
+        break;
+      case QuickAction::PipPreset7030:
+        applySelectedPipSizePreset(0.30f, "70/30");
+        break;
+      case QuickAction::EditCueNumber: {
+        Cue* sel = selectedCueMutable();
+        if (sel) {
+          std::string initial = sel->cueId.empty() ? cueDisplayToken(*sel, focusedDeck().selectedIndex) : sel->cueId;
+          openInlineTextEditor("cue.id", "Cue ID",
+                               "Short cue id (max 6 chars, letters/numbers):", initial,
+                               [this](const std::string& value) {
+            std::string normalized = normalizeCueIdShort(value);
+            if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) { cue.cueId = normalized; })) {
+              markProjectDirty();
+            }
+          });
+        }
+        break;
+      }
+      case QuickAction::CopyCueSettings:
+      case QuickAction::PasteCueSettings:
+      case QuickAction::ResetCueSettings:
+      case QuickAction::ConvertCueMedia:
+        break;
+      case QuickAction::AddPausePoint: {
+        Cue* sel = selectedCueMutable();
+        if (sel) {
+          MediaEngine* eng = focusedMediaEngine();
+          double pos = eng ? eng->position() : 0.0;
+          sel->pausePoints.push_back(pos);
+          std::sort(sel->pausePoints.begin(), sel->pausePoints.end());
+          // Update engine's live pause points
+          if (eng) eng->setPausePoints(sel->pausePoints);
+          triggerToast("pause point added at " + formatSeconds(pos));
+          markProjectDirty();
+        }
+        break;
+      }
+      case QuickAction::ClearPausePoints: {
+        Cue* sel = selectedCueMutable();
+        if (sel && !sel->pausePoints.empty()) {
+          sel->pausePoints.clear();
+          if (MediaEngine* eng = focusedMediaEngine()) eng->setPausePoints({});
+          triggerToast("pause points cleared");
+          markProjectDirty();
+        }
+        break;
+      }
+      case QuickAction::VolDec:
+        if (MediaEngine* eng = focusedMediaEngine()) {
+          eng->setVolume(eng->volume() - 0.05f);
+          triggerToast("volume " + std::to_string(static_cast<int>(std::round(eng->volume() * 100.0f))) + "%");
+        }
+        break;
+      case QuickAction::VolInc:
+        if (MediaEngine* eng = focusedMediaEngine()) {
+          eng->setVolume(eng->volume() + 0.05f);
+          triggerToast("volume " + std::to_string(static_cast<int>(std::round(eng->volume() * 100.0f))) + "%");
+        }
+        break;
+    }
+  }

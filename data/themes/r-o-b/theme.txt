@@ -1,0 +1,24 @@
+# Deckboy Theme: r-o-b
+# Family: tinted chassis -- dark enough for a booth, but a real coloured body
+# rather than true black, so it reads as its own machine.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	24262AFF
+shell_inner	2E3136FF
+shell_shadow	121316FF
+screen_light	D8DEE6FF
+screen_mid	8A929CFF
+screen_dark	4A5058FF
+screen_deep	121416FF
+screen_ink_soft	C0C6CEFF
+screen_fg	E4EAF0FF
+screen_fg_soft	A2AAB4FF
+screen_tile	1A1C20FF
+button_bezel	646C76FF
+delete_bezel	C0503AFF
+scanline_alpha	14
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	mouse	3

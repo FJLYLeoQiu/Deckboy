@@ -1,0 +1,2343 @@
+#name Polski
+#english Polish
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC. An operator who learned the desk in
+# one country has to be able to work it in another.
+NEW	NOWY
+OPEN	OTWÓRZ
+SAVE	ZAPISZ
+SAVE AS	ZAPISZ JAKO
+BUNDLE	SPAKUJ
+IMPORT	IMPORTUJ
+SOURCE	ŹRÓDŁO
+PATTERN	TESTOWY
+SETTINGS	USTAWIENIA
+TAKE	TAKE
+STOP	STOP
+REBOOT	RESTART
+BLACKOUT	CZERŃ
+CLEAR	WYCZYŚĆ
+RECORD	NAGRYWAJ
+PLAYLIST	PLAYLISTA
+TIMELINE	OŚ CZASU
+MEDIA	MEDIA
+TRANSPORT	TRANSPORT
+OUTPUT	WYJŚCIE
+PROGRAM	PROGRAM
+WARP	ZNIEKSZTAŁĆ
+LIVE	NA ŻYWO
+DECODE	DEKODOWANIE
+STREAM	TRANSMITUJ
+System	System
+Audio	Dźwięk
+Network	Sieć
+Video Outputs	Wyjścia wideo
+About	O nas
+Encoder	Koder
+Screen	Ekran
+Geometry	Geometria
+Devices	Urządzenia
+Streaming	Streaming
+APPEARANCE	WYGLĄD
+REMOTE CONTROL	ZDALNE STEROWANIE
+INTEGRATION ADAPTERS	ADAPTERY
+DISCOVERY / NOTES	WYKRYWANIE / NOTATKI
+DISPLAY & RASTER	EKRAN I RASTER
+CONNECTED DISPLAYS	PODŁĄCZONE EKRANY
+EDGE FEATHERING	WYGŁADZANIE KRAWĘDZI
+MATTE & OVERLAY	MASKA I NAKŁADKA
+AREA OF INTEREST	OBSZAR ZAINTERESOWANIA
+DEFAULT TRANSITION	DOMYŚLNE PRZEJŚCIE
+NMC IN & OUT	NMC WEJŚCIE I WYJŚCIE
+OSC QUERY / FEEDBACK	ZAPYTANIE OSC / ODPOWIEDŹ
+CUE INSPECTOR	INSPEKTOR CUE
+SELECTED CUE	WYBRANY CUE
+PLAYBACK	ODTWARZANIE
+COPY	KOPIUJ
+PASTE	WKLEJ
+RESET	RESETUJ
+Theme	Motyw
+Language	Język
+Resolution	Rozdzielczość
+Orientation	Orientacja
+Toggle Fullscreen	Pełny ekran
+IDENTIFY	IDENTYFIKUJ
+REGION SIZE	ROZMIAR
+POSITION	POZYCJA
+CENTRE	WYŚRODKUJ
+FULL	PEŁNY
+duration	czas trwania
+transition	przejście
+fade in	wejście
+fade out	wyjście
+ON	WL.
+OFF	WYŁ.
+Stopped	Zatrzymany
+Playing	Odtwarza
+Paused	Wstrzymany
+2-UP	2 OBOK SIEBIE
+DONE	GOTOWE
+EDIT	EDYTUJ
+HELD	WSTRZYMANY
+Mode	Tryb
+PICK	WYBIERZ
+QUAD	CZTERY
+Rate	Częstotliwość
+STEP	KROK
+Apply	Zastosuj
+CLOSE	ZAMKNIJ
+FIXED	STAŁY
+Help!	Pomoc!
+ORDER	KOLEJNOŚĆ
+READY	GOTOWY
+TILES	KAFELKI
+VIDEO	WIDEO
+ALL ON	WSZYSTKO WŁ.
+ALWAYS	ZAWSZE
+ANALOG	ANALOGOWY
+Buffer	Bufor
+Cancel	Anuluj
+Custom	Własny
+Device	Urządzenie
+HIDDEN	UKRYTY
+Length	Długość
+Mascot	Maskotka
+Mirror	Lustro
+NATIVE	NATYWNY
+PRESET	USTAWIENIE
+Sender	Nadajnik
+SUMMED	ZSUMOWANY
+TOGGLE	PRZEŁĄCZ
+12 HOUR	12 GODZIN
+24 HOUR	24 GODZINY
+ALL OFF	WSZYSTKO WYŁ.
+ARRANGE	ROZMIEŚĆ
+Channel	Kanał
+CONVERT	KONWERTUJ
+DEFAULT	DOMYŚLNY
+END CUE	KONIEC CUE
+Key out	Wyjście key
+LTC out	Wyjście LTC
+MISSING	BRAKUJE
+PRESETS	USTAWIENIA
+PROJECT	PROJEKT
+RUNNING	DZIAŁA
+Send to	Wyślij do
+SHUFFLE	LOSOWO
+UPDATES	AKTUALIZACJE
+VJ MODE	TRYB VJ
+CLOCK ON	ZEGAR WŁ.
+DOWNLOAD	POBIERZ
+EXAMPLES	PRZYKŁADY
+Mappings	Przypisania
+NMC sync	Sync NMC
+SHOW SDP	POKAŻ SDP
+TCP port	Port TCP
+UI scale	Skala interfejsu
+vMix API	API vMix
+WATCHING	OBSERWUJE
+A/V delay	Opóźnienie A/V
+ASIO outs	Wyjścia ASIO
+BOTH AXES	OBIE OSIE
+CHECK NOW	SPRAWDŹ TERAZ
+CLOCK OFF	ZEGAR WYŁ.
+Creatures	Stworzenia
+CUE TOOLS	NARZĘDZIA CUE
+Direction	Kierunek
+Freewheel	Wolne koło
+HTTP port	Port HTTP
+Jump mode	Tryb skoku
+Listen on	Nasłuch na
+OSC Query	Zapytanie OSC
+OUTPUT ON	WYJŚCIE WŁ.
+Panic now	Panika teraz
+RECORDING	NAGRYWANIE
+REMAINING	POZOSTAŁO
+RESET ALL	ZRESETUJ WSZYSTKO
+RUN PANIC	URUCHOM PANIKĘ
+SHOW FLOW	PRZEBIEG SHOW
+TIMERS ON	MINUTNIKI WŁ.
+WHEN IDLE	W BEZCZYNNOŚCI
+ADD OUTPUT	DODAJ WYJŚCIE
+BUILT WITH	ZBUDOWANO Z
+CANCEL ALL	ANULUJ WSZYSTKO
+colour tag	znacznik koloru
+copy chain	kopiuj łańcuch
+Hover tips	Podpowiedzi
+Input gain	Wzmocnienie wejścia
+Input mono	Wejście mono
+live audio	dźwięk na żywo
+Live input	Wejście na żywo
+MIDI input	Wejście MIDI
+no picture	brak obrazu
+no preview	brak podglądu
+OPEN SAVED	OTWÓRZ ZAPISANY
+OUTPUT OFF	WYJŚCIE WYŁ.
+Panic fade	Ściemnienie paniki
+Tally port	Port tally
+TIMERS OFF	MINUTNIKI WYŁ.
+Accept from	Przyjmuj od
+ASIO driver	Sterownik ASIO
+BACK TO TOP	NA GÓRĘ
+CANVAS MODE	TRYB PŁÓTNA
+CODE SOURCE	ŹRÓDŁO KODU
+Cue numbers	Numery cue
+Destination	Miejsce docelowe
+Mirror rate	Częstotliwość lustra
+no duration	brak czasu trwania
+NO LIVE CUE	BRAK CUE NA ANTENIE
+NO PREVIOUS	BRAK POPRZEDNIEGO
+OVERLAY BIN	POJEMNIK NAKŁADEK
+paste chain	wklej łańcuch
+Sample rate	Częstotliwość próbkowania
+SENDING OUT	WYSYŁA
+Shift: snap	Shift: przyciąganie
+THIS OUTPUT	TO WYJŚCIE
+(no matches)	(brak wyników)
+(no subtext)	(brak podpisu)
+add a button	dodaj przycisk
+add a window	dodaj okno
+Art-Net port	Port Art-Net
+AUDIO OUTPUT	WYJŚCIE AUDIO
+Auto restore	Auto przywracanie
+DECKLINK: ON	DECKLINK: WŁ.
+free running	swobodny
+KEY+FILL: ON	KEY+FILL: WŁ.
+LISTENING IN	NASŁUCHUJE
+Miami cursor	Kursor Miami
+MIDI CONTROL	STEROWANIE MIDI
+Mirror state	Odbicie stanu
+NDI KEY: OFF	NDI KEY: WYŁ.
+NDI KEY: ON	NDI KEY: WŁ.
+NO PROGRAMME	BRAK PROGRAMU
+ST 2110: OFF	ST 2110: WYŁ.
+ST 2110: ON	ST 2110: WŁ.
+WATCH FOLDER	OBSERWOWANY FOLDER
+COMPOSITE CUE	CUE ZŁOŻONE
+DECKLINK: OFF	DECKLINK: WYŁ.
+default route	trasa domyślna
+Every adapter	Każdy adapter
+KEY+FILL: OFF	KEY+FILL: WYŁ.
+LEFT TO RIGHT	OD LEWEJ DO PRAWEJ
+MEDIA ENCODER	KODER MEDIÓW
+MSC device id	Id urządzenia MSC
+NEW SHOW FILE	NOWY PLIK SHOW
+No cue loaded	Nie wczytano cue
+nothing taken	nic nie wzięto
+OPEN PREVIOUS	OTWÓRZ POPRZEDNI
+Output device	Urządzenie wyjściowe
+Panic profile	Profil paniki
+Quit Deckboy?	Zamknąć Deckboya?
+REMOVE OUTPUT	USUŃ WYJŚCIE
+Sound effects	Efekty dźwiękowe
+Tally address	Adres tally
+TOP TO BOTTOM	Z GÓRY NA DÓŁ
+127 (all-call)	127 (wywołanie ogólne)
+ALL INTERFACES	WSZYSTKIE INTERFEJSY
+LOCALHOST ONLY	TYLKO LOCALHOST
+Monitor device	Urządzenie odsłuchu
+no audio track	brak ścieżki audio
+PRESENTER VIEW	WIDOK PREZENTERA
+RECORD TO DISK	NAGRYWAJ NA DYSK
+STOP RECORDING	ZATRZYMAJ NAGRYWANIE
+STOP STREAMING	ZATRZYMAJ TRANSMISJĘ
+TALLY TRIGGERS	WYZWALACZE TALLY
+Device channels	Kanały urządzenia
+NDI SENDING: ON	WYSYŁANIE NDI: WŁ.
+NO CUE SELECTED	NIE WYBRANO CUE
+Output channels	Kanały wyjściowe
+preview pending	podgląd w toku
+START RECORDING	ROZPOCZNIJ NAGRYWANIE
+START STREAMING	ROZPOCZNIJ TRANSMISJĘ
+(system default)	(domyślne systemu)
+Check at startup	Sprawdzaj przy starcie
+Global crossfade	Globalne przenikanie
+Mic to recording	Mikrofon do nagrania
+Monitor playlist	Odsłuch playlisty
+NDI SENDING: OFF	WYSYŁANIE NDI: WYŁ.
+no still preview	brak podglądu stopklatki
+Pocket 3 / touch	Pocket 3 / dotyk
+SMPTE LTC OUTPUT	WYJŚCIE SMPTE LTC
+the whole screen	cały ekran
+Check for one now	Sprawdź teraz
+INSTALL & RESTART	ZAINSTALUJ I URUCHOM PONOWNIE
+Registry: NOT SET	Rejestr: NIE USTAWIONO
+SAFETY / TIMECODE	BEZPIECZEŃSTWO / TIMECODE
+Timecode jam sync	Jam sync timecode
+esc or N to cancel	Esc lub N aby anulować
+KEYBOARD SHORTCUTS	SKRÓTY KLAWISZOWE
+loading preview...	wczytywanie podglądu...
+CONVERT ALL FLAGGED	KONWERTUJ WSZYSTKIE OZNACZONE
+dot-matrix cue deck	matrycowy pulpit cue
+HyperDeck emulation	Emulacja HyperDeck
+locked to the tempo	zgrany z tempem
+VJ mode (two decks)	Tryb VJ (dwa decki)
+ADD ANOTHER PLAYLIST	DODAJ KOLEJNĄ PLAYLISTĘ
+Companion / OSC port	Port Companion / OSC
+Esc or click to skip	Esc lub kliknij aby pominąć
+PLAYLIST PREFERENCES	USTAWIENIA PLAYLISTY
+press ENTER to start	naciśnij ENTER aby zacząć
+ADD A SECOND PLAYLIST	DODAJ DRUGĄ PLAYLISTĘ
+filmstrip unavailable	pasek klatek niedostępny
+(empty — import media)	(pusto – zaimportuj media)
+Ctrl+D or Esc to close	Ctrl+D lub Esc aby zamknąć
+(no notes for this cue)	(brak notatek do tego cue)
+Timebase / start / fade	Baza czasu / start / ściemnienie
+No cues need conversion.	Żadne cue nie wymaga konwersji.
+CLICK TO SAMPLE KEY COLOR	KLIKNIJ ABY POBRAĆ KOLOR KEY
+normalize loudness (R128)	normalizuj głośność (R128)
+off - all channels silent	wył. – wszystkie kanały ciche
+no video lane for this cue	brak ścieżki wideo dla tego cue
+HyperDeck emulation is off.	Emulacja HyperDeck jest wyłączona.
+OWN SCRIPT  (click to edit)	WŁASNY SKRYPT  (kliknij aby edytować)
+Theme and operator feedback	Motyw i komunikaty dla operatora
+Discovery and mirrored state	Wykrywanie i odbicie stanu
+FOLLOWING THE LIVE CUE NOTES	ŚLEDZI NOTATKI CUE NA ANTENIE
+Listening on all interfaces.	Nasłuch na wszystkich interfejsach.
+Network-facing runtime notes	Notatki wykonawcze po stronie sieci
+Hi! Press I to import a clip.	Cześć! Naciśnij I aby zaimportować klip.
+Global jump and panic behavior	Globalne zachowanie skoku i paniki
+Roll when the show cuts to you	Start, gdy realizacja przechodzi na ciebie
+Choose a cue to inspect it here	Wybierz cue aby je tu obejrzeć
+Defaults for newly created cues	Domyślne dla nowych cue
+Device routing for cue playback	Routing urządzeń dla odtwarzania
+Smaller buffer = lower latency.	Mniejszy bufor = mniejsze opóźnienie.
+Emergency fade and sync behavior	Awaryjne ściemnienie i synchronizacja
+mixed selection: key unavailable	mieszany wybór: key niedostępny
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (EKSPERYMENTALNE)
+Esc=continue with current session	Esc = kontynuuj bieżącą sesję
+no per-cue settings for this type	brak ustawień cue dla tego typu
+On stop: remux to an ordinary MP4	Po zatrzymaniu: przemuksuj do zwykłego MP4
+Where RECORD writes the programme	Gdzie RECORD zapisuje program
+dot-matrix cue deck for live events	matrycowy pulpit cue do wydarzeń na żywo
+Listening on localhost (127.0.0.1).	Nasłuch na localhost (127.0.0.1).
+three expressions: red, green, blue	trzy wyrażenia: czerwony, zielony, niebieski
+Transport sync with another machine	Synchronizacja transportu z inną maszyną
+Add slot sources in the cue inspector	Dodaj źródła w inspektorze cue
+Ask GitHub; never installs on its own	Pyta GitHub; nigdy nie instaluje sam
+Import or click a cue in the playlist	Zaimportuj lub kliknij cue na playliście
+mixed selection: geometry unavailable	mieszany wybór: geometria niedostępna
+generate timecode for the rig to chase	generuj timecode, za którym podąża zestaw
+Lower Third and PIP fire independently	Belka i PiP wyzwalają się niezależnie
+Panels built for a vMix rig, unchanged	Panele zrobione pod vMix, bez zmian
+Incoming transport arrives as NMCEVENT.	Przychodzący transport dociera jako NMCEVENT.
+not in this build - saved with the show	brak w tej wersji – zapisane z show
+Find from the playlist, not from a modal	Szukaj z playlisty, nie z okna
+take or select a cue to open the timeline	weź lub wybierz cue aby otworzyć oś czasu
+Optional external transport and cue control	Opcjonalny zewnętrzny transport i sterowanie cue
+No previous show file found at startup path.	Nie znaleziono poprzedniego pliku show przy starcie.
+Use Ctrl+F or type a cue id/number to search.	Użyj Ctrl+F lub wpisz id/numer cue aby szukać.
+Companion / OSC ingress and HyperDeck emulation	Wejście Companion / OSC i emulacja HyperDeck
+A/V delay holds audio back for lagging displays.	Opóźnienie A/V wstrzymuje dźwięk dla wolnych ekranów.
+On stop: leave the crash-resilient file as it is	Po zatrzymaniu: zostaw plik odporny na awarie bez zmian
+same disk as Deckboy - a separate drive is safer	ten sam dysk co Deckboy – osobny jest bezpieczniejszy
+A step fires one cue on each playlist, all at once.	Krok wyzwala jedno cue na każdej playliście naraz.
+one expression: the same value in red, green and blue	jedno wyrażenie: ta sama wartość w czerwonym, zielonym i niebieskim
+NDI transport is configured per output in Video Outputs.	Transport NDI ustawia się per wyjście w Wyjściach wideo.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Wysyła PLAY / PAUSE / STOP / LOCATE gdy transport się porusza.
+OSC subscribe: send /deckboy/subscribe from your controller.	Subskrypcja OSC: wyślij /deckboy/subscribe ze swojego kontrolera.
+NMC mode / host / port are runtime-configurable for sync work.	Tryb / host / port NMC można zmieniać w trakcie pracy.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Wejście na antenę bierze cue. Deckboy nigdy nie wysyła polecenia mikserowi.
+FPS: ON	FPS: WŁ.
+FPS: OFF	FPS: WYŁ.
+NMOS: ON	NMOS: WŁ.
+NMOS: OFF	NMOS: WYŁ.
+SPOUT: ON	SPOUT: WŁ.
+SPOUT: OFF	SPOUT: WYŁ.
+CANVAS: ON	PŁÓTNO: WŁ.
+CANVAS: OFF	PŁÓTNO: WYŁ.
+10-BIT: ON	10 BITÓW: WŁ.
+10-BIT: OFF	10 BITÓW: WYŁ.
+EDIT...	EDYTUJ...
+ARRANGE...	ROZMIEŚĆ...
+ADD FILE...	DODAJ PLIK...
+RENUMBER...	PRZENUMERUJ...
+set a port...	ustaw port...
+no script	brak skryptu
++ OUTPUT	+ WYJŚCIE
+Eddie's Clock	Zegar Eddiego
+Ctrl+/ to close	Ctrl+/ aby zamknąć
+(step lives here)	(krok jest tutaj)
+4:2:2  8-BIT	4:2:2  8 BITÓW
+4:2:2  10-BIT	4:2:2  10 BITÓW
+No outputs — click + OUTPUT to add one.	Brak wyjść – kliknij + WYJŚCIE aby dodać.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, wyzwalacz NDI, NMC, MTC, LTC, Art-Net i Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Konwertuj do H.264 cue, których Deckboy nie odtwarza dobrze
+a button can run any command the network protocol understands	przycisk może wykonać każde polecenie rozumiane przez protokół
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	ROZMIEŚĆ WIDOK PREZENTERA  -  przeciągnij panel aby przesunąć, róg aby zmienić rozmiar
+Folder	Folder
+FORMAT	FORMAT
+PROMPTER	PROMPTER
+FOLDER...	FOLDER...
+film	film
+capture again - what is on now	przechwyć ponownie - to, co jest na wizji
+change what it does...	zmień, co robi...
+decks - Stop deck...	decki - zatrzymaj deck...
+decks - Take deck...	decki - TAKE na decku...
+delete step	usuń krok
+delete this button	usuń ten przycisk
+label, command and glyph as text...	etykieta, polecenie i symbol jako tekst...
+move down	przesuń w dół
+move up	przesuń w górę
+next colour	następny kolor
+preset - a new preset from what is on now	preset - nowy preset z tego, co jest na wizji
+type a command myself...	wpiszę polecenie sam...
+type a length in seconds...	wpisz długość w sekundach...
+wait for GO	czekaj na GO
+what it recalls...	co przywołuje...
+when its cues end	gdy skończą się jego cue
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL wyrównuje całą playlistę naraz
+back to the in point, not to zero	wraca do punktu wejścia, nie do zera
+drag to scrub. the audio follows	przeciągnij, aby przewijać. dźwięk podąża
+loops between the in and out points, not the file	zapętla między punktami wejścia i wyjścia, nie cały plik
+(not set)	(nie ustawiono)
+1.00x  (default 1080p)	1.00x  (domyślnie 1080p)
+1.25x  (large desktop)	1.25x  (duży pulpit)
+1.50x  (4K desktop)	1.50x  (pulpit 4K)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / mały 4K)
+highest bandwidth	najwyższa przepustowość
+lower bandwidth	niższa przepustowość
+CD, music rigs	CD, zestawy muzyczne
+video standard	standard wideo
+every playlist	każda playlista
+None  (no character art)	Brak  (bez postaci)
+custom size...	własny rozmiar...
+Browser URL	Adres URL przeglądarki
+Camera	Kamera
+Media File / Still	Plik multimedialny / obraz
+RECORD TO FILE	NAGRYWAJ DO PLIKU
+browser, with sound	przeglądarka, z dźwiękiem
+Window	Okno
+Desktop	Pulpit
+full screen	pełny ekran
+DeckLink Output	Wyjście DeckLink
+FFmpeg Stream Output	Wyjście strumienia FFmpeg
+NDI Output	Wyjście NDI
+SDL Window Output	Wyjście okna SDL
+Spout Output	Wyjście Spout
+DESK	PULPIT
+drop a folder in too - it reads the whole tree	przeciągnij też folder — wczytają się wszystkie podfoldery
+cameras, windows, NDI, screens - all live sources	kamery, okna, NDI, ekrany — same źródła na żywo
+test cards and generators - no file needed	plansze testowe i generatory — plik niepotrzebny
+space bar does this too, without moving your hand	spacja robi to samo, bez przekładania ręki
+stops the cue. ESC stops EVERYTHING	zatrzymuje cue. ESC zatrzymuje WSZYSTKO
+the safe one: audio and playback keep running	łagodna opcja: dźwięk i odtwarzanie działają dalej
+the thorough one. blackout is the reversible one	opcja gruntowna. Wygaszenie obrazu można cofnąć
+save as makes a new file instead	Zapisz jako tworzy nowy plik
+for a copy before you change something risky	na kopię przed ryzykowną zmianą
+this is what you carry to the venue	to właśnie zabierasz na miejsce wydarzenia
+the show on disk is untouched until you save	show na dysku pozostaje bez zmian, dopóki nie zapiszesz
+per cue. the deck has its own default too	dla każdego cue. Deck ma też własne ustawienia domyślne
+stills hold instead - a fade would dip the frame	obrazy statyczne zostają — wygaszenie przyciemniłoby kadr
+the frame stays up. good for slides	obraz zostaje. W sam raz do slajdów
+gain, pan and normalise live in the inspector	wzmocnienie, panorama i normalizacja są w inspektorze
+this clip has no audio track to enable	ten klip nie ma ścieżki audio do włączenia
+Hi! I am Deckboy.	Cześć! Jestem Deckboy.
+Press I to import a clip.	Naciśnij I, żeby zaimportować klip.
+Enter takes a cue live.	Enter wysyła cue na żywo.
+S stops the live cue.	S zatrzymuje cue na żywo.
+The timeline can be resized.	Możesz zmieniać rozmiar osi czasu.
+Try a terminal theme in Settings.	Wypróbuj motyw terminala w Ustawieniach.
+RELINK finds media that has moved.	RELINK znajduje przeniesione media.
+Cues have their own gain and fades.	Każdy cue ma własne wzmocnienie i przejścia.
+Trim with Ctrl+I and Ctrl+O.	Przytnij za pomocą Ctrl+I i Ctrl+O.
+Ctrl+/ shows every shortcut.	Ctrl+/ pokazuje wszystkie skróty.
+J jumps to the live cue.	J przechodzi do cue na żywo.
+Normalize matches loudness across cues.	Normalizacja wyrównuje głośność cue.
+Esc clears the desk, then the output, then quits.	Esc czyści pulpit, potem wyjście, a na końcu zamyka program.
+Stream SRT and RTMP at the same time.	Transmituj przez SRT i RTMP jednocześnie.
+CHECK lists what is broken, before doors.	CHECK pokaże problemy przed otwarciem drzwi.
+A cue can wait before it starts.	Cue może zaczekać przed uruchomieniem.
+A cue can start the next one by itself.	Cue może sam uruchomić następny.
+Disarm a cue and GO steps over it.	Rozbrój cue, a GO go pominie.
+Audition plays a cue to you, not the room.	Odsłuch gra dla ciebie, nie dla sali.
+Preload racks the next cue warm, off air.	Wstępne ładowanie przygotowuje następny cue poza anteną.
+A target cue starts or stops another cue.	Cue docelowy uruchamia lub zatrzymuje inny cue.
+A fade cue takes a deck down, then stops it.	Cue wygaszania ścisza lub przyciemnia deck, a potem go zatrzymuje.
+A master cue fires one cue on every deck.	Cue główny uruchamia po jednym cue na każdym decku.
+A MIDI cue can tell the lighting desk to go.	Cue MIDI może dać sygnał konsolecie oświetleniowej.
+A network cue speaks OSC, UDP or TCP.	Cue sieciowy mówi przez OSC, UDP lub TCP.
+A DMX cue fades the house lights on a cue.	Cue DMX płynnie zmienia oświetlenie sali.
+A script cue runs Deckboy's own commands.	Cue skryptowy wykonuje polecenia Deckboya.
+A timecode cue jams LTC to a value.	Cue kodu czasowego ustawia LTC na podaną wartość.
+Each output can show a different deck.	Każde wyjście może pokazywać inny deck.
+The matrix sends audio to any channel.	Matryca wysyła dźwięk na dowolny kanał.
+The panel map numbers every LED tile.	Mapa paneli numeruje każdy moduł LED.
+Hey!	Ej!
+Quit it!	No przestań!
+Ow. That was rude.	Au. Ładnie to tak?
+I am a professional.	Ja tu jestem zawodowcem.
+Seriously?	Serio?
+This is my monitor.	To mój monitor.
+I am telling the operator.	Powiem realizatorowi.
+All right. Wow.	No proszę.
+Right. That does it.	Dobra. Miarka się przebrała.
+I am leaving. Good luck with the show.	To ja wychodzę. Powodzenia z show.
+Still here? Me too.	Nadal tu? Ja też.
+Long show, huh.	To się ciągnie jak flaki z olejem.
+I could do this all day. Apparently.	Mogę tak cały dzień. Najwyraźniej muszę.
+You have been staring at me for hours.	Gapisz się na mnie od godzin.
+Has anyone seen a clock?	Ktoś widział zegarek? Czy czas stanął w kolejce?
+Is it still the same show?	To wciąż to samo show?
+I'm not tired. You're tired.	Ja nie jestem zmęczony. Ty jesteś.
+Five more minutes. Then five more.	Jeszcze pięć minut. Taaa, świstak siedzi i zawija.
+A whole day. I need a restart.	Cała doba. Potrzebuję restartu.
+Save the show. Then let me sleep.	Zapisz show. Potem daj mi się wyspać.
+Every pixel of me is tired.	Moje piksele padają na nos.
+Close me. Open me. I'll be fine.	Zamknij mnie. Otwórz. Będę jak nowy.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Nie mój cyrk, nie moje małpy... ale mój show.
+Oh hey. It's 4:20. Take it easy.	O, cześć. Jest 4:20. Na luzie.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	CZEŚĆ
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Jestem doktor Piksel. Pięć minut i poprowadzisz show. Mniej, jeśli mnie posłuchasz.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	A ja jestem profesor Video. Najpierw syntezatory, potem wideo. Teraz głównie wideo. Wciśnij START, to podłączymy... to zaczniemy.
+TURN THE OUTPUT ON	WŁĄCZ WYJŚCIE
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, ekran jest pusty. Nie każ im czekać. Otwórz MENU i zrób z WYJŚCIE WYŁ. WYJŚCIE WŁ. Ajde!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Lekcja pierwsza: nic nie wyjdzie, dopóki nie podłączysz oscylatora do... do WYJŚCIA. To wideo. Wiem.
+BRING IN A CLIP	DODAJ KLIP
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Teraz obraz. Wciśnij I i wybierz klip z komputera. Nie masz klipu? SHOW ME, pożyczę ci jeden z moich.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Każdy klip staje się cue w playliście. Jak wczytanie sampla. Sampla z obrazkami.
+TAKE IT LIVE	NA ANTENĘ
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Twój klip czeka w playliście. Zaznacz go, potem TAKE. Albo Enter. Pewni siebie operatorzy wciskają Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE to wyzwalacz obwiedni. Znaczy, eee, przycisk GO. To samo, tylko z obrazkami.
+LINE UP THE NEXT ONE	PRZYGOTUJ NASTĘPNY
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Kliknij inny cue. Czeka gotowy, aż powiesz. Tylko jeden cue? Zaimportuj kolejny albo SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Zaznaczenie to nie odtwarzanie. Zaznaczony to następna nuta w sekwencji. Następny CUE.
+CROSSFADE TO IT	PRZENIKANIE
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Cięcie na twardo jest dla amatorów. W inspektorze wciśnij + przy przejście, żeby był czas, a nie deck. Potem TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Przenikanie! Portamento, tylko dla obrazów. Każdy czas się nada. Kilka kliknięć więcej i jest sekunda. Potem TAKE.
+CLEAR THE SCREEN	WYCZYŚĆ EKRAN
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Coś poszło nie tak na scenie? Wciśnij BLACK albo B. Obraz znika. Show leci dalej pod spodem.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Nic nie ginie. Wciśnij B jeszcze raz i wraca. Jak mute na mikserze. Bardzo kojące.
+SAVE THE SHOW	ZAPISZ SHOW
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Teraz zapisz. Ctrl+S albo ZAPISZ. Niektóre programy gubią twoją pracę, a potem winią ciebie. Ja nigdy.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Zapisz swój patch. Swoje SHOW. Show. To ćwiczebne mieszka w folderze Deckboya; twoje jest bezpieczne.
+THAT'S A SHOW	TO JEST SHOW
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	To jest show! Wyjście, cue, TAKE, przenikanie, BLACK, zapis. Nazdrave, skapi. Rakija na mój koszt.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Koniec zajęć. Przykładowe show uczą warstw, napisów i efektów. MENU > LEARN THE BASICS puszcza to od nowa.
+*shakes head* That means yes. Bravo.	*kręci głową* To znaczy tak. Brawo.
+Wonderful! Lovely signal flow.	Cudownie! Piękny tor sygnału.
+Mm. I knew you had it in you.	Mm. Wiedziałam, że dasz radę.
+Yes! Have a gold star. It's a dot.	Tak! Masz złotą gwiazdkę. To kropka.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Gotowy na następny krok? *kiwa głową* ...W Bułgarii to znaczy nie, skapi. Ten świecący. Świeci dla ciebie.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Kliknąłeś wszystko oprócz świecącego. Nawet moje oscylatory znajdują ten świecący.
+stop playback first - the lesson cannot hand a running show back as it was	najpierw zatrzymaj odtwarzanie - lekcja nie odda grającego show w takim stanie, w jakim było
+choose RECOVER or KEEP SAVED first	najpierw wybierz RECOVER albo KEEP SAVED
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	nie udało się zapisać twojego show, więc lekcja się nie zaczęła. Zapisz je (ZAPISZ JAKO) i spróbuj ponownie
+the practice show would not open	ćwiczebne show się nie otworzyło
+could not start the practice show	nie udało się uruchomić ćwiczebnego show
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc wychodzi, a następnym razem zaczyna stąd
+that's the basics - MENU > LESSONS has part two	to są podstawy - MENU > LESSONS ma część drugą
+tour paused - LEARN THE BASICS picks up where you left off	wycieczka wstrzymana - LEARN THE BASICS wraca tam, gdzie skończyłeś
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Ekrany powielone, skapi. Wciśnij dowolny klawisz albo kliknij, a doktor Piksel to odda.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Zły ekran, skapi. Wciśnij dowolny klawisz albo kliknij, a doktor Piksel to odda.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Drugi ekran zniknął, skapi. Wciśnij dowolny klawisz albo kliknij, a doktor Piksel to odda.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Jeden ekran, skapi. Wciśnij dowolny klawisz albo kliknij, a doktor Piksel to odda.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Drugi ekran zniknął, skapi, więc obraz wrócił na ten. Włożyłam go do małego okienka, z tyłu. Podłącz go z powrotem, a obraz tam wróci.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Zjadło stół, skapi. Jeden ekran, więc wyjście zajęło całość. Włożyłam je do małego okienka, z tyłu. Prawdziwe show dostaje drugi ekran.
+IT ATE THE DESK	ZJADŁO STÓŁ
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	Tam. Przycisk z napisem WYJŚCIE WYŁ. Zrób z niego WŁ., skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Nic nie jest na antenie, skąd można przenikać, skapi. Najpierw TAKE na jeden cue, potem wybierz drugi i daj mu czas.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	To było cięcie, skapi. Szybkie, ale nie przenikanie. Wybierz drugi cue, wciśnij + przy przejście, potem TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Pętla sprzężenia! Wyjście wpięte prosto z powrotem w stół. Zdarza się najlepszym. Głównie mnie. 1983. O 1983 nie rozmawiamy.
+No more rakia. The rat has a problem.	Koniec z rakiją. Szczur ma problem.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Babcina rakija, z Biełogradczika. Jeden kieliszek, za lekcję.
+Is this... is this allowed during a tutorial?	Czy to... czy to wolno podczas samouczka?
+*shakes head* That means one more.	*kręci głową* To znaczy jeszcze jeden.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Kocham was wszystkich. Kocham oscylator. Kocham WYJŚCIE. To wideo. Wiem. WIEM.
+...and the rat took the rakia. Every time, skapi. Every single time.	...a szczur zabrał rakiję. Za każdym razem, skapi. Za każdym jednym razem.
+Was that a rat? In a hat? With a pizza?	Czy to był szczur? W kapeluszu? Z pizzą?
+Stop that. I am a serious man.	Przestań. Jestem poważnym człowiekiem.
+Do not tell Dr. Pixel about this.	Nie mów o tym doktor Piksel.
+This never happened. Back to the patch bay.	To się nigdy nie wydarzyło. Wracamy do krosownicy.
+It was the eighties. Everyone had a bow tie.	To były lata osiemdziesiąte. Każdy miał muszkę.
+LESSON LIST	LISTA LEKCJI
+OPEN EXAMPLE SHOWS	OTWÓRZ PRZYKŁADOWE SHOW
+EXIT (Esc)	WYJDŹ (Esc)
+Taking it on the road	Show w trasę
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Zrób CHECK, zanim show pojedzie, napraw, co znajdzie, i spakuj z mediami.
+Effects, oscillators and colour	Efekty, oscylatory i kolor
+An effect, a ~ on its knob, and the colour picker.	Efekt, ~ na jego gałce i wybór koloru.
+The art school crit, with Mr. Salty	Przegląd w akademii sztuk pięknych, z panem Salty
+Patterns, synths and Draw	Plansze, syntezatory i Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Plansza testowa, syntezator wideo i rysowanie po obrazie, zapisane jako kadr.
+The telestrator booth, with Coach Marv	Kabina telestratora, z trenerem Marvem
+Masks	Maski
+A heart from the library, the pen, invert and feather.	Serce z biblioteki, pióro, odwrócenie i wtapianie.
+The Signal Files: redact the evidence	Archiwum Sygnałów: zamaż dowód
+Warp, blend and slices	Warp, blend i plastry
+A corner pin, two soft edges, then three slices in the Screens window.	Przypięcie narożników, dwie miękkie krawędzie, potem trzy plastry w oknie Screens.
+The haunted lighthouse, with Keeper Rook	Nawiedzona latarnia, z latarnikiem Rookiem
+GO from anywhere	GO z dowolnego miejsca
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Numery cue, GOTO, skrót klawiszowy i którędy wchodzą Companion, MIDI i OSC.
+The game show, with Donna Wheel	Teleturniej, z Donną Wheel
+Words on screen	Słowa na ekranie
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Belka z imieniem, potem plansza tytułowa na zielonym tle do kluczowania.
+The kaiju weather report, with June O'Neil	Pogoda z kaiju, z June O'Neil
+Keeping time	Pilnowanie czasu
+A stage timer counting down, held, and a presenter view for the person on stage.	Sceniczny timer odliczający w dół, zatrzymany, i widok prezentera dla osoby na scenie.
+A grand day out, with Wallis and Grommet	Wielka wyprawa, z Wallisem i Grommetem
+Two playlists and TAKE ALL	Dwie playlisty i TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Druga playlista jako warstwa i TAKE ALL, żeby dwie rzeczy zmieniły się na jedno uderzenie.
+The magic show, with Turnip Top	Pokaz magii, z Turnip Topem
+When it goes wrong	Kiedy coś pójdzie nie tak
+BLACK against PANIC, and getting a show back.	BLACK kontra PANIC i odzyskiwanie show.
+The cooking show, with Chef Bork	Program kulinarny, z szefem Borkiem
+Presets	Presety
+Capture a look on a DASH button, change everything, and get it back with one press.	Zapamiętaj wygląd na przycisku DASH, zmień wszystko i odzyskaj jednym wciśnięciem.
+Transitions	Przejścia
+The styles beyond the crossfade: an iris, a shatter, and their times.	Style poza przenikaniem: irys, roztrzaskanie i ich czasy.
+The space-opera trailer, with Optimus Primetime	Zwiastun space opery, z Optimusem Primetime
+Sound	Dźwięk
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Efekt audio na cue, bend, który pięknie go psuje, i gdzie mieszka patch.
+The robot DJs, with Deft Funk	Roboty DJ-e, z Deft Funk
+Reading the scopes	Czytanie skopów
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Przebieg, wektoroskop i fałszywe kolory: czy poświata jest prawdziwa, czy tylko za jasna?
+The Signal Files: is the glow on the horizon a craft?	Archiwum Sygnałów: czy poświata na horyzoncie to statek?
+Out of the building	Poza budynek
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Gdzie mieszkają NDI, SDI i ST 2110, i NDI włączone, jeśli ten komputer je ma.
+The webcam as a controller, as a game. Five rounds, a high score.	Kamerka jako kontroler, jako gra. Pięć rund, rekord.
+A handheld, and bugs	Konsola przenośna i robaki
+The multiview	Multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	Okna, menu ..., co pokazuje każde, układy i tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Zagadka na statku Cathode, z por. Hailą i chorążym Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Dwie playlisty: Deckboy staje się SUPER DECKBOY. Zasłużył, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Wyewoluował! Moje oscylatory nigdy nie dostały fanfar.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Każde show na niego zasługuje. Brawo.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Power-up! Więcej playlist, więcej warstw, więcej super.
+Intro video (left on the office PC)	Wideo na otwarcie (zostało na komputerze w biurze)
+ON THE ROAD	W TRASIE
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Show zbudowane tutaj, skapi, dziś wieczorem chodzi na laptopie gdzie indziej. Wciśnij START.
+Before it travels: check it, fix it, bundle it.	Przed wyjazdem: sprawdź, napraw, spakuj.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Widzisz CHECK na górnym pasku? Pojawia się tylko, gdy coś jest nie tak. Wciśnij.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Wylicza wszystko, o co show by się potknęło: brakujące pliki, puste cue, niedostępne wyjścia.
+FIX IT	NAPRAW
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Wideo na otwarcie jest na innym komputerze. Zaznacz i usuń albo zrób RELINK, jeśli masz plik.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Napraw w domu, gdzie łatwo. Nie na miejscu, gdzie nie jest.
+BUNDLE IT	SPAKUJ
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Wciśnij SPAKUJ i wybierz gdzie: pendrive, folder współdzielony. Show i wszystkie media razem.
+The copy finds its media beside it, wherever the folder goes.	Kopia znajduje media obok siebie, gdziekolwiek pojedzie folder.
+SAFE TRAVELS	SZCZĘŚLIWEJ PODRÓŻY
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Sprawdzone, naprawione, spakowane. Na drugiej maszynie otwórz show z paczki: wszystko jest na miejscu.
+A show file is only text, so it travels light. The media is the heavy part.	Plik show to tylko tekst, więc podróżuje lekko. Ciężkie są media.
+Student work no. 4 (untitled)	Praca studenta nr 4 (bez tytułu)
+THE CRIT	PRZEGLĄD
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Akademia sztuk pięknych, skapi. Jeden student, jeden obraz, jeden krytyk, który widział wszystko. Wciśnij START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Efekty zmieniają obraz; oscylator zmienia go bez przerwy. Krytyk lubi tylko to drugie.
+A grey square on beige. I have seen this at every graduate show since 1987.	Szary kwadrat na beżu. Widzę to na każdej wystawie dyplomowej od 1987.
+AN EFFECT	EFEKT
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	W sekcji EFFECTS inspektora + dodaje efekt. Edges to dobry początek: rysuje kontury.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Są ich dziesiątki. Każdy chodzi na procesorze w kilka milisekund. Przeważnie.
+Take a risk! Bad art is fine. Boring art is a crime.	Zaryzykuj! Zła sztuka jest w porządku. Nudna sztuka to zbrodnia.
+A ~ ON ITS KNOB	~ NA GAŁCE
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Każda kontrolka z ~ obok może podążać za oscylatorem. Wciśnij jedną. Gałka zaczyna oddychać.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Oscylator niskiej częstotliwości: wolny, żeby oko nadążyło. Ćwierć herca to czterosekundowy oddech.
+Now it MOVES. Okay. Okay. I'm listening.	Teraz SIĘ RUSZA. Dobra. Dobra. Słucham.
+A COLOUR OF ITS OWN	WŁASNY KOLOR
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Efekty, które rysują kolorem, jak linia Edges, mają kwadracik koloru. Otwiera wybór: koło, wpisane nazwy albo kolor wzięty z ekranu.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Każdy kolor ma gdzieś nazwę. Mój to „zieleń oscyloskopowa”. Nikt inny jej nie używa.
+That colour is doing something. I don't know what. I love it.	Ten kolor coś robi. Nie wiem co. Uwielbiam.
+THE VERDICT	WERDYKT
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Efekt, ~ i kolor. Krytyk płacze, skapi. Chyba ze wzruszenia.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Nałóż kilka. Każdy ma własną ~ na każdej gałce. Tak wygląd staje się występem.
+It's still a square. But it's YOUR square. Post it.	To wciąż kwadrat. Ale TWÓJ kwadrat. Wrzuć to.
+THE TELESTRATOR BOOTH	KABINA TELESTRATORA
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Trener Marv tłumaczy sport, rysując po nim kółka. Raz zakreślił słońce. Dziesięć minut, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Dziś: plansze testowe, syntezator wideo i rysowanie po obrazie. Wciśnij START.
+Get me a picture and a pen. BOOM.	Dajcie mi obraz i pisak. BUM.
+A TEST PATTERN	PLANSZA TESTOWA
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Ustaw ekrany PRZED show. Nie w trakcie. Nauczyłam się tego w Płowdiwie.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Każdy stół potrzebuje planszy testowej. TESTOWY dodaje Pocket Test: sprawdzony prawdziwymi miernikami.
+A VIDEO SYNTH	SYNTEZATOR WIDEO
+He says 'no camera needed' like it is a feature. It is a feature.	Mówi „kamera niepotrzebna”, jakby to była funkcja. To jest funkcja.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Mój ulubiony. ŹRÓDŁO, potem Video Synth: oscylatory, lustra i sprzężenie. Kamera niepotrzebna.
+TAKE THE SYNTH	TAKE NA SYNTEZATOR
+Select it, then TAKE. Confident operators press Enter.	Zaznacz, potem TAKE. Pewni siebie operatorzy wciskają Enter.
+That's our replay. Every replay needs a pundit.	To nasza powtórka. Każda powtórka potrzebuje komentatora.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Oto powtórka. Oto zawodnik. I BUM, jest w środku.
+A SECOND PLAYLIST	DRUGA PLAYLISTA
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Tusz idzie na wierzch, na własną warstwę. Wciśnij + na końcu zakładek playlist.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	Druga playlista to warstwa nad pierwszą. Jak drugi oscylator domiksowany na górze.
+A DRAW CUE	CUE DRAW
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	W nowej playliście: ŹRÓDŁO, potem Draw. Przezroczyste wszędzie, gdzie nie rysowałeś.
+A Draw cue is transparent outside the ink, so the synth shows through.	Cue Draw jest przezroczysty poza tuszem, więc syntezator prześwituje.
+TAKE THE INK	TAKE NA TUSZ
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Zaznacz cue Draw i zrób TAKE. Dwie playlisty, dwie warstwy, jeden obraz.
+Now both are live: the synth underneath, the ink on top.	Teraz oba na antenie: syntezator pod spodem, tusz na wierzchu.
+CIRCLE SOMETHING	ZAKREŚL COŚ
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Wciśnij DRAW w inspektorze, potem rysuj na monitorze programu. Myszką albo piórkiem, jeśli masz.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Nacisk piórka pogrubia linię. Mysz zawsze naciska tak samo. Jak ja.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Zakreśl go! Nie, większe. BUM. To chmura. Dobra. Zakreśl chmurę.
+SAVE A STILL	ZAPISZ KADR
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL zapisuje rysunek jako obraz z przezroczystym tłem i dodaje go do playlisty.
+For next week's show. Coach Marv will want the cloud again.	Na program w przyszłym tygodniu. Trener Marv znowu będzie chciał chmurę.
+THAT'S THE BOOTH	TO BYŁA KABINA
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Plansze, syntezator, warstwa, tusz, kadr. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Wypróbuj Replay w sekcji Draw: rysuje twoje linie od nowa tak, jak je rysowałeś.
+Same time next week. Bring a bigger pen. And a turducken.	Ta sama pora za tydzień. Przynieś większy pisak. I gar bigosu.
+Saucer photo (CLASSIFIED)	Zdjęcie spodka (TAJNE)
+THE SIGNAL FILES	ARCHIWUM SYGNAŁÓW
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Biuro Niewyjaśnionych Sygnałów. Dwoje agentów, jedno zdjęcie i nie może iść na antenę. Wciśnij START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Maski wycinają obraz w kształty. Dziś wycinamy dowody.
+That's a craft, Brandt. Look at the lights. I want to believe.	To statek, Brandt. Spójrz na światła. Chcę wierzyć.
+A MASK FROM THE LIBRARY	MASKA Z BIBLIOTEKI
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	W sekcji MASK inspektora: mask, potem „new heart”. Każdy kształt się nada. Serce jest zabawniejsze.
+The library has circles, stars, hearts. Each one is points you can move.	Biblioteka ma koła, gwiazdy, serca. Każdy kształt to punkty, które możesz przesuwać.
+A heart, Hollis? The Bureau redacts with black bars.	Serce, Hollis? Biuro zamazuje czarnymi paskami.
+THE PEN	PIÓRO
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Ustaw narzędzie na pióro, potem klikaj wokół spodka na monitorze. Kliknij pierwszy punkt, żeby zamknąć.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Klik to narożnik, przeciągnięcie to krzywa. Tak, jak chcieli bracia Bézier.
+Draw round it carefully. It might be watching.	Obrysuj starannie. Może patrzeć.
+INVERT	ODWRÓĆ
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Odwrócenie zostawia zewnętrze i wycina środek. Spodek znika. Niebo zostaje.
+The same shape, the other way round. Very useful. Slightly spooky.	Ten sam kształt, na odwrót. Bardzo przydatne. Trochę upiorne.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, w niebie jest dziura w kształcie serca.
+FEATHER	WTAPIANIE
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Wtapianie zmiękcza krawędź, więc nikt nie widzi cięcia. Wciśnij + przy feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Twarda krawędź mówi „ktoś tu był”. Miękka nie mówi nic.
+They'll never know.	Nigdy się nie dowiedzą.
+CASE CLOSED	SPRAWA ZAMKNIĘTA
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Kształt z biblioteki, pióro, odwrócenie i wtapianie. Biuro dziękuje. Biura tu nigdy nie było.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Maski trafiają też na warstwę, wyjście albo jego matte: wybiera MASK ON. A każda kontrolka przyjmuje ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	Prawda jest w przebiegu, Hollis. Następnym razem skopy.
+The ghost	Duch
+THE HAUNTED LIGHTHOUSE	NAWIEDZONA LATARNIA
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Latarnia, duch i latarnik, który za długo był sam na sam z lampą. Wciśnij START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Mapping projekcyjny: wyginanie obrazu, żeby pasował do budynku. Warp, blend, plastry.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Ducha na okna chcecie, co? Uważajcie na lampę. Lampa jest MOJA.
+THE OUTPUT'S GEOMETRY	GEOMETRIA WYJŚCIA
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	MENU, potem Wyjścia wideo, potem Geometria. Tam mieszka kształt wyjścia.
+Geometry: the projector-menu word for 'what shape is the picture'.	Geometria: słowo z menu projektora na „jakiego kształtu jest obraz”.
+PIN A CORNER	PRZYPNIJ NAROŻNIK
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Wciśnij warp edit, potem przeciągnij narożnik na monitorze programu. Okno nie jest kwadratowe. Latarnik też nie.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Przypięcie narożników przesuwa cztery rogi. Perspektywa trzyma linie prosto, jak w prawdziwym oknie.
+LEFT! Ye call that a corner? I've seen straighter gulls.	W LEWO! To nazywasz narożnikiem? Widziałem prostsze mewy.
+TWO SOFT EDGES	DWIE MIĘKKIE KRAWĘDZIE
+Back in Geometry: edge blend, + on the left and + on the right.	Z powrotem w Geometrii: edge blend, + po lewej i + po prawej.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Dwa projektory zachodzą na siebie; każdy wygasza swoją krawędź, żeby zakładka nie była dwa razy jaśniejsza.
+THE SCREENS WINDOW	OKNO SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Geometria, SLICES, otwórz. W oknie Screens plastry się wycina i rozmieszcza.
+A slice is a piece of the picture, put anywhere on the output.	Plaster to kawałek obrazu, położony gdziekolwiek na wyjściu.
+THREE SLICES	TRZY PLASTRY
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	W oknie Screens trzy razy + SLICE i przeciągnij każdy kadr na jedną trzecią obrazu.
+Three windows, three slices: left, middle and right of one picture.	Trzy okna, trzy plastry: lewa, środek i prawa strona jednego obrazu.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Trzy okna. Środkowe dla lampy. Środkowe ZAWSZE dla lampy.
+THE GHOST IS PLEASED	DUCH JEST ZADOWOLONY
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Warp, blend, plastry. Latarnik wreszcie zaśnie. Mewy nie.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Plastry mają w oknie Screens własny warp i siatkę. I ~ na położeniu i obrocie.
+Ye did alright, lad. Now get away from the lamp.	Nieźle ci poszło, chłopcze. A teraz odsuń się od lampy.
+THE GAME SHOW	TELETURNIEJ
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Teleturniej, skapi. Troje uczestników, jeden przycisk i cue odpalane z dowolnego miejsca. Wciśnij START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Numery cue, skróty i GO z innych maszyn. Jak sekwencer, na którym grasz z dowolnego klawisza.
+Welcome to the show! Let's spin that wheel!	Witamy w programie! Kręcimy kołem!
+A CUE NUMBER	NUMER CUE
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Zaznaczony jest Uczestnik 3. W metadanych inspektora nadaj mu numer cue: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Teatr numeruje swoje cue. Q3, Q3.5, Q12A. Deckboy czyta wszystkie.
+I'd like to buy a number, please.	Poproszę numer.
+GO TO IT	SKOCZ TAM
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, wpisz numer, Enter. Idzie na antenę, gdziekolwiek stoi lista.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. Najszybsza droga w długiej liście. Szybciej niż przewijanie. Dużo szybciej niż ja.
+And the number is... three!	A numer to... trzy!
+A BUZZER	PRZYCISK
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Zaznaczony jest Uczestnik 1. W TRIGGERS wciśnij key, potem F5. Ten klawisz odpala teraz ten cue.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 do F10, F12 albo klawiatura numeryczna. Każdy to przycisk.
+Every contestant gets a buzzer.	Każdy uczestnik dostaje przycisk.
+BUZZ IN	NACIŚNIJ!
+Press the key. The cue fires, wherever the list is standing.	Wciśnij klawisz. Cue odpala, gdziekolwiek stoi lista.
+No mouse, no list, no looking. Just the key.	Bez myszy, bez listy, bez patrzenia. Tylko klawisz.
+Buzz! We have a winner!	Bzzz! Mamy zwycięzcę!
+FROM ANYWHERE	Z DOWOLNEGO MIEJSCA
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, nuta MIDI, wiadomość OSC: MENU, potem Sieć, mówi, gdzie każde się łączy.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Stream Deck w sąsiednim pokoju może wcisnąć GO. Klawiszowy syntezator też. Wolę syntezator.
+And for our viewers at home: you can play along too.	A dla widzów przed telewizorami: możecie grać z nami.
+THAT'S OUR SHOW	TO BYŁ NASZ PROGRAM
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Numery, GOTO, przycisk i GO z dowolnego miejsca. Jesteś teraz teleturniejem, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Cue może mieć naraz klawisz, nutę MIDI i adres OSC. Pasek, szelki i drugi pasek.
+Goodnight, everybody! Keep spinning!	Dobranoc wszystkim! Kręćcie dalej!
+Weather map	Mapa pogody
+THE KAIJU WEATHER	POGODA Z KAIJU
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Pogoda na kanale 6, skapi. Mapa, prezenterka i bardzo duża jaszczurka. Wciśnij START.
+Words on screen: Lower Thirds, text, and backdrops.	Słowa na ekranie: belki, tekst i tła.
+I'm June O'Neil, and nothing about this forecast is normal.	Jestem June O'Neil i nic w tej prognozie nie jest normalne.
+A LAYER FOR WORDS	WARSTWA NA SŁOWA
+Words go on their own layer: press the + at the end of the playlist tabs.	Słowa idą na własną warstwę: wciśnij + na końcu zakładek playlist.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	Druga playlista to warstwa nad mapą. Jaszczurka zostaje pod spodem. Przeważnie.
+Words on top. Always on top.	Słowa na wierzchu. Zawsze na wierzchu.
+A LOWER THIRD	BELKA
+In the new playlist: SOURCE, then Lower Third.	W nowej playliście: ŹRÓDŁO, potem Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Imię i funkcja, nisko na ekranie, z dala od drogi jaszczurki.
+HER NAME	JEJ IMIĘ
+In the inspector, title: type the presenter's name. The second line is her job.	W inspektorze, title: wpisz imię prezenterki. Druga linia to jej funkcja.
+Spelling counts. The audience reads it at the speed of light.	Pisownia się liczy. Widzowie czytają z prędkością światła.
+Spell it right. Last week it said 'Jane O'Meal'.	Pisz poprawnie. W zeszłym tygodniu było „June O'Nielsen”.
+ON AIR	NA ANTENIE
+TAKE the Lower Third. Her name slides in over the map.	TAKE na belkę. Jej imię wjeżdża nad mapę.
+Two layers live: the weather, and the words on top of it.	Dwie warstwy na antenie: pogoda i słowa na niej.
+Thank you. Now, about that lizard...	Dziękuję. A teraz, co do tej jaszczurki...
+BREAKING NEWS	Z OSTATNIEJ CHWILI
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	ŹRÓDŁO, potem Text: plansza tytułowa. Potem kwadracik tła: zieleń do kluczowania, żeby mikser wizji ją wyciął.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Tło wypełnia przestrzeń za słowami. Zieleń albo błękit do kluczowania, a resztę zrobi mikser.
+Breaking news: it's standing on the five-day forecast.	Z ostatniej chwili: stoi na prognozie pięciodniowej.
+BREAKING: KAIJU	PILNE: KAIJU
+BACK TO YOU	ODDAJEMY GŁOS STUDIU
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Belka, imię, plansza, tło. Jaszczurka opuściła studio, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Belki potrafią same czekać, wjeżdżać i znikać. W ich sekcji są wszystkie ustawienia.
+That's the weather. Back to you, guys. Run.	To była pogoda. Oddajemy głos studiu. Uciekajcie.
+A GRAND DAY OUT	WIELKA WYPRAWA
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Rakieta zbudowana w piwnicy, skapi, i wynalazca, który chce sera. Wciśnij START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Timery sceniczne: odliczanie, zegary i widok prezentera dla osoby na scenie.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Ser, Grommet! Księżyc jest z sera. Potrzebujemy odliczania.
+A COUNTDOWN	ODLICZANIE
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	ŹRÓDŁO, potem Stage Timer. Zegar, który liczy w dół, dużymi, przyjaznymi cyframi.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Kolory zmieniają się, gdy czas się kończy: biały, bursztynowy, czerwony. Jak VU-metr dla czasu.
+*raises an eyebrow*	*unosi brew*
+LIFT OFF	START
+Select the timer and TAKE it. The countdown starts.	Zaznacz timer i zrób TAKE. Odliczanie startuje.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Po zerze liczy dalej, czyli nadgodziny. Bardzo uczciwe. Trochę niegrzeczne.
+Ten... nine... ooh, I do love a countdown.	Dziesięć... dziewięć... och, uwielbiam odliczania.
+HOLD!	STOP!
+Something's loose! Space holds the countdown. The clock shows it is held.	Coś się obluzowało! Spacja wstrzymuje odliczanie. Zegar pokazuje, że stoi.
+A hold is not a stop. Space again, and it carries on from where it was.	Wstrzymanie to nie stop. Spacja jeszcze raz i leci dalej od miejsca, gdzie był.
+*holds up a spanner*	*unosi klucz francuski*
+THE PILOT'S VIEW	WIDOK PILOTA
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	MENU, Wyjścia wideo: ustaw typ wyjścia na PRESENTER. Osoba na scenie widzi timer, następny cue i swoje notatki.
+A presenter view is an output like any other. Point it at the confidence monitor.	Widok prezentera to wyjście jak każde inne. Skieruj je na monitor odsłuchowy przy scenie.
+So the pilot can see the time. The pilot is Grommet.	Żeby pilot widział czas. Pilotem jest Grommet.
+TO THE MOON	NA KSIĘŻYC
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Odliczanie, wstrzymanie i widok dla pilota. Nazdrave, skapi. Weź krakersy.
+Timers can also count up, or show the time of day. Their section has the lot.	Timery liczą też w górę albo pokazują godzinę. W ich sekcji jest wszystko.
+A grand day out, Grommet! Pass the crackers.	Wspaniała wyprawa, Grommet! Podaj krakersy.
+The trunk (closed)	Kufer (zamknięty)
+The trunk (open)	Kufer (otwarty)
+THE MAGIC SHOW	POKAZ MAGII
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Pokaz magii, skapi. Kufer, rekwizyt i jedno uderzenie, w którym wszystko zmienia się naraz. Wciśnij START.
+Two playlists are two layers. TAKE ALL changes both together.	Dwie playlisty to dwie warstwy. TAKE ALL zmienia obie razem.
+Every trick needs two things happening at once. And a rubber chicken.	Każda sztuczka potrzebuje dwóch rzeczy naraz. I gumowego kurczaka.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Rekwizyt idzie na własną warstwę. Wciśnij + na końcu zakładek playlist.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Playlista 2 leży na playliście 1. Jak folia na rzutniku.
+Nothing up my sleeve. Everything in my trunk.	Nic w rękawie. Wszystko w kufrze.
+THE PROP	REKWIZYT
+In the new playlist, add anything: PATTERN will do. That is the prop.	Do nowej playlisty dodaj cokolwiek: TESTOWY wystarczy. To jest rekwizyt.
+Whatever it is, it will appear the instant the trunk opens.	Cokolwiek to jest, pojawi się w chwili, gdy kufer się otworzy.
+Is it a rubber chicken? It's always a rubber chicken.	To gumowy kurczak? Zawsze jest gumowy kurczak.
+The prop (rubber chicken)	Rekwizyt (gumowy kurczak)
+TA-DA	TA-DAM
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Zaznacz „Kufer (otwarty)” w playliście 1 i rekwizyt w playliście 2. Potem TAKE ALL: oba na jedno uderzenie.
+One press, every playlist's selected cue. The audience never sees the seam.	Jedno wciśnięcie, zaznaczony cue każdej playlisty. Publiczność nigdy nie widzi szwu.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaam! ...Czekamy na oklaski. Czekamy. Czekamy.
+THE PRESTIGE	WIELKA SZTUCZKA
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Dwie warstwy, jedno uderzenie. Każda playlista ma własne krycie i może stać na dowolnym wyjściu. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Magik nigdy nie zdradza. Playliście nie przeszkadza, że ją zdradzą.
+Thank you! I'm here all week! The chicken is here forever.	Dziękuję! Jestem tu cały tydzień! Kurczak na zawsze.
+The kitchen (on fire)	Kuchnia (w ogniu)
+A lovely souffle	Śliczny suflet
+THE COOKING SHOW	PROGRAM KULINARNY
+A cooking show, skapi. Live. Everything is on fire. Press START.	Program kulinarny, skapi. Na żywo. Wszystko się pali. Wciśnij START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK chowa obraz, a show trwa. PANIC zatrzymuje wszystko. Wiedz, czego potrzebujesz.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, kuchnia się pali-flurdy!
+The audience must not see this. Press BLACK, or B.	Publiczność nie może tego zobaczyć. Wciśnij BLACK albo B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Obraz znika. Cue gra dalej pod spodem, gotowy wrócić.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. O, obraz poszedł.
+AND BACK	I Z POWROTEM
+The fire's out. Press B again: the picture comes back, still running.	Ogień zgaszony. Wciśnij B jeszcze raz: obraz wraca, wciąż gra.
+Nothing was lost. A mute on a mixer, for pictures.	Nic nie przepadło. Mute na mikserze, tylko dla obrazów.
+Ta-da! Still cookin'!	Ta-dam! Wciąż gotujemy!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Gorzej: MENU, System, karta SAFETY: PANIC. Wszystko staje tak, jak mówi ustawienie paniki.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC to wielki czerwony guzik. Użyj, gdy BLACK nie wystarczy. Potem oddychaj.
+GET IT BACK	ODZYSKAJ
+Close MENU, select the souffle, and TAKE it. The show is back on.	Zamknij MENU, zaznacz suflet i zrób TAKE. Show wraca.
+After a panic, the show is still there. Pick up where you meant to be.	Po panice show wciąż tam jest. Podejmij tam, gdzie chciałeś być.
+Voila! De souffle, he is risen!	Voilà! Suflet, on wyrósł!
+BON APPETIT	SMACZNEGO
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK, żeby schować, PANIC, żeby zatrzymać, TAKE, żeby wrócić. Przetrwasz każdą kuchnię, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Ustawienie paniki wybiera, co robi PANIC: wyciemnienie, cięcie albo tylko wyjścia.
+Bork bork bork! Goodnight!	Bork bork bork! Dobranoc!
+Look one	Wygląd pierwszy
+Look two	Wygląd drugi
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Presety, skapi. Cały wygląd zapamiętany i z powrotem jednym przyciskiem. Wciśnij START.
+Like the patch memory on a synth: store, then recall.	Jak pamięć patchy w syntezatorze: zapisz, potem przywołaj.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	Wciśnij DASH: twoje własne przyciski, do czegokolwiek.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D też działa. Bardzo szybko. Bardzo profesjonalnie.
+A PRESET BUTTON	PRZYCISK PRESETU
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Wciśnij +, potem „preset - a new preset from what is on now”. Przycisk zapamiętuje ten wygląd.
+Store. Like saving the patch before the drummer leans on the synth.	Zapisz. Jak zapisanie patcha, zanim perkusista oprze się o syntezator.
+CHANGE EVERYTHING	ZMIEŃ WSZYSTKO
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Zamknij DASH (Esc), potem zaznacz Wygląd drugi i zrób TAKE. Inny wygląd.
+Change it all. Don't worry. It remembers.	Zmień wszystko. Spokojnie. On pamięta.
+ONE PRESS	JEDNO WCIŚNIĘCIE
+Open the DASH and press your preset button. The first look comes back.	Otwórz DASH i wciśnij swój przycisk presetu. Pierwszy wygląd wraca.
+Recall. The patch memory, returning. Beautiful.	Przywołanie. Pamięć patchy wraca. Piękne.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Wygląd zapamiętany i przywołany. Preset może trzymać cue, pozycje, efekty, poziomy i routing; które z nich, wybiera menu jego przycisku.
+And a DASH button can run any command at all. Any. Even the exciting ones.	A przycisk DASH może wykonać dowolne polecenie. Dowolne. Nawet te ekscytujące.
+Opening titles	Napisy początkowe
+The planet	Planeta
+The battle	Bitwa
+THE TRAILER	ZWIASTUN
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Zwiastun space opery, skapi. Narrator o bardzo niskim głosie i z poglądami na przejścia. Wciśnij START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Przejście to sposób, w jaki jeden cue staje się następnym. Jest ich dużo więcej niż przenikanie.
+In a galaxy of content... one operator... must choose a transition.	W galaktyce treści... jeden operator... musi wybrać przejście.
+A STYLE	STYL
+'The planet' is selected. In the inspector, its transition style: choose iris.	„Planeta” jest zaznaczona. W inspektorze jej styl przejścia: wybierz iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Przesunięcia, wymazania, irys, przez biel. Nawet portal. Połowę napisałem ja. We wtorek.
+The planet deserves... a dramatic entrance.	Planeta zasługuje na... dramatyczne wejście.
+A TIME	CZAS
+Give it a time: + on transition until it says a second or more.	Daj mu czas: + przy przejście, aż pokaże sekundę lub więcej.
+No time, no transition. A style needs a duration to do anything at all.	Bez czasu nie ma przejścia. Styl potrzebuje długości, żeby w ogóle coś zrobić.
+ROLL IT	AKCJA
+TAKE the planet. Watch it arrive.	TAKE na planetę. Patrz, jak przybywa.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Przejście należy do przychodzącego cue. Każdy cue wybiera własne wejście.
+Autobots... roll the transition.	Autoboty... odpalić przejście.
+THE BATTLE	BITWA
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Teraz „Bitwa”: wybierz shatter, daj czas i zrób TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Shatter zrzuca stary obraz jak taflę szkła. Proszę, nie róbcie tego na pogrzebie.
+Transform... and shatter out!	Transformacja... i w drobny mak!
+IN CINEMAS NOW	TERAZ W KINACH
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Styl, czas i dwa bardzo dramatyczne wejścia. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	Playlista też ma styl domyślny, dla każdego cue, który nie wybiera własnego.
+Coming soon... to a desk near you.	Wkrótce... na stole niedaleko ciebie.
+The beat	Bit
+THE ROBOT DJS	ROBOTY DJ-E
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Dwa roboty DJ-e, skapi. Nie mówią. Mówią ich hełmy. Wciśnij START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Każdy cue ma własny łańcuch efektów audio, a niektóre psują dźwięk celowo.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> CZEŚĆ. PRZYSZLIŚMY NAPRAWIĆ TWÓJ MIKS.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Zaznaczony jest bit. W jego sekcji AUDIO EFFECTS + dodaje efekt. Spróbuj delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Delay, pogłos, filtry, kompresor. Ilość zawsze znaczy „mniej tego”.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> JESZCZE RAZ. Z ECHEM. ECHEM. ECHEM.
+A BEND	BEND
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Dodaj drugi: bend, na przykład crush. Psuje dźwięk jak uszkodzony plik.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Bendy to moje ulubione. Jak kaseta zostawiona na słońcu. Celowo.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> MOCNIEJ. LEPIEJ. CHRUPIĄCEJ. GŁOŚNIEJ.
+THE PATCH	PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	MENU, potem Dźwięk: dokąd idzie dźwięk każdej playlisty i patch nazwanych wyjść.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Głośniki, odsłuchy, douszny odsłuch dla perkusisty. Patch wysyła każdemu jego własny.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> DOOKOŁA MIKSU. DOOKOŁA MIKSU. DOOKOŁA MIKSU.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Efekt, bend i patch. Roboty akceptują, skapi. Chyba. Ich twarze to hełmy.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Każdy efekt audio też może podążać za ~, nawet za Motion. Pomachaj do delaya. Cudowne.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> DZIĘKUJEMY. DOBRANOC. JESTEŚMY ROBOTAMI.
+The glow on the horizon (evidence #2)	Poświata na horyzoncie (dowód nr 2)
+EVIDENCE #2	DOWÓD NR 2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Znowu Biuro, skapi. Poświata na horyzoncie i dwoje agentów, którzy się co do niej nie zgadzają. Wciśnij START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Skopy mierzą obraz: jasność, kolor, poziomy. Liczby, nie opinie.
+It's them, Brandt. It's a craft. Look how it glows.	To oni, Brandt. To statek. Patrz, jak świeci.
+THE REAL SIGNAL	PRAWDZIWY SYGNAŁ
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Skopy czytają tylko to, co naprawdę wychodzi, nigdy podgląd. Włącz wyjście: MENU, Wyjścia wideo, WYJŚCIE WYŁ.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Mierzenie pomniejszonego podglądu to jak mierzenie ksero. My mierzymy oryginał.
+Chain of evidence, Hollis. The real signal or nothing.	Łańcuch dowodowy, Hollis. Prawdziwy sygnał albo nic.
+THE SCOPES	SKOPY
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Zamknij MENU. Nad monitorem przycisk PROGRAM: wciskaj, aż pokaże SCOPES albo BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH pokazuje obraz i skopy obok siebie. Bardzo cywilizowane.
+Let the scopes decide, Hollis.	Niech skopy zdecydują, Hollis.
+THE WAVEFORM	PRZEBIEG
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Kliknij przebieg, żeby go powiększyć. Jasne rzeczy na górze, ciemne na dole, od lewej do prawej jak na obrazie.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Poświata to ten szpic przy samej górze. Bardzo jasne. Jasne to nie to samo co obce.
+Look at the peak. Nothing a streetlight couldn't do.	Spójrz na szczyt. Nic, czego latarnia uliczna by nie zrobiła.
+THE VECTORSCOPE	WEKTOROSKOP
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Kliknij jeszcze raz, żeby wrócić, potem kliknij wektoroskop: kolor wokół koła. Nasycone ucieka do krawędzi.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Magenta, daleko przy brzegu. Mocny kolor. Mocny to nie nielegalny. Jeszcze.
+It's off the chart, Brandt! Literally off the chart!	Poza skalą, Brandt! Dosłownie poza skalą!
+FALSE COLOUR	FAŁSZYWE KOLORY
+And false colour: red is clipped, yellow nearly. Is the glow red?	I fałszywe kolory: czerwone jest przycięte, żółte prawie. Czy poświata jest czerwona?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Przycięte znaczy najjaśniejsze, co sygnał uniesie, i trochę ponad to stracone. Szczegół przepadł.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Czerwone. Przycięte. Nie obcy, Hollis. Po prostu za jasne. Sprawa zamknięta.
+THE TRUTH	PRAWDA
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Przebieg, wektoroskop, fałszywe kolory. Skopy rozstrzygnęły, skapi. Agenci nie.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE czyta dowolne wyjście, a macierz może być 709 albo 2020. Dla ciekawskich.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Za jasne na latarnię, Brandt. Za jasne na cokolwiek. ...Chcę wierzyć.
+OUT OF THE BUILDING	POZA BUDYNEK
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Obrazy, które wychodzą kablem albo siecią, skapi, nie tylko okno na ekranie. Wciśnij START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI po sieci, SDI z karty DeckLink, ST 2110 dla zakładów nadawczych.
+THE DEVICES PAGE	STRONA URZĄDZEŃ
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	MENU, Wyjścia wideo, potem Urządzenia: każdy sposób, w jaki wyjście może opuścić ten komputer.
+Each one says whether this machine can do it, and what it needs if not.	Każdy mówi, czy ta maszyna to potrafi, a jeśli nie, czego potrzebuje.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Jeśli ten komputer ma NDI, włącz NDI SENDING: obraz jest w sieci. Jeśli nie, SHOW ME idzie dalej.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI znajduje się w sieci samo. Bez kabli, tylko dobry switch i cierpliwość.
+OUT THERE	TAM, NA ZEWNĄTRZ
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Strona wyjścia ma resztę: SDI z karty DeckLink, ST 2110 z NMOS, Spout i Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Każde to po prostu wyjście. Show nie wie i nie dba, jak wychodzi.
+Nebula ahead	Mgławica na kursie
+Engine room	Maszynownia
+Deck 3: something moving	Pokład 3: coś się rusza
+THE BRIDGE	MOSTEK
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Mostek statku Cathode, skapi. Cztery sygnały, jeden główny ekran, jedna zagadka. Wciśnij START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Multiview pokazuje wszystkie playlisty naraz. Jak ściana oscyloskopów, tylko w kosmosie.
+Frequencies open, Captain. All of them. That's the problem.	Częstotliwości otwarte, kapitanie. Wszystkie. W tym problem.
+MULTI, above the monitor: every playlist in its own window.	MULTI nad monitorem: każda playlista we własnym oknie.
+One window per playlist, the programme first.	Jedno okno na playlistę, program pierwszy.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Cztery sygnały. A w jednym jest potwór.
+WHAT'S NEXT	CO DALEJ
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Dodaj okno (+), potem jego menu ...: niech pokazuje NEXT. To, co pójdzie na antenę po TAKE.
+Every window has a ... button. It chooses what that window shows.	Każde okno ma przycisk .... Wybiera, co to okno pokazuje.
+I need to see who's calling before they reach the main viewer.	Muszę widzieć, kto wywołuje, zanim trafi na główny ekran.
+A CLOCK	ZEGAR
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	I jeszcze jedno okno, z zegarem. Operatorzy, którzy patrzą na zegar, nigdy się nie spóźniają. Przeważnie.
+Time of day, big. Stardates are just very long timecode.	Godzina, duża. Data gwiezdna to tylko bardzo długi timecode.
+The monster only shows up at midnight. We're going to need a clock.	Potwór pojawia się tylko o północy. Będziemy potrzebować zegara.
+ONE BIG ONE	JEDNO DUŻE
+Any window's ... menu, then a layout: one big, the rest small.	Menu ... dowolnego okna, potem układ: jedno duże, reszta małe.
+The big window is window one. Usually the programme. Usually.	Duże okno to okno pierwsze. Zwykle program. Zwykle.
+Main viewer big. The captain likes it big.	Główny ekran duży. Kapitan lubi duży.
+ON SCREEN	NA EKRAN
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Zaznacz Pokład 3 w playliście 3 i zrób TAKE. Patrz na jego okno.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Czerwona ramka to TALLY: okno na antenie. „Na ekran”, jak mówią na statkach.
+There! Feed three! Put it on screen!	Tam! Sygnał trzy! Na ekran!
+THAT'S A WRAP	KONIEC ZDJĘĆ
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Okna, menu ..., NEXT, zegar, układ, tally. Zagadka rozwiązana, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Okno może też pokazać wyjście, z jego warpem i plastrami. Przydatne, gdy to latarnia.
+And the monster was... the ship's cook, all along. Jinkys.	A potworem był... kucharz okrętowy, od samego początku. Jinkys.
+there is no such lesson	nie ma takiej lekcji
+finish or leave the lesson you are in first	najpierw skończ albo opuść lekcję, w której jesteś
+leave Bug Swat first	najpierw wyjdź z Bug Swat
+Psst. It's me, the desk. I'll be watching. Supportively.	Psst. To ja, stół. Będę patrzeć. Wspierająco.
+Hi! I'm the one doing all of this, by the way.	Cześć! Tak przy okazji, to wszystko robię ja.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D otwiera DASH. Tak tylko mówię.
+Nearly there. I can feel it in my pixels.	Prawie. Czuję to w pikselach.
+You're good at this. I can tell. I'm the one doing it.	Dobrze ci idzie. Widzę. To ja to robię.
+Every click, I heard. Every single one.	Każde kliknięcie słyszałem. Każde jedno.
+The glowing one. I can see it from here. It's glowing for you.	Ten świecący. Widzę go stąd. Świeci dla ciebie.
+lesson paused - MENU > LESSONS picks up where you left off	lekcja wstrzymana - MENU > LESSONS wraca tam, gdzie skończyłeś
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Sygnał: z czego jest zrobiony obraz i jak go wyginać. Wybierz lekcję.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Prowadzenie show, skapi. Szybkie ręce, spokojna twarz. Wybierz lekcję.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	LEKCJE  -  CZĘŚĆ DRUGA  -  ZA KIM IDZIESZ?
+FOLLOW PROF. VIDEO	ZA PROFESOREM VIDEO
+FOLLOW DR. PIXEL	ZA DOKTOR PIKSEL
+the signal	sygnał
+running the show	prowadzenie show
+PICK UP	WZNÓW
+CLOSE (Esc)	ZAMKNIJ (Esc)
+PART ONE: THE BASICS	CZĘŚĆ PIERWSZA: PODSTAWY
+finish or leave LEARN THE BASICS first	najpierw skończ albo opuść LEARN THE BASICS
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc wychodzi, a twoje show wraca, jak było
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: twoje show wróciło. Ustawienia Motion są w Ustawienia > Dźwięk
+TURN MOTION ON	WŁĄCZ MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Robaki pełzną do listy cue! Rozgnieć je, machając do kamery. Najpierw Motion: w MOTION CONTROL włącz ON i wybierz, co czyta (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	To NullPointer. Pusty w środku, nie wskazuje na nic. Palec przelatuje na wylot. Użyj całej dłoni, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Machaj, jakbyś łapał taksówkę! Małą, uprzejmą taksówkę. Nie przyciski. Taksówkę.
+DRAW TWO ZONES	NARYSUJ DWIE STREFY
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: bliźniaki, każdy pewny, że był pierwszy. Jeden odczyt nie odróżni twoich rąk, więc przeciągnij dwie ZONES na obrazie Motion, po jednej z każdej strony.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Uderz oba razem. Uderz jednego, a zamienią się miejscami. Jak moi kuzyni na weselu.
+One hand each side. Together! Together!	Po ręce z każdej strony. Razem! Razem!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Robak to nie twarz, tylko ten malutki dodatkowy segment, a mały ruch potrzebuje dokładniejszego odczytu. Zmniejsz SENSITIVITY do 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	Mniejsza liczba, dokładniejszy odczyt. Tak, mnie też się wydaje, że to na odwrót.
+Not the face. The little one on the end. Wiggle a finger.	Nie twarz. Ten malutki na końcu. Porusz palcem.
+FALL 1.5 S OR MORE	FALL 1,5 S LUB WIĘCEJ
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Puszcza tylko, dopóki odczyt jest wysoko. Wydłuż FALL, do 1,5 sekundy lub więcej, żeby twoje machnięcia zlały się w jedno.
+Slow and steady, skapi. Like paying back a loan.	Powoli i wytrwale, skapi. Jak spłata kredytu. We frankach.
+Sweep, and sweep again. Let the fall carry you between.	Machnij i machnij jeszcze raz. Niech opadanie niesie cię pomiędzy.
+MOTION X ON A TONE	MOTION X NA TONIE
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Heisenbug! Blednie za każdym razem, gdy się ruszasz. Ustaw wysokość tonu cue na Motion X i idź za nim słuchem: tykanie przyspiesza, gdy się zbliżasz.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME zrobi ton za ciebie. Wysoko to prawo. Nisko to lewo. Stój w miejscu, a wróci.
+Follow it. Listen. Faster ticking, closer bug.	Idź za nim. Słuchaj. Szybsze tykanie, bliżej robak.
+Waving paw	Machająca łapka
+Heisenbug finder	Tropiciel heisenbugów
+FIXED! Lovely signal flow.	NAPRAWIONE! Piękny tor sygnału.
+Closed as fixed. No regressions. Probably.	Zamknięte jako naprawione. Bez regresji. Chyba.
+Squashed! Ship it.	Rozgnieciony! Wypuszczaj.
+One reached the cue list. It has filed a bug report about you.	Jeden dotarł do listy cue. Zgłosił na ciebie błąd.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. To konsola przenośna. Nie wciska się jej. Macha się do niej.
+The buttons are for menus. The bugs are for flailing.	Przyciski są do menu. Robaki są do wymachiwania rękami.
+The D-pad is decorative. Like my diploma.	Krzyżak jest ozdobny. Jak mój dyplom.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	W 1989 też wciskaliśmy przyciski. Potem odkryliśmy machanie. Nigdy nie oglądaliśmy się wstecz.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Mocniejsze wciskanie nie pomaga. Robaki nie czują przycisków. Tylko ręce.
+It's called a handheld because your hands are held... up. In the air. Waving.	Mówi się na to przenośna, bo ręce się przenosi... do góry. W powietrze. Machając.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	Myszką? Gnieciesz robaki MYSZKĄ? W Bułgarii mysz byłaby po stronie robaków.
+Lovely clicking. Very crisp. The camera saw none of it.	Śliczne klikanie. Bardzo chrupkie. Kamera nie widziała ani jednego.
+DONE FOR YOU - PRESS START	ZROBIONE ZA CIEBIE - WCIŚNIJ START
+DONE! PRESS START	GOTOWE! WCIŚNIJ START
+SELECT OPENS MOTION CONTROL	SELECT OTWIERA MOTION CONTROL
+ALL BUGS FIXED	WSZYSTKIE ROBAKI NAPRAWIONE
+GAME OVER	KONIEC GRY
+NEW HIGH SCORE!	NOWY REKORD!
+START PLAYS AGAIN	START, ŻEBY ZAGRAĆ ZNOWU
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. A teraz idź naprawiać prawdziwe robaki.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Każda z nich to prawdziwa kontrolka Motion. Wstaw je na dowolną gałkę ~.
+START: AGAIN	START: JESZCZE RAZ
+START: PLAY	START: GRAJ
+# --- end of tutorials ---
+Splash	Ekran startowy
+Beast mode	Tryb bestii
+MIDI MAP	MAPA MIDI
++ ADD	+ DODAJ
+LEARN	NAUCZ
+LISTENING...	SŁUCHAM...
+BACK	WSTECZ
+READY-MADE...	GOTOWE...
+Message	Komunikat
+Runs	Uruchamia
+On	Na
+Now	Teraz
+Map	Mapa
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	Wejście MIDI jest wyłączone: włącz je w MIDI CONTROL. Wiersze OSC i tak odpowiadają.
+LEARN: move a knob or press a key on the controller...	NAUCZ: przekręć gałkę albo naciśnij klawisz na kontrolerze...
+1 · WHAT COMES IN	1 · CO PRZYCHODZI
+learn it, or say how to read it	naucz to albo powiedz, jak to czytać
+2 · WHAT IT RUNS	2 · CO URUCHAMIA
+any command, {value} is the number	dowolne polecenie, {value} to liczba
+3 · WHAT IT RUNS ON	3 · NA CZYM DZIAŁA
+aimed here; the desk never moves	wycelowane tutaj; stół nigdy się nie rusza
+Read as	Czytaj jako
+Hold for	Przytrzymaj
+Command	Polecenie
+From	Od
+Centre	Środek
+To	Do
+Pickup	Złapanie
+On release	Po puszczeniu
+Runs on	Działa na
+Playlist	Playlista
+Saved with	Zapisane z
+Row	Wiersz
+DELETE	USUŃ
+THE SHOW	SPEKTAKLEM
+THIS COMPUTER	TYM KOMPUTEREM
+any port	dowolny port
+the desk	stół
+the selected cue	wybrane cue
+what is on air	to, co na antenie
+one named cue	nazwane cue
+the focused one	aktywna
+Test: move it on the controller	Test: porusz nim na kontrolerze
+knob 0-127	gałka 0-127
+endless encoder	enkoder bez końca
+14-bit	14 bitów
+press	naciśnij
+hold	przytrzymaj
+press + release	naciśnij + puść
+play	graj
+on press	przy naciśnięciu
+plays	gra
+LED MAP	MAPA LED
+LAYOUT	UKŁAD
+FEEDS: pick a window, then one of these	ŹRÓDŁA: wybierz okno, potem jedno z nich
++ CHOOSE A FEED	+ WYBIERZ ŹRÓDŁO
+audio meter	miernik dźwięku
+safe areas	strefy bezpieczne
++ ONE AFTER THIS	+ JEDNO PO TYM
+- REMOVE THIS ONE	- USUŃ TO
+ONE PER PLAYLIST	JEDNO NA PLAYLISTĘ
+on the desk	na stole
+tile width	szerokość modułu
+tile height	wysokość modułu
+LISTENS: OFF	SŁUCHA: NIE
+LISTENS: the figure follows the sound	SŁUCHA: figura idzie za dźwiękiem
+import an SVG...	importuj SVG...
+the selected cue in playlist {n}	wybrane cue w playliście {n}
+the selected cue in the focused playlist	wybrane cue w aktywnej playliście
+on air in playlist {n}	na antenie w playliście {n}
+on air in the focused playlist	na antenie w aktywnej playliście
+cue "{n}"	cue „{n}”
+hold {n} s	przytrzymaj {n} s
+any	dowolny
+built in	wbudowany
+show	spektakl
+motion	ruch
+METADATA	METADANE
+generated	generowane
+Fit	Dopasuj
+inf	nieskończ.
+NO	NIE
+YES	TAK
+UP	GÓRA
+DOWN	DÓŁ
+Left	Lewo
+Right	Prawo
+Top	Góra
+Bottom	Dół
+add	dodaj
+all	wszystko
+none	brak
+Cut	Cięcie
+Fade	Wygaszenie
+Load	Wczytaj
+Pause	Pauza
+Resume	Wznów
+Start	Start
+Skip	Pomiń
+Arm	Uzbrój
+Disarm	Rozbrój
+ONE	JEDEN
+ONCE	RAZ
+Size	Rozmiar
+Width	Szerokość
+amount	ilość
+brightness	jasność
+contrast	kontrast
+saturation	nasycenie
+hue	odcień
+level	poziom
+speed	prędkość
+style	styl
+title	tytuł
+subtitle	podtytuł
+notes	notatki
+font	czcionka
+frame	klatka
+type	typ
+state	stan
+blend	mieszanie
+align	wyrównaj
+line	linia
+box	prostokąt
+oval	owal
+brush	pędzel
+eraser	gumka
+mask	maska
+grow	rozszerz
+subtract	odejmij
+split	podziel
+stacked	stos
+soft	miękko
+tolerance	tolerancja
+curve	krzywa
+Linear	Liniowo
+Ease in	Łagodny początek
+Ease out	Łagodny koniec
+S-curve	Krzywa S
+Position X	Pozycja X
+Position Y	Pozycja Y
+Deck volume	Głośność decka
+Deck opacity	Krycie decka
+Master dimmer	Główny dimmer
+Cue brightness	Jasność cue
+Cue contrast	Kontrast cue
+Cue saturation	Nasycenie cue
+Cue hue	Odcień cue
+no effects	brak efektów
+no audio effects	brak efektów audio
+nothing yet	jeszcze nic
+no output	brak wyjścia
+no window	brak okna
+source missing	brak źródła
+waiting for a picture	czekanie na obraz
+clear frame	wyczyść klatkę
+undo stroke	cofnij kreskę
+save still	zapisz obraz
+save animation	zapisz animację
+export	eksportuj
+repeats	powtórzenia
+hold last	trzymaj ostatnią
+end action	akcja końcowa
+cue id	ID cue
+goto target	cel skoku
+set	ustaw
+send	wyślij
+run	wykonaj
+idle	bezczynny
+standby	gotowość
+Loop	Pętla
+loop forever	pętla bez końca
+PATCH	PATCH
+OUTPUTS	WYJŚCIA
+SECTIONS	SEKCJE
+Video Synth	Syntezator wideo
+Browser	Przeglądarka
+Browser Cue	Cue przeglądarki
+Window Source	Źródło okna
+Camera Source	Źródło kamery
+NDI Source	Źródło NDI
+DeckLink Input	Wejście DeckLink
+Syphon/Spout Source	Źródło Syphon/Spout
+Live stream cue	Cue transmisji na żywo
+Composite	Kompozycja
+Composite scene cue	Cue sceny złożonej
+Lower Third	Belka podpisu
+Lower Third overlay cue	Cue belki podpisu
+PIP overlay cue	Cue nakładki PIP
+MIDI File	Plik MIDI
+Master	Master
+Memo	Notatka
+Mic	Mikrofon
+Timer	Minutnik
+Tone	Ton
+Script	Skrypt
+Target	Cel
+Draw	Rysunek
+Code	Kod
+Clouds	Chmury
+Swirl	Wir
+Moire	Mora
+Picture	Obraz
+Placement	Położenie
+Frame lock	Blokada klatki
+Suspend	Zawieszenie
+Seam	Szew
+High pass	Górnoprzepustowy
+Low pass	Dolnoprzepustowy
+Tilt EQ	EQ przechyłowy
+Compressor	Kompresor
+Gate	Bramka
+Delay	Opóźnienie
+Reverb	Pogłos
+Binaural	Binauralny
+Crush	Zgniatanie
+Word	Słowo
+Scrub	Przewijanie
+Short	Krótki
+Shatter	Rozbicie
+Pulse	Puls
+Crawl	Przewijany tekst
+Typewriter	Maszyna do pisania
+Oscilloscope	Oscyloskop
+Spectrum	Widmo
+Level Meters	Mierniki poziomu
+Waveform	Przebieg fali
+EFFECTS	EFEKTY
+TRIGGERS	WYZWALACZE
+SEQUENCE	SEKWENCJA
+MOTION CONTROL	STEROWANIE RUCHEM
+THIS CUE	TEN CUE
+FUNCTIONS	FUNKCJE
+VALUES	WARTOŚCI
+KEYS	KLAWISZE
+FREEZE	ZAMROŹ
+FROZEN	ZAMROŻONE
+BYPASSED	POMINIĘTY
+BYPASS ALL	POMIŃ WSZYSTKO
+DEFAULTS	DOMYŚLNE
+CHANGE	ZMIEŃ
+CHOOSE	WYBIERZ
+Stop all	Zatrzymaj wszystko
+Pause all	Pauzuj wszystko
+Resume all	Wznów wszystko
+Do not continue	Nie kontynuuj
+Auto-continue	Auto-kontynuacja
+Auto-follow	Dalej po końcu
+END HOLD	KONIEC TRZYMAJ
+END LOOP	KONIEC PĘTLA
+END NEXT	KONIEC NASTĘPNY
+END STOP	KONIEC STOP
+OUTPUT EFFECTS	EFEKTY WYJŚCIA
+LIVE CAPTIONS	NAPISY NA ŻYWO
+captions	napisy
+Name Card	Plansza z nazwą
+TEST CARD	PLANSZA TESTOWA
+TEST CARD ON	PLANSZA WŁ.
+EXPORT CARD	EKSPORTUJ PLANSZĘ
+EXPORTING...	EKSPORTOWANIE...
+LOW LATENCY	MAŁE OPÓŹNIENIE
+WEB MONITOR	MONITOR WWW
+PHONE & TABLET	TELEFON I TABLET
+SCAN TO PAIR	SKANUJ, ABY SPAROWAĆ
+WITH SOUND	Z DŹWIĘKIEM
+THE NETWORK	SIEĆ
+FIXTURES	OPRAWY
+ADD FIXTURE	DODAJ OPRAWĘ
+Dimmer	Dimmer
+Dimmer + RGB	Dimmer + RGB
+Dimmer + temperature	Dimmer + temperatura
+QR CODE	KOD QR
+loop	pętla
+inherit	dziedzicz
+Fill	Wypełnij
+Stretch	Rozciągnij
+Dissolve	Przenikanie
+Pattern	Wzór
+mixed	mieszane
+selected cue lane  |  TAKE to make it live	ścieżka wybranego cue  |  TAKE daje ją na antenę
+Dip to black	Przez czerń
+Dip to white	Przez biel
+Iris	Przysłona
+Push left	Pchnij w lewo
+Push right	Pchnij w prawo
+Push up	Pchnij w górę
+Push down	Pchnij w dół
+Wipe left	Kurtyna w lewo
+Wipe right	Kurtyna w prawo
+Wipe up	Kurtyna w górę
+Wipe down	Kurtyna w dół
+Still	Stopklatka
+address	adres
+auto next	auto dalej
+continue	kontynuuj
+deck fader	suwak decku
+fire	uruchom
+in	wej.
+out	wyj.
+trim	przytnij
+0-63, the hardware's own gain range.	0-63, własne wzmocnienie sprzętu.
+1-16, as the desk counts them	1-16, tak jak liczy je konsola
+7-segment, blocky, or a real font	7-segmentowy, kanciasty lub prawdziwa czcionka
+[ / ] keys — fade-in duration	Klawisze [ / ]: czas wejścia
+a camera moves the ~ controls	kamera porusza regulatorami ~
+a chain on a device, after the mix	łańcuch na urządzeniu, po miksie
+a comment	komentarz
+Act now, without taking the cue	Wykonaj teraz, bez brania cue
+Add a light	Dodaj światło
+add a second output to pair	dodaj drugie wyjście do pary
+add shape	dodaj kształt
+all driven by the cue's own transport	wszystko sterowane transportem cue
+All interfaces; trusted machines only.	Wszystkie interfejsy; tylko zaufane maszyny.
+all to 0	wszystko na 0
+An audio effect's knob	Pokrętło efektu audio
+An effect's knob	Pokrętło efektu
+any channel	dowolny kanał
+any window, any screen	dowolne okno, dowolny ekran
+Arm this cue as the one GO will fire	Uzbrój ten cue na następne GO
+Art-Net port address, 0-32767	Adres portu Art-Net, 0-32767
+Attached overlays fire on TAKE only	Połączone nakładki startują tylko przy TAKE
+BACK TO BUG SWAT	WRÓĆ DO BUG SWAT
+backdrop	tło
+bar	pasek
+bg alpha	alfa tła
+black lift	podniesienie czerni
+blend gamma	gamma przenikania
+blueprint	plan
+boxes	ramki
+bracket	nawiasy
+bulletin	biuletyn
+by density	według gęstości
+BY FIXTURE	WEDŁUG URZĄDZENIA
+capsule	kapsuła
+caption	podpis
+card	karta
+CARD OFF ALL	KARTA WYŁ. WSZYSTKO
+CARD ON ALL	KARTA WŁ. WSZYSTKO
+cartridge	kartridż
+cassette	kaseta
+Ceiling	Sufit
+Chain	Łańcuch
+Changing this re-prepares the cue.	Zmiana przygotowuje cue od nowa.
+channel list is not readable	lista kanałów nieczytelna
+CHANNELS	KANAŁY
+channels on your interfaces, by name	kanały z twoich interfejsów, po nazwie
+Checkerboard	Szachownica
+chime amber	ostrzeżenie bursztynowe
+chime red	ostrzeżenie czerwone
+chime zero	ostrzeżenie zero
+Choose startup mode:	Wybierz tryb startu:
+circle, heart, star...	koło, serce, gwiazda...
+circuit	obwód
+CLASSIC VIEW	WIDOK KLASYCZNY
+clear driver	wyczyść sterownik
+Clear in/out trim points	Wyczyść punkty wejścia/wyjścia
+CLEAR OVERLAY  [Backspace]	WYCZYŚĆ NAKŁADKĘ  [Backspace]
+Clear the active Lower Third overlay now	Usuń teraz aktywny Lower Third
+Clear the live PIP overlay now	Usuń teraz nakładkę PIP
+CLICK ANYWHERE...	KLIKNIJ GDZIEKOLWIEK...
+click or Esc to close	kliknij lub Esc, aby zamknąć
+click this window	kliknij to okno
+Click to edit cue notes	Kliknij, aby edytować notatki cue
+click to open the grid	kliknij, aby otworzyć siatkę
+Click to seek — drag to scrub	Kliknij, aby przejść, przeciągnij, aby przewijać
+Click to type it	Kliknij, aby pisać
+comic	komiks
+Companion passphrase	Hasło Companion
+confetti	konfetti
+Connections at once	Jednoczesne połączenia
+count up	liczenie w górę
+Countdown, count up, or wall clock	Odliczanie, liczenie w górę lub zegar
+credit	napisy końcowe
+crossfade	suwak przenikania
+crosshair	celownik
+Crosshatch	Kreskowanie
+Cue has no audio	Cue nie ma dźwięku
+cue number	numer cue
+Cycle end action for selected cues	Zmień działanie końcowe wybranych cue
+Cycle which slot drives scene audio	Zmień slot, który daje dźwięk sceny
+decoder spin-up	start dekodera
+Default App Feed	Domyślne źródło aplikacji
+Default Camera	Domyślna kamera
+Delay before the continue fires	Opóźnienie przed kontynuacją
+Delay between GO and this cue starting	Opóźnienie między GO a startem cue
+depth 1 turns it all the way round	głębokość 1 to pełny obrót
+Digit colour once amber is reached	Kolor cyfr na bursztynowym
+Digit colour while there is time in hand	Kolor cyfr przy zapasie czasu
+diskette	dyskietka
+Do it now, without taking the cue	Zrób to teraz, bez brania cue
+dotmatrix	matryca punktowa
+Double-GO guard	Ochrona podwójnego GO
+draw on the monitor	rysuj na monitorze
+driver speed	prędkość sterownika
+EDGE BLEND	MIESZANIE KRAWĘDZI
+EDIT is on: typing changes the show	EDIT wł.: zapis zmienia pokaz
+edit on the monitor	edytuj na monitorze
+Edit the main Lower Third title	Edytuj tytuł Lower Third
+Edit the secondary Lower Third line	Edytuj drugi wiersz Lower Third
+eq band	pasmo EQ
+equalizer	korektor
+Esc cancels	Esc anuluje
+Esc cancels, arrows nudge	Esc anuluje, strzałki przesuwają
+Esc to close	Esc, aby zamknąć
+even grid	równa siatka
+EXAMPLE SHOWS	POKAZ PRZYKŁADOWY
+EXIT  Esc	WYJDŹ  Esc
+face	twarz
+factory settings	ustawienia fabryczne
+Fade+LoadNext	Ściemnij+Wczytaj nast.
+Fade+Pause	Ściemnij+Pauza
+Fade+Rewind	Ściemnij+Przewiń
+Fade-in duration	Czas wejścia
+Fade-in duration for this cue	Wejście tego cue
+Fade-out duration	Czas wyjścia
+Fade-out duration before next cue	Wyjście przed następnym cue
+Fade-out duration for this cue	Wyjście tego cue
+Fall	Opadanie
+false colour reads SDR pictures	fałszywe kolory czytają obraz SDR
+fill the frame	wypełnij kadr
+find a named colour	znajdź kolor po nazwie
+fires cues	uruchamiaj cue
+first available	pierwszy wolny
+Fit/Fill/Stretch/Unscaled	Dopasuj/Wypełnij/Rozciągnij/Bez skali
+Fixed repeat count — 0 = infinite	Stała liczba powtórzeń: 0 = bez końca
+Fixed repeat count — 0 = loop forever	Stała liczba powtórzeń: 0 = bez końca
+FIXED!	NAPRAWIONE!
+flag	flaga
+FORGET MY DEFAULTS	ZAPOMNIJ MOJE DOMYŚLNE
+Frames a second	Klatki na sekundę
+from exactly this routing	prosto z tego routingu
+Full Black	Pełna czerń
+Full Blue	Pełny niebieski
+Full Green	Pełny zielony
+Full Red	Pełny czerwony
+Full White	Pełna biel
+garden	ogród
+Ghastly	Upiorny
+glass	szkło
+glitch down	glitch w dół
+glitch drift	dryf glitcha
+glitch reach	zasięg glitcha
+glitch through	glitch w poprzek
+glitch up	glitch w górę
+GO steps over it	GO to pomija
+hairline	linia
+Haptics	Drgania
+HDR input	Wejście HDR
+Hex, e.g. 90 3C 7F	Hex, np. 90 3C 7F
+HOLDING OFF AIR	STOP POZA ANTENĄ
+Home — skip to start	Home: na początek
+Horizontal output offset in pixels	Przesunięcie poziome wyjścia w pikselach
+How many features fit on screen.	Ile mieści się na ekranie.
+how much of this effect	ile tego efektu
+How solid the ink is	Krycie tuszu
+How tall the logo is above the clock	Wysokość logo nad zegarem
+In-point: cue starts playback here	Punkt wejścia: cue startuje tutaj
+index	indeks
+initializing webview	start webview
+install Tailscale here and on the phone	zainstaluj Tailscale tu i na telefonie
+INSTALLING...	INSTALACJA...
+Its amount, or one of its knobs A to D	Jego ilość lub pokrętło od A do D
+J jump to row	J: skocz do wiersza
+jam to	synchronizuj do
+Jump the driver back to its first frame	Cofnij sterownik do pierwszej klatki
+K — cycle cue color tag	K: zmień kolor cue
+Keep counting past zero, or stop dead	Licz dalej po zerze lub zatrzymaj
+key	klawisz
+Key edge softness	Miękkość krawędzi kluczowania
+knob	pokrętło
+L - loop this cue continuously	L: zapętl ten cue
+last reading	ostatni odczyt
+Last refused	Ostatnio odrzucone
+Learn it	Ucz się
+LEARN THE BASICS	POZNAJ PODSTAWY
+ledger	księga
+Left — skip back 10s	Lewo: 10 s wstecz
+Left, centre or right	Lewo, środek lub prawo
+LESSONS	LEKCJE
+Levels	Poziomy
+Limiting	Ograniczanie
+line  |  Enter: apply	wiersz  |  Enter: zastosuj
+LINEAR - a feather, not a blend	LINIOWE: gradient, nie mieszanie
+Linear, ease in, ease out or S-curve	Liniowo, wejście, wyjście lub krzywa S
+Lines	Linie
+link aspect	połącz proporcje
+Listen to	Słuchaj
+listener	słuchacz
+LIVE - every assigned deck matches	LIVE: wszystkie przypisane decki się zgadzają
+lock to screen	zablokuj na ekranie
+logo size	rozmiar logo
+look at it	popatrz na to
+lower 3rd	Lower Third
+marquee	tablica świetlna
+mask on	maska aktywna
+Master oscillator rate.	Prędkość głównego oscylatora.
+Maximum quality	Najwyższa jakość
+MIDI and OSC monitor	Monitor MIDI i OSC
+midi in	wejście MIDI
+MIDI note	nuta MIDI
+move points	przesuń punkty
+Move the height on its own oscillator	Porusz wysokością tonu oscylatorem
+name or number...	nazwa lub numer...
+name, from anywhere	nazwa, skądkolwiek
+NDI source cue	Źródłowy cue NDI
+needs file-backed video	wymaga pliku wideo
+new paths	nowe ścieżki
+New shows start from	Nowe pokazy zaczynają od
+next xfade	następne przejście
+no effects for this cue type	brak efektów dla tego typu cue
+nobody	brak
+none - click to learn	brak: kliknij, aby nauczyć
+none - click to set some	brak: kliknij, aby ustawić
+none - click to write some	brak: kliknij, aby wpisać
+none yet	jeszcze brak
+none: the one picture	brak: jedyny obraz
+none: the whole picture	brak: cały obraz
+notebook	notes
+nothing	nic
+nothing assigned yet	nic nie przypisano
+nothing follows	nic nie śledzi
+Nothing here with this filter.	Nic przy tym filtrze.
+nothing set - this cue sends nothing	nic nie ustawiono: ten cue nic nie wysyła
+nothing targeted yet	brak celu
+Nothing to see here. Probably.	Nie ma tu nic do oglądania. Chyba.
+nothing to send - check the message	nie ma czego wysłać: sprawdź wiadomość
+offset X	przesunięcie X
+offset Y	przesunięcie Y
+on any channel	na dowolnym kanale
+on the header to add another	na nagłówku, aby dodać więcej
+on the monitor	na monitorze
+one big on top, the rest below	jeden duży na górze, reszta pod nim
+one big, the rest beside it	jeden duży, reszta obok
+onion off	kalka wył.
+onion on	kalka wł.
+only this computer	tylko ten komputer
+Open a .deckboy show file	Otwórz plik .deckboy
+open the monitor	otwórz monitor
+or your own bytes	lub własne bajty
+ORDER - cues advance down the list	KOLEJNOŚĆ: cue idą w dół listy
+Out-point: cue stops playback here	Punkt wyjścia: cue kończy się tutaj
+output already has	wyjście ma już
+Outputs Off	Wyjścia wył.
+outs	wyjścia
+over budget - video will drop frames	ponad limit: wideo zgubi klatki
+over the picture	na obrazie
+PAIR	PARUJ
+Pair a phone	Sparuj telefon
+Pair overlap	Nakładanie pary
+Paired phones	Sparowane telefony
+Passphrase	Hasło
+Pattern motion toggle	Ruch wzoru
+pause begin	pauza na starcie
+pennant	proporczyk
+Per-cue transition duration override	Czas przejścia tego cue
+Perspective	Perspektywa
+PHASE	FAZA
+Phone access	Dostęp z telefonu
+Phone control	Sterowanie z telefonu
+phrase hold	długość frazy
+PICK FROM SCREEN	POBIERZ Z EKRANU
+Pitch, in semitones.	Wysokość tonu, w półtonach.
+PIXEL FOR PIXEL, TOP-LEFT	PIKSEL W PIKSEL, LEWY GÓRNY RÓG
+placard	szyld
+play a note...	zagraj nutę...
+PLAY BUG SWAT, a game	ZAGRAJ W BUG SWAT
+Play the out move now, then take it off	Zagraj wyjście teraz, potem usuń
+Playback speed: 0.25–4.0×	Prędkość: 0,25–4,0×
+playlists into the named outputs	lista odtwarzania na nazwane wyjścia
+plays synth	zagraj na syntezatorze
+plugin	wtyczka
+PNG matte	matte PNG
+podium	mównica
+press a key...	naciśnij klawisz...
+PRESS AGAIN TO FORGET	NACIŚNIJ PONOWNIE, ABY ZAPOMNIEĆ
+Previous show file:	Poprzedni plik:
+prog bar	pasek post.
+programme	program
+Programme with sound in any browser	Program z dźwiękiem w każdej przeglądarce
+PROJECTOR - gamma matched	PROJEKTOR: dopasowana gamma
+Projector gamma	Gamma projektora
+put it on a button	daj to na przycisk
+Put the brush's opacity on an oscillator	Daj krycie pędzla na oscylator
+Put the brush's size on an oscillator	Daj rozmiar pędzla na oscylator
+Put this control on an oscillator	Daj ten regulator na oscylator
+rack it	wczytaj to
+RACKED, WARM	WCZYTANE, GOTOWE
+rail	szyna
+rain	deszcz
+Reads	Czyta
+reads the same on any screen	czyta się tak samo na każdym ekranie
+recent and in this show	ostatnie i w tym pokazie
+Recent shows:	Ostatnie pokazy:
+red at	czerwony przy
+red col	kol. czerwona
+render height	wysokość renderu
+render width	szerokość renderu
+REPORT A PROBLEM	ZGŁOŚ PROBLEM
+reported rather than swapped	zgłoszone, nie zastąpione
+restart driver now	zrestartuj sterownik teraz
+restart on take	restart przy take
+restore at end	przywróć na końcu
+ribbon	wstęga
+Right — skip forward 10s	Prawo: 10 s naprzód
+Right-click turns them off.	Prawy klik je wyłącza.
+Rise	Narastanie
+rise, slide or wipe	wjazd, przewijanie lub kurtyna
+Rotation speed, degrees per second.	Prędkość obrotu, stopnie na sekundę.
+rounded rect	zaokr. prostokąt
+row turns the matrix off again	wiersz znów wyłącza matrycę
+Run it now, without taking the cue	Uruchom teraz, bez brania cue
+Run the show from a phone	Prowadź pokaz z telefonu
+runs off the show thread	poza wątkiem pokazu
+sACN universe, 1-63999	Uniwersum sACN, 1-63999
+SAVE AS MY DEFAULTS	ZAPISZ JAKO DOMYŚLNE
+says	mówi
+SCALED TO FILL	PRZESKALOWANE DO WYPEŁNIENIA
+Scene dwell time — 0 = hold	Czas sceny: 0 = trzymaj
+Scene fade-in duration	Wejście sceny
+Scene fade-out duration	Wyjście sceny
+scoreboard	tablica wyników
+SCREENS	EKRANY
+scroll	przewijanie
+Scroll up	Przewiń w górę
+sea	morze
+SELECT: MOTION	WYBÓR: RUCH
+Send now, without taking the cue	Wyślij teraz, bez brania cue
+sends	wyślij
+Sensitivity	Czułość
+Set browser URL/path	Ustaw URL/ścieżkę przeglądarki
+set by	ustawione przez
+Set capture source from the cue menu	Ustaw źródło z menu cue
+Set cue ID for selected cues	Ustaw ID wybranych cue
+Set cue token to jump to when cue ends	Ustaw cue, do którego skoczyć na końcu
+Set goto target for selected cues	Ustaw cel wybranych cue
+Set Lower Third background alpha	Alfa tła Lower Third
+Set per-cue transition duration	Czas przejścia cue
+Set playback speed for selected cues	Prędkość wybranych cue
+Set repeat count for selected cues	Powtórzenia wybranych cue
+Set short cue id for search/goto	Krótkie ID do szukania/skoku
+Set short cue label for search/goto	Krótka nazwa do szukania/skoku
+Set the NDI source name to receive	Nazwa źródła NDI do odbioru
+Shift+[ / ] — fade-out duration	Shift+[ / ]: czas wyjścia
+SHOW ME	POKAŻ MI
+Show on	Pokaż na
+Shows	Pokaż
+sideline	linia boczna
+sketch	szkic
+slide	przesuwanie
+slide from left	wsuń z lewej
+slide from right	wsuń z prawej
+SMOOTH	MIĘKKIE
+snow	śnieg
+SOS. Kidding. The show is fine.	SOS. Żart. Pokaz jest w porządku.
+Sound when the clock turns amber	Dźwięk, gdy zegar staje się bursztynowy
+Sound when the clock turns red	Dźwięk, gdy zegar staje się czerwony
+Sound when time is up	Dźwięk po upływie czasu
+Space — pause	Spacja: pauza
+Space — play	Spacja: odtwarzaj
+span	rozrzut
+sparkle	iskrzenie
+Speech models	Modele mowy
+Speed, like tape	Prędkość, jak taśma
+stamp	stempel
+Start NEW from factory	Zacznij NOWY od fabrycznych
+starting browser	start przeglądarki
+starting capture	start przechwytywania
+starting xvfb	start xvfb
+sticky	karteczka
+stop at 0	stop na 0
+Stop puppeteering this cue	Przestań sterować tym cue
+STRAIGHT	PROSTO
+survey	wypukłość
+SVG paths	Ścieżki SVG
+tab	karta
+tag	etykieta
+TAP	STUKNIJ
+text mode	tryb tekstowy
+the file cannot be read	plik jest nieczytelny
+The name	Nazwa
+The OSC path, e.g. /cue/1/start	Ścieżka OSC, np. /cue/1/start
+the playlist's PATCH	PATCH listy odtwarzania
+The role, or leave it empty	Rola lub zostaw puste
+the system output	wyjście systemowe
+The text this cue puts on screen	Tekst, który pokazuje ten cue
+theatre	teatr
+then stop	potem stop
+they have	mają
+things that are oscillating	rzeczy, które oscylują
+this cue lives on	ten cue jest na
+This show's setup, no cues	Ustawienia tego pokazu, bez cue
+ticket	bilet
+tile h	panel w
+Tile height in pixels.	Wysokość panelu w pikselach.
+tile w	panel s
+time of day	pora dnia
+Timecode	Kod czasowy
+Toggle audio enable for selected cues	Dźwięk wybranych cue
+Toggle chroma key	Przełącz kluczowanie chroma
+Toggle cue audio	Dźwięk cue
+Toggle cue audio track for this cue	Ścieżka audio tego cue
+Toggle fade in	Wejście
+Toggle fade out	Wyjście
+Toggle hold on last frame	Trzymaj ostatnią klatkę
+Toggle hold-at-end for selected cues	Trzymaj na końcu w wybranych cue
+Toggle loop	Pętla
+Toggle loop for selected cues	Pętla wybranych cue
+Toggle the live input's audio	Dźwięk wejścia na żywo
+Total time	Czas całkowity
+transcoding - plays clean until ready	transkodowanie: gra czysto do końca
+transparent: put its playlist on a layer	przezroczyste: daj listę na warstwę
+Trusted controllers	Zaufane kontrolery
+TURN OFF	WYŁĄCZ
+turn phone control on	włącz sterowanie z telefonu
+two big on top, the rest below	dwa duże na górze, reszta pod nimi
+type a cue number	wpisz numer cue
+Typing needs EDIT on	Pisanie wymaga EDIT wł.
+Use GEOMETRY for exact placement	Użyj GEOMETRII do dokładnego ustawienia
+value to type one	wartość do zapisu
+Vertical output offset in pixels	Przesunięcie pionowe wyjścia w pikselach
+VIDEO DIP: OFF	PRZEJŚCIE WIDEO: NIE
+VIDEO DIP: ON	PRZEJŚCIE WIDEO: TAK
+walk the outputs one at a time.	przechodź przez wyjścia po kolei.
+walks every output in turn	przechodzi przez każde wyjście
+WHAT DECKBOY DID	CO ZROBIŁ DECKBOY
+what is on air in a playlist	co jest na żywo na liście odtwarzania
+What NEW starts from, never this show	Skąd zaczyna NOWY, nigdy ten pokaz
+whatever the style says	jak mówi styl
+Where the ramp ends	Gdzie kończy się rampa
+Which deck the cue it acts on lives on	Na którym decku jest docelowy cue
+Which frame you draw on	Na której klatce rysujesz
+Who can see it	Kto może to zobaczyć
+whole network	cała sieć
+will not open	nie otwiera się
+window and recording outputs only	tylko wyjścia okien i nagrywania
+wipe	kurtyna
+Wobble	Drganie
+wobble by	drgaj o
+words	słowa
+X — cycle end action	X: zmień działanie końcowe
+X — cycle end action: stop / next / loop	X: działanie końcowe: stop / nast. / pętla
+Zones	Strefy
+~ makes the level breathe	~ sprawia, że poziom oddycha
+a note or an address becomes that cue's trigger	nuta lub adres staje się wyzwalaczem cue
+acts on every deck; deck and cue are ignored	działa na wszystkie decki; deck i cue pominięte
+Add an output above, then send playlists to it here.	Dodaj wyjście powyżej, potem wyślij tu listy odtwarzania.
+Ancient cypher, modern video desk. Respect.	Dawne pismo, nowoczesna konsola. Szacunek.
+Any font on this computer, Deckboy's own, or a font file	Czcionka komputera, Deckboya lub plik
+Apply fade-in to selected video/audio cues	Wejście na wybranych cue wideo/audio
+Apply fade-out to selected video/audio cues	Wyjście na wybranych cue wideo/audio
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net lub sACN (E1.31): to, czego słucha oświetlenie
+Auto-advance duration — 0 = hold until taken	Auto-przejście: 0 = trzymaj do take
+Bypass: this master leaves that deck alone	Bypass: ten master zostawia ten deck w spokoju
+Characters across. Fewer means bigger cells.	Znaki w wierszu. Mniej daje większe komórki.
+Choose a mask from this show's library, or start a new one from a shape	Wybierz maskę z biblioteki lub zrób ją z kształtu
+Click a value to change it. A red address overlaps another fixture.	Kliknij wartość, aby ją zmienić. Czerwony adres nakłada się na inne urządzenie.
+Click to show or hide this cue's captions	Kliknij, aby pokazać lub ukryć napisy cue
+Copy the show AND its media into one portable folder	Skopiuj pokaz ORAZ media do przenośnego folderu
+Ctrl+S - write back over the show that is open	Ctrl+S: zapisz do otwartego pokazu
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: zapisz do NOWEGO pliku
+Device output pair this cue's audio plays on	Para wyjść dla dźwięku tego cue
+E - freeze on last frame instead of stopping	E: zatrzymaj na ostatniej klatce zamiast stopu
+Edit title/subtitle here or fire it live with TAKE	Edytuj tytuł/podtytuł tutaj lub uruchom przez TAKE
+Every channel on every universe this session has touched	Każdy kanał każdego uniwersum użyty w tej sesji
+generator is off - a START cue turns it on	generator wył.: cue START go włącza
+How long the note takes to reach full level.	Czas, po którym nuta osiąga pełny poziom.
+How much it throws off; 0 is a clean burn	Jak bardzo się łuszczy; 0 pali czysto
+INPUT: the programme. Drag a crop to move it, its corners to size it.	WEJŚCIE: program. Przeciągnij wycinek, aby przesunąć, narożniki, aby zmienić rozmiar.
+Keep the outside and cut the inside instead	Zachowaj zewnątrz, wytnij środek
+LED panel height in pixels. Click to type it	Wysokość panelu LED w pikselach. Kliknij, aby wpisać
+Legacy target mode — switch type to convert	Stary tryb celu: zmień typ, aby przekonwertować
+Lissajous, spectrum, meters or a name card	Lissajous, widmo, wskaźniki lub tabliczka z nazwą
+Load the cue and hold first frame when taken	Wczytaj cue i trzymaj pierwszą klatkę przy take
+no fixtures patched - Settings > Network > FIXTURES	brak urządzeń w patchu: Ustawienia > Sieć > FIXTURES
+Nothing here changes the show that is open.	Nic tutaj nie zmienia otwartego pokazu.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Audio cue: wł./wył., trim, pan, mono, przejścia, normalizacja
+Phone control is in PHONE & TABLET, below	Sterowanie z telefonu jest w PHONE & TABLET, poniżej
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Zapisz maskę jako szary PNG w rozmiarze wyjścia: biel zachowuje, czerń wycina
+Seconds REMAINING when the clock turns amber	Sekundy POZOSTAŁE, gdy zegar staje się bursztynowy
+Seconds REMAINING when the clock turns red	Sekundy POZOSTAŁE, gdy zegar staje się czerwony
+Shown to the operator when GO reaches this cue	Pokazane operatorowi, gdy GO dojdzie do tego cue
+SHUFFLE - the next cue is picked at random	LOSOWO: następny cue jest losowany
+Slots are self-contained sources in this first pass	Sloty są w tej wersji samodzielnymi źródłami
+that output's whole picture, or its matte	cały obraz tego wyjścia lub jego matte
+The cue number on the other desk, e.g. 12.5	Numer cue na drugiej konsoli, np. 12.5
+Toggle pause-at-beginning for selected cues	Pauza na starcie w wybranych cue
+Toggle transition-to-next for selected cues	Przejście do następnego w wybranych cue
+transparent outside the blobs: put it on a layer	przezroczyste poza plamami: daj na warstwę
+transparent outside the ink: put it on a layer	przezroczyste poza tuszem: daj na warstwę
+what is said, on screen, made on this computer	to, co jest mówione, na ekranie, zrobione na tym komputerze
+What this cue does when it ends - click to change	Co ten cue robi na końcu: kliknij, aby zmienić
+Whether the next shape or pen path adds or cuts	Czy następny kształt lub ścieżka dodaje, czy wycina
+shape	kształt
+palette	paleta
+scale	skala
+feedback	sprzężenie
+RED	CZERWONY
+do it	wykonaj
+(empty)	(puste)
+(unset)	(nieustawione)
+English	Angielski
+amber at	żółty przy
++ section	+ sekcja
++pause pt	+ pauza
+a-fade in	dźwięk wej.
+amber col	kolor żółty
+(no notes)	(brak notatek)
+a-fade out	dźwięk wyj.
+gain (each)	gain (każdy)
+% of the height	% wysokości
++  a first step	+  pierwszy krok
++ ADD AN EFFECT	+ DODAJ EFEKT
+(none playing now)	(nic nie jest odtwarzane)
+Keep a transcript (.srt)	Zachowaj transkrypcję (.srt)
+Key tolerance (RGB distance)	Tolerancja key (odległość RGB)
+Contrast multiplier (0.0-2.0x)	Mnożnik kontrastu (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	Mnożnik jasności (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	Mnożnik nasycenia (0.0–2.0x)
+Output rotation angle (-180..180)	Kąt obrotu wyjścia (-180..180)
+Hue rotation (-180 to +180 degrees)	Obrót odcienia (-180 do +180 stopni)
+Lower Third background opacity (0-255)	Krycie tła belki podpisu (0–255)
+0-127; 127 addresses every device on the line	0–127; 127 adresuje wszystkie urządzenia na linii
+GO shows the note; picture and sound carry on	GO pokazuje notatkę; obraz i dźwięk trwają dalej
+How fast it moves; no effect when it is still	Prędkość ruchu; bez wpływu przy bezruchu
+Fires when incoming timecode passes this point	Uruchamia, gdy wejściowy kod czasu przekroczy ten punkt
+Source pixels, independent of output placement	Piksele źródła, niezależne od położenia na wyjściu
+Stereo balance, applied live (snaps to center)	Balans stereo na żywo (przyciąga do środka)
+bypassed: nothing here is processed or limited	pominięte: bez przetwarzania i ograniczania
+Per-cue audio trim: -40 to +40 dB, applied live	Wzmocnienie cue: -40 do +40 dB, na żywo
+Show the message in red - the wrap up NOW state	Czerwony komunikat: zakończyć TERAZ
+The brush's width, as % of the picture's height	Szerokość pędzla jako % wysokości obrazu
+What the stream carries: SDR, PQ (HDR10) or HLG	Zawartość strumienia: SDR, PQ (HDR10) lub HLG
+Digit colour once red is reached, and in overtime	Kolor cyfr od czerwonego progu i po przekroczeniu czasu
+Downmix this cue to mono (mono sources / mono PA)	Zmiksuj cue do mono (źródło / nagłośnienie mono)
+Drag to scrub (shift = fine), click to type exact	Przeciągnij, by przewijać (Shift: dokładnie), kliknij, by wpisać wartość
+Hand this to an oscillator so it moves on its own	Przypisz oscylator, aby poruszało się samo
+Changing width also scales height (and vice versa)	Zmiana szerokości skaluje też wysokość i odwrotnie
+How long the levels take to arrive; zero is a snap	Czas osiągnięcia poziomów; zero zmienia natychmiast
+Set the self-contained PIP source for this overlay	Ustaw samodzielne źródło PIP tej nakładki
+Take the newest shape or pen path out of this mask	Usuń ostatni kształt lub ścieżkę pióra z maski
+An address sent to Deckboy's OSC port fires this cue	Ten adres na porcie OSC Deckboy uruchamia cue
+Hold on the last composite frame when the scene ends	Zatrzymaj ostatnią złożoną klatkę na końcu sceny
+How long it takes; zero is a snap rather than a fade	Czas; zero zmienia od razu, bez przejścia
+Set still/pattern/browser duration for selected cues	Czas obrazu/wzoru/przeglądarki dla wybranych cues
+Start the LTC carrier, stop it, or jam it to a value	Uruchom, zatrzymaj lub zsynchronizuj nośną LTC z wartością
+Which cue on that deck; step off the end to clear it	Cue na tym decku; przejdź poza koniec, by wyczyścić
+Bob up and down. Depth 1 is half the frame either way	W górę i w dół. Głębokość 1: pół kadru w każdą stronę
+Output width in pixels | click value to type exact px	Szerokość wyjścia w pikselach; kliknij, by wpisać dokładnie
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Ustaw URL strumienia (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	Uruchamia codziennie o tej godzinie zegara komputera
+Output height in pixels | click value to type exact px	Wysokość wyjścia w pikselach; kliknij, by wpisać dokładnie
+Bar across the foot - readable further back than digits	Dolny pasek: czytelny z większej odległości niż cyfry
+OUTPUT: drag a slice to move it, its corners to size it.	WYJŚCIE: przeciągnij wycinek, by przesunąć, rogi, by zmienić rozmiar
+Choose a Lower Third from the overlay bin to fire on TAKE	Wybierz belkę podpisu z nakładek do uruchomienia przez TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	Wybierz PIP z nakładek do uruchomienia przez TAKE
+OUTPUT: drag a slice to move it, its corners to pin them.	WYJŚCIE: przeciągnij wycinek, by przesunąć, rogi, by je przypiąć
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 lub klawiatura numeryczna uruchamiają cue z dowolnego miejsca
+Use transition when auto-advancing or goto-taking next cue	Użyj przejścia przy automatycznym posuwie lub GOTO do następnego cue
+Nothing has arrived yet. Press something on the controller.	Nic nie nadeszło. Użyj przycisku lub pokrętła kontrolera.
+Audio fade-in: follow visual fade, none, or explicit seconds	Narastanie dźwięku: jak obraz, brak lub określone sekundy
+Audio fade-out: follow visual fade, none, or explicit seconds	Wygaszanie dźwięku: jak obraz, brak lub określone sekundy
+Add a library shape to this mask; its points are yours to move	Dodaj kształt z biblioteki do maski; można przesuwać jego punkty
+No slices: this output shows its one picture. + SLICE to start.	Brak wycinków: wyjście pokazuje swój obraz. Zacznij od + SLICE.
+Open and close this edge on an oscillator -- a wipe that breathes	Otwieraj i zamykaj tę krawędź oscylatorem: pulsujące przejście
+(none)	(brak)
+(nothing yet)	(jeszcze nic)
++ ADD AN OUTPUT	+ DODAJ WYJŚCIE
+>LIVE	>NA ŻYWO
+(no media source)	(brak źródła mediów)
+snap	natychmiast
+this deck	ten deck
+protocol	protokół
+does	działanie
+signal	sygnał
+sine	sinus
+freq	częstotliwość
+visuals	wizualizacja
+black	czarny
+green	zielony
+blue	niebieski
+Pause at start	Pauza start
+Pause at end	Pauza koniec
+Transition to next	Przej. dalej
+Hardware display	Wyświetlacz
+Raster mode	Tryb rastra
+Refresh rate	Odświeżanie
+Bit depth	Głębia bitów
+SDR material at	Poziom SDR
+HDR signal	Sygnał HDR
+Fullscreen	Pełny ekran
+Matte aspect	Proporcje mat
+Bar opacity	Krycie pasów
+Output mask	Maska wyjścia
+Overlay still	Stała nakładka
+Overlay opacity	Krycie nakł.
+Overlay image	Obraz nakł.
+Place it	Umieść
+Corner pin	Narożniki
+Slices	Wycinki
+choose...	wybierz...
+not configured	nieskonfigurowane
+(default system device)	(domyślne urządzenie)
+(no monitor)	(brak monitora)
+System audio (SDL)	Dźwięk systemu (SDL)
+Not watching a folder	Żaden folder nie jest śledzony
+anyone	każdy
+When taken off air	Po zejściu z anteny
+browser cue added	dodano cue przeglądarki
+source cue added	dodano cue źródła
+text added	dodano tekst
+tone cue added	dodano cue tonu
+gain	wzmocnienie
+follow	śledź
+moves	ruch
+overtime	po czasie
+chime	dźwięk
+bell	dzwonek
+load a sprite sheet from a file...	wczytaj arkusz sprite z pliku...
+Run the clock	Uruchom zegar
+What fires this cue besides GO	Co uruchamia cue oprócz GO
+center	Środek
+visual	wizualizacja
+JAM	SYNCHRO
+MIX	MIKS
+CLIP	KLIP
+TEXT	TEKST
+WACKY	SZALONE
+COLOUR	KOLOR
+DARKEN	PRZYCIEMNIJ
+COMPARE	PORÓWNAJ
+LIGHTEN	ROZJAŚNIJ
+DASHBOARD	PULPIT
+25 fps (PAL/EBU)	25 kl./s (PAL/EBU)
+29.97 fps (NTSC)	29,97 kl./s (NTSC)
+Pocket Test (day)	Test Pocket (dzień)
+Dark Detail (0-12%)	Szczegóły w cieniach (0-12%)
+Frame Count (emoji)	Licznik klatek (emoji)
+PLUGE (black level)	PLUGE (poziom czerni)
+Pocket Test (night)	Test Pocket (noc)
+Pocket Test (storm)	Test Pocket (burza)
+Marks stacked BELOW.	Znaki ułożone POD spodem.
+Panel Map (animated)	Mapa paneli (animowana)
+Pocket Test (sunset)	Test Pocket (zachód słońca)
+Boresight (alignment)	Celownik (wyrównanie)
+SMPTE 75% Colour Bars	Pasy barwne SMPTE 75%
+(projector curve only)	(tylko krzywa projektora)
+Multiburst (bandwidth)	Multiburst (pasmo)
+Convergence (fine grid)	Zbieżność (gęsta siatka)
+Greyscale Steps (gamma)	Stopnie szarości (gamma)
+Uniformity (flat fields)	Jednorodność (płaskie pola)
+MULTIVIEW carries this too.	MULTIVIEW też to niesie.
+Test Clock (sync + latency)	Zegar testowy (synchro + opóźnienie)
+auto (reads the common two)	auto (czyta dwa typowe)
+Panel Map (LED tile numbers)	Mapa paneli (numery paneli LED)
+Portal (blobs of deep space)	Portal (bańki głębokiego kosmosu)
+Terrarium (living ecosystem)	Terrarium (żywy ekosystem)
+Window 10% (peak brightness)	Okno 10% (jasność szczytowa)
+Window 50% (peak at mid APL)	Okno 50% (szczyt przy średnim APL)
+Frame Count (drops + latency)	Licznik klatek (zgubione + opóźnienie)
+Terrarium Pico (1px per cell)	Terrarium Pico (1 px na komórkę)
+Banding Ramps (real bit depth)	Rampy pasmowania (prawdziwa głębia bitowa)
+Fireside (a hearth that burns)	Kominek (palenisko, które płonie)
+HLG - live broadcast (BT.2100)	HLG - transmisja na żywo (BT.2100)
+Test Bars (motion diagnostics)	Pasy testowe (diagnostyka ruchu)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (czy coś skaluje?)
+Pocket Test (test card + scene cycle)	Test Pocket (plansza + cykl scen)
+Critters (pixel-exact scaling, animated)	Critters (skalowanie co do piksela, animowane)
+headphones, desk sounds and LTC stay out of it	słuchawki, dźwięki stołu i LTC zostają poza tym
+Above 1 tunnels inward, below 1 blooms outward.	Powyżej 1 tunel wciąga do środka, poniżej 1 rozkwita na zewnątrz.
+Read everything right to left. Yes, everything.	Czytaj wszystko od prawej do lewej. Tak, wszystko.
+Amber is closest to the 1976 single-phosphor look.	Bursztyn jest najbliżej pojedynczego luminoforu z 1976 roku.
+Greetings, primitive. Your "slideshow" amuses us.	Witaj, prymitywie. Twój „pokaz slajdów” nas bawi.
+Sway sideways. Depth 1 is half the frame either way	Kołysanie na boki. Głębokość 1 to pół kadru w każdą stronę
+Draw the diagnostic over the card, or just the text.	Rysuj diagnostykę na planszy albo tylko tekst.
+All interfaces, but only this computer is trusted yet.	Wszystkie interfejsy, ale na razie zaufany jest tylko ten komputer.
+Choose the legacy cue token to show inside the PIP window	Wybierz stary token cue pokazywany w oknie PIP
+ASIO carries the show's sound, and these are not on it yet	ASIO niesie dźwięk spektaklu, a tych jeszcze na nim nie ma
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=nowy  Enter/P=poprzedni  O=otwórz zapisany  E=przykłady  L=nauka
+Hand this parameter to an oscillator so it moves on its own	Oddaj ten parametr oscylatorowi, żeby ruszał się sam
+How long the finished drawing stays before it is drawn again	Jak długo gotowy rysunek zostaje, zanim zostanie narysowany od nowa
+How it comes on and goes off: none, fade, rise, slide or wipe	Jak wchodzi i schodzi: brak, zanik, wjazd, przesunięcie lub kurtyna
+The 64-step wavetable, quantised to 6 bits like the hardware.	64-stopniowa tablica falowa, kwantyzowana do 6 bitów jak w sprzęcie.
+Vary tile size per cell, so the grid stops looking like a grid.	Zmieniaj rozmiar kafli w komórkach, żeby siatka przestała wyglądać jak siatka.
+Which output channel carries the signal. 'all' feeds every one.	Który kanał wyjściowy niesie sygnał. „all” zasila wszystkie.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Co jest wysyłane. Ukośnik wsteczny n, r, t i 0 stają się tymi znakami
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Własne polecenia protokołu Deckboya, jedno w wierszu; # to komentarz
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Szybkość modulatora jako stosunek do nuty, więc wygięcie podąża za wysokością.
+Play this cue to the preview only; the outputs keep what they have	Odtwarzaj to cue tylko w podglądzie; wyjścia zachowują to, co mają
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Daj wysokość dźwięku na oscylator: Motion X przemiata ją jak theremin
+A disarmed cue stays in the list and does nothing; GO steps over it	Rozbrojone cue zostaje na liście i nic nie robi; GO je przeskakuje
+Where the clock reads from this cue on; click the value to type one	Skąd zegar czyta od tego cue; kliknij wartość, by ją wpisać
+Add a dashboard button that fires this master by name, from anywhere	Dodaj do pulpitu przycisk, który odpala ten master po nazwie, skądkolwiek
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Nowy tutaj? NAUKA PODSTAW zajmuje pięć minut. Oprowadzimy cię.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	Adres IPv4 albo 255.255.255.255, by nadawać do całej sieci
+How much playing audio widens and brightens the pattern. 0 free-runs.	Jak bardzo grający dźwięk poszerza i rozjaśnia wzór. 0 biegnie swobodnie.
+LED panel width in pixels - what one tile really is. Click to type it	Szerokość panelu LED w pikselach: ile naprawdę ma jeden kafel. Kliknij, by wpisać
+Which deck it acts on; step off the end for the one this cue lives on	Na który deck działa; wyjdź za koniec, by wybrać deck tego cue
+only one playlist - use the routing chip on the header to add another	tylko jedna playlista: przełącznik trasy w nagłówku dodaje następną
+Which cue this master fires on that deck; step off the end to clear it	Które cue ten master odpala na tym decku; wyjdź za koniec, by wyczyścić
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Rysuj na monitorze programu myszą lub piórem (DRAW). Esc kończy
+How long the move takes, each way. 0 is instant whatever the style says	Jak długo trwa ruch, w każdą stronę. 0 to natychmiast, cokolwiek mówi styl
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Zatrzymaj ten deck, gdy rampa dojdzie: zwykłe ściszyć-i-zatrzymać
+Which of the file's sound tracks plays: a second language, a commentary	Która ścieżka dźwiękowa pliku gra: drugi język, komentarz
+An oscillator on the colour: depth is how far round the wheel it travels	Oscylator na kolorze: głębokość to jak daleko obchodzi koło barw
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Załaduj to cue wstrzymane i poza anteną, by GO uruchomiło je bez rozruchu dekodera
+Note, control change, program change, MIDI Show Control, or your own bytes	Nuta, control change, program change, MIDI Show Control albo własne bajty
+Black behind the words. Zero leaves it over whatever the output already has	Czerń za słowami. Zero zostawia je na tym, co wyjście już ma
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Jak bardzo modulator wygina wysokość. 0-63, własny zakres wzmocnienia sprzętu.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	słowa, które to cue pokazuje na ekranie  |  Shift+Enter: nowy wiersz  |  Enter: zastosuj
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC i UDP wysyłają i zapominają; TCP łączy się, więc działa poza wątkiem spektaklu
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Daj poziom na oscylator: Motion robi z niego bramkę, która otwiera się, gdy się ruszasz
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Znaki ułożone NAD literami, jak łączone akcenty wylewające się poza wiersz.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Który dzwonek. Przełączanie go ODTWARZA, więc można wybierać na ucho, a nie po nazwie.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Brak wierszy. + DODAJ albo NAUCZ tworzy jeden; MIDIMAP RESET przywraca wbudowane wiersze.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Zapisz ścieżki maski jako SVG, dla Illustratora i wszystkiego, co je czyta
+Which MIDI output; a named port that is missing is reported rather than swapped	Które wyjście MIDI; brakujący nazwany port jest zgłaszany, a nie zamieniany
+An oscillator on the level, running after GO until a later cue sets this fixture	Oscylator na poziomie, działający po GO, aż późniejsze cue ustawi to urządzenie
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Kroki w tercjach oktawy, bo ucho pracuje w stosunkach. 1 kHz to konwencja.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Kreski W POPRZEK komórki, które niszczą znak zamiast go zdobić.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Czy przychodzące nuty MIDI grają na tym syntezatorze, czy odpalają cue jak zawsze.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Numer nuty albo wpisz LEARN i zagraj ją. Nuty, których żadne cue nie zajmuje, wciąż idą do cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Zwykła para stereo. Kliknij, by otworzyć matrycę, zaczynając dokładnie od tej trasy
+Folding is what turns an arbitrary pattern into something that reads as designed.	Składanie zmienia dowolny wzór w coś, co wygląda na zaprojektowane.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Kanał=poziom, oddzielone przecinkami. Zakresy też: 1=255, 10-14=64. Kanały liczy się od 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Przesuwa trim każdego zaznaczonego cue o tyle samo dB; wpisanie wartości ustawia ją wszystkim
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Wygina WYSOKOŚĆ nośnej zamiast się z nią mieszać. To sprawia, że FDS warczy.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	W połowie NAUKI PODSTAW. Naciśnij L, a podejmiemy tam, gdzie skończyłeś, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Renderuj jako siatkę znaków z indeksowaną 16-kolorową paletą zamiast pikseli.
+Which MIDI output this file plays to; step past the end for the first one available	Do którego wyjścia MIDI gra ten plik; wyjdź za koniec, by wybrać pierwsze wolne
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	Adres IPv4 albo 255.255.255.255 dla grupy multicast uniwersum (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Kliknij komórkę, by ją przełączać: wył., pełny, -3, -6, -12. Ten wiersz znów wyłącza matrycę
+How long each phrase stays before it moves. Zero hides them without losing the list.	Jak długo każda fraza zostaje, zanim się przesunie. Zero ukrywa je bez utraty listy.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Jak długo opada po ataku. Słychać tylko przy włączonym ponownym wyzwalaniu.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Wył., od startu (następne cue odpala, gdy to się zaczyna) albo od końca (gdy się kończy)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Wysokość jednego wiersza w procentach rastra, żeby plansza czytała się tak samo na każdym ekranie
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Ustaw źródło slotu jako media:/ścieżka, browser:url, window:nazwa, camera:nazwa lub syphon:nazwa
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Krótki tryb LFSR. Okres jest dość krótki, by brzmieć jak strojony metal, a nie szum.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Biały, ciepły, czerwony, bursztyn, zielony, cyjan, niebieski, magenta. ~ przesuwa go po kole barw
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Wyzwalaj obwiednię tak często. Hold trzyma jedną nutę, czego chce drone.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond to ostra krata z Atari Video Music; pierścienie dobrze tworzą tunel z zoomem sprzężenia.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Kołysz lub obracaj. Głębokość 1 to pół obrotu w każdą stronę; piła na 1 obraca w kółko
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	Poziom odtwarzania DECKU (na żywo, nie zapisuje się z cue) - trim cue to wzmocnienie w sekcji AUDIO
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Stały, pojawienie, maszyna do pisania, przewijanie w górę, pasek lub puls, wszystko napędzane transportem cue
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Półobrazy na wyrenderowaną klatkę. 1 to jeden do jednego, 0,5 trzyma każdy półobraz dwie klatki, 0 zamraża.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Co to cue pokazuje podczas grania: przebieg, oscyloskop, Lissajous, widmo, mierniki albo plansza z nazwiskiem
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 wybiera kafle według jasności, by obraz był czytelny. 1 wybiera losowo, więc siatka staje się fakturą.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Jak daleko się przesuwa, w półtonach. W górę brzmi jak przybycie, w dół jak odejście, zero to uderzona nuta.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	Adres IPv4. Nazwy nie są rozwiązywane: zapytanie DNS blokuje, a GO nie może go wykonać
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Szerokość kafla w pikselach. Musi pasować do siatki arkusza, inaczej wycinki wypadną na sąsiednich sprite'ach.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Naprzemienne lustra według pozycji komórki, czytane jako wzór tam, gdzie losowe odwracanie czyta się jak szum.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 przyspawa je do komórki, jak wygrawerowane. Powyżej losują się na nowo, jak gdyby wrzały.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L gra lewe wejście w obu głośnikach: mikrofon 1 w większości interfejsów. STEREO jest dla źródła liniowego.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Cały gest. To JEST czas trwania cue: dżingiel to jedyny generowany tu sygnał, który się kończy.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Kliknij wartość, by wysłać to urządzenie albo zostawić je tam, gdzie ustawiło je ostatnie cue. ~ sprawia, że poziom oddycha
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS to tablica falowa wyginana modulatorem. 2A03 to zestaw puls/trójkąt/szum, z którego robi się większość chiptune.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Pomieszaj, który znak oznacza którą jasność. Ten sam zestaw, inny charakter pisma. Z ziarnem, więc zostaje na miejscu.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Sortowanie pikseli: ciągi pikseli posortowane wg jasności w wierszu, co nadaje datamoshowi stopiony wygląd.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	O ile komórek znaki mogą się wspinać. Przerzedzają się po drodze, więc wysoki zasięg ciągnie smugę zamiast się podwajać.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue akc wart  -  G weź  S stop  F wyciszenie (wart = dziesiąte sekundy)  V głośność  O krycie  J skok do wiersza
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Waga harmonicznych: czysty dzwonek na zero, blacha na maksimum. To różnica między pingiem a fanfarą.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Przechodzi przez wejścia tego komputera. „Settings input” idzie za wejściem wybranym w Ustawieniach > Audio.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Od żaru do ryczącego ognia. Wciąż buzuje i opada przy każdym ustawieniu: ogień, który się nie rusza, wygląda jak zdjęcie
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Strój odniesienia. 440 to współczesny standard, 432 częsta alternatywa, a dawne instrumenty siedziały jeszcze niżej.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Gdzie zaczyna się dżingiel. Pod głosem ma zejść z drogi; nad salą ma się przebić.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Cyfrowe wzmocnienie wejścia, od -40 do +40 dB. Najpierw ustaw przedwzmacniacz interfejsu; to na ostatnie dB.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Pulsuj rozmiarem. Samo porusza szerokość I wysokość razem; daj wysokości własne ~, by zgniatać i rozciągać
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Plansza wypełnia kadr; Lower Third to nazwisko i funkcja, nisko na przezroczystym tle, z wejściem i zejściem
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held trzyma ostatnie przesunięcie zamiast je usuwać: obraz zostaje wygięty tak, jak zostawił go sterownik.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12,5 i 25 są cienkie i nosowe, 50 jest puste. 75 brzmi jak 25: jest tu, bo trackery go udostępniają.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Kwantyzuj wyjście jak sprzęt. Schodki SĄ dźwiękiem; wygładzenie robi z tego syntezator udający chip.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Przesuwa trim każdego zaznaczonego cue o tyle samo dB, zachowując różnice; wpisanie wartości ustawia ją wszystkim
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Gdzie krosspunkty playlisty ją wysyłają (Ustawienia > Audio). Kliknij, by otworzyć matrycę po nazwie, zaczynając dokładnie od tej trasy
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	nazwij wartości przez  d = ...;  zakończ jednym wyrażeniem albo trzema dla czerwonego zielonego niebieskiego  |  Shift+Enter: nowy wiersz  |  Enter: zastosuj
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Przywróć to, od czego zaczęło, gdy rampa dojdzie (po zatrzymaniu): deck gotowy na następne cue, narastanie, które puszcza
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Który model mowy robi napisy: angielski, dowolny język albo wolniejsza, dokładniejsza para. Każdy pobiera się raz
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Co wycina maska: to cue, gdziekolwiek gra, tę playlistę na wybranym wyjściu, cały obraz tego wyjścia albo jego matte
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Graj z częstotliwością ekranu, gdy różni się o mniej niż 0,2% (59,94 na 60): każda klatka raz, dźwięk do 3,5 centa za wysoko lub za nisko
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Ćwierćobroty są dokładne i zostają ostre. Obrót próbkuje pod kątem, co rwie pixel art: czasem właśnie o to chodzi.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Każde wzięcie zaczyna animację tak samo, więc przećwiczony wygląd się powtarza, zamiast zależeć od tego, jak długo aplikacja jest otwarta.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Co kieruje każdym przechyłem: własna pozycja, gradient luminancji obrazu, by znaki pochylały się jak obraz, albo odcień komórki.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Nazwij kanał lub parę raz. Playlisty wysyłają do nazwy, więc inny interfejs to zmiana nazw tutaj, a nie każdego cue.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Kliknij krosspunkt, by go przełączać: wył., 0, -3, -6, -12 dB. Przeciągnij w bok dla dowolnego poziomu. Playlista bez punktów gra na własne urządzenie.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Zestawy sprite'ów w data/sprites. Każdy folder to zestaw; przełączanie wybiera jeden i wraca do żadnego. Prawy klik je wyłącza.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Rozdzielczość wewnętrzna, od 1 najgrubszej do 5 najdrobniejszej. To tyle samo estetyka co szybkość: 8-bitowy wygląd bierze się z dużych pikseli.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture bierze kolor z obrazu. Zielony, bursztyn i cyjan to luminofory terminali. Palette blokuje tekst na wybranej palecie sprzętowej.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE sam się naprawia (H.264). CLASSIC to prawdziwe rozmazanie (MPEG-4). EXTREME jest grubsze i maże bez przerwy. Zmiana przygotowuje cue od nowa.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Sinus do ustawiania, różowy do wyrównania nagłośnienia, biały do szukania brzęczenia, przemiatanie, by usłyszeć, gdzie sala dzwoni, identify, by przejść wyjścia po kolei.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Który efekt, po miejscu w stosie cue, które gra ten deck, gdy to odpala. Gdy nic tam nie ma, zanik to mówi i nic nie robi
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Każda klatka wmieszana w następną. To podpis Hypno: na 0 to generator wzorów, powyżej obraz zaczyna żywić się sobą.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Co widać przez okno w ścianie kominka: ogród, deszcz, śnieg albo morze. Pokój z pogodą za oknem czyta się jako miejsce, a nie ściana
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	WG URZĄDZENIA: światła w patchu (Ustawienia > Sieć > URZĄDZENIA), po nazwie. KANAŁY: kanał=poziom ręcznie. Cue może mieć oba; kanały idą na końcu
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Każdy znak kołysze się jak przechylana karta. Każda komórka ma własną fazę, więc siatka oddycha zamiast przesuwać się jak jeden arkusz.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Pióro: klik dla narożników, przeciągnij dla krzywych, klik w pierwszy punkt, by zamknąć (P). Punkty: przeciągnij, kliknij obrys, by dodać, Alt-klik lub Delete, by usunąć
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Trzy kanały układu. Różnią się rodzajem: trójkąt nie ma regulacji głośności w sprzęcie, a szum to rejestr przesuwny, nie oscylator.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Wybrane zestawy symboli i emoji: gwiazdy, nuty, kwiaty, strzałki, pogoda, runy, twarze. Wybór wypełnia poniżej własne znaki, które pozostają edytowalne.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Graj z klawiatury komputera, układ Ableton: A W S E D F T G Y H U J, Z i X dla oktawy. Gdy to jest WŁ., te klawisze grają nuty zamiast odpalać cue.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Krycie decku, głośność decku, główny ściemniacz, jasność / kontrast / nasycenie / odcień aktywnego cue albo pokrętło jednego z jego efektów lub efektów audio
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Linie skanowania, poświata luminoforu i obwódki RGB. Poświata jest najważniejsza: luminofor rozlewa się na boki, dlatego CRT zdaje się emitować światło.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Zerwane pasy linii i rozdzielenie RGB. W trybie tekstowym psuje też KOMÓRKI: całe wiersze zacinają się na jednym powtarzanym znaku, jak prawdziwy ekran tekstowy tracący synchronizację.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still trzyma klatkę, na której jesteś. Flipbook gra klatki po kolei. Replay rysuje pierwszą klatkę pociągnięcie po pociągnięciu, tak jak powstała, potem trzyma i zaczyna od nowa
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (przygotuj bez odpalania), Arm, Disarm albo Devamp (pętla gra swój obieg i kończy); albo Stop all, Pause all, Resume all: każdy deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope pokazuje kształt i przesterowanie. Lissajous pokazuje fazę i biegunowość między dwoma pierwszymi kanałami: przekątna w złą stronę znaczy, że jeden jest odwrócony. Spectrum to słupki tercjowe.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 wybiera znak, o który prosi jasność, 1 dowolny znak z zestawu. Podkręć, by zobaczyć cały alfabet: ułożony ściśle wg tuszu, płaski obszar wybiera jeden znak, a reszta nigdy się nie pojawia.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Bloki i dithering czyta się jako gęstość; rampę ASCII jako tekst; symbole jako szczątki. Przełączenie czyści własny ciąg znaków, bo by to nadpisał; wiersz presetów przywraca jeden.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Strój równomiernie temperowany kupuje swobodną modulację kosztem tego, że każdy interwał jest trochę fałszywy. Naturalny i pitagorejski są idealnie czyste w jednej tonacji. Bohlen-Pierce dzieli duodecymę, więc nie ma oktaw.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+pan	panorama
+trans	przejś.
+Motion: Bug Swat	Ruch: Bug Swat
+Passphrase (shared)	Hasło (wspólne)
+, — skip to previous cue	, — do poprzedniego cue
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  nic nie robi na tej playliście  -  (M) playlista samego kroku
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS to wyrównanie EBU, -20 to SMPTE. Ograniczone poniżej 0: to zasila nagłośnienie na żywo.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  nic nie robi na tej playliście  -  (M) playlista samego kroku  -  EDIT włączony: pisanie zmienia spektakl
+pop	pop
+Port	Port
+deck	deck
+logo	logo
+neon	neon
+KEY L	KEY L
+MULTI	MULTI
+STEREO	STEREO
+arcade	arcade
+Limiter	Limiter
+TRACKER	TRACKER
+dossier	dossier
+routing	routing
+dateline	dateline
+terminal	terminal
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+Bork bork BORK!	Bork bork BORK!
+SELECT DECK 2	WYBIERZ DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Teraz kliknij jej zakładkę, Deck 2. Nowa playlista nie jest wybrana, dopóki jej nie klikniesz.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Podświetlona zakładka to miejsce, gdzie ŹRÓDŁO wkłada rzeczy. Pomiń to, a tusz wyląduje pod syntezatorem.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	Widzisz tę zakładkę? Kliknij ją. Jesteś na Deck 2. BUM. Podstawy.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Kliknij jej zakładkę, Deck 2. Podświetlona zakładka to playlista, do której dodaje ŹRÓDŁO.
+Skip this and the words go under the map. With the lizard.	Pomiń to, a słowa pójdą pod mapę. Do jaszczurki.
+Nine years of live weather. Always click the tab.	Dziewięć lat pogody na żywo. Zawsze klikaj zakładkę.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Kliknij jej zakładkę, Deck 2. Nowa playlista czeka, aż ją wybierzesz.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Podświetlona zakładka dostaje następny cue. Jak wybór slajdu, który trafi do projektora.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Wybierz talię. Dowolną. ...Deck 2. Wybierz Deck 2.
+VOLUME	GŁOŚNOŚĆ
++ step	+ krok
+< BACK	< WSTECZ
+ATEM switcher	Mikser ATEM
+ATEM tally	Tally ATEM
+AUDIO: DEFAULT	AUDIO: DOMYŚLNE
+Animated GIF	Animowany GIF
+Arrows	Strzałki
+CLICKER	PILOT
+Copyright	Prawa autorskie
+DEST...	CEL...
+Datamosh - classic	Datamosh – klasyczny
+Datamosh - extreme	Datamosh – ekstremalny
+Datamosh - subtle	Datamosh – subtelny
+Deckboy is input	Deckboy to wejście
+Device: None	Urządzenie: brak
+Drag	Przeciągnij
+Drop media here	Upuść tu media
+Enter Take  Space Play/Pause	Enter Take  Space Odtwórz/Pauza
+FFmpeg / libav  (in-process)	FFmpeg / libav  (w procesie)
+FPS: SOURCE	FPS: ŹRÓDŁO
+Fonts	Czcionki
+Free software. You may use, study, share	Wolne oprogramowanie. Możesz go używać, badać,
+GO / BACK	GO / WSTECZ
+GO / BACK (clicker)	GO / WSTECZ (pilot)
+Key out: None - fill only	Wyjście key: brak – tylko fill
+LTC in	Wejście LTC
+Licence	Licencja
+MATCH SOURCE	JAK ŹRÓDŁO
+MOSH: SUBTLE	MOSH: SUBTELNY
+MSC Trigger -> cue by id	MSC Trigger -> cue według id
+MTC in	Wejście MTC
+Mode: CALLER	Tryb: CALLER
+NDI receiver	Odbiornik NDI
+NDI trigger	Wyzwalacz NDI
+NO STEPS YET	JESZCZE BRAK KROKÓW
+No PTP lock, wide-model pacing - will not genlock to plant sources	Brak blokady PTP, zgrubne tempo – bez genlocka do źródeł realizacji
+ONCE  |  ORDER	RAZ  |  KOLEJNOŚĆ
+Optional	Opcjonalne
+PNG sequence	Sekwencja PNG
+Platform	Platforma
+Press A to take cue	Naciśnij A, aby wziąć cue
+RATE: AUTO	TEMPO: AUTO
+S Stop   C Clear   Esc Panic	S Stop   C Wyczyść   Esc Panika
+SIZE: SOURCE	ROZMIAR: ŹRÓDŁO
+SPOUT TEXTURE SHARE	WSPÓŁDZIELENIE TEKSTURY SPOUT
+Session	Sesja
+TSL tally out	Wyjście tally TSL
+Thanks	Podziękowania
+Timecode chase	Podążaj za timecode
+Timecode run	Uruchom timecode
+Toolkit	Zestaw narzędzi
+Trigger	Wyzwól
+WAV (audio only)	WAV (tylko dźwięk)
+Warranty	Gwarancja
+address...	adres...
+and modify it; derivatives stay GPL.	udostępniać i zmieniać; pochodne pozostają GPL.
+clear the cell	wyczyść komórkę
+companion ping	ping Companion
+fire this row	odpal ten wiersz
+insert a row	wstaw wiersz
+live lane  |  I/O set trim  |  click or drag to seek	ścieżka na żywo  |  I/O ustawia przycięcie  |  kliknij lub przeciągnij, by przewinąć
+media in	wrzuć media
+move the cursor	przesuń kursor
+mute / solo a column	wycisz / solo kolumny
+off -- edit on monitor	wył. -- edytuj na monitorze
+off: no camera is open. Drag on the picture to draw a zone.	wył.: żadna kamera nie jest otwarta. Przeciągnij po obrazie, by narysować strefę.
+open the code editor	otwórz edytor kodu
+play / stop	odtwórz / zatrzymaj
+stop, fade, vol, opacity	stop, przenikanie, głośn., krycie
+the FFmpeg, SDL and FreeType projects,	projektom FFmpeg, SDL i FreeType,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion i x42/libltc.
+Keys	Klawisze
+None. See LICENSE sections 15-16.	Brak. Zobacz LICENSE, sekcje 15-16.
+none compiled in	nic nie wkompilowano
+Alpha	Alfa
+Group	Grupa
+Normal	Normalny
+Remote	Zdalne
+lesson	lekcja
+Latency	Opóźnienie
+OUT {n}	WYJ. {n}
+Out {n}	Wyj. {n}
+{n} row	{n} wiersz
+Key name	Nazwa klawisza
+Keyframe	Klatka kluczowa
+Registry	Rejestr
+fade {n}	wygaszenie {n}
+{n} rows	{n} wierszy
+Node port	Port węzła
+Stream ID	ID strumienia
+added {1}	dodano {1}
+still {n}	stopklatka {n}
+FADE {n} s	WYGASZENIE {n} s
+LAYER {n}%	WARSTWA {n}%
+Output {n}	Wyjście {n}
+PTP domain	Domena PTP
+Stream key	Klucz strumienia
+[ASSIGNED]	[PRZYPISANE]
+audio only	tylko dźwięk
+to Out {n}	do wyj. {n}
+{n} of {n}	{n} z {n}
+Display {n}	Wyświetlacz {n}
+active jobs	aktywne zadania
+local clock	zegar lokalny
+not running	nie działa
+click to set	kliknij, aby ustawić
+full {n}x{n}	pełny {n}x{n}
+running v{n}	działa v{n}
+the other one	ten drugi
+DELIVERY H.{n}	WYDANIE H.{n}
+Output {n} mix	Miks wyjścia {n}
+made by Deckboy	zrobione w Deckboy
+{1} plays to {2}	{1} gra na {2}
+the picture {1} plays	obraz, który gra {1}
+New media joins {1} by itself	Nowe media same trafiają do {1}
+Press Win+P and choose Extend	Naciśnij Win+P i wybierz Rozszerz
+{n} patched - DMX cues set them by name	{n} spatchowanych - cue DMX ustawiają je po nazwie
+Set them to extend in your display settings	Ustaw rozszerzanie w ustawieniach ekranu
+lesson: {1}. Esc leaves, and it picks up here next time	lekcja: {1}. Esc wychodzi, a następnym razem zaczyna stąd
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Odpowiada ATEM Software Control jako deck na TCP 9993 pod {1}
+In System Settings > Displays, use it as an extended display	W Ustawieniach systemowych > Wyświetlacze użyj go jako rozszerzonego ekranu
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Zjadło stół, skapi. Masz {1} ekrany: WYŚWIETLACZ wyjścia w MENU przenosi obraz na inny.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Zjadło stół, skapi. Masz dwa ekrany: WYŚWIETLACZ wyjścia w MENU przenosi obraz na ten drugi.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} ekrany, skapi. Stół zostaje na tym, obraz idzie na {2}. Otwórz MENU i zmień WYJŚCIE WYŁ. na WYJŚCIE WŁ.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Dwa ekrany, skapi. Stół zostaje na tym, obraz idzie na drugi: {1}. Otwórz MENU i zmień WYJŚCIE WYŁ. na WYJŚCIE WŁ.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Zjadło stół, skapi. Ekrany w trybie lustrzanym pokazują obraz na obu, więc obraz trafił do małego okna, z tyłu. {1}, a dostanie własny ekran.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Twoje ekrany są w trybie lustrzanym, skapi: {1} pokazuje to samo co ten, więc obraz zakryje stół na obu. {2}, a obraz dostanie własny ekran. Albo otwórz MENU i zmień WYJŚCIE WYŁ. na WYJŚCIE WŁ.

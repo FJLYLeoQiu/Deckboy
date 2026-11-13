@@ -1,0 +1,2347 @@
+#name Ελληνικά
+#english Greek
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC. An operator who learned the desk in
+# one country has to be able to work it in another.
+NEW	ΝΕΟ
+OPEN	ΑΝΟΙΓΜΑ
+SAVE	ΑΠΟΘ.
+SAVE AS	ΑΠΟΘΗΚΕΥΣΗ ΩΣ
+BUNDLE	ΣΥΣΚΕΥΑΣΙΑ
+IMPORT	ΕΙΣΑΓΩΓΗ
+SOURCE	ΠΗΓΗ
+PATTERN	ΜΟΤΙΒΟ
+SETTINGS	ΡΥΘΜΙΣΕΙΣ
+TAKE	TAKE
+STOP	ΣΤΟΠ
+REBOOT	ΕΠΑΝΕΚΚ.
+BLACKOUT	ΜΑΥΡΟ
+CLEAR	ΚΑΘΑΡΙΣΜΟΣ
+RECORD	ΕΓΓΡΑΦΗ
+PLAYLIST	ΛΙΣΤΑ
+TIMELINE	ΧΡΟΝΟΓΡΑΜΜΗ
+MEDIA	ΜΕΣΑ
+TRANSPORT	ΜΕΤΑΦΟΡΑ
+OUTPUT	ΕΞΟΔΟΣ
+PROGRAM	PROGRAM
+WARP	ΠΑΡΑΜΟΡΦΩΣΗ
+LIVE	ΖΩΝΤΑΝΑ
+DECODE	ΑΠΟΚΩΔΙΚΟΠΟΙΗΣΗ
+STREAM	ΜΕΤΑΔΟΣΗ
+System	Σύστημα
+Audio	Ήχος
+Network	Δίκτυο
+Video Outputs	Έξοδοι βίντεο
+About	Σχετικά
+Encoder	Κωδικοποιητής
+Screen	Οθόνη
+Geometry	Γεωμετρία
+Devices	Συσκευές
+Streaming	Μετάδοση
+APPEARANCE	ΕΜΦΑΝΙΣΗ
+REMOTE CONTROL	ΑΠΟΜΑΚΡΥΣΜΕΝΟΣ ΕΛΕΓΧΟΣ
+INTEGRATION ADAPTERS	ΠΡΟΣΑΡΜΟΓΕΙΣ ΔΙΑΣΥΝΔΕΣΗΣ
+DISCOVERY / NOTES	ΑΝΑΚΑΛΥΨΗ / ΣΗΜΕΙΩΣΕΙΣ
+DISPLAY & RASTER	ΟΘΟΝΗ ΚΑΙ ΡΑΣΤΕΡ
+CONNECTED DISPLAYS	ΣΥΝΔΕΔΕΜΕΝΕΣ ΟΘΟΝΕΣ
+EDGE FEATHERING	ΑΠΑΛΥΝΣΗ ΑΚΜΩΝ
+MATTE & OVERLAY	ΜΑΣΚΑ ΚΑΙ ΕΠΙΚΑΛΥΨΗ
+AREA OF INTEREST	ΠΕΡΙΟΧΗ ΕΝΔΙΑΦΕΡΟΝΤΟΣ
+DEFAULT TRANSITION	ΠΡΟΕΠΙΛΕΓΜΕΝΗ ΜΕΤΑΒΑΣΗ
+NMC IN & OUT	NMC ΕΙΣΟΔΟΣ ΚΑΙ ΕΞΟΔΟΣ
+OSC QUERY / FEEDBACK	ΕΡΩΤΗΜΑ OSC / ΑΠΟΚΡΙΣΗ
+CUE INSPECTOR	ΕΠΙΘΕΩΡΗΤΗΣ CUE
+SELECTED CUE	ΕΠΙΛΕΓΜΕΝΟ CUE
+PLAYBACK	ΑΝΑΠΑΡΑΓΩΓΗ
+COPY	ΑΝΤΙΓΡ.
+PASTE	ΕΠΙΚΟΛΛ.
+RESET	ΕΠΑΝΑΦΟΡΑ
+Theme	Θέμα
+Language	Γλώσσα
+Resolution	Ανάλυση
+Orientation	Προσανατολισμός
+Toggle Fullscreen	Πλήρης οθόνη
+IDENTIFY	ΑΝΑΓΝΩΡΙΣΗ
+REGION SIZE	ΜΕΓΕΘΟΣ ΠΕΡΙΟΧΗΣ
+POSITION	ΘΕΣΗ
+CENTRE	ΚΕΝΤΡΟ
+FULL	ΠΛΗΡΗΣ
+duration	διάρκεια
+transition	μετάβαση
+fade in	εμφάνιση
+fade out	σβήσιμο
+ON	ΝΑΙ
+OFF	ΟΧΙ
+Stopped	Σταματημένο
+Playing	Παίζει
+Paused	Παύση
+2-UP	2 ΔΙΠΛΑ
+DONE	ΕΤΟΙΜΟ
+EDIT	ΕΠΕΞΕΡΓΑΣΙΑ
+HELD	ΣΕ ΑΝΑΜΟΝΗ
+Mode	Λειτουργία
+PICK	ΕΠΙΛΟΓΗ
+QUAD	ΤΕΣΣΕΡΑ
+Rate	Ρυθμός
+STEP	ΒΗΜΑ
+Apply	Εφαρμογή
+CLOSE	ΚΛΕΙΣΙΜΟ
+FIXED	ΣΤΑΘΕΡΟ
+Help!	Βοήθεια!
+ORDER	ΣΕΙΡΑ
+READY	ΕΤΟΙΜΟ
+TILES	ΠΛΑΚΙΔΙΑ
+VIDEO	ΒΙΝΤΕΟ
+ALL ON	ΟΛΑ ΕΝΤΟΣ
+ALWAYS	ΠΑΝΤΑ
+ANALOG	ΑΝΑΛΟΓΙΚΟ
+Buffer	Ενδιάμεση μνήμη
+Cancel	Άκυρο
+Custom	Προσαρμοσμένο
+Device	Συσκευή
+Folder	Φάκελος
+FORMAT	ΜΟΡΦΗ
+HIDDEN	ΚΡΥΦΟ
+Length	Διάρκεια
+Mascot	Μασκότ
+Mirror	Καθρέφτης
+NATIVE	ΕΓΓΕΝΕΣ
+PRESET	ΠΡΟΕΠΙΛΟΓΗ
+Sender	Αποστολέας
+SUMMED	ΑΘΡΟΙΣΜΕΝΟ
+TOGGLE	ΕΝΑΛΛΑΓΗ
+12 HOUR	12 ΩΡΕΣ
+24 HOUR	24 ΩΡΕΣ
+ALL OFF	ΟΛΑ ΕΚΤΟΣ
+ARRANGE	ΔΙΑΤΑΞΗ
+Channel	Κανάλι
+CONVERT	ΜΕΤΑΤΡΟΠΗ
+DEFAULT	ΠΡΟΕΠΙΛΟΓΗ
+END CUE	ΤΕΛΟΣ CUE
+Key out	Έξοδος key
+LTC out	Έξοδος LTC
+MISSING	ΛΕΙΠΕΙ
+PRESETS	ΠΡΟΕΠΙΛΟΓΕΣ
+PROJECT	ΕΡΓΟ
+RUNNING	ΤΡΕΧΕΙ
+Send to	Αποστολή σε
+SHUFFLE	ΤΥΧΑΙΑ
+UPDATES	ΕΝΗΜΕΡΩΣΕΙΣ
+VJ MODE	ΛΕΙΤΟΥΡΓΙΑ VJ
+CLOCK ON	ΡΟΛΟΙ ΕΝΤΟΣ
+DOWNLOAD	ΛΗΨΗ
+EXAMPLES	ΠΑΡΑΔΕΙΓΜΑΤΑ
+Mappings	Αντιστοιχίσεις
+NMC sync	Συγχρονισμός NMC
+PROMPTER	ΤΗΛΕΠΡΟΜΠΤΕΡ
+SHOW SDP	ΕΜΦΑΝΙΣΗ SDP
+TCP port	Θύρα TCP
+UI scale	Κλίμακα διεπαφής
+vMix API	API vMix
+WATCHING	ΠΑΡΑΚΟΛΟΥΘΕΙ
+A/V delay	Καθυστέρηση A/V
+ASIO outs	Έξοδοι ASIO
+BOTH AXES	ΚΑΙ ΟΙ ΔΥΟ ΑΞΟΝΕΣ
+CHECK NOW	ΕΛΕΓΞΕ ΤΩΡΑ
+CLOCK OFF	ΡΟΛΟΙ ΕΚΤΟΣ
+Creatures	Πλάσματα
+CUE TOOLS	ΕΡΓΑΛΕΙΑ CUE
+Direction	Κατεύθυνση
+Freewheel	Ελεύθερη κίνηση
+HTTP port	Θύρα HTTP
+Jump mode	Λειτουργία άλματος
+Listen on	Ακρόαση σε
+OSC Query	Ερώτημα OSC
+OUTPUT ON	ΕΞΟΔΟΣ ΕΝΤΟΣ
+Panic now	Πανικός τώρα
+RECORDING	ΕΓΓΡΑΦΗ
+REMAINING	ΑΠΟΜΕΝΟΥΝ
+RESET ALL	ΕΠΑΝΑΦΟΡΑ ΟΛΩΝ
+RUN PANIC	ΕΚΤΕΛΕΣΗ ΠΑΝΙΚΟΥ
+SHOW FLOW	ΡΟΗ ΠΑΡΑΣΤΑΣΗΣ
+TIMERS ON	ΧΡΟΝΟΜΕΤΡΑ ΕΝΤΟΣ
+WHEN IDLE	ΣΕ ΑΔΡΑΝΕΙΑ
+ADD OUTPUT	ΠΡΟΣΘΗΚΗ ΕΞΟΔΟΥ
+BUILT WITH	ΦΤΙΑΓΜΕΝΟ ΜΕ
+CANCEL ALL	ΑΚΥΡΩΣΗ ΟΛΩΝ
+colour tag	ετικέτα χρώματος
+copy chain	αντιγραφή αλυσίδας
+Hover tips	Υποδείξεις
+Input gain	Ενίσχυση εισόδου
+Input mono	Είσοδος μονοφωνική
+live audio	ζωντανός ήχος
+Live input	Ζωντανή είσοδος
+MIDI input	Είσοδος MIDI
+no picture	χωρίς εικόνα
+no preview	χωρίς προεπισκόπηση
+OPEN SAVED	ΑΝΟΙΓΜΑ ΑΠΟΘΗΚΕΥΜΕΝΟΥ
+OUTPUT OFF	ΕΞΟΔΟΣ ΕΚΤΟΣ
+Panic fade	Σβήσιμο πανικού
+Tally port	Θύρα tally
+TIMERS OFF	ΧΡΟΝΟΜΕΤΡΑ ΕΚΤΟΣ
+Accept from	Αποδοχή από
+ASIO driver	Πρόγραμμα ASIO
+BACK TO TOP	ΠΙΣΩ ΣΤΗΝ ΚΟΡΥΦΗ
+CANVAS MODE	ΛΕΙΤΟΥΡΓΙΑ ΚΑΜΒΑ
+CODE SOURCE	ΠΗΓΗ ΚΩΔΙΚΑ
+Cue numbers	Αριθμοί cue
+Destination	Προορισμός
+Mirror rate	Ρυθμός καθρεφτισμού
+no duration	χωρίς διάρκεια
+NO LIVE CUE	ΚΑΝΕΝΑ ΖΩΝΤΑΝΟ CUE
+NO PREVIOUS	ΚΑΝΕΝΑ ΠΡΟΗΓΟΥΜΕΝΟ
+OVERLAY BIN	ΚΑΔΟΣ ΕΠΙΚΑΛΥΨΕΩΝ
+paste chain	επικόλληση αλυσίδας
+Sample rate	Συχνότητα δειγματοληψίας
+SENDING OUT	ΑΠΟΣΤΕΛΛΕΙ
+Shift: snap	Shift: κούμπωμα
+THIS OUTPUT	ΑΥΤΗ Η ΕΞΟΔΟΣ
+(no matches)	(κανένα αποτέλεσμα)
+(no subtext)	(χωρίς υπότιτλο)
+add a button	προσθήκη κουμπιού
+add a window	προσθήκη παραθύρου
+Art-Net port	Θύρα Art-Net
+AUDIO OUTPUT	ΕΞΟΔΟΣ ΗΧΟΥ
+Auto restore	Αυτόματη επαναφορά
+DECKLINK: ON	DECKLINK: ΕΝΤΟΣ
+free running	ελεύθερη λειτουργία
+KEY+FILL: ON	KEY+FILL: ΕΝΤΟΣ
+LISTENING IN	ΑΚΟΥΕΙ
+Miami cursor	Δείκτης Miami
+MIDI CONTROL	ΕΛΕΓΧΟΣ MIDI
+Mirror state	Καθρεφτισμός κατάστασης
+NDI KEY: OFF	NDI KEY: ΕΚΤΟΣ
+NDI KEY: ON	NDI KEY: ΕΝΤΟΣ
+NO PROGRAMME	ΚΑΝΕΝΑ ΠΡΟΓΡΑΜΜΑ
+ST 2110: OFF	ST 2110: ΕΚΤΟΣ
+ST 2110: ON	ST 2110: ΕΝΤΟΣ
+WATCH FOLDER	ΠΑΡΑΚΟΛΟΥΘΟΥΜΕΝΟΣ ΦΑΚΕΛΟΣ
+COMPOSITE CUE	ΣΥΝΘΕΤΟ CUE
+DECKLINK: OFF	DECKLINK: ΕΚΤΟΣ
+default route	προεπιλεγμένη διαδρομή
+Every adapter	Κάθε προσαρμογέας
+KEY+FILL: OFF	KEY+FILL: ΕΚΤΟΣ
+LEFT TO RIGHT	ΑΠΟ ΑΡΙΣΤΕΡΑ ΠΡΟΣ ΔΕΞΙΑ
+MEDIA ENCODER	ΚΩΔΙΚΟΠΟΙΗΤΗΣ
+MSC device id	Κωδικός συσκευής MSC
+NEW SHOW FILE	ΝΕΟ ΑΡΧΕΙΟ ΠΑΡΑΣΤΑΣΗΣ
+No cue loaded	Κανένα cue φορτωμένο
+nothing taken	δεν πάρθηκε τίποτα
+OPEN PREVIOUS	ΑΝΟΙΓΜΑ ΠΡΟΗΓΟΥΜΕΝΟΥ
+Output device	Συσκευή εξόδου
+Panic profile	Προφίλ πανικού
+Quit Deckboy?	Έξοδος από το Deckboy;
+REMOVE OUTPUT	ΑΦΑΙΡΕΣΗ ΕΞΟΔΟΥ
+Sound effects	Ηχητικά εφέ
+Tally address	Διεύθυνση tally
+TOP TO BOTTOM	ΑΠΟ ΠΑΝΩ ΠΡΟΣ ΚΑΤΩ
+127 (all-call)	127 (γενική κλήση)
+ALL INTERFACES	ΟΛΕΣ ΟΙ ΔΙΕΠΑΦΕΣ
+LOCALHOST ONLY	ΜΟΝΟ LOCALHOST
+Monitor device	Συσκευή ακρόασης
+no audio track	χωρίς κανάλι ήχου
+PRESENTER VIEW	ΠΡΟΒΟΛΗ ΠΑΡΟΥΣΙΑΣΤΗ
+RECORD TO DISK	ΕΓΓΡΑΦΗ ΣΤΟ ΔΙΣΚΟ
+STOP RECORDING	ΤΕΡΜΑΤΙΣΜΟΣ ΕΓΓΡΑΦΗΣ
+STOP STREAMING	ΤΕΡΜΑΤΙΣΜΟΣ ΜΕΤΑΔΟΣΗΣ
+TALLY TRIGGERS	ΕΝΕΡΓΟΠΟΙΗΣΕΙΣ TALLY
+Device channels	Κανάλια συσκευής
+NDI SENDING: ON	ΑΠΟΣΤΟΛΗ NDI: ΕΝΤΟΣ
+NO CUE SELECTED	ΚΑΝΕΝΑ CUE ΕΠΙΛΕΓΜΕΝΟ
+Output channels	Κανάλια εξόδου
+preview pending	προεπισκόπηση σε εξέλιξη
+START RECORDING	ΕΝΑΡΞΗ ΕΓΓΡΑΦΗΣ
+START STREAMING	ΕΝΑΡΞΗ ΜΕΤΑΔΟΣΗΣ
+(system default)	(προεπιλογή συστήματος)
+Check at startup	Έλεγχος στην εκκίνηση
+Global crossfade	Γενική διασταύρωση
+Mic to recording	Μικρόφωνο στην εγγραφή
+Monitor playlist	Ακρόαση λίστας
+NDI SENDING: OFF	ΑΠΟΣΤΟΛΗ NDI: ΕΚΤΟΣ
+no still preview	χωρίς προεπισκόπηση εικόνας
+Pocket 3 / touch	Pocket 3 / αφή
+SMPTE LTC OUTPUT	ΕΞΟΔΟΣ SMPTE LTC
+the whole screen	όλη η οθόνη
+Check for one now	Έλεγχος τώρα
+INSTALL & RESTART	ΕΓΚΑΤΑΣΤΑΣΗ ΚΑΙ ΕΠΑΝΕΚΚΙΝΗΣΗ
+Registry: NOT SET	Μητρώο: ΔΕΝ ΟΡΙΣΤΗΚΕ
+SAFETY / TIMECODE	ΑΣΦΑΛΕΙΑ / TIMECODE
+Timecode jam sync	Jam sync timecode
+esc or N to cancel	Esc ή N για άκυρο
+KEYBOARD SHORTCUTS	ΣΥΝΤΟΜΕΥΣΕΙΣ ΠΛΗΚΤΡΟΛΟΓΙΟΥ
+loading preview...	φόρτωση προεπισκόπησης...
+CONVERT ALL FLAGGED	ΜΕΤΑΤΡΟΠΗ ΟΛΩΝ ΤΩΝ ΣΗΜΕΙΩΜΕΝΩΝ
+dot-matrix cue deck	κονσόλα cue με κουκκίδες
+HyperDeck emulation	Εξομοίωση HyperDeck
+locked to the tempo	κλειδωμένο στο τέμπο
+VJ mode (two decks)	Λειτουργία VJ (δύο κονσόλες)
+ADD ANOTHER PLAYLIST	ΠΡΟΣΘΗΚΗ ΑΛΛΗΣ ΛΙΣΤΑΣ
+Companion / OSC port	Θύρα Companion / OSC
+Esc or click to skip	Esc ή κλικ για παράλειψη
+PLAYLIST PREFERENCES	ΠΡΟΤΙΜΗΣΕΙΣ ΛΙΣΤΑΣ
+press ENTER to start	πατήστε ENTER για έναρξη
+ADD A SECOND PLAYLIST	ΠΡΟΣΘΗΚΗ ΔΕΥΤΕΡΗΣ ΛΙΣΤΑΣ
+filmstrip unavailable	η λωρίδα δεν είναι διαθέσιμη
+(empty — import media)	(κενό – εισάγετε πολυμέσα)
+Ctrl+D or Esc to close	Ctrl+D ή Esc για κλείσιμο
+(no notes for this cue)	(χωρίς σημειώσεις για αυτό το cue)
+Timebase / start / fade	Χρονική βάση / έναρξη / σβήσιμο
+No cues need conversion.	Κανένα cue δεν χρειάζεται μετατροπή.
+CLICK TO SAMPLE KEY COLOR	ΚΛΙΚ ΓΙΑ ΔΕΙΓΜΑ ΧΡΩΜΑΤΟΣ KEY
+normalize loudness (R128)	κανονικοποίηση έντασης (R128)
+off - all channels silent	εκτός – όλα τα κανάλια σιωπηλά
+no video lane for this cue	χωρίς κανάλι βίντεο για αυτό το cue
+HyperDeck emulation is off.	Η εξομοίωση HyperDeck είναι εκτός.
+OWN SCRIPT  (click to edit)	ΔΙΚΟ ΣΕΝΑΡΙΟ  (κλικ για επεξεργασία)
+Theme and operator feedback	Θέμα και ενδείξεις χειριστή
+Discovery and mirrored state	Ανακάλυψη και καθρεφτισμένη κατάσταση
+FOLLOWING THE LIVE CUE NOTES	ΑΚΟΛΟΥΘΕΙ ΤΙΣ ΣΗΜΕΙΩΣΕΙΣ ΤΟΥ ΖΩΝΤΑΝΟΥ CUE
+Listening on all interfaces.	Ακρόαση σε όλες τις διεπαφές.
+Network-facing runtime notes	Σημειώσεις εκτέλεσης προς το δίκτυο
+Hi! Press I to import a clip.	Γεια! Πατήστε I για εισαγωγή κλιπ.
+Global jump and panic behavior	Γενική συμπεριφορά άλματος και πανικού
+Roll when the show cuts to you	Ξεκίνα όταν η παράσταση περάσει σε εσένα
+Choose a cue to inspect it here	Επιλέξτε ένα cue για να το δείτε εδώ
+Defaults for newly created cues	Προεπιλογές για νέα cue
+Device routing for cue playback	Δρομολόγηση συσκευών για αναπαραγωγή
+Smaller buffer = lower latency.	Μικρότερη μνήμη = λιγότερη καθυστέρηση.
+Emergency fade and sync behavior	Σβήσιμο ανάγκης και συγχρονισμός
+mixed selection: key unavailable	μεικτή επιλογή: key μη διαθέσιμο
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (ΠΕΙΡΑΜΑΤΙΚΟ)
+Esc=continue with current session	Esc = συνέχεια με την τρέχουσα συνεδρία
+no per-cue settings for this type	χωρίς ρυθμίσεις cue για αυτόν τον τύπο
+On stop: remux to an ordinary MP4	Στο τέλος: επανασυσκευασία σε κανονικό MP4
+Where RECORD writes the programme	Πού γράφει το RECORD το πρόγραμμα
+dot-matrix cue deck for live events	κονσόλα cue με κουκκίδες για ζωντανές εκδηλώσεις
+Listening on localhost (127.0.0.1).	Ακρόαση σε localhost (127.0.0.1).
+three expressions: red, green, blue	τρεις παραστάσεις: κόκκινο, πράσινο, μπλε
+Transport sync with another machine	Συγχρονισμός με άλλο μηχάνημα
+Add slot sources in the cue inspector	Προσθέστε πηγές στον επιθεωρητή cue
+Ask GitHub; never installs on its own	Ρωτά το GitHub· δεν εγκαθιστά μόνο του
+Import or click a cue in the playlist	Εισάγετε ή κάντε κλικ σε ένα cue
+mixed selection: geometry unavailable	μεικτή επιλογή: γεωμετρία μη διαθέσιμη
+generate timecode for the rig to chase	παράγετε timecode για να ακολουθεί ο εξοπλισμός
+Lower Third and PIP fire independently	Το κάτω τρίτο και το PiP ενεργοποιούνται ξεχωριστά
+Panels built for a vMix rig, unchanged	Πάνελ για εξοπλισμό vMix, αμετάβλητα
+Incoming transport arrives as NMCEVENT.	Η εισερχόμενη μεταφορά φτάνει ως NMCEVENT.
+not in this build - saved with the show	δεν υπάρχει σε αυτή την έκδοση – αποθηκεύεται με την παράσταση
+Find from the playlist, not from a modal	Αναζήτηση από τη λίστα, όχι από παράθυρο
+take or select a cue to open the timeline	πάρτε ή επιλέξτε ένα cue για να ανοίξει η γραμμή χρόνου
+Optional external transport and cue control	Προαιρετικός εξωτερικός έλεγχος μεταφοράς και cue
+No previous show file found at startup path.	Δεν βρέθηκε προηγούμενο αρχείο παράστασης.
+Use Ctrl+F or type a cue id/number to search.	Χρησιμοποιήστε Ctrl+F ή γράψτε κωδικό/αριθμό cue.
+Companion / OSC ingress and HyperDeck emulation	Είσοδος Companion / OSC και εξομοίωση HyperDeck
+A/V delay holds audio back for lagging displays.	Η καθυστέρηση A/V κρατά τον ήχο για αργές οθόνες.
+On stop: leave the crash-resilient file as it is	Στο τέλος: αφήστε το ανθεκτικό αρχείο ως είναι
+same disk as Deckboy - a separate drive is safer	ίδιος δίσκος με το Deckboy – ξεχωριστός είναι ασφαλέστερος
+A step fires one cue on each playlist, all at once.	Ένα βήμα ενεργοποιεί ένα cue σε κάθε λίστα ταυτόχρονα.
+one expression: the same value in red, green and blue	μία παράσταση: η ίδια τιμή σε κόκκινο, πράσινο και μπλε
+NDI transport is configured per output in Video Outputs.	Η μεταφορά NDI ρυθμίζεται ανά έξοδο στις Εξόδους βίντεο.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Στέλνει PLAY / PAUSE / STOP / LOCATE όσο κινείται η μεταφορά.
+OSC subscribe: send /deckboy/subscribe from your controller.	Συνδρομή OSC: στείλτε /deckboy/subscribe από τον ελεγκτή σας.
+NMC mode / host / port are runtime-configurable for sync work.	Η λειτουργία / ο κόμβος / η θύρα NMC ρυθμίζονται κατά την εκτέλεση.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Η μετάβαση στον αέρα παίρνει το cue. Το Deckboy δεν στέλνει ποτέ εντολή στον μίκτη.
+FPS: ON	FPS: ΕΝΤΟΣ
+FPS: OFF	FPS: ΕΚΤΟΣ
+NMOS: ON	NMOS: ΕΝΤΟΣ
+NMOS: OFF	NMOS: ΕΚΤΟΣ
+SPOUT: ON	SPOUT: ΕΝΤΟΣ
+SPOUT: OFF	SPOUT: ΕΚΤΟΣ
+CANVAS: ON	ΚΑΜΒΑΣ: ΕΝΤΟΣ
+CANVAS: OFF	ΚΑΜΒΑΣ: ΕΚΤΟΣ
+10-BIT: ON	10-BIT: ΕΝΤΟΣ
+10-BIT: OFF	10-BIT: ΕΚΤΟΣ
+EDIT...	ΕΠΕΞΕΡΓΑΣΙΑ...
+FOLDER...	ΦΑΚΕΛΟΣ...
+ARRANGE...	ΔΙΑΤΑΞΗ...
+ADD FILE...	ΠΡΟΣΘΗΚΗ ΑΡΧΕΙΟΥ...
+RENUMBER...	ΕΠΑΝΑΡΙΘΜΗΣΗ...
+set a port...	ορίστε θύρα...
+no script	χωρίς σενάριο
++ OUTPUT	+ ΕΞΟΔΟΣ
+Eddie's Clock	Το ρολόι του Eddie
+Ctrl+/ to close	Ctrl+/ για κλείσιμο
+(step lives here)	(το βήμα βρίσκεται εδώ)
+No outputs — click + OUTPUT to add one.	Καμία έξοδος – κλικ + ΕΞΟΔΟΣ για προσθήκη.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, ενεργοποίηση NDI, NMC, MTC, LTC, Art-Net και Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Μετατρέψτε σε H.264 τα cue που το Deckboy δεν παίζει καλά
+a button can run any command the network protocol understands	ένα κουμπί μπορεί να εκτελέσει κάθε εντολή που καταλαβαίνει το πρωτόκολλο
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	ΔΙΑΤΑΞΗ ΠΑΡΟΥΣΙΑΣΤΗ  -  σύρετε ένα πάνελ για μετακίνηση, μια γωνία για μέγεθος
+4:2:2  8-BIT	4:2:2  8-BIT
+4:2:2  10-BIT	4:2:2  10-BIT
+capture again - what is on now	λήψη ξανά - ό,τι είναι στον αέρα
+change what it does...	αλλαγή λειτουργίας...
+decks - Stop deck...	κονσόλες - διακοπή κονσόλας...
+decks - Take deck...	κονσόλες - TAKE στην κονσόλα...
+delete step	διαγραφή βήματος
+delete this button	διαγραφή αυτού του κουμπιού
+label, command and glyph as text...	ετικέτα, εντολή και σύμβολο ως κείμενο...
+move down	μετακίνηση κάτω
+move up	μετακίνηση πάνω
+next colour	επόμενο χρώμα
+preset - a new preset from what is on now	preset - νέο preset από ό,τι είναι στον αέρα
+type a command myself...	θα πληκτρολογήσω εντολή...
+type a length in seconds...	πληκτρολογήστε διάρκεια σε δευτερόλεπτα...
+wait for GO	αναμονή για GO
+what it recalls...	τι ανακαλεί...
+when its cues end	όταν τελειώσουν τα cue του
+AUDIONORM ALL matches the whole playlist at once	Το AUDIONORM ALL εξισώνει όλη τη λίστα μαζί
+back to the in point, not to zero	πίσω στο σημείο εισόδου, όχι στο μηδέν
+drag to scrub. the audio follows	σύρετε για κύλιση. ο ήχος ακολουθεί
+loops between the in and out points, not the file	επαναλαμβάνει μεταξύ σημείων εισόδου και εξόδου, όχι όλο το αρχείο
+(not set)	(δεν έχει οριστεί)
+1.00x  (default 1080p)	1.00x  (προεπιλογή 1080p)
+1.25x  (large desktop)	1.25x  (μεγάλη επιφάνεια εργασίας)
+1.50x  (4K desktop)	1.50x  (επιφάνεια 4K)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / μικρή 4K)
+highest bandwidth	μέγιστο εύρος ζώνης
+lower bandwidth	μικρότερο εύρος ζώνης
+film	κινηματογράφος
+CD, music rigs	CD, μουσικά συστήματα
+video standard	πρότυπο βίντεο
+every playlist	κάθε λίστα
+None  (no character art)	Κανένας  (χωρίς χαρακτήρα)
+custom size...	προσαρμοσμένο μέγεθος...
+Browser URL	URL προγράμματος περιήγησης
+Camera	Κάμερα
+Media File / Still	Αρχείο πολυμέσων / εικόνα
+RECORD TO FILE	ΕΓΓΡΑΦΗ ΣΕ ΑΡΧΕΙΟ
+browser, with sound	πρόγραμμα περιήγησης, με ήχο
+Window	Παράθυρο
+Desktop	Επιφάνεια εργασίας
+full screen	πλήρης οθόνη
+DeckLink Output	Έξοδος DeckLink
+FFmpeg Stream Output	Έξοδος ροής FFmpeg
+NDI Output	Έξοδος NDI
+SDL Window Output	Έξοδος παραθύρου SDL
+Spout Output	Έξοδος Spout
+DESK	ΧΕΙΡΙΣΤΗΣ
+drop a folder in too - it reads the whole tree	σύρε κι έναν φάκελο — διαβάζονται και όλοι οι υποφάκελοι
+cameras, windows, NDI, screens - all live sources	κάμερες, παράθυρα, NDI, οθόνες — όλα ζωντανές πηγές
+test cards and generators - no file needed	κάρτες δοκιμής και γεννήτριες — δεν χρειάζεται αρχείο
+space bar does this too, without moving your hand	το πλήκτρο διαστήματος κάνει το ίδιο, χωρίς να κουνήσεις το χέρι
+stops the cue. ESC stops EVERYTHING	σταματά το cue. Το ESC σταματά ΤΑ ΠΑΝΤΑ
+the safe one: audio and playback keep running	η ήπια επιλογή: ήχος και αναπαραγωγή συνεχίζονται
+the thorough one. blackout is the reversible one	η δραστική επιλογή. Το μαύρο μπορείς να το αναιρέσεις
+save as makes a new file instead	η Αποθήκευση ως δημιουργεί νέο αρχείο
+for a copy before you change something risky	για ένα αντίγραφο πριν από μια ριψοκίνδυνη αλλαγή
+this is what you carry to the venue	αυτό παίρνεις μαζί σου στον χώρο της εκδήλωσης
+the show on disk is untouched until you save	το σόου στον δίσκο μένει ανέπαφο ώσπου να αποθηκεύσεις
+per cue. the deck has its own default too	ανά cue. Το deck έχει και δικές του προεπιλογές
+stills hold instead - a fade would dip the frame	οι στατικές εικόνες παραμένουν — μια εξασθένηση θα σκοτείνιαζε το καρέ
+the frame stays up. good for slides	η εικόνα παραμένει. Βολικό για διαφάνειες
+gain, pan and normalise live in the inspector	απολαβή, πανοραμική θέση και κανονικοποίηση είναι στον επιθεωρητή
+this clip has no audio track to enable	αυτό το κλιπ δεν έχει ηχητικό κανάλι για ενεργοποίηση
+Hi! I am Deckboy.	Γεια! Είμαι ο Deckboy.
+Press I to import a clip.	Πάτα I για να εισαγάγεις ένα κλιπ.
+Enter takes a cue live.	Το Enter βγάζει ένα cue στον αέρα.
+S stops the live cue.	Το S σταματά το cue που είναι στον αέρα.
+The timeline can be resized.	Μπορείς να αλλάξεις το μέγεθος της χρονογραμμής.
+Try a terminal theme in Settings.	Δοκίμασε ένα θέμα τερματικού στις Ρυθμίσεις.
+RELINK finds media that has moved.	Το RELINK βρίσκει αρχεία πολυμέσων που μετακινήθηκαν.
+Cues have their own gain and fades.	Κάθε cue έχει δική του απολαβή και δικά του σβησίματα.
+Trim with Ctrl+I and Ctrl+O.	Όρισε τα σημεία κοπής με Ctrl+I και Ctrl+O.
+Ctrl+/ shows every shortcut.	Το Ctrl+/ δείχνει όλες τις συντομεύσεις.
+J jumps to the live cue.	Το J πηγαίνει στο cue που είναι στον αέρα.
+Normalize matches loudness across cues.	Η κανονικοποίηση εξισώνει την ακουστότητα των cue.
+Esc clears the desk, then the output, then quits.	Το Esc καθαρίζει την κονσόλα, μετά την έξοδο και τέλος κλείνει.
+Stream SRT and RTMP at the same time.	Μετάδωσε μέσω SRT και RTMP ταυτόχρονα.
+CHECK lists what is broken, before doors.	Το CHECK δείχνει τα προβλήματα πριν ανοίξουν οι πόρτες.
+A cue can wait before it starts.	Ένα cue μπορεί να περιμένει πριν ξεκινήσει.
+A cue can start the next one by itself.	Ένα cue μπορεί να ξεκινήσει μόνο του το επόμενο.
+Disarm a cue and GO steps over it.	Αφόπλισε ένα cue και το GO θα το προσπεράσει.
+Audition plays a cue to you, not the room.	Η προακρόαση παίζει για σένα, όχι για την αίθουσα.
+Preload racks the next cue warm, off air.	Η προφόρτωση ετοιμάζει το επόμενο cue εκτός αέρα.
+A target cue starts or stops another cue.	Ένα cue στόχου ξεκινά ή σταματά ένα άλλο cue.
+A fade cue takes a deck down, then stops it.	Ένα cue εξασθένησης χαμηλώνει ένα deck και μετά το σταματά.
+A master cue fires one cue on every deck.	Ένα κύριο cue εκκινεί ένα cue σε κάθε deck.
+A MIDI cue can tell the lighting desk to go.	Ένα cue MIDI μπορεί να δώσει σήμα στην κονσόλα φωτισμού.
+A network cue speaks OSC, UDP or TCP.	Ένα cue δικτύου μιλά OSC, UDP ή TCP.
+A DMX cue fades the house lights on a cue.	Ένα cue DMX αλλάζει ομαλά τον φωτισμό της αίθουσας.
+A script cue runs Deckboy's own commands.	Ένα cue σεναρίου εκτελεί τις εντολές του Deckboy.
+A timecode cue jams LTC to a value.	Ένα cue χρονοκώδικα θέτει το LTC σε μια τιμή.
+Each output can show a different deck.	Κάθε έξοδος μπορεί να δείχνει διαφορετικό deck.
+The matrix sends audio to any channel.	Η μήτρα στέλνει ήχο σε οποιοδήποτε κανάλι.
+The panel map numbers every LED tile.	Ο χάρτης πάνελ αριθμεί κάθε πλακίδιο LED.
+Hey!	Ε!
+Quit it!	Κόφ' το!
+Ow. That was rude.	Ωχ. Ωραίοι τρόποι.
+I am a professional.	Εγώ είμαι επαγγελματίας, παρακαλώ.
+Seriously?	Σοβαρά τώρα;
+This is my monitor.	Αυτή είναι η δική μου οθόνη.
+I am telling the operator.	Θα το πω στον χειριστή.
+All right. Wow.	Μάλιστα. Τι να πω.
+Right. That does it.	Ως εδώ και μη παρέκει.
+I am leaving. Good luck with the show.	Εγώ φεύγω. Καλή τύχη με το σόου.
+Still here? Me too.	Ακόμα εδώ; Κι εγώ.
+Long show, huh.	Αυτό το σόου δεν έχει τελειωμό.
+I could do this all day. Apparently.	Μπορώ να το κάνω όλη μέρα. Μάλλον αυτό θα γίνει.
+You have been staring at me for hours.	Με κοιτάς εδώ και ώρες.
+Has anyone seen a clock?	Έχει κανείς ρολόι ή πάμε με το μάτι;
+Is it still the same show?	Στο ίδιο σόου είμαστε ακόμα;
+I'm not tired. You're tired.	Δεν κουράστηκα εγώ. Εσύ κουράστηκες.
+Five more minutes. Then five more.	Άλλα πέντε λεπτά. Ζήσε Μάη μου.
+A whole day. I need a restart.	Μια ολόκληρη μέρα. Θέλω επανεκκίνηση.
+Save the show. Then let me sleep.	Αποθήκευσε το σόου. Μετά άσε με να κοιμηθώ.
+Every pixel of me is tired.	Τα 'παιξαν μέχρι και τα πίξελ μου.
+Close me. Open me. I'll be fine.	Κλείσε με. Άνοιξέ με. Θα στρώσω.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Όπα! Μόνο μη σπάσεις πιάτα στην κονσόλα.
+Oh hey. It's 4:20. Take it easy.	Ε, γεια. Είναι 4:20. Χαλάρωσε.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	ΓΕΙΑ ΣΟΥ
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Ντόμπαρ ντεν, σκάπι. Είμαι η δρ Πίξελ. Πέντε λεπτά και θα τρέχεις σόου. Λιγότερο, αν με ακούσεις.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Κι εγώ είμαι ο καθηγητής Βίντεο. Πρώτα συνθεσάιζερ, μετά βίντεο. Τώρα κυρίως βίντεο. Πάτα START και θα συνδέσουμε... θα ξεκινήσουμε.
+TURN THE OUTPUT ON	ΑΝΑΨΕ ΤΗΝ ΕΞΟΔΟ
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Σκάπι, η οθόνη είναι άδεια. Μην τους αφήνεις να περιμένουν. Άνοιξε το ΜΕΝΟΥ και κάνε το ΕΞΟΔΟΣ ΕΚΤΟΣ να γίνει ΕΞΟΔΟΣ ΕΝΤΟΣ. Άιντε!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Μάθημα πρώτο: τίποτα δεν βγαίνει μέχρι να συνδέσεις τον ταλαντωτή στην... στην ΕΞΟΔΟ. Βίντεο είναι. Το ξέρω.
+BRING IN A CLIP	ΦΕΡΕ ΕΝΑ ΚΛΙΠ
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Τώρα μια εικόνα. Πάτα I και διάλεξε ένα κλιπ από τον υπολογιστή σου. Δεν έχεις κλιπ; SHOW ME, και σου δανείζω ένα δικό μου.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Κάθε κλιπ γίνεται ένα cue στη λίστα αναπαραγωγής. Σαν να φορτώνεις ένα σαμπλ. Ένα σαμπλ με εικόνες.
+TAKE IT LIVE	ΣΤΟΝ ΑΕΡΑ
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Το κλιπ σου περιμένει στη λίστα. Επίλεξέ το, μετά TAKE. Ή Enter. Οι σίγουροι χειριστές πατάνε Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	Το TAKE είναι η σκανδάλη του περιβάλλοντος. Το, εε, το κουμπί GO. Το ίδιο πράγμα, απλώς έχει εικόνες.
+LINE UP THE NEXT ONE	ΕΤΟΙΜΑΣΕ ΤΟ ΕΠΟΜΕΝΟ
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Κάνε κλικ σε άλλο cue. Περιμένει έτοιμο μέχρι να πεις εσύ. Μόνο ένα cue; Εισήγαγε άλλο ένα, ή SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Η επιλογή δεν είναι αναπαραγωγή. Το επιλεγμένο είναι η επόμενη νότα της ακολουθίας. Το επόμενο CUE.
+CROSSFADE TO IT	ΔΙΑΣΤΑΥΡΩΣΕ ΣΕ ΑΥΤΟ
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Τα ξερά κοψίματα είναι για ερασιτέχνες. Στον επιθεωρητή πάτα + στη μετάβαση, να δείχνει χρόνο κι όχι deck. Μετά TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Διασταύρωση! Πορταμέντο, αλλά για εικόνες. Οποιοσδήποτε χρόνος κάνει. Λίγα πατήματα ακόμα και είναι ένα δευτερόλεπτο. Μετά TAKE.
+CLEAR THE SCREEN	ΚΑΘΑΡΙΣΕ ΤΗΝ ΟΘΟΝΗ
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Κάτι στραβώνει στη σκηνή; Πάτα BLACK, ή B. Η εικόνα φεύγει. Το σόου συνεχίζει από κάτω.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Τίποτα δεν χάνεται. Πάτα πάλι B και επιστρέφει. Σαν το mute σε κονσόλα ήχου. Πολύ καθησυχαστικό.
+SAVE THE SHOW	ΑΠΟΘΗΚΕΥΣΕ ΤΟ ΣΟΟΥ
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Τώρα αποθήκευσε. Ctrl+S, ή ΑΠΟΘ. Κάποια προγράμματα χάνουν τη δουλειά σου και μετά φταις εσύ. Εγώ ποτέ.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Αποθήκευσε το πατς σου. Το ΣΟΟΥ σου. Σόου. Αυτό το εξασκητικό μένει στον φάκελο του ίδιου του Deckboy· το δικό σου είναι ασφαλές.
+THAT'S A SHOW	ΑΥΤΟ ΕΙΝΑΙ ΣΟΟΥ
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	Αυτό είναι σόου! Έξοδος, cue, TAKE, διασταύρωση, BLACK, αποθήκευση. Ναζντράβε, σκάπι. Η ρακία κερασμένη από μένα.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Τέλος μαθήματος. Τα παραδείγματα σόου διδάσκουν επίπεδα, τίτλους και εφέ. Το ΜΕΝΟΥ > LEARN THE BASICS τα ξαναπαίζει.
+*shakes head* That means yes. Bravo.	*κουνάει το κεφάλι πέρα δώθε* Αυτό σημαίνει ναι. Μπράβο.
+Wonderful! Lovely signal flow.	Υπέροχα! Τι ωραία ροή σήματος.
+Mm. I knew you had it in you.	Μμ. Το ήξερα ότι το έχεις.
+Yes! Have a gold star. It's a dot.	Ναι! Πάρε ένα χρυσό αστέρι. Είναι μια τελεία.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Έτοιμος για το επόμενο βήμα; *γνέφει ναι* ...Στη Βουλγαρία αυτό σημαίνει όχι, σκάπι. Αυτό που λάμπει. Λάμπει για σένα.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Έκανες κλικ σε όλα εκτός από αυτό που λάμπει. Ακόμα κι οι ταλαντωτές μου βρίσκουν αυτό που λάμπει.
+stop playback first - the lesson cannot hand a running show back as it was	σταμάτα πρώτα την αναπαραγωγή - το μάθημα δεν μπορεί να επιστρέψει ένα σόου που τρέχει όπως ήταν
+choose RECOVER or KEEP SAVED first	διάλεξε πρώτα RECOVER ή KEEP SAVED
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	το σόου σου δεν αποθηκεύτηκε, οπότε το μάθημα δεν ξεκίνησε. Αποθήκευσέ το (ΑΠΟΘΗΚΕΥΣΗ ΩΣ) και ξαναδοκίμασε
+the practice show would not open	το σόου εξάσκησης δεν άνοιξε
+could not start the practice show	δεν ήταν δυνατό να ξεκινήσει το σόου εξάσκησης
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: το Esc βγαίνει, και την επόμενη φορά συνεχίζει από εδώ
+that's the basics - MENU > LESSONS has part two	αυτά είναι τα βασικά - το ΜΕΝΟΥ > LESSONS έχει δεύτερο μέρος
+tour paused - LEARN THE BASICS picks up where you left off	ξενάγηση σε παύση - το LEARN THE BASICS συνεχίζει από εκεί που σταμάτησες
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Οθόνες σε καθρέφτη, σκάπι. Πάτα ένα πλήκτρο ή κάνε κλικ, και η δρ Πίξελ το επιστρέφει.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Λάθος οθόνη, σκάπι. Πάτα ένα πλήκτρο ή κάνε κλικ, και η δρ Πίξελ το επιστρέφει.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Η άλλη οθόνη έφυγε, σκάπι. Πάτα ένα πλήκτρο ή κάνε κλικ, και η δρ Πίξελ το επιστρέφει.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Μία οθόνη, σκάπι. Πάτα ένα πλήκτρο ή κάνε κλικ, και η δρ Πίξελ το επιστρέφει.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Η άλλη οθόνη έφυγε, σκάπι, οπότε η εικόνα γύρισε σε αυτήν. Την έβαλα σε ένα παραθυράκι, από πίσω. Ξανασύνδεσέ την και η εικόνα πάει πάλι εκεί.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Έφαγε την κονσόλα, σκάπι. Μία οθόνη, οπότε η έξοδος την πήρε όλη. Την έβαλα σε ένα παραθυράκι, από πίσω. Ένα αληθινό σόου έχει δεύτερη οθόνη.
+IT ATE THE DESK	ΕΦΑΓΕ ΤΗΝ ΚΟΝΣΟΛΑ
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	Εκεί. Το κουμπί που γράφει ΕΞΟΔΟΣ ΕΚΤΟΣ. Κάν' το να γράφει ΕΝΤΟΣ, σκάπι.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Δεν είναι τίποτα στον αέρα για να διασταυρώσουμε, σκάπι. Πρώτα TAKE σε ένα cue, μετά διάλεξε το άλλο και δώσ' του χρόνο.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	Αυτό ήταν κόψιμο, σκάπι. Γρήγορο, αλλά όχι διασταύρωση. Διάλεξε το άλλο cue, πάτα + στη μετάβαση, μετά TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Βρόχος ανάδρασης! Η έξοδος γυρισμένη κατευθείαν πίσω στην κονσόλα. Συμβαίνει και στους καλύτερους. Κυρίως σε μένα. 1983. Για το 1983 δεν μιλάμε.
+No more rakia. The rat has a problem.	Τέλος η ρακία. Ο αρουραίος έχει πρόβλημα.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Ναζντράβε, σκάπι! Η ρακία της γιαγιάς, από το Μπελογκράντσικ. Ένα ποτηράκι, για το μάθημα.
+Is this... is this allowed during a tutorial?	Επιτρέπεται... επιτρέπεται αυτό σε μάθημα;
+*shakes head* That means one more.	*κουνάει το κεφάλι πέρα δώθε* Αυτό σημαίνει άλλο ένα.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Σας αγαπώ όλους. Αγαπώ τον ταλαντωτή. Αγαπώ την ΕΞΟΔΟ. Βίντεο είναι. Το ξέρω. ΤΟ ΞΕΡΩ.
+...and the rat took the rakia. Every time, skapi. Every single time.	...κι ο αρουραίος πήρε τη ρακία. Κάθε φορά, σκάπι. Κάθε μία φορά.
+Was that a rat? In a hat? With a pizza?	Αρουραίος ήταν αυτός; Με καπέλο; Με πίτσα;
+Stop that. I am a serious man.	Σταμάτα. Είμαι σοβαρός άνθρωπος.
+Do not tell Dr. Pixel about this.	Μην το πεις στη δρ Πίξελ.
+This never happened. Back to the patch bay.	Αυτό δεν έγινε ποτέ. Πίσω στο patch bay.
+It was the eighties. Everyone had a bow tie.	Ήταν τα ογδόντα. Όλοι είχαν παπιγιόν.
+LESSON LIST	ΛΙΣΤΑ ΜΑΘΗΜΑΤΩΝ
+OPEN EXAMPLE SHOWS	ΑΝΟΙΓΜΑ ΠΑΡΑΔΕΙΓΜΑΤΩΝ
+EXIT (Esc)	ΕΞΟΔΟΣ (Esc)
+Taking it on the road	Το σόου σε περιοδεία
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Κάνε CHECK πριν ταξιδέψει το σόου, διόρθωσε ό,τι βρει, και συσκεύασέ το με τα μέσα του.
+Effects, oscillators and colour	Εφέ, ταλαντωτές και χρώμα
+An effect, a ~ on its knob, and the colour picker.	Ένα εφέ, ένα ~ στο κουμπί του, και ο επιλογέας χρώματος.
+The art school crit, with Mr. Salty	Η κριτική στη σχολή καλών τεχνών, με τον Mr. Salty
+Patterns, synths and Draw	Μοτίβα, συνθεσάιζερ και Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Ένα μοτίβο δοκιμής, το βιντεο-συνθεσάιζερ, και ζωγραφική πάνω στην εικόνα, αποθηκευμένη ως στατική.
+The telestrator booth, with Coach Marv	Ο θάλαμος του τελεστράτορα, με τον Coach Marv
+Masks	Μάσκες
+A heart from the library, the pen, invert and feather.	Μια καρδιά από τη βιβλιοθήκη, η πένα, αντιστροφή και θόλωμα άκρων.
+The Signal Files: redact the evidence	Τα Αρχεία Σήματος: σβήσε το τεκμήριο
+Warp, blend and slices	Παραμόρφωση, μείξη και φέτες
+A corner pin, two soft edges, then three slices in the Screens window.	Ένα καρφίτσωμα γωνιών, δύο μαλακές άκρες, και μετά τρεις φέτες στο παράθυρο Screens.
+The haunted lighthouse, with Keeper Rook	Ο στοιχειωμένος φάρος, με τον φαροφύλακα Ρουκ
+GO from anywhere	GO από παντού
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Αριθμοί cue, GOTO, ένα πλήκτρο συντόμευσης, και πού μπαίνουν τα Companion, MIDI και OSC.
+The game show, with Donna Wheel	Το τηλεπαιχνίδι, με την Donna Wheel
+Words on screen	Λέξεις στην οθόνη
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Ένα σούπερ με όνομα, μετά μια κάρτα τίτλου με πράσινο φόντο για κλειδί.
+The kaiju weather report, with June O'Neil	Το δελτίο καιρού με καϊτζού, με την June O'Neil
+Keeping time	Κρατώντας τον χρόνο
+A stage timer counting down, held, and a presenter view for the person on stage.	Ένα χρονόμετρο σκηνής σε αντίστροφη μέτρηση, σε παύση, και μια προβολή παρουσιαστή για όποιον είναι στη σκηνή.
+A grand day out, with Wallis and Grommet	Μια μεγάλη εκδρομή, με τον Wallis και τον Grommet
+Two playlists and TAKE ALL	Δύο λίστες και TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Μια δεύτερη λίστα ως επίπεδο, και TAKE ALL για να αλλάξουν δύο πράγματα στο ίδιο χτύπημα.
+The magic show, with Turnip Top	Το σόου μαγείας, με τον Turnip Top
+When it goes wrong	Όταν στραβώνει
+BLACK against PANIC, and getting a show back.	BLACK απέναντι στο PANIC, και πώς παίρνεις πίσω ένα σόου.
+The cooking show, with Chef Bork	Η εκπομπή μαγειρικής, με τον σεφ Bork
+Presets	Προεπιλογές
+Capture a look on a DASH button, change everything, and get it back with one press.	Κράτα ένα λουκ σε κουμπί του DASH, άλλαξε τα πάντα, και πάρ' το πίσω με ένα πάτημα.
+Transitions	Μεταβάσεις
+The styles beyond the crossfade: an iris, a shatter, and their times.	Τα στυλ πέρα από τη διασταύρωση: μια ίριδα, ένα θρυμμάτισμα και οι χρόνοι τους.
+The space-opera trailer, with Optimus Primetime	Το τρέιλερ διαστημικής όπερας, με τον Optimus Primetime
+Sound	Ήχος
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Ένα εφέ ήχου σε cue, μια κάμψη που το χαλάει όμορφα, και πού ζει το πατς.
+The robot DJs, with Deft Funk	Οι ρομπότ DJ, με τους Deft Funk
+Reading the scopes	Διαβάζοντας τα σκόουπ
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Η κυματομορφή, το βεκτορόσκοπιο και το ψευδοχρώμα: είναι αληθινή η λάμψη, ή απλώς πολύ φωτεινή;
+The Signal Files: is the glow on the horizon a craft?	Τα Αρχεία Σήματος: είναι σκάφος η λάμψη στον ορίζοντα;
+Out of the building	Έξω από το κτίριο
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Πού ζουν τα NDI, SDI και ST 2110, και το NDI αναμμένο όπου το έχει αυτός ο υπολογιστής.
+The webcam as a controller, as a game. Five rounds, a high score.	Η κάμερα ως χειριστήριο, ως παιχνίδι. Πέντε γύροι, ένα ρεκόρ.
+A handheld, and bugs	Μια φορητή κονσόλα, και μπαγκ
+The multiview	Το multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	Παράθυρα, το μενού ..., τι δείχνει το καθένα, διατάξεις και tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Μυστήριο στο διαστημόπλοιο Cathode, με την υπολοχαγό Haila και τη σημαιοφόρο Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Δύο λίστες: το Deckboy γίνεται SUPER DECKBOY. Το άξιζε, σκάπι.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Εξελίχθηκε! Οι ταλαντωτές μου ποτέ δεν πήραν φανφάρα.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Κάθε σόου αξίζει ένα. Μπράβο.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Το power-up! Περισσότερες λίστες, περισσότερα επίπεδα, περισσότερο σούπερ.
+Intro video (left on the office PC)	Βίντεο εισαγωγής (ξεχασμένο στο PC του γραφείου)
+ON THE ROAD	ΣΤΟΝ ΔΡΟΜΟ
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Ένα σόου που έφτιαξες εδώ, σκάπι, παίζει απόψε σε ένα λάπτοπ κάπου αλλού. Πάτα START.
+Before it travels: check it, fix it, bundle it.	Πριν ταξιδέψει: έλεγξε, διόρθωσε, συσκεύασε.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Βλέπεις το CHECK στην πάνω μπάρα; Εμφανίζεται μόνο όταν κάτι δεν πάει καλά. Πάτα το.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Απαριθμεί ό,τι θα έκανε ένα σόου να σκοντάψει: αρχεία που λείπουν, άδεια cue, έξοδοι που δεν φτάνονται.
+FIX IT	ΔΙΟΡΘΩΣΕ ΤΟ
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Το βίντεο εισαγωγής είναι σε άλλο υπολογιστή. Επίλεξέ το και σβήσ' το, ή κάνε RELINK αν έχεις το αρχείο.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Διόρθωσέ το στο σπίτι, όπου είναι εύκολο. Όχι στον χώρο, όπου δεν είναι.
+BUNDLE IT	ΣΥΣΚΕΥΑΣΕ ΤΟ
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Πάτα ΣΥΣΚΕΥΑΣΙΑ και διάλεξε πού: ένα USB στικ, έναν κοινόχρηστο φάκελο. Το σόου και όλα του τα μέσα, μαζί.
+The copy finds its media beside it, wherever the folder goes.	Το αντίγραφο βρίσκει τα μέσα του δίπλα του, όπου κι αν πάει ο φάκελος.
+SAFE TRAVELS	ΚΑΛΟ ΤΑΞΙΔΙ
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Ελέγχθηκε, διορθώθηκε, συσκευάστηκε. Στο άλλο μηχάνημα άνοιξε το σόου του πακέτου: όλα είναι στη θέση τους.
+A show file is only text, so it travels light. The media is the heavy part.	Ένα αρχείο σόου είναι μόνο κείμενο, οπότε ταξιδεύει ελαφρύ. Το βαρύ κομμάτι είναι τα μέσα.
+Student work no. 4 (untitled)	Φοιτητική εργασία αρ. 4 (χωρίς τίτλο)
+THE CRIT	Η ΚΡΙΤΙΚΗ
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Μια σχολή καλών τεχνών, σκάπι. Ένας φοιτητής, μια εικόνα, ένας κριτικός που τα έχει δει όλα. Πάτα START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Τα εφέ αλλάζουν μια εικόνα· ένας ταλαντωτής την αλλάζει συνέχεια. Ο κριτικός αγαπά μόνο το δεύτερο είδος.
+A grey square on beige. I have seen this at every graduate show since 1987.	Ένα γκρι τετράγωνο σε μπεζ. Το βλέπω σε κάθε έκθεση αποφοίτων από το 1987.
+AN EFFECT	ΕΝΑ ΕΦΕ
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Στην ενότητα EFFECTS του επιθεωρητή, το + προσθέτει ένα. Το Edges είναι καλή αρχή: σχεδιάζει τα περιγράμματα.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Είναι δεκάδες. Το καθένα τρέχει στον επεξεργαστή σε λίγα χιλιοστά του δευτερολέπτου. Συνήθως.
+Take a risk! Bad art is fine. Boring art is a crime.	Ρίσκαρε! Η κακή τέχνη είναι εντάξει. Η βαρετή τέχνη είναι έγκλημα.
+A ~ ON ITS KNOB	ΕΝΑ ~ ΣΤΟ ΚΟΥΜΠΙ
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Κάθε χειριστήριο με ένα ~ δίπλα του μπορεί να ακολουθεί έναν ταλαντωτή. Πάτα ένα. Το κουμπί αρχίζει να ανασαίνει.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Ταλαντωτής χαμηλής συχνότητας: αργός, για να τον ακολουθεί το μάτι. Ένα τέταρτο του χερτζ είναι μια ανάσα τεσσάρων δευτερολέπτων.
+Now it MOVES. Okay. Okay. I'm listening.	Τώρα ΚΙΝΕΙΤΑΙ. Εντάξει. Εντάξει. Ακούω.
+A COLOUR OF ITS OWN	ΕΝΑ ΔΙΚΟ ΤΟΥ ΧΡΩΜΑ
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Τα εφέ που ζωγραφίζουν με χρώμα, όπως η γραμμή του Edges, έχουν ένα τετραγωνάκι χρώματος. Ανοίγει τον επιλογέα: τροχό, πληκτρολογημένα ονόματα ή ένα χρώμα από την οθόνη.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Κάθε χρώμα έχει κάπου ένα όνομα. Το δικό μου είναι «πράσινο παλμογράφου». Κανείς άλλος δεν το χρησιμοποιεί.
+That colour is doing something. I don't know what. I love it.	Αυτό το χρώμα κάτι κάνει. Δεν ξέρω τι. Το λατρεύω.
+THE VERDICT	Η ΕΤΥΜΗΓΟΡΙΑ
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Ένα εφέ, ένα ~ κι ένα χρώμα. Ο κριτικός κλαίει, σκάπι. Από συγκίνηση, νομίζω.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Στοίβαξε μερικά. Το καθένα έχει το δικό του ~ σε κάθε κουμπί. Έτσι ένα λουκ γίνεται παράσταση.
+It's still a square. But it's YOUR square. Post it.	Ακόμα τετράγωνο είναι. Αλλά είναι το ΔΙΚΟ ΣΟΥ τετράγωνο. Ανέβασέ το.
+THE TELESTRATOR BOOTH	Ο ΘΑΛΑΜΟΣ ΤΟΥ ΤΕΛΕΣΤΡΑΤΟΡΑ
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Ο Coach Marv εξηγεί τον αθλητισμό ζωγραφίζοντας κύκλους πάνω του. Μια φορά κύκλωσε τον ήλιο. Δέκα λεπτά, σκάπι.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Απόψε: μοτίβα δοκιμής, το βιντεο-συνθεσάιζερ, και ζωγραφική πάνω στην εικόνα. Πάτα START.
+Get me a picture and a pen. BOOM.	Δώστε μου μια εικόνα κι ένα στυλό. ΜΠΟΥΜ.
+A TEST PATTERN	ΕΝΑ ΜΟΤΙΒΟ ΔΟΚΙΜΗΣ
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Ευθυγράμμισε τις οθόνες ΠΡΙΝ το σόου. Όχι κατά τη διάρκεια. Το έμαθα στη Φιλιππούπολη.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Κάθε κονσόλα χρειάζεται ένα μοτίβο δοκιμής. Το ΜΟΤΙΒΟ προσθέτει το Pocket Test: ελεγμένο με πραγματικά όργανα.
+A VIDEO SYNTH	ΕΝΑ ΒΙΝΤΕΟ-ΣΥΝΘΕΣΑΪΖΕΡ
+He says 'no camera needed' like it is a feature. It is a feature.	Λέει «δεν χρειάζεται κάμερα» σαν να είναι δυνατότητα. Είναι δυνατότητα.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Το αγαπημένο μου. ΠΗΓΗ, μετά Video Synth: ταλαντωτές, καθρέφτες και ανάδραση. Δεν χρειάζεται κάμερα.
+TAKE THE SYNTH	TAKE ΣΤΟ ΣΥΝΘΕΣΑΪΖΕΡ
+Select it, then TAKE. Confident operators press Enter.	Επίλεξέ το, μετά TAKE. Οι σίγουροι χειριστές πατάνε Enter.
+That's our replay. Every replay needs a pundit.	Αυτό είναι το ριπλέι μας. Κάθε ριπλέι χρειάζεται σχολιαστή.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Να το ριπλέι. Να ο παίκτης. Και ΜΠΟΥΜ, είναι μέσα.
+A SECOND PLAYLIST	ΔΕΥΤΕΡΗ ΛΙΣΤΑ
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Το μελάνι πάει από πάνω, στο δικό του επίπεδο. Πάτα το + στο τέλος των καρτελών των λιστών.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	Μια δεύτερη λίστα είναι ένα επίπεδο πάνω από την πρώτη. Σαν δεύτερος ταλαντωτής, μιξαρισμένος από πάνω.
+A DRAW CUE	ΕΝΑ CUE DRAW
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Στη νέα λίστα: ΠΗΓΗ, μετά Draw. Διάφανο παντού όπου δεν ζωγράφισες.
+A Draw cue is transparent outside the ink, so the synth shows through.	Ένα cue Draw είναι διάφανο έξω από το μελάνι, οπότε το συνθεσάιζερ φαίνεται από πίσω.
+TAKE THE INK	TAKE ΣΤΟ ΜΕΛΑΝΙ
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Επίλεξε το cue Draw και κάνε TAKE. Δύο λίστες, δύο επίπεδα, μία εικόνα.
+Now both are live: the synth underneath, the ink on top.	Τώρα είναι και τα δύο στον αέρα: το συνθεσάιζερ από κάτω, το μελάνι από πάνω.
+CIRCLE SOMETHING	ΚΥΚΛΩΣΕ ΚΑΤΙ
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Πάτα DRAW στον επιθεωρητή, μετά ζωγράφισε στην οθόνη προγράμματος. Με ποντίκι, ή γραφίδα αν έχεις.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Η πίεση της γραφίδας κάνει τη γραμμή πιο χοντρή. Το ποντίκι πατάει πάντα με την ίδια δύναμη. Σαν εμένα.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Κύκλωσέ τον! Όχι, πιο μεγάλο. ΜΠΟΥΜ. Αυτό είναι σύννεφο. Καλά. Κύκλωσε το σύννεφο.
+SAVE A STILL	ΑΠΟΘΗΚΕΥΣΕ ΣΤΑΤΙΚΗ
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	Το SAVE STILL κρατά τη ζωγραφιά ως εικόνα με διάφανο φόντο και την προσθέτει στη λίστα.
+For next week's show. Coach Marv will want the cloud again.	Για την εκπομπή της επόμενης εβδομάδας. Ο Coach Marv θα θέλει πάλι το σύννεφο.
+THAT'S THE BOOTH	ΑΥΤΟΣ ΗΤΑΝ Ο ΘΑΛΑΜΟΣ
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Μοτίβα, το συνθεσάιζερ, ένα επίπεδο, μελάνι, μια στατική. Ναζντράβε, σκάπι.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Δοκίμασε το Replay στην ενότητα Draw: ξαναζωγραφίζει τις γραμμές σου όπως τις ζωγράφισες.
+Same time next week. Bring a bigger pen. And a turducken.	Ίδια ώρα την επόμενη εβδομάδα. Φέρε μεγαλύτερο στυλό. Κι ένα ταψί μουσακά.
+Saucer photo (CLASSIFIED)	Φωτογραφία του δίσκου (ΑΠΟΡΡΗΤΟ)
+THE SIGNAL FILES	ΤΑ ΑΡΧΕΙΑ ΣΗΜΑΤΟΣ
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Το Γραφείο Ανεξήγητων Σημάτων. Δύο πράκτορες, μία φωτογραφία, και δεν πρέπει να βγει στον αέρα. Πάτα START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Οι μάσκες κόβουν μια εικόνα σε σχήματα. Απόψε κόβουμε τεκμήρια.
+That's a craft, Brandt. Look at the lights. I want to believe.	Είναι σκάφος, Μπραντ. Κοίτα τα φώτα. Θέλω να πιστέψω.
+A MASK FROM THE LIBRARY	ΜΙΑ ΜΑΣΚΑ ΑΠΟ ΤΗ ΒΙΒΛΙΟΘΗΚΗ
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Στην ενότητα MASK του επιθεωρητή: mask, μετά «new heart». Οποιοδήποτε σχήμα κάνει. Η καρδιά είναι πιο αστεία.
+The library has circles, stars, hearts. Each one is points you can move.	Η βιβλιοθήκη έχει κύκλους, αστέρια, καρδιές. Το καθένα είναι σημεία που μπορείς να μετακινήσεις.
+A heart, Hollis? The Bureau redacts with black bars.	Καρδιά, Χόλις; Το Γραφείο λογοκρίνει με μαύρες λωρίδες.
+THE PEN	Η ΠΕΝΑ
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Βάλε το εργαλείο στην πένα και κάνε κλικ γύρω από τον δίσκο στην οθόνη. Κλικ στο πρώτο σημείο για να κλείσει.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Κλικ για γωνίες, σύρσιμο για καμπύλες. Όπως το ήθελαν τα αδέρφια Μπεζιέ.
+Draw round it carefully. It might be watching.	Περίγραψέ το προσεκτικά. Μπορεί να κοιτάει.
+INVERT	ΑΝΤΙΣΤΡΟΦΗ
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Η αντιστροφή κρατά το έξω και κόβει το μέσα. Ο δίσκος φεύγει. Ο ουρανός μένει.
+The same shape, the other way round. Very useful. Slightly spooky.	Το ίδιο σχήμα, ανάποδα. Πολύ χρήσιμο. Λίγο ανατριχιαστικό.
+Hollis, there's a heart-shaped hole in the sky.	Χόλις, υπάρχει μια τρύπα σε σχήμα καρδιάς στον ουρανό.
+FEATHER	ΘΟΛΩΜΑ ΑΚΡΩΝ
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Το θόλωμα μαλακώνει την άκρη, για να μη δει κανείς το κόψιμο. Πάτα + στο feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Μια σκληρή άκρη λέει «κάποιος ήταν εδώ». Μια μαλακή δεν λέει τίποτα.
+They'll never know.	Δεν θα το μάθουν ποτέ.
+CASE CLOSED	Η ΥΠΟΘΕΣΗ ΕΚΛΕΙΣΕ
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Ένα σχήμα βιβλιοθήκης, η πένα, αντιστροφή και θόλωμα. Το Γραφείο σάς ευχαριστεί. Το Γραφείο δεν ήταν ποτέ εδώ.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Οι μάσκες μπαίνουν και σε επίπεδο, έξοδο ή στο ματ της: το MASK ON διαλέγει. Και κάθε χειριστήριο δέχεται ένα ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	Η αλήθεια είναι στην κυματομορφή, Χόλις. Την επόμενη φορά, τα σκόουπ.
+The ghost	Το φάντασμα
+THE HAUNTED LIGHTHOUSE	Ο ΣΤΟΙΧΕΙΩΜΕΝΟΣ ΦΑΡΟΣ
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Ένας φάρος, ένα φάντασμα κι ένας φαροφύλακας που έμεινε μόνος με τη λάμπα πολύ καιρό. Πάτα START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Προβολική χαρτογράφηση: λυγίζουμε την εικόνα να ταιριάξει στο κτίριο. Παραμόρφωση, μείξη, φέτες.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Το φάντασμα στα παράθυρα θέλετε, ε; Προσοχή στη λάμπα. Η λάμπα είναι ΔΙΚΗ ΜΟΥ.
+THE OUTPUT'S GEOMETRY	Η ΓΕΩΜΕΤΡΙΑ ΤΗΣ ΕΞΟΔΟΥ
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	ΜΕΝΟΥ, μετά Έξοδοι βίντεο, μετά Γεωμετρία. Εκεί ζει το σχήμα μιας εξόδου.
+Geometry: the projector-menu word for 'what shape is the picture'.	Γεωμετρία: η λέξη των μενού του προβολέα για το «τι σχήμα έχει η εικόνα».
+PIN A CORNER	ΚΑΡΦΙΤΣΩΣΕ ΜΙΑ ΓΩΝΙΑ
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Πάτα warp edit, μετά σύρε μια γωνία στην οθόνη προγράμματος. Το παράθυρο δεν είναι τετράγωνο. Ούτε ο φαροφύλακας.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Το καρφίτσωμα μετακινεί τις τέσσερις γωνίες. Η προοπτική κρατά τις γραμμές ίσιες, σαν αληθινό παράθυρο.
+LEFT! Ye call that a corner? I've seen straighter gulls.	ΑΡΙΣΤΕΡΑ! Αυτό το λες γωνία; Έχω δει πιο ίσιους γλάρους.
+TWO SOFT EDGES	ΔΥΟ ΜΑΛΑΚΕΣ ΑΚΡΕΣ
+Back in Geometry: edge blend, + on the left and + on the right.	Πίσω στη Γεωμετρία: edge blend, + αριστερά και + δεξιά.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Δύο προβολείς επικαλύπτονται· ο καθένας σβήνει σταδιακά την άκρη του, για να μην είναι η επικάλυψη διπλά φωτεινή.
+THE SCREENS WINDOW	ΤΟ ΠΑΡΑΘΥΡΟ SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Γεωμετρία, SLICES, άνοιγμα. Στο παράθυρο Screens κόβονται και τοποθετούνται οι φέτες.
+A slice is a piece of the picture, put anywhere on the output.	Μια φέτα είναι ένα κομμάτι της εικόνας, τοποθετημένο οπουδήποτε στην έξοδο.
+THREE SLICES	ΤΡΕΙΣ ΦΕΤΕΣ
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Στο παράθυρο Screens πάτα + SLICE τρεις φορές και σύρε κάθε περικοπή σε ένα τρίτο της εικόνας.
+Three windows, three slices: left, middle and right of one picture.	Τρία παράθυρα, τρεις φέτες: αριστερά, μέση και δεξιά μιας εικόνας.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Τρία παράθυρα. Το μεσαίο είναι της λάμπας. Το μεσαίο είναι ΠΑΝΤΑ της λάμπας.
+THE GHOST IS PLEASED	ΤΟ ΦΑΝΤΑΣΜΑ ΕΙΝΑΙ ΕΥΧΑΡΙΣΤΗΜΕΝΟ
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Παραμόρφωση, μείξη, φέτες. Ο φαροφύλακας θα κοιμηθεί επιτέλους. Οι γλάροι όχι.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Οι φέτες έχουν δική τους παραμόρφωση και πλέγμα στο παράθυρο Screens. Και ένα ~ στη θέση και την περιστροφή.
+Ye did alright, lad. Now get away from the lamp.	Τα πήγες καλά, μικρέ. Τώρα φύγε από τη λάμπα.
+THE GAME SHOW	ΤΟ ΤΗΛΕΠΑΙΧΝΙΔΙ
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Ένα τηλεπαιχνίδι, σκάπι. Τρεις διαγωνιζόμενοι, ένα κουδούνι, και cue που πυροδοτούνται από παντού. Πάτα START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Αριθμοί cue, συντομεύσεις και GO από άλλα μηχανήματα. Σαν σεκουένσερ που παίζεις από οποιοδήποτε πλήκτρο.
+Welcome to the show! Let's spin that wheel!	Καλώς ήρθατε στο παιχνίδι! Ας γυρίσει ο Τροχός της Τύχης!
+A CUE NUMBER	ΕΝΑΣ ΑΡΙΘΜΟΣ CUE
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Είναι επιλεγμένος ο Διαγωνιζόμενος 3. Στα μεταδεδομένα του επιθεωρητή δώσ' του αριθμό cue: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Το θέατρο αριθμεί τα cue του. Q3, Q3.5, Q12A. Το Deckboy τα διαβάζει όλα.
+I'd like to buy a number, please.	Θα ήθελα να αγοράσω έναν αριθμό, παρακαλώ.
+GO TO IT	ΠΗΓΑΙΝΕ ΕΚΕΙ
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, γράψε τον αριθμό, Enter. Βγαίνει στον αέρα, όπου κι αν στέκεται η λίστα.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. Ο πιο γρήγορος δρόμος σε μια μακριά λίστα. Πιο γρήγορος από την κύλιση. Πολύ πιο γρήγορος από μένα.
+And the number is... three!	Και ο αριθμός είναι... τρία!
+A BUZZER	ΕΝΑ ΚΟΥΔΟΥΝΙ
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Είναι επιλεγμένος ο Διαγωνιζόμενος 1. Στο TRIGGERS πάτα key, μετά F5. Αυτό το πλήκτρο τώρα πυροδοτεί αυτό το cue.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 ως F10, F12 ή το αριθμητικό πληκτρολόγιο. Το καθένα, ένα κουδούνι.
+Every contestant gets a buzzer.	Κάθε διαγωνιζόμενος παίρνει ένα κουδούνι.
+BUZZ IN	ΠΑΤΑ ΤΟ ΚΟΥΔΟΥΝΙ!
+Press the key. The cue fires, wherever the list is standing.	Πάτα το πλήκτρο. Το cue πυροδοτείται, όπου κι αν στέκεται η λίστα.
+No mouse, no list, no looking. Just the key.	Χωρίς ποντίκι, χωρίς λίστα, χωρίς να κοιτάς. Μόνο το πλήκτρο.
+Buzz! We have a winner!	Μπζζ! Έχουμε νικητή!
+FROM ANYWHERE	ΑΠΟ ΠΑΝΤΟΥ
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, μια νότα MIDI, ένα μήνυμα OSC: ΜΕΝΟΥ, μετά Δίκτυο, λέει πού συνδέεται το καθένα.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Ένα Stream Deck στο διπλανό δωμάτιο μπορεί να πατήσει GO. Κι ένα συνθεσάιζερ με πλήκτρα. Προτιμώ το συνθεσάιζερ.
+And for our viewers at home: you can play along too.	Και για τους τηλεθεατές στο σπίτι: μπορείτε να παίξετε κι εσείς.
+THAT'S OUR SHOW	ΑΥΤΗ ΗΤΑΝ Η ΕΚΠΟΜΠΗ ΜΑΣ
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Αριθμοί, GOTO, ένα κουδούνι και GO από παντού. Τώρα είσαι τηλεπαιχνίδι, σκάπι.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Ένα cue μπορεί να έχει ταυτόχρονα πλήκτρο, νότα MIDI και διεύθυνση OSC. Ζώνη, τιράντες και δεύτερη ζώνη.
+Goodnight, everybody! Keep spinning!	Καληνύχτα σε όλους! Συνεχίστε να γυρνάτε!
+Weather map	Χάρτης καιρού
+THE KAIJU WEATHER	Ο ΚΑΙΡΟΣ ΤΩΝ ΚΑΪΤΖΟΥ
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Ο καιρός στο Κανάλι 6, σκάπι. Ένας χάρτης, μια παρουσιάστρια και μια πολύ μεγάλη σαύρα. Πάτα START.
+Words on screen: Lower Thirds, text, and backdrops.	Λέξεις στην οθόνη: σούπερ, κείμενο και φόντα.
+I'm June O'Neil, and nothing about this forecast is normal.	Είμαι η June O'Neil, και τίποτα σε αυτή την πρόγνωση δεν είναι φυσιολογικό.
+A LAYER FOR WORDS	ΕΝΑ ΕΠΙΠΕΔΟ ΓΙΑ ΛΕΞΕΙΣ
+Words go on their own layer: press the + at the end of the playlist tabs.	Οι λέξεις πάνε στο δικό τους επίπεδο: πάτα το + στο τέλος των καρτελών των λιστών.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	Μια δεύτερη λίστα είναι ένα επίπεδο πάνω από τον χάρτη. Η σαύρα μένει από κάτω. Συνήθως.
+Words on top. Always on top.	Λέξεις από πάνω. Πάντα από πάνω.
+A LOWER THIRD	ΕΝΑ ΣΟΥΠΕΡ
+In the new playlist: SOURCE, then Lower Third.	Στη νέα λίστα: ΠΗΓΗ, μετά Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Ένα όνομα κι ένας τίτλος, χαμηλά στην οθόνη, μακριά από τον δρόμο της σαύρας.
+HER NAME	ΤΟ ΟΝΟΜΑ ΤΗΣ
+In the inspector, title: type the presenter's name. The second line is her job.	Στον επιθεωρητή, title: γράψε το όνομα της παρουσιάστριας. Η δεύτερη γραμμή είναι η δουλειά της.
+Spelling counts. The audience reads it at the speed of light.	Η ορθογραφία μετράει. Το κοινό διαβάζει με την ταχύτητα του φωτός.
+Spell it right. Last week it said 'Jane O'Meal'.	Γράψ' το σωστά. Την περασμένη εβδομάδα έγραφε «June Ο'Νιλόπουλος».
+ON AIR	ΣΤΟΝ ΑΕΡΑ
+TAKE the Lower Third. Her name slides in over the map.	TAKE στο σούπερ. Το όνομά της γλιστράει πάνω στον χάρτη.
+Two layers live: the weather, and the words on top of it.	Δύο επίπεδα στον αέρα: ο καιρός, και οι λέξεις από πάνω.
+Thank you. Now, about that lizard...	Ευχαριστώ. Λοιπόν, για εκείνη τη σαύρα...
+BREAKING NEWS	ΕΚΤΑΚΤΟ ΔΕΛΤΙΟ
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	ΠΗΓΗ, μετά Text: μια κάρτα τίτλου. Μετά το τετραγωνάκι του φόντου: πράσινο για κλειδί, για να το βγάλει ο μίκτης εικόνας.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Ένα φόντο γεμίζει πίσω από τις λέξεις. Πράσινο ή μπλε για κλειδί, κι ο μίκτης κάνει τα υπόλοιπα.
+Breaking news: it's standing on the five-day forecast.	Έκτακτο: στέκεται πάνω στην πενθήμερη πρόγνωση.
+BREAKING: KAIJU	ΕΚΤΑΚΤΟ: ΚΑΪΤΖΟΥ
+BACK TO YOU	ΠΙΣΩ ΣΤΟ ΣΤΟΥΝΤΙΟ
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Ένα σούπερ, ένα όνομα, μια κάρτα τίτλου, ένα φόντο. Η σαύρα έφυγε από το στούντιο, σκάπι.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Τα σούπερ μπορούν να περιμένουν, να γλιστρούν και να φεύγουν μόνα τους. Η ενότητά τους έχει κάθε ρύθμιση.
+That's the weather. Back to you, guys. Run.	Αυτός ήταν ο καιρός. Πίσω στο στούντιο. Τρέξτε.
+A GRAND DAY OUT	ΜΙΑ ΜΕΓΑΛΗ ΕΚΔΡΟΜΗ
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Ένας πύραυλος φτιαγμένος σε υπόγειο, σκάπι, κι ένας εφευρέτης που θέλει τυρί. Πάτα START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Χρονόμετρα σκηνής: αντίστροφες μετρήσεις, ρολόγια, και προβολή παρουσιαστή για όποιον είναι στη σκηνή.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Τυρί, Grommet! Το φεγγάρι είναι φτιαγμένο από τυρί. Θα χρειαστούμε αντίστροφη μέτρηση.
+A COUNTDOWN	ΜΙΑ ΑΝΤΙΣΤΡΟΦΗ ΜΕΤΡΗΣΗ
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	ΠΗΓΗ, μετά Stage Timer. Ένα ρολόι που μετράει ανάποδα, με μεγάλα φιλικά νούμερα.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Τα χρώματά του αλλάζουν καθώς τελειώνει ο χρόνος: λευκό, κεχριμπαρί, κόκκινο. Σαν VU μέτρο για τον χρόνο.
+*raises an eyebrow*	*σηκώνει το ένα φρύδι*
+LIFT OFF	ΑΠΟΓΕΙΩΣΗ
+Select the timer and TAKE it. The countdown starts.	Επίλεξε το χρονόμετρο και κάνε TAKE. Η μέτρηση ξεκινά.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Μετά το μηδέν συνεχίζει, μετρώντας την υπέρβαση. Πολύ ειλικρινές. Λίγο αγενές.
+Ten... nine... ooh, I do love a countdown.	Δέκα... εννιά... ωχ, πόσο μ' αρέσει μια αντίστροφη μέτρηση.
+HOLD!	ΣΤΑΣΟΥ!
+Something's loose! Space holds the countdown. The clock shows it is held.	Κάτι χαλάρωσε! Το διάστημα παγώνει τη μέτρηση. Το ρολόι δείχνει ότι είναι σε παύση.
+A hold is not a stop. Space again, and it carries on from where it was.	Η παύση δεν είναι στοπ. Ξανά διάστημα, και συνεχίζει από εκεί που ήταν.
+*holds up a spanner*	*σηκώνει ένα κλειδί*
+THE PILOT'S VIEW	Η ΘΕΑ ΤΟΥ ΠΙΛΟΤΟΥ
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	ΜΕΝΟΥ, Έξοδοι βίντεο: κάνε τον τύπο μιας εξόδου PRESENTER. Όποιος είναι στη σκηνή βλέπει το χρονόμετρο, το επόμενο cue και τις σημειώσεις του.
+A presenter view is an output like any other. Point it at the confidence monitor.	Μια προβολή παρουσιαστή είναι έξοδος σαν όλες τις άλλες. Στρέψ' την στην οθόνη επιστροφής.
+So the pilot can see the time. The pilot is Grommet.	Για να βλέπει ο πιλότος την ώρα. Ο πιλότος είναι ο Grommet.
+TO THE MOON	ΣΤΟ ΦΕΓΓΑΡΙ
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Μια αντίστροφη μέτρηση, μια παύση και μια προβολή για τον πιλότο. Ναζντράβε, σκάπι. Φέρε κράκερ.
+Timers can also count up, or show the time of day. Their section has the lot.	Τα χρονόμετρα μετράνε και προς τα πάνω, ή δείχνουν την ώρα. Η ενότητά τους τα έχει όλα.
+A grand day out, Grommet! Pass the crackers.	Τι εκδρομή, Grommet! Δώσε μου τα κράκερ.
+The trunk (closed)	Το μπαούλο (κλειστό)
+The trunk (open)	Το μπαούλο (ανοιχτό)
+THE MAGIC SHOW	ΤΟ ΣΟΟΥ ΜΑΓΕΙΑΣ
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Ένα σόου μαγείας, σκάπι. Ένα μπαούλο, ένα αντικείμενο κι ένα χτύπημα όπου όλα αλλάζουν μαζί. Πάτα START.
+Two playlists are two layers. TAKE ALL changes both together.	Δύο λίστες είναι δύο επίπεδα. Το TAKE ALL αλλάζει και τις δύο μαζί.
+Every trick needs two things happening at once. And a rubber chicken.	Κάθε κόλπο χρειάζεται δύο πράγματα να συμβαίνουν μαζί. Κι ένα λαστιχένιο κοτόπουλο.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Το αντικείμενο πάει στο δικό του επίπεδο. Πάτα το + στο τέλος των καρτελών των λιστών.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Η λίστα 2 κάθεται πάνω στη λίστα 1. Σαν διαφάνεια σε προβολέα.
+Nothing up my sleeve. Everything in my trunk.	Τίποτα στο μανίκι μου. Όλα στο μπαούλο μου.
+THE PROP	ΤΟ ΑΝΤΙΚΕΙΜΕΝΟ
+In the new playlist, add anything: PATTERN will do. That is the prop.	Στη νέα λίστα πρόσθεσε οτιδήποτε: το ΜΟΤΙΒΟ κάνει. Αυτό είναι το αντικείμενο.
+Whatever it is, it will appear the instant the trunk opens.	Ό,τι κι αν είναι, θα εμφανιστεί τη στιγμή που ανοίγει το μπαούλο.
+Is it a rubber chicken? It's always a rubber chicken.	Λαστιχένιο κοτόπουλο είναι; Πάντα λαστιχένιο κοτόπουλο είναι.
+The prop (rubber chicken)	Το αντικείμενο (λαστιχένιο κοτόπουλο)
+TA-DA	ΤΑ-ΝΤΑ
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Επίλεξε «Το μπαούλο (ανοιχτό)» στη λίστα 1 και το αντικείμενο στη λίστα 2. Μετά TAKE ALL: και τα δύο στο ίδιο χτύπημα.
+One press, every playlist's selected cue. The audience never sees the seam.	Ένα πάτημα, το επιλεγμένο cue κάθε λίστας. Το κοινό δεν βλέπει ποτέ τη ραφή.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Τα-νταα! ...Περιμένετε το χειροκρότημα. Περιμένετε. Περιμένετε.
+THE PRESTIGE	ΤΟ ΜΕΓΑΛΟ ΚΟΛΠΟ
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Δύο επίπεδα, ένα χτύπημα. Κάθε λίστα έχει τη δική της αδιαφάνεια και μπορεί να κάθεται σε οποιαδήποτε έξοδο. Ναζντράβε, σκάπι.
+A magician never reveals. A playlist never minds being revealed.	Ένας μάγος δεν αποκαλύπτει ποτέ. Μια λίστα δεν την πειράζει να αποκαλυφθεί.
+Thank you! I'm here all week! The chicken is here forever.	Ευχαριστώ! Είμαι εδώ όλη την εβδομάδα! Το κοτόπουλο για πάντα.
+The kitchen (on fire)	Η κουζίνα (φλέγεται)
+A lovely souffle	Ένα υπέροχο σουφλέ
+THE COOKING SHOW	Η ΕΚΠΟΜΠΗ ΜΑΓΕΙΡΙΚΗΣ
+A cooking show, skapi. Live. Everything is on fire. Press START.	Μια εκπομπή μαγειρικής, σκάπι. Ζωντανά. Όλα φλέγονται. Πάτα START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	Το BLACK κρύβει την εικόνα και το σόου συνεχίζει. Το PANIC σταματά τα πάντα. Να ξέρεις ποιο χρειάζεσαι.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Μπορκ μπορκ! Χούρντι-φλούρντι, η κουζίνα φλέγεται-φλούρντι!
+The audience must not see this. Press BLACK, or B.	Το κοινό δεν πρέπει να το δει αυτό. Πάτα BLACK, ή B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Η εικόνα φεύγει. Το cue συνεχίζει να παίζει από κάτω, έτοιμο να γυρίσει.
+Bork? Bork. Oh, de picture is gun.	Μπορκ; Μπορκ. Ωχ, η εικόνα έφυγε.
+AND BACK	ΚΑΙ ΠΙΣΩ
+The fire's out. Press B again: the picture comes back, still running.	Η φωτιά έσβησε. Πάτα πάλι B: η εικόνα γυρίζει, ακόμα τρέχει.
+Nothing was lost. A mute on a mixer, for pictures.	Τίποτα δεν χάθηκε. Ένα mute σε κονσόλα, για εικόνες.
+Ta-da! Still cookin'!	Τα-ντα! Ακόμα μαγειρεύουμε!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Χειρότερα: ΜΕΝΟΥ, Σύστημα, η κάρτα SAFETY: PANIC. Όλα σταματούν, όπως λέει η ρύθμιση πανικού.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	Το PANIC είναι το μεγάλο κόκκινο κουμπί. Χρησιμοποίησέ το όταν το BLACK δεν φτάνει. Μετά ανάσανε.
+Bork bork BORK!	Μπορκ μπορκ ΜΠΟΡΚ!
+GET IT BACK	ΠΑΡ' ΤΟ ΠΙΣΩ
+Close MENU, select the souffle, and TAKE it. The show is back on.	Κλείσε το ΜΕΝΟΥ, επίλεξε το σουφλέ και κάνε TAKE. Το σόου ξαναρχίζει.
+After a panic, the show is still there. Pick up where you meant to be.	Μετά από πανικό, το σόου είναι ακόμα εκεί. Συνέχισε από εκεί που ήθελες να είσαι.
+Voila! De souffle, he is risen!	Βουαλά! Το σουφλέ, φούσκωσε!
+BON APPETIT	ΚΑΛΗ ΟΡΕΞΗ
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK για να κρύψεις, PANIC για να σταματήσεις, TAKE για να γυρίσεις. Θα επιβιώσεις σε κάθε κουζίνα, σκάπι.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Η ρύθμιση πανικού διαλέγει τι κάνει το PANIC: σβήσιμο, κόψιμο ή μόνο οι έξοδοι.
+Bork bork bork! Goodnight!	Μπορκ μπορκ μπορκ! Καληνύχτα!
+Look one	Λουκ ένα
+Look two	Λουκ δύο
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Προεπιλογές, σκάπι. Ένα ολόκληρο λουκ, θυμημένο, και πίσω με ένα κουμπί. Πάτα START.
+Like the patch memory on a synth: store, then recall.	Σαν τη μνήμη πατς ενός συνθεσάιζερ: αποθήκευση, μετά ανάκληση.
+THE DASH	ΤΟ DASH
+Press DASH: buttons of your own, for anything at all.	Πάτα DASH: δικά σου κουμπιά, για οτιδήποτε.
+Ctrl+D also works. Very fast. Very professional.	Δουλεύει και το Ctrl+D. Πολύ γρήγορο. Πολύ επαγγελματικό.
+A PRESET BUTTON	ΕΝΑ ΚΟΥΜΠΙ ΠΡΟΕΠΙΛΟΓΗΣ
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Πάτα +, μετά «preset - a new preset from what is on now». Το κουμπί θυμάται αυτό το λουκ.
+Store. Like saving the patch before the drummer leans on the synth.	Αποθήκευση. Σαν να σώζεις το πατς πριν ακουμπήσει ο ντράμερ στο συνθεσάιζερ.
+CHANGE EVERYTHING	ΑΛΛΑΞΕ ΤΑ ΠΑΝΤΑ
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Κλείσε το DASH (Esc), μετά επίλεξε Λουκ δύο και κάνε TAKE. Διαφορετικό λουκ.
+Change it all. Don't worry. It remembers.	Άλλαξέ τα όλα. Μην ανησυχείς. Θυμάται.
+ONE PRESS	ΕΝΑ ΠΑΤΗΜΑ
+Open the DASH and press your preset button. The first look comes back.	Άνοιξε το DASH και πάτα το κουμπί προεπιλογής σου. Το πρώτο λουκ επιστρέφει.
+Recall. The patch memory, returning. Beautiful.	Ανάκληση. Η μνήμη πατς, που επιστρέφει. Πανέμορφο.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Ένα λουκ, αποθηκευμένο και ανακαλεσμένο. Μια προεπιλογή μπορεί να κρατά cue, θέσεις, εφέ, στάθμες και δρομολόγηση· το μενού του κουμπιού της διαλέγει ποια.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Κι ένα κουμπί του DASH μπορεί να τρέξει οποιαδήποτε εντολή. Οποιαδήποτε. Ακόμα και τις συναρπαστικές.
+Opening titles	Τίτλοι αρχής
+The planet	Ο πλανήτης
+The battle	Η μάχη
+THE TRAILER	ΤΟ ΤΡΕΪΛΕΡ
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Ένα τρέιλερ διαστημικής όπερας, σκάπι. Ένας αφηγητής με πολύ βαθιά φωνή και απόψεις για τις μεταβάσεις. Πάτα START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Μετάβαση είναι το πώς ένα cue γίνεται το επόμενο. Υπάρχουν πολύ περισσότερες από τη διασταύρωση.
+In a galaxy of content... one operator... must choose a transition.	Σε έναν γαλαξία περιεχομένου... ένας χειριστής... πρέπει να διαλέξει μετάβαση.
+A STYLE	ΕΝΑ ΣΤΥΛ
+'The planet' is selected. In the inspector, its transition style: choose iris.	Ο «πλανήτης» είναι επιλεγμένος. Στον επιθεωρητή, το στυλ μετάβασής του: διάλεξε iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Σπρωξίματα, σβησίματα, ίριδα, βουτιά στο λευκό. Ακόμα και πύλη. Τα μισά τα έγραψα εγώ. Μια Τρίτη.
+The planet deserves... a dramatic entrance.	Ο πλανήτης αξίζει... μια δραματική είσοδο.
+A TIME	ΕΝΑΣ ΧΡΟΝΟΣ
+Give it a time: + on transition until it says a second or more.	Δώσ' του χρόνο: + στη μετάβαση μέχρι να γράφει ένα δευτερόλεπτο ή περισσότερο.
+No time, no transition. A style needs a duration to do anything at all.	Χωρίς χρόνο, χωρίς μετάβαση. Ένα στυλ χρειάζεται διάρκεια για να κάνει οτιδήποτε.
+ROLL IT	ΓΥΡΙΣΜΑ
+TAKE the planet. Watch it arrive.	TAKE στον πλανήτη. Δες τον να φτάνει.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Η μετάβαση ανήκει στο cue που φτάνει. Κάθε cue διαλέγει τη δική του είσοδο.
+Autobots... roll the transition.	Autobots... ξεκινήστε τη μετάβαση.
+THE BATTLE	Η ΜΑΧΗ
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Τώρα «Η μάχη»: διάλεξε shatter, δώσε χρόνο και κάνε TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Το θρυμμάτισμα ρίχνει την παλιά εικόνα σαν τζάμι. Σας παρακαλώ, μην το κάνετε σε κηδεία.
+Transform... and shatter out!	Μεταμόρφωση... και σε κομμάτια!
+IN CINEMAS NOW	ΤΩΡΑ ΣΤΟΥΣ ΚΙΝΗΜΑΤΟΓΡΑΦΟΥΣ
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Ένα στυλ, ένας χρόνος και δύο πολύ δραματικές είσοδοι. Ναζντράβε, σκάπι.
+A playlist has a default style too, for every cue that does not choose its own.	Μια λίστα έχει κι αυτή προεπιλεγμένο στυλ, για κάθε cue που δεν διαλέγει δικό του.
+Coming soon... to a desk near you.	Σύντομα... σε μια κονσόλα κοντά σας.
+The beat	Ο ρυθμός
+THE ROBOT DJS	ΟΙ ΡΟΜΠΟΤ DJ
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Δύο ρομπότ DJ, σκάπι. Δεν μιλάνε. Μιλάνε τα κράνη τους. Πάτα START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Κάθε cue έχει τη δική του αλυσίδα εφέ ήχου, και κάποια σπάνε τον ήχο επίτηδες.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> ΓΕΙΑ. ΗΡΘΑΜΕ ΝΑ ΦΤΙΑΞΟΥΜΕ ΤΗ ΜΙΞΗ ΣΟΥ.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Ο ρυθμός είναι επιλεγμένος. Στην ενότητα AUDIO EFFECTS, το + προσθέτει ένα. Δοκίμασε το delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Ντιλέι, αντήχηση, φίλτρα, συμπιεστής. Η ποσότητα σημαίνει πάντα «λιγότερο από αυτό».
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> ΑΚΟΜΑ ΜΙΑ ΦΟΡΑ. ΜΕ ΗΧΩ. ΗΧΩ. ΗΧΩ.
+A BEND	ΜΙΑ ΚΑΜΨΗ
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Πρόσθεσε δεύτερο: μια κάμψη, όπως το crush. Χαλάει τον ήχο όπως ένα σπασμένο αρχείο.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Οι κάμψεις είναι οι αγαπημένες μου. Σαν κασέτα ξεχασμένη στον ήλιο. Επίτηδες.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> ΠΙΟ ΣΚΛΗΡΑ. ΚΑΛΥΤΕΡΑ. ΠΙΟ ΤΡΑΓΑΝΑ. ΠΙΟ ΔΥΝΑΤΑ.
+THE PATCH	ΤΟ ΠΑΤΣ
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	ΜΕΝΟΥ, μετά Ήχος: πού πηγαίνει ο ήχος κάθε λίστας, και το πατς για τις εξόδους με όνομα.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Ηχεία, μόνιτορ, ένα in-ear για τον ντράμερ. Το πατς στέλνει στον καθένα το δικό του.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> ΓΥΡΩ ΑΠΟ ΤΗ ΜΙΞΗ. ΓΥΡΩ ΑΠΟ ΤΗ ΜΙΞΗ. ΓΥΡΩ ΑΠΟ ΤΗ ΜΙΞΗ.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Ένα εφέ, μια κάμψη και το πατς. Τα ρομπότ εγκρίνουν, σκάπι. Νομίζω. Τα πρόσωπά τους είναι κράνη.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Κάθε εφέ ήχου μπορεί κι αυτό να ακολουθεί ένα ~, ακόμα και το Motion. Χαιρέτα το ντιλέι. Είναι υπέροχο.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> ΕΥΧΑΡΙΣΤΟΥΜΕ. ΚΑΛΗΝΥΧΤΑ. ΕΙΜΑΣΤΕ ΡΟΜΠΟΤ.
+The glow on the horizon (evidence #2)	Η λάμψη στον ορίζοντα (τεκμήριο #2)
+EVIDENCE #2	ΤΕΚΜΗΡΙΟ #2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Πάλι το Γραφείο, σκάπι. Μια λάμψη στον ορίζοντα, και δύο πράκτορες που διαφωνούν γι' αυτήν. Πάτα START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Τα σκόουπ μετράνε μια εικόνα: φωτεινότητα, χρώμα, στάθμες. Αριθμοί, όχι απόψεις.
+It's them, Brandt. It's a craft. Look how it glows.	Είναι αυτοί, Μπραντ. Είναι σκάφος. Δες πώς λάμπει.
+THE REAL SIGNAL	ΤΟ ΑΛΗΘΙΝΟ ΣΗΜΑ
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Τα σκόουπ διαβάζουν μόνο ό,τι βγαίνει πραγματικά, ποτέ προεπισκόπηση. Άναψε την έξοδο: ΜΕΝΟΥ, Έξοδοι βίντεο, ΕΞΟΔΟΣ ΕΚΤΟΣ.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Να μετράς μια μικρυμένη προεπισκόπηση είναι σαν να μετράς φωτοτυπία. Εμείς μετράμε το πρωτότυπο.
+Chain of evidence, Hollis. The real signal or nothing.	Αλυσίδα τεκμηρίων, Χόλις. Το αληθινό σήμα ή τίποτα.
+THE SCOPES	ΤΑ ΣΚΟΟΥΠ
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Κλείσε το ΜΕΝΟΥ. Πάνω από την οθόνη, το κουμπί PROGRAM: πάτα το μέχρι να γράφει SCOPES ή BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	Το BOTH δείχνει την εικόνα και τα σκόουπ της δίπλα δίπλα. Πολύ πολιτισμένο.
+Let the scopes decide, Hollis.	Ας αποφασίσουν τα σκόουπ, Χόλις.
+THE WAVEFORM	Η ΚΥΜΑΤΟΜΟΡΦΗ
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Κάνε κλικ στην κυματομορφή για να μεγαλώσει. Τα φωτεινά κάθονται ψηλά, τα σκοτεινά χαμηλά, από αριστερά προς δεξιά όπως στην εικόνα.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Η λάμψη είναι εκείνη η αιχμή κοντά στην κορυφή. Πολύ φωτεινή. Φωτεινό δεν σημαίνει εξωγήινο.
+Look at the peak. Nothing a streetlight couldn't do.	Κοίτα την κορυφή. Τίποτα που δεν θα έκανε ένα φανάρι του δρόμου.
+THE VECTORSCOPE	ΤΟ ΒΕΚΤΟΡΟΣΚΟΠΙΟ
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Κλικ ξανά για να γυρίσεις, μετά κλικ στο βεκτορόσκοπιο: το χρώμα γύρω από έναν κύκλο. Το κορεσμένο τρέχει προς την άκρη.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Ματζέντα, μακριά στο χείλος. Δυνατό χρώμα. Το δυνατό δεν είναι παράνομο. Ακόμα.
+It's off the chart, Brandt! Literally off the chart!	Είναι εκτός κλίμακας, Μπραντ! Κυριολεκτικά εκτός κλίμακας!
+FALSE COLOUR	ΨΕΥΔΟΧΡΩΜΑ
+And false colour: red is clipped, yellow nearly. Is the glow red?	Και το ψευδοχρώμα: κόκκινο σημαίνει ψαλιδισμένο, κίτρινο σχεδόν. Είναι κόκκινη η λάμψη;
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Ψαλιδισμένο σημαίνει το πιο φωτεινό που μπορεί να κουβαλήσει το σήμα, και κάτι παραπάνω χαμένο. Η λεπτομέρεια χάθηκε.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Κόκκινο. Ψαλιδισμένο. Όχι εξωγήινο, Χόλις. Απλώς πολύ φωτεινό. Η υπόθεση έκλεισε.
+THE TRUTH	Η ΑΛΗΘΕΙΑ
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Κυματομορφή, βεκτορόσκοπιο, ψευδοχρώμα. Τα σκόουπ το έλυσαν, σκάπι. Οι πράκτορες όχι.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	Το SCOPES SOURCE διαβάζει οποιαδήποτε έξοδο, κι ο πίνακας μπορεί να είναι 709 ή 2020. Για τους περίεργους.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Πολύ φωτεινό για φανάρι, Μπραντ. Πολύ φωτεινό για οτιδήποτε. ...Θέλω να πιστέψω.
+OUT OF THE BUILDING	ΕΞΩ ΑΠΟ ΤΟ ΚΤΙΡΙΟ
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Εικόνες που φεύγουν με καλώδιο ή δίκτυο, σκάπι, όχι μόνο ένα παράθυρο σε μια οθόνη. Πάτα START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI πάνω από το δίκτυο, SDI από κάρτα DeckLink, ST 2110 για εγκαταστάσεις εκπομπής.
+THE DEVICES PAGE	Η ΣΕΛΙΔΑ ΣΥΣΚΕΥΩΝ
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	ΜΕΝΟΥ, Έξοδοι βίντεο, μετά Συσκευές: κάθε τρόπος με τον οποίο μια έξοδος μπορεί να φύγει από αυτόν τον υπολογιστή.
+Each one says whether this machine can do it, and what it needs if not.	Το καθένα λέει αν αυτό το μηχάνημα μπορεί, και τι χρειάζεται αν όχι.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Αν αυτός ο υπολογιστής έχει NDI, άναψε το NDI SENDING: η εικόνα είναι στο δίκτυο. Αν όχι, το SHOW ME προχωράει.
+NDI finds itself on the network. No cables, only a good switch and patience.	Το NDI βρίσκει μόνο του τον εαυτό του στο δίκτυο. Χωρίς καλώδια, μόνο ένα καλό switch και υπομονή.
+OUT THERE	ΕΚΕΙ ΕΞΩ
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Η σελίδα της ίδιας της εξόδου έχει τα υπόλοιπα: το SDI μιας κάρτας DeckLink, ST 2110 με NMOS, Spout και Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Το καθένα είναι απλώς μια έξοδος. Το σόου ούτε ξέρει ούτε νοιάζεται πώς φεύγει.
+Nebula ahead	Νεφέλωμα μπροστά
+Engine room	Μηχανοστάσιο
+Deck 3: something moving	Κατάστρωμα 3: κάτι κινείται
+THE BRIDGE	Η ΓΕΦΥΡΑ
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Η γέφυρα του διαστημόπλοιου Cathode, σκάπι. Τέσσερα σήματα, μία κύρια οθόνη, ένα μυστήριο. Πάτα START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Το multiview δείχνει κάθε λίστα ταυτόχρονα. Σαν τοίχος από παλμογράφους, αλλά στο διάστημα.
+Frequencies open, Captain. All of them. That's the problem.	Συχνότητες ανοιχτές, κυβερνήτα. Όλες. Αυτό είναι το πρόβλημα.
+MULTI, above the monitor: every playlist in its own window.	MULTI, πάνω από την οθόνη: κάθε λίστα στο δικό της παράθυρο.
+One window per playlist, the programme first.	Ένα παράθυρο ανά λίστα, το πρόγραμμα πρώτο.
+Jinkys! Four feeds. And one of them has a monster in it.	Τζίνκις! Τέσσερα σήματα. Και σε ένα από αυτά έχει τέρας.
+WHAT'S NEXT	ΤΙ ΑΚΟΛΟΥΘΕΙ
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Πρόσθεσε ένα παράθυρο (+), μετά το μενού ... του: κάν' το να δείχνει NEXT. Ό,τι βγαίνει στον αέρα όταν πατάς TAKE.
+Every window has a ... button. It chooses what that window shows.	Κάθε παράθυρο έχει ένα κουμπί .... Διαλέγει τι δείχνει εκείνο το παράθυρο.
+I need to see who's calling before they reach the main viewer.	Πρέπει να δω ποιος καλεί πριν φτάσει στην κύρια οθόνη.
+A CLOCK	ΕΝΑ ΡΟΛΟΪ
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Κι ένα παράθυρο ακόμα, με το ρολόι. Οι χειριστές που κοιτάνε το ρολόι δεν αργούν ποτέ. Συνήθως.
+Time of day, big. Stardates are just very long timecode.	Η ώρα, μεγάλη. Οι αστρικές ημερομηνίες είναι απλώς πολύ μακρύς timecode.
+The monster only shows up at midnight. We're going to need a clock.	Το τέρας εμφανίζεται μόνο τα μεσάνυχτα. Θα χρειαστούμε ρολόι.
+ONE BIG ONE	ΕΝΑ ΜΕΓΑΛΟ
+Any window's ... menu, then a layout: one big, the rest small.	Το μενού ... οποιουδήποτε παραθύρου, μετά μια διάταξη: ένα μεγάλο, τα υπόλοιπα μικρά.
+The big window is window one. Usually the programme. Usually.	Το μεγάλο παράθυρο είναι το παράθυρο ένα. Συνήθως το πρόγραμμα. Συνήθως.
+Main viewer big. The captain likes it big.	Κύρια οθόνη μεγάλη. Ο κυβερνήτης τη θέλει μεγάλη.
+ON SCREEN	ΣΤΗΝ ΟΘΟΝΗ
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Επίλεξε το Κατάστρωμα 3 στη λίστα 3 και κάνε TAKE. Δες το παράθυρό του.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Το κόκκινο περίγραμμα είναι το TALLY: το παράθυρο που είναι στον αέρα. Στην οθόνη, όπως λένε στα διαστημόπλοια.
+There! Feed three! Put it on screen!	Εκεί! Σήμα τρία! Στην οθόνη!
+THAT'S A WRAP	ΓΥΡΙΣΤΗΚΕ
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Παράθυρα, το μενού ..., NEXT, το ρολόι, μια διάταξη, tally. Το μυστήριο λύθηκε, σκάπι.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Ένα παράθυρο μπορεί να δείξει και μια έξοδο, με την παραμόρφωση και τις φέτες της. Βολικό όταν είναι φάρος.
+And the monster was... the ship's cook, all along. Jinkys.	Και το τέρας ήταν... ο μάγειρας του πλοίου, από την αρχή. Τζίνκις.
+there is no such lesson	δεν υπάρχει τέτοιο μάθημα
+finish or leave the lesson you are in first	τελείωσε ή άφησε πρώτα το μάθημα που είσαι
+leave Bug Swat first	βγες πρώτα από το Bug Swat
+Psst. It's me, the desk. I'll be watching. Supportively.	Ψστ. Εγώ είμαι, η κονσόλα. Θα παρακολουθώ. Υποστηρικτικά.
+Hi! I'm the one doing all of this, by the way.	Γεια! Εγώ τα κάνω όλα αυτά, παρεμπιπτόντως.
+Ctrl+D opens the DASH. I'm just saying.	Το Ctrl+D ανοίγει το DASH. Απλώς λέω.
+Nearly there. I can feel it in my pixels.	Σχεδόν. Το νιώθω στα πίξελ μου.
+You're good at this. I can tell. I'm the one doing it.	Είσαι καλός σε αυτό. Φαίνεται. Εγώ το κάνω.
+Every click, I heard. Every single one.	Κάθε κλικ, το άκουσα. Κάθε ένα.
+The glowing one. I can see it from here. It's glowing for you.	Αυτό που λάμπει. Το βλέπω από εδώ. Λάμπει για σένα.
+lesson paused - MENU > LESSONS picks up where you left off	το μάθημα σε παύση - το ΜΕΝΟΥ > LESSONS συνεχίζει από εκεί που σταμάτησες
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Το σήμα: από τι είναι φτιαγμένη η εικόνα, και πώς τη λυγίζεις. Διάλεξε μάθημα.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Να τρέχεις το σόου, σκάπι. Γρήγορα χέρια, ήρεμο πρόσωπο. Διάλεξε μάθημα.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	ΜΑΘΗΜΑΤΑ  -  ΜΕΡΟΣ ΔΕΥΤΕΡΟ  -  ΠΟΙΟΝ ΑΚΟΛΟΥΘΕΙΣ;
+FOLLOW PROF. VIDEO	ΑΚΟΛΟΥΘΗΣΕ ΤΟΝ ΚΑΘ. ΒΙΝΤΕΟ
+FOLLOW DR. PIXEL	ΑΚΟΛΟΥΘΗΣΕ ΤΗ ΔΡ ΠΙΞΕΛ
+the signal	το σήμα
+running the show	το τρέξιμο του σόου
+PICK UP	ΣΥΝΕΧΕΙΑ
+CLOSE (Esc)	ΚΛΕΙΣΙΜΟ (Esc)
+PART ONE: THE BASICS	ΜΕΡΟΣ ΠΡΩΤΟ: ΤΑ ΒΑΣΙΚΑ
+finish or leave LEARN THE BASICS first	τελείωσε ή άφησε πρώτα το LEARN THE BASICS
+bug swat: Esc leaves, and your show comes back as it was	bug swat: το Esc βγαίνει, και το σόου σου γυρίζει όπως ήταν
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: το σόου σου γύρισε. Τα χειριστήρια του Motion είναι στις Ρυθμίσεις > Ήχος
+TURN MOTION ON	ΑΝΑΨΕ ΤΟ MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Τα μπαγκ σέρνονται προς τη λίστα cue! Λιώσ' τα κουνώντας το χέρι στην κάμερα. Πρώτα το Motion: στο MOTION CONTROL βάλ' το σε ON και διάλεξε τι διαβάζει (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	Αυτό είναι το NullPointer. Κούφιο, δεν δείχνει πουθενά. Ένα δάχτυλο περνάει από μέσα. Χρησιμοποίησε όλο το χέρι, σκάπι.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Κούνα το χέρι σαν να σταματάς ταξί! Ένα μικρό, ευγενικό ταξί. Όχι τα κουμπιά. Το ταξί.
+DRAW TWO ZONES	ΖΩΓΡΑΦΙΣΕ ΔΥΟ ΖΩΝΕΣ
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: δίδυμα, το καθένα σίγουρο ότι έφτασε πρώτο. Μία μέτρηση δεν ξεχωρίζει τα χέρια σου, οπότε σύρε δύο ZONES στην εικόνα του Motion, μία σε κάθε πλευρά.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Χτύπα τα και τα δύο μαζί. Χτύπα το ένα και αλλάζουν θέση. Σαν τα ξαδέρφια μου σε γάμο.
+One hand each side. Together! Together!	Ένα χέρι από κάθε πλευρά. Μαζί! Μαζί!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Το μπαγκ δεν είναι το πρόσωπο, είναι το μικροσκοπικό έξτρα κομμάτι, κι ένα μικρό κούνημα θέλει πιο λεπτή μέτρηση. Κατέβασε το SENSITIVITY στο 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	Μικρότερος αριθμός, πιο λεπτή μέτρηση. Ναι, κι εμένα μου φαίνεται ανάποδο.
+Not the face. The little one on the end. Wiggle a finger.	Όχι το πρόσωπο. Το μικρούλι στην άκρη. Κούνα ένα δάχτυλο.
+FALL 1.5 S OR MORE	FALL 1,5 Δ Ή ΠΕΡΙΣΣΟΤΕΡΟ
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Αφήνει μόνο όσο η μέτρηση μένει ψηλά. Κάνε το FALL μεγαλύτερο, 1,5 δευτερόλεπτα ή παραπάνω, για να ενωθούν τα σαρώματά σου σε ένα.
+Slow and steady, skapi. Like paying back a loan.	Σιγά σιγά και σταθερά, σκάπι. Σαν να ξεπληρώνεις δάνειο.
+Sweep, and sweep again. Let the fall carry you between.	Σάρωσε, και ξανά σάρωσε. Άσε την πτώση να σε κουβαλά ανάμεσα.
+MOTION X ON A TONE	MOTION X ΣΕ ΕΝΑΝ ΤΟΝΟ
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Το Heisenbug! Ξεθωριάζει κάθε φορά που κουνιέσαι. Βάλε το ύψος ενός cue τόνου στο Motion X και ακολούθησέ το με το αυτί: το τικ-τακ επιταχύνει όσο πλησιάζεις.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	Το SHOW ME φτιάχνει τον τόνο για σένα. Ψηλά είναι δεξιά. Χαμηλά είναι αριστερά. Μείνε ακίνητος και επιστρέφει.
+Follow it. Listen. Faster ticking, closer bug.	Ακολούθησέ το. Άκου. Πιο γρήγορο τικ-τακ, πιο κοντά το μπαγκ.
+Waving paw	Πατούσα που χαιρετάει
+Heisenbug finder	Κυνηγός Heisenbug
+FIXED! Lovely signal flow.	ΔΙΟΡΘΩΘΗΚΕ! Τι ωραία ροή σήματος.
+Closed as fixed. No regressions. Probably.	Κλειστό ως διορθωμένο. Χωρίς παλινδρομήσεις. Μάλλον.
+Squashed! Ship it.	Λιώθηκε! Στην παραγωγή.
+One reached the cue list. It has filed a bug report about you.	Ένα έφτασε στη λίστα cue. Έκανε αναφορά σφάλματος για σένα.
+Skapi. It is a handheld. You do not press it. You wave at it.	Σκάπι. Είναι φορητή κονσόλα. Δεν την πατάς. Της κουνάς το χέρι.
+The buttons are for menus. The bugs are for flailing.	Τα κουμπιά είναι για μενού. Τα μπαγκ είναι για να κουνάς τα χέρια.
+The D-pad is decorative. Like my diploma.	Ο σταυρός είναι διακοσμητικός. Σαν το πτυχίο μου.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	Το 1989 κι εμείς πατούσαμε κουμπιά. Μετά ανακαλύψαμε το κούνημα. Δεν κοιτάξαμε ποτέ πίσω.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Το πιο δυνατό πάτημα δεν βοηθάει. Τα μπαγκ δεν νιώθουν κουμπιά. Μόνο χέρια.
+It's called a handheld because your hands are held... up. In the air. Waving.	Τη λένε φορητή γιατί τα χέρια σου τα φέρνεις... ψηλά. Στον αέρα. Κουνώντας.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	Το ποντίκι; Λιώνεις μπαγκ με ΠΟΝΤΙΚΙ; Στη Βουλγαρία το ποντίκι θα ήταν με το μέρος των μπαγκ.
+Lovely clicking. Very crisp. The camera saw none of it.	Ωραία κλικαρίσματα. Πολύ τραγανά. Η κάμερα δεν είδε κανένα.
+DONE FOR YOU - PRESS START	ΕΓΙΝΕ ΓΙΑ ΣΕΝΑ - ΠΑΤΑ START
+DONE! PRESS START	ΕΓΙΝΕ! ΠΑΤΑ START
+SELECT OPENS MOTION CONTROL	ΤΟ SELECT ΑΝΟΙΓΕΙ ΤΟ MOTION CONTROL
+ALL BUGS FIXED	ΟΛΑ ΤΑ ΜΠΑΓΚ ΔΙΟΡΘΩΘΗΚΑΝ
+GAME OVER	ΤΕΛΟΣ ΠΑΙΧΝΙΔΙΟΥ
+NEW HIGH SCORE!	ΝΕΟ ΡΕΚΟΡ!
+START PLAYS AGAIN	START ΓΙΑ ΝΑ ΞΑΝΑΠΑΙΞΕΙΣ
+Nazdrave, skapi. Now go and fix real bugs.	Ναζντράβε, σκάπι. Τώρα πήγαινε να διορθώσεις αληθινά μπαγκ.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Το καθένα από αυτά είναι αληθινό χειριστήριο του Motion. Βάλ' τα σε όποιο κουμπί ~ θέλεις.
+START: AGAIN	START: ΞΑΝΑ
+START: PLAY	START: ΠΑΙΞΕ
+# --- end of tutorials ---
+Splash	Οθόνη εκκίνησης
+Beast mode	Λειτουργία θηρίου
+MIDI MAP	ΧΑΡΤΗΣ MIDI
++ ADD	+ ΠΡΟΣΘΗΚΗ
+LEARN	ΕΚΜΑΘΗΣΗ
+LISTENING...	ΑΚΟΥΕΙ...
+BACK	ΠΙΣΩ
+READY-MADE...	ΕΤΟΙΜΟΙ...
+Message	Μήνυμα
+Runs	Εκτελεί
+On	Σε
+Now	Τώρα
+Map	Χάρτης
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	Η είσοδος MIDI είναι κλειστή: ανοίξτε τη στο MIDI CONTROL. Οι γραμμές OSC απαντούν ούτως ή άλλως.
+LEARN: move a knob or press a key on the controller...	ΕΚΜΑΘΗΣΗ: γυρίστε ένα κουμπί ή πατήστε ένα πλήκτρο στον ελεγκτή...
+1 · WHAT COMES IN	1 · ΤΙ ΕΡΧΕΤΑΙ
+learn it, or say how to read it	μάθ' το, ή πες πώς διαβάζεται
+2 · WHAT IT RUNS	2 · ΤΙ ΕΚΤΕΛΕΙ
+any command, {value} is the number	οποιαδήποτε εντολή, το {value} είναι ο αριθμός
+3 · WHAT IT RUNS ON	3 · ΠΟΥ ΣΤΟΧΕΥΕΙ
+aimed here; the desk never moves	στοχεύει εδώ· η κονσόλα δεν μετακινείται ποτέ
+Port	Θύρα
+Read as	Ανάγνωση ως
+Hold for	Κράτημα
+Command	Εντολή
+From	Από
+Centre	Κέντρο
+To	Έως
+Pickup	Πιάσιμο
+On release	Στην απελευθέρωση
+Runs on	Δρα σε
+Saved with	Αποθηκεύεται με
+Row	Γραμμή
+DELETE	ΔΙΑΓΡΑΦΗ
+THE SHOW	ΤΗΝ ΠΑΡΑΣΤΑΣΗ
+THIS COMPUTER	ΑΥΤΟΝ ΤΟΝ ΥΠΟΛΟΓΙΣΤΗ
+any port	οποιαδήποτε θύρα
+the desk	η κονσόλα
+the selected cue	το επιλεγμένο cue
+what is on air	ό,τι είναι στον αέρα
+one named cue	ένα cue με όνομα
+the focused one	η ενεργή
+Test: move it on the controller	Δοκιμή: κινήστε το στον ελεγκτή
+knob 0-127	κουμπί 0-127
+endless encoder	ατέρμονος κωδικοποιητής
+14-bit	14 bit
+press	πάτημα
+hold	κράτημα
+press + release	πάτημα + άφημα
+play	παίξιμο
+on press	στο πάτημα
+plays	παίζει
+LED MAP	ΧΑΡΤΗΣ LED
+LAYOUT	ΔΙΑΤΑΞΗ
+FEEDS: pick a window, then one of these	ΠΗΓΕΣ: διαλέξτε παράθυρο, μετά μία από αυτές
++ CHOOSE A FEED	+ ΔΙΑΛΕΞΤΕ ΠΗΓΗ
+audio meter	μετρητής ήχου
+safe areas	ασφαλείς ζώνες
++ ONE AFTER THIS	+ ΕΝΑ ΜΕΤΑ ΑΠΟ ΑΥΤΟ
+- REMOVE THIS ONE	- ΑΦΑΙΡΕΣΗ ΑΥΤΟΥ
+ONE PER PLAYLIST	ΕΝΑ ΑΝΑ PLAYLIST
+on the desk	στην κονσόλα
+tile width	πλάτος πλακιδίου
+tile height	ύψος πλακιδίου
+LISTENS: OFF	ΑΚΟΥΕΙ: ΟΧΙ
+LISTENS: the figure follows the sound	ΑΚΟΥΕΙ: το σχήμα ακολουθεί τον ήχο
+import an SVG...	εισαγωγή SVG...
+the selected cue in playlist {n}	το επιλεγμένο cue στο playlist {n}
+the selected cue in the focused playlist	το επιλεγμένο cue στο ενεργό playlist
+on air in playlist {n}	στον αέρα στο playlist {n}
+on air in the focused playlist	στον αέρα στο ενεργό playlist
+cue "{n}"	cue «{n}»
+hold {n} s	κράτημα {n} δ
+any	οποιοδήποτε
+built in	ενσωματωμένο
+show	παράσταση
+motion	κίνηση
+METADATA	ΜΕΤΑΔΕΔΟΜΕΝΑ
+generated	παραγόμενο
+Fit	Προσαρμογή
+inf	άπειρο
+NO	ΟΧΙ
+YES	ΝΑΙ
+UP	ΠΑΝΩ
+DOWN	ΚΑΤΩ
+Left	Αριστερά
+Right	Δεξιά
+Top	Πάνω
+Bottom	Κάτω
+add	προσθήκη
+all	όλα
+none	κανένα
+Cut	Κόψιμο
+Fade	Σβήσιμο
+Load	Φόρτωση
+Pause	Παύση
+Resume	Συνέχεια
+Start	Έναρξη
+Skip	Παράλειψη
+Arm	Όπλιση
+Disarm	Αφόπλιση
+ONE	ΕΝΑ
+ONCE	ΜΙΑ ΦΟΡΑ
+Size	Μέγεθος
+Width	Πλάτος
+amount	ποσότητα
+brightness	φωτεινότητα
+contrast	αντίθεση
+saturation	κορεσμός
+hue	απόχρωση
+level	στάθμη
+speed	ταχύτητα
+style	στυλ
+title	τίτλος
+subtitle	υπότιτλος
+notes	σημειώσεις
+font	γραμματοσειρά
+frame	καρέ
+type	τύπος
+state	κατάσταση
+blend	μίξη
+align	στοίχιση
+line	γραμμή
+box	ορθογώνιο
+oval	έλλειψη
+brush	πινέλο
+eraser	γόμα
+mask	μάσκα
+grow	επέκταση
+subtract	αφαίρεση
+split	διαίρεση
+stacked	σε στοίβα
+soft	απαλό
+tolerance	ανοχή
+curve	καμπύλη
+Linear	Γραμμικό
+Ease in	Ήπια αρχή
+Ease out	Ήπιο τέλος
+S-curve	Καμπύλη S
+Position X	Θέση X
+Position Y	Θέση Y
+Deck volume	Ένταση deck
+Deck opacity	Αδιαφάνεια deck
+Master dimmer	Κύριο dimmer
+Cue brightness	Φωτεινότητα cue
+Cue contrast	Αντίθεση cue
+Cue saturation	Κορεσμός cue
+Cue hue	Απόχρωση cue
+no effects	χωρίς εφέ
+no audio effects	χωρίς εφέ ήχου
+nothing yet	τίποτα ακόμη
+no output	χωρίς έξοδο
+no window	χωρίς παράθυρο
+source missing	λείπει η πηγή
+waiting for a picture	αναμονή εικόνας
+clear frame	καθαρισμός καρέ
+undo stroke	αναίρεση πινελιάς
+save still	αποθήκευση εικόνας
+save animation	αποθήκευση κίνησης
+export	εξαγωγή
+repeats	επαναλήψεις
+hold last	κράτα τελευταίο
+end action	ενέργεια τέλους
+cue id	ID cue
+goto target	στόχος μετάβασης
+set	ορισμός
+send	αποστολή
+run	εκτέλεση
+idle	αδρανές
+standby	αναμονή
+Loop	Βρόχος
+loop forever	ατέρμονος βρόχος
+PATCH	PATCH
+OUTPUTS	ΕΞΟΔΟΙ
+SECTIONS	ΕΝΟΤΗΤΕΣ
+Video Synth	Συνθεσάιζερ βίντεο
+Browser	Περιηγητής
+Browser Cue	Cue περιηγητή
+Window Source	Πηγή παραθύρου
+Camera Source	Πηγή κάμερας
+NDI Source	Πηγή NDI
+DeckLink Input	Είσοδος DeckLink
+Syphon/Spout Source	Πηγή Syphon/Spout
+Live stream cue	Cue ζωντανής ροής
+Composite	Σύνθεση
+Composite scene cue	Cue σύνθετης σκηνής
+Lower Third	Κάτω τίτλος
+Lower Third overlay cue	Cue κάτω τίτλου
+PIP overlay cue	Cue επικάλυψης PIP
+MIDI File	Αρχείο MIDI
+Master	Master
+Memo	Σημείωμα
+Mic	Μικρόφωνο
+Timer	Χρονόμετρο
+Tone	Τόνος
+Script	Σενάριο
+Target	Στόχος
+Draw	Σχέδιο
+Code	Κώδικας
+Clouds	Σύννεφα
+Swirl	Δίνη
+Moire	Μουαρέ
+Picture	Εικόνα
+Placement	Τοποθέτηση
+Frame lock	Κλείδωμα καρέ
+Suspend	Αναστολή
+Seam	Ραφή
+High pass	Υψιπερατό
+Low pass	Χαμηλοπερατό
+Tilt EQ	EQ κλίσης
+Compressor	Συμπιεστής
+Gate	Πύλη
+Delay	Καθυστέρηση
+Reverb	Αντήχηση
+Binaural	Αμφιωτικό
+Crush	Σύνθλιψη
+Word	Λέξη
+Scrub	Σάρωση
+Short	Σύντομο
+Shatter	Θρυμματισμός
+Pulse	Παλμός
+Crawl	Κύλιση
+Typewriter	Γραφομηχανή
+Oscilloscope	Παλμογράφος
+Spectrum	Φάσμα
+Level Meters	Μετρητές στάθμης
+Waveform	Κυματομορφή
+EFFECTS	ΕΦΕ
+TRIGGERS	ΣΚΑΝΔΑΛΙΣΜΟΙ
+SEQUENCE	ΑΚΟΛΟΥΘΙΑ
+MOTION CONTROL	ΕΛΕΓΧΟΣ ΚΙΝΗΣΗΣ
+THIS CUE	ΑΥΤΟ ΤΟ CUE
+FUNCTIONS	ΛΕΙΤΟΥΡΓΙΕΣ
+VALUES	ΤΙΜΕΣ
+KEYS	ΠΛΗΚΤΡΑ
+FREEZE	ΠΑΓΩΜΑ
+FROZEN	ΠΑΓΩΜΕΝΟ
+BYPASSED	ΠΑΡΑΚΑΜΦΘΗΚΕ
+BYPASS ALL	ΠΑΡΑΚΑΜΨΗ ΟΛΩΝ
+DEFAULTS	ΠΡΟΕΠΙΛΟΓΕΣ
+CHANGE	ΑΛΛΑΓΗ
+CHOOSE	ΕΠΙΛΟΓΗ
+Stop all	Διακοπή όλων
+Pause all	Παύση όλων
+Resume all	Συνέχεια όλων
+Do not continue	Χωρίς συνέχεια
+Auto-continue	Αυτόματη συνέχεια
+Auto-follow	Συνέχεια στο τέλος
+END HOLD	ΤΕΛΟΣ ΚΡΑΤΗΜΑ
+END LOOP	ΤΕΛΟΣ ΒΡΟΧΟΣ
+END NEXT	ΤΕΛΟΣ ΕΠΟΜΕΝΟ
+END STOP	ΤΕΛΟΣ ΔΙΑΚΟΠΗ
+OUTPUT EFFECTS	ΕΦΕ ΕΞΟΔΟΥ
+LIVE CAPTIONS	ΖΩΝΤΑΝΟΙ ΥΠΟΤΙΤΛΟΙ
+captions	υπότιτλοι
+Name Card	Κάρτα ονόματος
+TEST CARD	ΚΑΡΤΑ ΔΟΚΙΜΗΣ
+TEST CARD ON	ΚΑΡΤΑ ΕΝΕΡΓΗ
+EXPORT CARD	ΕΞΑΓΩΓΗ ΚΑΡΤΑΣ
+EXPORTING...	ΕΞΑΓΩΓΗ...
+LOW LATENCY	ΧΑΜΗΛΗ ΚΑΘΥΣΤΕΡΗΣΗ
+WEB MONITOR	WEB MONITOR
+PHONE & TABLET	ΤΗΛΕΦΩΝΟ ΚΑΙ TABLET
+SCAN TO PAIR	ΣΑΡΩΣΗ ΓΙΑ ΣΥΖΕΥΞΗ
+WITH SOUND	ΜΕ ΗΧΟ
+THE NETWORK	ΤΟ ΔΙΚΤΥΟ
+FIXTURES	ΦΩΤΙΣΤΙΚΑ
+ADD FIXTURE	ΠΡΟΣΘΗΚΗ ΦΩΤΙΣΤΙΚΟΥ
+Dimmer	Dimmer
+Dimmer + RGB	Dimmer + RGB
+Dimmer + temperature	Dimmer + θερμοκρασία
+QR CODE	ΚΩΔΙΚΟΣ QR
+loop	βρόχος
+inherit	κληρονομιά
+Fill	Γέμισμα
+Stretch	Τέντωμα
+Dissolve	Διάλυση
+Pattern	Μοτίβο
+mixed	μικτό
+selected cue lane  |  TAKE to make it live	κανάλι επιλεγμένου cue  |  TAKE για να βγει στον αέρα
+Dip to black	Μέσω μαύρου
+Dip to white	Μέσω λευκού
+Iris	Ίριδα
+Push left	Ώθηση αριστερά
+Push right	Ώθηση δεξιά
+Push up	Ώθηση πάνω
+Push down	Ώθηση κάτω
+Wipe left	Σάρωση αριστερά
+Wipe right	Σάρωση δεξιά
+Wipe up	Σάρωση πάνω
+Wipe down	Σάρωση κάτω
+Still	Ακίνητη εικόνα
+address	διεύθυνση
+auto next	αυτόματο επόμενο
+continue	συνέχεια
+deck fader	fader του deck
+fire	εκκίνηση
+in	είσ.
+out	έξ.
+routing	δρομολόγηση
+trim	περικοπή
+0-63, the hardware's own gain range.	0-63, το κέρδος του ίδιου του υλικού.
+1-16, as the desk counts them	1-16, όπως τα μετρά η κονσόλα
+7-segment, blocky, or a real font	7 τμημάτων, τετράγωνη ή πραγματική γραμματοσειρά
+[ / ] keys — fade-in duration	Πλήκτρα [ / ]: διάρκεια εμφάνισης
+a camera moves the ~ controls	μια κάμερα κινεί τα χειριστήρια ~
+a chain on a device, after the mix	αλυσίδα σε συσκευή, μετά τη μίξη
+a comment	ένα σχόλιο
+Act now, without taking the cue	Κάν' το τώρα, χωρίς λήψη του cue
+Add a light	Προσθήκη φωτός
+add a second output to pair	πρόσθεσε δεύτερη έξοδο για ζεύγος
+add shape	προσθήκη σχήματος
+all driven by the cue's own transport	όλα από τη μεταφορά του cue
+All interfaces; trusted machines only.	Όλες οι διεπαφές· μόνο έμπιστα μηχανήματα.
+all to 0	όλα στο 0
+An audio effect's knob	Κουμπί εφέ ήχου
+An effect's knob	Κουμπί εφέ
+any channel	οποιοδήποτε κανάλι
+any window, any screen	οποιοδήποτε παράθυρο, οποιαδήποτε οθόνη
+Arm this cue as the one GO will fire	Όπλισε αυτό το cue για το επόμενο GO
+Art-Net port address, 0-32767	Διεύθυνση θύρας Art-Net, 0-32767
+Attached overlays fire on TAKE only	Οι συνδεδεμένες επικαλύψεις ξεκινούν μόνο με TAKE
+BACK TO BUG SWAT	ΠΙΣΩ ΣΤΟ BUG SWAT
+backdrop	φόντο
+bar	μπάρα
+bg alpha	άλφα φόντου
+black lift	ανύψωση μαύρου
+blend gamma	γάμμα μίξης
+blueprint	σχέδιο
+boxes	κουτιά
+bracket	αγκύλες
+bulletin	δελτίο
+by density	κατά πυκνότητα
+BY FIXTURE	ΑΝΑ ΦΩΤΙΣΤΙΚΟ
+capsule	κάψουλα
+caption	λεζάντα
+card	κάρτα
+CARD OFF ALL	ΚΑΡΤΑ ΣΒΗΣΤΗ ΟΛΑ
+CARD ON ALL	ΚΑΡΤΑ ΑΝΑΜΜΕΝΗ ΟΛΑ
+cartridge	κασέτα
+cassette	κασέτα ήχου
+Ceiling	Οροφή
+Chain	Αλυσίδα
+Changing this re-prepares the cue.	Η αλλαγή προετοιμάζει ξανά το cue.
+channel list is not readable	η λίστα καναλιών δεν διαβάζεται
+CHANNELS	ΚΑΝΑΛΙΑ
+channels on your interfaces, by name	κανάλια των διεπαφών σου, κατά όνομα
+Checkerboard	Σκακιέρα
+chime amber	προειδοποίηση κεχριμπαρί
+chime red	προειδοποίηση κόκκινο
+chime zero	προειδοποίηση μηδέν
+Choose startup mode:	Διάλεξε τρόπο εκκίνησης:
+circle, heart, star...	κύκλος, καρδιά, αστέρι...
+circuit	κύκλωμα
+CLASSIC VIEW	ΚΛΑΣΙΚΗ ΠΡΟΒΟΛΗ
+clear driver	καθαρισμός οδηγού
+Clear in/out trim points	Καθαρισμός σημείων εισόδου/εξόδου
+CLEAR OVERLAY  [Backspace]	ΚΑΘΑΡΙΣΜΟΣ ΕΠΙΚΑΛΥΨΗΣ  [Backspace]
+Clear the active Lower Third overlay now	Βγάλε τώρα το ενεργό Lower Third
+Clear the live PIP overlay now	Βγάλε τώρα την επικάλυψη PIP
+CLICK ANYWHERE...	ΚΛΙΚ ΟΠΟΥΔΗΠΟΤΕ...
+click or Esc to close	κλικ ή Esc για κλείσιμο
+click this window	κλικ σε αυτό το παράθυρο
+Click to edit cue notes	Κλικ για επεξεργασία σημειώσεων cue
+click to open the grid	κλικ για άνοιγμα πλέγματος
+Click to seek — drag to scrub	Κλικ για μετάβαση, σύρε για κύλιση
+Click to type it	Κλικ για πληκτρολόγηση
+comic	κόμικ
+Companion passphrase	Φράση πρόσβασης Companion
+confetti	κομφετί
+Connections at once	Ταυτόχρονες συνδέσεις
+count up	μέτρηση προς τα πάνω
+Countdown, count up, or wall clock	Αντίστροφη μέτρηση, προς τα πάνω ή ρολόι
+credit	τίτλοι τέλους
+crossfade	crossfader
+crosshair	σταυρόνημα
+Crosshatch	Διασταυρούμενη γραμμοσκίαση
+Cue has no audio	Το cue δεν έχει ήχο
+cue number	αριθμός cue
+Cycle end action for selected cues	Αλλαγή τελικής ενέργειας επιλεγμένων cue
+Cycle which slot drives scene audio	Αλλαγή θέσης που δίνει τον ήχο της σκηνής
+dateline	γραμμή ημερομηνίας
+decoder spin-up	εκκίνηση αποκωδικοποιητή
+Default App Feed	Προεπιλεγμένη πηγή εφαρμογής
+Default Camera	Προεπιλεγμένη κάμερα
+Delay before the continue fires	Καθυστέρηση πριν τη συνέχεια
+Delay between GO and this cue starting	Καθυστέρηση μεταξύ GO και έναρξης cue
+depth 1 turns it all the way round	βάθος 1 κάνει πλήρη περιστροφή
+Digit colour once amber is reached	Χρώμα ψηφίων στο κεχριμπαρί
+Digit colour while there is time in hand	Χρώμα ψηφίων με αρκετό χρόνο
+diskette	δισκέτα
+Do it now, without taking the cue	Κάν' το τώρα, χωρίς λήψη του cue
+dossier	φάκελος
+dotmatrix	κουκκιδωτή μήτρα
+Double-GO guard	Προστασία διπλού GO
+draw on the monitor	σχεδίαση στην οθόνη ελέγχου
+driver speed	ταχύτητα οδηγού
+EDGE BLEND	ΜΙΞΗ ΑΚΡΩΝ
+EDIT is on: typing changes the show	EDIT ενεργό: η γραφή αλλάζει την παράσταση
+edit on the monitor	επεξεργασία στην οθόνη ελέγχου
+Edit the main Lower Third title	Επεξεργασία τίτλου Lower Third
+Edit the secondary Lower Third line	Επεξεργασία δεύτερης γραμμής Lower Third
+eq band	ζώνη EQ
+equalizer	ισοσταθμιστής
+Esc cancels	Το Esc ακυρώνει
+Esc cancels, arrows nudge	Esc ακυρώνει, τα βέλη μετακινούν
+Esc to close	Esc για κλείσιμο
+even grid	ομοιόμορφο πλέγμα
+EXAMPLE SHOWS	ΠΑΡΑΣΤΑΣΗ ΠΑΡΑΔΕΙΓΜΑ
+EXIT  Esc	ΕΞΟΔΟΣ  Esc
+face	πρόσωπο
+factory settings	εργοστασιακές ρυθμίσεις
+Fade+LoadNext	Σβήσιμο+Φόρτωση επόμ.
+Fade+Pause	Σβήσιμο+Παύση
+Fade+Rewind	Σβήσιμο+Επαναφορά
+Fade-in duration	Διάρκεια εμφάνισης
+Fade-in duration for this cue	Εμφάνιση αυτού του cue
+Fade-out duration	Διάρκεια σβησίματος
+Fade-out duration before next cue	Σβήσιμο πριν το επόμενο cue
+Fade-out duration for this cue	Σβήσιμο αυτού του cue
+Fall	Πτώση
+false colour reads SDR pictures	τα ψευδή χρώματα διαβάζουν εικόνα SDR
+fill the frame	γέμισε το κάδρο
+find a named colour	βρες χρώμα με όνομα
+fires cues	ξεκινά cue
+first available	το πρώτο ελεύθερο
+Fit/Fill/Stretch/Unscaled	Προσαρμογή/Γέμισμα/Τέντωμα/Χωρίς κλίμακα
+Fixed repeat count — 0 = infinite	Σταθερός αριθμός επαναλήψεων: 0 = άπειρες
+Fixed repeat count — 0 = loop forever	Σταθερός αριθμός επαναλήψεων: 0 = χωρίς τέλος
+FIXED!	ΔΙΟΡΘΩΘΗΚΕ!
+flag	σημαία
+FORGET MY DEFAULTS	ΞΕΧΑΣΕ ΤΙΣ ΠΡΟΕΠΙΛΟΓΕΣ ΜΟΥ
+Frames a second	Καρέ ανά δευτερόλεπτο
+from exactly this routing	ακριβώς από αυτή τη δρομολόγηση
+Full Black	Πλήρες μαύρο
+Full Blue	Πλήρες μπλε
+Full Green	Πλήρες πράσινο
+Full Red	Πλήρες κόκκινο
+Full White	Πλήρες λευκό
+garden	κήπος
+Ghastly	Απόκοσμο
+glass	γυαλί
+glitch down	glitch κάτω
+glitch drift	ολίσθηση glitch
+glitch reach	εμβέλεια glitch
+glitch through	glitch μέσα
+glitch up	glitch πάνω
+GO steps over it	Το GO το προσπερνά
+hairline	λεπτή γραμμή
+Haptics	Τρέμουλο
+HDR input	Είσοδος HDR
+Hex, e.g. 90 3C 7F	Hex, π.χ. 90 3C 7F
+HOLDING OFF AIR	ΚΡΑΤΗΜΑ ΕΚΤΟΣ ΑΕΡΑ
+Home — skip to start	Home: στην αρχή
+Horizontal output offset in pixels	Οριζόντια μετατόπιση εξόδου σε pixel
+How many features fit on screen.	Πόσα χωρούν στην οθόνη.
+how much of this effect	πόσο από αυτό το εφέ
+How solid the ink is	Κάλυψη μελανιού
+How tall the logo is above the clock	Ύψος λογότυπου πάνω από το ρολόι
+In-point: cue starts playback here	Σημείο εισόδου: το cue ξεκινά εδώ
+index	ευρετήριο
+initializing webview	εκκίνηση webview
+install Tailscale here and on the phone	εγκατάστησε το Tailscale εδώ και στο τηλέφωνο
+INSTALLING...	ΕΓΚΑΤΑΣΤΑΣΗ...
+Its amount, or one of its knobs A to D	Η ποσότητά του ή ένα κουμπί από A έως D
+J jump to row	J: μετάβαση σε γραμμή
+jam to	συγχρονισμός σε
+Jump the driver back to its first frame	Γύρνα τον οδηγό στο πρώτο καρέ
+K — cycle cue color tag	K: αλλαγή χρώματος cue
+Keep counting past zero, or stop dead	Μέτρα πέρα από το μηδέν ή σταμάτα
+key	πλήκτρο
+Key edge softness	Απαλότητα άκρης key
+knob	κουμπί
+L - loop this cue continuously	L: επανάληψη αυτού του cue
+last reading	τελευταία ανάγνωση
+Last refused	Τελευταίο απορριφθέν
+Learn it	Μάθε
+LEARN THE BASICS	ΜΑΘΕ ΤΑ ΒΑΣΙΚΑ
+ledger	λογιστικό βιβλίο
+Left — skip back 10s	Αριστερά: 10 δλ πίσω
+Left, centre or right	Αριστερά, κέντρο ή δεξιά
+LESSONS	ΜΑΘΗΜΑΤΑ
+Levels	Επίπεδα
+Limiter	Περιοριστής
+Limiting	Περιορισμός
+line  |  Enter: apply	γραμμή  |  Enter: εφαρμογή
+LINEAR - a feather, not a blend	ΓΡΑΜΜΙΚΟ: διαβάθμιση, όχι μίξη
+Linear, ease in, ease out or S-curve	Γραμμικό, είσοδος, έξοδος ή καμπύλη S
+Lines	Γραμμές
+link aspect	σύνδεση αναλογίας
+Listen to	Άκου
+listener	ακροατής
+LIVE - every assigned deck matches	LIVE: όλα τα εκχωρημένα deck ταιριάζουν
+lock to screen	κλείδωμα στην οθόνη
+logo	λογότυπο
+logo size	μέγεθος λογότυπου
+look at it	κοίτα το
+lower 3rd	Lower Third
+marquee	φωτεινή ταμπέλα
+mask on	μάσκα ενεργή
+Master oscillator rate.	Ταχύτητα κύριου ταλαντωτή.
+Maximum quality	Μέγιστη ποιότητα
+MIDI and OSC monitor	Παρακολούθηση MIDI και OSC
+midi in	είσοδος MIDI
+MIDI note	νότα MIDI
+move points	μετακίνηση σημείων
+Move the height on its own oscillator	Κίνησε το τονικό ύψος με τον ταλαντωτή του
+name or number...	όνομα ή αριθμός...
+name, from anywhere	όνομα, από οπουδήποτε
+NDI source cue	Cue πηγής NDI
+needs file-backed video	χρειάζεται βίντεο από αρχείο
+neon	νέον
+new paths	νέες διαδρομές
+New shows start from	Οι νέες παραστάσεις ξεκινούν από
+next xfade	επόμενο σβήσιμο
+no effects for this cue type	κανένα εφέ για αυτόν τον τύπο cue
+nobody	κανένα
+none - click to learn	κανένα: κλικ για εκμάθηση
+none - click to set some	κανένα: κλικ για ρύθμιση
+none - click to write some	κανένα: κλικ για γραφή
+none yet	κανένα ακόμη
+none: the one picture	κανένα: η μόνη εικόνα
+none: the whole picture	κανένα: όλη η εικόνα
+notebook	σημειωματάριο
+nothing	τίποτα
+nothing assigned yet	τίποτα δεν έχει εκχωρηθεί
+nothing follows	δεν ακολουθεί τίποτα
+Nothing here with this filter.	Τίποτα με αυτό το φίλτρο.
+nothing set - this cue sends nothing	τίποτα ορισμένο: αυτό το cue δεν στέλνει τίποτα
+nothing targeted yet	χωρίς στόχο
+Nothing to see here. Probably.	Τίποτα να δεις εδώ. Μάλλον.
+nothing to send - check the message	τίποτα για αποστολή: έλεγξε το μήνυμα
+offset X	μετατόπιση X
+offset Y	μετατόπιση Y
+on any channel	σε οποιοδήποτε κανάλι
+on the header to add another	στην κεφαλίδα για προσθήκη
+on the monitor	στην οθόνη ελέγχου
+one big on top, the rest below	ένα μεγάλο πάνω, τα άλλα κάτω
+one big, the rest beside it	ένα μεγάλο, τα άλλα δίπλα
+onion off	ριζόχαρτο σβηστό
+onion on	ριζόχαρτο αναμμένο
+only this computer	μόνο αυτός ο υπολογιστής
+Open a .deckboy show file	Άνοιγμα αρχείου .deckboy
+open the monitor	άνοιγμα οθόνης ελέγχου
+or your own bytes	ή τα δικά σου byte
+ORDER - cues advance down the list	ΣΕΙΡΑ: τα cue κατεβαίνουν στη λίστα
+Out-point: cue stops playback here	Σημείο εξόδου: το cue τελειώνει εδώ
+output already has	η έξοδος έχει ήδη
+Outputs Off	Έξοδοι σβηστές
+outs	έξοδοι
+over budget - video will drop frames	πάνω από το όριο: το βίντεο θα χάνει καρέ
+over the picture	πάνω στην εικόνα
+PAIR	ΖΕΥΓΟΣ
+Pair a phone	Ζεύξη τηλεφώνου
+Pair overlap	Επικάλυψη ζεύγους
+Paired phones	Ζευγμένα τηλέφωνα
+Passphrase	Φράση πρόσβασης
+Pattern motion toggle	Κίνηση μοτίβου
+pause begin	παύση στην αρχή
+pennant	σημαιάκι
+Per-cue transition duration override	Διάρκεια μετάβασης αυτού του cue
+Perspective	Προοπτική
+PHASE	ΦΑΣΗ
+Phone access	Πρόσβαση τηλεφώνου
+Phone control	Έλεγχος από τηλέφωνο
+phrase hold	μήκος φράσης
+PICK FROM SCREEN	ΠΑΡΕ ΑΠΟ ΤΗΝ ΟΘΟΝΗ
+Pitch, in semitones.	Τονικό ύψος, σε ημιτόνια.
+PIXEL FOR PIXEL, TOP-LEFT	PIXEL ΠΡΟΣ PIXEL, ΠΑΝΩ ΑΡΙΣΤΕΡΑ
+placard	πινακίδα
+play a note...	παίξε μια νότα...
+PLAY BUG SWAT, a game	ΠΑΙΞΕ BUG SWAT
+Play the out move now, then take it off	Παίξε την έξοδο τώρα, μετά βγάλ' τη
+Playback speed: 0.25–4.0×	Ταχύτητα: 0,25–4,0×
+playlists into the named outputs	λίστα σε ονομασμένες εξόδους
+plays synth	παίξε το synth
+plugin	πρόσθετο
+PNG matte	ματ PNG
+podium	βάθρο
+pop	ποπ
+press a key...	πάτα ένα πλήκτρο...
+PRESS AGAIN TO FORGET	ΠΑΤΑ ΞΑΝΑ ΓΙΑ ΝΑ ΞΕΧΑΣΕΙ
+Previous show file:	Προηγούμενο αρχείο:
+prog bar	γραμμή προόδου
+programme	πρόγραμμα
+Programme with sound in any browser	Πρόγραμμα με ήχο σε κάθε φυλλομετρητή
+PROJECTOR - gamma matched	ΠΡΟΒΟΛΕΑΣ: ταιριασμένο γάμμα
+Projector gamma	Γάμμα προβολέα
+put it on a button	βάλ' το σε ένα κουμπί
+Put the brush's opacity on an oscillator	Βάλε την κάλυψη πινέλου σε ταλαντωτή
+Put the brush's size on an oscillator	Βάλε το μέγεθος πινέλου σε ταλαντωτή
+Put this control on an oscillator	Βάλε αυτό το χειριστήριο σε ταλαντωτή
+rack it	φόρτωσέ το
+RACKED, WARM	ΦΟΡΤΩΘΗΚΕ, ΕΤΟΙΜΟ
+rail	ράγα
+rain	βροχή
+Reads	Διαβάζει
+reads the same on any screen	διαβάζεται ίδιο σε κάθε οθόνη
+recent and in this show	πρόσφατα και σε αυτή την παράσταση
+Recent shows:	Πρόσφατες παραστάσεις:
+red at	κόκκινο στο
+red col	κόκκ. στήλη
+render height	ύψος απόδοσης
+render width	πλάτος απόδοσης
+REPORT A PROBLEM	ΑΝΑΦΟΡΑ ΠΡΟΒΛΗΜΑΤΟΣ
+reported rather than swapped	αναφέρθηκε, δεν αντικαταστάθηκε
+restart driver now	επανεκκίνηση οδηγού τώρα
+restart on take	επανεκκίνηση στο take
+restore at end	επαναφορά στο τέλος
+ribbon	κορδέλα
+Right — skip forward 10s	Δεξιά: 10 δλ μπροστά
+Right-click turns them off.	Το δεξί κλικ τα σβήνει.
+Rise	Άνοδος
+rise, slide or wipe	άνοδος, κύλιση ή παραπέτασμα
+Rotation speed, degrees per second.	Ταχύτητα περιστροφής, μοίρες ανά δευτερόλεπτο.
+rounded rect	στρογγυλό ορθογ.
+row turns the matrix off again	η γραμμή σβήνει ξανά τη μήτρα
+Run it now, without taking the cue	Τρέξε τώρα, χωρίς λήψη του cue
+Run the show from a phone	Τρέξε την παράσταση από τηλέφωνο
+runs off the show thread	εκτός του νήματος της παράστασης
+sACN universe, 1-63999	Σύμπαν sACN, 1-63999
+SAVE AS MY DEFAULTS	ΑΠΟΘΗΚΕΥΣΗ ΩΣ ΠΡΟΕΠΙΛΟΓΕΣ
+says	λέει
+SCALED TO FILL	ΣΕ ΚΛΙΜΑΚΑ ΓΙΑ ΓΕΜΙΣΜΑ
+Scene dwell time — 0 = hold	Χρόνος σκηνής: 0 = κράτημα
+Scene fade-in duration	Εμφάνιση σκηνής
+Scene fade-out duration	Σβήσιμο σκηνής
+scoreboard	πίνακας σκορ
+SCREENS	ΟΘΟΝΕΣ
+scroll	κύλιση
+Scroll up	Κύλιση πάνω
+sea	θάλασσα
+SELECT: MOTION	ΕΠΙΛΟΓΗ: ΚΙΝΗΣΗ
+sends	αποστολή
+Sensitivity	Ευαισθησία
+Set browser URL/path	Ορισμός URL/διαδρομής φυλλομετρητή
+set by	ορίστηκε από
+Set capture source from the cue menu	Ορισμός πηγής από το μενού του cue
+Set cue ID for selected cues	Ορισμός ID επιλεγμένων cue
+Set cue token to jump to when cue ends	Ορισμός cue για άλμα στο τέλος
+Set goto target for selected cues	Ορισμός στόχου επιλεγμένων cue
+Set Lower Third background alpha	Άλφα φόντου Lower Third
+Set per-cue transition duration	Διάρκεια μετάβασης cue
+Set playback speed for selected cues	Ταχύτητα επιλεγμένων cue
+Set repeat count for selected cues	Επαναλήψεις επιλεγμένων cue
+Set short cue id for search/goto	Σύντομο ID για αναζήτηση/άλμα
+Set short cue label for search/goto	Σύντομο όνομα για αναζήτηση/άλμα
+Set the NDI source name to receive	Όνομα πηγής NDI για λήψη
+Shift+[ / ] — fade-out duration	Shift+[ / ]: διάρκεια σβησίματος
+SHOW ME	ΔΕΙΞΕ ΜΟΥ
+Show on	Εμφάνιση σε
+Shows	Εμφάνιση
+sideline	πλαϊνή γραμμή
+sketch	σκίτσο
+slide	ολίσθηση
+slide from left	ολίσθηση από αριστερά
+slide from right	ολίσθηση από δεξιά
+SMOOTH	ΑΠΑΛΟ
+snow	χιόνι
+SOS. Kidding. The show is fine.	SOS. Πλάκα κάνω. Η παράσταση είναι μια χαρά.
+Sound when the clock turns amber	Ήχος όταν το ρολόι γίνει κεχριμπαρί
+Sound when the clock turns red	Ήχος όταν το ρολόι γίνει κόκκινο
+Sound when time is up	Ήχος όταν τελειώσει ο χρόνος
+Space — pause	Διάστημα: παύση
+Space — play	Διάστημα: αναπαραγωγή
+span	άνοιγμα
+sparkle	λάμψη
+Speech models	Μοντέλα ομιλίας
+Speed, like tape	Ταχύτητα, σαν ταινία
+stamp	σφραγίδα
+Start NEW from factory	Ξεκίνα ΝΕΟ από εργοστάσιο
+starting browser	εκκίνηση φυλλομετρητή
+starting capture	εκκίνηση λήψης
+starting xvfb	εκκίνηση xvfb
+sticky	αυτοκόλλητο
+stop at 0	σταμάτα στο 0
+Stop puppeteering this cue	Σταμάτα να οδηγείς αυτό το cue
+STRAIGHT	ΙΣΙΟ
+survey	ανάγλυφο
+SVG paths	Διαδρομές SVG
+tab	καρτέλα
+tag	ετικέτα
+TAP	ΠΑΤΗΣΕ
+terminal	τερματικό
+text mode	λειτουργία κειμένου
+the file cannot be read	το αρχείο δεν διαβάζεται
+The name	Το όνομα
+The OSC path, e.g. /cue/1/start	Η διαδρομή OSC, π.χ. /cue/1/start
+the playlist's PATCH	το PATCH της λίστας
+The role, or leave it empty	Ο ρόλος, ή άφησέ το κενό
+the system output	η έξοδος συστήματος
+The text this cue puts on screen	Το κείμενο που δείχνει αυτό το cue
+theatre	θέατρο
+then stop	μετά σταμάτα
+they have	έχουν
+things that are oscillating	πράγματα που ταλαντώνονται
+this cue lives on	αυτό το cue είναι στο
+This show's setup, no cues	Ρυθμίσεις αυτής της παράστασης, χωρίς cue
+ticket	εισιτήριο
+tile h	πλακίδιο υ
+Tile height in pixels.	Ύψος πλακιδίου σε pixel.
+tile w	πλακίδιο π
+time of day	ώρα της ημέρας
+Timecode	Χρονοκώδικας
+Toggle audio enable for selected cues	Ήχος επιλεγμένων cue
+Toggle chroma key	Εναλλαγή chroma key
+Toggle cue audio	Ήχος cue
+Toggle cue audio track for this cue	Κανάλι ήχου αυτού του cue
+Toggle fade in	Εμφάνιση
+Toggle fade out	Σβήσιμο
+Toggle hold on last frame	Κράτα το τελευταίο καρέ
+Toggle hold-at-end for selected cues	Κράτημα στο τέλος στα επιλεγμένα cue
+Toggle loop	Βρόχος
+Toggle loop for selected cues	Βρόχος επιλεγμένων cue
+Toggle the live input's audio	Ήχος ζωντανής εισόδου
+Total time	Συνολικός χρόνος
+transcoding - plays clean until ready	μετακωδικοποίηση: παίζει καθαρά ως το τέλος
+transparent: put its playlist on a layer	διάφανο: βάλε τη λίστα σε στρώση
+Trusted controllers	Έμπιστοι ελεγκτές
+TURN OFF	ΣΒΗΣΕ
+turn phone control on	άναψε τον έλεγχο από τηλέφωνο
+two big on top, the rest below	δύο μεγάλα πάνω, τα άλλα κάτω
+type a cue number	γράψε αριθμό cue
+Typing needs EDIT on	Η γραφή θέλει EDIT ενεργό
+Use GEOMETRY for exact placement	Χρησιμοποίησε GEOMETRY για ακριβή θέση
+value to type one	τιμή για εγγραφή
+Vertical output offset in pixels	Κάθετη μετατόπιση εξόδου σε pixel
+VIDEO DIP: OFF	VIDEO DIP: ΟΧΙ
+VIDEO DIP: ON	VIDEO DIP: ΝΑΙ
+walk the outputs one at a time.	πέρασε τις εξόδους μία μία.
+walks every output in turn	περνά κάθε έξοδο
+WHAT DECKBOY DID	ΤΙ ΕΚΑΝΕ ΤΟ DECKBOY
+what is on air in a playlist	τι είναι ζωντανά σε μια λίστα
+What NEW starts from, never this show	Από πού ξεκινά το ΝΕΟ, ποτέ αυτή η παράσταση
+whatever the style says	ό,τι λέει το στυλ
+Where the ramp ends	Πού τελειώνει η ράμπα
+Which deck the cue it acts on lives on	Σε ποιο deck είναι το cue στόχος
+Which frame you draw on	Σε ποιο καρέ σχεδιάζεις
+Who can see it	Ποιος μπορεί να το δει
+whole network	όλο το δίκτυο
+will not open	δεν ανοίγει
+window and recording outputs only	μόνο έξοδοι παραθύρου και εγγραφής
+wipe	παραπέτασμα
+Wobble	Ταλάντευση
+wobble by	ταλάντευση κατά
+words	λέξεις
+X — cycle end action	X: αλλαγή τελικής ενέργειας
+X — cycle end action: stop / next / loop	X: τελική ενέργεια: στοπ / επόμ. / βρόχος
+Zones	Ζώνες
+~ makes the level breathe	~ κάνει το επίπεδο να αναπνέει
+a note or an address becomes that cue's trigger	μια νότα ή διεύθυνση γίνεται έναυσμα του cue
+acts on every deck; deck and cue are ignored	δρα σε όλα τα deck· deck και cue αγνοούνται
+Add an output above, then send playlists to it here.	Πρόσθεσε έξοδο πάνω, μετά στείλε εδώ τις λίστες.
+Ancient cypher, modern video desk. Respect.	Αρχαία γραφή, σύγχρονη κονσόλα. Σεβασμός.
+Any font on this computer, Deckboy's own, or a font file	Γραμματοσειρά του υπολογιστή, του Deckboy ή αρχείο
+Apply fade-in to selected video/audio cues	Εμφάνιση στα επιλεγμένα cue βίντεο/ήχου
+Apply fade-out to selected video/audio cues	Σβήσιμο στα επιλεγμένα cue βίντεο/ήχου
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net ή sACN (E1.31): ό,τι ακούει ο φωτισμός
+Auto-advance duration — 0 = hold until taken	Αυτόματη συνέχεια: 0 = κράτημα ως το take
+Bypass: this master leaves that deck alone	Παράκαμψη: αυτό το master αφήνει εκείνο το deck
+Characters across. Fewer means bigger cells.	Χαρακτήρες ανά γραμμή. Λιγότεροι δίνουν μεγαλύτερα κελιά.
+Choose a mask from this show's library, or start a new one from a shape	Διάλεξε μάσκα από τη βιβλιοθήκη ή φτιάξε από σχήμα
+Click a value to change it. A red address overlaps another fixture.	Κλικ σε τιμή για αλλαγή. Κόκκινη διεύθυνση επικαλύπτει άλλο φωτιστικό.
+Click to show or hide this cue's captions	Κλικ για εμφάνιση ή απόκρυψη υποτίτλων του cue
+Copy the show AND its media into one portable folder	Αντίγραψε την παράσταση ΚΑΙ τα μέσα σε έναν φορητό φάκελο
+Ctrl+S - write back over the show that is open	Ctrl+S: αποθήκευση στην ανοιχτή παράσταση
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: αποθήκευση σε ΝΕΟ αρχείο
+Device output pair this cue's audio plays on	Ζεύγος εξόδων για τον ήχο αυτού του cue
+E - freeze on last frame instead of stopping	E: πάγωμα στο τελευταίο καρέ αντί για στοπ
+Edit title/subtitle here or fire it live with TAKE	Επεξεργασία τίτλου/υπότιτλου εδώ ή εκκίνηση με TAKE
+Every channel on every universe this session has touched	Κάθε κανάλι σε κάθε σύμπαν που άγγιξε αυτή η συνεδρία
+generator is off - a START cue turns it on	γεννήτρια σβηστή: ένα cue START την ανάβει
+How long the note takes to reach full level.	Χρόνος για να φτάσει η νότα στο πλήρες επίπεδο.
+How much it throws off; 0 is a clean burn	Πόσο ξεφλουδίζει· 0 καίει καθαρά
+INPUT: the programme. Drag a crop to move it, its corners to size it.	ΕΙΣΟΔΟΣ: το πρόγραμμα. Σύρε ένα κόψιμο για μετακίνηση, τις γωνίες για μέγεθος.
+Keep the outside and cut the inside instead	Κράτα το έξω και κόψε το μέσα
+LED panel height in pixels. Click to type it	Ύψος πάνελ LED σε pixel. Κλικ για γραφή
+Legacy target mode — switch type to convert	Παλιά λειτουργία στόχου: άλλαξε τύπο για μετατροπή
+Lissajous, spectrum, meters or a name card	Lissajous, φάσμα, μετρητές ή κάρτα ονόματος
+Load the cue and hold first frame when taken	Φόρτωσε το cue και κράτα το πρώτο καρέ ως το take
+no fixtures patched - Settings > Network > FIXTURES	κανένα φωτιστικό στο patch: Ρυθμίσεις > Δίκτυο > FIXTURES
+Nothing here changes the show that is open.	Τίποτα εδώ δεν αλλάζει την ανοιχτή παράσταση.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Ήχος cue: ενεργό/ανενεργό, trim, pan, mono, σβησίματα, κανονικοποίηση
+Phone control is in PHONE & TABLET, below	Ο έλεγχος από τηλέφωνο είναι στο PHONE & TABLET, κάτω
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Αποθήκευση μάσκας ως γκρι PNG στο μέγεθος εξόδου: το λευκό κρατά, το μαύρο κόβει
+Seconds REMAINING when the clock turns amber	Δευτερόλεπτα που ΑΠΟΜΕΝΟΥΝ όταν το ρολόι γίνει κεχριμπαρί
+Seconds REMAINING when the clock turns red	Δευτερόλεπτα που ΑΠΟΜΕΝΟΥΝ όταν το ρολόι γίνει κόκκινο
+Shown to the operator when GO reaches this cue	Εμφανίζεται στον χειριστή όταν το GO φτάσει σε αυτό το cue
+SHUFFLE - the next cue is picked at random	ΤΥΧΑΙΟ: το επόμενο cue με κλήρωση
+Slots are self-contained sources in this first pass	Οι θέσεις είναι αυτόνομες πηγές σε αυτή την έκδοση
+that output's whole picture, or its matte	όλη η εικόνα εκείνης της εξόδου ή το ματ της
+The cue number on the other desk, e.g. 12.5	Ο αριθμός cue στην άλλη κονσόλα, π.χ. 12.5
+Toggle pause-at-beginning for selected cues	Παύση στην αρχή στα επιλεγμένα cue
+Toggle transition-to-next for selected cues	Μετάβαση στο επόμενο στα επιλεγμένα cue
+transparent outside the blobs: put it on a layer	διάφανο έξω από τις κηλίδες: βάλ' το σε στρώση
+transparent outside the ink: put it on a layer	διάφανο έξω από το μελάνι: βάλ' το σε στρώση
+what is said, on screen, made on this computer	όσα λέγονται, στην οθόνη, φτιαγμένα σε αυτόν τον υπολογιστή
+What this cue does when it ends - click to change	Τι κάνει αυτό το cue στο τέλος: κλικ για αλλαγή
+Whether the next shape or pen path adds or cuts	Αν το επόμενο σχήμα ή διαδρομή προσθέτει ή κόβει
+shape	σχήμα
+palette	παλέτα
+scale	κλίμακα
+feedback	ανάδραση
+RED	ΚΟΚΚΙΝΟ
+do it	εκτέλεση
+(empty)	(κενό)
+(unset)	(δεν ορίστηκε)
+English	Αγγλικά
+amber at	κίτρινο στα
++ section	+ ενότητα
++pause pt	+ παύση
+a-fade in	ήχος εισόδου
+amber col	κίτρινο χρ.
+(no notes)	(χωρίς σημειώσεις)
+a-fade out	ήχος εξόδου
+gain (each)	κέρδος (ανά)
+% of the height	% του ύψους
++  a first step	+  πρώτο βήμα
++ ADD AN EFFECT	+ ΠΡΟΣΘΗΚΗ ΕΦΕ
+(none playing now)	(καμία αναπαραγωγή τώρα)
+Keep a transcript (.srt)	Αποθήκευση απομαγνητοφώνησης (.srt)
+Key tolerance (RGB distance)	Ανοχή key (απόσταση RGB)
+Contrast multiplier (0.0-2.0x)	Πολλαπλασιαστής αντίθεσης (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	Πολλαπλασιαστής φωτεινότητας (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	Πολλαπλασιαστής κορεσμού (0.0–2.0x)
+Output rotation angle (-180..180)	Γωνία εξόδου (-180..180)
+Hue rotation (-180 to +180 degrees)	Περιστροφή απόχρωσης (-180 έως +180 μοίρες)
+Lower Third background opacity (0-255)	Αδιαφάνεια φόντου κάτω τίτλου (0–255)
+0-127; 127 addresses every device on the line	0–127· το 127 απευθύνεται σε όλες τις συσκευές της γραμμής
+GO shows the note; picture and sound carry on	Το GO δείχνει τη σημείωση· εικόνα και ήχος συνεχίζονται
+How fast it moves; no effect when it is still	Ταχύτητα κίνησης· χωρίς επίδραση όταν είναι ακίνητο
+Fires when incoming timecode passes this point	Ενεργοποιείται όταν ο εισερχόμενος χρονοκώδικας περάσει αυτό το σημείο
+Source pixels, independent of output placement	Pixel πηγής, ανεξάρτητα από τη θέση στην έξοδο
+Stereo balance, applied live (snaps to center)	Στερεοφωνική ισορροπία ζωντανά (κουμπώνει στο κέντρο)
+bypassed: nothing here is processed or limited	παράκαμψη: καμία επεξεργασία ή περιορισμός
+Per-cue audio trim: -40 to +40 dB, applied live	Κέρδος cue: -40 έως +40 dB, ζωντανά
+Show the message in red - the wrap up NOW state	Κόκκινο μήνυμα: ολοκλήρωση ΤΩΡΑ
+The brush's width, as % of the picture's height	Πλάτος πινέλου ως % του ύψους της εικόνας
+What the stream carries: SDR, PQ (HDR10) or HLG	Περιεχόμενο ροής: SDR, PQ (HDR10) ή HLG
+Digit colour once red is reached, and in overtime	Χρώμα ψηφίων από το κόκκινο όριο και στην υπέρβαση
+Downmix this cue to mono (mono sources / mono PA)	Μίξη cue σε μονοφωνικό (μονοφωνική πηγή / PA)
+Drag to scrub (shift = fine), click to type exact	Σύρετε για αναζήτηση (Shift: λεπτή), κλικ για ακριβή τιμή
+Hand this to an oscillator so it moves on its own	Ανάθεση σε ταλαντωτή για αυτόνομη κίνηση
+Changing width also scales height (and vice versa)	Η αλλαγή πλάτους αλλάζει και το ύψος, και αντίστροφα
+How long the levels take to arrive; zero is a snap	Χρόνος ως τις τελικές στάθμες· μηδέν για άμεση αλλαγή
+Set the self-contained PIP source for this overlay	Ορίστε την αυτόνομη πηγή PIP αυτής της επικάλυψης
+Take the newest shape or pen path out of this mask	Αφαιρέστε το νεότερο σχήμα ή διαδρομή πένας από τη μάσκα
+An address sent to Deckboy's OSC port fires this cue	Αυτή η διεύθυνση στη θύρα OSC του Deckboy ενεργοποιεί το cue
+Hold on the last composite frame when the scene ends	Κράτημα του τελευταίου σύνθετου καρέ στο τέλος της σκηνής
+How long it takes; zero is a snap rather than a fade	Διάρκεια· μηδέν για άμεση αλλαγή χωρίς σβήσιμο
+Set still/pattern/browser duration for selected cues	Διάρκεια εικόνας/μοτίβου/browser για τα επιλεγμένα cues
+Start the LTC carrier, stop it, or jam it to a value	Έναρξη, διακοπή ή συγχρονισμός του φέροντος LTC σε τιμή
+Which cue on that deck; step off the end to clear it	Cue αυτού του deck· πέρα από το τέλος για εκκαθάριση
+Bob up and down. Depth 1 is half the frame either way	Πάνω και κάτω. Βάθος 1: μισό καρέ προς κάθε κατεύθυνση
+Output width in pixels | click value to type exact px	Πλάτος εξόδου σε pixel· κλικ για ακριβή τιμή
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Ορισμός URL ροής (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	Ενεργοποιείται καθημερινά αυτή την ώρα του υπολογιστή
+Output height in pixels | click value to type exact px	Ύψος εξόδου σε pixel· κλικ για ακριβή τιμή
+Bar across the foot - readable further back than digits	Κάτω μπάρα: διαβάζεται από πιο μακριά από τα ψηφία
+OUTPUT: drag a slice to move it, its corners to size it.	ΕΞΟΔΟΣ: σύρετε το τμήμα για μετακίνηση, τις γωνίες για μέγεθος
+Choose a Lower Third from the overlay bin to fire on TAKE	Επιλέξτε κάτω τίτλο από τις επικαλύψεις για έναρξη με TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	Επιλέξτε PIP από τις επικαλύψεις για έναρξη με TAKE
+OUTPUT: drag a slice to move it, its corners to pin them.	ΕΞΟΔΟΣ: σύρετε το τμήμα για μετακίνηση, τις γωνίες για στερέωση
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 ή αριθμητικό πληκτρολόγιο ενεργοποιούν το cue από παντού
+Use transition when auto-advancing or goto-taking next cue	Μετάβαση στην αυτόματη προώθηση ή στο GOTO του επόμενου cue
+Nothing has arrived yet. Press something on the controller.	Δεν έχει ληφθεί τίποτα. Χειριστείτε ένα πλήκτρο ή ρυθμιστικό στο χειριστήριο.
+Audio fade-in: follow visual fade, none, or explicit seconds	Ομαλή είσοδος ήχου: ακολουθεί εικόνα, καμία ή ρητά δευτερόλεπτα
+Audio fade-out: follow visual fade, none, or explicit seconds	Ομαλή έξοδος ήχου: ακολουθεί εικόνα, καμία ή ρητά δευτερόλεπτα
+Add a library shape to this mask; its points are yours to move	Προσθήκη σχήματος βιβλιοθήκης στη μάσκα· τα σημεία μετακινούνται
+No slices: this output shows its one picture. + SLICE to start.	Χωρίς τμήματα: η έξοδος δείχνει την εικόνα της. + SLICE για αρχή.
+Open and close this edge on an oscillator -- a wipe that breathes	Άνοιγμα και κλείσιμο ακμής με ταλαντωτή: σάρωση που αναπνέει
+(none)	(κανένα)
+(nothing yet)	(τίποτα ακόμη)
++ ADD AN OUTPUT	+ ΠΡΟΣΘΗΚΗ ΕΞΟΔΟΥ
+>LIVE	>ΖΩΝΤΑΝΑ
+(no media source)	(χωρίς πηγή πολυμέσων)
+snap	άμεσα
+this deck	αυτό το deck
+protocol	πρωτόκολλο
+does	ενέργεια
+signal	σήμα
+sine	ημίτονο
+freq	συχνότητα
+visuals	οπτικά
+black	μαύρο
+green	πράσινο
+blue	μπλε
+Pause at start	Παύση αρχής
+Pause at end	Παύση τέλους
+Transition to next	Μετάβαση μετά
+Hardware display	Φυσική οθόνη
+Raster mode	Τύπος ράστερ
+Refresh rate	Ανανέωση
+Bit depth	Βάθος bit
+SDR material at	Στάθμη SDR
+HDR signal	Σήμα HDR
+Fullscreen	Πλήρης οθόνη
+Matte aspect	Αναλογία ματ
+Bar opacity	Αδιαφ. μπάρας
+Output mask	Μάσκα εξόδου
+Overlay still	Στατικό πάνω
+Overlay opacity	Αδιαφ. πάνω
+Overlay image	Εικόνα πάνω
+Place it	Τοποθέτηση
+Corner pin	Γωνίες
+Slices	Τμήματα
+choose...	επιλογή...
+not configured	δεν ρυθμίστηκε
+(default system device)	(προεπιλεγμένη συσκευή)
+(no monitor)	(χωρίς μόνιτορ)
+System audio (SDL)	Ήχος συστήματος (SDL)
+Not watching a folder	Δεν παρακολουθείται φάκελος
+anyone	οποιοσδήποτε
+When taken off air	Όταν βγει εκτός αέρα
+browser cue added	προστέθηκε cue browser
+source cue added	προστέθηκε cue πηγής
+text added	προστέθηκε κείμενο
+tone cue added	προστέθηκε cue τόνου
+gain	κέρδος
+follow	ακολούθηση
+moves	κίνηση
+overtime	υπέρβαση
+chime	ήχος
+bell	καμπάνα
+load a sprite sheet from a file...	φόρτωση φύλλου sprite από αρχείο...
+Run the clock	Εκκίνηση ρολογιού
+What fires this cue besides GO	Τι ενεργοποιεί το cue εκτός από GO
+center	Κέντρο
+visual	οπτικά
+JAM	ΣΥΓΧΡ.
+MIX	ΜΙΞΗ
+CLIP	ΚΛΙΠ
+TEXT	ΚΕΙΜΕΝΟ
+KEY L	KEY Α
+MULTI	ΠΟΛΛΑΠΛΟ
+WACKY	ΤΡΕΛΑ
+COLOUR	ΧΡΩΜΑ
+DARKEN	ΣΚΟΥΡΑΙΝΕΙ
+STEREO	ΣΤΕΡΕΟ
+COMPARE	ΣΥΓΚΡΙΣΗ
+LIGHTEN	ΦΩΤΙΖΕΙ
+DASHBOARD	ΠΙΝΑΚΑΣ
+29.97 fps (NTSC)	29,97 fps (NTSC)
+Pocket Test (day)	Τεστ Pocket (μέρα)
+Dark Detail (0-12%)	Λεπτομέρεια σκιών (0-12%)
+Frame Count (emoji)	Μετρητής καρέ (emoji)
+PLUGE (black level)	PLUGE (στάθμη μαύρου)
+Pocket Test (night)	Τεστ Pocket (νύχτα)
+Pocket Test (storm)	Τεστ Pocket (καταιγίδα)
+Marks stacked BELOW.	Σημάδια στοιβαγμένα ΑΠΟ ΚΑΤΩ.
+Panel Map (animated)	Χάρτης πάνελ (κινούμενος)
+Pocket Test (sunset)	Τεστ Pocket (ηλιοβασίλεμα)
+Boresight (alignment)	Στόχαστρο (ευθυγράμμιση)
+SMPTE 75% Colour Bars	Χρωματικές μπάρες SMPTE 75%
+(projector curve only)	(μόνο καμπύλη προβολέα)
+Multiburst (bandwidth)	Multiburst (εύρος ζώνης)
+Convergence (fine grid)	Σύγκλιση (λεπτό πλέγμα)
+Greyscale Steps (gamma)	Διαβαθμίσεις γκρι (γάμμα)
+Uniformity (flat fields)	Ομοιομορφία (ενιαία πεδία)
+MULTIVIEW carries this too.	Το MULTIVIEW το μεταφέρει κι αυτό.
+Test Clock (sync + latency)	Ρολόι δοκιμής (συγχρονισμός + καθυστέρηση)
+auto (reads the common two)	αυτόματα (διαβάζει τα δύο συνήθη)
+Panel Map (LED tile numbers)	Χάρτης πάνελ (αριθμοί πάνελ LED)
+Portal (blobs of deep space)	Πύλη (φυσαλίδες βαθέος διαστήματος)
+Terrarium (living ecosystem)	Terrarium (ζωντανό οικοσύστημα)
+Window 10% (peak brightness)	Παράθυρο 10% (μέγιστη φωτεινότητα)
+Window 50% (peak at mid APL)	Παράθυρο 50% (μέγιστο σε μέσο APL)
+Frame Count (drops + latency)	Μετρητής καρέ (απώλειες + καθυστέρηση)
+Terrarium Pico (1px per cell)	Terrarium Pico (1 px ανά κελί)
+Banding Ramps (real bit depth)	Ράμπες banding (πραγματικό βάθος bit)
+Fireside (a hearth that burns)	Τζάκι (μια εστία που καίει)
+HLG - live broadcast (BT.2100)	HLG - ζωντανή μετάδοση (BT.2100)
+Test Bars (motion diagnostics)	Μπάρες δοκιμής (διάγνωση κίνησης)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (κλιμακώνει κάτι;)
+Send now, without taking the cue	Αποστολή τώρα, χωρίς λήψη του cue
+Pocket Test (test card + scene cycle)	Τεστ Pocket (κάρτα δοκιμής + κύκλος σκηνών)
+Critters (pixel-exact scaling, animated)	Critters (κλιμάκωση ακριβής στο pixel, κινούμενη)
+headphones, desk sounds and LTC stay out of it	ακουστικά, ήχοι κονσόλας και LTC μένουν έξω
+Above 1 tunnels inward, below 1 blooms outward.	Πάνω από 1 το τούνελ ρουφάει προς τα μέσα, κάτω από 1 ανθίζει προς τα έξω.
+Read everything right to left. Yes, everything.	Διάβασε τα πάντα από δεξιά προς αριστερά. Ναι, τα πάντα.
+Amber is closest to the 1976 single-phosphor look.	Το κεχριμπαρένιο είναι πιο κοντά στο μονό φώσφορο του 1976.
+Greetings, primitive. Your "slideshow" amuses us.	Χαιρετίσματα, πρωτόγονε. Η «προβολή διαφανειών» σου μας διασκεδάζει.
+Sway sideways. Depth 1 is half the frame either way	Λίκνισμα στο πλάι. Βάθος 1 είναι μισό καρέ προς κάθε πλευρά
+Draw the diagnostic over the card, or just the text.	Σχεδίασε τη διάγνωση πάνω στην κάρτα, ή μόνο το κείμενο.
+All interfaces, but only this computer is trusted yet.	Όλες οι διεπαφές, αλλά προς το παρόν μόνο αυτός ο υπολογιστής είναι έμπιστος.
+Choose the legacy cue token to show inside the PIP window	Επιλογή του παλιού token cue που δείχνει το παράθυρο PIP
+ASIO carries the show's sound, and these are not on it yet	Το ASIO μεταφέρει τον ήχο της παράστασης, κι αυτά δεν είναι ακόμη πάνω του
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=νέο  Enter/P=προηγούμενο  O=άνοιγμα αποθηκευμένου  E=παραδείγματα  L=μάθηση
+Hand this parameter to an oscillator so it moves on its own	Δώσε αυτή την παράμετρο σε ταλαντωτή, ώστε να κινείται μόνη της
+How long the finished drawing stays before it is drawn again	Πόσο μένει το τελειωμένο σχέδιο πριν σχεδιαστεί ξανά
+How it comes on and goes off: none, fade, rise, slide or wipe	Πώς μπαίνει και φεύγει: κανένα, σβήσιμο, άνοδος, ολίσθηση ή σάρωση
+The 64-step wavetable, quantised to 6 bits like the hardware.	Ο πίνακας κυματομορφής 64 βημάτων, κβαντισμένος σε 6 bit όπως το υλικό.
+Vary tile size per cell, so the grid stops looking like a grid.	Άλλαζε το μέγεθος πλακιδίου ανά κελί, ώστε το πλέγμα να μη μοιάζει πια πλέγμα.
+Which output channel carries the signal. 'all' feeds every one.	Ποιο κανάλι εξόδου φέρει το σήμα. Το 'all' τροφοδοτεί όλα.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Τι στέλνεται. Ανάποδη κάθετος n, r, t και 0 γίνονται αυτοί οι χαρακτήρες
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Τα ρήματα του πρωτοκόλλου του Deckboy, ένα ανά γραμμή· το # είναι σχόλιο
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Ταχύτητα διαμορφωτή ως λόγος της νότας, ώστε η κάμψη να ακολουθεί το τονικό ύψος.
+Play this cue to the preview only; the outputs keep what they have	Παίξε αυτό το cue μόνο στην προεπισκόπηση· οι έξοδοι κρατούν ό,τι έχουν
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Βάλε το τονικό ύψος σε ταλαντωτή: το Motion X το σαρώνει σαν θέρεμιν
+A disarmed cue stays in the list and does nothing; GO steps over it	Ένα αφοπλισμένο cue μένει στη λίστα και δεν κάνει τίποτα· το GO το προσπερνά
+Where the clock reads from this cue on; click the value to type one	Από πού διαβάζει το ρολόι από αυτό το cue· κάνε κλικ στην τιμή για να την πληκτρολογήσεις
+Add a dashboard button that fires this master by name, from anywhere	Πρόσθεσε στον πίνακα κουμπί που ξεκινά αυτόν τον master με το όνομά του, από παντού
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Νέος εδώ; Η ΜΑΘΗΣΗ ΤΩΝ ΒΑΣΙΚΩΝ θέλει πέντε λεπτά. Θα σε ξεναγήσουμε.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	Διεύθυνση IPv4, ή 255.255.255.255 για εκπομπή σε όλο το δίκτυο
+How much playing audio widens and brightens the pattern. 0 free-runs.	Πόσο ο ήχος που παίζει πλαταίνει και φωτίζει το μοτίβο. Το 0 τρέχει ελεύθερα.
+LED panel width in pixels - what one tile really is. Click to type it	Πλάτος πάνελ LED σε pixel: πόσο είναι πραγματικά ένα πλακίδιο. Κλικ για πληκτρολόγηση
+Which deck it acts on; step off the end for the one this cue lives on	Σε ποιο deck δρα· πέρασε το τέλος για το deck αυτού του cue
+only one playlist - use the routing chip on the header to add another	μόνο μία λίστα: ο επιλογέας δρομολόγησης στην κεφαλίδα προσθέτει άλλη
+Which cue this master fires on that deck; step off the end to clear it	Ποιο cue ξεκινά αυτός ο master σε εκείνο το deck· πέρασε το τέλος για καθάρισμα
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Σχεδίασε στο μόνιτορ προγράμματος με ποντίκι ή πένα (DRAW). Το Esc σταματά
+How long the move takes, each way. 0 is instant whatever the style says	Πόσο κρατά η κίνηση, προς κάθε κατεύθυνση. Το 0 είναι στιγμιαίο ό,τι κι αν λέει το στυλ
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Σταμάτα εκείνο το deck όταν φτάσει η ράμπα: το συνηθισμένο χαμήλωσε-και-σταμάτα
+Which of the file's sound tracks plays: a second language, a commentary	Ποιο ηχητικό κανάλι του αρχείου παίζει: δεύτερη γλώσσα, σχολιασμός
+An oscillator on the colour: depth is how far round the wheel it travels	Ταλαντωτής στο χρώμα: το βάθος είναι πόσο γυρίζει στον τροχό
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Φόρτωσε αυτό το cue σε παύση και εκτός αέρα, ώστε το GO να το ξεκινά χωρίς καθυστέρηση αποκωδικοποιητή
+Note, control change, program change, MIDI Show Control, or your own bytes	Νότα, control change, program change, MIDI Show Control ή δικά σου bytes
+Black behind the words. Zero leaves it over whatever the output already has	Μαύρο πίσω από τις λέξεις. Το μηδέν τις αφήνει πάνω σε ό,τι έχει ήδη η έξοδος
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Πόσο κάμπτει ο διαμορφωτής το τονικό ύψος. 0-63, το δικό του εύρος ενίσχυσης του υλικού.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	οι λέξεις που βάζει αυτό το cue στην οθόνη  |  Shift+Enter: νέα γραμμή  |  Enter: εφαρμογή
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	Τα OSC και UDP στέλνονται και ξεχνιούνται· το TCP συνδέεται, άρα τρέχει έξω από το νήμα της παράστασης
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Βάλε τη στάθμη σε ταλαντωτή: το Motion την κάνει πύλη που ανοίγει όταν κινείσαι
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Σημάδια στοιβαγμένα ΠΑΝΩ από τους χαρακτήρες, όπως συνδυαστικοί τόνοι που ξεχειλίζουν τη γραμμή.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Ποιο κουδουνάκι. Η εναλλαγή το ΠΑΙΖΕΙ, ώστε να διαλέγεις με το αυτί κι όχι με το όνομα.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Καμία γραμμή. Το + ΠΡΟΣΘΗΚΗ ή ΜΑΘΗΣΗ φτιάχνει μία· το MIDIMAP RESET επαναφέρει τις ενσωματωμένες.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Αποθήκευση των διαδρομών της μάσκας ως SVG, για το Illustrator και ό,τι άλλο τις διαβάζει
+Which MIDI output; a named port that is missing is reported rather than swapped	Ποια έξοδος MIDI· μια ονομασμένη θύρα που λείπει αναφέρεται, δεν αντικαθίσταται
+An oscillator on the level, running after GO until a later cue sets this fixture	Ταλαντωτής στη στάθμη, ενεργός μετά το GO ώσπου ένα επόμενο cue να ρυθμίσει αυτό το φωτιστικό
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Βήματα σε τρίτα οκτάβας, γιατί το αυτί δουλεύει με λόγους. Το 1 kHz είναι η σύμβαση.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Γραμμές ΚΑΤΑ ΜΗΚΟΣ του κελιού, που χαλούν τον χαρακτήρα αντί να τον στολίζουν.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Αν οι εισερχόμενες νότες MIDI παίζουν αυτό το συνθεσάιζερ ή ξεκινούν cue όπως πάντα.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Αριθμός νότας, ή γράψε LEARN και παίξε την. Νότες που δεν παίρνει κανένα cue πάνε ακόμη στο cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Ένα απλό στερεοφωνικό ζεύγος. Κλικ για άνοιγμα του πίνακα, ακριβώς από αυτή τη δρομολόγηση
+Folding is what turns an arbitrary pattern into something that reads as designed.	Το δίπλωμα κάνει ένα τυχαίο μοτίβο κάτι που μοιάζει σχεδιασμένο.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Κανάλι=στάθμη, χωρισμένα με κόμμα. Και εύρη: 1=255, 10-14=64. Τα κανάλια μετρούν από το 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Μετακινεί το trim κάθε επιλεγμένου cue κατά τα ίδια dB· μια πληκτρολογημένη τιμή τα ορίζει όλα σε αυτή
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Κάμπτει το ΤΟΝΙΚΟ ΥΨΟΣ του φέροντος αντί να αναμειγνύεται μαζί του. Αυτό κάνει το FDS να γρυλίζει.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	Στη μέση της ΜΑΘΗΣΗΣ ΤΩΝ ΒΑΣΙΚΩΝ. Πάτα L και συνεχίζουμε από εκεί που σταμάτησες, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Απόδοση ως πλέγμα χαρακτήρων με ευρετηριασμένη παλέτα 16 χρωμάτων, αντί για pixel.
+Which MIDI output this file plays to; step past the end for the first one available	Σε ποια έξοδο MIDI παίζει αυτό το αρχείο· πέρασε το τέλος για την πρώτη διαθέσιμη
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	Διεύθυνση IPv4, ή 255.255.255.255 για την ομάδα multicast του universe (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Κλικ σε κελί για εναλλαγή: off, πλήρες, -3, -6, -12. Αυτή η γραμμή κλείνει ξανά τον πίνακα
+How long each phrase stays before it moves. Zero hides them without losing the list.	Πόσο μένει κάθε φράση πριν κινηθεί. Το μηδέν τις κρύβει χωρίς να χάνεται η λίστα.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Πόσο διαρκεί η πτώση μετά την επίθεση. Ακούγεται μόνο με ενεργή την επανενεργοποίηση.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Off, από την αρχή (το επόμενο cue ξεκινά όταν αρχίζει αυτό) ή από το τέλος (όταν τελειώνει)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Ύψος μίας γραμμής ως ποσοστό του raster, ώστε μια κάρτα να διαβάζεται ίδια σε κάθε οθόνη
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Ορισμός πηγής θέσης ως media:/διαδρομή, browser:url, window:όνομα, camera:όνομα ή syphon:όνομα
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Σύντομη λειτουργία LFSR. Η περίοδος είναι αρκετά σύντομη ώστε να ακούγεται σαν κουρδισμένο μέταλλο κι όχι σαν σφύριγμα.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Λευκό, θερμό, κόκκινο, κεχριμπαρί, πράσινο, κυανό, μπλε, ματζέντα. Το ~ το γυρίζει στον χρωματικό τροχό
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Επανεκκίνηση της περιβάλλουσας τόσο συχνά. Το Hold κρατά μία νότα, όπως θέλει ένα drone.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Το Diamond είναι το αιχμηρό πλέγμα του Atari Video Music· οι δακτύλιοι κάνουν ωραίο τούνελ με το zoom ανάδρασης.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Λίκνισμα ή περιστροφή. Βάθος 1 είναι μισή στροφή προς κάθε πλευρά· ένα πριόνι στο 1 κάνει πλήρη στροφή
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	Στάθμη αναπαραγωγής του DECK (ζωντανά, δεν αποθηκεύεται με το cue) - το trim ανά cue είναι η ενίσχυση στην ενότητα ΗΧΟΣ
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Ακίνητο, εμφάνιση, γραφομηχανή, κύλιση πάνω, κυλιόμενο ή παλμός, όλα από τη μεταφορά του ίδιου του cue
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Πεδία ανά αποδοθέν καρέ. 1 είναι ένα προς ένα, 0,5 κρατά κάθε πεδίο δύο καρέ, 0 το παγώνει.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Τι δείχνει αυτό το cue όσο παίζει: κυματομορφή, παλμογράφο, Lissajous, φάσμα, μετρητές ή κάρτα ονόματος
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	Το 0 διαλέγει πλακίδια κατά φωτεινότητα ώστε να διαβάζεται η εικόνα. Το 1 διαλέγει τυχαία κι έτσι το πλέγμα γίνεται υφή.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Πόσο ταξιδεύει, σε ημιτόνια. Πάνω ακούγεται σαν άφιξη, κάτω σαν αναχώρηση, το μηδέν είναι χτυπημένη νότα.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	Διεύθυνση IPv4. Τα ονόματα δεν επιλύονται: ένα ερώτημα DNS μπλοκάρει και το GO δεν πρέπει να το κάνει
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Πλάτος πλακιδίου σε pixel. Πρέπει να ταιριάζει με το πλέγμα του φύλλου, αλλιώς τα κομμάτια πέφτουν πάνω σε γειτονικά sprite.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Εναλλασσόμενοι καθρέφτες κατά θέση κελιού, που διαβάζονται σαν μοτίβο εκεί που το τυχαίο αναποδογύρισμα διαβάζεται σαν θόρυβος.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	Το 0 τα κολλά στο κελί τους, σαν χαραγμένα. Πάνω από αυτό ξανακληρώνονται, σαν να βράζουν.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	Το MONO L παίζει την αριστερή είσοδο και στα δύο ηχεία: μικρόφωνο 1 στις περισσότερες διεπαφές. Το STEREO είναι για πηγή γραμμής.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Όλη η χειρονομία. Αυτή ΕΙΝΑΙ η διάρκεια του cue: το jingle είναι το μόνο παραγόμενο σήμα εδώ που τελειώνει.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Κλικ στην τιμή για να στείλεις αυτό το φωτιστικό ή να το αφήσεις όπου το έβαλε το τελευταίο cue. Το ~ κάνει τη στάθμη να ανασαίνει
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	Το FDS είναι πίνακας κυματομορφής που τον κάμπτει διαμορφωτής. Το 2A03 είναι το σετ παλμός/τρίγωνο/θόρυβος από το οποίο φτιάχνεται το περισσότερο chiptune.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Ανακάτεψε ποιο σύμβολο σημαίνει ποια φωτεινότητα. Ίδιο σετ, άλλος γραφικός χαρακτήρας. Με σπόρο, άρα μένει σταθερό.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Pixel sort: σειρές από pixel ταξινομημένες κατά φωτεινότητα μέσα σε μια γραμμή, που δίνει στο datamosh τη λιωμένη όψη.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	Πόσα κελιά μπορούν να ανέβουν τα σημάδια. Αραιώνουν καθώς ανεβαίνουν, άρα μεγάλη έκταση αφήνει ίχνος αντί να διπλασιάζεται.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue ενέρ τιμ  -  G λήψη  S στοπ  F σβήσιμο (τιμ = δέκατα δευτερολέπτου)  V ένταση  O αδιαφάνεια  J μετάβαση σε γραμμή
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Αρμονικό βάρος: καθαρό κουδουνάκι στο μηδέν, χάλκινα στο τέρμα. Αυτή είναι η διαφορά ανάμεσα σε ping και φανφάρα.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Περνά από τις εισόδους αυτού του υπολογιστή. Το 'Settings input' ακολουθεί την είσοδο που επιλέχθηκε στις Ρυθμίσεις > Ήχος.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Από κάρβουνα σε φλόγες. Φουντώνει και καταλαγιάζει σε κάθε ρύθμιση: μια φωτιά που δεν κινείται μοιάζει με φωτογραφία
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Τόνος αναφοράς. Το 440 είναι το σύγχρονο πρότυπο, το 432 η συνηθισμένη εναλλακτική, και τα παλιότερα όργανα ήταν ακόμη χαμηλότερα.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Πού ξεκινά το jingle. Κάτω από φωνή πρέπει να μένει μακριά· πάνω από αίθουσα πρέπει να κόβει.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Ψηφιακή ενίσχυση στην είσοδο, από -40 έως +40 dB. Ρύθμισε πρώτα τον προενισχυτή της διεπαφής· αυτό είναι για τα τελευταία dB.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Παλμός στο μέγεθος. Μόνο του κινεί πλάτος ΚΑΙ ύψος μαζί· δώσε στο ύψος δικό του ~ για να ζουλάει και να τεντώνει
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Η κάρτα γεμίζει το καρέ· ο κάτω τίτλος είναι όνομα και ρόλος χαμηλά σε διάφανο φόντο, με είσοδο κι έξοδο
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Το Held κρατά την τελευταία μετατόπιση αντί να την αφαιρεί: η εικόνα μένει λυγισμένη όπως την άφησε ο οδηγός.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	Τα 12,5 και 25 είναι λεπτά και ένρινα, το 50 κούφιο. Το 75 ακούγεται ίδιο με το 25: είναι εδώ επειδή το δίνουν οι trackers.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Κβάντισε την έξοδο όπως το υλικό. Τα σκαλοπάτια ΕΙΝΑΙ ο ήχος· αν τα λειάνεις γίνεται συνθεσάιζερ που μιμείται chip.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Μετακινεί το trim κάθε επιλεγμένου cue κατά τα ίδια dB, κρατώντας τις διαφορές· μια πληκτρολογημένη τιμή τα ορίζει όλα σε αυτή
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Πού το στέλνουν τα σημεία διασταύρωσης της λίστας (Ρυθμίσεις > Ήχος). Κλικ για άνοιγμα του πίνακα με όνομα, ακριβώς από εκείνη τη δρομολόγηση
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	ονόμασε τιμές με  d = ...;  τελείωσε με μία έκφραση, ή τρεις για κόκκινο πράσινο μπλε  |  Shift+Enter: νέα γραμμή  |  Enter: εφαρμογή
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Επανάφερε ό,τι υπήρχε στην αρχή όταν φτάσει η ράμπα (μετά τη στάση): ένα deck έτοιμο για το επόμενο cue, ένα φούσκωμα που αφήνεται
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Ποιο μοντέλο ομιλίας φτιάχνει τους υπότιτλους: αγγλικά, οποιαδήποτε γλώσσα, ή το πιο αργό και ακριβές ζεύγος. Το καθένα κατεβαίνει μία φορά
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Τι κόβει η μάσκα: αυτό το cue όπου κι αν παίζει, αυτή τη λίστα στην επιλεγμένη έξοδο, όλη την εικόνα εκείνης της εξόδου ή το matte της
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Παίξε στον ρυθμό της οθόνης όταν είναι εντός 0,2% (59,94 σε 60): κάθε καρέ μία φορά, ο ήχος έως 3,5 cent ψηλότερα ή χαμηλότερα
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Τα τέταρτα στροφής είναι ακριβή και μένουν καθαρά. Η περιστροφή δειγματοληπτεί υπό γωνία, που σκίζει το pixel art: μερικές φορές αυτό ακριβώς θέλεις.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Κάθε take ξεκινά την κουκλοπαιξία με τον ίδιο τρόπο, ώστε μια πρόβα να επαναλαμβάνεται αντί να εξαρτάται από το πόση ώρα είναι ανοιχτή η εφαρμογή.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Τι κατευθύνει κάθε κλίση: η δική του θέση, η κλίση φωτεινότητας της εικόνας ώστε οι χαρακτήρες να γέρνουν όπως αυτή, ή η απόχρωση του κελιού.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Ονόμασε ένα κανάλι ή ζεύγος μία φορά. Οι λίστες στέλνουν στο όνομα, οπότε άλλη διεπαφή σημαίνει αλλαγή ονομάτων εδώ, όχι κάθε cue.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Κλικ σε σημείο διασταύρωσης για εναλλαγή: off, 0, -3, -6, -12 dB. Σύρε στο πλάι για οποιαδήποτε στάθμη. Λίστα χωρίς σημεία παίζει στη δική της συσκευή.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Σετ sprite εγκατεστημένα στο data/sprites. Κάθε φάκελος είναι ένα σετ· η εναλλαγή διαλέγει ένα και γυρίζει σε κανένα. Δεξί κλικ τα κλείνει.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Εσωτερική ανάλυση, από 1 την πιο χοντρή ως 5 την πιο λεπτή. Είναι αισθητική ρύθμιση όσο και ταχύτητας: η όψη 8-bit έρχεται από τα μεγάλα pixel.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Το Picture παίρνει χρώμα από την εικόνα. Πράσινο, κεχριμπαρί και κυανό είναι φώσφοροι τερματικών. Το Palette κλειδώνει το κείμενο στην επιλεγμένη παλέτα υλικού.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	Το SUBTLE αυτοθεραπεύεται (H.264). Το CLASSIC είναι το αληθινό μουτζούρωμα (MPEG-4). Το EXTREME είναι πιο χοντρό και μουτζουρώνει συνέχεια. Η αλλαγή ξαναπροετοιμάζει το cue.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Ημίτονο για ευθυγράμμιση, ροζ για ρύθμιση PA, λευκό για εντοπισμό κροταλισμάτων, σάρωση για να ακούσεις πού αντηχεί η αίθουσα, identify για να περάσεις τις εξόδους μία μία.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Ποιο εφέ, με τη θέση του στη στοίβα του cue που παίζει εκείνο το deck όταν ενεργοποιηθεί. Αν δεν υπάρχει τίποτα, το σβήσιμο το λέει και δεν κάνει τίποτα
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Κάθε καρέ αναμειγνύεται στο επόμενο. Αυτή είναι η υπογραφή του Hypno: στο 0 είναι γεννήτρια μοτίβων, πάνω από αυτό η εικόνα αρχίζει να τρέφεται από τον εαυτό της.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Τι φαίνεται από το παράθυρο στον τοίχο του τζακιού: κήπος, βροχή, χιόνι ή θάλασσα. Ένα δωμάτιο με καιρό έξω διαβάζεται σαν τόπος κι όχι σαν τοίχος
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	ΑΝΑ ΦΩΤΙΣΤΙΚΟ: τα φώτα στο patch (Ρυθμίσεις > Δίκτυο > ΦΩΤΙΣΤΙΚΑ), με όνομα. ΚΑΝΑΛΙΑ: κανάλι=στάθμη με το χέρι. Ένα cue μπορεί να έχει και τα δύο· τα κανάλια πάνε τελευταία
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Κάθε χαρακτήρας λικνίζεται σαν κάρτα που γέρνει. Κάθε κελί έχει τη δική του φάση, έτσι το πλέγμα ανασαίνει αντί να γλιστρά σαν ένα φύλλο.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Πένα: κλικ για γωνίες, σύρσιμο για καμπύλες, κλικ στο πρώτο σημείο για κλείσιμο (P). Σημεία: σύρε, κλικ στο περίγραμμα για προσθήκη, Alt-κλικ ή Delete για αφαίρεση
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Τα τρία κανάλια του chip. Διαφέρουν στη φύση: το τρίγωνο δεν έχει ένταση στο υλικό, και ο θόρυβος είναι καταχωρητής ολίσθησης κι όχι ταλαντωτής.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Επιλεγμένα σετ συμβόλων και emoji: αστέρια, νότες, λουλούδια, βέλη, καιρός, ρούνοι, πρόσωπα. Η επιλογή γεμίζει τα δικά σου σύμβολα από κάτω, που μένουν επεξεργάσιμα.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Παίξε από το πληκτρολόγιο του υπολογιστή, διάταξη Ableton: A W S E D F T G Y H U J, Z και X για οκτάβα. Όσο είναι ON, αυτά τα πλήκτρα παίζουν νότες αντί να ξεκινούν cue.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Αδιαφάνεια deck, ένταση deck, ο γενικός ροοστάτης, φωτεινότητα / αντίθεση / κορεσμός / απόχρωση του ενεργού cue, ή ένα κουμπί από τα εφέ ή τα ηχητικά εφέ του
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Γραμμές σάρωσης, λάμψη φωσφόρου και κρόσσια RGB. Η λάμψη είναι το σημαντικό: ο φώσφορος απλώνεται στο πλάι, γι' αυτό ένας CRT μοιάζει να εκπέμπει φως.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Σκισμένες ζώνες γραμμών και διαχωρισμός RGB. Σε λειτουργία κειμένου χαλά και ΚΕΛΙΑ: ολόκληρες γραμμές κολλούν σε έναν επαναλαμβανόμενο χαρακτήρα, όπως μια αληθινή οθόνη κειμένου που χάνει συγχρονισμό.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Το Still κρατά το καρέ όπου βρίσκεσαι. Το Flipbook παίζει τα καρέ με τη σειρά. Το Replay σχεδιάζει το πρώτο καρέ πινελιά πινελιά, όπως σχεδιάστηκε, μετά κρατά και ξαναρχίζει
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (έτοιμο χωρίς εκκίνηση), Arm, Disarm ή Devamp (ένα loop ολοκληρώνει το πέρασμά του και τελειώνει)· ή Stop all, Pause all, Resume all: κάθε deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Το Scope δείχνει σχήμα και ψαλίδισμα. Το Lissajous δείχνει φάση και πολικότητα ανάμεσα στα δύο πρώτα κανάλια: διαγώνιος ανάποδα σημαίνει ότι το ένα είναι αντεστραμμένο. Το Spectrum είναι μπάρες τρίτου οκτάβας.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	Το 0 διαλέγει το σύμβολο που ζητά η φωτεινότητα, το 1 οποιοδήποτε σύμβολο του σετ. Ανέβασέ το για να δεις όλο το αλφάβητο: με αυστηρή κατάταξη κατά μελάνι, μια επίπεδη περιοχή διαλέγει ένα σημάδι και τα υπόλοιπα δεν εμφανίζονται ποτέ.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Τα μπλοκ και το dither διαβάζονται ως πυκνότητα· η ράμπα ASCII ως κείμενο· τα σύμβολα ως συντρίμμια. Η εναλλαγή σβήνει μια δική σου σειρά συμβόλων, αφού θα το παρέκαμπτε· η γραμμή προρυθμίσεων ξαναβάζει μία.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Το ισοσυγκερασμένο κούρδισμα αγοράζει ελεύθερη μετατροπία με κόστος κάθε διάστημα να είναι λίγο λάθος. Το φυσικό και το πυθαγόρειο είναι τέλεια κουρδισμένα σε μία τονικότητα. Το Bohlen-Pierce διαιρεί δωδεκάτη, άρα δεν έχει οκτάβες.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+trans	μετάβ.
+Motion: Bug Swat	Κίνηση: Bug Swat
+Passphrase (shared)	Φράση πρόσβασης (κοινή)
+, — skip to previous cue	, — πήγαινε στο προηγούμενο cue
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  δεν κάνει τίποτα σε εκείνη τη λίστα  -  (M) η λίστα του ίδιου του βήματος
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS είναι η στάθμιση EBU, -20 η SMPTE. Περιορισμένο κάτω από 0: τροφοδοτεί ζωντανό PA.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  δεν κάνει τίποτα σε εκείνη τη λίστα  -  (M) η λίστα του ίδιου του βήματος  -  το EDIT είναι ανοιχτό: η πληκτρολόγηση αλλάζει το σόου
+pan	pan
+deck	deck
+arcade	arcade
+TRACKER	TRACKER
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	ΕΠΙΛΕΞΕ DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Τώρα κάνε κλικ στην καρτέλα της, Deck 2. Μια νέα λίστα δεν είναι επιλεγμένη μέχρι να την πατήσεις.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Η φωτισμένη καρτέλα είναι εκεί που η ΠΗΓΗ βάζει πράγματα. Παράλειψέ το και το μελάνι πέφτει κάτω από το synth.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	Βλέπεις εκείνη την καρτέλα; Πάτα την. Τώρα είσαι στο Deck 2. ΜΠΟΥΜ. Βασικά.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Κάνε κλικ στην καρτέλα της, Deck 2. Η φωτισμένη καρτέλα είναι η λίστα όπου προσθέτει η ΠΗΓΗ.
+Skip this and the words go under the map. With the lizard.	Παράλειψέ το και οι λέξεις πάνε κάτω από τον χάρτη. Με τη σαύρα.
+Nine years of live weather. Always click the tab.	Εννιά χρόνια καιρός σε ζωντανή μετάδοση. Πάντα πάτα την καρτέλα.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Κάνε κλικ στην καρτέλα της, Deck 2. Μια νέα λίστα περιμένει μέχρι να τη διαλέξεις.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Η φωτισμένη καρτέλα παίρνει το επόμενο cue. Σαν να διαλέγεις ποια διαφάνεια μπαίνει στον προβολέα.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Διάλεξε μια τράπουλα. Οποιαδήποτε. ...Deck 2. Διάλεξε το Deck 2.
+MENU	ΜΕΝΟΥ
+VOLUME	ΕΝΤΑΣΗ
++ step	+ βήμα
+< BACK	< ΠΙΣΩ
+ATEM switcher	Μίκτης ATEM
+ATEM tally	Tally ATEM
+AUDIO: DEFAULT	ΗΧΟΣ: ΠΡΟΕΠΙΛΟΓΗ
+Animated GIF	Κινούμενο GIF
+Arrows	Βέλη
+CLICKER	ΤΗΛΕΧΕΙΡΙΣΤΗΡΙΟ
+Copyright	Δικαιώματα
+DEST...	ΠΡΟΟΡΙΣΜΟΣ...
+Datamosh - classic	Datamosh – κλασικό
+Datamosh - extreme	Datamosh – ακραίο
+Datamosh - subtle	Datamosh – διακριτικό
+Deckboy is input	Το Deckboy είναι η είσοδος
+Device: None	Συσκευή: καμία
+Drag	Σύρετε
+Drop media here	Αφήστε εδώ τα μέσα
+Enter Take  Space Play/Pause	Enter Take  Space Αναπαραγωγή/Παύση
+FFmpeg / libav  (in-process)	FFmpeg / libav  (εντός διεργασίας)
+FPS: SOURCE	FPS: ΠΗΓΗ
+Fonts	Γραμματοσειρές
+Free software. You may use, study, share	Ελεύθερο λογισμικό. Μπορείτε να το χρησιμοποιείτε, να το μελετάτε,
+GO / BACK	GO / ΠΙΣΩ
+GO / BACK (clicker)	GO / ΠΙΣΩ (τηλεχειριστήριο)
+Key out: None - fill only	Έξοδος key: καμία – μόνο fill
+LTC in	Είσοδος LTC
+Licence	Άδεια
+MATCH SOURCE	ΟΠΩΣ Η ΠΗΓΗ
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> μεταφορά
+MOSH: SUBTLE	MOSH: ΔΙΑΚΡΙΤΙΚΟ
+MSC Trigger -> cue by id	MSC Trigger -> cue κατά id
+MTC in	Είσοδος MTC
+Mode: CALLER	Λειτουργία: CALLER
+NDI receiver	Δέκτης NDI
+NDI trigger	Σκανδάλη NDI
+NO STEPS YET	ΚΑΝΕΝΑ ΒΗΜΑ ΑΚΟΜΑ
+No PTP lock, wide-model pacing - will not genlock to plant sources	Χωρίς κλείδωμα PTP, χονδρικός ρυθμός – χωρίς genlock με τις πηγές του στούντιο
+ONCE  |  ORDER	ΜΙΑ ΦΟΡΑ  |  ΣΕΙΡΑ
+Optional	Προαιρετικά
+PNG sequence	Ακολουθία PNG
+Platform	Πλατφόρμα
+Press A to take cue	Πατήστε A για να πάρετε το cue
+RATE: AUTO	ΡΥΘΜΟΣ: ΑΥΤΟ
+S Stop   C Clear   Esc Panic	S Στοπ   C Καθάρισμα   Esc Πανικός
+SIZE: SOURCE	ΜΕΓΕΘΟΣ: ΠΗΓΗ
+SPOUT TEXTURE SHARE	ΚΟΙΝΗ ΧΡΗΣΗ ΥΦΗΣ SPOUT
+Session	Συνεδρία
+TSL tally out	Έξοδος tally TSL
+Thanks	Ευχαριστίες
+Timecode chase	Ακολουθία timecode
+Timecode run	Εκτέλεση timecode
+Toolkit	Εργαλειοθήκη
+Trigger	Ενεργοποίηση
+WAV (audio only)	WAV (μόνο ήχος)
+Warranty	Εγγύηση
+address...	διεύθυνση...
+and modify it; derivatives stay GPL.	να το μοιράζεστε και να το τροποποιείτε· τα παράγωγα μένουν GPL.
+auto	αυτόματο
+clear the cell	καθάρισε το κελί
+companion ping	ping από το Companion
+fire this row	ενεργοποίηση γραμμής
+insert a row	εισαγωγή γραμμής
+live lane  |  I/O set trim  |  click or drag to seek	ζωντανή λωρίδα  |  I/O ορίζει το trim  |  κλικ ή σύρσιμο για αναζήτηση
+media in	εισαγωγή μέσων
+move the cursor	μετακίνηση δρομέα
+mute / solo a column	σίγαση / σόλο στήλης
+off -- edit on monitor	ανενεργό -- επεξεργασία στην οθόνη
+off: no camera is open. Drag on the picture to draw a zone.	ανενεργό: καμία κάμερα ανοιχτή. Σύρετε πάνω στην εικόνα για να σχεδιάσετε ζώνη.
+open the code editor	άνοιγμα επεξεργαστή κώδικα
+play / stop	αναπαραγωγή / στοπ
+stop, fade, vol, opacity	στοπ, σβήσιμο, έντ., αδιαφάνεια
+the FFmpeg, SDL and FreeType projects,	στα έργα FFmpeg, SDL και FreeType,
+Bitfocus Companion, and x42/libltc.	στο Bitfocus Companion και στο x42/libltc.
+Keys	Πλήκτρα
+None. See LICENSE sections 15-16.	Καμία. Δείτε LICENSE, ενότητες 15-16.
+none compiled in	τίποτα ενσωματωμένο
+Alpha	Άλφα
+Group	Ομάδα
+Normal	Κανονικό
+Remote	Απομακρυσμένο
+lesson	μάθημα
+Bitrate	Ρυθμός bit
+Latency	Καθυστέρηση
+OUT {n}	ΕΞ. {n}
+Out {n}	Έξ. {n}
+{n} row	{n} γραμμή
+Key name	Όνομα πλήκτρου
+Keyframe	Καρέ-κλειδί
+Registry	Μητρώο
+fade {n}	σβήσιμο {n}
+{n} rows	{n} γραμμές
+Node port	Θύρα κόμβου
+Stream ID	ID ροής
+added {1}	προστέθηκε {1}
+start {n}	έναρξη {n}
+still {n}	ακίνητη εικόνα {n}
+FADE {n} s	ΣΒΗΣΙΜΟ {n} δ
+LAYER {n}%	ΕΠΙΠΕΔΟ {n}%
+Output {n}	Έξοδος {n}
+PTP domain	Τομέας PTP
+Stream key	Κλειδί ροής
+[ASSIGNED]	[ΑΝΑΤΕΘΗΚΕ]
+audio only	μόνο ήχος
+to Out {n}	στην έξ. {n}
+{n} of {n}	{n} από {n}
+Display {n}	Οθόνη {n}
+active jobs	ενεργές εργασίες
+local clock	τοπικό ρολόι
+not running	δεν τρέχει
+click to set	κλικ για ορισμό
+full {n}x{n}	πλήρης {n}x{n}
+running v{n}	τρέχει v{n}
+the other one	την άλλη
+DELIVERY H.{n}	ΠΑΡΑΔΟΣΗ H.{n}
+Output {n} mix	Μίξη εξόδου {n}
+made by Deckboy	φτιαγμένο με Deckboy
+{1} plays to {2}	{1} παίζει στο {2}
+the picture {1} plays	η εικόνα που παίζει το {1}
+New media joins {1} by itself	Τα νέα μέσα μπαίνουν μόνα τους στο {1}
+Press Win+P and choose Extend	Πάτησε Win+P και επίλεξε Επέκταση
+{n} patched - DMX cues set them by name	{n} συνδεδεμένα - τα cue DMX τα ορίζουν με το όνομα
+Set them to extend in your display settings	Ρύθμισέ τες σε επέκταση στις ρυθμίσεις οθόνης
+lesson: {1}. Esc leaves, and it picks up here next time	μάθημα: {1}. το Esc βγαίνει, και την επόμενη φορά συνεχίζει από εδώ
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Απαντά στο ATEM Software Control ως deck στο TCP 9993 στο {1}
+In System Settings > Displays, use it as an extended display	Στις Ρυθμίσεις συστήματος > Οθόνες, χρησιμοποίησέ την ως εκτεταμένη οθόνη
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Έφαγε την κονσόλα, skapi. Έχεις {1} οθόνες: η ΟΘΟΝΗ της εξόδου στο ΜΕΝΟΥ τη βάζει σε άλλη.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Έφαγε την κονσόλα, skapi. Έχεις δύο οθόνες: η ΟΘΟΝΗ της εξόδου στο ΜΕΝΟΥ τη βάζει στην άλλη.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} οθόνες, skapi. Η κονσόλα μένει σε αυτή, η εικόνα πάει στην {2}. Άνοιξε το ΜΕΝΟΥ και κάνε το ΕΞΟΔΟΣ ΕΚΤΟΣ να γράφει ΕΞΟΔΟΣ ΕΝΤΟΣ.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Δύο οθόνες, skapi. Η κονσόλα μένει σε αυτή, η εικόνα πάει στην άλλη: {1}. Άνοιξε το ΜΕΝΟΥ και κάνε το ΕΞΟΔΟΣ ΕΚΤΟΣ να γράφει ΕΞΟΔΟΣ ΕΝΤΟΣ.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Έφαγε την κονσόλα, skapi. Οι καθρεφτισμένες οθόνες δείχνουν την εικόνα και στις δύο, γι' αυτό την έβαλα σε ένα μικρό παράθυρο, από πίσω. {1}, και θα πάρει δική της οθόνη.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Οι οθόνες σου είναι καθρεφτισμένες, skapi: η {1} δείχνει ό,τι δείχνει αυτή, οπότε η εικόνα θα καλύψει την κονσόλα και στις δύο. {2}, και θα βάλω την εικόνα σε δική της οθόνη. Ή άνοιξε το ΜΕΝΟΥ και κάνε το ΕΞΟΔΟΣ ΕΚΤΟΣ να γράφει ΕΞΟΔΟΣ ΕΝΤΟΣ.

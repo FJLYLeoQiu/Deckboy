@@ -1,0 +1,2171 @@
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+// app_ui_widgets.ipp — Reusable UI Widget Functions
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Shared widget infrastructure used across the control window. Every popup,
+// dropdown, inline editor, and context menu lives here so that the render and
+// input files can stay focused on layout and domain logic.
+//
+// ─── Context Menu ────────────────────────────────────────────────────────────
+//   handleRightClick()        — entry point: right-click on trim handles
+//                               (clears in/out points) or on cue rows (opens
+//                               context menu via hit-test against clip rects).
+//   openContextMenu()         — builds the context item list: color tag palette
+//                               (8 entries with swatch colors) plus a "delete
+//                               cue" action. Positions the menu to fit on
+//                               screen and logs via uiWatchdogPopupEvent().
+//   handleContextMenuClick()  — dispatches click to matching item action or
+//                               dismisses if click is outside the menu rect.
+//   renderContextMenu()       — draws the popup: filled panel, hover highlight,
+//                               color swatches, and item labels.
+//
+// ─── UI Profiling ────────────────────────────────────────────────────────────
+//   uiProfileLog()            — conditional stderr log gated by
+//                               DECKBOY_UI_PROFILE env flag; timestamps with
+//                               SDL_GetTicks.
+//   uiWatchdogPopupEvent()    — specialized log for popup open/close events
+//                               with optional item count.
+//
+// ─── Key-to-Character Mapping ────────────────────────────────────────────────
+//   dropdownFilterCharFromKey() — converts SDL keycodes to printable chars for
+//                                 the dropdown type-ahead filter. Supports
+//                                 a-z, 0-9, and common punctuation; respects
+//                                 Shift but blocks Ctrl/Alt/GUI modifiers.
+//   inlineEditorCharFromKey()   — broader mapping for the inline text editor,
+//                                 adding shifted number-row symbols (!@#$%^&*)
+//                                 and extra punctuation (=, +, <, >, :, ;, etc.).
+//
+// ─── Choice List Builders ────────────────────────────────────────────────────
+//   sourceCueTypeChoices()    — returns token/label pairs for source cue kinds
+//                               (window, camera, syphon/spout).
+//   sourceCueLabelForType()   — resolves a source type token to its display
+//                               label string.
+//   sourceCueKindFromToken()  — resolves a source type token to its CueKind
+//                               enum value (with common aliases like "cam").
+//   pipSourceTypeChoices()    — PiP overlay source kinds (media, browser,
+//                               window, camera, syphon).
+//   pipSourceTypeLabel()      — display label for a PiP source type token.
+//   transitionStyleChoices()  — transition style options (cut, crossfade, dip).
+//   transitionStyleLabel()    — display label for a transition style token.
+//   setSelectedCueTransitionStyle() — applies a style to all focused-deck
+//                               selected cues.
+//   audioOutputDeviceDropdownChoices() — enumerates available audio output
+//                               devices from the platform audio subsystem.
+//   displayChoiceLabel()      — "Display N: <name>" label for a display index.
+//   outputDisplayDropdownChoices() — enumerates SDL video displays.
+//   outputMirrorSourceDropdownChoices() — lists other outputs as mirror sources.
+//   outputStreamProtocolDropdownChoices() — SRT and RTMP options.
+//
+// ─── Dropdown Widget ─────────────────────────────────────────────────────────
+//   openDropdown()            — initializes dropdown state: options list,
+//                               type-ahead filter, anchor rect, highlight
+//                               position, and selection callback. Measures text
+//                               widths for popover sizing.
+//   closeDropdown()           — tears down dropdown state, stops text input.
+//   dropdownVisibleRowCount() — visible row count clamped to maxVisibleRows.
+//   ensureDropdownHighlightVisible() — scrolls the dropdown list to keep the
+//                               highlighted item in view.
+//   rebuildDropdownFilteredIndices() — re-filters options against the current
+//                               type-ahead filter string (case-insensitive).
+//   refreshDropdownPopoverRect() — repositions/resizes the popover to fit in
+//                               the window, flipping above the anchor if needed.
+//   handleDropdownMouseDown() — click dispatch: select item, dismiss, or anchor
+//                               toggle.
+//   handleDropdownMouseWheel() — scrolls the filtered list.
+//   handleDropdownKey()       — keyboard nav: arrows, enter to select, escape
+//                               to dismiss, backspace to trim filter, and
+//                               printable chars to extend filter.
+//   renderDropdownPopover()   — draws the popover: framed panel, filter text,
+//                               clipped scrollable item list with highlight.
+//
+// ─── Inline Text Editor ──────────────────────────────────────────────────────
+//   openInlineTextEditor()    — opens a small text input panel (docked inside
+//                               the cue inspector or floating center-screen).
+//                               Flushes any stale SDL_EVENT_TEXT_INPUT events from the
+//                               key that triggered the editor.
+//   closeInlineTextEditor()   — tears down editor, optionally invoking the
+//                               onSubmit callback with the entered value.
+//   handleInlineTextEditorMouseDown() — click on Apply/Cancel buttons or
+//                               outside the panel to dismiss.
+//   handleInlineTextEditorKey() — keyboard: Escape = cancel, Enter = apply,
+//                               Backspace/Delete = edit text.
+//   handleInlineTextEditorTextInput() — appends SDL text input (clamped to 180
+//                               chars).
+//   renderInlineTextEditor()  — draws the editor panel with title, prompt,
+//                               blinking cursor, Apply/Cancel buttons. When the
+//                               owner starts with "cue." and the inspector is
+//                               visible, docks the panel near the anchor rect
+//                               inside the inspector viewport.
+//
+// ─── Settings Modal ──────────────────────────────────────────────────────────
+//   settingsModalRect()       — computes the settings modal bounding rect,
+//                               scaling to fit the window with tab-specific
+//                               minimum/maximum dimensions (video tab is widest,
+//                               network tab is tallest).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+  void handleRightClick(int x, int y) {
+    // THE DASHBOARD IS MODAL, for the right button too. Without this a
+    // right-click on a tile went through to whatever the dashboard covers.
+    if (dashboardOverlayOpen_) {
+      openDashboardContextMenu(x, y);
+      return;
+    }
+    // A MULTIVIEW WINDOW, FIRST. Left-click focuses the playlist a window
+    // shows, which is the action you want ninety-nine times out of a
+    // hundred; right-click is how you say what the window IS. Tested before
+    // anything else because the multiview occupies the monitor area, and the
+    // handlers below claim large parts of it.
+    for (std::size_t i = 0; i < multiviewTileRects_.size(); ++i) {
+      if (multiviewTileRects_[i].w > 0 && pointInRect(x, y, multiviewTileRects_[i])) {
+        if (i < multiviewTileDecks_.size() && multiviewTileDecks_[i] == -3) {
+          return;   // the + tile has nothing to configure
+        }
+        openMultiviewTileMenu(static_cast<int>(i), x, y);
+        return;
+      }
+    }
+    // Right-click on trim handles to clear them
+    if (trimInHandleRect_.w > 0 && pointInRect(x, y, trimInHandleRect_)) {
+      if (Cue* cue = activeCueMutable()) {
+        pushUndoSnapshot(/*force=*/true);   // a right-click is easy to make by mistake
+        cue->inPointSeconds = 0.0;
+        triggerToast("in point cleared");
+        markProjectDirty();
+      }
+      return;
+    }
+    if (trimOutHandleRect_.w > 0 && pointInRect(x, y, trimOutHandleRect_)) {
+      if (Cue* cue = activeCueMutable()) {
+        pushUndoSnapshot(/*force=*/true);
+        cue->outPointSeconds = 0.0;
+        triggerToast("out point cleared");
+        markProjectDirty();
+      }
+      return;
+    }
+    // Determine which cue was right-clicked
+    for (int di = 0; di < static_cast<int>(deckListClipRects_.size()); ++di) {
+      const Deck& deck = project_.decks[di];
+      const SDL_Rect& primaryFrame = deckListClipRects_[di];
+      SDL_Rect primaryClip {primaryFrame.x + 8, primaryFrame.y + 30, primaryFrame.w - 16, primaryFrame.h - 38};
+      if (pointInRect(x, y, primaryClip)) {
+        int listY = primaryClip.y - deckScrolls_[di];
+        for (int ci : cueIndicesForOverlayRole(deck, false)) {
+          SDL_Rect row {primaryClip.x, listY, primaryClip.w, kRowHeight};
+          if (pointInRect(x, y, row)) {
+            openContextMenu(di, ci, x, y);
+            return;
+          }
+          listY += kRowHeight + 8;
+        }
+      }
+      const SDL_Rect& overlayFrame = deckOverlayClipRects_[di];
+      SDL_Rect overlayClip {overlayFrame.x + 8, overlayFrame.y + 42, overlayFrame.w - 16, overlayFrame.h - 50};
+      if (!pointInRect(x, y, overlayClip)) continue;
+      int overlayY = overlayClip.y - (di < static_cast<int>(deckOverlayScrolls_.size()) ? deckOverlayScrolls_[di] : 0);
+      for (int ci : cueIndicesForOverlayRole(deck, true)) {
+        SDL_Rect row {overlayClip.x, overlayY, overlayClip.w, kRowHeight};
+        if (pointInRect(x, y, row)) {
+          openContextMenu(di, ci, x, y);
+          return;
+        }
+        overlayY += kRowHeight + 8;
+      }
+    }
+    if (contextMenuOpen_) {
+      contextMenuOpen_ = false;
+      uiWatchdogPopupEvent("context_menu", false);
+    }
+  }
+
+  // ── WHERE THIS PLAYLIST GOES ──────────────────────────────────────────
+  //
+  // Everything Super Deckboy can do to one playlist, in one menu: which
+  // outputs it reaches and at which layer, which way to move it in the stack,
+  // and how to make another playlist in the first place.
+  //
+  // A MENU RATHER THAN A ROW OF CHIPS, because the number of outputs is not
+  // bounded and the column header is. The chip that opens it always says the
+  // answer, so the routing is readable without opening anything.
+  // ── WHERE A POPUP MENU GOES, AND HOW IT FITS ──────────────────────────
+  //
+  // One implementation, because there were three and the one thing they all
+  // got wrong was the same thing: a menu taller than the window clamps to the
+  // top and then runs off the bottom regardless. The SOURCE menu offers more
+  // than twenty cue types, so on a 1080 screen its last few -- the DMX cue,
+  // the script cue -- were drawn past the edge and could not be picked at all.
+  //
+  // COLUMNS, not a scrollbar. A menu is a thing you pick from at a glance; a
+  // list you have to scroll to see the end of is a menu that has stopped
+  // being one. Two columns of twelve read faster than twenty-four rows even
+  // when they do fit.
+  //
+  // `anchorX/anchorY` is where the caller would LIKE it, usually the control
+  // it belongs to. It is honoured when it can be.
+  void layoutContextMenu(int anchorX, int anchorY, bool anchorIsBottom = false) {
+    ++contextMenuLayouts_;
+    int winW = 0, winH = 0;
+    SDL_GetWindowSize(controlWindow_, &winW, &winH);
+    const int itemH = uiScaled(32);
+    const int pad = uiScaled(4);
+    const int count = static_cast<int>(contextItems_.size());
+    if (count == 0) {
+      contextMenuRect_ = SDL_Rect {};
+      return;
+    }
+
+    // How many rows fit in the window at all, leaving a margin top and bottom.
+    const int usableH = std::max(itemH, winH - uiScaled(16));
+    const int rowsPerColumn = std::max(1, (usableH - pad * 2) / itemH);
+    const int minColumns = std::max(1, (count + rowsPerColumn - 1) / rowsPerColumn);
+
+    // COLUMNS BREAK BETWEEN SECTIONS, so each starts with its heading: a
+    // column that began half-way through MADE BY DECKBOY read as a second
+    // menu with no name. Sections are packed greedily at the shortest column
+    // height that still needs no more columns than the window demands; a
+    // menu with no headings, or a section too tall for one column, falls
+    // back to an even split.
+    std::vector<int> sectionStarts {0};
+    for (int i = 1; i < count; ++i) {
+      if (!contextItems_[static_cast<std::size_t>(i)].action) sectionStarts.push_back(i);
+    }
+    int largest = 0;
+    for (std::size_t k = 0; k < sectionStarts.size(); ++k) {
+      const int end = k + 1 < sectionStarts.size() ? sectionStarts[k + 1] : count;
+      largest = std::max(largest, end - sectionStarts[k]);
+    }
+    std::vector<int> columnOf(static_cast<std::size_t>(count), 0), rowOf(static_cast<std::size_t>(count), 0);
+    int columns = minColumns, rows = (count + minColumns - 1) / minColumns;
+    bool packed = false;
+    if (sectionStarts.size() > 1 && largest <= rowsPerColumn) {
+      for (int target = std::max(largest, (count + minColumns - 1) / minColumns); target <= rowsPerColumn && !packed;
+           ++target) {
+        int col = 0, used = 0, tallest = 0;
+        for (std::size_t k = 0; k < sectionStarts.size(); ++k) {
+          const int end = k + 1 < sectionStarts.size() ? sectionStarts[k + 1] : count;
+          const int size = end - sectionStarts[k];
+          if (used > 0 && used + size > target) { ++col; used = 0; }
+          for (int i = sectionStarts[k]; i < end; ++i) {
+            columnOf[static_cast<std::size_t>(i)] = col;
+            rowOf[static_cast<std::size_t>(i)] = used++;
+          }
+          tallest = std::max(tallest, used);
+        }
+        if (col + 1 <= std::max(minColumns, 2) || target == rowsPerColumn) {
+          columns = col + 1;
+          rows = tallest;
+          packed = true;
+        }
+      }
+    }
+    if (!packed) {
+      for (int i = 0; i < count; ++i) {
+        columnOf[static_cast<std::size_t>(i)] = i / rows;
+        rowOf[static_cast<std::size_t>(i)] = i % rows;
+      }
+    }
+
+    // WIDE ENOUGH FOR ITS LONGEST LABEL, so nothing is shrunk or cut short,
+    // within what the window can give.
+    int widest = 0;
+    for (const auto& item : contextItems_) widest = std::max(widest, measuredTextWidth(fontSmall_, item.label));
+    const int maxColW = std::max(uiScaled(246), (winW - uiScaled(8) - pad * 2) / columns - uiScaled(4));
+    const int colW = std::clamp(widest + uiScaled(40), uiScaled(246), maxColW);
+
+    const int menuW = colW * columns + pad * 2 + uiScaled(4) * (columns - 1);
+    const int menuH = rows * itemH + pad * 2;
+
+    int x = anchorX;
+    int y = anchorIsBottom ? anchorY - menuH - uiScaled(4) : anchorY;
+    x = std::clamp(x, uiScaled(4), std::max(uiScaled(4), winW - menuW - uiScaled(4)));
+    y = std::clamp(y, uiScaled(4), std::max(uiScaled(4), winH - menuH - uiScaled(4)));
+    contextMenuRect_ = {x, y, menuW, menuH};
+
+    for (int i = 0; i < count; ++i) {
+      const int col = columnOf[static_cast<std::size_t>(i)];
+      const int row = rowOf[static_cast<std::size_t>(i)];
+      contextItems_[static_cast<std::size_t>(i)].rect = {
+        x + pad + col * (colW + uiScaled(4)),
+        y + pad + row * itemH,
+        colW, itemH - uiScaled(2)};
+    }
+    uiWatchdogPopupEvent("context_menu", true, count);
+  }
+
+  // -- ONE WINDOW OF THE MULTIVIEW ---------------------------------------
+  //
+  // James: "there needs to be a clear way to assign what each window of a
+  // multi is". Clicking a window used to focus whatever playlist it happened
+  // to show, which is an action ABOUT the playlist -- it never said what the
+  // window was, and there was no way to make it be something else.
+  //
+  // Opening the list here also MATERIALISES the automatic set: the moment
+  // you arrange one window the whole arrangement becomes explicit and is
+  // saved, so it cannot silently rearrange itself when a playlist is added
+  // later. That is the behaviour you want from a multiview and the opposite
+  // of what a derived list would do.
+  void openMultiviewTileMenu(int tileIndex, int mx, int my) {
+    if (project_.multiviewTiles.empty()) {
+      project_.multiviewTiles = multiviewTilePlan();
+    }
+    if (tileIndex < 0 ||
+        tileIndex >= static_cast<int>(project_.multiviewTiles.size())) {
+      return;
+    }
+    contextItems_.clear();
+    const MultiviewTile current = project_.multiviewTiles[tileIndex];
+    contextItems_.push_back({
+      "WINDOW " + std::to_string(tileIndex + 1) + " - " +
+        multiviewTileSourceLabel(current), {0, 0, 0, 0}, nullptr});
+
+    contextItems_.push_back({"SHOWS", {0, 0, 0, 0}, nullptr});
+    auto sourceRow = [&](const std::string& id, const std::string& label) {
+      const bool on = current.source == id;
+      contextItems_.push_back({
+        std::string(on ? "  * " : "    ") + label,
+        on ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+        [this, tileIndex, id]() {
+          if (tileIndex < static_cast<int>(project_.multiviewTiles.size())) {
+            project_.multiviewTiles[tileIndex].source = id;
+            markProjectDirty();
+          }
+        }});
+    };
+    sourceRow("programme", "the programme");
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      sourceRow("deck:" + std::to_string(d), deckLabel(d));
+    }
+    // What each output carries, by its id, so the window follows that
+    // output when another one is removed.
+    for (int o = 0; o < static_cast<int>(project_.outputs.size()); ++o) {
+      const std::string& id = project_.outputs[static_cast<std::size_t>(o)].outputId;
+      if (!id.empty()) sourceRow("output:" + id, "output: " + outputLabel(o));
+    }
+    sourceRow("next", "the next cue (what GO plays)");
+    sourceRow("clock", "the time of day");
+    sourceRow("", "nothing - leave it empty");
+
+    // -- THE BELLS AND WHISTLES, PER WINDOW ------------------------------
+    contextItems_.push_back({"OVER THE PICTURE", {0, 0, 0, 0}, nullptr});
+    auto toggleRow = [&](const std::string& label, bool on,
+                         std::function<void(MultiviewTile&)> flip,
+                         const std::string& tail) {
+      contextItems_.push_back({
+        std::string(on ? "  [x] " : "  [ ] ") + label + tail,
+        on ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+        [this, tileIndex, flip]() {
+          if (tileIndex < static_cast<int>(project_.multiviewTiles.size())) {
+            flip(project_.multiviewTiles[tileIndex]);
+            markProjectDirty();
+          }
+        }});
+    };
+    toggleRow("safe areas", current.safeAreas,
+              [](MultiviewTile& t) { t.safeAreas = !t.safeAreas; },
+              "   action 90%, title 80%");
+    toggleRow("audio meter", current.vuMeter,
+              [](MultiviewTile& t) { t.vuMeter = !t.vuMeter; },
+              "   this window's own level");
+    toggleRow("name and routing", current.label,
+              [](MultiviewTile& t) { t.label = !t.label; }, "");
+
+    contextItems_.push_back({"WINDOWS", {0, 0, 0, 0}, nullptr});
+    if (static_cast<int>(project_.multiviewTiles.size()) < kMaxMultiviewTiles) {
+      contextItems_.push_back({
+        "  + another window after this one", SDL_Color {40, 90, 130, 255},
+        [this, tileIndex]() {
+          if (tileIndex < static_cast<int>(project_.multiviewTiles.size())) {
+            MultiviewTile fresh;
+            fresh.source = "";
+            project_.multiviewTiles.insert(
+              project_.multiviewTiles.begin() + tileIndex + 1, fresh);
+            markProjectDirty();
+          }
+        }});
+    }
+    // The LAST window stays. A multiview with no windows is a blank panel
+    // with no way back to one -- the same rule the last playlist follows.
+    if (project_.multiviewTiles.size() > 1) {
+      contextItems_.push_back({
+        "  - remove this window", SDL_Color {130, 50, 40, 255},
+        [this, tileIndex]() {
+          if (tileIndex < static_cast<int>(project_.multiviewTiles.size())) {
+            project_.multiviewTiles.erase(
+              project_.multiviewTiles.begin() + tileIndex);
+            markProjectDirty();
+          }
+        }});
+    }
+    contextItems_.push_back({
+      "  reset to one window per playlist", {0, 0, 0, 0},
+      [this]() {
+        project_.multiviewTiles.clear();   // empty means automatic again
+        markProjectDirty();
+        triggerToast("multiview: back to the automatic set");
+      }});
+
+    // -- THE LAYOUT, for every window at once ---------------------------
+    contextItems_.push_back({"LAYOUT", {0, 0, 0, 0}, nullptr});
+    for (int l = 0; l < static_cast<int>(deckboy::multiview::Layout::Count); ++l) {
+      const auto layout = static_cast<deckboy::multiview::Layout>(l);
+      const bool on = project_.multiviewLayout == layout;
+      contextItems_.push_back({
+        std::string(on ? "  * " : "    ") + deckboy::multiview::layoutLabel(layout),
+        on ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+        [this, layout]() {
+          project_.multiviewLayout = layout;
+          markProjectDirty();
+        }});
+    }
+
+    layoutContextMenu(mx, my);
+  }
+
+  // Every blend mode, under its heading, for one layer on one output. A
+  // click sets the mode and leaves the menu open on the new choice.
+  void openLayerBlendMenu(int deckIdx, int outputIndex, int mx, int my) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) return;
+    const OutputLayer* layer = nullptr;
+    for (const OutputLayer& l : project_.outputs[outputIndex].layerDecks) {
+      if (l.deckIndex == deckIdx) layer = &l;
+    }
+    if (!layer) return;
+    const std::string current = layer->blendMode.empty() ? std::string("dissolve") : layer->blendMode;
+    contextMenuOpen_ = true;
+    contextMenuDeckIdx_ = deckIdx;
+    contextMenuCueIdx_ = -1;
+    contextMenuAnchor_ = SDL_Point {mx, my};
+    contextItems_.clear();
+    static const char* kOrder[] = {"MIX", "LIGHTEN", "DARKEN", "CONTRAST", "COMPARE", "COLOUR", "KEY",
+                                   "CHANNEL", "WACKY"};
+    for (const char* group : kOrder) {
+      contextItems_.push_back({group, {0, 0, 0, 0}, nullptr});
+      for (const std::string& mode : vjBlendModes()) {
+        if (std::string(blendModeGroup(mode)) != group) continue;
+        const bool on = mode == current;
+        contextItems_.push_back({
+          std::string(on ? "  > " : "    ") + mode,
+          on ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+          [this, deckIdx, outputIndex, mode]() {
+            setLayerBlend(deckIdx, outputIndex, mode);
+            openLayerBlendMenu(deckIdx, outputIndex, contextMenuAnchor_.x, contextMenuAnchor_.y);
+          }});
+      }
+    }
+    layoutContextMenu(mx, my);
+  }
+
+  void openPlaylistRoutingMenu(int deckIdx, int mx, int my) {
+    if (deckIdx < 0 || deckIdx >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    contextMenuOpen_ = true;
+    contextMenuDeckIdx_ = deckIdx;
+    contextMenuCueIdx_ = -1;
+    contextMenuAnchor_ = SDL_Point {mx, my};
+    contextItems_.clear();
+
+    contextItems_.push_back({deckLabel(deckIdx) + " goes to:", {0, 0, 0, 0}, nullptr});
+
+    // ── EVERY OUTPUT, ITS WHOLE STACK, AND A SLOT BETWEEN EACH ──────────
+    //
+    // The stack is drawn bottom to top -- the base first, then what sits over
+    // it -- with a "put it here" row at every insertion point. Choosing a
+    // layer is choosing a row, rather than adding at the top and then moving.
+    //
+    // It also means the menu SHOWS the stack, which nothing did: you could
+    // not see what an output was composited from without reading the
+    // multiview or asking over the socket.
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size());
+         ++outputIndex) {
+      const OutputTarget& output = project_.outputs[outputIndex];
+      const auto here = assignmentIndexForDeckOutput(deckIdx, outputIndex);
+      contextItems_.push_back({outputLabel(outputIndex), {0, 0, 0, 0}, nullptr});
+
+      // The stack, bottom first. Index 0 is the base; 1..N sit over it.
+      const int slots = static_cast<int>(output.layerDecks.size()) + 1;
+      for (int slot = 0; slot < slots; ++slot) {
+        const int occupantDeck = (slot == 0) ? output.hostDeckIndex
+                                             : output.layerDecks[slot - 1].deckIndex;
+        const bool isThisPlaylist = occupantDeck == deckIdx;
+        const std::string role = (slot == 0) ? "base" : "over " + layerLetter(slot);
+        contextItems_.push_back({
+          std::string("    ") + role + " - " + deckLabel(occupantDeck) +
+            (isThisPlaylist ? "   <- this one" : ""),
+          isThisPlaylist ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+          nullptr});
+        // A slot to go ABOVE this one, unless this playlist is already there
+        // or directly above it -- an insertion that changes nothing is a row
+        // that does nothing.
+        const bool wouldBeANoOp = here && (*here == slot || *here == slot + 1);
+        if (!wouldBeANoOp) {
+          const int targetLayer = slot + 1;
+          contextItems_.push_back({
+            "        put it here, over " + deckLabel(occupantDeck),
+            SDL_Color {40, 90, 130, 255},
+            [this, deckIdx, outputIndex, targetLayer]() {
+              if (assignmentIndexForDeckOutput(deckIdx, outputIndex)) {
+                setDeckOutputAssignmentLayer(deckIdx, outputIndex, targetLayer);
+              } else {
+                assignDeckToOutput(deckIdx, outputIndex, targetLayer);
+              }
+            }});
+        }
+      }
+      // AS THE BASE is its own row: it is a swap with whatever is there, not
+      // an insertion, and an output must always have one.
+      if (!here || *here != 0) {
+        contextItems_.push_back({
+          "        make it the base",
+          SDL_Color {40, 90, 130, 255},
+          [this, deckIdx, outputIndex]() {
+            if (!assignmentIndexForDeckOutput(deckIdx, outputIndex)) {
+              assignDeckToOutput(deckIdx, outputIndex);
+            }
+            setDeckOutputAssignmentLayer(deckIdx, outputIndex, 0);
+          }});
+      }
+      // THE LAYER'S BLEND: how it combines with what is under it. Opens the
+      // blend picker, which stays open while the operator tries modes on the
+      // live output.
+      if (here && *here > 0 &&
+          *here - 1 < static_cast<int>(output.layerDecks.size())) {
+        const std::string& mode = output.layerDecks[*here - 1].blendMode;
+        contextItems_.push_back({
+          "        blend: " + (mode.empty() ? std::string("dissolve") : mode) + "  ...",
+          SDL_Color {120, 70, 150, 255},
+          [this, deckIdx, outputIndex]() {
+            openLayerBlendMenu(deckIdx, outputIndex, contextMenuAnchor_.x, contextMenuAnchor_.y);
+          }});
+      }
+      if (here) {
+        contextItems_.push_back({
+          "        take it off this output",
+          SDL_Color {130, 50, 40, 255},
+          [this, deckIdx, outputIndex]() {
+            unassignDeckFromOutput(deckIdx, outputIndex);
+          }});
+      }
+    }
+
+    // -- AND WHERE ITS SOUND GOES -----------------------------------------
+    //
+    // This menu is about where a playlist goes, and until now it only meant
+    // the picture. A deck's audio device has never had any connection to its
+    // output routing, so several playlists at once all arrived on the same
+    // default device together -- "the original program is trying to receive
+    // all decks, even if they are assigned to other outputs".
+    //
+    // Two separate switches, because they are two separate questions: does
+    // the room hear this, and do YOU hear this.
+    contextItems_.push_back({"SOUND", {0, 0, 0, 0}, nullptr});
+    {
+      const bool inRoom = project_.decks[deckIdx].audioToProgram;
+      contextItems_.push_back({
+        std::string(inRoom ? "  [x] " : "  [ ] ") + "in the room" +
+          (inRoom ? "" : "   (silent on its own device)"),
+        inRoom ? SDL_Color {40, 130, 90, 255} : SDL_Color {130, 50, 40, 255},
+        [this, deckIdx]() {
+          if (deckIdx < static_cast<int>(project_.decks.size())) {
+            Deck& d = project_.decks[deckIdx];
+            d.audioToProgram = !d.audioToProgram;
+            applyAudioMonitorSelection();
+            markProjectDirty();
+            triggerToast(deckLabel(deckIdx) +
+                         (d.audioToProgram ? " is in the room"
+                                           : " is out of the room"));
+          }
+        }});
+
+      // The monitor only means something once a device is named for it, so
+      // say so rather than offering a switch that cannot do anything.
+      if (project_.monitorDeviceName.empty()) {
+        contextItems_.push_back({
+          "      no monitor device set (Settings > Audio)", {0, 0, 0, 0}, nullptr});
+      } else {
+        const bool pinnedHere = project_.monitorDeckIndex == deckIdx;
+        const bool audible = monitoredDeckIndex() == deckIdx;
+        contextItems_.push_back({
+          std::string(audible ? "  [x] " : "  [ ] ") + "on the monitor" +
+            (pinnedHere ? "   (pinned)"
+                        : audible ? "   (follows focus)" : ""),
+          audible ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
+          [this, deckIdx]() {
+            // Clicking the one you are already pinned to releases the pin
+            // and goes back to following focus, so the switch has somewhere
+            // to go in both directions.
+            project_.monitorDeckIndex =
+              (project_.monitorDeckIndex == deckIdx) ? -1 : deckIdx;
+            applyAudioMonitorSelection();
+            markProjectDirty();
+            triggerToast(project_.monitorDeckIndex < 0
+                           ? std::string("monitor follows the focused playlist")
+                           : ("monitoring " + deckLabel(deckIdx)));
+          }});
+      }
+    }
+
+    contextItems_.push_back({"PLAYLISTS", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({
+      "  + add a playlist", SDL_Color {40, 90, 130, 255},
+      [this]() { addDeck(); }});
+    // REMOVING IS OFFERED HERE TOO, because this is the menu about playlists
+    // and a feature you can only ever add to is a feature that accumulates.
+    // Not offered on the last one -- removeDeck refuses it anyway, and an
+    // entry that always refuses is a dead control.
+    if (project_.decks.size() > 1) {
+      contextItems_.push_back({
+        "  - remove " + deckLabel(deckIdx), SDL_Color {130, 50, 40, 255},
+        [this, deckIdx]() { removeDeck(deckIdx); }});
+    }
+    contextItems_.push_back({
+      "  + add an output", SDL_Color {40, 90, 130, 255},
+      [this]() { addOutput(project_.focusedDeckIndex); }});
+
+    layoutContextMenu(mx, my);
+  }
+
+  // What the chip says: every output this playlist reaches, with its layer.
+  // "--" is a real and important answer -- a playlist that is running and
+  // reaching nothing looks identical to a broken one until it says so.
+  // ── SAID IN WORDS, NOT IN A CODE ──────────────────────────────────────
+  //
+  // This read "O1A" / "O2B", which is exactly as informative as it looks.
+  // James: "i dont like how layers are labeled now. needs to be clearer and
+  // easier to understand what is happening."
+  //
+  // BASE is the layer everything else sits on; OVER is a layer on top of it,
+  // numbered when there is more than one. A playlist reaching nothing says so
+  // in words too, because that is the state most worth noticing.
+  // ── THE HEADER ANSWERS ONE QUESTION: WHERE DOES THIS GO? ──────────────
+  //
+  // Two earlier tries were both wrong in the same way -- they put the LAYER
+  // in the chip. "O1A" was a code ("i dont like how layers are labeled"), and
+  // spelling it out as "OUT1 BASE" traded a code for jargon ("i dont like
+  // something that says out1 base").
+  //
+  // The layer is the wrong thing to put here. Which layer a playlist is on is
+  // visible where the layers are: stacked in the multiview, listed in the
+  // routing menu. What the header has room to say, and what somebody scanning
+  // a column actually wants, is the destination.
+  std::string playlistRoutingChipLabel(int deckIndex) const {
+    std::string list;
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (!assignmentIndexForDeckOutput(deckIndex, i)) {
+        continue;
+      }
+      list += (list.empty() ? "" : ",") + std::to_string(i + 1);
+    }
+    if (list.empty()) {
+      // THE STATE MOST WORTH NOTICING, said plainly rather than as "--".
+      return "no output";
+    }
+    return (list.find(',') == std::string::npos ? "to Out " : "to Outs ") + list;
+  }
+
+  // The same thing for one output, for a tile or a row that already knows
+  // which output it is talking about.
+  std::string layerRoleLabel(int deckIndex, int outputIndex) const {
+    const auto layer = assignmentIndexForDeckOutput(deckIndex, outputIndex);
+    if (!layer) {
+      return "not on this output";
+    }
+    if (*layer == 0) {
+      return "base layer";
+    }
+    return "over, layer " + std::to_string(*layer);
+  }
+
+  void openContextMenu(int deckIdx, int cueIdx, int mx, int my) {
+    contextMenuOpen_ = true;
+    contextMenuDeckIdx_ = deckIdx;
+    contextMenuCueIdx_ = cueIdx;
+    contextItems_.clear();
+
+    Deck& deck = project_.decks[deckIdx];
+    Cue& cue = deck.cues[cueIdx];
+
+    // ── RENAME ──────────────────────────────────────────────────────────────
+    //
+    // First, because it is the thing you most often want from a cue and the
+    // one that was missing. A cue has carried a `name` since the beginning --
+    // it is what the playlist row draws -- and nothing in the program could
+    // change it. The file header of app_cue_mgmt.ipp has listed renameCue()
+    // among its contents the whole time; there was no such function.
+    //
+    // Blank means "go back to the filename", which is where an imported cue's
+    // name came from, so there is a way back from a rename you regret.
+    contextItems_.push_back({
+      "  rename...",
+      {0, 0, 0, 0},
+      [this, deckIdx, cueIdx]() {
+        if (deckIdx < 0 || deckIdx >= static_cast<int>(project_.decks.size())) return;
+        Deck& d = project_.decks[deckIdx];
+        if (cueIdx < 0 || cueIdx >= static_cast<int>(d.cues.size())) return;
+        const std::string current = d.cues[cueIdx].name;
+        openInlineTextEditor("cue_rename", "Rename cue",
+                             "Cue name (blank restores the file name)", current,
+          [this, deckIdx, cueIdx](const std::string& value) {
+            if (deckIdx >= static_cast<int>(project_.decks.size())) return;
+            Deck& dd = project_.decks[deckIdx];
+            if (cueIdx >= static_cast<int>(dd.cues.size())) return;
+            Cue& c = dd.cues[cueIdx];
+            const std::string trimmed = trim(value);
+            if (trimmed.empty()) {
+              const fs::path p = fs::path(c.path);
+              c.name = p.has_stem() ? p.stem().string() : c.path;
+            } else {
+              c.name = trimmed;
+            }
+            markProjectDirty();
+            triggerToast("renamed: " + c.name);
+          });
+      }
+    });
+
+    // ── MOVE TO DECK ───────────────────────────────────────────────────────
+    //
+    // There was no way to do this at all -- a cue built on the wrong playlist
+    // had to be re-imported on the right one from scratch. Offered only when
+    // there IS another deck to send it to, and refused (with a reason, not
+    // silently) on the deck's own active cue: the engine holds its own
+    // snapshot rather than a pointer into Deck::cues, so the picture would
+    // keep playing regardless, but the source deck's activeIndex would be
+    // left pointing at whatever slid into the gap -- confusing for no reason
+    // a TAKE first doesn't solve.
+    if (project_.decks.size() > 1) {
+      contextItems_.push_back({
+        "  move to deck...",
+        {0, 0, 0, 0},
+        [this, deckIdx, cueIdx, mx, my]() {
+          if (deckIdx < 0 || deckIdx >= static_cast<int>(project_.decks.size())) return;
+          if (cueIdx < 0 || cueIdx >= static_cast<int>(project_.decks[deckIdx].cues.size())) return;
+          if (project_.decks[deckIdx].activeIndex == cueIdx) {
+            triggerToast("can't move the active cue -- take another cue on this deck first");
+            return;
+          }
+          std::vector<std::pair<std::string, std::string>> choices;
+          for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+            if (d == deckIdx) continue;
+            choices.emplace_back(std::to_string(d), deckLabel(d));
+          }
+          SDL_Rect anchor {mx, my, 1, 1};
+          openDropdown("cue.movetodeck", anchor, choices, "",
+                       [this, deckIdx, cueIdx](const std::string& chosen) {
+            const int targetDeck = std::atoi(chosen.c_str());
+            if (deckIdx >= static_cast<int>(project_.decks.size()) ||
+                cueIdx >= static_cast<int>(project_.decks[deckIdx].cues.size()) ||
+                targetDeck < 0 || targetDeck >= static_cast<int>(project_.decks.size())) {
+              return;
+            }
+            Deck& source = project_.decks[deckIdx];
+            if (source.activeIndex == cueIdx) {
+              triggerToast("can't move the active cue -- take another cue on this deck first");
+              return;
+            }
+            pushUndoSnapshot();
+            Cue moved = source.cues[cueIdx];
+            source.cues.erase(source.cues.begin() + cueIdx);
+            // The shared rule: standby and a waiting take move too, and a
+            // pointer at the moved cue itself is cleared on this deck.
+            remapDeckCueIndices(deckIdx, [cueIdx](int index) {
+              return index == cueIdx ? -1 : index > cueIdx ? index - 1 : index;
+            });
+            if (source.selectedIndex < 0 && !source.cues.empty()) {
+              source.selectedIndex = std::min(cueIdx, static_cast<int>(source.cues.size()) - 1);
+            }
+            Deck& target = project_.decks[targetDeck];
+            target.cues.push_back(std::move(moved));
+            selectOnlyCue(target, static_cast<int>(target.cues.size()) - 1);
+            markProjectDirty();
+            triggerToast("moved to " + deckLabel(targetDeck));
+          });
+        }
+      });
+    }
+    // Color tag items
+    static const std::vector<std::pair<std::string, SDL_Color>> kTagOpts = {
+      {"no color",  {48,  98,  48,  255}},
+      {"red",       {180, 40,  40,  255}},
+      {"orange",    {190, 100, 20,  255}},
+      {"yellow",    {160, 145, 10,  255}},
+      {"cyan",      {15,  140, 140, 255}},
+      {"blue",      {20,  60,  175, 255}},
+      {"purple",    {110, 30,  150, 255}},
+      {"pink",      {175, 45,  115, 255}},
+    };
+    for (const auto& [label, col] : kTagOpts) {
+      std::string tag = label == "no color" ? "" : label;
+      bool isCurrent = cue.colorTag == tag;
+      contextItems_.push_back({
+        (isCurrent ? "* " : "  ") + label,
+        col,
+        [this, deckIdx, cueIdx, tag]() {
+          project_.decks[deckIdx].cues[cueIdx].colorTag = tag;
+          triggerToast("tag: " + (tag.empty() ? "none" : tag));
+          markProjectDirty();
+        }
+      });
+    }
+    // A cue whose notes are in parts can become one cue per part. Offered only
+    // when there ARE parts, so the menu never carries an entry that would
+    // answer "nothing to split".
+    if (noteBuildParts(cue.notes).size() > 1) {
+      const std::size_t parts = noteBuildParts(cue.notes).size();
+      contextItems_.push_back({
+        "  split notes into " + std::to_string(parts) + " cues",
+        {0, 0, 0, 0},
+        [this, deckIdx, cueIdx]() { splitCueNotesIntoCues(deckIdx, cueIdx); }
+      });
+    }
+    // File-backed cues get a "reveal in the OS file manager" entry — the
+    // fastest answer to "which file is this cue actually playing?"
+    {
+      std::string mediaPath = resolvedCueFilesystemPathString(cue, currentProjectFile_);
+      bool fileBacked = !mediaPath.empty() && !pathLooksLikeUri(cue.path) &&
+                        (cue.kind == CueKind::Video || cue.kind == CueKind::Audio ||
+                         cue.kind == CueKind::Image);
+      if (fileBacked) {
+        // The reveal itself is cross-platform (Explorer /select, Finder via
+        // `open -R`, the containing directory on Linux) but the label and toast
+        // said "explorer" everywhere, which is wrong on two of the three
+        // platforms it runs on.
+#if defined(_WIN32)
+        static constexpr const char* kRevealLabel = "  show in explorer";
+        static constexpr const char* kRevealOk = "opened in explorer";
+        static constexpr const char* kRevealFail = "couldn't open explorer";
+#elif defined(__APPLE__)
+        static constexpr const char* kRevealLabel = "  show in finder";
+        static constexpr const char* kRevealOk = "revealed in finder";
+        static constexpr const char* kRevealFail = "couldn't open finder";
+#else
+        static constexpr const char* kRevealLabel = "  show in file manager";
+        static constexpr const char* kRevealOk = "opened in file manager";
+        static constexpr const char* kRevealFail = "couldn't open file manager";
+#endif
+        contextItems_.push_back({kRevealLabel, {0, 0, 0, 0}, [this, mediaPath]() {
+          if (deckboy::platform::revealFileInFileManager(mediaPath)) {
+            triggerToast(kRevealOk);
+          } else {
+            triggerToast(kRevealFail);
+          }
+        }});
+      }
+    }
+    // Deleting the cue that is ON AIR is worth a warning, but the warning
+    // belongs in the LABEL, not in a second click the menu cannot deliver.
+    // Picking a named item out of a right-click menu is already deliberate, so
+    // this deletes on the first click and says plainly what it is about to do.
+    {
+      // ── IT DELETES THE SELECTION, NOT THE CUE UNDER THE POINTER ─────────
+      //
+      // Right-clicking one of several selected cues and choosing delete
+      // removed exactly one of them: the menu was built with the clicked
+      // index and nothing else, so a multi-selection was silently ignored by
+      // the one command most likely to be used on one. Every other row action
+      // in the playlist already applies to the whole selection when the cue
+      // you pressed is part of it; this did not.
+      //
+      // ONLY WHEN THE CLICKED CUE IS IN THE SELECTION. Right-clicking OUTSIDE
+      // a selection means "I mean this one", and deleting somebody's whole
+      // selection because they right-clicked past it would be far worse than
+      // the bug being fixed.
+      std::vector<int> victims {cueIdx};
+      const bool clickedInSelection =
+        std::find(deck.selectedIndices.begin(), deck.selectedIndices.end(), cueIdx)
+          != deck.selectedIndices.end();
+      if (clickedInSelection && deck.selectedIndices.size() > 1) {
+        victims = deck.selectedIndices;
+      }
+      bool anyLive = false;
+      for (int victim : victims) {
+        anyLive = anyLive || victim == deck.activeIndex ||
+          std::find(deck.overlayActiveIndices.begin(), deck.overlayActiveIndices.end(),
+                    victim) != deck.overlayActiveIndices.end();
+      }
+      // The label says HOW MANY, because "delete cue" on a selection of nine
+      // is the one place a wrong guess costs the most.
+      std::string label;
+      if (victims.size() > 1) {
+        label = std::string(anyLive ? "— delete " : "— delete ") +
+                std::to_string(victims.size()) + " cues" + (anyLive ? " (one is LIVE)" : "");
+      } else {
+        label = anyLive ? "— delete LIVE cue" : "— delete cue";
+      }
+      contextItems_.push_back({
+        label,
+        anyLive ? SDL_Color{140, 30, 30, 255} : SDL_Color{80, 30, 30, 255},
+        [this, deckIdx, victims]() {
+          requestDeleteCueIndices(deckIdx, victims, /*alreadyConfirmed=*/true);
+        }});
+    }
+
+    layoutContextMenu(mx, my);
+  }
+
+  void handleContextMenuClick(int x, int y) {
+    if (!contextMenuOpen_) return;
+    if (!pointInRect(x, y, contextMenuRect_)) {
+      contextMenuOpen_ = false;
+      uiWatchdogPopupEvent("context_menu", false);
+      return;
+    }
+    for (auto& item : contextItems_) {
+      if (pointInRect(x, y, item.rect)) {
+        // A HEADING IS NOT A MISS. Closing the menu because somebody's finger
+        // landed on the word SOURCES is the most annoying way to lose a menu
+        // there is: nothing happened, and now it is gone.
+        if (!item.action) {
+          return;
+        }
+        const int layoutsBefore = contextMenuLayouts_;
+        item.action();
+        if (contextMenuLayouts_ != layoutsBefore) {
+          return;   // the row rebuilt the menu: keep it open
+        }
+        contextMenuOpen_ = false;
+        uiWatchdogPopupEvent("context_menu", false);
+        return;
+      }
+    }
+    contextMenuOpen_ = false;
+    uiWatchdogPopupEvent("context_menu", false);
+  }
+  // ── A MENU IS OPAQUE, BELONGS TO THE THEME, AND HAS DEPTH ───────────────
+  //
+  // It filled with a hardcoded dark green at alpha 245 -- ignoring the theme
+  // entirely, and at 96% opacity you could read the timeline's hint text
+  // straight through the list of source types. That was fixed by using the
+  // chrome roles CLAUDE.md names for a structural panel, at full opacity.
+  //
+  // What that left was a flat list: a rectangle with rows of text in it, in a
+  // program where every other control is a raised tile with a bezel. James,
+  // on the source picker: "i dont like the way the popup menu works when
+  // selecting a source, its too flat."
+  //
+  // So each ITEM is a control now, drawn like one -- and the rows that are
+  // not controls (a heading, a name at the top of a routing menu) are drawn
+  // as headings instead, which is information the flat version threw away:
+  // every row looked equally pressable and half of them were not.
+  void renderContextMenu() {
+    if (!contextMenuOpen_) return;
+
+    // A shadow, so the menu sits ABOVE the window rather than in it. Four
+    // offset rects rather than a blur: cheap, and at this size a hard shadow
+    // reads as depth just as well.
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    for (int step = 1; step <= 3; ++step) {
+      const int off = uiScaled(step * 2);
+      SDL_Rect shade {contextMenuRect_.x + off, contextMenuRect_.y + off,
+                      contextMenuRect_.w, contextMenuRect_.h};
+      Primitives::fillRect(controlRenderer_, shade,
+                           SDL_Color {0, 0, 0, static_cast<Uint8>(60 - step * 15)});
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    Primitives::drawFramedPanel(controlRenderer_, contextMenuRect_,
+                                pal.tile, pal.deep, pal.mid);
+    const int swatchW = uiScaled(12);
+    const int textX = uiScaled(22);
+    for (const auto& item : contextItems_) {
+      const bool hover = !inTouchMode() && pointInRect(mouseX_, mouseY_, item.rect);
+      // A ROW WITH NO ACTION IS A HEADING, and headings do not get a tile --
+      // that is the whole point of the distinction. Underlined, so the group
+      // it heads reads as a group.
+      if (!item.action) {
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {item.rect.x + uiScaled(4), item.rect.y,
+                               item.rect.w - uiScaled(8), item.rect.h},
+                     item.label, pal.fgSoft);
+        Primitives::fillRect(controlRenderer_,
+                             SDL_Rect {item.rect.x + uiScaled(4),
+                                       item.rect.y + item.rect.h - uiScaled(2),
+                                       item.rect.w - uiScaled(8), std::max(1, uiScaled(1))},
+                             pal.mid);
+        continue;
+      }
+      // Every other row IS a control, so it is drawn as one: a raised tile
+      // with the same lit/unlit pair every toggle in the program uses, which
+      // is what makes a menu feel like a stack of buttons rather than a list.
+      drawUIPanel(item.rect, paletteToggleFill(hover), pal.deep, pal.mid);
+      if (item.swatch.a > 0) {
+        SDL_Rect sw {item.rect.x + uiScaled(4), item.rect.y + uiScaled(5),
+                     swatchW, item.rect.h - uiScaled(10)};
+        Primitives::fillRect(controlRenderer_, sw, item.swatch);
+        Primitives::strokeRect(controlRenderer_, sw, pal.deep);
+      }
+      // Into a rect, so a long source name ellipsizes inside the menu instead
+      // of running out of its right edge.
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {item.rect.x + textX, item.rect.y,
+                             std::max(uiScaled(40), item.rect.w - textX - uiScaled(6)),
+                             item.rect.h},
+                   item.label, paletteToggleInk(hover));
+    }
+  }
+
+  void uiProfileLog(const std::string& message) const {
+    if (!uiProfileEnabled_) {
+      return;
+    }
+    std::cerr << "[DECKBOY_UI_PROFILE " << SDL_GetTicks() << "ms] " << message << '\n';
+  }
+
+  void uiWatchdogPopupEvent(const std::string& popupName, bool opening, int itemCount = -1) const {
+    if (!uiProfileEnabled_) {
+      return;
+    }
+    std::ostringstream line;
+    line << (opening ? "open " : "close ") << popupName;
+    if (itemCount >= 0) {
+      line << " items=" << itemCount;
+    }
+    uiProfileLog(line.str());
+  }
+
+  static std::optional<char> dropdownFilterCharFromKey(SDL_Keycode key, Uint16 mod) {
+    if ((mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0) {
+      return std::nullopt;
+    }
+    bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+    if (key >= SDLK_A && key <= SDLK_Z) {
+      char base = static_cast<char>('a' + (key - SDLK_A));
+      return shift ? static_cast<char>(std::toupper(static_cast<unsigned char>(base))) : base;
+    }
+    if (key >= SDLK_0 && key <= SDLK_9) {
+      return static_cast<char>('0' + (key - SDLK_0));
+    }
+    switch (key) {
+      case SDLK_MINUS: return shift ? '_' : '-';
+      case SDLK_UNDERSCORE: return '_';
+      case SDLK_PERIOD: return '.';
+      case SDLK_SPACE: return ' ';
+      case SDLK_SLASH: return '/';
+      default: break;
+    }
+    return std::nullopt;
+  }
+
+  static std::optional<char> inlineEditorCharFromKey(SDL_Keycode key, Uint16 mod) {
+    if ((mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0) {
+      return std::nullopt;
+    }
+    bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+    if (key >= SDLK_A && key <= SDLK_Z) {
+      char base = static_cast<char>('a' + (key - SDLK_A));
+      return shift ? static_cast<char>(std::toupper(static_cast<unsigned char>(base))) : base;
+    }
+    if (key >= SDLK_0 && key <= SDLK_9) {
+      static const std::string shifted = ")!@#$%^&*(";
+      int idx = static_cast<int>(key - SDLK_0);
+      return shift ? shifted[idx] : static_cast<char>('0' + idx);
+    }
+    switch (key) {
+      case SDLK_SPACE: return ' ';
+      case SDLK_MINUS: return shift ? '_' : '-';
+      case SDLK_UNDERSCORE: return '_';
+      case SDLK_EQUALS: return shift ? '+' : '=';
+      case SDLK_PLUS: return '+';
+      case SDLK_PERIOD: return shift ? '>' : '.';
+      case SDLK_COMMA: return shift ? '<' : ',';
+      case SDLK_COLON: return ':';
+      case SDLK_SEMICOLON: return shift ? ':' : ';';
+      case SDLK_SLASH: return shift ? '?' : '/';
+      case SDLK_BACKSLASH: return shift ? '|' : '\\';
+      default: break;
+    }
+    return std::nullopt;
+  }
+
+  std::vector<std::pair<std::string, std::string>> sourceCueTypeChoices() const {
+    // Only offer capture sources whose backend actually works on THIS platform.
+    // Listing all three everywhere was theatre: a user picked "Camera" and
+    // nothing happened. macOS window and camera capture are real now
+    // (ScreenCaptureKit and AVFoundation), so they appear there; and
+    // Syphon/Spout *capture* is a scaffold on Windows too (Spout OUTPUT works;
+    // capturing a Spout sender as input does not). The self-check already knows
+    // this per platform — drive the menu from the same catalog so the two can
+    // never disagree.
+    std::vector<std::pair<std::string, std::string>> choices;
+    auto catalog = deckboy::platform::createCaptureBackendCatalog();
+    for (const auto& info : catalog->list()) {
+      if (!info.supported) {
+        continue;
+      }
+      switch (info.kind) {
+        case deckboy::platform::CaptureBackendKind::Window:
+          choices.emplace_back("window", "Window");
+          break;
+        case deckboy::platform::CaptureBackendKind::Camera:
+          choices.emplace_back("camera", "Camera");
+          break;
+        case deckboy::platform::CaptureBackendKind::AppTexture:
+          choices.emplace_back("syphon", "Syphon / Spout");
+          break;
+      }
+    }
+    return choices;
+  }
+
+  std::string sourceCueLabelForType(std::string token) const {
+    token = toLower(trim(token));
+    if (token == "camera") {
+      return "Camera";
+    }
+    if (token == "spout" || token == "syphon") {
+      return "Syphon / Spout";
+    }
+    return "Window";
+  }
+
+  CueKind sourceCueKindFromToken(std::string token) const {
+    token = toLower(trim(token));
+    if (token == "camera" || token == "cam") {
+      return CueKind::Camera;
+    }
+    if (token == "syphon" || token == "spout" || token == "siphon") {
+      return CueKind::Syphon;
+    }
+    return CueKind::WindowSource;
+  }
+
+  std::vector<std::pair<std::string, std::string>> pipSourceTypeChoices() const {
+    return {
+      {"media", "Media File / Still"},
+      {"browser", "Browser URL"},
+      {"window", "Window"},
+      {"camera", "Camera"},
+      {"syphon", "Syphon / Spout"},
+    };
+  }
+
+  std::string pipSourceTypeLabel(std::string token) const {
+    token = toLower(trim(token));
+    if (token == "browser") {
+      return "Browser URL";
+    }
+    if (token == "window") {
+      return "Window";
+    }
+    if (token == "camera") {
+      return "Camera";
+    }
+    if (token == "syphon" || token == "spout") {
+      return "Syphon / Spout";
+    }
+    if (token == "legacy") {
+      return "Legacy Cue Link";
+    }
+    return "Media File / Still";
+  }
+
+  // EVERY STYLE, FROM THE ENUM, in the order it is declared.
+  //
+  // This was a hand-written list of three, so the nine added after it would
+  // have been reachable over the wire and invisible in the interface -- the
+  // same way the LFO oscillators were. A list built from the enum cannot drift
+  // from what the program can actually do.
+  //
+  // Pick from a list, set a length: that is the whole interaction, and it is
+  // the one every presentation tool has settled on.
+  std::vector<std::pair<std::string, std::string>> transitionStyleChoices() const {
+    std::vector<std::pair<std::string, std::string>> out;
+    for (int i = 0; i < static_cast<int>(TransitionStyle::Count); ++i) {
+      const auto style = static_cast<TransitionStyle>(i);
+      out.push_back({transitionStyleToken(style), ::transitionStyleLabel(style)});
+    }
+    return out;
+  }
+
+  std::vector<std::pair<std::string, std::string>> audioOutputDeviceDropdownChoices() const {
+    std::vector<std::pair<std::string, std::string>> choices;
+    for (const auto& deviceName : outputAudioDeviceChoices()) {
+      choices.push_back({deviceName, deviceName.empty() ? "(default audio)" : deviceName});
+    }
+    return choices;
+  }
+
+  std::string displayChoiceLabel(int displayIndex) const {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0 || displayIndex < 0 || displayIndex >= displayCount) {
+      return "Display none";
+    }
+    std::string label = "Display " + std::to_string(displayIndex + 1);
+    const char* displayName = deckboyGetDisplayName(displayIndex);
+    if (displayName && *displayName) {
+      label += ": ";
+      label += displayName;
+    }
+    if (displayIsMirrored(displayIndex)) {
+      label += " (mirrored)";
+    }
+    return label;
+  }
+
+  std::vector<std::pair<std::string, std::string>> outputDisplayDropdownChoices() const {
+    std::vector<std::pair<std::string, std::string>> choices;
+    int displayCount = deckboyGetNumVideoDisplays();
+    for (int displayIndex = 0; displayIndex < displayCount; ++displayIndex) {
+      choices.push_back({std::to_string(displayIndex), displayChoiceLabel(displayIndex)});
+    }
+    if (choices.empty()) {
+      choices.push_back({"-1", "Display none"});
+    }
+    return choices;
+  }
+
+  // WHAT AN OUTPUT SHOWS, in the words an operator would use for it:
+  // "Programme", "Multiview", "Presenter view", with the output it lives on.
+  std::string outputSourceLabel(int sourceOutputIndex) const {
+    if (sourceOutputIndex < 0 || sourceOutputIndex >= static_cast<int>(project_.outputs.size())) {
+      return "own playlist";
+    }
+    const std::string type = normalizeOutputType(
+      project_.outputs[static_cast<std::size_t>(sourceOutputIndex)].outputType);
+    const std::string where = "Output " + std::to_string(sourceOutputIndex + 1);
+    if (type == "multiview") return "Multiview (" + where + ")";
+    if (type == "presenter") return "Presenter view (" + where + ")";
+    if (type == "prompter") return "Prompter (" + where + ")";
+    if (sourceOutputIndex == primaryProgrammeOutputIndex(-1)) return "Programme (" + where + ")";
+    return where + "  " + outputLabel(sourceOutputIndex);
+  }
+
+  std::vector<std::pair<std::string, std::string>> outputMirrorSourceDropdownChoices() const {
+    std::vector<std::pair<std::string, std::string>> choices;
+    const OutputTarget& focused = project_.outputs[static_cast<std::size_t>(
+      std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1))];
+    // The Web Monitor always carries SOMETHING it was given; "its own
+    // playlist" is the focused-deck accident it was made to avoid.
+    const bool web = outputStreamProtocolIsWeb(normalizeOutputStreamProtocol(focused.streamProtocol));
+    if (!web) {
+      choices.push_back({"-1", "Own playlist (render own assignments)"});
+    }
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      // Another stream has no picture of its own to give.
+      if (outputIndex == project_.focusedOutputIndex ||
+          normalizeOutputType(project_.outputs[static_cast<std::size_t>(outputIndex)].outputType) == "stream") {
+        continue;
+      }
+      choices.push_back({std::to_string(outputIndex), outputSourceLabel(outputIndex)});
+    }
+    return choices;
+  }
+
+  std::string outputMirrorSourceDropdownLabel(int sourceOutputIndex) const {
+    if (sourceOutputIndex < 0 || sourceOutputIndex >= static_cast<int>(project_.outputs.size())) {
+      return "Off";
+    }
+    return "Output " + std::to_string(sourceOutputIndex + 1) + "  " + outputLabel(sourceOutputIndex);
+  }
+
+  // Installed ASIO drivers, with the SDL device as an explicit first choice
+  // rather than an empty row -- "none" reads as broken, "system audio" reads
+  // as a decision.
+  // Input devices, with the system default as an explicit first entry.
+  std::vector<std::pair<std::string, std::string>> audioInputDeviceDropdownChoices() const {
+    std::vector<std::pair<std::string, std::string>> out;
+    out.emplace_back("__off__", "Off");
+    out.emplace_back("", "System default input");
+    int count = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioRecordingDevices(&count)) {
+      for (int i = 0; i < count; ++i) {
+        if (const char* n = SDL_GetAudioDeviceName(ids[i])) {
+          out.emplace_back(n, n);
+        }
+      }
+      SDL_free(ids);
+    }
+    return out;
+  }
+
+  std::vector<std::pair<std::string, std::string>> asioDriverDropdownChoices() const {
+    std::vector<std::pair<std::string, std::string>> out;
+    out.emplace_back("", "System audio (SDL)");
+    for (const auto& dev : deckboy::platform::audio::listAsioDevices()) {
+      out.emplace_back(dev.name, dev.name);
+    }
+    return out;
+  }
+
+  std::vector<std::pair<std::string, std::string>> outputStreamProtocolDropdownChoices() const {
+    // RTMPS was fully implemented -- its own default URL, the FLV muxer, TLS --
+    // but appeared in neither this list nor the cycle, so it was unreachable
+    // from the UI. FILE is the program recorder.
+    return {
+      {"srt", "SRT"},
+      {"rtmp", "RTMP"},
+      {"rtmps", "RTMPS"},
+      {"file", "RECORD TO FILE"},
+      {"web", "WEB (browser, with sound)"},
+    };
+  }
+
+  // The inspector's label for a cue's transition, including the two words that
+  // are not styles at all: "deck" (inherit) and "mixed" (a multi-selection that
+  // does not agree).
+  //
+  // Everything else defers to the one in core, so a style added to the enum is
+  // named correctly here without this being touched. It used to answer
+  // "crossfade" for anything it did not recognise, which would have quietly
+  // mislabelled all nine of the new ones.
+  std::string transitionStyleLabel(std::string token) const {
+    token = toLower(trim(token));
+    if (token == "mixed") return "mixed";
+    if (token == "deck") return "deck";
+    return ::transitionStyleLabel(parseTransitionStyleToken(token));
+  }
+
+  void setSelectedCueTransitionStyle(const std::string& rawStyle) {
+    std::string style = toLower(trim(rawStyle));
+    // ANY STYLE THE PARSER KNOWS. This accepted exactly three and silently
+    // returned for anything else, so every style added after it would have
+    // been offered in the menu and refused on the way in.
+    if (style != "deck" &&
+        transitionStyleToken(parseTransitionStyleToken(style)) != style) {
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.cueTransitionStyle = style;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("cue style: " + style);
+    markProjectDirty();
+  }
+
+  void closeDropdown(bool announceClose = true) {
+    if (!dropdown_.open) {
+      return;
+    }
+    if (announceClose) {
+      uiWatchdogPopupEvent("dropdown:" + dropdown_.owner, false);
+    }
+    dropdown_ = DropdownState {};
+    dropdownLastRenderedItemCount_ = -1;
+    SDL_StopTextInput(controlWindow_);
+  }
+
+  int dropdownVisibleRowCount() const {
+    if (!dropdown_.open) {
+      return 0;
+    }
+    int count = static_cast<int>(dropdown_.filteredIndices.size());
+    return std::max(1, std::min(dropdown_.maxVisibleRows, std::max(1, count)));
+  }
+
+  void ensureDropdownHighlightVisible() {
+    int itemCount = static_cast<int>(dropdown_.filteredIndices.size());
+    if (itemCount <= 0) {
+      dropdown_.highlightedFilteredIndex = 0;
+      dropdown_.scrollRow = 0;
+      return;
+    }
+    dropdown_.highlightedFilteredIndex = std::clamp(dropdown_.highlightedFilteredIndex, 0, itemCount - 1);
+    int visibleRows = dropdownVisibleRowCount();
+    if (dropdown_.highlightedFilteredIndex < dropdown_.scrollRow) {
+      dropdown_.scrollRow = dropdown_.highlightedFilteredIndex;
+    } else if (dropdown_.highlightedFilteredIndex >= dropdown_.scrollRow + visibleRows) {
+      dropdown_.scrollRow = dropdown_.highlightedFilteredIndex - visibleRows + 1;
+    }
+    int maxScroll = std::max(0, itemCount - visibleRows);
+    dropdown_.scrollRow = std::clamp(dropdown_.scrollRow, 0, maxScroll);
+  }
+
+  void rebuildDropdownFilteredIndices() {
+    dropdown_.filteredIndices.clear();
+    std::string filterToken = toLower(trim(dropdown_.filter));
+    for (int index = 0; index < static_cast<int>(dropdown_.options.size()); ++index) {
+      const auto& item = dropdown_.options[index];
+      if (filterToken.empty() || item.searchLabel.find(filterToken) != std::string::npos) {
+        dropdown_.filteredIndices.push_back(index);
+      }
+    }
+    if (dropdown_.filteredIndices.empty()) {
+      dropdown_.highlightedFilteredIndex = 0;
+      dropdown_.scrollRow = 0;
+    }
+    ensureDropdownHighlightVisible();
+  }
+
+  // The filter line: there while something is typed, or always on a list
+  // that offers a search (searchHint).
+  int dropdownFilterHeight() const {
+    if (dropdown_.filter.empty() && dropdown_.searchHint.empty()) {
+      return 0;
+    }
+    return dropdown_.searchHint.empty() ? 18
+                                        : std::max(18, (fontSmall_ ? TTF_GetFontHeight(fontSmall_) : 14) + uiScaled(6));
+  }
+
+  // A face for one row of a font list, opened once and kept (fontPreviewFaces_
+  // says why). Null when the file will not open; the row then says so.
+  TTF_Font* fontPreviewFace(const std::string& path) {
+    const auto found = fontPreviewFaces_.find(path);
+    if (found != fontPreviewFaces_.end()) {
+      return found->second;
+    }
+    TTF_Font* face = TTF_OpenFont(path.c_str(), static_cast<float>(uiScaled(22)));
+    fontPreviewFaces_.emplace(path, face);
+    return face;
+  }
+
+  // For STATUS JSON: the open dropdown, so a check can find a row and click
+  // it, and the timer's font row, which opens one.
+  // "dropdown": {"open", "owner", "rect":[x,y,w,h], "listY", "rowHeight",
+  // "scrollRow", "shown", "total", "filter", "rows":[label, ...] (the visible ones)}
+  std::string dropdownStatusJson() const {
+    std::ostringstream out;
+    const SDL_Rect r = dropdown_.popoverRect;
+    out << "\"dropdown\":{\"open\":" << (dropdown_.open ? "true" : "false") << ",\"owner\":\""
+        << escapeJson(dropdown_.owner) << "\",\"rect\":[" << r.x << "," << r.y << "," << r.w << "," << r.h
+        << "],\"listY\":" << (r.y + 4 + dropdownFilterHeight()) << ",\"rowHeight\":" << dropdown_.rowHeight
+        << ",\"scrollRow\":" << dropdown_.scrollRow << ",\"shown\":" << dropdown_.filteredIndices.size()
+        << ",\"total\":" << dropdown_.options.size() << ",\"filter\":\"" << escapeJson(dropdown_.filter)
+        << "\",\"rows\":[";
+    const int visible = dropdown_.open ? dropdownVisibleRowCount() : 0;
+    for (int row = 0; row < visible; ++row) {
+      const int filtered = dropdown_.scrollRow + row;
+      if (filtered >= static_cast<int>(dropdown_.filteredIndices.size())) break;
+      out << (row ? "," : "") << "\"" << escapeJson(dropdown_.options[dropdown_.filteredIndices[filtered]].label)
+          << "\"";
+    }
+    out << "]},\"timerFontRow\":[";
+    SDL_Rect font {};
+    for (const auto& button : quickButtons_) {
+      if (button.action == QuickAction::TimerPickFont) font = button.rect;
+    }
+    out << font.x << "," << font.y << "," << font.w << "," << font.h << "],";
+    const Cue* cue = selectedCuePtr();
+    if (cue && cue->kind == CueKind::Timer) {
+      out << "\"timerFont\":\"" << escapeJson(cue->timer.fontPath) << "\",";
+    }
+    return out.str();
+  }
+
+  void refreshDropdownPopoverRect() {
+    if (!dropdown_.open) {
+      return;
+    }
+    int winW = 0;
+    int winH = 0;
+    SDL_GetWindowSize(controlWindow_, &winW, &winH);
+
+    int widest = dropdown_.anchorRect.w;
+    for (const auto& item : dropdown_.options) {
+      widest = std::max(widest, item.textWidth + 28);
+    }
+    widest = std::clamp(widest, 160, std::max(220, winW - 24));
+    if (dropdown_.fixedWidth > 0) {
+      widest = std::min(dropdown_.fixedWidth, std::max(160, winW - 12));
+    }
+
+    int filterH = dropdownFilterHeight();
+    int visibleRows = dropdownVisibleRowCount();
+    int popH = 8 + filterH + visibleRows * dropdown_.rowHeight;
+    int popX = std::clamp(dropdown_.anchorRect.x, 6, std::max(6, winW - widest - 6));
+    int popY = dropdown_.anchorRect.y + dropdown_.anchorRect.h + 2;
+    if (popY + popH > winH - 6) {
+      popY = dropdown_.anchorRect.y - popH - 2;
+      if (popY < 6) {
+        popY = 6;
+      }
+    }
+    dropdown_.popoverRect = {popX, popY, widest, popH};
+  }
+
+  void openDropdown(const std::string& owner,
+                    const SDL_Rect& anchorRect,
+                    const std::vector<std::pair<std::string, std::string>>& options,
+                    const std::string& selectedId,
+                    std::function<void(const std::string&)> onSelect) {
+    if (dropdown_.open && dropdown_.owner == owner) {
+      closeDropdown(true);
+      return;
+    }
+
+    DropdownState next;
+    next.open = true;
+    next.owner = owner;
+    next.anchorRect = anchorRect;
+    next.options.reserve(options.size());
+    for (const auto& [id, label] : options) {
+      DropdownOptionItem item;
+      item.id = id;
+      item.label = label;
+      item.searchLabel = toLower(label + " " + id);
+      if (fontSmall_) {
+        int textW = 0;
+        textSizeShown(fontSmall_, label.c_str(), 0, &textW, nullptr);
+        item.textWidth = textW;
+      }
+      next.options.push_back(std::move(item));
+    }
+    next.onSelect = std::move(onSelect);
+    dropdown_ = std::move(next);
+    dropdown_.highlightedFilteredIndex = 0;
+    for (int i = 0; i < static_cast<int>(dropdown_.options.size()); ++i) {
+      if (dropdown_.options[i].id == selectedId) {
+        dropdown_.highlightedFilteredIndex = i;
+        break;
+      }
+    }
+    rebuildDropdownFilteredIndices();
+    refreshDropdownPopoverRect();
+    dropdownLastRenderedItemCount_ = -1;
+    SDL_StartTextInput(controlWindow_);
+    uiWatchdogPopupEvent("dropdown:" + owner, true, static_cast<int>(dropdown_.options.size()));
+  }
+
+  bool handleDropdownMouseDown(int x, int y) {
+    if (!dropdown_.open) {
+      return false;
+    }
+    if (pointInRect(x, y, dropdown_.anchorRect)) {
+      closeDropdown(true);
+      return true;
+    }
+    if (!pointInRect(x, y, dropdown_.popoverRect)) {
+      closeDropdown(true);
+      return true;
+    }
+    int filterH = dropdownFilterHeight();
+    int listY = dropdown_.popoverRect.y + 4 + filterH;
+    int relativeY = y - listY;
+    if (relativeY < 0) {
+      return true;
+    }
+    int row = relativeY / dropdown_.rowHeight;
+    int filteredIndex = dropdown_.scrollRow + row;
+    if (filteredIndex < 0 || filteredIndex >= static_cast<int>(dropdown_.filteredIndices.size())) {
+      return true;
+    }
+    int optionIndex = dropdown_.filteredIndices[filteredIndex];
+    std::string selectedId = dropdown_.options[optionIndex].id;
+    auto onSelect = dropdown_.onSelect;
+    closeDropdown(true);
+    if (onSelect) {
+      onSelect(selectedId);
+    }
+    return true;
+  }
+
+  bool handleDropdownMouseWheel(int wheelY) {
+    if (!dropdown_.open || !pointInRect(mouseX_, mouseY_, dropdown_.popoverRect)) {
+      return false;
+    }
+    int visibleRows = dropdownVisibleRowCount();
+    int itemCount = static_cast<int>(dropdown_.filteredIndices.size());
+    int maxScroll = std::max(0, itemCount - visibleRows);
+    dropdown_.scrollRow = std::clamp(dropdown_.scrollRow - wheelY, 0, maxScroll);
+    if (itemCount > 0) {
+      dropdown_.highlightedFilteredIndex = std::clamp(dropdown_.highlightedFilteredIndex,
+                                                      dropdown_.scrollRow,
+                                                      std::min(maxScroll + visibleRows - 1, itemCount - 1));
+    }
+    return true;
+  }
+
+  bool handleDropdownKey(SDL_Keycode key, Uint16 mod) {
+    if (!dropdown_.open) {
+      return false;
+    }
+    int itemCount = static_cast<int>(dropdown_.filteredIndices.size());
+    if (key == SDLK_ESCAPE) {
+      closeDropdown(true);
+      return true;
+    }
+    if (key == SDLK_UP && itemCount > 0) {
+      dropdown_.highlightedFilteredIndex =
+        std::max(0, dropdown_.highlightedFilteredIndex - 1);
+      ensureDropdownHighlightVisible();
+      return true;
+    }
+    if (key == SDLK_DOWN && itemCount > 0) {
+      dropdown_.highlightedFilteredIndex =
+        std::min(itemCount - 1, dropdown_.highlightedFilteredIndex + 1);
+      ensureDropdownHighlightVisible();
+      return true;
+    }
+    // A long list (the timer's fonts run to hundreds) needs to be crossed in
+    // pages, and its ends reached in one key.
+    if ((key == SDLK_PAGEUP || key == SDLK_PAGEDOWN || key == SDLK_HOME || key == SDLK_END) && itemCount > 0) {
+      const int page = std::max(1, dropdownVisibleRowCount() - 1);
+      int& at = dropdown_.highlightedFilteredIndex;
+      at = key == SDLK_HOME ? 0 : key == SDLK_END ? itemCount - 1 : key == SDLK_PAGEUP ? at - page : at + page;
+      at = std::clamp(at, 0, itemCount - 1);
+      ensureDropdownHighlightVisible();
+      return true;
+    }
+    if ((key == SDLK_RETURN || key == SDLK_KP_ENTER) && itemCount > 0) {
+      int optionIndex = dropdown_.filteredIndices[dropdown_.highlightedFilteredIndex];
+      std::string selectedId = dropdown_.options[optionIndex].id;
+      auto onSelect = dropdown_.onSelect;
+      closeDropdown(true);
+      if (onSelect) {
+        onSelect(selectedId);
+      }
+      return true;
+    }
+    if (key == SDLK_BACKSPACE) {
+      if (!dropdown_.filter.empty()) {
+        dropdown_.filter.pop_back();
+        rebuildDropdownFilteredIndices();
+        refreshDropdownPopoverRect();
+      }
+      return true;
+    }
+    if (auto typed = dropdownFilterCharFromKey(key, mod); typed) {
+      dropdown_.filter.push_back(*typed);
+      rebuildDropdownFilteredIndices();
+      refreshDropdownPopoverRect();
+      return true;
+    }
+    return false;
+  }
+
+  void renderDropdownPopover() {
+    if (!dropdown_.open) {
+      return;
+    }
+    refreshDropdownPopoverRect();
+    Primitives::drawFramedPanel(controlRenderer_, dropdown_.popoverRect,
+                                pal.light,
+                                pal.deep,
+                                pal.mid);
+    int filterH = dropdownFilterHeight();
+    if (filterH > 0) {
+      const bool hinting = dropdown_.filter.empty();
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {dropdown_.popoverRect.x + 6, dropdown_.popoverRect.y + 3,
+                             dropdown_.popoverRect.w - 12, filterH},
+                   hinting ? dropdown_.searchHint
+                           : (dropdown_.searchHint.empty() ? "filter: " : "search: ") + dropdown_.filter,
+                   hinting ? pal.inkSoft : pal.dark);
+    }
+
+    SDL_Rect listRect {
+      dropdown_.popoverRect.x + 3,
+      dropdown_.popoverRect.y + 4 + filterH,
+      dropdown_.popoverRect.w - 6,
+      dropdown_.popoverRect.h - 7 - filterH
+    };
+    SDL_SetRenderClipRect(controlRenderer_, &listRect);
+    int drawY = listRect.y;
+    int visibleRows = dropdownVisibleRowCount();
+    for (int row = 0; row < visibleRows; ++row) {
+      int filteredIndex = dropdown_.scrollRow + row;
+      if (filteredIndex >= static_cast<int>(dropdown_.filteredIndices.size())) {
+        break;
+      }
+      int optionIndex = dropdown_.filteredIndices[filteredIndex];
+      bool highlighted = filteredIndex == dropdown_.highlightedFilteredIndex;
+      SDL_Rect rowRect {listRect.x, drawY, listRect.w, dropdown_.rowHeight};
+      SDL_Color rowFill = highlighted ? pal.dark : pal.light;
+      SDL_Color rowInk = highlighted ? pal.light : pal.deep;
+      Primitives::fillRect(controlRenderer_, rowRect, rowFill);
+      const auto& option = dropdown_.options[optionIndex];
+      if (!option.fontPath.empty()) {
+        // The sample in the font itself, the family's name beside it in the
+        // interface's face: a name drawn only in its own font is unreadable
+        // for a symbol font, and says nothing about one that will not open.
+        TTF_Font* face = fontPreviewFace(option.fontPath);
+        const int nameW = std::min(rowRect.w / 2, option.textWidth + uiScaled(12));
+        const SDL_Rect nameRect {rowRect.x + rowRect.w - nameW, rowRect.y, nameW - 6, rowRect.h};
+        const SDL_Rect sampleRect {rowRect.x + 6, rowRect.y, rowRect.w - nameW - 12, rowRect.h};
+        if (face) {
+          drawTextSafe(controlRenderer_, face, sampleRect, dropdown_.sample, rowInk, false);
+        } else {
+          drawTextSafe(controlRenderer_, fontSmall_, sampleRect, "will not open", pal.inkSoft);
+        }
+        drawTextSafe(controlRenderer_, fontSmall_, nameRect, option.label, rowInk, false);
+      } else {
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {rowRect.x + 6, rowRect.y, rowRect.w - 12, rowRect.h},
+                     option.label,
+                     rowInk);
+      }
+      drawY += dropdown_.rowHeight;
+    }
+    if (dropdown_.filteredIndices.empty()) {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {listRect.x + 6, listRect.y, listRect.w - 12, 18},
+                   "(no matches)",
+                   pal.inkSoft);
+    }
+    SDL_SetRenderClipRect(controlRenderer_, nullptr);
+
+    int renderedItems = static_cast<int>(dropdown_.filteredIndices.size());
+    if (renderedItems != dropdownLastRenderedItemCount_) {
+      dropdownLastRenderedItemCount_ = renderedItems;
+      uiProfileLog("popup render " + dropdown_.owner
+        + " items=" + std::to_string(renderedItems)
+        + " visible=" + std::to_string(visibleRows));
+    }
+  }
+
+  void openInlineTextEditor(const std::string& owner,
+                            const std::string& title,
+                            const std::string& prompt,
+                            const std::string& initialValue,
+                            std::function<void(const std::string&)> onSubmit) {
+    closeDropdown(true);
+    inlineEditor_ = InlineTextEditorState {};
+    inlineEditor_.open = true;
+    inlineEditor_.owner = owner;
+    inlineEditor_.title = title;
+    inlineEditor_.prompt = prompt;
+    inlineEditor_.value = initialValue;
+    inlineEditor_.initialValue = initialValue;
+    inlineEditor_.caret = initialValue.size();
+    inlineEditor_.freshEntry = true;  // old value acts selected: first keystroke replaces it
+    inlineEditor_.anchorRect = lastInlineEditorAnchorRect_;
+    inlineEditor_.onSubmit = std::move(onSubmit);
+    lastInlineEditorAnchorRect_ = SDL_Rect {};
+    if (controlWindow_) {
+      SDL_ShowWindow(controlWindow_);
+      SDL_RaiseWindow(controlWindow_);
+    }
+    SDL_StartTextInput(controlWindow_);
+    // Discard any SDL_EVENT_TEXT_INPUT event that was generated by the keyboard
+    // shortcut that opened this editor (e.g. "b" from the B-key shortcut).
+    // The event is already in the queue at this point; flushing it here
+    // prevents it from appearing as the first character in the field.
+    SDL_FlushEvent(SDL_EVENT_TEXT_INPUT);
+    uiWatchdogPopupEvent("inline_text:" + owner, true);
+  }
+
+  void closeInlineTextEditor(bool apply) {
+    if (!inlineEditor_.open) {
+      return;
+    }
+    auto owner = inlineEditor_.owner;
+    auto submit = inlineEditor_.onSubmit;
+    std::string value = inlineEditor_.value;
+    inlineEditor_ = InlineTextEditorState {};
+    SDL_StopTextInput(controlWindow_);
+    uiWatchdogPopupEvent("inline_text:" + owner, false);
+    if (apply && submit) {
+      submit(value);
+    }
+  }
+
+  bool handleInlineTextEditorMouseDown(int x, int y) {
+    if (!inlineEditor_.open) {
+      return false;
+    }
+    if (pointInRect(x, y, inlineEditor_.applyRect)) {
+      closeInlineTextEditor(true);
+      return true;
+    }
+    if (pointInRect(x, y, inlineEditor_.cancelRect)) {
+      closeInlineTextEditor(false);
+      return true;
+    }
+    // A CLICK AWAY KEEPS WHAT WAS TYPED, and then does what it was aimed at.
+    // It used to throw the edit away AND swallow the click: the editor docks
+    // in the inspector and dims nothing else, so it looks like the rest of the
+    // desk is live -- and a press on TAKE lost both the value and the take.
+    if (!pointInRect(x, y, inlineEditor_.panelRect)) {
+      closeInlineTextEditor(inlineEditor_.value != inlineEditor_.initialValue);
+      return false;
+    }
+    return true;
+  }
+
+  // ---- A REAL TEXT FIELD -------------------------------------------------
+  //
+  // This used to be append-and-backspace-from-the-end: no caret, no arrow
+  // keys, and no paste. Which is survivable for a number and hopeless for a
+  // URL -- you could not put one in without retyping it, and could not fix a
+  // typo in the middle without deleting everything after it.
+  //
+  // Now: a caret, Left/Right/Home/End, Ctrl+Left/Right by word, Delete and
+  // Backspace either side of it, and clipboard through SDL. `freshEntry`
+  // still means "the whole value is selected", which is what makes typing
+  // over a pre-filled value work.
+
+  // UTF-8: step to the previous/next character boundary, never into the
+  // middle of a multi-byte sequence.
+  static std::size_t utf8Prev(const std::string& s, std::size_t at) {
+    if (at == 0) return 0;
+    --at;
+    while (at > 0 && (static_cast<unsigned char>(s[at]) & 0xC0) == 0x80) {
+      --at;
+    }
+    return at;
+  }
+
+  static std::size_t utf8Next(const std::string& s, std::size_t at) {
+    if (at >= s.size()) return s.size();
+    ++at;
+    while (at < s.size() && (static_cast<unsigned char>(s[at]) & 0xC0) == 0x80) {
+      ++at;
+    }
+    return at;
+  }
+
+  static std::size_t wordLeft(const std::string& s, std::size_t at) {
+    while (at > 0 && std::isspace(static_cast<unsigned char>(s[at - 1]))) --at;
+    while (at > 0 && !std::isspace(static_cast<unsigned char>(s[at - 1]))) --at;
+    return at;
+  }
+
+  static std::size_t wordRight(const std::string& s, std::size_t at) {
+    while (at < s.size() && !std::isspace(static_cast<unsigned char>(s[at]))) ++at;
+    while (at < s.size() && std::isspace(static_cast<unsigned char>(s[at]))) ++at;
+    return at;
+  }
+
+  void inlineEditorInsert(const std::string& text) {
+    if (text.empty()) {
+      return;
+    }
+    if (inlineEditor_.freshEntry) {
+      inlineEditor_.value.clear();
+      inlineEditor_.caret = 0;
+      inlineEditor_.freshEntry = false;
+    }
+    inlineEditor_.caret = std::min(inlineEditor_.caret, inlineEditor_.value.size());
+    // Room left before the 180-byte cap, so a long paste truncates instead of
+    // being dropped: half a URL you can finish beats nothing happening.
+    const std::size_t room = inlineEditor_.value.size() >= 180
+                           ? 0 : (180 - inlineEditor_.value.size());
+    const std::string piece = text.substr(0, room);
+    if (piece.empty()) {
+      return;
+    }
+    inlineEditor_.value.insert(inlineEditor_.caret, piece);
+    inlineEditor_.caret += piece.size();
+  }
+
+  bool handleInlineTextEditorKey(SDL_Keycode key, Uint16 mod) {
+    if (!inlineEditor_.open) {
+      return false;
+    }
+    const bool ctrl = deckboyShortcutHeld(mod);
+    std::string& value = inlineEditor_.value;
+    inlineEditor_.caret = std::min(inlineEditor_.caret, value.size());
+
+    if (key == SDLK_ESCAPE) {
+      closeInlineTextEditor(false);
+      return true;
+    }
+    if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+      closeInlineTextEditor(true);
+      return true;
+    }
+
+    // ---- Clipboard -------------------------------------------------------
+    if (ctrl && key == SDLK_V) {
+      if (char* text = SDL_GetClipboardText()) {
+        // One line only: a pasted newline would otherwise sit invisibly in a
+        // URL and fail the load with nothing to see.
+        std::string pasted(text);
+        SDL_free(text);
+        std::string flat;
+        flat.reserve(pasted.size());
+        for (char ch : pasted) {
+          if (ch != '\n' && ch != '\r' && ch != '\t') {
+            flat += ch;
+          }
+        }
+        inlineEditorInsert(trim(flat));
+      }
+      return true;
+    }
+    if (ctrl && (key == SDLK_C || key == SDLK_X)) {
+      SDL_SetClipboardText(value.c_str());
+      if (key == SDLK_X) {
+        value.clear();
+        inlineEditor_.caret = 0;
+        inlineEditor_.freshEntry = false;
+      }
+      return true;
+    }
+    if (ctrl && key == SDLK_A) {
+      inlineEditor_.freshEntry = true;   // "all selected": the next key replaces it
+      inlineEditor_.caret = value.size();
+      return true;
+    }
+
+    // ---- Moving ----------------------------------------------------------
+    //
+    // LEFT MOVES LEFT ON SCREEN. In left-to-right text that is one character
+    // back; in Arabic or Persian it is one character ON, and in text that mixes
+    // the two it is wherever the next caret position actually is -- which is
+    // what a reader of a right-to-left language expects the arrow to do. Plain
+    // left-to-right text keeps the simple step.
+    if (key == SDLK_LEFT || key == SDLK_RIGHT) {
+      const bool left = key == SDLK_LEFT;
+      TTF_Font* editFont = fontMono_ ? fontMono_ : fontSmall_;
+      const bool bidiText = editFont && deckboy::core::bidi::needsBidi(value);
+      if (ctrl) {
+        // Words: in a right-to-left paragraph the word to the left is the next
+        // one.
+        const bool rtl = bidiText && deckboy::render::shaping::resolvesRightToLeft(value);
+        const bool back = left != rtl;
+        inlineEditor_.caret = back ? wordLeft(value, inlineEditor_.caret)
+                                   : wordRight(value, inlineEditor_.caret);
+      } else if (!bidiText) {
+        inlineEditor_.caret = left ? utf8Prev(value, inlineEditor_.caret)
+                                   : utf8Next(value, inlineEditor_.caret);
+      } else {
+        namespace shaping = deckboy::render::shaping;
+        const int from = shaping::caretX(editFont, value, inlineEditor_.caret);
+        std::size_t best = inlineEditor_.caret;
+        int bestX = left ? -1 : 1 << 30;
+        for (std::size_t at = 0;; at = utf8Next(value, at)) {
+          const int x = shaping::caretX(editFont, value, at);
+          const bool wanted = left ? (x < from && x > bestX) : (x > from && x < bestX);
+          if (wanted) {
+            best = at;
+            bestX = x;
+          }
+          if (at >= value.size()) break;
+        }
+        inlineEditor_.caret = best;
+      }
+      inlineEditor_.freshEntry = false;
+      return true;
+    }
+    if (key == SDLK_HOME) {
+      inlineEditor_.caret = 0;
+      inlineEditor_.freshEntry = false;
+      return true;
+    }
+    if (key == SDLK_END) {
+      inlineEditor_.caret = value.size();
+      inlineEditor_.freshEntry = false;
+      return true;
+    }
+
+    // ---- Erasing ---------------------------------------------------------
+    if (key == SDLK_BACKSPACE) {
+      if (inlineEditor_.freshEntry) {   // the pre-filled value is selected
+        value.clear();
+        inlineEditor_.caret = 0;
+        inlineEditor_.freshEntry = false;
+      } else if (inlineEditor_.caret > 0) {
+        const std::size_t from = ctrl ? wordLeft(value, inlineEditor_.caret)
+                                      : utf8Prev(value, inlineEditor_.caret);
+        value.erase(from, inlineEditor_.caret - from);
+        inlineEditor_.caret = from;
+      }
+      return true;
+    }
+    if (key == SDLK_DELETE) {
+      if (inlineEditor_.freshEntry) {
+        value.clear();
+        inlineEditor_.caret = 0;
+        inlineEditor_.freshEntry = false;
+      } else if (inlineEditor_.caret < value.size()) {
+        const std::size_t to = ctrl ? wordRight(value, inlineEditor_.caret)
+                                    : utf8Next(value, inlineEditor_.caret);
+        value.erase(inlineEditor_.caret, to - inlineEditor_.caret);
+      }
+      return true;
+    }
+    return true;
+  }
+
+  void handleInlineTextEditorTextInput(const std::string& text) {
+    if (!inlineEditor_.open || text.empty()) {
+      return;
+    }
+    inlineEditorInsert(text);
+  }
+
+  void renderInlineTextEditor() {
+    if (!inlineEditor_.open) {
+      return;
+    }
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+    bool cueDocked = inlineEditor_.owner.rfind("cue.", 0) == 0 && cueSettingsViewportRect_.w > 80;
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    if (cueDocked && cueSettingsViewportRect_.w > 0 && cueSettingsViewportRect_.h > 0) {
+      SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 46);
+      SDL_RenderFillRect(controlRenderer_, &cueSettingsViewportRect_);
+      Primitives::strokeRect(controlRenderer_, cueSettingsViewportRect_, pal.mid);
+    } else {
+      SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 140);
+      SDL_Rect shade {0, 0, width, height};
+      SDL_RenderFillRect(controlRenderer_, &shade);
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    SDL_Rect panel {};
+    if (cueDocked) {
+      int dockW = std::max(280, cueSettingsViewportRect_.w - 14);
+      dockW = std::min(dockW, cueSettingsViewportRect_.w - 8);
+      int dockH = 118;
+      int dockX = cueSettingsViewportRect_.x + (cueSettingsViewportRect_.w - dockW) / 2;
+      if (inlineEditor_.anchorRect.w > 0) {
+        int preferredX = inlineEditor_.anchorRect.x + inlineEditor_.anchorRect.w / 2 - dockW / 2;
+        dockX = std::clamp(preferredX,
+                           cueSettingsViewportRect_.x + 4,
+                           cueSettingsViewportRect_.x + cueSettingsViewportRect_.w - dockW - 4);
+      }
+      int dockY = cueSettingsViewportRect_.y + 12;
+      if (inlineEditor_.anchorRect.w > 0) {
+        dockY = inlineEditor_.anchorRect.y + inlineEditor_.anchorRect.h + 6;
+        if (dockY + dockH > cueSettingsViewportRect_.y + cueSettingsViewportRect_.h - 4) {
+          dockY = inlineEditor_.anchorRect.y - dockH - 6;
+        }
+      }
+      if (dockY + dockH > cueSettingsViewportRect_.y + cueSettingsViewportRect_.h) {
+        dockY = std::max(cueSettingsViewportRect_.y + 4,
+                         cueSettingsViewportRect_.y + cueSettingsViewportRect_.h - dockH - 4);
+      }
+      dockY = std::max(dockY, cueSettingsViewportRect_.y + 4);
+      panel = SDL_Rect {dockX, dockY, dockW, dockH};
+    } else {
+      panel = SDL_Rect {width / 2 - 280, height / 2 - 82, 560, 164};
+    }
+    inlineEditor_.panelRect = panel;
+    Primitives::drawFramedPanel(controlRenderer_, panel,
+                                pal.light,
+                                pal.deep,
+                                pal.mid);
+    int titleY = cueDocked ? panel.y + 8 : panel.y + 12;
+    int promptY = cueDocked ? panel.y + 28 : panel.y + 44;
+    int inputY = cueDocked ? panel.y + 48 : panel.y + 68;
+    drawText(controlRenderer_, cueDocked ? fontSmall_ : fontBase_,
+             ellipsizeToPixelWidth(cueDocked ? fontSmall_ : fontBase_, inlineEditor_.title, panel.w - 28),
+             pal.deep, panel.x + 14, titleY);
+    drawText(controlRenderer_, fontSmall_,
+             ellipsizeToPixelWidth(fontSmall_, inlineEditor_.prompt, panel.w - 28),
+             pal.dark, panel.x + 14, promptY);
+
+    SDL_Rect inputRect {panel.x + 14, inputY, panel.w - 28, 34};
+    inlineEditor_.inputRect = inputRect;
+    Primitives::drawFramedPanel(controlRenderer_, inputRect,
+                                pal.deep,
+                                pal.dark,
+                                pal.dark);
+    // ---- THE CARET, AND KEEPING IT IN VIEW -------------------------------
+    //
+    // This used to append an underscore to the END of the value and ellipsize
+    // from the end, so on anything longer than the box -- a URL, always -- you
+    // saw the beginning of the string and a cursor that was nowhere near where
+    // you were typing. Now the text scrolls under a caret drawn at the real
+    // insertion point, and the whole value is shown highlighted while it
+    // counts as selected, so "type to replace" is visible rather than a
+    // surprise.
+    {
+      TTF_Font* editFont = fontMono_ ? fontMono_ : fontSmall_;
+      const std::string& text = inlineEditor_.value;
+      const std::size_t caret = std::min(inlineEditor_.caret, text.size());
+      const int viewW = inputRect.w - 12;
+
+      auto widthOf = [&](const std::string& s) {
+        int w = 0;
+        if (editFont && !s.empty()) {
+          deckboy::render::shaping::textSize(editFont, s.c_str(), 0, &w, nullptr);
+        }
+        return w;
+      };
+      // WHERE THE CARET IS DRAWN, not how wide the text before it is: in a
+      // right-to-left value -- an Arabic name, a Persian title -- the
+      // characters before the caret are on its RIGHT, and measuring them put
+      // the caret at the wrong end of the word.
+      const int caretPx = editFont ? deckboy::render::shaping::caretX(editFont, text, caret) : 0;
+      const int fullPx = widthOf(text);
+      // Scroll only as far as needed to keep the caret inside, and never past
+      // the end of the string.
+      int scroll = 0;
+      if (caretPx > viewW - 8) {
+        scroll = caretPx - (viewW - 8);
+      }
+      scroll = std::min(scroll, std::max(0, fullPx - viewW));
+
+      // Same save/restore idiom as the VJ bar: ask whether a clip is enabled
+      // first -- SDL_GetRenderClipRect answers "did the call work", not
+      // "was there one".
+      const bool hadClip = SDL_RenderClipEnabled(controlRenderer_);
+      SDL_Rect prevClip {};
+      if (hadClip) {
+        SDL_GetRenderClipRect(controlRenderer_, &prevClip);
+      }
+      SDL_Rect clip {inputRect.x + 3, inputRect.y + 2, inputRect.w - 6, inputRect.h - 4};
+      SDL_SetRenderClipRect(controlRenderer_, &clip);
+
+      const int textX = inputRect.x + 6 - scroll;
+      const int textY = inputRect.y + 8;
+      if (inlineEditor_.freshEntry && !text.empty()) {
+        // Selected: a filled band behind the text, dark ink on it.
+        SDL_Rect sel {textX - 1, inputRect.y + 5, fullPx + 2, inputRect.h - 10};
+        Primitives::fillRect(controlRenderer_, sel, pal.light);
+        drawTextRaw(controlRenderer_, editFont, text, pal.deep, textX, textY);
+      } else {
+        // RAW: the operator's own words, never looked up in the catalogue --
+        // a cue being renamed "SAVE" on a German desk must not read SPEICHERN.
+        drawTextRaw(controlRenderer_, editFont, text, pal.light, textX, textY);
+        // A bar, not a trailing underscore: it has to be able to sit BETWEEN
+        // two characters.
+        if ((animationNow_ / 450) % 2 == 0) {
+          Primitives::fillRect(controlRenderer_,
+                               SDL_Rect{textX + caretPx, inputRect.y + 5,
+                                        std::max(1, uiScaled(2)), inputRect.h - 10},
+                               pal.light);
+        }
+      }
+
+      if (hadClip) {
+        SDL_SetRenderClipRect(controlRenderer_, &prevClip);
+      } else {
+        SDL_SetRenderClipRect(controlRenderer_, nullptr);
+      }
+    }
+
+    SDL_Rect applyRect {panel.x + panel.w - 136, panel.y + panel.h - 38, 58, 28};
+    SDL_Rect cancelRect {panel.x + panel.w - 72, panel.y + panel.h - 38, 58, 28};
+    inlineEditor_.applyRect = applyRect;
+    inlineEditor_.cancelRect = cancelRect;
+    Primitives::drawFramedPanel(controlRenderer_, applyRect,
+                                pal.dark,
+                                pal.deep,
+                                pal.light);
+    Primitives::drawFramedPanel(controlRenderer_, cancelRect,
+                                pal.mid,
+                                pal.deep,
+                                pal.light);
+    drawCenteredText(controlRenderer_, fontSmall_, "Apply",
+                     pal.light, applyRect);
+    drawCenteredText(controlRenderer_, fontSmall_, "Cancel",
+                     pal.deep, cancelRect);
+  }
+
+  SDL_Rect settingsModalRect() const {
+    int width = 0, height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+    // One envelope for every tab. The modal used to pick per-tab min/max
+    // sizes (video widest, network tallest), which made it jump around on
+    // every tab switch; the union of those envelopes keeps the busiest tab
+    // comfortable and the dialog rock-steady.
+    // The envelope scales with the UI scale: at 2x every card, row and label
+    // inside is twice the size, so a fixed 1320x940 cap would simply crop the
+    // content. Still bounded by the window below, so a small screen wins.
+    const int kMargin = uiScaled(10);
+    const int kMinW = uiScaled(980);
+    const int kMinH = uiScaled(700);
+    const int kMaxW = uiScaled(1320);
+    // 1000, not 940: at 940 the System tab was a few pixels taller than its
+    // frame on a full-HD screen and scrolled by a hair. Still bounded by the
+    // window below, so a smaller screen is unchanged.
+    const int kMaxH = uiScaled(1000);
+    int modalW = std::clamp(width - kMargin * 2, std::min(kMinW, width), kMaxW);
+    int modalH = std::clamp(height - kMargin * 2, std::min(kMinH, height), kMaxH);
+    modalW = std::min(modalW, std::max(320, width - 12));
+    modalH = std::min(modalH, std::max(260, height - 12));
+    return SDL_Rect {(width - modalW) / 2, (height - modalH) / 2, modalW, modalH};
+  }
+

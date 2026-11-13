@@ -1,0 +1,2349 @@
+#name isiZulu
+#english Zulu
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	OKUSHA
+OPEN	VULA
+SAVE	LONDOLOZA
+SAVE AS	LONDOLOZA NJENGE
+BUNDLE	HLANGANISA
+IMPORT	NGENISA
+SOURCE	UMTHOMBO
+PATTERN	IPHETHINI
+SETTINGS	IZILUNGISELELO
+TAKE	TAKE
+STOP	MISA
+REBOOT	QALA KABUSHA
+BLACKOUT	MNYAMA
+CLEAR	SULA
+RECORD	QOPHA
+PLAYLIST	UHLU
+TIMELINE	ULAYINI WESIKHATHI
+MEDIA	IMIDIYA
+TRANSPORT	UKUTHUTHA
+OUTPUT	OKUPHUMAYO
+PROGRAM	PROGRAM
+WARP	GOQOZA
+LIVE	BUKHOMA
+DECODE	CHAZA
+STREAM	SAKAZA
+System	Isistimu
+Audio	Umsindo
+Network	Inethiwekhi
+Video Outputs	Okuphumayo kwevidiyo
+About	Mayelana
+Encoder	Isibhali
+Screen	Isikrini
+Geometry	Ijiyomethri
+Devices	Amadivayisi
+Streaming	Ukusakaza
+APPEARANCE	UKUBUKEKA
+REMOTE CONTROL	UKULAWULA KUDE
+INTEGRATION ADAPTERS	AMA-ADAPTHA OKUXHUMANA
+DISCOVERY / NOTES	UKUTHOLA / AMANOTHI
+DISPLAY & RASTER	ISIKRINI NE-RASTER
+CONNECTED DISPLAYS	IZIKRINI EZIXHUNYIWE
+EDGE FEATHERING	UKUTHAMBISA AMAPHETHELO
+MATTE & OVERLAY	I-MATTE NOKWEMBESA
+AREA OF INTEREST	INDAWO EDINGEKAYO
+DEFAULT TRANSITION	UKUSHINTSHA OKUJWAYELEKILE
+NMC IN & OUT	NMC NGAPHAKATHI NANGAPHANDLE
+OSC QUERY / FEEDBACK	UMBUZO WE-OSC / IMPENDULO
+CUE INSPECTOR	UMHLOLI WE-CUE
+SELECTED CUE	I-CUE EKHETHIWE
+PLAYBACK	UKUDLALA
+COPY	KOPISHA
+PASTE	NAMATHISELA
+RESET	SETHA KABUSHA
+Theme	Itimu
+Language	Ulimi
+Resolution	Ukucaca
+Orientation	Ukubheka
+Toggle Fullscreen	Isikrini esigcwele
+IDENTIFY	KHOMBA
+REGION SIZE	UBUKHULU BENDAWO
+POSITION	ISIKHUNDLA
+CENTRE	MAPHAKATHI
+FULL	GCWELE
+duration	ubude
+transition	ukuguqula
+fade in	cima ungena
+fade out	cima uphuma
+ON	VULIWE
+OFF	VALIWE
+Stopped	Kumisiwe
+Playing	Kuyadlala
+Paused	Kumisiwe okwesikhashana
+2-UP	2 EDUZE
+DONE	KWENZIWE
+EDIT	HLELA
+HELD	KUBAMBILE
+Mode	Indlela
+PICK	KHETHA
+QUAD	OKUNE
+Rate	Izinga
+STEP	ISINYATHELO
+Apply	Sebenzisa
+CLOSE	VALA
+FIXED	KUMISIWE
+Help!	Usizo!
+ORDER	UKUHLELEKA
+READY	KULUNGILE
+TILES	AMATHAYILI
+VIDEO	IVIDIYO
+ALL ON	KONKE KUVULIWE
+ALWAYS	NJALO
+ANALOG	I-ANALOG
+Buffer	Isibuffer
+Cancel	Khansela
+Custom	Okwakho
+Device	Idivayisi
+Folder	Ifolda
+FORMAT	IFOMETHI
+HIDDEN	KUFIHLIWE
+Length	Ubude
+Mascot	Isilwane sethu
+Mirror	Isibuko
+NATIVE	OKWANGEMPELA
+PRESET	OKUMISIWE
+Sender	Othumelayo
+SUMMED	KUHLANGANISIWE
+TOGGLE	SHINTSHA
+12 HOUR	12 AMAHORA
+24 HOUR	24 AMAHORA
+ALL OFF	KONKE KUVALIWE
+ARRANGE	HLELA
+Channel	Isiteshi
+CONVERT	GUQULA
+DEFAULT	OKUJWAYELEKILE
+END CUE	UKUPHELA KWE-CUE
+Key out	Okuphuma kwe-key
+LTC out	Okuphuma kwe-LTC
+MISSING	AKUTHOLAKALI
+PRESETS	OKUMISIWE
+PROJECT	IPHROJEKTHI
+RUNNING	IYASEBENZA
+Send to	Thumela ku
+SHUFFLE	HLANGANISA
+UPDATES	IZIBUYEKEZO
+VJ MODE	INDLELA YE-VJ
+CLOCK ON	IWASHI LIVULIWE
+DOWNLOAD	LANDA
+EXAMPLES	IZIBONELO
+Mappings	Ukuhlelwa
+NMC sync	Ukuvumelanisa i-NMC
+PROMPTER	ISIKHUMBUZI
+SHOW SDP	BONISA I-SDP
+TCP port	Imbobo ye-TCP
+UI scale	Ubukhulu bobuso
+vMix API	I-API ye-vMix
+WATCHING	IYABUKA
+A/V delay	Ukubambezeleka kwe-A/V
+ASIO outs	Okuphuma kwe-ASIO
+BOTH AXES	AMA-AXIS OMABILI
+CHECK NOW	HLOLA MANJE
+CLOCK OFF	IWASHI LIVALIWE
+Creatures	Izidalwa
+CUE TOOLS	AMATHULUZI E-CUE
+Direction	Inkomba
+Freewheel	Ukuzihambela
+HTTP port	Imbobo ye-HTTP
+Jump mode	Indlela yokweqa
+Listen on	Lalela ku
+OSC Query	Umbuzo we-OSC
+OUTPUT ON	OKUPHUMAYO KUVULIWE
+Panic now	Misa manje
+RECORDING	IYAREKHODA
+REMAINING	OKUSELE
+RESET ALL	SETHA KONKE KABUSHA
+RUN PANIC	MISA MASISHANE
+SHOW FLOW	UKUGELEZA KOMBUKISO
+TIMERS ON	AMAWASHI AVULIWE
+WHEN IDLE	LAPHO KUNGENZI LUTHO
+ADD OUTPUT	ENGEZA OKUPHUMAYO
+BUILT WITH	KWAKHIWE NGE
+CANCEL ALL	KHANSELA KONKE
+colour tag	uphawu lombala
+copy chain	kopisha uchungechunge
+Hover tips	Amacebo
+Input gain	Ukukhulisa okungenayo
+Input mono	Okungenayo kube mono
+live audio	umsindo obukhoma
+Live input	Okungenayo obukhoma
+MIDI input	Okungenayo kwe-MIDI
+no picture	asikho isithombe
+no preview	akukho ukubuka kuqala
+OPEN SAVED	VULA OKULONDOLOZIWE
+OUTPUT OFF	OKUPHUMAYO KUVALIWE
+Panic fade	Ukucima masishane
+Tally port	Imbobo ye-tally
+TIMERS OFF	AMAWASHI AVALIWE
+Accept from	Yamukela ku
+ASIO driver	Umshayeli we-ASIO
+BACK TO TOP	BUYELA PHEZULU
+CANVAS MODE	INDLELA YEKHANVASI
+CODE SOURCE	UMTHOMBO WEKHODI
+Cue numbers	Izinombolo ze-cue
+Destination	Okuyiwa kuyo
+Mirror rate	Izinga lesibuko
+no duration	akukho ubude
+NO LIVE CUE	AKUKHO CUE OBUKHOMA
+NO PREVIOUS	AKUKHO OKWANGAPHAMBILI
+OVERLAY BIN	IBHOKISI LOKWEMBESA
+paste chain	namathisela uchungechunge
+Sample rate	Izinga lesampula
+SENDING OUT	IYATHUMELA
+Shift: snap	Shift: namathela
+THIS OUTPUT	LOKHU OKUPHUMAYO
+(no matches)	(akukho okufanayo)
+(no subtext)	(akukho umbhalo ongezansi)
+add a button	engeza inkinobho
+add a window	engeza iwindi
+Art-Net port	Imbobo ye-Art-Net
+AUDIO OUTPUT	OKUPHUMA KOMSINDO
+Auto restore	Buyisela ngokwako
+DECKLINK: ON	DECKLINK: KUVULIWE
+free running	ukuzihambela
+KEY+FILL: ON	KEY+FILL: KUVULIWE
+LISTENING IN	IYALALELA
+Miami cursor	Inkomba ye-Miami
+MIDI CONTROL	UKULAWULA I-MIDI
+Mirror state	Bonisa isimo esibukweni
+NDI KEY: OFF	NDI KEY: KUVALIWE
+NDI KEY: ON	NDI KEY: KUVULIWE
+NO PROGRAMME	AKUKHO UHLELO
+ST 2110: OFF	ST 2110: KUVALIWE
+ST 2110: ON	ST 2110: KUVULIWE
+WATCH FOLDER	IFOLDA EBUKWAYO
+COMPOSITE CUE	I-CUE EHLANGANISIWE
+DECKLINK: OFF	DECKLINK: KUVALIWE
+default route	umgwaqo ojwayelekile
+Every adapter	Yonke i-adaptha
+KEY+FILL: OFF	KEY+FILL: KUVALIWE
+LEFT TO RIGHT	KUSUKA KWESOBUNXELE KWESOKUDLA
+MEDIA ENCODER	ISIBHALI SEMIDIYA
+MSC device id	Inombolo yedivayisi ye-MSC
+NEW SHOW FILE	IFAYELA LOMBUKISO ELISHA
+No cue loaded	Akukho cue elifakiwe
+nothing taken	akukho lutho olukhishwe
+OPEN PREVIOUS	VULA OKWANGAPHAMBILI
+Output device	Idivayisi ekhiphayo
+Panic profile	Iphrofayela yokumisa
+Quit Deckboy?	Uyaphuma ku-Deckboy?
+REMOVE OUTPUT	SUSA OKUPHUMAYO
+Sound effects	Imisindo
+Tally address	Ikheli le-tally
+TOP TO BOTTOM	KUSUKA PHEZULU KUYA PHANSI
+127 (all-call)	127 (ubizo lwabo bonke)
+ALL INTERFACES	ZONKE IZIXHUMANISI
+LOCALHOST ONLY	I-LOCALHOST KUPHELA
+Monitor device	Idivayisi yokulalela
+no audio track	akukho ithrekhi yomsindo
+PRESENTER VIEW	UKUBUKA KOMETHULI
+RECORD TO DISK	REKHODA KUDISKI
+STOP RECORDING	MISA UKUREKHODA
+STOP STREAMING	MISA UKUSAKAZA
+TALLY TRIGGERS	OKUQALISA I-TALLY
+Device channels	Iziteshi zedivayisi
+NDI SENDING: ON	UKUTHUMELA I-NDI: KUVULIWE
+NO CUE SELECTED	AKUKHO CUE ELIKHETHIWE
+Output channels	Iziteshi ezikhiphayo
+preview pending	ukubuka kuqala kusalungiswa
+START RECORDING	QALA UKUREKHODA
+START STREAMING	QALA UKUSAKAZA
+(system default)	(okujwayelekile kwesistimu)
+Check at startup	Hlola ekuqaleni
+Global crossfade	Ukuxubana kwazo zonke
+Mic to recording	Imakrofoni kokurekhodwayo
+Monitor playlist	Lalela uhlu lokudlala
+NDI SENDING: OFF	UKUTHUMELA I-NDI: KUVALIWE
+no still preview	akukho ukubuka isithombe
+Pocket 3 / touch	Pocket 3 / ukuthinta
+SMPTE LTC OUTPUT	OKUPHUMA KWE-SMPTE LTC
+the whole screen	isikrini sonke
+Check for one now	Hlola manje
+INSTALL & RESTART	FAKA BESE UQALA KABUSHA
+Registry: NOT SET	Irejista: AKUMISIWE
+SAFETY / TIMECODE	UKUPHEPHA / I-TIMECODE
+Timecode jam sync	I-jam sync ye-timecode
+esc or N to cancel	Esc noma N ukukhansela
+KEYBOARD SHORTCUTS	IZINDLELA EZIFUSHANE
+loading preview...	kufakwa ukubuka kuqala...
+CONVERT ALL FLAGGED	GUQULA KONKE OKUPHAWULIWE
+dot-matrix cue deck	ideki ye-cue yamachashazi
+HyperDeck emulation	Ukulingisa i-HyperDeck
+locked to the tempo	kuhlanganiswe nesigqi
+VJ mode (two decks)	Indlela ye-VJ (amadeki amabili)
+ADD ANOTHER PLAYLIST	ENGEZA OLUNYE UHLU LOKUDLALA
+Companion / OSC port	Imbobo ye-Companion / OSC
+Esc or click to skip	Esc noma chofoza ukweqa
+PLAYLIST PREFERENCES	IZINTANDO ZOHLU LOKUDLALA
+press ENTER to start	cindezela u-ENTER ukuqala
+ADD A SECOND PLAYLIST	ENGEZA UHLU LWESIBILI
+filmstrip unavailable	umucu wefilimu awutholakali
+(empty — import media)	(akunalutho – ngenisa imidiya)
+Ctrl+D or Esc to close	Ctrl+D noma Esc ukuvala
+(no notes for this cue)	(akukho amanothi kule cue)
+Timebase / start / fade	Isisekelo sesikhathi / ukuqala / ukucima
+No cues need conversion.	Akukho cue eludinga ukuguqulwa.
+CLICK TO SAMPLE KEY COLOR	CHOFOZA UKUTHATHA UMBALA WE-KEY
+normalize loudness (R128)	linganisa ukuzwakala (R128)
+off - all channels silent	kuvaliwe – zonke iziteshi zithule
+no video lane for this cue	akukho umzila wevidiyo kule cue
+HyperDeck emulation is off.	Ukulingisa i-HyperDeck kuvaliwe.
+OWN SCRIPT  (click to edit)	ISIKRIPTHI SAKHO  (chofoza ukuhlela)
+Theme and operator feedback	Isimo sombala nempendulo kumsebenzisi
+Discovery and mirrored state	Ukutholakala nesimo esibukweni
+FOLLOWING THE LIVE CUE NOTES	KULANDELA AMANOTHI E-CUE OBUKHOMA
+Listening on all interfaces.	Ilalela kuzo zonke izixhumanisi.
+Network-facing runtime notes	Amanothi abhekene nenethiwekhi
+Hi! Press I to import a clip.	Sawubona! Cindezela u-I ukungenisa isiqeshana.
+Global jump and panic behavior	Ukweqa nokumisa kwazo zonke
+Roll when the show cuts to you	Qala lapho umbukiso udlulela kuwe
+Choose a cue to inspect it here	Khetha i-cue ukuyibuka lapha
+Defaults for newly created cues	Okujwayelekile kuma-cue amasha
+Device routing for cue playback	Umgwaqo wedivayisi wokudlala i-cue
+Smaller buffer = lower latency.	Isibuffer esincane = ukubambezeleka okuncane.
+Emergency fade and sync behavior	Ukucima masishane nokuvumelanisa
+mixed selection: key unavailable	ukukhetha okuxubile: i-key ayitholakali
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (OKUSAHLOLWA)
+Esc=continue with current session	Esc = qhubeka ngalesi sikhathi
+no per-cue settings for this type	akukho izilungiselelo ze-cue kulolu hlobo
+On stop: remux to an ordinary MP4	Uma kumiswa: pakisha kabusha kube i-MP4 ejwayelekile
+Where RECORD writes the programme	Lapho i-RECORD ibhala uhlelo
+dot-matrix cue deck for live events	ideki ye-cue yamachashazi yemicimbi ebukhoma
+Listening on localhost (127.0.0.1).	Ilalela ku-localhost (127.0.0.1).
+three expressions: red, green, blue	izinkulumo ezintathu: bomvu, luhlaza, luhlaza okwesibhakabhaka
+Transport sync with another machine	Ukuvumelanisa nomunye umshini
+Add slot sources in the cue inspector	Engeza imithombo kumhloli we-cue
+Ask GitHub; never installs on its own	Ibuza i-GitHub; ayifaki ngokwayo
+Import or click a cue in the playlist	Ngenisa noma chofoza i-cue ohlwini
+mixed selection: geometry unavailable	ukukhetha okuxubile: ubukhulu abutholakali
+generate timecode for the rig to chase	khiqiza i-timecode ukuthi imishini iyilandele
+Lower Third and PIP fire independently	Umbhalo ongezansi ne-PiP zisebenza ngokwazo
+Panels built for a vMix rig, unchanged	Amaphaneli akhelwe i-vMix, awashintshwanga
+Incoming transport arrives as NMCEVENT.	Okungenayo kufika njenge-NMCEVENT.
+not in this build - saved with the show	akukho kulesi sakhiwo – kulondolozwa nombukiso
+Find from the playlist, not from a modal	Thola ohlwini lokudlala, hhayi kuwindi
+take or select a cue to open the timeline	khipha noma khetha i-cue ukuvula umugqa wesikhathi
+Optional external transport and cue control	Ukulawula okungaphandle kwe-transport ne-cue
+No previous show file found at startup path.	Akutholakalanga ifayela lombukiso langaphambilini.
+Use Ctrl+F or type a cue id/number to search.	Sebenzisa u-Ctrl+F noma bhala inombolo ye-cue.
+Companion / OSC ingress and HyperDeck emulation	Okungenayo kwe-Companion / OSC nokulingisa i-HyperDeck
+A/V delay holds audio back for lagging displays.	Ukubambezeleka kwe-A/V kubamba umsindo kwizikrini ezihamba kancane.
+On stop: leave the crash-resilient file as it is	Uma kumiswa: shiya ifayela eliqinile njengalokhu
+same disk as Deckboy - a separate drive is safer	idiski efanayo ne-Deckboy – idrayivu ehlukile iphephile
+A step fires one cue on each playlist, all at once.	Isinyathelo sikhipha i-cue elilodwa kuhlu ngalunye ngasikhathi sinye.
+one expression: the same value in red, green and blue	inkulumo eyodwa: inani elifanayo kubomvu, luhlaza nokwesibhakabhaka
+NDI transport is configured per output in Video Outputs.	I-NDI ilungiselelwa ngokuphuma ngakunye kokuphuma kwevidiyo.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Ithumela u-PLAY / PAUSE / STOP / LOCATE njengoba kuhamba.
+OSC subscribe: send /deckboy/subscribe from your controller.	Ukubhalisa i-OSC: thumela u-/deckboy/subscribe kumlawuli wakho.
+NMC mode / host / port are runtime-configurable for sync work.	Indlela / umsingathi / imbobo ye-NMC kungashintshwa ngesikhathi isebenza.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Ukungena emoyeni kukhipha i-cue. I-Deckboy ayithumeli neze umyalo kumshintshi.
+FPS: ON	FPS: KUVULIWE
+FPS: OFF	FPS: KUVALIWE
+NMOS: ON	NMOS: KUVULIWE
+NMOS: OFF	NMOS: KUVALIWE
+SPOUT: ON	SPOUT: KUVULIWE
+SPOUT: OFF	SPOUT: KUVALIWE
+CANVAS: ON	IKHANVASI: KUVULIWE
+CANVAS: OFF	IKHANVASI: KUVALIWE
+10-BIT: ON	10-BIT: KUVULIWE
+10-BIT: OFF	10-BIT: KUVALIWE
+EDIT...	HLELA...
+FOLDER...	IFOLDA...
+ARRANGE...	HLELA...
+ADD FILE...	ENGEZA IFAYELA...
+RENUMBER...	NIKA IZINOMBOLO KABUSHA...
+set a port...	misa imbobo...
+no script	akukho isikriphthi
++ OUTPUT	+ OKUPHUMAYO
+Eddie's Clock	Iwashi lika-Eddie
+Ctrl+/ to close	Ctrl+/ ukuvala
+(step lives here)	(isinyathelo silapha)
+No outputs — click + OUTPUT to add one.	Akukho okuphumayo – chofoza u-+ OKUPHUMAYO.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, i-NDI trigger, NMC, MTC, LTC, Art-Net ne-Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Guqulela ku-H.264 ama-cue i-Deckboy engawadlali kahle
+a button can run any command the network protocol understands	inkinobho ingasebenzisa noma yimuphi umyalo iprothokholi iwuqondayo
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	HLELA UKUBUKA KOMETHULI  -  hudula iphaneli ukuyihambisa, ikhona ukushintsha ubukhulu
+4:2:2  8-BIT	4:2:2  8-BIT
+4:2:2  10-BIT	4:2:2  10-BIT
+capture again - what is on now	thwebula futhi - okudlalayo manje
+change what it does...	shintsha lokho ekwenzayo...
+decks - Stop deck...	ama-deck - misa i-deck...
+decks - Take deck...	ama-deck - TAKE ku-deck...
+delete step	susa isinyathelo
+delete this button	susa le nkinobho
+label, command and glyph as text...	ilebula, umyalo nophawu njengombhalo...
+move down	yehlisa
+move up	khuphula
+next colour	umbala olandelayo
+preset - a new preset from what is on now	i-preset - i-preset entsha kulokho okudlalayo manje
+type a command myself...	ngizothayipha umyalo ngokwami...
+type a length in seconds...	thayipha ubude ngamasekhondi...
+wait for GO	linda u-GO
+what it recalls...	lokho ekubuyisayo...
+when its cues end	lapho ama-cue ayo ephela
+AUDIONORM ALL matches the whole playlist at once	I-AUDIONORM ALL ilinganisa uhlu lonke ngesikhathi esisodwa
+back to the in point, not to zero	buyela endaweni yokungena, hhayi ku-zero
+drag to scrub. the audio follows	hudula ukuze uskrabhe. umsindo uyalandela
+loops between the in and out points, not the file	iphinda phakathi kwezindawo zokungena nokuphuma, hhayi ifayela
+(not set)	(akusethiwe)
+1.00x  (default 1080p)	1.00x  (okuzenzakalelayo 1080p)
+1.25x  (large desktop)	1.25x  (ideskithophu enkulu)
+1.50x  (4K desktop)	1.50x  (ideskithophu ye-4K)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / i-4K encane)
+highest bandwidth	umkhawulokudonsa ophakeme kakhulu
+lower bandwidth	umkhawulokudonsa ophansi
+film	ifilimu
+CD, music rigs	i-CD, izinto zomculo
+video standard	izinga levidiyo
+every playlist	uhlu ngalunye
+None  (no character art)	Lutho  (akukho mlingiswa)
+custom size...	usayizi wakho...
+Browser URL	I-URL yesiphequluli
+Camera	Ikhamera
+Media File / Still	Ifayela lemidiya / isithombe
+RECORD TO FILE	QOPHA EFAYELENI
+browser, with sound	isiphequluli, nomsindo
+Window	Iwindi
+Desktop	Ideskithophu
+full screen	isikrini esigcwele
+DeckLink Output	Okukhiphayo kwe-DeckLink
+FFmpeg Stream Output	Okukhiphayo kokusakaza kwe-FFmpeg
+NDI Output	Okukhiphayo kwe-NDI
+SDL Window Output	Okukhiphayo kwewindi le-SDL
+Spout Output	Okukhiphayo kwe-Spout
+DESK	IDESKI
+drop a folder in too - it reads the whole tree	faka nefolda — kuzofundwa nawo wonke amafolda angaphakathi
+cameras, windows, NDI, screens - all live sources	amakhamera, amawindi, i-NDI nezikrini — konke kuyimithombo ebukhoma
+test cards and generators - no file needed	amakhadi okuhlola namajeneretha — alikho ifayela elidingekayo
+space bar does this too, without moving your hand	nenkinobho yesikhala iyakwenza lokhu, unganyakazisanga isandla
+stops the cue. ESC stops EVERYTHING	kumisa i-cue. I-ESC imisa KONKE
+the safe one: audio and playback keep running	indlela ethambile: umsindo nokudlala kuyaqhubeka
+the thorough one. blackout is the reversible one	indlela ephelele. Ukucisha isithombe kube mnyama kungahlehliswa
+save as makes a new file instead	u-Gcina njenge wakha ifayela elisha
+for a copy before you change something risky	ukugcina ikhophi ngaphambi koshintsho oluyingozi
+this is what you carry to the venue	yilokhu ozokuphatha uye nakho endaweni yombukiso
+the show on disk is untouched until you save	umbukiso osediskini awuguquki uze ugcine
+per cue. the deck has its own default too	nge-cue ngayinye. Idekhi nayo inezilungiselelo zayo ezizenzakalelayo
+stills hold instead - a fade would dip the frame	izithombe ezinganyakazi ziyahlala — ukufiphala bekungazenza zibe mnyama
+the frame stays up. good for slides	isithombe siyahlala. Kulungele amaslayidi
+gain, pan and normalise live in the inspector	ukukhulisa umsindo, i-pan nokulinganisa kusemhlolini
+this clip has no audio track to enable	lesi siqeshana asinawo umkhondo womsindo ongawuvula
+Hi! I am Deckboy.	Sawubona! Ngingu-Deckboy.
+Press I to import a clip.	Cindezela u-I ukuze ufake isiqeshana.
+Enter takes a cue live.	U-Enter ufaka i-cue emoyeni.
+S stops the live cue.	U-S umisa i-cue esemoyeni.
+The timeline can be resized.	Ungashintsha usayizi womugqa wesikhathi.
+Try a terminal theme in Settings.	Zama itimu yetheminali kuzilungiselelo.
+RELINK finds media that has moved.	I-RELINK ithola amafayela emidiya asusiwe endaweni yawo.
+Cues have their own gain and fades.	I-cue ngayinye inokukhuliswa komsindo nokufiphala kwayo.
+Trim with Ctrl+I and Ctrl+O.	Setha izindawo zokusika ngo-Ctrl+I no-Ctrl+O.
+Ctrl+/ shows every shortcut.	U-Ctrl+/ ubonisa zonke izinqamuleli.
+J jumps to the live cue.	U-J uya ku-cue esemoyeni.
+Normalize matches loudness across cues.	Ukulinganisa kwenza umsindo wama-cue uzwakale ngokulinganayo.
+Esc clears the desk, then the output, then quits.	U-Esc usula ideski, bese kusulwa okuphumayo, bese uhlelo luvala.
+Stream SRT and RTMP at the same time.	Sakaza nge-SRT ne-RTMP ngesikhathi esisodwa.
+CHECK lists what is broken, before doors.	I-CHECK ibonisa izinkinga ngaphambi kokuvulwa kweminyango.
+A cue can wait before it starts.	I-cue ingalinda ngaphambi kokuqala.
+A cue can start the next one by itself.	I-cue ingaziqalela elandelayo.
+Disarm a cue and GO steps over it.	Khubaza i-cue bese i-GO iyayeqa.
+Audition plays a cue to you, not the room.	Ukulalela kusengaphambili kudlalela wena, hhayi ihholo.
+Preload racks the next cue warm, off air.	Ukulayisha kusengaphambili kulungisa i-cue elandelayo ingekho emoyeni.
+A target cue starts or stops another cue.	I-cue eqondisayo iqala noma imise enye i-cue.
+A fade cue takes a deck down, then stops it.	I-cue yokufiphala yehlisa idekhi, bese iyayimisa.
+A master cue fires one cue on every deck.	I-cue eyinhloko iqala i-cue eyodwa kudekhi ngayinye.
+A MIDI cue can tell the lighting desk to go.	I-cue ye-MIDI ingatshela ideski lezibani ukuthi liqale.
+A network cue speaks OSC, UDP or TCP.	I-cue yenethiwekhi ikhuluma i-OSC, i-UDP noma i-TCP.
+A DMX cue fades the house lights on a cue.	I-cue ye-DMX ishintsha ukukhanya kwehholo kancane kancane.
+A script cue runs Deckboy's own commands.	I-cue yeskripthi isebenzisa imiyalo ye-Deckboy.
+A timecode cue jams LTC to a value.	I-cue yekhodi yesikhathi isetha i-LTC enanini elithile.
+Each output can show a different deck.	Ukuphumayo ngakunye kungabonisa idekhi ehlukile.
+The matrix sends audio to any channel.	Imethriksi ithumela umsindo kunoma yisiphi isiteshi.
+The panel map numbers every LED tile.	Imephu yamaphaneli inika imojuli ngayinye ye-LED inombolo.
+Hey!	Hheyi!
+Quit it!	Yeka manje!
+Ow. That was rude.	Hawu. Awunamahloni?
+I am a professional.	Mina ngiwuchwepheshe.
+Seriously?	Uqinisile nje?
+This is my monitor.	Lesi yisikrini sami.
+I am telling the operator.	Ngizotshela ophethe.
+All right. Wow.	Hawu, bo.
+Right. That does it.	Sekwanele manje.
+I am leaving. Good luck with the show.	Sengiyahamba. Nginifisela okuhle ngombukiso.
+Still here? Me too.	Usekhona? Nami.
+Long show, huh.	Yoh, kusekude phambili ngalombukiso.
+I could do this all day. Apparently.	Ngingakwenza lokhu usuku lonke. Kubonakala kuzofanele.
+You have been staring at me for hours.	Usungigqolozele amahora amaningi.
+Has anyone seen a clock?	Ukhona onewashi, noma nalo selithathe ikhefu?
+Is it still the same show?	Sisembukisweni ofanayo namanje?
+I'm not tired. You're tired.	Mina angikhathele. Uwena okhathele.
+Five more minutes. Then five more.	Eminye imizuzu emihlanu. Yebo, siyayazi leyo ndaba.
+A whole day. I need a restart.	Usuku lonke. Ngidinga ukuqala kabusha.
+Save the show. Then let me sleep.	Gcina umbukiso. Bese ungiyeka ngilale.
+Every pixel of me is tired.	Ngisho namaphikseli ami asephelelwe amandla.
+Close me. Open me. I'll be fine.	Ngivale. Ungivule. Ngizophila.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Sawubona! Masiqhubeke.
+Oh hey. It's 4:20. Take it easy.	O, sawubona. Sekuyi-4:20. Thatha kancane.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	SAWUBONA
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Sawubona! NginguDokotela Pixel. Imizuzu emihlanu, uzobe usuqhuba umbukiso. Kancane kunalokho, uma ungilalela.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Futhi minginguSolwazi Video. Kuqala ama-synth, bese kuba ividiyo. Manje ikakhulu ividiyo. Cindezela u-START sixhume... siqale.
+TURN THE OUTPUT ON	VULA OKUPHUMAYO
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, isikrini asinalutho. Ungabalindisi. Vula i-IMENYU wenze u-OKUPHUMAYO KUVALIWE abe ngu-OKUPHUMAYO KUVULIWE. Hajde!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Isifundo sokuqala: akukho okuphumayo uze uxhume i-oscillator ku... kokuphumayo. Yividiyo. Ngiyazi.
+BRING IN A CLIP	LETHA I-CLIP
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Manje isithombe. Cindezela u-I ukhethe i-clip kukhompyutha yakho. Ayikho i-clip? SHOW ME, ngizokuboleka eyami.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Yonke i-clip iba yi-cue ku-playlist. Njengokulayisha i-sample. I-sample enezithombe.
+TAKE IT LIVE	YISE EMOYENI
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	I-clip yakho ilinde ku-playlist. Yikhethe, bese u-TAKE. Noma u-Enter. Abasebenzisi abazethembayo bacindezela u-Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	U-TAKE uyisicupho se-envelope. Yinkinobho, e-e, ka-GO. Into efanayo, inezithombe nje.
+LINE UP THE NEXT ONE	LUNGISA ELANDELAYO
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Chofoza enye i-cue. Ilinde ilungile kuze kube usho. Yi-cue eyodwa kuphela? Ngenisa enye, noma SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Ukukhetha akusikho ukudlala. Ekhethiwe ingunothi elandelayo ochungechungeni. I-CUE elandelayo.
+CROSSFADE TO IT	YIFADE KUYO
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Ama-cut aqinile ngawabafundayo. Ku-inspector, cindezela u-+ ku-ukuguqula, ukuze kubonise isikhathi, hhayi u-deck. Bese u-TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	I-crossfade! I-portamento, kodwa yezithombe. Noma yisiphi isikhathi silungile. Cindezela kambalwa futhi kube umzuzwana. Bese u-TAKE.
+CLEAR THE SCREEN	SULA ISIKRINI
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Kukhona okungahambi kahle esiteji? Cindezela u-BLACK, noma u-B. Isithombe siyahamba. Njenge-load shedding, kodwa ngamabomu. Umbukiso uqhubeka ngaphansi.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Akukho okulahlekayo. Cindezela u-B futhi kubuye. Njengokuthulisa umsindo ku-mixer. Kuyathobisa kakhulu.
+SAVE THE SHOW	LONDOLOZA UMBUKISO
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Manje londoloza. Ctrl+S, noma u-LONDOLOZA. Ezinye izinhlelo zilahla umsebenzi wakho bese zikusola wena. Mina angisoze.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Londoloza i-patch yakho. UMBUKISO wakho. Umbukiso. Lona owokuzijwayeza uhlala kufolda kaDeckboy uqobo; owakho uphephile.
+THAT'S A SHOW	LOWO NGUMBUKISO
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	Lowo ngumbukiso! Okuphumayo, i-cue, u-TAKE, i-crossfade, u-BLACK, ukulondoloza. Nazdrave, skapi. I-rakia ngeyami. Halala!
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Isifundo siphelile. Imibukiso eyizibonelo ifundisa ama-layer, iziqu nemiphumela. I-IMENYU > LEARN THE BASICS iphinda lokhu.
+*shakes head* That means yes. Bravo.	*unikina ikhanda* Lokho kusho yebo. Halala!
+Wonderful! Lovely signal flow.	Kuhle kakhulu! Ukugeleza kwesignali okuhle.
+Mm. I knew you had it in you.	Mm. Bengazi ukuthi uyakwazi.
+Yes! Have a gold star. It's a dot.	Yebo! Thatha inkanyezi yegolide. Ichashaza.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Ulungele isinyathelo esilandelayo? *unqekuzisa ikhanda* ...EBulgaria lokho kusho cha, skapi. Okukhanyayo. Kukhanyela wena.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Uchofoze konke ngaphandle kwalokho okukhanyayo. Ngisho nama-oscillator ami ayakuthola okukhanyayo.
+stop playback first - the lesson cannot hand a running show back as it was	misa ukudlala kuqala - isifundo asikwazi ukubuyisa umbukiso oqhubekayo njengoba ubunjalo
+choose RECOVER or KEEP SAVED first	khetha u-RECOVER noma u-KEEP SAVED kuqala
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	umbukiso wakho awukwazanga ukulondolozwa, ngakho isifundo asiqalanga. Wulondoloze (LONDOLOZA NJENGE) uzame futhi
+the practice show would not open	umbukiso wokuzijwayeza awuvulekanga
+could not start the practice show	ayikwazanga ukuqala umbukiso wokuzijwayeza
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: i-Esc iyaphuma, ngokuzayo iqhubeka lapha
+that's the basics - MENU > LESSONS has part two	lezo yizisekelo - i-IMENYU > LESSONS inengxenye yesibili
+tour paused - LEARN THE BASICS picks up where you left off	uhambo lumisiwe - u-LEARN THE BASICS uqhubeka lapho ugcine khona
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Izikrini ezibonisanayo, skapi. Cindezela noma iyiphi inkinobho noma uchofoze, uDokotela Pixel uyakubuyisela.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Isikrini esingesiso, skapi. Cindezela noma iyiphi inkinobho noma uchofoze, uDokotela Pixel uyakubuyisela.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Esinye isikrini sihambile, skapi. Cindezela noma iyiphi inkinobho noma uchofoze, uDokotela Pixel uyakubuyisela.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Isikrini esisodwa, skapi. Cindezela noma iyiphi inkinobho noma uchofoze, uDokotela Pixel uyakubuyisela.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Esinye isikrini sihambile, skapi, ngakho isithombe sibuyele kulesi. Ngisibeke efasiteleni elincane, ngemuva. Siphinde usixhume isithombe sibuyele kuso.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Kudle ideski, skapi. Isikrini esisodwa, ngakho okuphumayo kuthathe konke. Ngikubeke efasiteleni elincane, ngemuva. Umbukiso wangempela uthola isikrini sesibili.
+IT ATE THE DESK	KUDLE IDESKI
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	Lapho. Inkinobho ethi OKUPHUMAYO KUVALIWE. Yenze ithi KUVULIWE, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Akukho okusemoyeni okungafiphalisa kukho, skapi. Yenza u-TAKE ku-cue eyodwa kuqala, bese ukhetha enye uyinike isikhathi.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	Lokho bekuwukusika, skapi. Kuyashesha, kodwa akusiyo i-crossfade. Khetha enye i-cue, cindezela u-+ ku-ukuguqula, bese u-TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	I-feedback loop! Okuphumayo kuxhunywe ngqo kubuyela edeskini. Kwenzeka nakwabangcono kakhulu. Ikakhulukazi kimi. 1983. Asikhulumi ngo-1983.
+No more rakia. The rat has a problem.	Ayisekho i-rakia. Igundane linenkinga.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! I-rakia kagogo, evela eBelogradchik. Ingilazi eyodwa, yesifundo. Iqine kakhulu kunomqombothi.
+Is this... is this allowed during a tutorial?	Ingabe lokhu... ingabe lokhu kuvunyelwe phakathi nesifundo?
+*shakes head* That means one more.	*unikina ikhanda* Lokho kusho enye futhi.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Nginithanda nonke. Ngiyayithanda i-oscillator. Ngiyakuthanda OKUPHUMAYO. Yividiyo. Ngiyazi. NGIYAZI.
+...and the rat took the rakia. Every time, skapi. Every single time.	...futhi igundane lathatha i-rakia. Njalo, skapi. Njalo nje.
+Was that a rat? In a hat? With a pizza?	Bekuyigundane lelo? Ligqoke isigqoko? Liphethe i-pizza?
+Stop that. I am a serious man.	Yeka lokho. Ngiyindoda ezimisele.
+Do not tell Dr. Pixel about this.	Ungamtsheli uDokotela Pixel ngalokhu.
+This never happened. Back to the patch bay.	Lokhu akukaze kwenzeke. Emuva ku-patch bay.
+It was the eighties. Everyone had a bow tie.	Kwakuyiminyaka yama-eighties. Wonke umuntu wayene-bow tie.
+LESSON LIST	UHLU LWEZIFUNDO
+OPEN EXAMPLE SHOWS	VULA IMIBUKISO EYIZIBONELO
+EXIT (Esc)	PHUMA (Esc)
+Taking it on the road	Umbukiso uthatha uhambo
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Hlola umbukiso nge-CHECK ngaphambi kokuthi uhambe, ulungise okutholayo, bese uwuhlanganisa nemidiya yawo.
+Effects, oscillators and colour	Imiphumela, ama-oscillator nombala
+An effect, a ~ on its knob, and the colour picker.	Umphumela, u-~ enkinobheni yawo, nesikhethi sombala.
+The art school crit, with Mr. Salty	Ukuhlaziywa esikoleni sobuciko, noMnu. Salty
+Patterns, synths and Draw	Amaphethini, ama-synth noDraw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Iphethini yokuhlola, i-video synth, nokudweba esithombeni, kulondolozwe njengesithombe esimile.
+The telestrator booth, with Coach Marv	Indlwana ye-telestrator, noCoach Marv
+Masks	Ama-mask
+A heart from the library, the pen, invert and feather.	Inhliziyo evela kulabhulali, ipeni, ukuphendula nokuthambisa.
+The Signal Files: redact the evidence	Amafayela Esignali: fihla ubufakazi
+Warp, blend and slices	Ukusonta, ukuxuba nezingcezu
+A corner pin, two soft edges, then three slices in the Screens window.	I-corner pin, imiphetho emibili ethambile, bese izingcezu ezintathu efasiteleni le-Screens.
+The haunted lighthouse, with Keeper Rook	Indlu yesibani ehlaselwa yisipoki, noMgcini Rook
+GO from anywhere	U-GO usuka noma kuphi
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Izinombolo ze-cue, u-GOTO, inkinobho esheshayo, nalapho u-Companion, i-MIDI ne-OSC bengena khona.
+The game show, with Donna Wheel	Umdlalo wethelevishini, noDonna Wheel
+Words on screen	Amagama esikrinini
+A Lower Third with a name on it, then a title card with a key-green backdrop.	I-lower third enegama, bese ikhadi lesihloko elinengemuva eliluhlaza le-key.
+The kaiju weather report, with June O'Neil	Isimo sezulu se-kaiju, noJune O'Neil
+Keeping time	Ukugcina isikhathi
+A stage timer counting down, held, and a presenter view for the person on stage.	Isikhathi sesiteji esibalela phansi, simisiwe, nombono womethuli womuntu osesiteji.
+A grand day out, with Wallis and Grommet	Usuku olukhulu, noWallis noGrommet
+Two playlists and TAKE ALL	Ama-playlist amabili no-TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	I-playlist yesibili njenge-layer, no-TAKE ALL ukuze izinto ezimbili zishintshe ngesigqi esisodwa.
+The magic show, with Turnip Top	Umbukiso womlingo, noTurnip Top
+When it goes wrong	Uma kungahambi kahle
+BLACK against PANIC, and getting a show back.	U-BLACK ngokumelene no-PANIC, nokubuyisa umbukiso.
+The cooking show, with Chef Bork	Umbukiso wokupheka, noChef Bork
+Presets	Ama-preset
+Capture a look on a DASH button, change everything, and get it back with one press.	Bamba ukubukeka enkinobheni ye-DASH, shintsha konke, ukubuyise ngokucindezela okukodwa.
+Transitions	Ukuguqula
+The styles beyond the crossfade: an iris, a shatter, and their times.	Izitayela ezingaphezu kwe-crossfade: i-iris, ukuphahlazeka, nezikhathi zazo.
+The space-opera trailer, with Optimus Primetime	I-trailer ye-space opera, no-Optimus Primetime
+Sound	Umsindo
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Umphumela womsindo ku-cue, ukugoba okuwulimaza kahle, nalapho i-patch ihlala khona.
+The robot DJs, with Deft Funk	Ama-DJ amarobhothi, noDeft Funk
+Reading the scopes	Ukufunda ama-scope
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	I-waveform, i-vectorscope nombala ongamanga: ingabe ukukhanya kungokwangempela, noma kukhanya kakhulu nje?
+The Signal Files: is the glow on the horizon a craft?	Amafayela Esignali: ingabe ukukhanya emkhathizwe kungumkhumbi?
+Out of the building	Phuma esakhiweni
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Lapho u-NDI, u-SDI no-ST 2110 behlala khona, no-NDI evuliwe lapho le khompyutha inaye.
+The webcam as a controller, as a game. Five rounds, a high score.	I-webcam njengesilawuli, njengomdlalo. Imizuliswano emihlanu, amaphuzu aphezulu.
+A handheld, and bugs	I-handheld, nezimbungulu
+The multiview	I-multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	Amafasitela, imenyu ethi ..., okubonakaliswa yilowo nalowo, ukuhleleka, ne-tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Imfihlakalo emkhunjini-mkhathi i-Cathode, noLt. Haila no-Ensign Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Ama-playlist amabili: uDeckboy uba ngu-SUPER DECKBOY. Ukufanele, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Uguqukile! Ama-oscillator ami awakaze athole umkhosi wamacilongo.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Wonke umbukiso ufanelwe eyodwa. Halala!
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Amandla engeziwe! Ama-playlist amaningi, ama-layer amaningi, i-super eningi.
+Intro video (left on the office PC)	Ividiyo yokuqala (ishiywe kukhompyutha yasehhovisi)
+ON THE ROAD	ENDLELENI
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Umbukiso owakhe lapha, skapi, usebenza namhlanje ebusuku ku-laptop kwenye indawo. Cindezela u-START.
+Before it travels: check it, fix it, bundle it.	Ngaphambi kokuthi uhambe: hlola, lungisa, hlanganisa.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Uyambona u-CHECK ebhayini eliphezulu? Uvela kuphela uma kukhona okungalungile. Mcindezele.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Ubala konke umbukiso obungakhubeka kukho: amafayela angekho, ama-cue angenalutho, okuphumayo okungafinyeleleki.
+FIX IT	KULUNGISE
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Ividiyo yokuqala isekhompyutheni ehlukile. Yikhethe uyisule, noma wenze u-RELINK uma unefayela.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Yilungise ekhaya, lapho kulula khona. Hhayi endaweni yomcimbi, lapho kungelula khona.
+BUNDLE IT	YIHLANGANISE
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Cindezela u-HLANGANISA ukhethe lapho: i-USB stick, ifolda okwabelwana ngayo. Umbukiso nayo yonke imidiya yawo, ndawonye.
+The copy finds its media beside it, wherever the folder goes.	Ikhophi ithola imidiya yayo eceleni kwayo, noma ifolda iyaphi.
+SAFE TRAVELS	UHAMBE KAHLE
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Kuhloliwe, kulungisiwe, kuhlanganisiwe. Kumshini omunye, vula umbukiso wephakethe: konke kusendaweni yakho.
+A show file is only text, so it travels light. The media is the heavy part.	Ifayela lombukiso ngumbhalo nje, ngakho lihamba lilula. Okusindayo yimidiya.
+Student work no. 4 (untitled)	Umsebenzi womfundi no. 4 (awunasihloko)
+THE CRIT	UKUHLAZIYWA
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Isikole sobuciko, skapi. Umfundi oyedwa, isithombe esisodwa, umgxeki oyedwa osebone konke. Cindezela u-START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Imiphumela ishintsha isithombe; i-oscillator iqhubeka isishintsha. Umgxeki uthanda uhlobo lwesibili kuphela.
+A grey square on beige. I have seen this at every graduate show since 1987.	Isikwele esimpunga phezu kwe-beige. Ngikubone lokhu kuyo yonke imibukiso yokuphothula kusukela ngo-1987.
+AN EFFECT	UMPHUMELA
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Esigabeni se-EFFECTS se-inspector, u-+ wengeza owodwa. U-Edges uyisiqalo esihle: udweba imiphetho.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Ziningi. Ngayinye isebenza ku-CPU ngama-millisecond ambalwa. Ngokuvamile.
+Take a risk! Bad art is fine. Boring art is a crime.	Zama! Ubuciko obubi bulungile. Ubuciko obuyisicefe buyicala.
+A ~ ON ITS KNOB	U-~ ENKINOBHENI
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Noma yisiphi isilawuli esino-~ eceleni singalandela i-oscillator. Cindezela esisodwa. Inkinobho iqala ukuphefumula.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	I-oscillator ye-frequency ephansi: ihamba kancane, ukuze iso liyilandele. Ingxenye yesine ye-hertz ingumoya wemizuzwana emine.
+Now it MOVES. Okay. Okay. I'm listening.	Manje IYANYAKAZA. Kulungile. Kulungile. Ngiyalalela.
+A COLOUR OF ITS OWN	UMBALA WAYO
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Imiphumela edweba umbala, njengomugqa ka-Edges, inesigcawu sombala. Sivula isikhethi: isondo, amagama abhaliwe, noma umbala osuka esikrinini.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Wonke umbala unegama kwenye indawo. Owami ngu-'luhlaza lwe-oscilloscope'. Akekho omunye owusebenzisayo.
+That colour is doing something. I don't know what. I love it.	Lowo mbala wenza okuthile. Angazi ukuthi yini. Ngiyawuthanda.
+THE VERDICT	ISINQUMO
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Umphumela, u-~ nombala. Umgxeki uyakhala, skapi. Ukukhala okuhle, ngicabanga.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Beka ezimbalwa phezu kwezinye. Ngayinye ino-~ wayo kuyo yonke inkinobho. Yilokho okwenza ukubukeka kube ngumdlalo.
+It's still a square. But it's YOUR square. Post it.	Kusese yisikwele. Kodwa yisikwele SAKHO. Sithumele.
+THE TELESTRATOR BOOTH	INDLWANA YE-TELESTRATOR
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	UCoach Marv uchaza ezemidlalo ngokudweba izindingilizi phezu kwayo. Ngelinye ilanga wazungeza ilanga. Imizuzu eyishumi, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Namhlanje ebusuku: amaphethini okuhlola, i-video synth, nokudweba esithombeni. Cindezela u-START.
+Get me a picture and a pen. BOOM.	Nginike isithombe nepeni. BHUM.
+A TEST PATTERN	IPHETHINI YOKUHLOLA
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Qondanisa izikrini NGAPHAMBI kombukiso. Hhayi phakathi. Lokhu ngakufunda ePlovdiv.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Yonke ideski idinga iphethini yokuhlola. U-IPHETHINI wengeza u-Pocket Test: ihlolwe ngamamitha angempela.
+A VIDEO SYNTH	I-VIDEO SYNTH
+He says 'no camera needed' like it is a feature. It is a feature.	Uthi 'akudingeki ikhamera' sengathi kuyisici. Kuyisici.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Engiyithanda kakhulu. U-UMTHOMBO, bese u-Video Synth: ama-oscillator, izibuko ne-feedback. Akudingeki ikhamera.
+TAKE THE SYNTH	TAKE I-SYNTH
+Select it, then TAKE. Confident operators press Enter.	Yikhethe, bese u-TAKE. Abasebenzisi abazethembayo bacindezela u-Enter.
+That's our replay. Every replay needs a pundit.	Yile i-replay yethu. Yonke i-replay idinga umhlaziyi.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Nansi i-replay. Nanku umdlali. Futhi BHUM, ungaphakathi.
+A SECOND PLAYLIST	I-PLAYLIST YESIBILI
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Uyinki uya phezulu, ku-layer yawo. Cindezela u-+ ekugcineni kwamathebhu e-playlist.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	I-playlist yesibili iyi-layer phezu kweyokuqala. Njenge-oscillator yesibili, exutshwe phezulu.
+A DRAW CUE	I-CUE KA-DRAW
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Ku-playlist entsha: u-UMTHOMBO, bese u-Draw. Kucacile yonke indawo ongadwebanga kuyo.
+A Draw cue is transparent outside the ink, so the synth shows through.	I-cue ka-Draw icacile ngaphandle koyinki, ngakho i-synth ibonakala ngemuva.
+TAKE THE INK	TAKE UYINKI
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Khetha i-cue ka-Draw wenze u-TAKE. Ama-playlist amabili, ama-layer amabili, isithombe esisodwa.
+Now both are live: the synth underneath, the ink on top.	Manje zombili zisemoyeni: i-synth ngaphansi, uyinki phezulu.
+CIRCLE SOMETHING	ZUNGEZA OKUTHILE
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Cindezela u-DRAW ku-inspector, bese udweba ku-monitor yohlelo. Nge-mouse, noma ngepeni uma unalo.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Ukucindezela kwepeni kwenza umugqa ujiye. I-mouse icindezela ngamandla afanayo njalo. Njengami.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Mzungeze! Cha, kakhudlwana. BHUM. Lelo yifu. Kulungile. Zungeza ifu.
+SAVE A STILL	LONDOLOZA ISITHOMBE ESIMILE
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	U-SAVE STILL ugcina umdwebo njengesithombe esinengemuva elicacile, awufake ku-playlist.
+For next week's show. Coach Marv will want the cloud again.	Kohlelo lwesonto elizayo. UCoach Marv uzolifuna futhi ifu.
+THAT'S THE BOOTH	LEYO KWAKUYINDLWANA
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Amaphethini, i-synth, i-layer, uyinki, isithombe esimile. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Zama u-Replay esigabeni sika-Draw: uphinda adwebe imigqa yakho njengoba wayidweba.
+Same time next week. Bring a bigger pen. And a turducken.	Isikhathi esifanayo ngesonto elizayo. Letha ipeni elikhulu. Nebhodwe lephaphu nenyama.
+Saucer photo (CLASSIFIED)	Isithombe sesoso (IMFIHLO)
+THE SIGNAL FILES	AMAFAYELA ESIGNALI
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Ihhovisi Lezignali Ezingachazeki. Ama-ejenti amabili, isithombe esisodwa, futhi akumele siye emoyeni. Cindezela u-START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Ama-mask asika isithombe abe yizimo. Namhlanje ebusuku sisika ubufakazi.
+That's a craft, Brandt. Look at the lights. I want to believe.	Leyo yimikhumbi-mkhathi, Brandt. Bheka izibani. Ngifuna ukukholwa.
+A MASK FROM THE LIBRARY	I-MASK EVELA KULABHULALI
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Esigabeni se-MASK se-inspector: mask, bese u-'new heart'. Noma yisiphi isimo silungile. Inhliziyo iyahlekisa kakhulu.
+The library has circles, stars, hearts. Each one is points you can move.	Ilabhulali inezindingilizi, izinkanyezi, izinhliziyo. Ngasinye singamaphoyinti ongawahambisa.
+A heart, Hollis? The Bureau redacts with black bars.	Inhliziyo, Hollis? Ihhovisi lifihla ngemigqa emnyama.
+THE PEN	IPENI
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Setha ithuluzi kube ipeni, bese uchofoza uzungeze isoso ku-monitor. Chofoza iphoyinti lokuqala ukuze uvale.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Chofoza amakhona, hudula amajika. Njengoba abazalwane uBézier babehlosile.
+Draw round it carefully. It might be watching.	Yizungeze ngokucophelela. Kungenzeka iyabuka.
+INVERT	PHENDULA
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Ukuphendula kugcina ingaphandle bese kusika ingaphakathi. Isoso iyahamba. Isibhakabhaka sisala.
+The same shape, the other way round. Very useful. Slightly spooky.	Isimo esifanayo, ngakolunye uhlangothi. Kuyasiza kakhulu. Kuyesabisa kancane.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, kukhona imbobo emise okwenhliziyo esibhakabhakeni.
+FEATHER	THAMBISA
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Ukuthambisa kuthambisa umphetho, ukuze kungabikho obona ukusika. Cindezela u-+ ku-feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Umphetho oqinile uthi 'kukhona obekhona lapha'. Othambile awusho lutho.
+They'll never know.	Abasoze bazi.
+CASE CLOSED	ICALA LIVALIWE
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Isimo selabhulali, ipeni, ukuphendula nokuthambisa. Ihhovisi liyabonga. Ihhovisi alikaze libe lapha.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Ama-mask aya nase-layer, kokuphumayo, noma ku-matte yakhona: u-MASK ON uyakhetha. Futhi zonke izilawuli zithatha u-~.
+The truth is in the waveform, Hollis. Next time, the scopes.	Iqiniso lisesimweni segagasi, Hollis. Ngokuzayo, ama-scope.
+The ghost	Isipoki
+THE HAUNTED LIGHTHOUSE	INDLU YESIBANI EHLASELWA YISIPOKI
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Indlu yesibani, isipoki, nomgcini ohlale yedwa nesibani isikhathi eside kakhulu. Cindezela u-START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	I-projection mapping: ukugoba isithombe silingane nesakhiwo. Ukusonta, ukuxuba, izingcezu.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Nifuna isipoki emafasiteleni, akunjalo? Qaphelani isibani. Isibani ngesaMI.
+THE OUTPUT'S GEOMETRY	I-JIYOMETHRI YOKUPHUMAYO
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	I-IMENYU, bese u-Okuphumayo kwevidiyo, bese u-Ijiyomethri. Lapho kuhlala khona isimo sokuphumayo.
+Geometry: the projector-menu word for 'what shape is the picture'.	I-jiyomethri: igama lamamenyu e-projector elisho 'isithombe simise kanjani'.
+PIN A CORNER	BETHELA IKHONA
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Cindezela u-warp edit, bese uhudula ikhona ku-monitor yohlelo. Ifasitela aliyona isikwele. Nomgcini akayona.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	I-corner pin ihambisa amakhona amane. I-perspective igcina imigqa iqondile, njengefasitela langempela.
+LEFT! Ye call that a corner? I've seen straighter gulls.	KWESOBUNXELE! Lokho ukubiza ngekhona? Ngike ngabona izinkwilimba eziqonde kakhudlwana.
+TWO SOFT EDGES	IMIPHETHO EMIBILI ETHAMBILE
+Back in Geometry: edge blend, + on the left and + on the right.	Emuva ku-Ijiyomethri: edge blend, u-+ kwesobunxele no-+ kwesokudla.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Ama-projector amabili ayagqagqana; ngalinye lifiphalisa umphetho walo ukuze indawo egqagqanayo ingakhanyi kabili.
+THE SCREENS WINDOW	IFASITELA LE-SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	I-Ijiyomethri, SLICES, vula. Ifasitela le-Screens yilapho izingcezu zisikwa futhi zibekwa khona.
+A slice is a piece of the picture, put anywhere on the output.	Ucezu luyingxenye yesithombe, ebekwe noma kuphi kokuphumayo.
+THREE SLICES	IZINGCEZU EZINTATHU
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Efasiteleni le-Screens, u-+ SLICE kathathu, bese uhudula ukusika ngakunye kube yingxenye yesithathu yesithombe.
+Three windows, three slices: left, middle and right of one picture.	Amafasitela amathathu, izingcezu ezintathu: kwesobunxele, phakathi nakwesokudla kwesithombe esisodwa.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Amafasitela amathathu. Isibani sithola elisemaphakathi. Isibani SIHLALA sithola elisemaphakathi.
+THE GHOST IS PLEASED	ISIPOKI SIJABULILE
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Ukusonta, ukuxuba, izingcezu. Umgcini uzogcina elele. Izinkwilimba ngeke.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Izingcezu zinokusonta kwazo kanye ne-mesh efasiteleni le-Screens. No-~ endaweni nasekujikeni.
+Ye did alright, lad. Now get away from the lamp.	Wenze kahle, mfana. Manje suka esibanini.
+THE GAME SHOW	UMDLALO WETHELEVISHINI
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Umdlalo wethelevishini, skapi. Abaqhudelana abathathu, i-buzzer eyodwa, nama-cue aqhuma noma kuphi. Cindezela u-START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Izinombolo ze-cue, izinkinobho ezisheshayo, no-GO osuka kweminye imishini. Njenge-sequencer oyidlala nganoma iyiphi inkinobho.
+Welcome to the show! Let's spin that wheel!	Siyakwamukela embukisweni! Masizungezise isondo!
+A CUE NUMBER	INOMBOLO YE-CUE
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Umqhudelani 3 ukhethiwe. Kumethadatha ye-inspector, yinike inombolo ye-cue: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Ithiyetha ibeka izinombolo kuma-cue ayo. Q3, Q3.5, Q12A. UDeckboy uyazifunda zonke.
+I'd like to buy a number, please.	Ngicela ukuthenga inombolo.
+GO TO IT	YIYA KUYO
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, bhala inombolo, Enter. Iya emoyeni, noma uhlu lume kuphi.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	U-GOTO. Indlela esheshayo ohlwini olude. Ishesha kunokuskrola. Ishesha kakhulu kunami.
+And the number is... three!	Futhi inombolo... ngu-ntathu!
+A BUZZER	I-BUZZER
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Umqhudelani 1 ukhethiwe. Ku-TRIGGERS, cindezela u-key, bese u-F5. Leyo nkinobho manje iqhumisa le cue.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 kuya ku-F10, F12, noma i-number pad. Ngayinye, i-buzzer.
+Every contestant gets a buzzer.	Wonke umqhudelani uthola i-buzzer.
+BUZZ IN	CINDEZELA!
+Press the key. The cue fires, wherever the list is standing.	Cindezela inkinobho. I-cue iyaqhuma, noma uhlu lume kuphi.
+No mouse, no list, no looking. Just the key.	Akukho mouse, akukho hlu, akukho ukubheka. Inkinobho nje.
+Buzz! We have a winner!	Bzzz! Sinomnqobi!
+FROM ANYWHERE	NOMA KUPHI
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	U-Companion, inothi ye-MIDI, umlayezo we-OSC: i-IMENYU, bese u-Inethiwekhi, kusho ukuthi ngayinye ixhuma kuphi.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	I-Stream Deck egumbini elilandelayo ingacindezela u-GO. Ne-keyboard synth futhi. Mina ngithanda i-synth.
+And for our viewers at home: you can play along too.	Futhi ababukeli abasekhaya: nani ningadlala nathi.
+THAT'S OUR SHOW	LOWO KWAKUNGUMBUKISO WETHU
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Izinombolo, u-GOTO, i-buzzer, no-GO osuka noma kuphi. Manje usungumdlalo wethelevishini, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	I-cue ingaba nenkinobho, inothi ye-MIDI nekheli le-OSC ngesikhathi esisodwa. Ibhande, ama-brace nebhande lesibili.
+Goodnight, everybody! Keep spinning!	Lala kahle, nonke! Qhubekani nizungezisa!
+Weather map	Imephu yesimo sezulu
+THE KAIJU WEATHER	ISIMO SEZULU SE-KAIJU
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Isimo sezulu ku-Channel 6, skapi. Imephu, umethuli, nesibankwa esikhulu kakhulu. Kukhulu kunesiphepho saseHighveld. Cindezela u-START.
+Words on screen: Lower Thirds, text, and backdrops.	Amagama esikrinini: ama-lower third, umbhalo, nezingemuva.
+I'm June O'Neil, and nothing about this forecast is normal.	NginguJune O'Neil, futhi akukho lutho olujwayelekile kulesi sibikezelo.
+A LAYER FOR WORDS	I-LAYER YAMAGAMA
+Words go on their own layer: press the + at the end of the playlist tabs.	Amagama aya ku-layer yawo: cindezela u-+ ekugcineni kwamathebhu e-playlist.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	I-playlist yesibili iyi-layer phezu kwemephu. Isibankwa sihlala ngaphansi. Ngokuvamile.
+Words on top. Always on top.	Amagama phezulu. Njalo phezulu.
+A LOWER THIRD	I-LOWER THIRD
+In the new playlist: SOURCE, then Lower Third.	Ku-playlist entsha: u-UMTHOMBO, bese u-Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Igama nesikhundla, phansi esikrinini, kude nendlela yesibankwa.
+HER NAME	IGAMA LAKHE
+In the inspector, title: type the presenter's name. The second line is her job.	Ku-inspector, title: bhala igama lomethuli. Umugqa wesibili ngumsebenzi wakhe.
+Spelling counts. The audience reads it at the speed of light.	Ukupela kubalulekile. Izethameli zifunda ngejubane lokukhanya.
+Spell it right. Last week it said 'Jane O'Meal'.	Lipele kahle. Ngesonto eledlule kwakubhalwe 'June O'Ndlovu'.
+ON AIR	EMOYENI
+TAKE the Lower Third. Her name slides in over the map.	U-TAKE i-lower third. Igama lakhe lishelela phezu kwemephu.
+Two layers live: the weather, and the words on top of it.	Ama-layer amabili emoyeni: isimo sezulu, namagama phezu kwaso.
+Thank you. Now, about that lizard...	Ngiyabonga. Manje, mayelana naleso sibankwa...
+BREAKING NEWS	IZINDABA EZISHISAYO
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	U-UMTHOMBO, bese u-Text: ikhadi lesihloko. Bese isigcawu sengemuva: okuluhlaza kwe-key, ukuze i-vision mixer ikukhiphe.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Ingemuva ligcwalisa ngemuva kwamagama. Okuluhlaza noma okuluhlaza okwesibhakabhaka kwe-key, i-mixer yenza okunye.
+Breaking news: it's standing on the five-day forecast.	Izindaba ezishisayo: simi phezu kwesibikezelo sezinsuku ezinhlanu.
+BREAKING: KAIJU	EZISHISAYO: I-KAIJU
+BACK TO YOU	SIBUYELA ESITUDIYO
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	I-lower third, igama, ikhadi lesihloko, ingemuva. Isibankwa siphume esitudiyo, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Ama-lower third angalinda, ashelele futhi aphume ngokwawo. Isigaba sawo sinazo zonke izilungiselelo.
+That's the weather. Back to you, guys. Run.	Lesi bekuyisimo sezulu. Sibuyela esitudiyo. Gijimani.
+A GRAND DAY OUT	USUKU OLUKHULU
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Irokhethi elakhiwe egumbini elingaphansi, skapi, nomsunguli ofuna ushizi. Cindezela u-START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Izikhathi zesiteji: ukubala phansi, amawashi, nombono womethuli womuntu osesiteji.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Ushizi, Grommet! Inyanga yenziwe ngawo. Sizodinga ukubala phansi.
+A COUNTDOWN	UKUBALA PHANSI
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	U-UMTHOMBO, bese u-Stage Timer. Iwashi elibalela emuva, ngezinombolo ezinkulu ezinobungane.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Imibala yalo iyashintsha njengoba isikhathi siphela: okumhlophe, okumpofu, okubomvu. Njenge-VU meter yesikhathi.
+*raises an eyebrow*	*uphakamisa ishiya*
+LIFT OFF	UKUNDIZA
+Select the timer and TAKE it. The countdown starts.	Khetha isikhathi wenze u-TAKE. Ukubala kuyaqala.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Ngemuva kuka-zero luyaqhubeka, lubala isikhathi esengeziwe. Kuthembekile kakhulu. Kunenhlamba kancane.
+Ten... nine... ooh, I do love a countdown.	Ishumi... ayisishiyagalolunye... hawu, ngiyakuthanda ukubala phansi.
+HOLD!	MA!
+Something's loose! Space holds the countdown. The clock shows it is held.	Kukhona okuxegayo! I-space imisa ukubala. Iwashi libonisa ukuthi limisiwe.
+A hold is not a stop. Space again, and it carries on from where it was.	Ukumisa akusikho ukuyeka. I-space futhi, luqhubeke lapho belukhona.
+*holds up a spanner*	*uphakamisa isipanela*
+THE PILOT'S VIEW	UMBONO WOMSHAYELI
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	I-IMENYU, Okuphumayo kwevidiyo: yenza uhlobo lokuphumayo lube ngu-PRESENTER. Umuntu osesiteji uthola isikhathi, i-cue elandelayo namanothi akhe.
+A presenter view is an output like any other. Point it at the confidence monitor.	Umbono womethuli ungokuphumayo njengakho konke okunye. Wukhombise ku-monitor yesiteji.
+So the pilot can see the time. The pilot is Grommet.	Ukuze umshayeli abone isikhathi. Umshayeli nguGrommet.
+TO THE MOON	ENYANGENI
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Ukubala phansi, ukumisa, nombono womshayeli. Nazdrave, skapi. Letha amabhisikidi.
+Timers can also count up, or show the time of day. Their section has the lot.	Izikhathi zingabala futhi phezulu, noma zibonise isikhathi sosuku. Isigaba sazo sinakho konke.
+A grand day out, Grommet! Pass the crackers.	Usuku olukhulu, Grommet! Nginike amabhisikidi.
+The trunk (closed)	Isifuba (sivaliwe)
+The trunk (open)	Isifuba (sivuliwe)
+THE MAGIC SHOW	UMBUKISO WOMLINGO
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Umbukiso womlingo, skapi. Isifuba, into yokudlala, nesigqi esisodwa lapho konke kushintsha ngasikhathi sinye. Cindezela u-START.
+Two playlists are two layers. TAKE ALL changes both together.	Ama-playlist amabili angama-layer amabili. U-TAKE ALL uwashintsha womabili ndawonye.
+Every trick needs two things happening at once. And a rubber chicken.	Lonke iqhinga lidinga izinto ezimbili ezenzeka ngasikhathi sinye. Nenkukhu yerabha.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Into yokudlala iya ku-layer yayo. Cindezela u-+ ekugcineni kwamathebhu e-playlist.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	I-playlist 2 ihlala phezu kwe-playlist 1. Njenge-transparency ku-overhead projector.
+Nothing up my sleeve. Everything in my trunk.	Akukho lutho emkhonweni wami. Konke kusesifubeni sami.
+THE PROP	INTO YOKUDLALA
+In the new playlist, add anything: PATTERN will do. That is the prop.	Ku-playlist entsha, engeza noma yini: u-IPHETHINI uzokwenza. Leyo yinto yokudlala.
+Whatever it is, it will appear the instant the trunk opens.	Noma kuyini, kuzovela ngomzuzu isifuba sivuleka ngawo.
+Is it a rubber chicken? It's always a rubber chicken.	Yinkukhu yerabha? Njalo yinkukhu yerabha.
+The prop (rubber chicken)	Into yokudlala (inkukhu yerabha)
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Khetha 'Isifuba (sivuliwe)' ku-playlist 1 nento yokudlala ku-playlist 2. Bese u-TAKE ALL: kokubili ngesigqi esisodwa.
+One press, every playlist's selected cue. The audience never sees the seam.	Ukucindezela okukodwa, i-cue ekhethiwe ye-playlist ngayinye. Izethameli azisoze zabona umthungo.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaa! ...Linda ihlombe. Linda. Linda.
+THE PRESTIGE	IQHINGA ELIKHULU
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Ama-layer amabili, isigqi esisodwa. Yonke i-playlist ine-opacity yayo futhi ingahlala kunoma yikuphi okuphumayo. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Umlingo akaveli ngemfihlo. I-playlist ayinandaba uma idaluliwe.
+Thank you! I'm here all week! The chicken is here forever.	Ngiyabonga! Ngilapha isonto lonke! Inkukhu ilapha unomphela.
+The kitchen (on fire)	Ikhishi (liyasha)
+A lovely souffle	I-soufflé enhle
+THE COOKING SHOW	UMBUKISO WOKUPHEKA
+A cooking show, skapi. Live. Everything is on fire. Press START.	Umbukiso wokupheka, skapi. Bukhoma. Konke kuyasha. Cindezela u-START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	U-BLACK ufihla isithombe agcine umbukiso uqhubeka. U-PANIC umisa konke. Yazi ukuthi yikuphi okudingayo.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, ikhishi liyasha-flurdy!
+The audience must not see this. Press BLACK, or B.	Izethameli akumele zibone lokhu. Cindezela u-BLACK, noma u-B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Isithombe siyahamba. I-cue iqhubeka idlala ngaphansi, ilungele ukubuya.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. Hhawu, isithombe sihambile.
+AND BACK	NOKUBUYA
+The fire's out. Press B again: the picture comes back, still running.	Umlilo ucimile. Cindezela u-B futhi: isithombe siyabuya, sisasebenza.
+Nothing was lost. A mute on a mixer, for pictures.	Akukho okulahlekile. Ukuthulisa ku-mixer, kwezithombe.
+Ta-da! Still cookin'!	Ta-da! Sisapheka!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Kubi kakhulu: i-IMENYU, Isistimu, ikhadi le-SAFETY: u-PANIC. Konke kuyama, njengoba isilungiselelo sokwethuka sisho.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	U-PANIC yinkinobho enkulu ebomvu. Yisebenzise uma u-BLACK enganele. Bese uphefumula.
+GET IT BACK	KUBUYISE
+Close MENU, select the souffle, and TAKE it. The show is back on.	Vala i-IMENYU, khetha i-soufflé, wenze u-TAKE. Umbukiso uyaqhubeka futhi.
+After a panic, the show is still there. Pick up where you meant to be.	Ngemuva kokwethuka, umbukiso usekhona. Qhubeka lapho ubufuna ukuba khona.
+Voila! De souffle, he is risen!	Voilà! I-soufflé, ivukile!
+BON APPETIT	DLANI KAHLE
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	U-BLACK ukufihla, u-PANIC ukumisa, u-TAKE ukubuya. Uzosinda kunoma yiliphi ikhishi, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Isilungiselelo sokwethuka sikhetha ukuthi u-PANIC wenzani: ukufiphala, ukusika, noma okuphumayo kuphela.
+Bork bork bork! Goodnight!	Bork bork bork! Lala kahle!
+Look one	Ukubukeka kokuqala
+Look two	Ukubukeka kwesibili
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Ama-preset, skapi. Ukubukeka konke, kukhunjulwe, futhi kubuye ngenkinobho eyodwa. Cindezela u-START.
+Like the patch memory on a synth: store, then recall.	Njengememori ye-patch ku-synth: gcina, bese ubiza.
+THE DASH	I-DASH
+Press DASH: buttons of your own, for anything at all.	Cindezela u-DASH: izinkinobho zakho, zanoma yini.
+Ctrl+D also works. Very fast. Very professional.	I-Ctrl+D nayo iyasebenza. Kuyashesha kakhulu. Kuchwepheshile kakhulu.
+A PRESET BUTTON	INKINOBHO YE-PRESET
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Cindezela u-+, bese u-'preset - a new preset from what is on now'. Inkinobho iyakhumbula lokhu kubukeka.
+Store. Like saving the patch before the drummer leans on the synth.	Gcina. Njengokulondoloza i-patch ngaphambi kokuthi umshayi wezigubhu ancike ku-synth.
+CHANGE EVERYTHING	SHINTSHA KONKE
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Vala i-DASH (Esc), bese ukhetha Ukubukeka kwesibili wenze u-TAKE. Ukubukeka okuhlukile.
+Change it all. Don't worry. It remembers.	Shintsha konke. Ungakhathazeki. Iyakhumbula.
+ONE PRESS	UKUCINDEZELA OKUKODWA
+Open the DASH and press your preset button. The first look comes back.	Vula i-DASH ucindezele inkinobho yakho ye-preset. Ukubukeka kokuqala kuyabuya.
+Recall. The patch memory, returning. Beautiful.	Ukubiza. Imemori ye-patch, iyabuya. Kuhle.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Ukubukeka, kugcinwe futhi kubiziwe. I-preset ingagcina ama-cue, izindawo, imiphumela, amazinga ne-routing; imenyu yenkinobho yayo ikhetha ukuthi yikuphi.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Futhi inkinobho ye-DASH ingaqhuba noma yimuphi umyalo. Noma yimuphi. Ngisho nalabo abajabulisayo.
+Opening titles	Iziqu zokuvula
+The planet	Iplanethi
+The battle	Impi
+THE TRAILER	I-TRAILER
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	I-trailer ye-space opera, skapi. Umxoxi onezwi elijulile kakhulu nemibono ngokuguqula. Cindezela u-START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Ukuguqula yindlela i-cue eyodwa eba ngayo elandelayo. Kunezingaphezu kwe-crossfade.
+In a galaxy of content... one operator... must choose a transition.	Emthaleni wokuqukethwe... umsebenzisi oyedwa... kumele akhethe ukuguqula.
+A STYLE	ISITAYELA
+'The planet' is selected. In the inspector, its transition style: choose iris.	'Iplanethi' ikhethiwe. Ku-inspector, isitayela sayo sokuguqula: khetha iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Ukusunduza, ukusula, i-iris, ukucwila kokumhlophe. Ngisho nesango. Ingxenye ngayibhala mina. NgoLwesibili.
+The planet deserves... a dramatic entrance.	Iplanethi ifanelwe... ukungena okumangalisayo.
+A TIME	ISIKHATHI
+Give it a time: + on transition until it says a second or more.	Yinike isikhathi: u-+ ku-ukuguqula kuze kube kusho umzuzwana noma ngaphezulu.
+No time, no transition. A style needs a duration to do anything at all.	Asikho isikhathi, akukho kuguqula. Isitayela sidinga ubude ukuze senze noma yini.
+ROLL IT	QALA
+TAKE the planet. Watch it arrive.	U-TAKE iplanethi. Buka ifika.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Ukuguqula kungokwe-cue efikayo. I-cue ngayinye ikhetha ukungena kwayo.
+Autobots... roll the transition.	Ama-Autobot... qalisani ukuguqula.
+THE BATTLE	IMPI
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Manje 'Impi': khetha i-shatter, uyinike isikhathi, wenze u-TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	I-shatter iwisa isithombe esidala njengengilazi. Ngicela ningakwenzi lokhu emngcwabeni.
+Transform... and shatter out!	Guquka... futhi phahlazeka!
+IN CINEMAS NOW	MANJE EMABHAYISIKOBHO
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Isitayela, isikhathi, nokungena okubili okumangalisa kakhulu. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	I-playlist nayo inesitayela esizenzakalelayo, sayo yonke i-cue engazikhetheli esayo.
+Coming soon... to a desk near you.	Kuyeza maduze... edeskini eliseduze kwakho.
+The beat	Isigqi
+THE ROBOT DJS	AMA-DJ AMAROBHOTHI
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Ama-DJ amarobhothi amabili, skapi. Awakhulumi. Kukhuluma izigqoko zawo. Cindezela u-START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Yonke i-cue inochungechunge lwayo lwemiphumela yomsindo, futhi eminye iphula umsindo ngamabomu.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> SAWUBONA. SIZE UKULUNGISA I-MIX YAKHO.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Isigqi sikhethiwe. Esigabeni sayo se-AUDIO EFFECTS, u-+ wengeza owodwa. Zama i-delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	I-delay, i-reverb, izihlungi, i-compressor. Inani lihlala lisho 'okuncane kwalokhu'.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> FUTHI. NGE-ECHO. ECHO. ECHO.
+A BEND	UKUGOBA
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Engeza owesibili: ukugoba, njenge-crush. Kulimaza umsindo njengefayela eliphukile.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Ukugoba yikho engikuthanda kakhulu. Njengekhasethi elishiywe elangeni. Ngamabomu.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> KAKHULU. KANGCONO. KUQHUMA. KUZWAKALA.
+THE PATCH	I-PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	I-IMENYU, bese u-Umsindo: lapho umsindo we-playlist ngayinye uya khona, ne-patch yokuphumayo okunamagama.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Izipikha, ama-monitor, i-in-ear yomshayi wezigubhu. I-patch ithumela ngamunye okwakhe.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> EZUNGEZE I-MIX. EZUNGEZE I-MIX. EZUNGEZE I-MIX.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Umphumela, ukugoba ne-patch. Amarobhothi ayavuma, skapi. Ngicabanga. Ubuso bawo yizigqoko.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Yonke imiphumela yomsindo ingalandela u-~ futhi, ngisho no-Motion. Phakamisela i-delay isandla. Kuyamangalisa.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> SIYABONGA. LALA KAHLE. SINGAMAROBHOTHI.
+The glow on the horizon (evidence #2)	Ukukhanya emkhathizwe (ubufakazi #2)
+EVIDENCE #2	UBUFAKAZI #2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Ihhovisi futhi, skapi. Ukukhanya emkhathizwe, nama-ejenti amabili angavumelani ngakho. Cindezela u-START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Ama-scope alinganisa isithombe: ukukhanya, umbala, amazinga. Izinombolo, hhayi imibono.
+It's them, Brandt. It's a craft. Look how it glows.	Yibo, Brandt. Ngumkhumbi. Bheka ukuthi ukhanya kanjani.
+THE REAL SIGNAL	ISIGNALI YANGEMPELA
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Ama-scope afunda kuphela okuphuma ngempela, hhayi i-preview. Vula okuphumayo: i-IMENYU, Okuphumayo kwevidiyo, OKUPHUMAYO KUVALIWE.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Ukulinganisa i-preview encishisiwe kungaba njengokulinganisa i-photocopy. Thina silinganisa okwangempela.
+Chain of evidence, Hollis. The real signal or nothing.	Uchungechunge lobufakazi, Hollis. Isignali yangempela noma lutho.
+THE SCOPES	AMA-SCOPE
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Vala i-IMENYU. Ngaphezu kwe-monitor, inkinobho ye-PROGRAM: yicindezele kuze kube kuthi SCOPES noma BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	U-BOTH ubonisa isithombe nama-scope aso eceleni. Kunesizotha kakhulu.
+Let the scopes decide, Hollis.	Ake ama-scope anqume, Hollis.
+THE WAVEFORM	I-WAVEFORM
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Chofoza i-waveform ukuze ibe nkulu. Izinto ezikhanyayo zihlala phezulu, ezimnyama phansi, kusuka kwesobunxele kuya kwesokudla njengasesithombeni.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Ukukhanya yileyo nsonga eduze kwaphezulu. Kukhanya kakhulu. Ukukhanya akufani nokuba ngowasemkhathini.
+Look at the peak. Nothing a streetlight couldn't do.	Bheka inqanaba. Akukho lutho isibani somgwaqo esingeke sikwenze.
+THE VECTORSCOPE	I-VECTORSCOPE
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Chofoza futhi ubuyele emuva, bese uchofoza i-vectorscope: umbala uzungeza indilinga. Okugcwele kugijimela emaphethelweni.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	I-magenta, kude emaphethelweni. Umbala oqinile. Oqinile akusikho okungekho emthethweni. Okwamanje.
+It's off the chart, Brandt! Literally off the chart!	Iphume eshadini, Brandt! Ngokoqobo!
+FALSE COLOUR	UMBALA ONGAMANGA
+And false colour: red is clipped, yellow nearly. Is the glow red?	Nombala ongamanga: okubomvu kusikiwe, okuphuzi cishe. Ingabe ukukhanya kubomvu?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Okusikiwe kusho okukhanya kakhulu isignali engakuthwala, nokunye ngaphezulu kulahlekile. Imininingwane ihambile.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Okubomvu. Kusikiwe. Akusiwo owasemkhathini, Hollis. Kukhanya kakhulu nje. Icala livaliwe.
+THE TRUTH	IQINISO
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	I-waveform, i-vectorscope, umbala ongamanga. Ama-scope akuxazulule, skapi. Ama-ejenti awakuxazululanga.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	U-SCOPES SOURCE ufunda noma yikuphi okuphumayo, futhi i-matrix ingaba ngu-709 noma 2020. Kwabanelukuluku.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Kukhanya kakhulu kwesibani somgwaqo, Brandt. Kukhanya kakhulu kunoma yini. ...Ngifuna ukukholwa.
+OUT OF THE BUILDING	PHUMA ESAKHIWENI
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Izithombe eziphuma ngekhebula noma ngenethiwekhi, skapi, hhayi nje ifasitela esikrinini. Cindezela u-START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	U-NDI ngenethiwekhi, u-SDI ovela kukhadi le-DeckLink, u-ST 2110 wezindawo zokusakaza.
+THE DEVICES PAGE	IKHASI LAMADIVAYISI
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	I-IMENYU, Okuphumayo kwevidiyo, bese u-Amadivayisi: zonke izindlela okuphumayo okungashiya ngazo le khompyutha.
+Each one says whether this machine can do it, and what it needs if not.	Ngayinye isho ukuthi lo mshini ungakwenza yini, nokuthi udingani uma ungakwazi.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Uma le khompyutha ino-NDI, vula u-NDI SENDING: isithombe sisenethiwekhini. Uma kungenjalo, u-SHOW ME uyaqhubeka.
+NDI finds itself on the network. No cables, only a good switch and patience.	U-NDI uzithola yena kunethiwekhi. Awekho amakhebula, i-switch enhle nokubekezela kuphela.
+OUT THERE	PHANDLE LAPHO
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Ikhasi lokuphumayo uqobo linokunye: u-SDI wekhadi le-DeckLink, u-ST 2110 no-NMOS, u-Spout no-Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Ngayinye ingokuphumayo nje. Umbukiso awazi futhi awunandaba ukuthi uphuma kanjani.
+Nebula ahead	Ifu lomkhathi ngaphambili
+Engine room	Igumbi lezinjini
+Deck 3: something moving	Idekhi 3: kukhona okunyakazayo
+THE BRIDGE	IBHULOHO
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Ibhuloho lomkhumbi-mkhathi i-Cathode, skapi. Ama-feed amane, isikrini esikhulu esisodwa, imfihlakalo eyodwa. Cindezela u-START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	I-multiview ibonisa wonke ama-playlist ngasikhathi sinye. Njengodonga lwama-oscilloscope, kodwa emkhathini.
+Frequencies open, Captain. All of them. That's the problem.	Ama-frequency avuliwe, Kaputeni. Wonke. Yinkinga leyo.
+MULTI, above the monitor: every playlist in its own window.	U-MULTI, ngaphezu kwe-monitor: i-playlist ngayinye efasiteleni layo.
+One window per playlist, the programme first.	Ifasitela elilodwa nge-playlist, uhlelo kuqala.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Ama-feed amane. Futhi kwelinye linesilo.
+WHAT'S NEXT	OKULANDELAYO
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Engeza ifasitela (+), bese imenyu yalo ethi ...: yenza libonise u-NEXT. Okuya emoyeni uma ucindezela u-TAKE.
+Every window has a ... button. It chooses what that window shows.	Wonke amafasitela anenkinobho ethi .... Ikhetha ukuthi lelo fasitela libonisani.
+I need to see who's calling before they reach the main viewer.	Ngidinga ukubona ukuthi ngubani ofonayo ngaphambi kokuthi afike esikrinini esikhulu.
+A CLOCK	IWASHI
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Nelinye ifasitela, elibonisa iwashi. Abasebenzisi ababheka iwashi abaze bephuze. Ngokuvamile.
+Time of day, big. Stardates are just very long timecode.	Isikhathi sosuku, sikhulu. Ama-stardate ayi-timecode ende kakhulu nje.
+The monster only shows up at midnight. We're going to need a clock.	Isilo sivela phakathi kwamabili kuphela. Sizodinga iwashi.
+ONE BIG ONE	ELILODWA ELIKHULU
+Any window's ... menu, then a layout: one big, the rest small.	Imenyu ethi ... yanoma yiliphi ifasitela, bese ukuhleleka: elilodwa elikhulu, amanye amancane.
+The big window is window one. Usually the programme. Usually.	Ifasitela elikhulu yifasitela lokuqala. Ngokuvamile uhlelo. Ngokuvamile.
+Main viewer big. The captain likes it big.	Isikrini esikhulu sibe sikhulu. UKaputeni usithanda sikhulu.
+ON SCREEN	ESIKRININI
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Khetha Idekhi 3 ku-playlist 3 wenze u-TAKE. Buka ifasitela layo.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Uhlaka olubomvu ngu-TALLY: ifasitela elisemoyeni. Esikrinini, njengoba besho emikhunjini-mkhathi.
+There! Feed three! Put it on screen!	Lapho! I-feed yesithathu! Yibeke esikrinini!
+THAT'S A WRAP	SESIQEDILE
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Amafasitela, imenyu ethi ..., u-NEXT, iwashi, ukuhleleka, i-tally. Imfihlakalo ixazululiwe, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Ifasitela lingabonisa nokuphumayo, nokusonta kwakho nezingcezu. Kuyasiza uma kuyindlu yesibani.
+And the monster was... the ship's cook, all along. Jinkys.	Futhi isilo bekungu... umpheki womkhumbi, sonke isikhathi. Jinkys.
+there is no such lesson	asikho isifundo esinjalo
+finish or leave the lesson you are in first	qeda noma uphume esifundweni okuso kuqala
+leave Bug Swat first	phuma ku-Bug Swat kuqala
+Psst. It's me, the desk. I'll be watching. Supportively.	Psst. Yimi, ideski. Ngizobuka. Ngokukweseka.
+Hi! I'm the one doing all of this, by the way.	Sawubona! Yimi owenza konke lokhu, phela.
+Ctrl+D opens the DASH. I'm just saying.	I-Ctrl+D ivula i-DASH. Ngisho nje.
+Nearly there. I can feel it in my pixels.	Cishe. Ngikuzwa kuma-pixel ami.
+You're good at this. I can tell. I'm the one doing it.	Ukuhle kulokhu. Ngiyabona. Yimi owenzayo.
+Every click, I heard. Every single one.	Konke ukuchofoza, ngikuzwile. Konke.
+The glowing one. I can see it from here. It's glowing for you.	Elikhanyayo. Ngiyalibona ngilapha. Likhanyela wena.
+lesson paused - MENU > LESSONS picks up where you left off	isifundo simisiwe - i-IMENYU > LESSONS iqhubeka lapho ugcine khona
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Isignali: isithombe senziwe ngani, nokuthi usigoba kanjani. Khetha isifundo.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Ukuqhuba umbukiso, skapi. Izandla ezisheshayo, ubuso obuzolile. Khetha isifundo.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	IZIFUNDO  -  INGXENYE YESIBILI  -  ULANDELA BANI?
+FOLLOW PROF. VIDEO	LANDELA U-PROF. VIDEO
+FOLLOW DR. PIXEL	LANDELA U-DR. PIXEL
+the signal	isignali
+running the show	ukuqhuba umbukiso
+PICK UP	QHUBEKA
+CLOSE (Esc)	VALA (Esc)
+PART ONE: THE BASICS	INGXENYE YOKUQALA: IZISEKELO
+finish or leave LEARN THE BASICS first	qeda noma uphume ku-LEARN THE BASICS kuqala
+bug swat: Esc leaves, and your show comes back as it was	bug swat: i-Esc iyaphuma, futhi umbukiso wakho ubuya njengoba ubunjalo
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: umbukiso wakho ubuyile. Izilawuli zika-Motion zise-Settings > Umsindo
+TURN MOTION ON	VULA U-MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Izimbungulu zinwabuzela ohlwini lwama-cue! Zishaye ngokuphakamisela ikhamera yakho isandla. Kuqala, u-Motion: ku-MOTION CONTROL mvule ku-ON ukhethe ukuthi ufundani (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	Lena ngu-NullPointer. Ayinalutho ngaphakathi, ayikhombi lutho. Umunwe udlula kuyo. Sebenzisa isandla sonke, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Phakamisa isandla sengathi umisa itekisi! Itekisi elincane, elinenhlonipho. Hhayi izinkinobho. Itekisi.
+DRAW TWO ZONES	DWEBA IZINDAWO EZIMBILI
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: amawele, ngalinye liqinisekile ukuthi lifike kuqala. Ukufunda okukodwa akukwazi ukuhlukanisa izandla zakho, ngakho hudula ama-ZONES amabili esithombeni sika-Motion, elilodwa ohlangothini ngalunye.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Washaye womabili ndawonye. Shaya elilodwa, ashintshe izindawo. Njengabazala bami emshadweni.
+One hand each side. Together! Together!	Isandla esisodwa ohlangothini ngalunye. Ndawonye! Ndawonye!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Imbungulu akubona ubuso, yileso sicucwana esengeziwe, futhi ukunyakaza okuncane kudinga ukufunda okucolisisekile. Yehlisa i-SENSITIVITY ibe ngu-5%.
+Lower number, finer reading. Yes, I also think it is backwards.	Inombolo ephansi, ukufunda okucolisisekile. Yebo, nami ngicabanga ukuthi kuhlehlile.
+Not the face. The little one on the end. Wiggle a finger.	Hhayi ubuso. Lokho okuncane ekugcineni. Nyakazisa umunwe.
+FALL 1.5 S OR MORE	FALL 1.5 S NOMA NGAPHEZULU
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Iyadedela kuphela uma ukufunda kuhlala phezulu. Yenza i-FALL ibe nde, imizuzwana engu-1.5 noma ngaphezulu, ukuze ukushanela kwakho kuhlangane kube kunye.
+Slow and steady, skapi. Like paying back a loan.	Kancane futhi kuqinile, skapi. Njengokukhokha isikweletu. Noma ukulinda itekisi lase-Joburg.
+Sweep, and sweep again. Let the fall carry you between.	Shanela, futhi ushanele. Vumela ukwehla kukuthwale phakathi.
+MOTION X ON A TONE	U-MOTION X ETHONINI
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	I-Heisenbug! Iyafiphala njalo uma unyakaza. Beka ukuphakama kwe-cue yethoni ku-Motion X uyilandele ngendlebe: ukukhilikithiza kuyashesha uma usondela.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	U-SHOW ME ukwenzela ithoni. Ephezulu yesokudla. Ephansi yesobunxele. Yima unganyakazi izobuya.
+Follow it. Listen. Faster ticking, closer bug.	Yilandele. Lalela. Ukukhilikithiza okusheshayo, imbungulu eseduze.
+Waving paw	Isidladla esiphakamisa isandla
+Heisenbug finder	Umtholi we-Heisenbug
+FIXED! Lovely signal flow.	KULUNGISIWE! Ukugeleza kwesignali okuhle.
+Closed as fixed. No regressions. Probably.	Kuvaliwe njengokulungisiwe. Akukho ukuhlehla. Mhlawumbe.
+Squashed! Ship it.	Ishayiwe! Yithumele.
+One reached the cue list. It has filed a bug report about you.	Enye ifike ohlwini lwama-cue. Ifake umbiko wephutha ngawe.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. Yi-handheld. Awuyicindezeli. Uyiphakamisela isandla.
+The buttons are for menus. The bugs are for flailing.	Izinkinobho ngezamamenyu. Izimbungulu ngezokushwibeka izingalo.
+The D-pad is decorative. Like my diploma.	I-D-pad yokuhlobisa. Njengediploma yami.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	Ngo-1989 nathi sasicindezela izinkinobho. Sabe sesithola ukuphakamisa isandla. Asizange sibheke emuva.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Ukucindezela kakhulu akusizi. Izimbungulu azizizwa izinkinobho. Izingalo kuphela.
+It's called a handheld because your hands are held... up. In the air. Waving.	Ibizwa ngokuthi yi-handheld ngoba izandla ziphakanyiswa... phezulu. Emoyeni. Ziphakamiswa.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	I-mouse? Ushaya izimbungulu nge-MOUSE? EBulgaria igundane belizoba ngasohlangothini lwezimbungulu.
+Lovely clicking. Very crisp. The camera saw none of it.	Ukuchofoza okuhle. Kubukhali kakhulu. Ikhamera ayikubonanga nhlobo.
+DONE FOR YOU - PRESS START	KWENZELWE WENA - CINDEZELA U-START
+DONE! PRESS START	KUQEDIWE! CINDEZELA U-START
+SELECT OPENS MOTION CONTROL	U-SELECT UVULA U-MOTION CONTROL
+ALL BUGS FIXED	ZONKE IZIMBUNGULU ZILUNGISIWE
+GAME OVER	UMDLALO UPHELILE
+NEW HIGH SCORE!	AMAPHUZU AMASHA APHEZULU!
+START PLAYS AGAIN	U-START UDLALA FUTHI
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Manje hamba uyolungisa izimbungulu zangempela.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Ngayinye yalezo isilawuli sangempela sika-Motion. Zibeke kunoma iyiphi inkinobho ka-~ oyithandayo.
+START: AGAIN	START: FUTHI
+START: PLAY	START: DLALA
+# --- end of tutorials ---
+Splash	Isikrini sokuvula
+Beast mode	Imodi yesilo
++ ADD AN OUTPUT	+ ENGEZA OKUPHUMAYO
+>LIVE	>BUKHOMA
+center	MAPHAKATHI
+NO	CHA
+YES	YEBO
+To	Kuya
+UP	PHEZULU
+add	engeza
+all	konke
+any	noma yikuphi
+box	ibhokisi
+Cut	Sika
+Fit	Faka kulingane
+hue	umbala
+inf	okungapheli
+key	inkinobho
+Map	Imephu
+Mic	Imakrofoni
+Now	Manje
+ONE	KUNYE
+RED	BOMVU
+Row	Umugqa
+run	sebenzisa
+sea	ulwandle
+set	setha
+tab	ithebhu
+tag	uphawu
+Top	Phezulu
+BACK	EMUVA
+bell	insimbi
+blue	okwesibhakabhaka
+Code	Ikhodi
+DOWN	PHANSI
+DRAW	DWEBA
+face	ubuso
+Fill	Gcwalisa
+flag	ifulegi
+font	ifonti
+From	Kusuka
+grow	khulisa
+hold	bamba
+idle	akusebenzi
+KEYS	IZINKINOBHO
+Left	Kwesobunxele
+line	umugqa
+Load	Layisha
+Loop	Phinda
+MASK	IMASKI
+Memo	Inothi
+NONE	LUTHO
+ONCE	KANYE
+oval	okweqanda
+PAIR	BHEQA
+play	dlala
+Port	Imbobo
+rain	imvula
+send	thumela
+show	umbukiso
+Size	Ubukhulu
+SKIP	YEQA
+snow	iqhwa
+soft	thambile
+TEXT	UMBHALO
+Tone	Ithoni
+type	uhlobo
+Word	Igama
++ ADD	+ ENGEZA
+align	qondanisa
+black	mnyama
+blend	hlanganisa
+boxes	amabhokisi
+brush	ibhulashi
+Chain	Uchungechunge
+Curve	Ijika
+Delay	Libazisa
+do it	kwenze
+frame	uhlaka
+glass	ingilazi
+green	luhlaza
+LEARN	FUNDA
+level	izinga
+Lines	Imigqa
+mixed	kuxubile
+notes	amanothi
+Pause	Misa kancane
+Right	Kwesokudla
+scale	isikali
+shape	isimo
+Short	Kufushane
+speed	isivinini
+split	hlukanisa
+stamp	isitembu
+START	QALA
+state	isimo
+Still	Isithombe
+style	isitayela
+Timer	Iwashi
+title	isihloko
+Width	Ububanzi
+words	amagama
+Zones	Izindawo
+(none)	(akukho)
+amount	inani
+anyone	noma ubani
+CHANGE	SHINTSHA
+CHOOSE	KHETHA
+Clouds	Amafu
+DELETE	SUSA
+eraser	irabha
+export	khipha
+FIXED!	KULUNGISIWE!
+follow	landela
+FREEZE	QANDISA
+FROZEN	KUQANDISIWE
+garden	ingadi
+LAYOUT	ISAKHIWO
+Levels	Amazinga
+MOTION	UKUNYAKAZA
+nobody	akekho
+Resume	Qhubeka
+ribbon	iribhoni
+Script	Isikripthi
+scroll	skrola
+signal	isignali
+sketch	umdwebo
+SLICES	IZINGCEZU
+SMOOTH	BUSHELELE
+Target	Okuqondiwe
+VALUES	AMANANI
+(empty)	(akunalutho)
+(unset)	(akusethiwe)
+address	ikheli
+Browser	Isiphequluli
+caption	umbhalo
+Ceiling	Umkhawulo
+Command	Umyalo
+Cue hue	Umbala we-cue
+EFFECTS	IMIPHUMELA
+English	IsiNgisi
+Haptics	Ukudlidliza
+LESSONS	IZIFUNDO
+Message	Umlayezo
+midi in	I-MIDI engenayo
+nothing	lutho
+OUTPUTS	OKUPHUMAYO
+Picture	Isithombe
+repeats	ukuphinda
+SCREENS	IZIKRINI
+SHOW ME	NGIBONISE
+Show on	Bonisa ku
+standby	kulindile
+Stretch	Nweba
+theatre	ithiyetha
+all to 0	konke kube 0
+backdrop	ingemuva
+captions	imibhalo
+CHANNELS	IZITESHI
+continue	qhubeka
+count up	bala ukhuphuke
+DEFAULTS	OKUJWAYELEKILE
+Full Red	Bomvu ngokuphelele
+Learn it	Kufunde
+METADATA	IMINININGWANE
+none yet	akukho okwamanje
+notebook	incwajana
+offset X	ukugudluka X
+offset Y	ukugudluka Y
+on press	uma ucindezela
+SECTIONS	IZIGABA
+Stop all	Misa konke
+STRAIGHT	QONDILE
+subtitle	umbhalo ongezansi
+subtract	susa
+the desk	ideski
+The name	Igama
+THE SHOW	UMBUKISO
+THIS CUE	LE CUE
+TURN OFF	CISHA
+a comment	umbono
+add shape	engeza isimo
+choose...	khetha...
+Full Blue	Kwesibhakabhaka ngokuphelele
+FUNCTIONS	IMISEBENZI
+generated	kukhiqiziwe
+Listen to	Lalela
+logo size	usayizi logo
+MIDI File	Ifayela le-MIDI
+no output	akukho okuphumayo
+no window	alikho iwindi
+Pause all	Misa konke kancane
+stop at 0	misa ku-0
+text mode	indlela yombhalo
+then stop	bese umisa
+(no notes)	(awekho amanothi)
+brightness	ukukhanya
+cue number	inombolo ye-cue
+Full Black	Mnyama ngokuphelele
+Full Green	Luhlaza ngokuphelele
+Full White	Mhlophe ngokuphelele
+Fullscreen	Isikrini sonke
+look at it	kubuke
+no effects	ayikho imiphumela
+Position X	Indawo X
+Position Y	Indawo Y
+Resume all	Qhubeka konke
+save still	londoloza isithombe
+text added	umbhalo wengeziwe
+Total time	Isikhathi sonke
+WITH SOUND	NOMSINDO
+any channel	noma yisiphi isiteshi
+clear frame	sula uhlaka
+Esc cancels	U-Esc uyakhansela
+nothing yet	akukho okwamanje
+Sensitivity	Ukuzwela
+THE NETWORK	INETHIWEKHI
+time of day	isikhathi sosuku
+Esc to close	Esc ukuvala
+EXPORTING...	IYAKHIPHA...
+loop forever	phinda njalo
+Pair a phone	Xhuma ifoni
+Pause at end	Misa ekugcineni
+Phone access	Ukufinyelela ngefoni
+(nothing yet)	(akukho okwamanje)
+EXAMPLE SHOWS	IMIBUKISO EYIZIBONELO
+INSTALLING...	IYAFAKA...
+Paired phones	Amafoni axhunyiwe
+THIS COMPUTER	LE KHOMPYUTHA
+whole network	inethiwekhi yonke
+will not open	akuvuleki
+not configured	akulungiselelwe
+on any channel	kunoma yisiphi isiteshi
+Pause at start	Misa ekuqaleni
+source missing	umthombo awutholakali
++ ADD AN EFFECT	+ ENGEZA UMPHUMELA
+Maximum quality	Ikhwalithi ephezulu kakhulu
+Click to type it	Chofoza ukuze uthayiphe
+Cue has no audio	I-cue ayinawo umsindo
+LEARN THE BASICS	FUNDA IZISEKELO
+REPORT A PROBLEM	BIKA INKINGA
+(no media source)	(awukho umthombo wemidiya)
+CLICK ANYWHERE...	CHOFOZA NOMA KUPHI...
+name or number...	igama noma inombolo...
+only this computer	le khompyutha kuphela
+type a cue number	thayipha inombolo ye-cue
+Click to edit cue notes	Chofoza ukuhlela amanothi e-cue
+the file cannot be read	ifayela alifundeki
+Keep a transcript (.srt)	Gcina okulotshiwe (.srt)
+Nothing here with this filter.	Akukho lutho ngalesi sihlungi.
+Nothing has arrived yet. Press something on the controller.	Akukafiki lutho. Cindezela okuthile kusilawuli.
+Click to seek — drag to scrub	Chofoza ukuya endaweni — hudula ukudlula kusiqeshana
+name, from anywhere	igama, noma kuphi
+what is on air	okusemoyeni
+on air in playlist {n}	emoyeni ohlwini {n}
+the selected cue in playlist {n}	i-cue ekhethiwe ohlwini {n}
+how much of this effect	inani lalo mphumela
+The text this cue puts on screen	Umbhalo le cue ewubeka esikrinini
+Which frame you draw on	Uhlaka odweba kulo
+Choose startup mode:	Khetha indlela yokuqalisa:
+Run the show from a phone	Lawula umbukiso ngefoni
+Who can see it	Ubani ongakubona
+what is on air in a playlist	okusemoyeni ohlwini
+click or Esc to close	chofoza noma u-Esc ukuvala
+Right-click turns them off.	Ukuchofoza kwesokudla kuyazicisha.
+Copy the show AND its media into one portable folder	Kopisha umbukiso KANYE nemidiya yawo kufolda eyodwa ephathekayo
+The role, or leave it empty	Indima, noma kushiye kungenalutho
+Clear the live PIP overlay now	Susa isembozo se-PIP esibukhoma manje
+Set per-cue transition duration	Setha ubude bokuguqula nge-cue ngayinye
+Changing this re-prepares the cue.	Ukushintsha lokhu kulungisa i-cue kabusha.
+The OSC path, e.g. /cue/1/start	Indlela ye-OSC, isib. /cue/1/start
+any command, {value} is the number	noma yimuphi umyalo, {value} yinombolo
+nothing to send - check the message	akukho okuthunyelwayo — hlola umlayezo
+selected cue lane  |  TAKE to make it live	umzila we-cue ekhethiwe — TAKE ukuyifaka emoyeni
+JAM	VUMELANISA
+CLIP	IKLIPHU
+Fall	Ukwehla
+Rise	Ukukhuphuka
+Runs	Iyagijima
+KEY L	KEY K
+MULTI	OKUNINGI
+Reads	Ifunda
+Shows	Ibonisa
+Pickup	Ukuthatha
+STEREO	I-STEREO
+cue id	i-ID ye-cue
+jam to	vumelanisa ku-
+red at	okubomvu ku-
+set by	kusethwe ngu-
+tile h	ithayela h
+tile w	ithayela w
+Limiter	Isikhawulisi
+QR CODE	IKHODI YE-QR
+Read as	Funda njenge
+Runs on	Isebenza ku-
+mask on	imaski ivuliwe
+rack it	yilungiselele
+red col	ikholomu ebomvu
+BYPASSED	KWEQIWE
+FIXTURES	IZIBANI
+Hold for	Bamba isikhathi
+Limiting	Kuyakhawulwa
+MIDI MAP	IMEPHU YE-MIDI
+amber at	i-amber ku-
+any port	noma iyiphi iphothi
+bg alpha	i-alpha yangemuva
+onion on	isikhumba sika-anyanisi sivuliwe
+prog bar	ibha yohlelo
++ section	+ isigaba
++pause pt	+ikhefu
+DASHBOARD	IDESHIBHODI
+EXIT  Esc	PHUMA  Esc
+HDR input	okokufaka kwe-HDR
+MIDI note	inothi le-MIDI
+PNG matte	i-matte ye-PNG
+SVG paths	izindlela ze-SVG
+TEST CARD	IKHADI LOKUHLOLA
+a-fade in	a-ukungena kancane
+amber col	ikholomu ye-amber
+chime red	insimbi ebomvu
+glitch up	i-glitch phezulu
+new paths	izindlela ezintsha
+onion off	isikhumba sika-anyanisi sivaliwe
+wobble by	nyakazisa ngo-
+BY FIXTURE	NGESIBANI
+BYPASS ALL	YEQA KONKE
+Black lift	Ukuphakamisa okumnyama
+EDGE BLEND	UKUHLANGANISA KWEMIPHETHO
+On release	Uma kudedelwa
+Passphrase	Iphasiwedi
+Saved with	Kugcinwe nge-
+a-fade out	a-ukuphuma kancane
+black lift	ukuphakamisa okumnyama
+by density	ngobuningi
+chime zero	insimbi ku-zero
+deck fader	i-fader ye-deck
+end action	isenzo sokugcina
+fires cues	iqala ama-cue
+next xfade	i-xfade elandelayo
+ADD FIXTURE	ENGEZA ISIBANI
+Add a light	Engeza isibani
+CARD ON ALL	IKHADI KUKHO KONKE
+EXPORT CARD	THUMELA IKHADI
+LOW LATENCY	UKULIBALA OKUNCANE
+WEB MONITOR	ISIQAPHI SEWEBHU
+Web monitor	Isiqaphi sewebhu
+blend gamma	i-gamma yokuxuba
+chime amber	insimbi ye-amber
+gain (each)	inzuzo (ngayinye)
+glitch down	i-glitch phansi
+link aspect	xhumanisa isimo
+move points	hambisa amaphoyinti
+pause begin	ikhefu ekuqaleni
+phrase hold	ukubamba umusho
+plays synth	idlala i-synth
+undo stroke	hlehlisa umugqa
+CARD OFF ALL	IKHADI LICIMILE KUKHO KONKE
+CLASSIC VIEW	UMBUKISO WAKUDALA
+LISTENING...	KULALELWA...
+LISTENS: OFF	UKULALELA: KUVALIWE
+Last refused	Okwenqatshwe ekugcineni
+Pair overlap	Ukudlulana kwepheya
+RACKED, WARM	KULUNGILE, KUFUDUMELE
+SCAN TO PAIR	SKENA UKUXHUMA
+Space — play	Space — dlala
+TEST CARD ON	IKHADI LOKUHLOLA LIVULIWE
+driver speed	isivinini somshayeli
+glitch drift	ukukhukhuleka kwe-glitch
+glitch reach	ukufinyelela kwe-glitch
+last reading	ukufunda kokugcina
+pair overlap	ukudlulana kwepheya
+render width	ububanzi bokudweba
+LIVE CAPTIONS	AMAGAMA ABHALWE BUKHOMA
+Live captions	Amagama abhalwe bukhoma
+Phone control	Ukulawula ngefoni
+READY-MADE...	OSEKULUNGILE...
+Space — pause	Space — ikhefu
+Speech models	Amamodeli okukhuluma
+VIDEO DIP: ON	VIDEO DIP: KUVULIWE
+render height	ubude bokudweba
+MOTION CONTROL	UKULAWULA KOKUNYAKAZA
+NDI source cue	i-cue yomthombo we-NDI
+OUTPUT EFFECTS	IMIPHUMELA YOKUPHUMA
+PHONE & TABLET	IFONI NETHEBHULETHI
+SCALED TO FILL	KULINGANISWE KWAGCWALA
+SELECT: MOTION	KHETHA: UKUNYAKAZA
+VIDEO DIP: OFF	VIDEO DIP: KUVALIWE
+glitch through	i-glitch ngokudlula
+lock to screen	khiyela esikrinini
+on the monitor	esiqaphini
+play a note...	dlala inothi...
+press a key...	cindezela ukhiye...
+restore at end	buyisela ekugcineni
+save animation	gcina opopayi
+% of the height	% wobude
++  a first step	+  isinyathelo sokuqala
++ CHOOSE A FEED	+ KHETHA OKUNGENAYO
+Double-GO guard	Ukuvikela kwe-GO kabili
+Frames a second	Ozimele ngomzuzwana
+HOLDING OFF AIR	KUBANJWE KUNGEKHO EMOYENI
+Live stream cue	I-cue yokusakaza bukhoma
+PIP overlay cue	I-cue ye-PIP
+Projector gamma	I-gamma ye-projector
+first available	okokuqala okutholakalayo
+nothing follows	akukho okulandelayo
+restart on take	qala kabusha ku-take
+the focused one	okugxilwe kukho
+BACK TO BUG SWAT	BUYELA KU-BUG SWAT
+Fade-in duration	Ubude bokungena kancane
+PICK FROM SCREEN	KHETHA ESIKRININI
+WHAT DECKBOY DID	OKWENZIWE NGU-DECKBOY
+factory settings	izilungiselelo zasefektri
+no audio effects	ayikho imiphumela yomsindo
+open the monitor	vula isiqaphi
+over the picture	phezu kwesithombe
+Fade-out duration	Ubude bokuphuma kancane
+Key edge softness	Ukuthamba konqenqema lukakhiye
+Toggle chroma key	Vula/vala i-chroma key
+click this window	chofoza leli windi
+the system output	okuphumayo kwesistimu
+(none playing now)	(akukho okudlalayo manje)
+FORGET MY DEFAULTS	KHOHLWA IZINTO ZAMI ZOKUZENZAKALELA
+Hex, e.g. 90 3C 7F	Hex, isib. 90 3C 7F
+put it on a button	yibeke enkinobheni
+Composite scene cue	I-cue yesigcawu esihlanganisiwe
+Connections at once	Ukuxhumana ngesikhathi esisodwa
+Passphrase (shared)	Iphasiwedi (eyabelwana ngayo)
+SAVE AS MY DEFAULTS	GCINA NJENGEZAMI ZOKUZENZAKALELA
+Trusted controllers	Izilawuli ezithembekile
+Where the ramp ends	Lapho i-ramp iphela khona
+draw on the monitor	dweba esiqaphini
+edit on the monitor	hlela esiqaphini
+find a named colour	thola umbala ngegama
+Companion passphrase	Iphasiwedi ye-Companion
+Home — skip to start	Home — yeqela ekuqaleni
+How solid the ink is	Uyinki uqine kangakanani
+Left — skip back 10s	Kwesobunxele — buyela emuva 10s
+MIDI AND OSC MONITOR	ISIQAPHI SE-MIDI NE-OSC
+MIDI and OSC monitor	Isiqaphi se-MIDI ne-OSC
+Marks stacked BELOW.	Izimpawu zinqwabelene NGEZANSI.
+New shows start from	Imibukiso emisha iqala ku-
+Pitch, in semitones.	Iphimbo, ngama-semitone.
+Set browser URL/path	Setha i-URL/indlela yesiphequluli
+Typing needs EDIT on	Ukuthayipha kudinga i-EDIT ivuliwe
+X — cycle end action	X — shintsha isenzo sokugcina
+nothing assigned yet	akukho okwabelwe okwamanje
+nothing targeted yet	akukho okuhlosiwe okwamanje
+the playlist's PATCH	I-PATCH ye-playlist
+Left, centre or right	Kwesobunxele, phakathi noma kwesokudla
+PLAY BUG SWAT, a game	DLALA I-BUG SWAT, umdlalo
+PRESS AGAIN TO FORGET	CINDEZELA FUTHI UKUZE UKHOHLWE
+Pattern motion toggle	Vula/vala ukunyakaza kwephethini
+Sound when time is up	Umsindo uma isikhathi siphelile
+none - click to learn	lutho - chofoza ukufunda
+none: the one picture	lutho: isithombe esisodwa
+turn phone control on	vula ukulawula ngefoni
+waiting for a picture	ilinde isithombe
+(projector curve only)	(ijika le-projector kuphela)
+Scene fade-in duration	Ubude bokungena kwesigcawu
+Start NEW from factory	Qala OKUSHA kusuka efektri
+Tile height in pixels.	Ubude bethayela ngamaphikseli.
+any window, any screen	noma yiliphi iwindi, noma yisiphi isikrini
+circle, heart, star...	indilinga, inhliziyo, inkanyezi...
+click to open the grid	chofoza ukuvula igridi
+sACN universe, 1-63999	I-universe ye-sACN, 1-63999
+Lower Third overlay cue	I-cue ye-Lower Third
+Master oscillator rate.	Isivinini se-oscillator enkulu.
+Scene fade-out duration	Ubude bokuphuma kwesigcawu
+needs file-backed video	idinga ividiyo esefayeleni
+none: the whole picture	lutho: isithombe sonke
+recent and in this show	okwakamuva nokukulo mbukiso
+Clear in/out trim points	Sula amaphoyinti okusika okungena/okuphuma
+Right — skip forward 10s	Kwesokudla — eqela phambili 10s
+none - click to set some	lutho - chofoza ukusetha
+Esc cancels, arrows nudge	Esc iyakhansela, imicibisholo iyahambisa
+Fit/Fill/Stretch/Unscaled	Fit/Gcwalisa/Nweba/Ungalinganisi
+PIXEL FOR PIXEL, TOP-LEFT	IPHIKSELI NGEPHIKSELI, PHEZULU-KWESOBUNXELE
+PROJECTOR - gamma matched	I-PROJECTOR - i-gamma ifanisiwe
+Playback speed: 0.25–4.0×	Isivinini sokudlala: 0.25–4.0×
+This show's setup, no cues	Ukusethwa kwalo mbukiso, awekho ama-cue
+none - click to write some	lutho - chofoza ukubhala
+walks every output in turn	ihamba kukho konke okuphumayo ngokulandelana
+MULTIVIEW carries this too.	I-MULTIVIEW nayo iyakuthwala lokhu.
+Scene dwell time — 0 = hold	Isikhathi sesigcawu — 0 = bamba
+add a second output to pair	engeza okuphumayo kwesibili ukuze kube yipheya
+things that are oscillating	izinto ezinyakazayo
+Key tolerance (RGB distance)	Ukubekezelela kukakhiye (ibanga le-RGB)
+channel list is not readable	uhlu lweziteshi alufundeki
+no effects for this cue type	ayikho imiphumela yalolu hlobo lwe-cue
+1-16, as the desk counts them	1-16, njengoba idesiki ikubala
+Art-Net port address, 0-32767	Ikheli lephothi ye-Art-Net, 0-32767
+Fade-in duration for this cue	Ubude bokungena kwale cue
+Toggle loop for selected cues	Vula/vala i-loop yama-cue akhethiwe
+Toggle the live input's audio	Vula/vala umsindo wokokufaka bukhoma
+[ / ] keys — fade-in duration	[ / ] okhiye — ubude bokungena
+a camera moves the ~ controls	ikhamera ihambisa izilawuli ze-~
+Contrast multiplier (0.0-2.0x)	Isiphindaphindi sokuhluka (0.0-2.0x)
+Fade-out duration for this cue	Ubude bokuphuma kwale cue
+HLG - live broadcast (BT.2100)	HLG - ukusakaza bukhoma (BT.2100)
+L - loop this cue continuously	L - phinda le cue njalo
+Sound when the clock turns red	Umsindo uma iwashi liba bomvu
+Act now, without taking the cue	Yenza manje, ungathathanga i-cue
+Delay before the continue fires	Ukulibala ngaphambi kokuqhubeka
+Edit the main Lower Third title	Hlela isihloko esikhulu se-Lower Third
+LINEAR - a feather, not a blend	LINEAR - ukuthambisa, hhayi ukuxuba
+Shift+[ / ] — fade-out duration	Shift+[ / ] — ubude bokuphuma
+false colour reads SDR pictures	umbala ongamanga ufunda izithombe ze-SDR
+learn it, or say how to read it	kufunde, noma usho ukuthi kufundwa kanjani
+Brightness multiplier (0.0-2.0x)	Isiphindaphindi sokukhanya (0.0-2.0x)
+How many features fit on screen.	Zingaki izici ezingena esikrinini.
+Saturation multiplier (0.0-2.0x)	Isiphindaphindi sokugcwala kombala (0.0-2.0x)
+Send now, without taking the cue	Thumela manje, ungathathanga i-cue
+Set Lower Third background alpha	Setha i-alpha yangemuva ye-Lower Third
+Sound when the clock turns amber	Umsindo uma iwashi liba yi-amber
+Use GEOMETRY for exact placement	Sebenzisa i-GEOMETRY ukubeka ngqo
+Vertical output offset in pixels	Ukususwa okuqondile kokuphumayo ngamaphikseli
+aimed here; the desk never moves	kuqondiswe lapha; idesiki ayinyakazi
+playlists into the named outputs	ama-playlist aya kokuphumayo okunamagama
+7-segment, blocky, or a real font	izingxenye ezi-7, amabhulokhi, noma ifonti yangempela
+Do it now, without taking the cue	Kwenze manje, ungathathanga i-cue
+Fade-out duration before next cue	Ubude bokuphuma ngaphambi kwe-cue elandelayo
+Fixed repeat count — 0 = infinite	Inani lokuphinda — 0 = ingunaphakade
+Output rotation angle (-180..180)	I-engeli yokujikisa okuphumayo (-180..180)
+Put this control on an oscillator	Beka lesi silawuli ku-oscillator
+window and recording outputs only	okuphumayo kwewindi nokurekhoda kuphela
+Countdown, count up, or wall clock	Ukubala phansi, ukubala phezulu, noma iwashi lodonga
+Cycle end action for selected cues	Shintsha isenzo sokugcina sama-cue akhethiwe
+Digit colour once amber is reached	Umbala wezinombolo uma kufika i-amber
+Horizontal output offset in pixels	Ukususwa okuvundlile kokuphumayo ngamaphikseli
+In-point: cue starts playback here	Iphoyinti lokungena: i-cue iqala lapha
+LIVE - every assigned deck matches	BUKHOMA - yonke i-deck eyabelwe iyafana
+Out-point: cue stops playback here	Iphoyinti lokuphuma: i-cue iyama lapha
+Run it now, without taking the cue	Yiqalise manje, ungathathanga i-cue
+Set repeat count for selected cues	Setha inani lokuphinda lama-cue akhethiwe
+Set the NDI source name to receive	Setha igama lomthombo we-NDI ozowamukela
+a chain on a device, after the mix	uchungechunge kudivayisi, ngemva kokuxuba
+Attached overlays fire on TAKE only	Ezinamathiselwe ziqala ku-TAKE kuphela
+Cycle which slot drives scene audio	Shintsha ukuthi iyiphi i-slot eqhuba umsindo wesigcawu
+Edit the secondary Lower Third line	Hlela umugqa wesibili we-Lower Third
+Hue rotation (-180 to +180 degrees)	Ukujikisa kombala (-180 kuya ku-+180 degrees)
+Programme with sound in any browser	Uhlelo olunomsindo kunoma yisiphi isiphequluli
+Rotation speed, degrees per second.	Isivinini sokujikeleza, ama-degree ngomzuzwana.
+Set short cue label for search/goto	Setha ilebula emfushane ye-cue yokusesha/goto
+Toggle cue audio track for this cue	Vula/vala umsindo wale cue
+Arm this cue as the one GO will fire	Lungiselela le cue njengaleyo i-GO ezoyiqala
+How tall the logo is above the clock	Ubude belogo ngaphezu kwewashi
+Linear, ease in, ease out or S-curve	Okuqondile, ukungena kancane, ukuphuma kancane noma i-S
+Per-cue transition duration override	Ubude bokushintsha ngayinye i-cue
+Set capture source from the cue menu	Setha umthombo wokuthwebula kumenyu ye-cue
+Set playback speed for selected cues	Setha isivinini sokudlala sama-cue akhethiwe
+Toggle hold-at-end for selected cues	Vula/vala ukubamba ekugcineni kwama-cue akhethiwe
+channels on your interfaces, by name	iziteshi kuma-interface akho, ngegama
+nothing set - this cue sends nothing	akukho okusethiwe - le cue ayithumeli lutho
+over budget - video will drop frames	ngaphezu kwesabelomali - ividiyo izokwehlisa izithombe
+Fixed repeat count — 0 = loop forever	Inani lokuphinda — 0 = i-loop njalo
+Keep counting past zero, or stop dead	Qhubeka ubala ngale kuka-zero, noma ume
+LISTENS: the figure follows the sound	IYALALELA: isimo silandela umsindo
+Move the height on its own oscillator	Hambisa ubude ku-oscillator yawo
+Put the brush's size on an oscillator	Beka usayizi webhulashi ku-oscillator
+Toggle audio enable for selected cues	Vula/vala umsindo wama-cue akhethiwe
+What NEW starts from, never this show	Lapho OKUSHA kuqala khona, akulona lo mbukiso
+transcoding - plays clean until ready	kuyaguqulwa - kudlala kahle kuze kulunge
+All interfaces; trusted machines only.	Wonke ama-interface; imishini ethembekile kuphela.
+Delay between GO and this cue starting	Ukulibala phakathi kwe-GO nokuqala kwale cue
+Its amount, or one of its knobs A to D	Inani layo, noma enye yezinkinobho zayo A kuya ku-D
+Lower Third background opacity (0-255)	Ukufiphala kwangemuva kwe-Lower Third (0-255)
+Which deck the cue it acts on lives on	Iyiphi i-deck lapho i-cue isebenza khona
+FEEDS: pick a window, then one of these	OKUNGENAYO: khetha iwindi, bese ukhetha okukodwa kwalokhu
+install Tailscale here and on the phone	faka i-Tailscale lapha nasefonini
+Digit colour while there is time in hand	Umbala wezinombolo uma kusekhona isikhathi
+Put the brush's opacity on an oscillator	Beka ukufiphala kwebhulashi ku-oscillator
+X — cycle end action: stop / next / loop	X — shintsha isenzo sokugcina: yima / okulandelayo / i-loop
+transparent: put its playlist on a layer	kuyabonakala: beka i-playlist yayo kusendlalelo
+Click to show or hide this cue's captions	Chofoza ukubonisa noma ukufihla amagama ale cue
+How much it throws off; 0 is a clean burn	Ijikijela kangakanani; u-0 ukushisa okuhlanzekile
+Phone control is in PHONE & TABLET, below	Ukulawula ngefoni kuku-PHONE & TABLET, ngezansi
+Apply fade-in to selected video/audio cues	Faka ukungena kancane kuma-cue akhethiwe evidiyo/omsindo
+Bypass: this master leaves that deck alone	Yeqa: le master iyishiya leyo deck
+Seconds REMAINING when the clock turns red	Imizuzwana ESELE uma iwashi liba bomvu
+generator is off - a START cue turns it on	ijeneretha ivaliwe - i-cue ye-START iyayivula
+Apply fade-out to selected video/audio cues	Faka ukuphuma kancane kuma-cue akhethiwe evidiyo/omsindo
+Keep the outside and cut the inside instead	Gcina ingaphandle bese usika ingaphakathi
+Legacy target mode — switch type to convert	Imodi endala yokuhlosa — shintsha uhlobo ukuguqula
+Nothing here changes the show that is open.	Akukho lapha okushintsha umbukiso ovuliwe.
+The cue number on the other desk, e.g. 12.5	Inombolo ye-cue kwenye idesiki, isib. 12.5
+Toggle pause-at-beginning for selected cues	Vula/vala ikhefu ekuqaleni kwama-cue akhethiwe
+Toggle transition-to-next for selected cues	Vula/vala ukushintshela kokulandelayo kwama-cue akhethiwe
+Auto-advance duration — 0 = hold until taken	Ubude bokuqhubeka okuzenzakalelayo — 0 = bamba kuze kuthathwe
+Characters across. Fewer means bigger cells.	Izinhlamvu ngobubanzi. Ezimbalwa zisho amaseli amakhulu.
+Device output pair this cue's audio plays on	Ipheya yokuphuma kwedivayisi lapho umsindo wale cue udlala khona
+E - freeze on last frame instead of stopping	E - misa esithombeni sokugcina esikhundleni sokuma
+How long the note takes to reach full level.	Isikhathi esithathwa yinothi ukufika ezingeni eligcwele.
+LED panel height in pixels. Click to type it	Ubude bephaneli ye-LED ngamaphikseli. Chofoza ukuthayipha
+Load the cue and hold first frame when taken	Layisha i-cue ubambe isithombe sokuqala uma ithathwa
+Seconds REMAINING when the clock turns amber	Imizuzwana ESELE uma iwashi liba yi-amber
+acts on every deck; deck and cue are ignored	isebenza kuzo zonke ama-deck; i-deck ne-cue kuyashaywa indiva
+0-127; 127 addresses every device on the line	0-127; u-127 ukhuluma nayo yonke idivayisi emugqeni
+GO shows the note; picture and sound carry on	I-GO ibonisa inothi; isithombe nomsindo kuyaqhubeka
+How fast it moves; no effect when it is still	Ihamba ngokushesha kangakanani; ayikho imiphumela uma imile
+Fires when incoming timecode passes this point	Iqala uma i-timecode engenayo idlula leli phoyinti
+Shown to the operator when GO reaches this cue	Kuboniswa umlawuli uma i-GO ifika kule cue
+Source pixels, independent of output placement	Amaphikseli omthombo, angancikile ekubekweni kokuphumayo
+Stereo balance, applied live (snaps to center)	Ukulinganisa kwe-stereo, bukhoma (kunamathela maphakathi)
+bypassed: nothing here is processed or limited	kweqiwe: akukho lapha okucutshungulwayo noma okukhawulwayo
+headphones, desk sounds and LTC stay out of it	ama-headphone, imisindo yedesiki ne-LTC kuhlala ngaphandle
+transparent outside the ink: put it on a layer	kuyabonakala ngaphandle kwenki: kubeke kusendlalelo
+what is said, on screen, made on this computer	okushiwoyo, esikrinini, kwenziwe kule khompyutha
+Above 1 tunnels inward, below 1 blooms outward.	Ngaphezu kuka-1 umhubhe ungena ngaphakathi, ngaphansi kuka-1 uyaqhakaza ngaphandle.
+Per-cue audio trim: -40 to +40 dB, applied live	Ukunciphisa umsindo ngayinye i-cue: -40 kuya ku-+40 dB, bukhoma
+Show the message in red - the wrap up NOW state	Bonisa umlayezo ngokubomvu - isimo sokuqeda MANJE
+The brush's width, as % of the picture's height	Ububanzi bebhulashi, njengo-% wobude besithombe
+What the stream carries: SDR, PQ (HDR10) or HLG	Okuthwalwa ukusakaza: SDR, PQ (HDR10) noma HLG
+Whether the next shape or pen path adds or cuts	Ukuthi isimo esilandelayo noma indlela yepeni iyengeza noma iyasika
+a note or an address becomes that cue's trigger	inothi noma ikheli liba yisiqalisi saleyo cue
+transparent outside the blobs: put it on a layer	kuyabonakala ngaphandle kwamabhamuza: kubeke kusendlalelo
+Digit colour once red is reached, and in overtime	Umbala wezinombolo uma kufika okubomvu, nangesikhathi esedlule
+Downmix this cue to mono (mono sources / mono PA)	Hlanganisa le cue ibe yi-mono (imithombo ye-mono / i-PA ye-mono)
+Drag to scrub (shift = fine), click to type exact	Hudula ukuskrabha (shift = kahle), chofoza ukuthayipha ngqo
+Hand this to an oscillator so it moves on its own	Nikeza lokhu ku-oscillator ukuze kunyakaze kukodwa
+Amber is closest to the 1976 single-phosphor look.	I-amber isondele kakhulu ekubukekeni kwe-phosphor eyodwa ka-1976.
+Changing width also scales height (and vice versa)	Ukushintsha ububanzi kushintsha nobude (nokuphambene)
+Edit title/subtitle here or fire it live with TAKE	Hlela isihloko/isihlokwana lapha noma usiqale bukhoma nge-TAKE
+How long the levels take to arrive; zero is a snap	Isikhathi esithathwa amazinga ukufika; u-zero ungokushesha
+Set the self-contained PIP source for this overlay	Setha umthombo we-PIP walokhu okumbozayo
+Take the newest shape or pen path out of this mask	Khipha isimo noma indlela yepeni entsha kakhulu kule maski
+Slots are self-contained sources in this first pass	Ama-slot ayimithombo ezimele kulo mjikelezo wokuqala
+Sway sideways. Depth 1 is half the frame either way	Nyakazisa ngasemaceleni. Ukujula 1 kuyingxenye yesithombe ohlangothini ngalunye
+no fixtures patched - Settings > Network > FIXTURES	azikho izibani ezixhunyiwe - Settings > Network > FIXTURES
+Add an output above, then send playlists to it here.	Engeza okuphumayo ngenhla, bese uthumela ama-playlist kukho lapha.
+An address sent to Deckboy's OSC port fires this cue	Ikheli elithunyelwe kuphothi ye-OSC ye-Deckboy liqala le cue
+Draw the diagnostic over the card, or just the text.	Dweba ukuhlola phezu kwekhadi, noma umbhalo kuphela.
+Hold on the last composite frame when the scene ends	Bamba esithombeni sokugcina esihlanganisiwe uma isigcawu siphela
+How long it takes; zero is a snap rather than a fade	Kuthatha isikhathi esingakanani; u-zero ungokushesha esikhundleni sokufiphala
+Set still/pattern/browser duration for selected cues	Setha ubude be-still/pattern/browser bama-cue akhethiwe
+Start the LTC carrier, stop it, or jam it to a value	Qala i-LTC, uyimise, noma uyivumelanise nenani
+Which cue on that deck; step off the end to clear it	Iyiphi i-cue kuleyo deck; dlula ekugcineni ukuze usule
+Bob up and down. Depth 1 is half the frame either way	Ukugxuma phezulu naphansi. Ukujula 1 kuyingxenye yesithombe ohlangothini ngalunye
+Output width in pixels | click value to type exact px	Ububanzi bokuphumayo ngamaphikseli | chofoza inani ukuthayipha
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Setha i-URL yokusakaza (srt://, rtmp://, rtsp://, udp://)
+All interfaces, but only this computer is trusted yet.	Wonke ama-interface, kodwa le khompyutha kuphela ethenjwayo okwamanje.
+Fires at this time on this computer's clock, every day	Iqala ngalesi sikhathi ewashini lale khompyutha, nsuku zonke
+Output height in pixels | click value to type exact px	Ubude bokuphumayo ngamaphikseli | chofoza inani ukuthayipha
+Bar across the foot - readable further back than digits	Ibha ngezansi - ifundeka kude kunezinombolo
+Any font on this computer, Deckboy's own, or a font file	Noma iyiphi ifonti kule khompyutha, eye-Deckboy, noma ifayela
+Every channel on every universe this session has touched	Zonke iziteshi kuwo wonke ama-universe athintwe yile seshini
+OUTPUT: drag a slice to move it, its corners to size it.	OKUPHUMAYO: hudula isiqephu ukusihambisa, amakhona aso ukulinganisa.
+Choose a Lower Third from the overlay bin to fire on TAKE	Khetha i-Lower Third emgqonyeni ukuze iqale ku-TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	Khetha i-PIP emgqonyeni ukuze iqale ku-TAKE
+Choose the legacy cue token to show inside the PIP window	Khetha ithokheni endala ye-cue ezobonakala ewindini le-PIP
+OUTPUT: drag a slice to move it, its corners to pin them.	OKUPHUMAYO: hudula isiqephu ukusihambisa, amakhona aso ukuwaphina.
+ASIO carries the show's sound, and these are not on it yet	I-ASIO ithwala umsindo wombukiso, futhi lezi azikabi kuyo
+F1-F10, F12 or the number pad fires this cue from anywhere	I-F1-F10, F12 noma iphedi yezinombolo iqala le cue noma kuphi
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=okusha  Enter/P=okwedlule  O=vula okugciniwe  E=izibonelo  L=funda
+Use transition when auto-advancing or goto-taking next cue	Sebenzisa ukushintsha uma kuqhubeka ngokuzenzakalela noma kuthathwa i-cue elandelayo
+Hand this parameter to an oscillator so it moves on its own	Nikeza le pharamitha ku-oscillator ukuze inyakaze yodwa
+Audio fade-in: follow visual fade, none, or explicit seconds	Ukungena komsindo: landela isithombe, lutho, noma imizuzwana ethile
+How long the finished drawing stays before it is drawn again	Isikhathi umdwebo ophelele uhlala ngaphambi kokudwetshwa futhi
+Audio fade-out: follow visual fade, none, or explicit seconds	Ukuphuma komsindo: landela isithombe, lutho, noma imizuzwana ethile
+How it comes on and goes off: none, fade, rise, slide or wipe	Indlela engena ngayo nephuma ngayo: lutho, ukufiphala, ukukhuphuka, ukushelela noma ukusula
+The 64-step wavetable, quantised to 6 bits like the hardware.	I-wavetable enezinyathelo ezingama-64, ilinganiswe kuma-bit angu-6 njengehadiwe.
+Add a library shape to this mask; its points are yours to move	Engeza isimo sasemtatsheni kule maski; amaphoyinti aso ungawahambisa
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	I-Art-Net noma i-sACN (E1.31): noma yikuphi okulalelwa yizibani
+No slices: this output shows its one picture. + SLICE to start.	Azikho izingxenye: lokhu okuphumayo kubonisa isithombe sakho esisodwa. + SLICE ukuqala.
+Vary tile size per cell, so the grid stops looking like a grid.	Shintsha usayizi wethayela ngeseli ngalinye, ukuze igridi ingabe isabukeka njengegridi.
+Which output channel carries the signal. 'all' feeds every one.	Isiphi isiteshi sokuphuma esithwala isignali. U-'all' ondla zonke.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Okuthunyelwayo. I-Backslash-n, -r, -t no--0 kuba yilezo zinhlamvu
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Izenzo zephrothokholi ye-Deckboy, isinye emugqeni ngamunye; u-# ungumbono
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Isivinini se-modulator njengesilinganiso senothi, ukuze ukugoba kulandele iphimbo.
+Open and close this edge on an oscillator -- a wipe that breathes	Vula uvale lo mphetho nge-oscillator -- ukusula okuphefumulayo
+Play this cue to the preview only; the outputs keep what they have	Dlala le cue ekubukeni kuqala kuphela; okuphumayo kugcina okunakho
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Beka iphimbo ku-oscillator: i-Motion X iyalishanela njenge-theremin
+A disarmed cue stays in the list and does nothing; GO steps over it	I-cue engalungisiwe ihlala ohlwini ingenzi lutho; i-GO iyayeqa
+Click a value to change it. A red address overlaps another fixture.	Chofoza inani ukulishintsha. Ikheli elibomvu ligqagqana nesinye isibani.
+Where the clock reads from this cue on; click the value to type one	Lapho iwashi lifunda khona kusukela kule cue; chofoza inani ukulithayipha
+Add a dashboard button that fires this master by name, from anywhere	Engeza inkinobho yedeshibhodi eqala le master ngegama, noma kuphi
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Umusha lapha? UKUFUNDA OKUYISISEKELO kuthatha imizuzu emihlanu. Sizokukhombisa.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	Ikheli le-IPv4, noma u-255.255.255.255 ukusakazela inethiwekhi yonke
+How much playing audio widens and brightens the pattern. 0 free-runs.	Umsindo odlalayo welula futhi ukhanyise iphethini kangakanani. U-0 uhamba ngokukhululeka.
+INPUT: the programme. Drag a crop to move it, its corners to size it.	OKUNGENAYO: uhlelo. Hudula ukusika ukukuhambisa, amakhona akho ukulinganisa.
+LED panel width in pixels - what one tile really is. Click to type it	Ububanzi bephaneli ye-LED ngamaphikseli - ithayela elilodwa ngempela. Chofoza ukuthayipha
+Which deck it acts on; step off the end for the one this cue lives on	Isebenza kuyiphi i-deck; dlula ekugcineni ukuze kube yi-deck yale cue
+only one playlist - use the routing chip on the header to add another	i-playlist eyodwa kuphela - sebenzisa i-chip yomzila esihlokweni ukwengeza enye
+Which cue this master fires on that deck; step off the end to clear it	Iyiphi i-cue le master eyiqalayo kuleyo deck; dlula ekugcineni ukuze usule
+Choose a mask from this show's library, or start a new one from a shape	Khetha imaski emtatsheni walo mbukiso, noma uqale entsha kusuka esimweni
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Dweba esiqaphini sohlelo ngegundane noma ngepeni (DRAW). I-Esc iyama
+How long the move takes, each way. 0 is instant whatever the style says	Ukunyakaza kuthatha isikhathi esingakanani, ohlangothini ngalunye. U-0 ungokushesha noma ngabe isitayela sithini
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Misa leyo deck uma i-ramp ifika - okujwayelekile ukwehlisa nokumisa
+Which of the file's sound tracks plays: a second language, a commentary	Iyiphi ingoma yomsindo efayeleni edlalayo: ulimi lwesibili, incazelo
+An oscillator on the colour: depth is how far round the wheel it travels	I-oscillator embaleni: ukujula kuyibanga elizungeza isondo
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Lungiselela le cue imisiwe ingekho emoyeni ukuze i-GO iyiqale ngaphandle kokulinda i-decoder
+Note, control change, program change, MIDI Show Control, or your own bytes	Inothi, control change, program change, MIDI Show Control, noma ama-byte akho
+Black behind the words. Zero leaves it over whatever the output already has	Okumnyama ngemuva kwamagama. U-zero uwashiya phezu kwalokho okuphumayo okunakho
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	I-modulator igoba iphimbo kangakanani. 0-63, ububanzi benzuzo yehadiwe uqobo.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	amagama le cue ewabeka esikrinini  |  Shift+Enter: umugqa omusha  |  Enter: faka
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	I-OSC ne-UDP ziyathumela bese zikhohlwa; i-TCP iyaxhuma, ngakho isebenza ngaphandle kochungechunge lombukiso
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Beka izinga ku-oscillator: i-Motion ilenza isango elivuleka uma unyakaza
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Izimpawu zinqwabelene NGENHLA kwezinhlamvu, njengezimpawu ezidlula umugqa.
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Gcina imaski njenge-PNG empunga ngosayizi wokuphumayo: okumhlophe kuyagcina, okumnyama kuyasika
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Iyiphi insimbi. Ukushintsha kuyayidlala, ukuze ikhethwe ngendlebe hhayi ngegama.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Ayikho imigqa. + ADD noma LEARN yenza owodwa; MIDIMAP RESET ibuyisa imigqa yokuqala.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Gcina izindlela zemaski njenge-SVG, ze-Illustrator nanoma yini ezifundayo
+Which MIDI output; a named port that is missing is reported rather than swapped	Isiphi i-MIDI ephumayo; iphothi eqanjiwe engekho iyabikwa, ayishintshwa
+An oscillator on the level, running after GO until a later cue sets this fixture	I-oscillator ezingeni, isebenza ngemuva kwe-GO kuze kube i-cue elandelayo isetha lesi sibani
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Izinyathelo ezingxenyeni zesithathu ze-octave, ngoba indlebe isebenza ngezilinganiso. U-1kHz uyinkambiso.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Imivimbo edwetshwe NGAPHESHEYA kweseli, ilimaza uhlamvu esikhundleni sokuluhlobisa.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Ukuthi amanothi e-MIDI angenayo adlala le synth noma aqala ama-cue njengakuqala.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Inombolo yenothi, noma thayipha LEARN bese uyidlala. Amanothi angenayo i-cue ayaya ku-cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Ipheya ye-stereo elula. Chofoza ukuvula i-matrix, kusukela kulo mzila ngqo
+Folding is what turns an arbitrary pattern into something that reads as designed.	Ukugoqa yikho okwenza iphethini engahleliwe ibukeke idizayiniwe.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Isiteshi=izinga, kuhlukaniswe ngokhefana. Namabanga: 1=255, 10-14=64. Iziteshi zibalwa kusukela ku-1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Ihambisa i-trim yayo yonke i-cue ekhethiwe nge-dB efanayo; ukuthayipha inani kuzisetha zonke kulo
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Igoba IPHIMBO le-carrier esikhundleni sokuxuba nalo. Yilokhu okwenza i-FDS ibhonge.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	Uphakathi nendawo ku-UKUFUNDA OKUYISISEKELO. Cindezela u-L siqhubeke lapho ume khona, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Dweba njengegridi yezinhlamvu enephalethi enemibala engu-16, hhayi njengamaphikseli.
+Which MIDI output this file plays to; step past the end for the first one available	Iyiphi i-MIDI ephumayo le fayela elidlalela kuyo; dlula ekugcineni kwetholakalayo yokuqala
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	Ikheli le-IPv4, noma u-255.255.255.255 weqembu le-multicast le-universe (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Chofoza iseli ukulishintsha: valiwe, gcwele, -3, -6, -12. Lo mugqa uvala i-matrix futhi
+How long each phrase stays before it moves. Zero hides them without losing the list.	Umusho ngamunye uhlala isikhathi esingakanani ngaphambi kokunyakaza. U-zero uyawafihla ngaphandle kokulahla uhlu.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Isikhathi sokwehla ngemva kokushaya. Kuzwakala kuphela uma ukushaya kabusha kuvuliwe.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Valiwe, kusukela ekuqaleni (i-cue elandelayo iqala lapho le iqala) noma ekugcineni (uma iphela)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Ubude bomugqa owodwa njengephesenti le-raster, ukuze ikhadi lifundeke ngokufanayo kunoma yisiphi isikrini
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Setha umthombo we-slot njenge-media:/indlela, browser:url, window:igama, camera:igama, noma syphon:igama
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Imodi emfushane ye-LFSR. Isikhathi sifushane ngokwanele ukuzwakala njengensimbi ecwengekile hhayi ukuhashaza.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Okumhlophe, okufudumele, okubomvu, i-amber, okuluhlaza, i-cyan, okuluhlaza okwesibhakabhaka, i-magenta. U-~ uyayizungezisa esondweni lemibala
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Shaya i-envelope futhi kaningi kanje. I-Hold ibamba inothi elilodwa, okudingwa yi-drone.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	I-Diamond iyigridi enemiphetho ebukhali ye-Atari Video Music; amasongo enza umhubhe omuhle nge-zoom yempendulo.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Ukuntenga noma ukujikeleza. Ukujula 1 kuyingxenye yokujika ohlangothini ngalunye; i-saw ku-1 iyazungeza yonke
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	Izinga lokudlala le-DECK (bukhoma, aligcinwa ne-cue) - i-trim ye-cue ngayinye iyinzuzo esigabeni se-AUDIO
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Okumile, ukungena kancane, umshini wokubhala, ukuskrola phezulu, ukukhasa noma ukushaya -- konke kuqhutshwa ukuhamba kwe-cue uqobo
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Izinkambu ngesithombe ngasinye. U-1 ungowodwa kowodwa, u-0.5 ubamba inkambu ngayinye izithombe ezimbili, u-0 uyamisa.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Okuboniswa yile cue uma idlala: i-waveform, i-scope, i-Lissajous, i-spectrum, amamitha noma ikhadi legama
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	U-0 ukhetha amathayela ngokukhanya ukuze isithombe sifundeke. U-1 ukhetha ngokungahleliwe igridi ibe ukuthungwa.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Ihamba ibanga elingakanani, ngama-semitone. Phezulu kuzwakala njengokufika, phansi njengokuhamba, u-zero inothi elishayiwe.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	Ikheli le-IPv4. Amagama awaxazululwa: ukusesha kwe-DNS kuyavimba futhi i-GO akumele ikwenze
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Ububanzi bethayela ngamaphikseli. Kumele bufane negridi yeshidi noma izingcezu ziwele kuma-sprite angomakhelwane.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Izibuko ezishintshanayo ngendawo yeseli, ezifundeka njengephethini lapho ukuphenduka okungahleliwe kufundeka njengomsindo.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	U-0 uzinamathisela eselini lazo, zifundeke njengezibaziwe. Ngaphezulu ziyaphinda zikhethwe, zifundeke njengokubila.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	I-MONO L idlala okokufaka kwesobunxele kuzo zombili izipikha: i-mic 1 kuma-interface amaningi. I-STEREO ingeyomthombo womugqa.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Isenzo sonke. LOKHU kungubude be-cue -- i-sting iyona kuphela isignali eyakhiwe lapha ephelayo.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Chofoza inani ukuthumela lesi sibani noma usishiye lapho i-cue yokugcina isibeke khona. U-~ wenza izinga liphefumule
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	I-FDS iyi-wavetable egotshwa yi-modulator. I-2A03 iyisethi ye-pulse/triangle/noise okwenziwe ngayo i-chiptune eningi.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Xuba ukuthi iyiphi i-glyph esho ukukhanya okuthile. Isethi efanayo, umbhalo ohlukile. Inembewu, ngakho ihlala injalo.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Ukuhlunga amaphikseli: imigqa yamaphikseli ihlungwe ngokukhanya emgqeni, yikho okwenza i-datamosh ibukeke incibilika.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	Amaseli angaki izimpawu ezingakhuphukela kuwo. Ziyancipha njengoba zikhuphuka, ngakho ukufinyelela okude kushiya umkhondo hhayi ukuphindeka.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue isenzo inani  -  G thatha  S yima  F phuma kancane (inani = okweshumi komzuzwana)  V ivolumu  O ukufiphala  J yeqela emugqeni
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Isisindo se-harmonic: insimbi ehlanzekile ku-zero, ithusi lapho kugcwele. Lokhu kungumehluko phakathi kwe-ping ne-fanfare.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Idlula kokungenayo kwale khompyutha. I-'Settings input' ilandela okokufaka okukhethwe ku-Settings > Audio.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Kusukela emalahleni kuya emlilweni ovuthayo. Isavuka futhi izole kunoma yiliphi izinga -- umlilo ongahambi ubukeka njengesithombe
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Iphimbo lereferensi. U-440 uyindinganiso yanamuhla, u-432 enye evamile, futhi izinsimbi ezindala zazingaphansi kakhulu.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Lapho i-sting iqala khona. Ngaphansi kwezwi ifuna ukungaphazamisi; phezu kwegumbi ifuna ukudabula.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Inzuzo yedijithali kokungenayo, -40 kuya ku-+40 dB. Setha i-preamp ye-interface kuqala; lokhu kungama-dB ambalwa okugcina.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Shaya usayizi. Uwodwa uhambisa ububanzi NOBUDE ndawonye; nikeza ubude u-~ wabo ukuze ucindezele futhi welule
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Ikhadi ligcwalisa isithombe; i-Lower Third yigama nendima, phansi esithombeni esibonakalayo, kungena futhi kuphuma
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	I-Held igcina ukususwa kokugcina esikhundleni sokukususa -- isithombe sihlala sigobile njengoba umshayeli esishiyile.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	U-12.5 no-25 bancane futhi bayakhala ngekhala, u-50 ungenalutho. U-75 uzwakala ngokufana no-25 -- ukhona ngoba ama-tracker ayabonisa.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Linganisa okuphumayo njengehadiwe. Izinyathelo ZIWUMSINDO; ukuzithambisa kwenza kube yi-synth elingisa i-chip.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Ihambisa i-trim yayo yonke i-cue ekhethiwe nge-dB efanayo, igcina umehluko phakathi kwazo; ukuthayipha inani kuzisetha zonke kulo
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Lapho amaphoyinti okuwela e-playlist ayithumela khona (Settings > Audio). Chofoza ukuvula i-matrix ngegama, kusukela kulowo mzila ngqo
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	qamba amanani nge-  d = ...;  qeda ngesisho esisodwa, noma ezintathu okubomvu okuluhlaza okwesibhakabhaka  |  Shift+Enter: umugqa omusha  |  Enter: faka
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Buyisela lokho ekuqale kukho uma i-ramp ifika (ngemva kokuma): i-deck ilungele i-cue yayo elandelayo, ukukhuphuka okudedelayo
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Iyiphi imodeli yokukhuluma eyenza amagama: isiNgisi, noma yiluphi ulimi, noma ipheya ehamba kancane enembayo. Ngayinye ilandwa kanye
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Lokho okusikwa imaski: le cue noma ngabe idlala kuphi, le playlist kokuphumayo okugxilwe kukho, isithombe sonke salokho okuphumayo, noma i-matte yakho
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Dlala ngesivinini sesikrini uma singaphakathi kuka-0.2% (59.94 ku-60): isithombe ngasinye sibonwa kanye, umsindo ukhuphuke noma wehle kuze kufike ku-3.5 cents
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Ukujika kwekota kunembile futhi kuhlala kucacile. Ukujikeleza kuthatha amasampula nge-engeli, okudabula ubuciko bamaphikseli -- ngezinye izikhathi yilokho okufunayo.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	I-take ngayinye iqala ukunyakaza ngendlela efanayo, ukuze ukubukeka okuzijwayezwe kuphindeke kungancikile ekutheni uhlelo luvulwe isikhathi esingakanani.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Okuqondisa ukutsheka ngakunye: indawo yakho, i-gradient yokukhanya kwesithombe ukuze izinhlamvu zitsheke njengesithombe, noma umbala weseli.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Qamba isiteshi noma ipheya kanye. Ama-playlist athumela egameni, ngakho i-interface ehlukile isho ukushintsha amagama lapha, hhayi i-cue ngayinye.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Chofoza iphoyinti lokuwela ukulishintsha: valiwe, 0, -3, -6, -12 dB. Lihudule eceleni ngezinga elithile. I-playlist engenalo idlala kudivayisi yayo.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Amasethi ama-sprite afakwe ku-data/sprites. Ifolda ngayinye iyisethi; ukushintsha kukhetha eyodwa bese kubuyela kulutho. Ukuchofoza kwesokudla kuyawavala.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Isixazululo sangaphakathi, u-1 omkhulu kakhulu kuya ku-5 omncane kakhulu. Lokhu kungukulawula ukubukeka njengokulawula isivinini -- ukubukeka kwe-8-bit kuvela kumaphikseli amakhulu.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	I-Picture ithatha umbala esithombeni. Okuluhlaza, i-amber ne-cyan zingama-phosphor e-terminal. I-Palette ikhiyela umbhalo kuphalethi yehadiwe ekhethiwe.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	I-SUBTLE iyazelapha (H.264). I-CLASSIC iyindlela yangempela yokugcoba (MPEG-4). I-EXTREME inkulu futhi igcoba njalo. Ukushintsha lokhu kulungisa i-cue kabusha.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	I-sine yokuqondanisa, i-pink yokulungisa i-PA, i-white yokuthola ukuhlokoma, i-sweep yokuzwa lapho igumbi likhala khona, i-identify yokuhamba kokuphumayo ngakunye.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Imiphi imiphumela, ngendawo yayo esitakini se-cue edlalwa yileyo deck lapho lokhu kuqala. Uma kungekho lutho, ukufiphala kusho kanjalo futhi akwenzi lutho
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Isithombe ngasinye sixutshwa nesilandelayo. Lesi yisiginesha ye-Hypno -- ku-0 iyijeneretha yephethini, ngaphezulu isithombe siqala ukuzondla ngokwaso.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Okubonakala ewindini lodonga lweziko: ingadi, imvula, iqhwa noma ulwandle. Igumbi elinesimo sezulu ngaphandle lifundeka njengendawo hhayi udonga
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	NGESIBANI: izibani ku-patch (Settings > Network > FIXTURES), ngegama. IZITESHI: isiteshi=izinga ngesandla. I-cue ingathwala kokubili; iziteshi zigcina
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Uhlamvu ngalunye luyantenga njengekhadi elitshekiswayo. Iseli ngalinye linesigaba salo, ngakho igridi iyaphefumula esikhundleni sokushelela njengeshidi elilodwa.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Ipeni: chofoza amakhona, hudula ama-curve, chofoza iphoyinti lokuqala ukuvala (P). Amaphoyinti: hudula, chofoza unqenqema ukwengeza, Alt-chofoza noma Delete ukususa
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Iziteshi ezintathu ze-chip. Zihlukile ngohlobo: i-triangle ayinakho ukulawula ivolumu kuhadiwe, futhi i-noise iyi-shift register hhayi i-oscillator.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Amasethi akhethiwe ezimpawu ne-emoji -- izinkanyezi, amanothi, izimbali, imicibisholo, isimo sezulu, ama-rune, ubuso. Ukukhetha esisodwa kugcwalisa ama-glyph angezansi, ahlala ehleleka.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Dlala ngekhibhodi yekhompyutha, isakhiwo se-Ableton: A W S E D F T G Y H U J, Z no-X ku-octave. Uma lokhu KUVULIWE labo khiye benza amanothi esikhundleni sokuqala ama-cue.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Ukufiphala kwe-deck, ivolumu ye-deck, i-dimmer enkulu, ukukhanya / ukuhluka / ukugcwala / umbala we-cue esebenzayo, noma inkinobho yomunye wemiphumela yayo noma imiphumela yomsindo
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Imigqa yokuskena, ukukhanya kwe-phosphor nemiphetho ye-RGB. Ukukhanya kubalulekile -- i-phosphor ichitheka eceleni, yingakho i-CRT ibukeka sengathi ikhipha ukukhanya.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Amabhande emigqa adabukile nokwahlukana kwe-RGB. Kumodi yombhalo yonakalisa nama-SELI -- imigqa yonke ikhiyeka kuhlamvu olulodwa oluphindayo, njengesikrini sombhalo sangempela silahlekelwa ukuvumelana.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	I-Still ibamba isithombe okuso. I-Flipbook idlala izithombe ngokulandelana. I-Replay idweba isithombe sokuqala umvimbo ngomvimbo, njengoba sadwetshwa, bese ibamba iqale futhi
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (yilungiselele ngaphandle kokuyiqala), Arm, Disarm, noma Devamp (i-loop iqeda umjikelezo wayo bese iyaphela); noma Stop all, Pause all, Resume all: yonke i-deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	I-Scope ibonisa isimo nokusikeka. I-Lissajous ibonisa isigaba nokubhekisa phakathi kweziteshi ezimbili zokuqala -- i-diagonal ebheke ngendlela engeyiyo isho ukuthi esinye siphendukile. I-Spectrum ingamabha engxenye yesithathu ye-octave.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	U-0 ukhetha i-glyph ecelwa ukukhanya, u-1 ukhetha noma iyiphi i-glyph esethini. Yikhuphule ukuze ubone lonke uhlamvu: uma kuhlelwe ngokuqinile ngoyinki, indawo eyisicaba ikhetha uphawu olulodwa nezinye azibonakali.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Amabhulokhi nama-dither afundeka njengobuningi; i-ASCII ramp ifundeka njengombhalo; izimpawu zifundeka njengemfucuza. Ukushintsha lokhu kusula uchungechunge lwe-glyph oluzenzele, ngoba lungalweqa -- umugqa we-preset ubuyisa olulodwa.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	I-equal temperament ithenga ukushintsha kwekhiye ngokukhululeka ngentengo yokuthi ibanga ngalinye libe nephutha elincane. I-just ne-pythagorean zihambisana ngqo kukhiye owodwa. I-Bohlen-Pierce ihlukanisa i-twelfth, ngakho ayinawo ama-octave.
+OSC	OSC
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+DECKBOY  POCKET	DECKBOY  POCKET
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+in	ngaphakathi
+Arm	Lungiselela
+TAP	THEPHA
+bar	ibha
+out	ngaphandle
+Fade	Fiphaza
+Gate	Isango
+Seam	Umthungo
+card	ikhadi
+does	yenza
+fire	qalisa
+freq	imvamisa
+knob	inkinobho
+neon	i-neon
+outs	okuphumayo
+says	ithi
+sine	i-sine
+snap	ngokushesha
+span	ububanzi
+wipe	sula
+Crawl	Khasa
+Crush	Choboza
+Moire	Moiré
+Pulse	Shaya
+Scrub	Skrabha
+Swirl	Zungeza
+WACKY	OKUHLANYAYO
+chime	insimbi
+comic	ikhomikhi
+moves	ukunyakaza
+plays	idlala
+press	cindezela
+sends	ithumela
+slide	shelela
+Bottom	Phansi
+COLOUR	UMBALA
+DARKEN	FIPHAZA
+Dimmer	I-dimmer
+Disarm	Khipha ukulungela
+Linear	Okuqondile
+Master	Inhloko
+Reverb	Ukunanela
+Wobble	Ukunyakazisa
+credit	ukubongwa
+ledger	ileja
+podium	inkundla yokukhuluma
+sticky	okunamathelayo
+survey	inhlolovo
+visual	okubonakalayo
+COMPARE	QHATHANISA
+Ease in	Ukungena kancane
+Ghastly	Okwesabekayo
+LED MAP	IMEPHU YE-LED
+LIGHTEN	KHANYISA
+Push up	Phushela phezulu
+S-curve	Ijika le-S
+Shatter	Ukuphahlazeka
+Suspend	Misa okwesikhashana
+Tilt EQ	Tsheka i-EQ
+Wipe up	Sula phezulu
+bracket	ubakaki
+eq band	ibhendi ye-eq
+inherit	zuza ifa
+marquee	umbhalo ohambayo
+pennant	ifulegi
+placard	uphawu
+routing	umzila
+sparkle	ukucwebezela
+stacked	kunqwabelene
+visuals	okubonakalayo
+Dissolve	Ncibilikisa
+END HOLD	EKUPHELENI BAMBA
+END LOOP	EKUPHELENI PHINDA
+END NEXT	EKUPHELENI OKULANDELAYO
+END STOP	EKUPHELENI YIMA
+Ease out	Ukuphuma kancane
+Low pass	Isihlungi esiphansi
+Place it	Kubeke
+SEQUENCE	UKULANDELANA
+Spectrum	I-spectrum
+TRIGGERS	IZIQALISI
+Waveform	Ukuma kwegagasi
+built in	kwakhelwe ngaphakathi
+confetti	ama-confetti
+contrast	ukuhluka
+diskette	idiskethi
+feedback	impendulo
+hairline	umugqa omncane
+listener	umlaleli
+overtime	isikhathi esengeziwe
+protocol	iphrothokholi
+sideline	umugqa ohlangothini
+Bit depth	Ukujula kwe-bit
+Composite	Okuhlanganisiwe
+High pass	Isihlungi esiphezulu
+Name Card	Ikhadi Legama
+Placement	Ukubekwa
+Push down	Phushela phansi
+Push left	Phushela kwesobunxele
+Scroll up	Skrola phezulu
+Wipe down	Sula phansi
+Wipe left	Sula kwesobunxele
+auto next	okulandelayo ngokuzenzakalela
+blueprint	ipulani
+cartridge	ikhatriji
+crossfade	ukufiphala okuwelayo
+crosshair	isiphambano sokuhlosa
+dotmatrix	i-dotmatrix
+equalizer	i-equalizer
+even grid	igridi elinganayo
+hold last	bamba okokugcina
+they have	banakho
+this deck	le deck
+tolerance	ukubekezelela
+Compressor	I-compressor
+Corner pin	Iphini lekhona
+Crosshatch	Imigqa ewelanayo
+Fade+Pause	Fiphaza+Ikhefu
+Frame lock	Ukukhiya isithombe
+HDR signal	Isignali ye-HDR
+NDI Source	Umthombo we-NDI
+Push right	Phushela kwesokudla
+Typewriter	Umshini wokubhala
+Wipe right	Sula kwesokudla
+hold {n} s	bamba {n} s
+knob 0-127	inkinobho 0-127
+safe areas	izindawo eziphephile
+saturation	ukugcwala kombala
+scoreboard	ibhodi lamaphuzu
+tile width	ububanzi bethayela
+Auto-follow	Landela ngokuzenzakalela
+Bar opacity	Ukufiphala kwebha
+Browser Cue	I-cue yesiphequluli
+Deck volume	Ivolumu ye-deck
+Fade+Rewind	Fiphaza+Hlehlisa
+Output mask	Imaski yokuphumayo
+Outputs Off	Okuphumayo kuvaliwe
+Raster mode	Imodi ye-raster
+Toggle loop	Vula/vala i-loop
+Video Synth	I-synth yevidiyo
+audio meter	imitha yomsindo
+goto target	okuhlosiwe kwe-goto
+on the desk	edeskini
+tile height	ubude bethayela
+(no monitor)	(ayikho isiqaphi)
+Checkerboard	Ibhodi le-checkers
+Cue contrast	Ukuhluka kwe-cue
+Deck opacity	Ukufiphala kwe-deck
+Dimmer + RGB	I-dimmer + RGB
+Dip to black	Cwilisa kokumnyama
+Dip to white	Cwilisa kokumhlophe
+Level Meters	Amamitha ezinga
+Matte aspect	Isimo se-matte
+Oscilloscope	I-oscilloscope
+Refresh rate	Isivinini sokuvuselela
+clear driver	sula umshayeli
+rounded rect	unxande oyindilinga
+Auto-continue	Qhubeka ngokuzenzakalela
+Camera Source	Umthombo wekhamera
+Fade+LoadNext	Fiphaza+Layisha okulandelayo
+J jump to row	J yeqela emugqeni
+Master dimmer	I-dimmer enkulu
+Overlay image	Isithombe esimbozayo
+Overlay still	Isithombe esimile esimbozayo
+Recent shows:	Imibukiso yakamuva:
+Run the clock	Qalisa iwashi
+Window Source	Umthombo wewindi
+one named cue	i-cue eyodwa eqanjiwe
+starting xvfb	kuqala i-xvfb
+Cue brightness	Ukukhanya kwe-cue
+Cue saturation	Ukugcwala kwe-cue
+DeckLink Input	Okungenayo kwe-DeckLink
+Default Camera	Ikhamera yokuzenzakalela
+Toggle fade in	Vula/vala ukungena kancane
+fill the frame	gcwalisa isithombe
+tone cue added	i-cue yethoni yengeziwe
+Do not continue	Ungaqhubeki
+Overlay opacity	Ukufiphala kokumbozayo
+SDR material at	Okokufaka kwe-SDR ku-
+Toggle fade out	Vula/vala ukuphuma kancane
+decoder spin-up	ukuqala kwe-decoder
+endless encoder	i-encoder engapheli
+press + release	cindezela + dedela
+slide from left	shelela kusuka kwesobunxele
++ ONE AFTER THIS	+ EYODWA NGEMVA KWALE
+2 · WHAT IT RUNS	2 · OKUSEBENZAYO
+An effect's knob	Inkinobho yomphumela
+Default App Feed	Okungenayo kohlelo okuzenzakalelayo
+GO steps over it	I-GO iyayeqa
+Hardware display	Isibonisi sehadiwe
+ONE PER PLAYLIST	EYODWA NGE-PLAYLIST NGAYINYE
+Speed, like tape	Isivinini, njengetheyiphu
+Toggle cue audio	Vula/vala umsindo we-cue
+import an SVG...	ngenisa i-SVG...
+slide from right	shelela kusuka kwesokudla
+source cue added	i-cue yomthombo yengeziwe
+starting browser	kuqala isiphequluli
+starting capture	kuqala ukuthwebula
+the selected cue	i-cue ekhethiwe
+- REMOVE THIS ONE	- SUSA LENA
+1 · WHAT COMES IN	1 · OKUNGENAYO
+Pocket Test (day)	Ukuhlolwa kwe-Pocket (emini)
+browser cue added	i-cue yesiphequluli yengeziwe
+or your own bytes	noma ama-byte akho
+this cue lives on	le cue ihlala ku-
+value to type one	inani ukuthayipha elilodwa
+System audio (SDL)	Umsindo wesistimu (SDL)
+Transition to next	Shintshela kokulandelayo
+When taken off air	Uma kususwa emoyeni
+output already has	okuphumayo sekunakho
+restart driver now	qala kabusha umshayeli manje
+3 · WHAT IT RUNS ON	3 · LAPHO KUSEBENZA KHONA
+Dark Detail (0-12%)	Imininingwane emnyama (0-12%)
+Frame Count (emoji)	Isibali sezithombe (i-emoji)
+PLUGE (black level)	PLUGE (izinga elimnyama)
+Pocket Test (night)	Ukuhlolwa kwe-Pocket (ebusuku)
+Pocket Test (storm)	Ukuhlolwa kwe-Pocket (isiphepho)
+Previous show file:	Ifayela lombukiso wangaphambili:
+Syphon/Spout Source	Umthombo we-Syphon/Spout
+rise, slide or wipe	khuphuka, shelela noma sula
+Dimmer + temperature	I-dimmer + izinga lokushisa
+Panel Map (animated)	Imephu yamaphaneli (enyakazayo)
+Pocket Test (sunset)	Ukuhlolwa kwe-Pocket (ukushona kwelanga)
+initializing webview	kuqala i-webview
+Boresight (alignment)	Ukuqondisa (ukuqondanisa)
+Not watching a folder	Ayibukeli ifolda
+SMPTE 75% Colour Bars	Amabha emibala e-SMPTE 75%
+line  |  Enter: apply	umugqa  |  Enter: faka
+An audio effect's knob	Inkinobho yomphumela womsindo
+Multiburst (bandwidth)	I-multiburst (umkhawulokudonsa)
+(default system device)	(idivayisi yesistimu ezenzakalelayo)
+Convergence (fine grid)	Ukuhlangana (igridi ecolekile)
+Greyscale Steps (gamma)	Izinyathelo zokumpunga (i-gamma)
+K — cycle cue color tag	K — shintsha ithegi yombala we-cue
+whatever the style says	noma yini isitayela esishoyo
+Uniformity (flat fields)	Ukufana (izinkambu eziyisicaba)
+runs off the show thread	isebenza ngaphandle kochungechunge lombukiso
+Open a .deckboy show file	Vula ifayela lombukiso le-.deckboy
+Toggle hold on last frame	Vula/vala ukubamba esithombeni sokugcina
+from exactly this routing	kusukela kulo mzila ngqo
+~ makes the level breathe	u-~ wenza izinga liphefumule
+CLEAR OVERLAY  [Backspace]	SULA OKUMBOZAYO  [Backspace]
+Stop puppeteering this cue	Yeka ukulawula le cue
+Test Clock (sync + latency)	Iwashi lokuhlola (ukuvumelanisa + ukulibala)
+auto (reads the common two)	okuzenzakalelayo (kufunda okubili okuvamile)
+one big, the rest beside it	okukhulu kukodwa, okunye eceleni
+Panel Map (LED tile numbers)	Imephu yamaphaneli (izinombolo zamathayela e-LED)
+Portal (blobs of deep space)	I-portal (amabhamuza omkhathi ojulile)
+Set cue ID for selected cues	Setha i-ID ye-cue kuma-cue akhethiwe
+Terrarium (living ecosystem)	I-terrarium (uhlelo lwemvelo oluphilayo)
+Window 10% (peak brightness)	Iwindi 10% (ukukhanya okuphezulu)
+Window 50% (peak at mid APL)	Iwindi 50% (okuphezulu ku-APL ephakathi)
+on the header to add another	esihlokweni ukuze wengeze enye
+reads the same on any screen	kufundeka ngendlela efanayo kunoma yisiphi isikrini
+reported rather than swapped	kuyabikwa esikhundleni sokushintshwa
+Frame Count (drops + latency)	Isibali sezithombe (okulahlekile + ukulibala)
+Terrarium Pico (1px per cell)	I-terrarium Pico (1px iseli ngalinye)
+Banding Ramps (real bit depth)	Ama-ramp e-banding (ukujula kwe-bit kwangempela)
+Fireside (a hearth that burns)	Eziko (umlilo ovuthayo)
+Nothing to see here. Probably.	Akukho okubonwayo lapha. Mhlawumbe.
+Test Bars (motion diagnostics)	Amabha okuhlola (ukuhlola ukunyakaza)
+What fires this cue besides GO	Yini eqala le cue ngaphandle kwe-GO
+on air in the focused playlist	bukhoma ku-playlist egxilwe kuyo
+one big on top, the rest below	okukodwa okukhulu phezulu, okunye ngezansi
+row turns the matrix off again	umugqa uvala i-matrix futhi
+two big on top, the rest below	okukhulu okubili phezulu, okunye ngezansi
+SOS. Kidding. The show is fine.	SOS. Ngiyadlala. Umbukiso uhamba kahle.
+Test: move it on the controller	Hlola: kunyakazise esilawulini
+walk the outputs one at a time.	hamba kokuphumayo ngakunye.
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (ingabe kukhona okulinganiswayo?)
+Set short cue id for search/goto	Setha i-ID emfushane ye-cue yokusesha/goto
+Set goto target for selected cues	Setha okuhlosiwe kwe-goto kuma-cue akhethiwe
+ORDER - cues advance down the list	ORDER - ama-cue ahamba phansi ohlwini
+depth 1 turns it all the way round	ukujula 1 kuyiphendula yonke indlela
+load a sprite sheet from a file...	layisha ishidi lama-sprite efayeleni...
+EDIT is on: typing changes the show	I-EDIT ivuliwe: ukuthayipha kushintsha umbukiso
+0-63, the hardware's own gain range.	0-63, ububanzi benzuzo yehadiwe.
+Pocket Test (test card + scene cycle)	Ukuhlolwa kwe-Pocket (ikhadi lokuhlola + umjikelezo wezigcawu)
+all driven by the cue's own transport	konke kuqhutshwa ukuhamba kwe-cue uqobo
+Set cue token to jump to when cue ends	Setha ithokheni ye-cue okuzoyelwa kuyo uma i-cue iphela
+Jump the driver back to its first frame	Buyisela umshayeli esithombeni sakhe sokuqala
+Play the out move now, then take it off	Dlala ukuphuma manje, bese ukususa
+Clear the active Lower Third overlay now	Sula i-Lower Third esebenzayo manje
+Critters (pixel-exact scaling, animated)	I-Critters (ukulinganisa okuqondile kwamaphikseli, kunyakaza)
+the selected cue in the focused playlist	i-cue ekhethiwe ku-playlist egxilwe kuyo
+that output's whole picture, or its matte	isithombe sonke salokho okuphumayo, noma i-matte yakho
+Lissajous, spectrum, meters or a name card	I-Lissajous, i-spectrum, amamitha noma ikhadi legama
+SHUFFLE - the next cue is picked at random	SHUFFLE - i-cue elandelayo ikhethwa ngokungahleliwe
+Ancient cypher, modern video desk. Respect.	Imfihlo yasendulo, idesiki yevidiyo yesimanje. Inhlonipho.
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S - bhala umbukiso efayeleni ELISHA
+Ctrl+S - write back over the show that is open	Ctrl+S - bhala phezu kombukiso ovuliwe
+Read everything right to left. Yes, everything.	Funda konke kusuka kwesokudla kuya kwesobunxele. Yebo, konke.
+Greetings, primitive. Your "slideshow" amuses us.	Sawubona, wena wakudala. "Ukubonisa izithombe" kwakho kuyasijabulisa.
+What this cue does when it ends - click to change	Lokho le cue ekwenzayo uma iphela - chofoza ukushintsha
+LEARN: move a knob or press a key on the controller...	LEARN: nyakazisa inkinobho noma cindezela ukhiye esilawulini...
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Umsindo we-cue ngayinye: vula, i-trim, i-pan, i-mono, ukufiphala, ukulinganisa
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	Okokufaka kwe-MIDI kuvaliwe: kuvule ku-MIDI CONTROL. Imigqa ye-OSC isaphendula.
+MIX	UKUXUBA
+pan	i-pan
+pop	i-pop
+gain	inzuzo
+logo	ilogo
+rail	ujantshi
+trim	i-trim
+index	inkomba
+trans	ukushintsha
+arcade	i-arcade
+plugin	i-plugin
+ticket	ithikithi
+TRACKER	UMLANDELELI
+capsule	i-capsule
+circuit	isekhethi
+dossier	ifayela
+palette	iphalethi
+bulletin	isaziso
+cassette	ikhasethi
+dateline	usuku
+terminal	i-terminal
+programme	uhlelo
+Perspective	Umbono
+Motion: Bug Swat	Ukunyakaza: Bug Swat
+, — skip to previous cue	, — yeqela ku-cue edlule
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  ayenzi lutho kuleyo playlist  -  (M) i-playlist yesinyathelo uqobo
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	U--18 dBFS ukuqondanisa kwe-EBU, u--20 owe-SMPTE. Kukhawulelwe ngaphansi kuka-0: lokhu kondla i-PA ebukhoma.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  ayenzi lutho kuleyo playlist  -  (M) i-playlist yesinyathelo uqobo  -  I-EDIT ivuliwe: ukuthayipha kushintsha umbukiso
+RTMPS	RTMPS
+TA-DA	TA-DA
+14-bit	14-bit
+Binaural	Binaural
+cue "{n}"	cue "{n}"
+NDI® NETWORK	NDI® NETWORK
+Syphon / Spout	Syphon / Spout
+29.97 fps (NTSC)	29.97 fps (NTSC)
+deck	deck
+PATCH	PATCH
+lower 3rd	lower 3rd
+Lower Third	Lower Third
+Bork bork BORK!	Bork bork BORK!
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+SELECT DECK 2	KHETHA I-DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Manje chofoza ithebhu yayo, i-Deck 2. I-playlist entsha ayikhethiwe uze uyichofoze.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Ithebhu ekhanyayo yilapho u-UMTHOMBO ubeka khona izinto. Yeqa lokhu bese uyinki iwela ngaphansi kwe-synth.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	Uyayibona leyo thebhu? Yichofoze. Manje usu-Deck 2. BHUM. Izisekelo.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Chofoza ithebhu yayo, i-Deck 2. Ithebhu ekhanyayo yi-playlist u-UMTHOMBO angeza kuyo.
+Skip this and the words go under the map. With the lizard.	Yeqa lokhu bese amagama aya ngaphansi kwemephu. Kanye nesibankwa.
+Nine years of live weather. Always click the tab.	Iminyaka eyisishiyagalolunye yesimo sezulu bukhoma. Hlala uchofoza ithebhu.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Chofoza ithebhu yayo, i-Deck 2. I-playlist entsha ilinda uze uyikhethe.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Ithebhu ekhanyayo ithola i-cue elandelayo. Njengokukhetha ukuthi yisiphi isilayidi esingena kuprojektha.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Khetha iphakethe. Noma yiliphi. ...Deck 2. Khetha i-Deck 2.
+Timecode	Ikhodi yesikhathi
+PHASE	ISIGABA
+MENU	IMENYU
+VOLUME	IVOLUMU
++ step	+ isinyathelo
+< BACK	< EMUVA
+ATEM switcher	Isixubi se-ATEM
+ATEM tally	I-tally ye-ATEM
+AUDIO: DEFAULT	UMSINDO: OKUJWAYELEKILE
+Animated GIF	I-GIF enyakazayo
+Arrows	Imicibisholo
+CLICKER	ISICHOFOZI
+Copyright	Ilungelo lobunikazi
+DEST...	INDAWO...
+Datamosh - classic	Datamosh – esidala
+Datamosh - extreme	Datamosh – eweqile
+Datamosh - subtle	Datamosh – encane
+Deckboy is input	I-Deckboy iyinto efakwayo
+Device: None	Idivayisi: ayikho
+Drag	Hudula
+Drop media here	Lahla imidiya lapha
+Enter Take  Space Play/Pause	Enter Take  Space Dlala/Misa kancane
+FFmpeg / libav  (in-process)	FFmpeg / libav  (ngaphakathi kwenqubo)
+FPS: SOURCE	FPS: UMTHOMBO
+Fonts	Amafonti
+Free software. You may use, study, share	Isofthiwe yamahhala. Ungayisebenzisa, uyifunde,
+GO / BACK	GO / EMUVA
+GO / BACK (clicker)	GO / EMUVA (isichofozi)
+Key out: None - fill only	Ukuphuma kwe-key: akukho – i-fill kuphela
+LTC in	Okungenayo kwe-LTC
+Licence	Ilayisensi
+MATCH SOURCE	NJENGOMTHOMBO
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> ukudlala
+MOSH: SUBTLE	MOSH: ENCANE
+MSC Trigger -> cue by id	MSC Trigger -> i-cue nge-id
+MTC in	Okungenayo kwe-MTC
+Mode: CALLER	Indlela: CALLER
+NDI receiver	Isamukeli se-NDI
+NDI trigger	Isiqalisi se-NDI
+NO STEPS YET	AKUKABI NEZINYATHELO
+No PTP lock, wide-model pacing - will not genlock to plant sources	Akukho kukhiya kwe-PTP, isikhathi esilinganiselwe – ngeke kwenze i-genlock nemithombo yesitudiyo
+ONCE  |  ORDER	KANYE  |  UKUHLELEKA
+Optional	Okuzikhethela
+PNG sequence	Uchungechunge lwe-PNG
+Platform	Inkundla
+Press A to take cue	Cindezela u-A ukuze uthathe i-cue
+RATE: AUTO	IZINGA: AUTO
+S Stop   C Clear   Esc Panic	S Misa   C Sula   Esc Ingozi
+SIZE: SOURCE	USAYIZI: UMTHOMBO
+SPOUT TEXTURE SHARE	UKWABELANA NGOKWAKHIWA KWE-SPOUT
+Session	Iseshini
+TSL tally out	Ukuphuma kwe-tally ye-TSL
+Thanks	Siyabonga
+Timecode chase	Landela i-timecode
+Timecode run	Gijimisa i-timecode
+Toolkit	Ithuluzi
+Trigger	Qalisa
+WAV (audio only)	WAV (umsindo kuphela)
+Warranty	Iwaranti
+address...	ikheli...
+and modify it; derivatives stay GPL.	wabelane ngayo futhi uyiguqule; okuthathwe kuyo kuhlala kuyi-GPL.
+clear the cell	sula iseli
+companion ping	i-ping ye-Companion
+fire this row	qalisa lo mugqa
+insert a row	faka umugqa
+live lane  |  I/O set trim  |  click or drag to seek	umzila obukhoma  |  I/O isetha ukusika  |  chofoza noma hudula ukuze useshe
+media in	imidiya ingene
+move the cursor	hambisa ikhesa
+mute / solo a column	thulisa / solo ikholomu
+off -- edit on monitor	kuvaliwe -- hlela kumonitha
+off: no camera is open. Drag on the picture to draw a zone.	kuvaliwe: ayikho ikhamera evuliwe. Hudula esithombeni ukuze udwebe indawo.
+open the code editor	vula umhleli wekhodi
+play / stop	dlala / misa
+stop, fade, vol, opacity	misa, fiphala, umsindo, i-opacity
+the FFmpeg, SDL and FreeType projects,	amaphrojekthi e-FFmpeg, SDL ne-FreeType,
+Bitfocus Companion, and x42/libltc.	i-Bitfocus Companion, ne-x42/libltc.
+Keys	Okhiye
+None. See LICENSE sections 15-16.	Ayikho. Bheka i-LICENSE, izigaba 15-16.
+none compiled in	akukho okuhlanganisiwe
+Alpha	I-Alpha
+Group	Iqembu
+Normal	Okuvamile
+Remote	Okukude
+lesson	isifundo
+Bitrate	I-bitrate
+Latency	Ukubambezeleka
+OUT {n}	OKUPHUMAYO {n}
+Out {n}	Okuphumayo {n}
+{n} row	umugqa ongu-{n}
+Deck {n}	I-deck {n}
+Key name	Igama lenkinobho
+Keyframe	Ifreyimu eyinhloko
+Registry	I-registry
+fade {n}	fiphaza {n}
+{n} rows	imigqa engu-{n}
+Node port	Imbobo ye-node
+Stream ID	I-ID yokusakaza
+added {1}	kungeziwe {1}
+start {n}	qala {n}
+still {n}	isithombe {n}
+FADE {n} s	FIPHAZA {n} s
+LAYER {n}%	UNGQIMBA {n}%
+Output {n}	Okuphumayo {n}
+PROXY {n}p	IPROKSI {n}p
+PTP domain	Isizinda se-PTP
+Proxy {n}p	Iproksi {n}p
+Stream key	Ukhiye wokusakaza
+[ASSIGNED]	[KUNIKEZIWE]
+audio only	umsindo kuphela
+to Out {n}	kuya ku-Okuphumayo {n}
+{n} of {n}	{n} kwangu-{n}
+Display {n}	Isibonisi {n}
+active jobs	imisebenzi esebenzayo
+local clock	iwashi lendawo
+not running	ayisebenzi
+click to set	chofoza ukuze usethe
+full {n}x{n}	gcwele {n}x{n}
+running v{n}	iyasebenza v{n}
+the other one	enye
+DELIVERY H.{n}	UKULETHWA H.{n}
+Output {n} mix	Ukuxuba kokuphumayo {n}
+made by Deckboy	yenziwe yi-Deckboy
+{1} plays to {2}	{1} idlala ku-{2}
+the picture {1} plays	isithombe esidlalwa ngu-{1}
+New media joins {1} by itself	Imidiya emisha ijoyina {1} ngokwayo
+Press Win+P and choose Extend	Cindezela Win+P bese ukhetha Yandisa
+{n} patched - DMX cues set them by name	{n} kuxhunyiwe - ama-cue e-DMX azisetha ngegama
+Set them to extend in your display settings	Zisethe ukuthi zandise kuzilungiselelo zesibonisi sakho
+lesson: {1}. Esc leaves, and it picks up here next time	isifundo: {1}. I-Esc iyaphuma, ngokuzayo iqhubeka lapha
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Iphendula i-ATEM Software Control njenge-deck ku-TCP 9993 ku-{1}
+In System Settings > Displays, use it as an extended display	Ku-Izilungiselelo Zesistimu > Izibonisi, yisebenzise njengesibonisi esandisiwe
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Kudle ideski, skapi. Unezikrini ezingu-{1}: i-ISIBONISI sokuphumayo ku-IMENYU siyibeka kwesinye.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Kudle ideski, skapi. Unezikrini ezimbili: i-ISIBONISI sokuphumayo ku-IMENYU siyibeka kwesinye.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Izikrini ezingu-{1}, skapi. Ideski lihlala kulesi, isithombe siya ku-{2}. Vula IMENYU bese wenza OKUPHUMAYO KUVALIWE kuthi OKUPHUMAYO KUVULIWE.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Izikrini ezimbili, skapi. Ideski lihlala kulesi, isithombe siya kwesinye: {1}. Vula IMENYU bese wenza OKUPHUMAYO KUVALIWE kuthi OKUPHUMAYO KUVULIWE.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Kudle ideski, skapi. Izikrini ezikopishanayo zibonisa isithombe kuzo zombili, ngakho ngisibeke ewindini elincane, ngemuva. {1}, futhi sizothola isikrini saso.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Izikrini zakho ziyakopishana, skapi: {1} ibonisa okuboniswa yilesi, ngakho isithombe sizomboza ideski kuzo zombili. {2}, futhi ngizobeka isithombe esikrinini saso. Noma vula IMENYU bese wenza OKUPHUMAYO KUVALIWE kuthi OKUPHUMAYO KUVULIWE.

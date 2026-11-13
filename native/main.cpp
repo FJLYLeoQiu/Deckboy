@@ -1,0 +1,14401 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Deckboy Contributors
+// This file is part of Deckboy, a cue deck for live events.
+// See LICENSE for details.
+
+// ============================================================================
+// main.cpp — Deckboy application entry point and monolithic App class.
+//
+// This is the largest file in the codebase (~5300 lines) and contains:
+//
+//   1. Free-standing helper functions (lines ~100–3450):
+//      - Windows-specific utilities (UTF-8 conversion, icon loading)
+//      - UI text helpers (ellipsize, cue kind labels, timecode formatting)
+//      - OSC protocol parser and query server
+//      - Network master clock (NMC) sync packet handling
+//      - ATEM tally/trigger protocol parser
+//      - Art-Net DMX packet handling
+//      - Project serialization helpers (escape/unescape tab-delimited fields)
+//      - Audio waveform peak analysis
+//      - Runtime structs: OutputRuntime, DeckRuntime, PipOverlayRuntime
+//
+//   2. class App (line ~3453 onward):
+//      - SDL window/renderer lifecycle (init, run, shutdown)
+//      - Main loop: event pump → update → render → present
+//      - Project state (load/save .deckboy files)
+//      - Multi-deck management with output routing
+//      - Integration thread management (ATEM, NDI trigger, NMC, MTC, LTC, Art-Net)
+//      - .ipp file includes for modular organization of App methods:
+//          app_smoke.ipp        — startup self-test / smoke test
+//          app_accessors.ipp    — getters for deck/cue/output state
+//          app_network.ipp      — OSC server, Companion integration
+//          app_output_mgmt.ipp  — output window lifecycle, stream writer
+//          app_project_state.ipp — save/load project, import/export
+//          app_remote_command.ipp — remote command handler (OSC, Companion)
+//          app_update.ipp       — per-frame update logic
+//          app_overlays.ipp     — lower-third overlay management
+//          app_render_control.ipp — transport control panel rendering
+//          app_render_main.ipp  — main control window rendering
+//          app_geometry.ipp     — cue/output geometry calculations
+//          app_render_output.ipp — output window compositor + NDI/DeckLink
+//          app_ui_widgets.ipp   — reusable UI widget functions
+//          app_render_settings.ipp — settings modal dialog rendering
+//          app_input.ipp        — keyboard/mouse input handling
+//          app_cue_transport.ipp — cue playback transport (play/stop/seek)
+//          app_quick_action.ipp — quick-action command palette
+//          app_cue_mgmt.ipp     — cue list management (add/remove/reorder)
+//
+//   3. main() / WinMain() entry points (line ~5315)
+//
+// Threading model:
+//   Main thread: SDL event loop, UI rendering, settings, cue management
+//   Per-deck: video decode thread, audio decode thread (in MediaEngine)
+//   Per-output: stream writer thread (ffmpeg pipe)
+//   Integration: ATEM, NDI trigger, NMC, MTC, LTC, Art-Net threads
+//   OSC server: listener thread for incoming OSC/Companion messages
+// ============================================================================
+
+#include "core/sdl_compat.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
+#ifdef _WIN32
+#endif
+
+#include "core/constants.hpp"
+#include "core/show_control.hpp"
+#include "core/midi_map.hpp"
+#include "core/bugswat.hpp"
+#include "core/types.hpp"
+#include "core/output_runtime.hpp"
+#include "core/scopes.hpp"
+#include "platform/mac_audio_default.hpp"
+#include "platform/mac_output_level.hpp"
+#include "platform/mac_vblank.hpp"
+#include "platform/window_icon.hpp"
+#include "core/deck_audio_ring.hpp"
+#include "core/mtc_decode.hpp"
+#include "core/utils.hpp"
+#include "core/media_probe.hpp"
+#include "core/watch_folder.hpp"
+#include "deckboy_version.hpp"
+#include "core/paths.hpp"
+#include "core/subprocess.hpp"
+#include "core/palette.hpp"
+#include "core/expression_parser.hpp"
+#include "core/single_instance_guard.hpp"
+#include "core/cue_helpers.hpp"
+#include "core/pixel_effects.hpp"
+#include "core/pattern_helpers.hpp"
+#include "core/lava_lamp.hpp"
+#include "core/code_source.hpp"
+#include "core/creatures.hpp"
+#include "core/io_utils.hpp"
+#include "core/subtitle_parser.hpp"
+#include "core/caption_formats.hpp"
+#include "core/captioning.hpp"
+#include "core/live_captions.hpp"
+#include "core/hdr_to_sdr.hpp"
+#include "core/test_card.hpp"
+#include "core/system_browser.hpp"
+#include "engine/media_engine.hpp"
+#include "engine/stage_timings.hpp"
+#include "engine/hap_decoder.hpp"
+#include "engine/gpu_readback.hpp"
+#include "engine/gpu_scopes.hpp"
+#include "engine/motion_field.hpp"
+#include "platform/capture_backend.hpp"
+#include "platform/display_topology.hpp"
+#include "platform/audio_plugin.hpp"
+#include "platform/dynamic_library.hpp"
+#include "platform/ltc_api.hpp"
+#include "platform/midi.hpp"
+#include "platform/ndi_api.hpp"
+#include "platform/ndi_trigger_api.hpp"
+#include "platform/network.hpp"
+// JPEG for the web monitor. Vendored (public domain, v1.16) so every platform
+// has the same encoder and nothing depends on a library being installed. Its
+// own warnings are not ours to fix, and the warnings audit fails the build on
+// them, so they are silenced for this header alone.
+#if defined(_MSC_VER)
+#pragma warning(push, 0)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+#define STB_IMAGE_WRITE_STATIC
+#define STBI_WRITE_NO_STDIO
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "third_party/stb_image_write.h"
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+#include "platform/nmc_sync.hpp"
+#include "platform/artnet_bridge.hpp"
+#include "platform/atem.hpp"
+#include "platform/integration_backend.hpp"
+#include "platform/output_backend.hpp"
+#include "platform/browser.hpp"
+#include "platform/pdf_import.hpp"
+#include "platform/screen_colour.hpp"
+#include "core/named_colours.hpp"
+#include "core/system_fonts.hpp"
+#include "platform/decklink.hpp"
+#include "platform/siphon_spout.hpp"
+#include "platform/st2110_output.hpp"
+#include "platform/ptp_client.hpp"
+#include "platform/asio_audio.hpp"
+#include "core/i18n.hpp"
+#include "platform/nmos_node.hpp"
+#include "render/primitives.hpp"
+#include "render/font_fallbacks.hpp"
+#include "render/text_shaper.hpp"
+#include "extras/upstream/qrcodegen/qrcodegen.hpp"
+#include "render/layout.hpp"
+#include "render/texture_helpers.hpp"
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <condition_variable>
+#include <cctype>
+#include <cerrno>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <deque>
+#include "core/fs.hpp"
+#include <fstream>
+#include <functional>
+#include <future>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <unordered_map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <random>
+#include <sstream>
+#include <set>
+#include <string>
+#include <system_error>
+#include <string_view>
+#include <thread>
+#include <type_traits>
+#include <unordered_set>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#ifndef _WIN32
+#include <arpa/inet.h>
+#include <dlfcn.h>
+#include <execinfo.h>  // backtrace / backtrace_symbols_fd in deckboyPosixCrashHandler
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#else
+#include <io.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <psapi.h>  // K32GetProcessMemoryInfo — soak-mode RSS logging
+#include <shellapi.h>
+#include <objbase.h>
+#include <dbghelp.h>  // symbolised stack in deckboyCrashHandler
+#pragma comment(lib, "dbghelp.lib")
+#endif
+
+#if defined(DECKBOY_HAS_NDI_SDK)
+#include <Processing.NDI.Lib.h>
+#endif
+
+#if defined(DECKBOY_HAS_ALSA)
+#include <alsa/asoundlib.h>
+#endif
+
+namespace fs = dbfs;
+
+using deckboy::core::Paths;
+
+// ════════════════════════════════════════════════════════════════════════════
+// Anonymous namespace: free-standing helpers, constants, and runtime structs
+// used by the App class. Everything here is file-local.
+// ════════════════════════════════════════════════════════════════════════════
+namespace {
+  using deckboy::render::Primitives;
+  using deckboy::platform::browser::BrowserStartPhase;
+  using namespace deckboy::core::utils;
+  using namespace deckboy::core::media;
+
+// ── Audio and network constants ─────────────────────────────────────────────
+constexpr SDL_AudioFormat kAudioFormat = SDL_AUDIO_S16;           // SDL audio format: signed 16-bit native endian
+constexpr int kDefaultAtemBridgePort = 9910;             // ATEM switcher default UDP port
+constexpr int kDefaultArtNetPort = 6454;                 // Art-Net default UDP port (IANA registered)
+constexpr int kDefaultNmcSyncPort = 51010;               // Network master clock sync port
+constexpr int kDefaultNmcLocateIntervalMs = 250;         // NMC peer discovery interval
+const fs::path kUiPackRelativePathV3 = fs::path("ui") / "deckboy_ui_pack_v3";  // UI font/asset pack path
+const fs::path kUiPackRelativePathV2 = fs::path("ui") / "deckboy_ui_pack_v2";  // Legacy UI pack path
+
+std::atomic<bool> gShouldQuit = false;  // Global quit flag (set by signal handlers)
+// The thread that creates the windows and does all the drawing. Recorded so a
+// crash report can say whether the fault was on it.
+std::atomic<unsigned long> gMainThreadId {0};
+
+// ── Version and platform utilities ──────────────────────────────────────────
+
+void printDeckboyVersion(std::ostream& out) {
+  out << "Deckboy " << deckboy::core::version::kVersionTag << '\n';
+}
+
+#ifdef _WIN32
+// Convert a Windows wide string (UTF-16) to a UTF-8 std::string.
+// Used for command-line argument conversion on Windows (WinMain receives wchar_t*).
+std::string utf8FromWide(const wchar_t* text) {
+  if (!text || !*text) {
+    return {};
+  }
+  int needed = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+  if (needed <= 1) {
+    return {};
+  }
+  std::string utf8(static_cast<size_t>(needed), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8.data(), needed, nullptr, nullptr);
+  utf8.pop_back();
+  return utf8;
+}
+
+// Parse the Windows command line into UTF-8 arguments (replaces argv from WinMain).
+std::vector<std::string> windowsCommandLineArgsUtf8() {
+  int argc = 0;
+  LPWSTR* argvWide = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (!argvWide || argc <= 0) {
+    if (argvWide) {
+      LocalFree(argvWide);
+    }
+    return {};
+  }
+
+  std::vector<std::string> args;
+  args.reserve(static_cast<size_t>(argc));
+  for (int i = 0; i < argc; ++i) {
+    args.push_back(utf8FromWide(argvWide[i]));
+  }
+  LocalFree(argvWide);
+  return args;
+}
+
+// Load the Deckboy app icon from the embedded Windows resource at the given size.
+HICON loadDeckboyAppIconHandle(int width, int height) {
+  HINSTANCE instance = GetModuleHandleW(nullptr);
+  if (!instance) {
+    return nullptr;
+  }
+  return static_cast<HICON>(LoadImageW(
+    instance,
+    L"IDI_DECKBOY_APP_ICON",
+    IMAGE_ICON,
+    width,
+    height,
+    LR_DEFAULTCOLOR));
+}
+
+// Set the Deckboy icon on an SDL window via Windows WM_SETICON messages.
+// Loads both large (taskbar) and small (title bar) icon sizes from resources.
+void applyDeckboyWindowIcon(SDL_Window* window) {
+  if (!window) {
+    return;
+  }
+  HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
+    SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+  if (!hwnd) {
+    return;
+  }
+  HICON bigIcon = loadDeckboyAppIconHandle(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+  HICON smallIcon = loadDeckboyAppIconHandle(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+  if (bigIcon) {
+    SendMessageW(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(bigIcon));
+  }
+  if (smallIcon) {
+    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(smallIcon));
+  } else if (bigIcon) {
+    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(bigIcon));
+  }
+}
+#else
+void applyDeckboyWindowIcon(SDL_Window* window) {
+  deckboy::platform::applyPortableWindowIcon(window);
+}
+#endif
+
+// ── UI text helpers ─────────────────────────────────────────────────────────
+
+// Truncate text to fit within maxWidth pixels, appending "..." if clipped.
+// Used throughout the UI for labels, cue names, and file paths that may
+// exceed their allocated display width.
+std::string ellipsizeToPixelWidth(TTF_Font* font, const std::string& text, int maxWidth) {
+  if (!font || maxWidth <= 0 || text.empty()) {
+    return "";
+  }
+
+  // Measured the way it will be drawn: through the shaper, which knows the
+  // fallback faces and the direction of each piece. TTF_GetStringSize alone
+  // measured an Arabic name as a row of the primary font's empty boxes.
+  namespace shaping = deckboy::render::shaping;
+  int textW = 0;
+  int textH = 0;
+  if (shaping::textSize(font, text.c_str(), text.size(), &textW, &textH) && textW <= maxWidth) {
+    return text;
+  }
+
+  const std::string kEllipsis = "...";
+  int ellipsisW = 0;
+  if (!shaping::textSize(font, kEllipsis.c_str(), kEllipsis.size(), &ellipsisW, &textH)) {
+    return text;
+  }
+  if (ellipsisW > maxWidth) {
+    return "";
+  }
+
+  // ── CUT ON A CHARACTER, AND FIND THE CUT BY HALVING ─────────────────────
+  //
+  // This dropped one BYTE at a time and measured after each. Two things wrong
+  // with that. A byte is not a character: the moment the interface learned a
+  // language that needs more than one of them, a cut could land inside a
+  // character and leave invalid UTF-8 behind. And measuring is a full shape
+  // of the string, so a long name in a narrow column cost thirty of them --
+  // per label, per frame.
+  //
+  // Width only grows as the string does, so the cut can be found by halving:
+  // about six measurements instead of thirty, and never inside a character.
+  std::vector<std::size_t> stops;   // byte offset where each character starts
+  stops.reserve(text.size());
+  for (std::size_t i = 0; i < text.size();) {
+    stops.push_back(i);
+    const unsigned char c = static_cast<unsigned char>(text[i]);
+    const std::size_t step = (c < 0xC0) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+    i += step;
+  }
+  stops.push_back(text.size());   // sentinel: "keep everything"
+
+  // Largest number of characters that still fits once the ellipsis is added.
+  // The whole string is already known not to fit, so the search stops one
+  // character short of it.
+  const int maxKeep = static_cast<int>(stops.size()) - 2;
+  int lo = 0;
+  int hi = std::max(0, maxKeep);
+  while (lo < hi) {
+    const int mid = (lo + hi + 1) / 2;
+    const std::string candidate = text.substr(0, stops[static_cast<std::size_t>(mid)]) + kEllipsis;
+    if (shaping::textSize(font, candidate.c_str(), candidate.size(), &textW, &textH) &&
+        textW <= maxWidth) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (lo <= 0) {
+    return kEllipsis;
+  }
+  return text.substr(0, stops[static_cast<std::size_t>(lo)]) + kEllipsis;
+}
+
+// Returns the human-readable display label for a CueKind (shown in UI).
+// cueKindLabel lives in core/utils.cpp -- it is declared in core/utils.hpp and
+// this file had a SECOND definition of it in the anonymous namespace below,
+// missing DeckLink, Tone and Video Synth while the other was missing six kinds
+// this one had. Nothing warns about that: the UI is compiled into this file, so
+// the UI got this copy, and a DeckLink cue called itself a video everywhere in
+// the playlist and the inspector.
+
+// Returns the serialization token for a CueKind (used in .deckboy project files).
+// cueKindToken lives in core/utils.cpp -- it is declared in core/utils.hpp and
+// this file had a SECOND definition of it with a different set of cases. Two
+// non-static definitions of one function is an ODR violation; the linker
+// picked one and the other silently did nothing.
+
+// Normalize user-entered composite layout names to canonical tokens.
+// Accepts various aliases: "split", "pip", "four" → "2up", "7030", "quad".
+std::string normalizeCompositeLayoutPresetToken(std::string token) {
+  token = toLower(trim(token));
+  if (token == "split" || token == "split2" || token == "two" || token == "2") {
+    return "2up";
+  }
+  if (token == "bigsmall" || token == "pip" || token == "pictureinpicture" || token == "70-30") {
+    return "7030";
+  }
+  if (token == "4" || token == "four") {
+    return "quad";
+  }
+  if (token == "2up" || token == "7030" || token == "quad") {
+    return token;
+  }
+  return "2up";
+}
+
+std::string compositeLayoutPresetLabel(const std::string& rawToken) {
+  std::string token = normalizeCompositeLayoutPresetToken(rawToken);
+  if (token == "7030") {
+    return "70/30";
+  }
+  if (token == "quad") {
+    return "Quad";
+  }
+  return "2-Up";
+}
+
+// ── Composite cue helpers ────────────────────────────────────────────────────
+// Composite cues split the output into multiple slots (2-up, quad, 70/30),
+// each showing a different source. These helpers manage slot identities,
+// layout presets, and source resolution.
+
+std::string compositeSlotDefaultId(int index) {
+  int slotNumber = std::max(0, index) + 1;
+  return "slot" + std::to_string(slotNumber);
+}
+
+std::string compositeSlotDefaultName(int index) {
+  static constexpr char kNames[] = {'A', 'B', 'C', 'D'};
+  if (index >= 0 && index < static_cast<int>(sizeof(kNames))) {
+    return std::string("Slot ") + kNames[index];
+  }
+  return "Slot " + std::to_string(std::max(0, index) + 1);
+}
+
+void ensureCompositeSlotIdentity(CompositeSlot& slot, int index) {
+  if (trim(slot.id).empty()) {
+    slot.id = compositeSlotDefaultId(index);
+  }
+  if (trim(slot.name).empty()) {
+    slot.name = compositeSlotDefaultName(index);
+  }
+  slot.sourceType = trim(slot.sourceType).empty() ? "media" : toLower(trim(slot.sourceType));
+  slot.normX = std::clamp(slot.normX, 0.0f, 1.0f);
+  slot.normY = std::clamp(slot.normY, 0.0f, 1.0f);
+  slot.normW = std::clamp(slot.normW, 0.05f, 1.0f);
+  slot.normH = std::clamp(slot.normH, 0.05f, 1.0f);
+}
+
+void applyCompositePresetToCue(Cue& cue, const std::string& rawPreset) {
+  std::string preset = normalizeCompositeLayoutPresetToken(rawPreset);
+  size_t slotCount = preset == "quad" ? 4u : 2u;
+  std::vector<CompositeSlot> previous = cue.compositeSlots;
+  cue.compositeSlots.assign(slotCount, CompositeSlot {});
+  for (size_t i = 0; i < slotCount; ++i) {
+    if (i < previous.size()) {
+      cue.compositeSlots[i] = previous[i];
+    }
+    ensureCompositeSlotIdentity(cue.compositeSlots[i], static_cast<int>(i));
+  }
+
+  cue.compositeLayoutPreset = preset;
+  if (cue.compositeBackgroundColor.a == 0) {
+    cue.compositeBackgroundColor = SDL_Color {18, 24, 18, 255};
+  }
+
+  if (preset == "7030") {
+    cue.compositeSlots[0].normX = 0.02f;
+    cue.compositeSlots[0].normY = 0.02f;
+    cue.compositeSlots[0].normW = 0.68f;
+    cue.compositeSlots[0].normH = 0.96f;
+    cue.compositeSlots[1].normX = 0.73f;
+    cue.compositeSlots[1].normY = 0.08f;
+    cue.compositeSlots[1].normW = 0.24f;
+    cue.compositeSlots[1].normH = 0.24f;
+  } else if (preset == "quad") {
+    static constexpr std::array<std::array<float, 4>, 4> kQuad {{
+      {{0.02f, 0.02f, 0.46f, 0.46f}},
+      {{0.52f, 0.02f, 0.46f, 0.46f}},
+      {{0.02f, 0.52f, 0.46f, 0.46f}},
+      {{0.52f, 0.52f, 0.46f, 0.46f}},
+    }};
+    for (size_t i = 0; i < cue.compositeSlots.size(); ++i) {
+      cue.compositeSlots[i].normX = kQuad[i][0];
+      cue.compositeSlots[i].normY = kQuad[i][1];
+      cue.compositeSlots[i].normW = kQuad[i][2];
+      cue.compositeSlots[i].normH = kQuad[i][3];
+    }
+  } else {
+    cue.compositeSlots[0].normX = 0.02f;
+    cue.compositeSlots[0].normY = 0.02f;
+    cue.compositeSlots[0].normW = 0.46f;
+    cue.compositeSlots[0].normH = 0.96f;
+    cue.compositeSlots[1].normX = 0.52f;
+    cue.compositeSlots[1].normY = 0.02f;
+    cue.compositeSlots[1].normW = 0.46f;
+    cue.compositeSlots[1].normH = 0.96f;
+  }
+
+  if (trim(cue.compositeAudioSlotId).empty()) {
+    cue.compositeAudioSlotId = cue.compositeSlots.empty() ? std::string() : cue.compositeSlots.front().id;
+  }
+  bool audioSlotFound = false;
+  for (const CompositeSlot& slot : cue.compositeSlots) {
+    if (slot.id == cue.compositeAudioSlotId) {
+      audioSlotFound = true;
+      break;
+    }
+  }
+  if (!audioSlotFound) {
+    cue.compositeAudioSlotId = cue.compositeSlots.empty() ? std::string() : cue.compositeSlots.front().id;
+  }
+}
+
+// isSourceCueKind → core/cue_helpers.hpp
+
+// ── Source cue helpers ──────────────────────────────────────────────────────
+// Source cues (WindowSource, Camera, Syphon) capture live input.
+// These helpers manage source type tokens, reference formatting, and
+// user-facing labels for the source input editor.
+
+std::string sourceCueTokenForKind(CueKind kind) {
+  switch (kind) {
+    case CueKind::WindowSource: return "window";
+    case CueKind::Camera:       return "camera";
+    case CueKind::Syphon:       return "syphon";
+    default:                    return "source";
+  }
+}
+
+// defaultSourceRefForKind, sourceCueRefFromCue → core/cue_helpers.hpp
+
+std::string sourceCueRefFriendlyLabel(CueKind kind, const std::string& rawRef) {
+  std::string ref = trim(rawRef);
+  if (ref.empty()) {
+    ref = defaultSourceRefForKind(kind);
+  }
+  std::string lower = ref;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (kind == CueKind::WindowSource) {
+    if (lower == "active-window") {
+      return "Focused Window (recommended)";
+    }
+    if (lower == "desktop") {
+      return "Desktop (full screen)";
+    }
+    if (lower.rfind("title:", 0) == 0 && ref.size() > 6) {
+      return ref.substr(6);  // Show just the window title
+    }
+    if (lower.rfind("id:", 0) == 0) {
+      return "Specific Window (advanced)";
+    }
+    if (lower.rfind("region:", 0) == 0) {
+      return "Screen Region (advanced)";
+    }
+    if (!lower.empty() && lower.front() == ':') {
+      return "Screen Region (advanced)";
+    }
+  } else if (kind == CueKind::Camera) {
+    if (lower == "default-camera" || lower == "default") {
+      return "Default Camera";
+    }
+  } else if (kind == CueKind::Syphon) {
+    if (lower == "default-bus" || lower == "default") {
+      return "Default App Feed";
+    }
+  }
+  return ref;
+}
+
+std::string sourceCueRefFromAlias(CueKind kind, const std::string& rawRef) {
+  std::string ref = trim(rawRef);
+  std::string lower = ref;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (ref.empty() || lower == "default") {
+    return defaultSourceRefForKind(kind);
+  }
+  if (kind == CueKind::WindowSource) {
+    if (lower == "focused"
+        || lower == "recommended"
+        || lower == "focused window"
+        || lower == "window"
+        || lower == "active") {
+      return "active-window";
+    }
+    if (lower == "screen" || lower == "full screen" || lower == "fullscreen") {
+      return "desktop";
+    }
+    // Preserve title: prefix as-is (window picker selections)
+    if (lower.rfind("title:", 0) == 0) {
+      return ref;
+    }
+  } else if (kind == CueKind::Camera) {
+    if (lower == "camera"
+        || lower == "cam"
+        || lower == "recommended") {
+      return "default-camera";
+    }
+  } else if (kind == CueKind::Syphon) {
+    if (lower == "syphon"
+        || lower == "spout"
+        || lower == "app"
+        || lower == "feed"
+        || lower == "bus"
+        || lower == "recommended") {
+      return "default-bus";
+    }
+  }
+  return ref;
+}
+
+std::string sourceCueEditorInputDefault(CueKind kind, const std::string& rawRef) {
+  std::string resolved = sourceCueRefFromAlias(kind, rawRef);
+  std::string lower = resolved;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (kind == CueKind::WindowSource && lower == "active-window") {
+    return "focused";
+  }
+  if ((kind == CueKind::Camera && lower == "default-camera")
+      || (kind == CueKind::Syphon && lower == "default-bus")) {
+    return "default";
+  }
+  return resolved;
+}
+
+std::string sourceCueEditorPrompt(CueKind kind) {
+  switch (kind) {
+    case CueKind::WindowSource:
+      return "Type focused, then press Enter.";
+    case CueKind::Camera:
+      return "Type default, then press Enter.";
+    case CueKind::Syphon:
+      return "Type default, then press Enter.";
+    default:
+      return "Set source";
+  }
+}
+
+// resolvedCueEndAction, cueAdvancesWhenFinished → core/cue_helpers.hpp
+
+// ── Cue display and formatting helpers ──────────────────────────────────────
+
+// Returns the transport status label for the cue's end action (shown in UI).
+std::string cueEndStatusLabel(const Cue& cue) {
+  switch (resolvedCueEndAction(cue)) {
+    case CueEndAction::Loop: return "END LOOP";
+    case CueEndAction::PauseOnLast: return "END HOLD";
+    case CueEndAction::Stop: return "END STOP";
+    case CueEndAction::AutoNext:
+    case CueEndAction::Inherit:
+    default: return "END NEXT";
+  }
+}
+
+std::string normalizeJumpModeToken(std::string token) {
+  token = trim(token);
+  std::transform(token.begin(), token.end(), token.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::toupper(ch));
+  });
+  if (token == "LOAD" || token == "ARM" || token == "READY") {
+    return "load";
+  }
+  return "trigger";
+}
+
+std::string jumpModeLabelFromToken(const std::string& token) {
+  return normalizeJumpModeToken(token) == "load" ? "Load" : "Trigger";
+}
+
+std::string normalizePanicProfileToken(std::string token) {
+  token = trim(token);
+  std::transform(token.begin(), token.end(), token.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::toupper(ch));
+  });
+  if (token == "FADE_PAUSE" || token == "FADEPAUSE" || token == "PAUSE") {
+    return "fade_pause";
+  }
+  if (token == "FADE_REWIND" || token == "FADEREWIND" || token == "REWIND" || token == "STOP") {
+    return "fade_rewind";
+  }
+  if (token == "FADE_LOAD_NEXT" || token == "FADELOADNEXT" || token == "LOAD_NEXT" || token == "LOADNEXT" || token == "NEXT") {
+    return "fade_load_next";
+  }
+  return "outputs_off";
+}
+
+std::string panicProfileLabelFromToken(const std::string& token) {
+  std::string normalized = normalizePanicProfileToken(token);
+  if (normalized == "fade_pause") {
+    return "Fade+Pause";
+  }
+  if (normalized == "fade_rewind") {
+    return "Fade+Rewind";
+  }
+  if (normalized == "fade_load_next") {
+    return "Fade+LoadNext";
+  }
+  return "Outputs Off";
+}
+
+
+// tryParseColor and parseColor live in core/utils.cpp. This file had its own
+// copies; the shared ones could not read the alpha digits, so which behaviour a
+// caller got depended on which file it was compiled into. The alpha-reading
+// pair is now the only pair.
+
+std::string normalizeCueIdShort(std::string value) {
+  std::string out;
+  out.reserve(value.size());
+  for (char ch : value) {
+    if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '-') {
+      out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+    }
+  }
+  if (out.size() > 6) {
+    out.resize(6);
+  }
+  return out;
+}
+
+std::string cueDisplayToken(const Cue& cue, int index) {
+  if (!trim(cue.cueId).empty()) {
+    return cue.cueId;
+  }
+  if (!trim(cue.cueNumber).empty()) {
+    return cue.cueNumber;
+  }
+  return std::to_string(index + 1);
+}
+
+double normalizePlaylistTimebaseFps(double fps) {
+  static constexpr std::array<double, 4> kChoices {24.0, 25.0, 29.97, 30.0};
+  double candidate = std::isfinite(fps) ? fps : 30.0;
+  double best = kChoices.front();
+  double bestDiff = std::fabs(candidate - best);
+  for (double choice : kChoices) {
+    double diff = std::fabs(candidate - choice);
+    if (diff < bestDiff) {
+      best = choice;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+std::string playlistTimebaseLabel(double fps) {
+  double normalized = normalizePlaylistTimebaseFps(fps);
+  if (std::fabs(normalized - 29.97) < 0.01) {
+    return "29.97";
+  }
+  int whole = static_cast<int>(std::lround(normalized));
+  return std::to_string(whole);
+}
+
+bool isDefaultStillDurationCueKind(CueKind kind) {
+  return kind == CueKind::Image
+    || kind == CueKind::Pattern
+    || kind == CueKind::Browser
+    || kind == CueKind::Pip
+    || kind == CueKind::Composite
+    || kind == CueKind::LowerThird;
+}
+
+bool cueCanBePipSource(const Cue& cue) {
+  return cue.kind == CueKind::Video
+    || cue.kind == CueKind::Image
+    || cue.kind == CueKind::Pattern
+    || cue.kind == CueKind::Browser
+    || cue.kind == CueKind::SrtStream
+    || cue.kind == CueKind::NdiSource
+    || isSourceCueKind(cue.kind);
+}
+
+std::string pipSourceTypeTokenFromCue(const Cue& cue) {
+  std::string token = trim(cue.pipSourceType);
+  std::transform(token.begin(), token.end(), token.begin(),
+                 [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  if (!token.empty()) {
+    return token;
+  }
+  std::string rawPath = trim(cue.path);
+  if (!trim(cue.pipTargetCue).empty() && (rawPath.empty() || rawPath == "graphic://pip")) {
+    return "legacy";
+  }
+  if (rawPath.rfind("source://window/", 0) == 0) {
+    return "window";
+  }
+  if (rawPath.rfind("source://camera/", 0) == 0) {
+    return "camera";
+  }
+  if (rawPath.rfind("source://syphon/", 0) == 0) {
+    return "syphon";
+  }
+  if (rawPath.rfind("source://spout/", 0) == 0) {
+    return "syphon";
+  }
+  if (rawPath.rfind("http://", 0) == 0 || rawPath.rfind("https://", 0) == 0 ||
+      rawPath.rfind("file://", 0) == 0 || rawPath.rfind("about:", 0) == 0 ||
+      rawPath.rfind("data:", 0) == 0) {
+    return "browser";
+  }
+  if (rawPath.empty() || rawPath == "graphic://pip") {
+    return "media";
+  }
+  return "media";
+}
+
+bool pipSourceTypeUsesSourceRef(std::string token) {
+  token = trim(token);
+  std::transform(token.begin(), token.end(), token.begin(),
+                 [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  return token == "window" || token == "camera" || token == "syphon" || token == "spout";
+}
+
+std::pair<std::string, std::string> parseCompositeSourceSpec(const std::string& rawSpec) {
+  std::string spec = trim(rawSpec);
+  if (spec.empty()) {
+    return {"media", ""};
+  }
+  auto colon = spec.find(':');
+  if (colon != std::string::npos) {
+    std::string prefix = toLower(trim(spec.substr(0, colon)));
+    std::string value = trim(spec.substr(colon + 1));
+    if (prefix == "media" || prefix == "browser" || prefix == "window" ||
+        prefix == "camera" || prefix == "syphon" || prefix == "spout") {
+      return {prefix == "spout" ? "syphon" : prefix, value};
+    }
+  }
+  std::string lower = toLower(spec);
+  if (lower.rfind("http://", 0) == 0 || lower.rfind("https://", 0) == 0 ||
+      lower.rfind("file://", 0) == 0 || lower.rfind("about:", 0) == 0 ||
+      lower.rfind("data:", 0) == 0) {
+    return {"browser", spec};
+  }
+  return {"media", spec};
+}
+
+std::string compositeSourceTypeLabel(const std::string& rawType) {
+  std::string type = toLower(trim(rawType));
+  if (type == "browser") {
+    return "Browser";
+  }
+  if (type == "window") {
+    return "Window";
+  }
+  if (type == "camera") {
+    return "Camera";
+  }
+  if (type == "syphon" || type == "spout") {
+    return "Syphon/Spout";
+  }
+  return "Media";
+}
+
+std::string compositeSourceDisplayLabel(const CompositeSlot& slot) {
+  std::string type = toLower(trim(slot.sourceType));
+  std::string source = trim(slot.source);
+  if (type == "browser") {
+    return source.empty() ? std::string("(set url)") : source;
+  }
+  if (type == "window" || type == "camera" || type == "syphon" || type == "spout") {
+    CueKind kind = type == "window" ? CueKind::WindowSource
+                 : type == "camera" ? CueKind::Camera
+                 : CueKind::Syphon;
+    std::string sourceRef = source;
+    if (sourceRef.rfind("source://", 0) == 0) {
+      Cue tempCue;
+      tempCue.kind = kind;
+      tempCue.path = sourceRef;
+      sourceRef = sourceCueRefFromCue(tempCue);
+    }
+    if (sourceRef.empty()) {
+      sourceRef = defaultSourceRefForKind(kind);
+    }
+    return sourceCueRefFriendlyLabel(kind, sourceRef);
+  }
+  if (source.empty()) {
+    return "(set media file)";
+  }
+  return fs::path(source).filename().string();
+}
+
+std::string pipCueTargetDisplayToken(const Cue& cue) {
+  return trim(cue.pipTargetCue);
+}
+
+// colorControlsActive, cueHasColorControls, cueHasPixelEffects,
+// applyChromaKeyToPixels, applyColorControlsToPixels,
+// applyCueVisualEffectsToPixels → core/pixel_effects.hpp
+
+using deckboy::platform::SocketHandle;
+using deckboy::platform::kInvalidSocket;
+using deckboy::platform::kSocketSendFlags;
+using deckboy::platform::closeSocket;
+using deckboy::platform::setCloseOnExec;
+using deckboy::platform::createBoundSocket;
+using deckboy::platform::createDatagramSocket;
+using deckboy::platform::socketAddressToString;
+using deckboy::platform::privateLanIPv4Address;
+using deckboy::platform::selectNfds;
+using deckboy::platform::watchFd;
+using deckboy::platform::readyFd;
+
+// ── Network Master Clock (NMC) sync ─────────────────────────────────────────
+// NMC provides transport synchronization between Deckboy instances over UDP.
+// One instance is the "output" (master) that broadcasts position, others
+// are "input" (followers) that chase the master's timecode.
+
+struct NmcSyncPacket {
+  std::string command;                 // "play", "stop", "seek", "locate"
+  std::optional<double> seconds;       // Position in seconds (for seek/locate)
+};
+
+std::string normalizeNmcSyncModeToken(const std::string& raw) {
+  std::string token = toUpper(trim(raw));
+  if (token == "OUT" || token == "OUTPUT" || token == "SEND" || token == "MASTER") {
+    return "output";
+  }
+  return "input";
+}
+
+std::optional<double> parseLooseSecondsToken(const std::string& token) {
+  if (token.empty()) {
+    return std::nullopt;
+  }
+  try {
+    double value = std::stod(token);
+    if (!std::isfinite(value)) {
+      return std::nullopt;
+    }
+    return std::max(0.0, value);
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+std::optional<NmcSyncPacket> parseNmcSyncPacket(const std::string& raw) {
+  auto parts = splitWhitespace(trim(raw));
+  if (parts.empty()) {
+    return std::nullopt;
+  }
+
+  std::string command = toUpper(parts[0]);
+  size_t valueIndex = 1;
+  if (command == "DECKBOY_NMC1" || command == "NMC1" || command == "NMC") {
+    if (parts.size() < 2) {
+      return std::nullopt;
+    }
+    command = toUpper(parts[1]);
+    valueIndex = 2;
+  }
+
+  if (command == "ROLL" || command == "GO") {
+    command = "PLAY";
+  } else if (command == "SEEK" || command == "POSITION" || command == "POS" || command == "JUMP") {
+    command = "LOCATE";
+  }
+
+  if (command != "PLAY" && command != "PAUSE" && command != "STOP" && command != "LOCATE") {
+    return std::nullopt;
+  }
+
+  NmcSyncPacket packet;
+  packet.command = command;
+  if (valueIndex < parts.size()) {
+    packet.seconds = parseLooseSecondsToken(parts[valueIndex]);
+  }
+  return packet;
+}
+
+std::string formatNmcSyncPacket(const std::string& command, std::optional<double> seconds = std::nullopt) {
+  std::ostringstream output;
+  output << "DECKBOY_NMC1 " << toUpper(trim(command));
+  if (seconds) {
+    output << ' ' << std::fixed << std::setprecision(6) << std::max(0.0, *seconds);
+  }
+  return output.str();
+}
+
+// endsWith, normalizePatternTypeId, stripPatternMotionSuffix,
+// patternTypeSupportsMotion, patternTypeIsAnimated → core/pattern_helpers.hpp
+
+// ── OSC (Open Sound Control) protocol ───────────────────────────────────────
+// Deckboy implements an OSC server for remote control from external tools
+// (Bitfocus Companion, TouchOSC, mixing consoles, etc.). Messages use
+// standard OSC binary format with typed arguments.
+
+using OscArg = std::variant<std::int32_t, float, std::string, bool>;
+
+struct OscMessage {
+  std::string address;            // OSC address pattern (e.g. "/deck/1/go")
+  std::vector<OscArg> args;       // Typed arguments (int32, float, string, bool)
+};
+
+struct OscQueryEndpointDoc {
+  const char* path;
+  const char* command;
+  const char* args;
+  const char* notes;
+};
+
+constexpr std::array<OscQueryEndpointDoc, 41> kOscQueryEndpoints {{
+  {"/play", "PLAY", "", "Start focused deck"},
+  {"/pause", "PAUSE", "", "Pause focused deck"},
+  {"/stop", "STOP", "", "Stop focused deck"},
+  {"/go", "GO", "", "Toggle play/pause"},
+  {"/toggle", "GO", "", "Alias for GO"},
+  {"/take", "TAKE [cue]", "string", "Take selected or cue token"},
+  {"/takeid", "TAKEID <cue-id>", "string", "Take by operator cue ID"},
+  {"/goto", "GOTO <cue>", "string", "Load/play cue index/token"},
+  {"/next", "NEXT", "", "Select next cue"},
+  {"/prev", "PREV", "", "Select previous cue"},
+  {"/select", "SELECT <cue>", "string", "Select cue without taking"},
+  {"/selectid", "SELECTID <cue-id>", "string", "Select by cue ID"},
+  {"/deck", "DECK <index>", "int/string", "Focus deck"},
+  {"/deck/next", "DECKNEXT", "", "Cycle focused deck forward"},
+  {"/deck/prev", "DECKPREV", "", "Cycle focused deck backward"},
+  {"/deck/opacity", "DECKOPACITY [0..100]", "number", "Set/query deck opacity"},
+  {"/deck/autofade", "DECKAUTOFADE [on|off]", "toggle", "Toggle deck auto fade"},
+  {"/deck/fade", "DECKFADE [seconds]", "number", "Set/query deck auto-fade time"},
+  {"/route", "ROUTE <output>", "string", "Route focused deck"},
+  {"/layer", "LAYER <index>", "int", "Set deck layer index"},
+  {"/cue/audio", "CUEAUDIO [on|off]", "toggle", "Per-cue audio enable"},
+  {"/cue/pausebegin", "CUEPAUSEBEGIN [on|off]", "toggle", "Per-cue pause at beginning"},
+  {"/cue/pauseend", "CUEPAUSEEND [on|off]", "toggle", "Per-cue pause at end"},
+  {"/cue/transition", "CUENEXTTRANS [on|off]", "toggle", "Per-cue transition-to-next"},
+  {"/cue/goto", "CUEGOTO [target]", "string", "Per-cue goto target token"},
+  {"/jumpmode", "JUMPMODE [TRIGGER|LOAD]", "string", "Jump behavior"},
+  {"/panic", "PANIC [profile]", "string", "Run panic profile"},
+  {"/output", "OUTPUT <index> ...", "string", "Output command namespace"},
+  {"/status", "STATUS", "", "Request status snapshot"},
+  {"/state", "STATE", "", "Request status snapshot"},
+  {"/oscquery", "OSCQUERY [on|off]", "toggle", "Enable OSC Query HTTP server"},
+  {"/oscquery/port", "OSCQUERYPORT [port]", "number", "Set/query OSC Query HTTP port"},
+  {"/osc/feedback", "OSCFEEDBACK [on|off]", "toggle", "Enable canonical OSC feedback mirror"},
+  {"/atem", "ATEM [on|off]", "toggle", "Toggle ATEM trigger adapter"},
+  {"/ndi/trigger", "NDITRIGGER [on|off]", "toggle", "Toggle NDI metadata trigger adapter"},
+  {"/nmc", "NMC [on|off]", "toggle", "Toggle NMC transport sync adapter"},
+  {"/mtc", "MTC [on|off]", "toggle", "Toggle MTC ingest adapter"},
+  {"/ltc", "LTC [on|off]", "toggle", "Toggle LTC ingest adapter"},
+  {"/artnet", "ARTNET [on|off]", "toggle", "Toggle DMX/Art-Net adapter"},
+  {"/artnet/port", "ARTNETPORT [port]", "number", "Set/query Art-Net adapter port"},
+  {"/integration", "INTEGRATIONS [STATUS]", "string", "Show integration adapter route status"}
+}};
+
+size_t alignOscOffset(size_t offset) {
+  return (offset + 3u) & ~size_t(3u);
+}
+
+bool readOscString(const std::uint8_t* bytes, size_t size, size_t& offset, std::string& out) {
+  if (offset >= size) {
+    return false;
+  }
+  size_t end = offset;
+  while (end < size && bytes[end] != 0) {
+    ++end;
+  }
+  if (end >= size) {
+    return false;
+  }
+  out.assign(reinterpret_cast<const char*>(bytes + offset), end - offset);
+  offset = alignOscOffset(end + 1u);
+  return offset <= size;
+}
+
+std::uint32_t readOscU32(const std::uint8_t* bytes, size_t offset) {
+  return
+    (static_cast<std::uint32_t>(bytes[offset]) << 24u) |
+    (static_cast<std::uint32_t>(bytes[offset + 1]) << 16u) |
+    (static_cast<std::uint32_t>(bytes[offset + 2]) << 8u) |
+    (static_cast<std::uint32_t>(bytes[offset + 3]));
+}
+
+void appendOscU32(std::vector<std::uint8_t>& out, std::uint32_t value) {
+  out.push_back(static_cast<std::uint8_t>((value >> 24u) & 0xFFu));
+  out.push_back(static_cast<std::uint8_t>((value >> 16u) & 0xFFu));
+  out.push_back(static_cast<std::uint8_t>((value >> 8u) & 0xFFu));
+  out.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+}
+
+void appendOscString(std::vector<std::uint8_t>& out, const std::string& value) {
+  out.insert(out.end(), value.begin(), value.end());
+  out.push_back(0);
+  while (out.size() % 4u != 0u) {
+    out.push_back(0);
+  }
+}
+
+std::vector<std::uint8_t> buildOscStringMessage(const std::string& address, const std::string& value) {
+  std::vector<std::uint8_t> bytes;
+  appendOscString(bytes, address);
+  appendOscString(bytes, ",s");
+  appendOscString(bytes, value);
+  return bytes;
+}
+
+std::optional<OscMessage> parseOscMessage(const std::string& payload) {
+  if (payload.empty() || payload[0] != '/') {
+    return std::nullopt;
+  }
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(payload.data());
+  size_t size = payload.size();
+  size_t offset = 0;
+
+  OscMessage message;
+  if (!readOscString(bytes, size, offset, message.address) || message.address.empty()) {
+    return std::nullopt;
+  }
+
+  std::string typeTags;
+  if (!readOscString(bytes, size, offset, typeTags) || typeTags.empty() || typeTags[0] != ',') {
+    return std::nullopt;
+  }
+
+  for (size_t index = 1; index < typeTags.size(); ++index) {
+    char tag = typeTags[index];
+    switch (tag) {
+      case 'i': {
+        if (offset + 4u > size) {
+          return std::nullopt;
+        }
+        message.args.emplace_back(static_cast<std::int32_t>(readOscU32(bytes, offset)));
+        offset += 4u;
+        break;
+      }
+      case 'f': {
+        if (offset + 4u > size) {
+          return std::nullopt;
+        }
+        std::uint32_t raw = readOscU32(bytes, offset);
+        float value = 0.0f;
+        std::memcpy(&value, &raw, sizeof(float));
+        message.args.emplace_back(value);
+        offset += 4u;
+        break;
+      }
+      case 's': {
+        std::string value;
+        if (!readOscString(bytes, size, offset, value)) {
+          return std::nullopt;
+        }
+        message.args.emplace_back(value);
+        break;
+      }
+      case 'T':
+        message.args.emplace_back(true);
+        break;
+      case 'F':
+        message.args.emplace_back(false);
+        break;
+      default:
+        return std::nullopt;
+    }
+  }
+
+  return message;
+}
+
+std::vector<OscMessage> parseOscPacket(const std::string& payload, int depth = 0) {
+  std::vector<OscMessage> messages;
+  if (payload.empty()) {
+    return messages;
+  }
+
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(payload.data());
+  size_t size = payload.size();
+  if (size >= 16 && std::memcmp(bytes, "#bundle\0", 8) == 0) {
+    constexpr int kMaxOscBundleDepth = 8;
+    if (depth >= kMaxOscBundleDepth) {
+      return messages;  // refuse deeply nested bundles (stack overflow prevention)
+    }
+    size_t offset = 16;  // "#bundle\0" + timetag (8 bytes)
+    while (offset + 4u <= size) {
+      std::uint32_t elementSize = readOscU32(bytes, offset);
+      offset += 4u;
+      if (elementSize == 0 || offset + elementSize > size) {
+        break;
+      }
+      std::string element(payload.data() + offset, payload.data() + offset + elementSize);
+      auto nested = parseOscPacket(element, depth + 1);
+      messages.insert(messages.end(), nested.begin(), nested.end());
+      offset += elementSize;
+    }
+    return messages;
+  }
+
+  auto single = parseOscMessage(payload);
+  if (single) {
+    messages.push_back(*single);
+  }
+  return messages;
+}
+
+std::optional<double> oscArgAsNumber(const OscArg& arg) {
+  if (std::holds_alternative<std::int32_t>(arg)) {
+    return static_cast<double>(std::get<std::int32_t>(arg));
+  }
+  if (std::holds_alternative<float>(arg)) {
+    return static_cast<double>(std::get<float>(arg));
+  }
+  if (std::holds_alternative<bool>(arg)) {
+    return std::get<bool>(arg) ? 1.0 : 0.0;
+  }
+  if (std::holds_alternative<std::string>(arg)) {
+    try {
+      return std::stod(std::get<std::string>(arg));
+    } catch (...) {
+      return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> oscArgAsString(const OscArg& arg) {
+  if (std::holds_alternative<std::string>(arg)) {
+    return std::get<std::string>(arg);
+  }
+  if (std::holds_alternative<std::int32_t>(arg)) {
+    return std::to_string(std::get<std::int32_t>(arg));
+  }
+  if (std::holds_alternative<float>(arg)) {
+    return std::to_string(std::get<float>(arg));
+  }
+  if (std::holds_alternative<bool>(arg)) {
+    return std::get<bool>(arg) ? "1" : "0";
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> mapOscToRemoteCommand(const OscMessage& message) {
+  std::string path = toUpper(trim(message.address));
+  auto argNumber = [&](size_t index) -> std::optional<double> {
+    if (index >= message.args.size()) {
+      return std::nullopt;
+    }
+    return oscArgAsNumber(message.args[index]);
+  };
+  auto argString = [&](size_t index) -> std::optional<std::string> {
+    if (index >= message.args.size()) {
+      return std::nullopt;
+    }
+    return oscArgAsString(message.args[index]);
+  };
+  auto argToggleWord = [&](size_t index) -> std::optional<std::string> {
+    auto number = argNumber(index);
+    if (!number) {
+      return std::nullopt;
+    }
+    return *number >= 0.5 ? "ON" : "OFF";
+  };
+
+  if (path == "/GO" || path == "/TOGGLE") {
+    return "GO";
+  }
+  if (path == "/PLAY") {
+    return "PLAY";
+  }
+  if (path == "/PAUSE") {
+    return "PAUSE";
+  }
+  if (path == "/STOP") {
+    return "STOP";
+  }
+  if (path == "/CLEAR") {
+    return "CLEAR";
+  }
+  if (path == "/NEXT") {
+    return "NEXT";
+  }
+  if (path == "/PREV" || path == "/PREVIOUS") {
+    return "PREV";
+  }
+  if (path == "/FULLSCREEN") {
+    return "FULLSCREEN";
+  }
+  if (path == "/VIDEO" || path == "/OUTPUTMODE") {
+    std::string output = "VIDEO";
+    for (size_t i = 0; i < message.args.size(); ++i) {
+      auto value = argString(i);
+      if (!value) {
+        continue;
+      }
+      output += " ";
+      output += *value;
+    }
+    return output;
+  }
+  if (path == "/SELECT") {
+    if (auto value = argString(0)) {
+      return "SELECT " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/SELECTID" || path == "/CUEID") {
+    if (auto value = argString(0)) {
+      return "SELECTID " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TAKE") {
+    if (auto value = argString(0)) {
+      return "TAKE " + *value;
+    }
+    return "TAKE";
+  }
+  if (path == "/TAKEID") {
+    if (auto value = argString(0)) {
+      return "TAKEID " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/GOTO") {
+    if (auto value = argString(0)) {
+      return "GOTO " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/FIND" || path == "/CUE/FIND") {
+    if (auto value = argString(0)) {
+      return "FIND " + *value;
+    }
+    return "FIND";
+  }
+  if (path == "/FIND/NEXT" || path == "/CUE/FIND/NEXT") {
+    return "FINDNEXT";
+  }
+  if (path == "/FIND/PREV" || path == "/CUE/FIND/PREV") {
+    return "FINDPREV";
+  }
+  if (path == "/FIND/TAKE" || path == "/CUE/FIND/TAKE") {
+    if (auto value = argString(0)) {
+      return "FINDTAKE " + *value;
+    }
+    return "FINDTAKE";
+  }
+  if (path == "/FIND/CLEAR" || path == "/CUE/FIND/CLEAR") {
+    return "FINDCLEAR";
+  }
+  if (path == "/RENUMBER" || path == "/CUE/RENUMBER" || path == "/CUE/AUTOID") {
+    if (message.args.empty()) {
+      return "RENUMBER";
+    }
+    std::string output = "RENUMBER";
+    for (size_t i = 0; i < message.args.size(); ++i) {
+      if (auto value = argString(i)) {
+        output += " " + *value;
+      }
+    }
+    return output;
+  }
+  if (path == "/DECK") {
+    if (auto value = argString(0)) {
+      return "DECK " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/DECK/OPACITY" || path == "/PLAYLIST/OPACITY") {
+    if (auto value = argString(0)) {
+      return "DECKOPACITY " + *value;
+    }
+    return "DECKOPACITY";
+  }
+  if (path == "/DECK/AUTOFADE" || path == "/PLAYLIST/AUTOFADE") {
+    if (auto value = argToggleWord(0)) {
+      return "DECKAUTOFADE " + *value;
+    }
+    return "DECKAUTOFADE";
+  }
+  if (path == "/DECK/FADE" || path == "/PLAYLIST/FADE") {
+    if (auto value = argString(0)) {
+      return "DECKFADE " + *value;
+    }
+    return "DECKFADE";
+  }
+  if (path == "/OSCQUERY" || path == "/DECKBOY/OSCQUERY") {
+    if (auto value = argToggleWord(0)) {
+      return "OSCQUERY " + *value;
+    }
+    return "OSCQUERY";
+  }
+  if (path == "/OSCQUERY/PORT" || path == "/DECKBOY/OSCQUERY/PORT") {
+    if (auto value = argString(0)) {
+      return "OSCQUERYPORT " + *value;
+    }
+    return "OSCQUERYPORT";
+  }
+  if (path == "/OSC/FEEDBACK" || path == "/OSCFEEDBACK" || path == "/DECKBOY/OSCFEEDBACK") {
+    if (auto value = argToggleWord(0)) {
+      return "OSCFEEDBACK " + *value;
+    }
+    return "OSCFEEDBACK";
+  }
+  if (path == "/OSC/FEEDBACK/RATE" || path == "/OSCFEEDBACK/RATE" || path == "/DECKBOY/OSCFEEDBACK/RATE") {
+    if (auto value = argString(0)) {
+      return "OSCFEEDBACKRATE " + *value;
+    }
+    return "OSCFEEDBACKRATE";
+  }
+  if (path == "/ATEM" || path == "/DECKBOY/ATEM") {
+    if (auto value = argToggleWord(0)) {
+      return "ATEM " + *value;
+    }
+    return "ATEM";
+  }
+  if (path == "/NDI/TRIGGER" || path == "/NDITRIGGER" || path == "/DECKBOY/NDITRIGGER") {
+    if (auto value = argToggleWord(0)) {
+      return "NDITRIGGER " + *value;
+    }
+    return "NDITRIGGER";
+  }
+  if (path == "/NMC" || path == "/DECKBOY/NMC") {
+    if (auto value = argToggleWord(0)) {
+      return "NMC " + *value;
+    }
+    return "NMC";
+  }
+  if (path == "/MTC" || path == "/DECKBOY/MTC") {
+    if (auto value = argToggleWord(0)) {
+      return "MTC " + *value;
+    }
+    return "MTC";
+  }
+  if (path == "/LTC" || path == "/DECKBOY/LTC") {
+    if (auto value = argToggleWord(0)) {
+      return "LTC " + *value;
+    }
+    return "LTC";
+  }
+  if (path == "/ARTNET" || path == "/DMX/ARTNET" || path == "/DECKBOY/ARTNET") {
+    if (auto value = argToggleWord(0)) {
+      return "ARTNET " + *value;
+    }
+    return "ARTNET";
+  }
+  if (path == "/ARTNET/PORT" || path == "/DECKBOY/ARTNET/PORT") {
+    if (auto value = argString(0)) {
+      return "ARTNETPORT " + *value;
+    }
+    return "ARTNETPORT";
+  }
+  if (path == "/INTEGRATION" || path == "/INTEGRATIONS" || path == "/DECKBOY/INTEGRATION") {
+    if (auto value = argString(0)) {
+      return "INTEGRATIONS " + *value;
+    }
+    return "INTEGRATIONS";
+  }
+  if (path == "/ROUTE") {
+    if (auto value = argString(0)) {
+      return "ROUTE " + *value;
+    }
+    return "ROUTE";
+  }
+  if (path == "/LAYER") {
+    if (auto value = argString(0)) {
+      return "LAYER " + *value;
+    }
+    return "LAYER";
+  }
+  if (path == "/DECK/NEXT") {
+    return "DECKNEXT";
+  }
+  if (path == "/DECK/PREV") {
+    return "DECKPREV";
+  }
+  if (path == "/VOLUME") {
+    if (auto value = argString(0)) {
+      return "VOLUME " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/CUE/ID" || path == "/CUE/SHORTID") {
+    if (auto value = argString(0)) {
+      return "CUEIDSHORT " + *value;
+    }
+    return "CUEIDSHORT";
+  }
+  if (path == "/CUE/AUDIO") {
+    if (auto value = argToggleWord(0)) {
+      return "CUEAUDIO " + *value;
+    }
+    return "CUEAUDIO";
+  }
+  if (path == "/CUE/PAUSEBEGIN") {
+    if (auto value = argToggleWord(0)) {
+      return "PAUSEBEGIN " + *value;
+    }
+    return "PAUSEBEGIN";
+  }
+  if (path == "/CUE/PAUSEEND") {
+    if (auto value = argToggleWord(0)) {
+      return "PAUSEEND " + *value;
+    }
+    return "PAUSEEND";
+  }
+  if (path == "/CUE/NEXTTRANS") {
+    if (auto value = argToggleWord(0)) {
+      return "NEXTTRANS " + *value;
+    }
+    return "NEXTTRANS";
+  }
+  if (path == "/CUE/GOTO") {
+    if (auto value = argString(0)) {
+      return "CUEGOTO " + *value;
+    }
+    return "CUEGOTO";
+  }
+  if (path == "/SEEK") {
+    if (auto value = argString(0)) {
+      return "SEEK " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/AUTONEXT") {
+    if (auto value = argToggleWord(0)) {
+      return "AUTONEXT " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/PLAYLISTLOOP") {
+    if (auto value = argToggleWord(0)) {
+      return "PLAYLISTLOOP " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TRANSITION") {
+    if (auto value = argString(0)) {
+      return "TRANSITION " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TRANSITION/STYLE") {
+    if (auto value = argString(0)) {
+      return "TRANSITION STYLE " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/OVERLAY" || path == "/TIMEOVERLAY") {
+    if (auto value = argToggleWord(0)) {
+      return "OVERLAY " + *value;
+    }
+    return "OVERLAY";
+  }
+  if (path == "/NDI") {
+    if (auto value = argToggleWord(0)) {
+      return "NDI " + *value;
+    }
+    return "NDI";
+  }
+  if (path == "/NDI/NAME") {
+    if (auto value = argString(0)) {
+      return "NDI NAME " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/SOURCE") {
+    if (auto value = argString(0)) {
+      return "SOURCE " + *value;
+    }
+    return "SOURCE";
+  }
+  if (path == "/SOURCE/WINDOW") {
+    if (auto value = argString(0)) {
+      return "SOURCE WINDOW " + *value;
+    }
+    return "SOURCE WINDOW";
+  }
+  if (path == "/SOURCE/CAMERA") {
+    if (auto value = argString(0)) {
+      return "SOURCE CAMERA " + *value;
+    }
+    return "SOURCE CAMERA";
+  }
+  if (path == "/SOURCE/SYPHON" || path == "/SOURCE/SPOUT") {
+    if (auto value = argString(0)) {
+      return "SOURCE SYPHON " + *value;
+    }
+    return "SOURCE SYPHON";
+  }
+  if (path == "/IN") {
+    if (auto value = argString(0)) {
+      return "IN " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/OUT") {
+    if (auto value = argString(0)) {
+      return "OUT " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TRIM/CLEAR") {
+    return "TRIM CLEAR";
+  }
+  if (path == "/TIMECODE") {
+    if (auto value = argString(0)) {
+      return "TIMECODE " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/CHASE") {
+    if (auto value = argToggleWord(0)) {
+      return "TIMECODE CHASE " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/RUN") {
+    if (auto value = argToggleWord(0)) {
+      return "TIMECODE RUN " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/FPS") {
+    if (auto value = argString(0)) {
+      return "TIMECODE FPS " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/JAM") {
+    if (auto value = argToggleWord(0)) {
+      return "TIMECODE JAM " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/FREEWHEEL") {
+    if (auto value = argString(0)) {
+      return "TIMECODE FREEWHEEL " + *value;
+    }
+    return std::nullopt;
+  }
+  if (path == "/TIMECODE/MARK") {
+    if (auto value = argString(0)) {
+      return "TCMARK " + *value;
+    }
+    return std::nullopt;
+  }
+
+  return std::nullopt;
+}
+
+// THE PAGE A BROWSER CUE SHOWS WHEN NOBODY HAS PICKED ONE.
+//
+// James's pick, and it is a better joke than a test card: a browser cue that
+// has not been told where to go explains what a VJ is.
+//
+// A browser cue with no URL used to be a black rectangle, which is exactly what
+// a broken one looks like. This is unmistakable either way -- on a machine with
+// no network it shows the browser's own "cannot reach" page, which still says
+// the browser backend is alive and the fault is the network.
+std::string defaultBrowserPageUrl() {
+  return "https://en.wikipedia.org/wiki/Video_jockey";
+}
+
+std::string normalizeBrowserUrl(std::string value) {
+  value = trim(value);
+  if (value.empty()) {
+    return value;
+  }
+  std::error_code error;
+  fs::path localPath(value);
+  if (fs::exists(localPath, error)) {
+    return "file://" + fs::absolute(localPath, error).string();
+  }
+  if (value.find("://") != std::string::npos) {
+    return value;
+  }
+  if (value.rfind("about:", 0) == 0 || value.rfind("file:", 0) == 0 || value.rfind("data:", 0) == 0) {
+    return value;
+  }
+  return "https://" + value;
+}
+
+std::string browserCueNameForUrl(const std::string& url) {
+  std::string value = normalizeBrowserUrl(url);
+  size_t scheme = value.find("://");
+  size_t begin = scheme == std::string::npos ? 0 : scheme + 3;
+  size_t end = value.find('/', begin);
+  std::string host = value.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+  if (host.empty()) {
+    return "Browser Cue";
+  }
+  return "Browser: " + host;
+}
+
+#ifndef _WIN32
+bool executableOnPath(const std::string& name) {
+  if (name.empty()) {
+    return false;
+  }
+  if (name.find('/') != std::string::npos) {
+    return access(name.c_str(), X_OK) == 0;
+  }
+
+  const char* pathEnv = std::getenv("PATH");
+  if (!pathEnv) {
+    return false;
+  }
+
+  for (const auto& part : splitByChar(pathEnv, ':')) {
+    if (part.empty()) {
+      continue;
+    }
+    fs::path candidate = fs::path(part) / name;
+    if (access(candidate.c_str(), X_OK) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
+// NdiApi, LtcApi, NdiTriggerApi → platform/*.hpp
+
+// MediaEngine is now defined in engine/media_engine.hpp
+
+static std::string browserPhaseLabel(BrowserStartPhase phase) {
+  switch (phase) {
+    case BrowserStartPhase::None: return "idle";
+    case BrowserStartPhase::WaitXvfb:
+#if defined(_WIN32) && defined(DECKBOY_HAS_WEBVIEW)
+      return "initializing webview";
+#else
+      return "starting xvfb";
+#endif
+    case BrowserStartPhase::WaitChrome: return "starting browser";
+    case BrowserStartPhase::WaitCapture: return "starting capture";
+    case BrowserStartPhase::Live: return "live";
+  }
+  return "idle";
+}
+
+static std::string browserCueStatusSummary(BrowserStartPhase phase, bool live, const std::string& lastError) {
+  if (!lastError.empty()) {
+    return "failed: " + lastError;
+  }
+  if (live || phase == BrowserStartPhase::Live) {
+    return "live";
+  }
+  return browserPhaseLabel(phase);
+}
+
+// The output runtime structs now live in core/output_runtime.hpp -- they are
+// pure data shared by eight files, and keeping them in main.cpp meant every
+// one of those files had to be compiled INTO main.cpp to see them.
+
+// Audio buffer for streaming: accumulates PCM samples from the deck's
+// audio callback and packages them into stream packets.
+// Encode presets. Each builds its own ffmpeg args; the queue tries them in
+// order and keeps the first that produces a file, so a GPU-first preset can
+// fall back to libx264 on machines without NVENC.
+//
+// File scope, not a class member: the .ipp files are included into the class
+// body ABOVE where members are declared, and a parameter type has to be
+// visible at declaration (function bodies are a complete-class context,
+// parameter lists are not).
+// One row of the encode format matrix. The catalog below is curated (ffmpeg
+// exposes ~200 encoders, most meaningless for a cue deck) but AVAILABILITY is
+// probed from the local ffmpeg at runtime, never assumed: a portable build, a
+// distro package and a Homebrew build all ship different encoder sets, and a
+// format that is offered but cannot run just fails silently into "conversion
+// failed" with no explanation.
+struct EncoderFormat {
+  const char* id;          // stable token, used by the remote verb
+  const char* label;       // what the operator sees
+  const char* encoder;     // ffmpeg -c:v name, "" for audio-only formats
+  const char* audioEncoder;// ffmpeg -c:a name
+  const char* container;   // output extension, without the dot
+  const char* note;        // one line of why you would pick it
+  bool alpha;              // carries an alpha channel
+};
+
+// Live state of one Timer cue. File scope for the same reason EncoderPreset is:
+// the .ipp files are included into the class body above where members are
+// declared, so a type used as a RETURN or PARAMETER type there must already be
+// visible (function bodies are a complete-class context; signatures are not).
+struct TimerRuntime {
+  bool running = false;
+  double elapsedSeconds = 0.0;
+  Uint64 lastTickMs = 0;
+  // Highest chime already sounded: 0 none, 1 amber, 2 red, 3 zero. Latched so
+  // a chime fires ONCE on crossing rather than every frame it is past the
+  // threshold, and resets when the clock is reset or wound back.
+  int chimedStage = 0;
+};
+
+// MIDI note number to frequency under a chosen tuning. Note 69 is A above
+// middle C and is the reference in every system here, so they all agree on
+// that one pitch and diverge from it.
+inline double synthNoteToHz(int midiNote, SynthTuning tuning, double referenceHz) {
+  const double ref = (referenceHz > 0.0) ? referenceHz : 440.0;
+  const int rel = midiNote - 69;
+  switch (tuning) {
+    case SynthTuning::Equal19:
+      // Nineteen steps to the octave. The keyboard still sends twelve per
+      // octave, so this stretches those twelve across the 19-step grid rather
+      // than pretending extra keys exist.
+      return ref * std::pow(2.0, (rel * 19.0 / 12.0) / 19.0);
+    case SynthTuning::Equal24:
+      return ref * std::pow(2.0, (rel * 24.0 / 12.0) / 24.0);
+    case SynthTuning::BohlenPierce:
+      // Thirteen equal divisions of 3:1 rather than 2:1. There is no octave in
+      // this system at all, which is the point.
+      return ref * std::pow(3.0, rel / 13.0);
+    case SynthTuning::Just: {
+      // 5-limit just intonation. Pure ratios inside the octave, transposed by
+      // whole octaves outside it.
+      static const double kRatios[12] = {
+        1.0, 16.0/15, 9.0/8, 6.0/5, 5.0/4, 4.0/3,
+        45.0/32, 3.0/2, 8.0/5, 5.0/3, 9.0/5, 15.0/8
+      };
+      const int oct = static_cast<int>(std::floor(rel / 12.0));
+      const int step = ((rel % 12) + 12) % 12;
+      return ref * kRatios[step] * std::pow(2.0, oct);
+    }
+    case SynthTuning::Pythagorean: {
+      // Built from stacked perfect fifths, so fifths are exact and thirds are
+      // wide and bright.
+      static const double kRatios[12] = {
+        1.0, 256.0/243, 9.0/8, 32.0/27, 81.0/64, 4.0/3,
+        729.0/512, 3.0/2, 128.0/81, 27.0/16, 16.0/9, 243.0/128
+      };
+      const int oct = static_cast<int>(std::floor(rel / 12.0));
+      const int step = ((rel % 12) + 12) % 12;
+      return ref * kRatios[step] * std::pow(2.0, oct);
+    }
+    case SynthTuning::Meantone: {
+      // Quarter-comma meantone: fifths narrowed so that thirds come out pure.
+      static const double kCents[12] = {
+        0.0, 76.0, 193.2, 310.3, 386.3, 503.4,
+        579.5, 696.6, 772.6, 889.7, 1006.8, 1082.9
+      };
+      const int oct = static_cast<int>(std::floor(rel / 12.0));
+      const int step = ((rel % 12) + 12) % 12;
+      return ref * std::pow(2.0, kCents[step] / 1200.0) * std::pow(2.0, oct);
+    }
+    default:
+      return ref * std::pow(2.0, rel / 12.0);
+  }
+}
+
+// Ableton's layout: the home row is the white keys and the row above holds the
+// sharps where they physically sit on a piano. Anyone who has used a tracker
+// or a DAW already knows it, so it needs no explanation.
+inline int synthKeyToSemitone(SDL_Keycode key) {
+  switch (key) {
+    case SDLK_A: return 0;   case SDLK_W: return 1;
+    case SDLK_S: return 2;   case SDLK_E: return 3;
+    case SDLK_D: return 4;   case SDLK_F: return 5;
+    case SDLK_T: return 6;   case SDLK_G: return 7;
+    case SDLK_Y: return 8;   case SDLK_H: return 9;
+    case SDLK_U: return 10;  case SDLK_J: return 11;
+    case SDLK_K: return 12;  case SDLK_O: return 13;
+    case SDLK_L: return 14;
+    default: return -1;
+  }
+}
+
+enum class EncoderPreset {
+  DeliveryH264,      // the historical behaviour: NVENC, libx264 fallback
+  Proxy,             // 720p, fast, for scrubbing on weak machines
+  MatchSource,       // same raster, high quality, CPU only
+  DatamoshFriendly,  // no B-frames, no scene-cut keyframes, single reference
+};
+
+// Operator overrides for a conversion. Everything here defaults to "leave it
+// alone", so the encoder behaves exactly as before until something is changed.
+//
+// File scope for the same reason EncoderPreset is: the .ipp files are included
+// into the class body above where members are declared, so a type used as a
+// RETURN or PARAMETER type there must already be visible.
+struct EncoderOverrides {
+  // There is no universal quality knob -- x264/x265 take -crf, NVENC -cq,
+  // MPEG-4/MJPEG -qscale:v, VP9/AV1 -crf alongside -b:v 0, and ProRes/DNxHR
+  // only take profiles. So the operator sets an intent and each codec maps it
+  // onto whatever it actually has; a single "CRF" field would be a lie on
+  // more than half the catalogue.
+  enum class Rate {
+    Auto,     // the per-format default
+    Quality,  // constant quality, mapped per codec from quality0to100
+    Bitrate,  // constant bitrate, -b:v
+  };
+  Rate rate = Rate::Auto;
+  int quality0to100 = 65;        // higher = better picture, bigger file
+  int videoBitrateKbps = 8000;
+  int audioBitrateKbps = 0;      // 0 = the format's own default
+  double fps = 0.0;              // 0 = keep the source rate
+  int width = 0;                 // 0 = keep the source raster
+  int height = 0;
+  std::string outputDir;         // empty = _converted beside the show
+
+  bool touchesVideoRate() const { return rate != Rate::Auto; }
+};
+
+// Per-deck runtime state: the playback engine, audio device, and browser renderer.
+// Each deck has its own MediaEngine instance that handles video/audio decode
+// and frame upload independently.
+struct DeckRuntime {
+  // Which playlist this runtime belongs to (Deck::runtimeKey), and where that
+  // playlist is now. The slot is SHARED with the engine's sound callbacks,
+  // which used to capture the index once: a playlist that moved up kept
+  // feeding the meters and the recordings as its old number. Moved, never
+  // copied, with the runtime; the ring reads it under its own lock
+  // (DeckAudioRing::push), and it is only changed under that lock.
+  std::uint64_t deckKey = 0;
+  std::shared_ptr<std::atomic<int>> slot = std::make_shared<std::atomic<int>>(-1);
+  SDL_Window* outputWindow = nullptr;    // Legacy (unused — outputs moved to OutputRuntime)
+  SDL_Renderer* outputRenderer = nullptr;
+  SDL_AudioStream* audioStream = nullptr;  // device-bound SDL3 stream for this deck's audio output
+  // Extra destinations for the same audio (Deck::extraAudioDeviceNames).
+  // Owned here so they are closed exactly where the primary one is.
+  std::vector<SDL_AudioStream*> extraAudioStreams;
+  // The monitor. Open on every deck whenever the show names a monitor device;
+  // which deck you actually HEAR is a mute on the engine, not this pointer,
+  // so switching cannot click. Owned here for the same reason as the extras.
+  SDL_AudioStream* monitorAudioStream = nullptr;
+  // WHAT WE ACTUALLY GOT, which is not always what was asked for. Deck::
+  // audioOutputDeviceName is the operator's REQUEST and is persisted; this is
+  // the device currently open, empty for the system default. They differ while
+  // a named interface is absent -- powered off, still enumerating, or unplugged
+  // mid-show -- and keeping them apart is what lets the request survive that
+  // and be honoured when the device comes back.
+  std::string audioDeviceInUse;
+  // For a playlist in the PATCH: the interfaces it was opened on and their
+  // widths, in the order the patch gave them. When the patch would now open
+  // something else -- an interface arrived or left, an output moved -- the
+  // deck is reopened (servicePatchRouting).
+  std::string patchSignature;
+  // The system output this deck was last moved to because SDL had not moved
+  // it (reconcileDeckAudioDevices). Kept so a move that does not take is not
+  // retried, and the sound torn down, every two seconds.
+  std::string audioFollowTried;
+  std::unique_ptr<MediaEngine> mediaEngine;   // Core playback engine
+  // THE CUE THAT WAS PLAYING WHEN THE NEXT ONE WAS TAKEN, still playing. A
+  // take with a transition that would have frozen a playing cue hands that
+  // cue's engine here instead, with the audio streams it is writing to, and
+  // the deck gets a fresh engine and fresh streams for the incoming cue. The
+  // tail feeds its picture into the transition and fades its sound, then is
+  // stopped (App::handOffToOutgoingTail / serviceOutgoingTail /
+  // finishOutgoingTail). Empty almost all of the time.
+  struct OutgoingTail {
+    std::unique_ptr<MediaEngine> engine;
+    SDL_AudioStream* audioStream = nullptr;
+    std::vector<SDL_AudioStream*> extraAudioStreams;
+    SDL_AudioStream* monitorAudioStream = nullptr;
+    Uint64 endsAtMs = 0;
+    std::uint64_t lastFedIndex = ~std::uint64_t{0};
+  } outgoingTail;
+  std::unique_ptr<deckboy::platform::browser::BrowserRenderer> browserRenderer;  // For Browser/LowerThird cues
+  // When to next re-apply the hide-scrollbars rule, and when to stop bothering.
+  Uint64 browserScrollbarNextMs = 0;
+  Uint64 browserScrollbarUntilMs = 0;
+  bool browserCueLive = false;           // Whether a browser cue is currently active
+};
+
+// Runtime state for a PIP (Picture-in-Picture) overlay layer.
+// Each PIP has its own MediaEngine for independent playback.
+struct PipOverlayRuntime {
+  std::unique_ptr<MediaEngine> mediaEngine;
+  std::string loadedCueKey;              // Key of the currently loaded cue
+  int targetCueIndex = -1;              // Index into the cue list
+  Cue resolvedCue;                       // Resolved cue data (after alias/reference resolution)
+  bool resolvedCueValid = false;
+};
+
+// spawnDetachedProcess is now provided by native/core/subprocess.hpp/cpp
+// readExact is now provided by native/core/io_utils.hpp
+
+// ── Project file serialization helpers ──────────────────────────────────────
+// .deckboy project files use tab-delimited fields. These helpers escape/unescape
+// special characters (backslash, tab, newline) so field values can contain
+// arbitrary text without breaking the delimiter format.
+
+// Markers serialize as comma-separated lists in two parallel fields. Comma
+// rather than tab because tab is the record separator; the names field is
+// escaped like any other string.
+std::string joinMarkerTimes(const Cue& cue) {
+  std::string out;
+  for (double t : cue.markerSeconds) {
+    if (!out.empty()) out += ",";
+    out += std::to_string(t);
+  }
+  return out;
+}
+
+std::string joinMarkerNames(const Cue& cue) {
+  std::string out;
+  for (const std::string& n : cue.markerNames) {
+    if (!out.empty()) out += ",";
+    std::string safe = n;
+    std::replace(safe.begin(), safe.end(), ',', ';');   // commas are our separator
+    out += safe;
+  }
+  return out;
+}
+
+void parseMarkerTimes(Cue& cue, const std::string& field) {
+  cue.markerSeconds.clear();
+  if (field.empty()) return;
+  std::size_t start = 0;
+  while (start <= field.size()) {
+    std::size_t comma = field.find(',', start);
+    std::string tok = field.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    if (!tok.empty()) {
+      try { cue.markerSeconds.push_back(std::stod(tok)); } catch (...) {}
+    }
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  std::sort(cue.markerSeconds.begin(), cue.markerSeconds.end());
+}
+
+void parseMarkerNames(Cue& cue, const std::string& field) {
+  cue.markerNames.clear();
+  std::size_t start = 0;
+  while (start <= field.size() && !field.empty()) {
+    std::size_t comma = field.find(',', start);
+    cue.markerNames.push_back(
+      field.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  // Names must stay parallel to times or the pairing silently shifts.
+  cue.markerNames.resize(cue.markerSeconds.size());
+}
+
+// Effect stack <-> one tab field. Colons inside an entry, pipes between them,
+// so a stack of any length occupies a single column.
+// A master cue's assignments as one field: "deck:cueId:bypassed", entries
+// joined by '|'. Same shape as the effect stack above -- pipe between entries,
+// colon within one -- because the record is tab-delimited and a variable-length
+// list has to live inside a single field.
+//
+// The cue is referenced BY ID. Ids are generated hex ("cue-158f9d9e1a117c37"),
+// so they carry neither separator; a path would have carried both.
+// The audio crosspoint matrix, "source:dest:gain|source:dest:gain". Sparse, so
+// a cue with a plain stereo pair on outs 7-8 writes two cells rather than a
+// 2x64 grid of zeroes -- and a cue with no matrix at all writes nothing.
+std::string serializeAudioMatrix(const std::vector<AudioCrosspoint>& list) {
+  std::string out;
+  for (const auto& p : list) {
+    if (p.source < 0 || p.dest < 0 || p.gain <= 0.0f) {
+      continue;                 // a zero cell is the absence of a cell
+    }
+    if (!out.empty()) out += '|';
+    out += std::to_string(p.source);
+    out += ':';
+    out += std::to_string(p.dest);
+    out += ':';
+    // Three decimals: enough for a dB step, short enough not to bloat a show
+    // file with a matrix on every cue.
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%.3f", p.gain);
+    out += buf;
+    // A fourth part names the output, on a playlist in the patch. A build
+    // from before names reads the gain and stops at the colon.
+    if (!p.output.empty()) {
+      out += ':';
+      out += p.output;
+    }
+  }
+  return out;
+}
+
+std::vector<AudioCrosspoint> parseAudioMatrix(const std::string& text) {
+  std::vector<AudioCrosspoint> out;
+  if (text.empty()) return out;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t bar = text.find('|', start);
+    if (bar == std::string::npos) bar = text.size();
+    const std::string cell = text.substr(start, bar - start);
+    start = bar + 1;
+    if (cell.empty()) continue;
+    const std::size_t c1 = cell.find(':');
+    if (c1 == std::string::npos) continue;
+    const std::size_t c2 = cell.find(':', c1 + 1);
+    if (c2 == std::string::npos) continue;
+    AudioCrosspoint p;
+    const std::size_t c3 = cell.find(':', c2 + 1);
+    try {
+      p.source = std::stoi(cell.substr(0, c1));
+      p.dest = std::stoi(cell.substr(c1 + 1, c2 - c1 - 1));
+      p.gain = std::stof(cell.substr(c2 + 1, c3 == std::string::npos ? std::string::npos : c3 - c2 - 1));
+    } catch (...) {
+      continue;                 // one bad cell is skipped, not fatal
+    }
+    if (c3 != std::string::npos) {
+      p.output = cleanAudioOutputName(cell.substr(c3 + 1));
+      if (p.output.empty() || p.dest > 1) continue;   // a named point is channel 0 or 1 of its output
+    }
+    // Clamped on the way IN, so a hand-edited or corrupted show cannot put a
+    // gain of 900 on the audio thread.
+    if (p.source < 0 || p.source > 1 || p.dest < 0 || p.dest >= kMaxAudioOutputs) continue;
+    p.gain = p.gain < 0.0f ? 0.0f : (p.gain > 4.0f ? 4.0f : p.gain);
+    if (p.gain <= 0.0f) continue;
+    out.push_back(p);
+  }
+  return out;
+}
+
+std::string serializeMasterAssignments(const std::vector<MasterAssignment>& list) {
+  std::string out;
+  for (const auto& a : list) {
+    if (a.deckIndex < 0 || (a.action == 'G' && a.cueId.empty())) continue;
+    if (!out.empty()) out += '|';
+    out += std::to_string(a.deckIndex);
+    out += ':';
+    out += a.cueId;
+    out += ':';
+    out += (a.bypassed ? '1' : '0');
+    // The action and its value, only when they say more than "take the cue":
+    // a plain take is written exactly as it always was.
+    if (a.action != 'G' || a.value >= 0) {
+      out += ':';
+      out += a.action;
+      out += ':';
+      out += std::to_string(a.value);
+    }
+  }
+  return out;
+}
+
+std::vector<MasterAssignment> parseMasterAssignments(const std::string& text) {
+  std::vector<MasterAssignment> out;
+  if (text.empty()) return out;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    const std::size_t bar = text.find('|', start);
+    const std::string entry = text.substr(start, bar == std::string::npos
+                                                 ? std::string::npos : bar - start);
+    if (!entry.empty()) {
+      const std::size_t c1 = entry.find(':');
+      const std::size_t c2 = (c1 == std::string::npos)
+                             ? std::string::npos : entry.find(':', c1 + 1);
+      if (c1 != std::string::npos && c2 != std::string::npos) {
+        MasterAssignment a;
+        try {
+          a.deckIndex = std::stoi(entry.substr(0, c1));
+        } catch (...) {
+          a.deckIndex = -1;
+        }
+        a.cueId = entry.substr(c1 + 1, c2 - c1 - 1);
+        // deck:cue:bypassed, then (0.99.417) :action:value.
+        const std::size_t c3 = entry.find(':', c2 + 1);
+        a.bypassed = entry.substr(c2 + 1, c3 == std::string::npos ? std::string::npos : c3 - c2 - 1) == "1";
+        if (c3 != std::string::npos) {
+          const std::size_t c4 = entry.find(':', c3 + 1);
+          const std::string act = entry.substr(c3 + 1, c4 == std::string::npos ? std::string::npos : c4 - c3 - 1);
+          a.action = act.empty() ? 'G' : act[0];
+          if (a.action != 'G' && a.action != 'S' && a.action != 'F' && a.action != 'V' && a.action != 'O') {
+            a.action = 'G';
+          }
+          if (c4 != std::string::npos) {
+            try {
+              a.value = std::stoi(entry.substr(c4 + 1));
+            } catch (...) {
+              a.value = -1;
+            }
+          }
+        }
+        if (a.deckIndex >= 0 && (a.action != 'G' || !a.cueId.empty())) {
+          out.push_back(std::move(a));
+        }
+      }
+    }
+    if (bar == std::string::npos) break;
+    start = bar + 1;
+  }
+  return out;
+}
+
+// ONE OSCILLATOR, as the show file spells it: commas inside, and the caller
+// chooses what separates one from the next. Shared by the effect parameters
+// and the geometry, so the two cannot drift into two spellings of one thing.
+void writeParamLfo(std::ostream& one, const deckboy::effects::ParamLfo& lfo) {
+  one << (lfo.on ? 1 : 0) << ',' << static_cast<int>(lfo.shape) << ','
+      << lfo.rateHz << ',' << lfo.depth << ',' << lfo.phase << ','
+      << (lfo.beatSync ? 1 : 0) << ',' << lfo.beats;
+  // The drawn curve rides along ONLY when it is the shape in use, and
+  // only when it is not still the default ramp. Thirty-two numbers on
+  // every LFO of every effect of every cue would be most of a show file
+  // spent on curves nobody drew.
+  //
+  // Appended after `beats`, so a build that predates it reads the seven
+  // fields it knows and stops -- and a curve written by a newer build
+  // degrades to the shape token, which is the honest fallback.
+  if (lfo.shape == deckboy::effects::LfoShape::Drawn) {
+    for (int c = 0; c < deckboy::effects::ParamLfo::kLfoCurvePoints; ++c) {
+      one << ',' << lfo.curve[static_cast<std::size_t>(c)];
+    }
+  }
+  // A Motion shape's zone, in the place the curve would take: the two are
+  // never both in use. A build without Motion reads the shape as Audio and
+  // stops at the seventh field.
+  if (deckboy::effects::lfoShapeIsMotion(lfo.shape)) {
+    one << ',' << lfo.motionZone;
+  }
+  // A MIDI shape's channel and CC, in the same place, for the same reason.
+  if (deckboy::effects::lfoShapeIsMidi(lfo.shape)) {
+    one << ',' << lfo.midiChannel << ',' << lfo.midiNumber;
+  }
+}
+
+void readParamLfo(const std::string& one, deckboy::effects::ParamLfo& lfo) {
+  std::vector<std::string> f;
+  std::size_t c0 = 0;
+  for (;;) {
+    const std::size_t comma = one.find(',', c0);
+    f.push_back(one.substr(c0, comma == std::string::npos
+                                 ? std::string::npos : comma - c0));
+    if (comma == std::string::npos) break;
+    c0 = comma + 1;
+  }
+  if (f.size() > 0) lfo.on = std::atoi(f[0].c_str()) != 0;
+  if (f.size() > 1) {
+    const int shape = std::atoi(f[1].c_str());
+    lfo.shape = static_cast<deckboy::effects::LfoShape>(
+      std::clamp(shape, 0,
+                 static_cast<int>(deckboy::effects::LfoShape::Count) - 1));
+  }
+  if (f.size() > 2) lfo.rateHz = static_cast<float>(std::atof(f[2].c_str()));
+  if (f.size() > 3) lfo.depth = static_cast<float>(std::atof(f[3].c_str()));
+  if (f.size() > 4) lfo.phase = static_cast<float>(std::atof(f[4].c_str()));
+  if (f.size() > 5) lfo.beatSync = std::atoi(f[5].c_str()) != 0;
+  if (f.size() > 6) lfo.beats = static_cast<float>(std::atof(f[6].c_str()));
+  if (deckboy::effects::lfoShapeIsMotion(lfo.shape)) {
+    lfo.motionZone = f.size() > 7 ? std::clamp(std::atoi(f[7].c_str()), 0, 8) : 0;
+    return;
+  }
+  if (deckboy::effects::lfoShapeIsMidi(lfo.shape)) {
+    lfo.midiChannel = f.size() > 7 ? std::clamp(std::atoi(f[7].c_str()), 0, 16) : 0;
+    lfo.midiNumber = f.size() > 8 ? std::clamp(std::atoi(f[8].c_str()), 0, 127) : 1;
+    return;
+  }
+  // The drawn curve, if this show carries one. A partial curve is
+  // read as far as it goes and the rest keeps the default ramp,
+  // rather than being rejected: half a curve still oscillates.
+  for (int c = 0; c < deckboy::effects::ParamLfo::kLfoCurvePoints; ++c) {
+    const std::size_t curveAt = static_cast<std::size_t>(7 + c);
+    if (f.size() <= curveAt) break;
+    lfo.curve[static_cast<std::size_t>(c)] =
+      std::clamp(static_cast<float>(std::atof(f[curveAt].c_str())), 0.0f, 1.0f);
+  }
+}
+
+// A cue's geometry oscillators, one field. EMPTY when none is armed, which is
+// every cue that has never had one -- so the field costs a tab and nothing
+// else, and an older build reading a newer show sees one more field it skips.
+//
+// EMPTY ONLY WHEN NOTHING WAS EVER SET, not when nothing is switched on. An
+// oscillator the operator shaped and then switched off still carries its
+// rate, depth, shape and drawn curve; writing nothing for it handed back the
+// defaults on reopening, so switching it on again gave a different look
+// (Codex audit #3, found on the Moire cue, which shares this field format).
+std::string serializeGeometryLfos(const std::array<deckboy::effects::ParamLfo, 9>& lfos) {
+  const deckboy::effects::ParamLfo fresh;
+  bool any = false;
+  for (const auto& lfo : lfos) {
+    any = any || lfo.on || lfo.shape != fresh.shape || lfo.rateHz != fresh.rateHz ||
+          lfo.depth != fresh.depth || lfo.phase != fresh.phase ||
+          lfo.beatSync != fresh.beatSync || lfo.beats != fresh.beats || lfo.curve != fresh.curve ||
+          lfo.motionZone != fresh.motionZone;
+  }
+  if (!any) {
+    return std::string();
+  }
+  std::ostringstream out;
+  for (std::size_t i = 0; i < lfos.size(); ++i) {
+    if (i) out << ';';
+    writeParamLfo(out, lfos[i]);
+  }
+  return out.str();
+}
+
+// A Moire cue's theme inks, one field: four RRGGBB hex values split by ','.
+std::string serializeMoireInks(const std::array<std::uint32_t, 4>& inks) {
+  std::string out;
+  for (std::size_t i = 0; i < inks.size(); ++i) {
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%06X", static_cast<unsigned>(inks[i] & 0xFFFFFFu));
+    if (i) out += ',';
+    out += buf;
+  }
+  return out;
+}
+
+std::array<std::uint32_t, 4> parseMoireInks(const std::string& text,
+                                            const std::array<std::uint32_t, 4>& fallback) {
+  std::array<std::uint32_t, 4> inks = fallback;
+  std::size_t at = 0;
+  for (std::size_t i = 0; i < inks.size() && at <= text.size(); ++i) {
+    const std::size_t comma = text.find(',', at);
+    const std::string part = text.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+    if (part.size() == 6 && part.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
+      inks[i] = static_cast<std::uint32_t>(std::strtoul(part.c_str(), nullptr, 16));
+    }
+    if (comma == std::string::npos) break;
+    at = comma + 1;
+  }
+  return inks;
+}
+
+// A DMX cue's fixture levels, one field: entries split by ';', each
+// name|intensity|colour|intensity lfo|colour lfo. The name is %-escaped so a
+// fixture called "Wash; left" cannot break the record.
+static std::string escapeFixtureName(const std::string& name) {
+  std::string out;
+  for (const char ch : name) {
+    if (ch == '%' || ch == ';' || ch == '|' || ch == '\t' || ch == '\n') {
+      char buf[4];
+      std::snprintf(buf, sizeof(buf), "%%%02X", static_cast<unsigned char>(ch));
+      out += buf;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+static std::string unescapeFixtureName(const std::string& text) {
+  std::string out;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '%' && i + 2 < text.size()) {
+      out += static_cast<char>(std::strtol(text.substr(i + 1, 2).c_str(), nullptr, 16));
+      i += 2;
+    } else {
+      out += text[i];
+    }
+  }
+  return out;
+}
+
+std::string serializeFixtureLevels(const std::vector<CueFixtureLevel>& levels) {
+  std::ostringstream out;
+  for (std::size_t i = 0; i < levels.size(); ++i) {
+    const CueFixtureLevel& l = levels[i];
+    if (i) out << ';';
+    out << escapeFixtureName(l.fixture) << '|' << l.intensity << '|' << l.colour << '|';
+    writeParamLfo(out, l.intensityLfo);
+    out << '|';
+    writeParamLfo(out, l.colourLfo);
+  }
+  return out.str();
+}
+
+std::vector<CueFixtureLevel> parseFixtureLevels(const std::string& text) {
+  std::vector<CueFixtureLevel> levels;
+  std::size_t at = 0;
+  while (!text.empty() && at <= text.size() && levels.size() < 512) {
+    const std::size_t semi = text.find(';', at);
+    const std::string entry = text.substr(at, semi == std::string::npos ? std::string::npos : semi - at);
+    std::vector<std::string> f;
+    std::size_t p = 0;
+    for (;;) {
+      const std::size_t bar = entry.find('|', p);
+      f.push_back(entry.substr(p, bar == std::string::npos ? std::string::npos : bar - p));
+      if (bar == std::string::npos) break;
+      p = bar + 1;
+    }
+    if (!f.empty() && !f[0].empty()) {
+      CueFixtureLevel l;
+      l.fixture = unescapeFixtureName(f[0]);
+      if (f.size() > 1) l.intensity = std::clamp(static_cast<float>(std::atof(f[1].c_str())), 0.0f, 1.0f);
+      if (f.size() > 2) l.colour = std::clamp(std::atoi(f[2].c_str()), -1, deckboy::fixtures::kColourCount - 1);
+      if (f.size() > 3) readParamLfo(f[3], l.intensityLfo);
+      if (f.size() > 4) readParamLfo(f[4], l.colourLfo);
+      levels.push_back(l);
+    }
+    if (semi == std::string::npos) break;
+    at = semi + 1;
+  }
+  return levels;
+}
+
+std::array<deckboy::effects::ParamLfo, 9> parseGeometryLfos(const std::string& text) {
+  std::array<deckboy::effects::ParamLfo, 9> lfos {};
+  std::size_t at = 0;
+  for (std::size_t i = 0; i < lfos.size() && !text.empty() && at != std::string::npos; ++i) {
+    const std::size_t semi = text.find(';', at);
+    readParamLfo(text.substr(at, semi == std::string::npos ? std::string::npos : semi - at),
+                 lfos[i]);
+    at = semi == std::string::npos ? std::string::npos : semi + 1;
+  }
+  return lfos;
+}
+
+// A tone cue's two oscillators, in the geometry field's spelling (the first
+// two of nine). Empty when neither was ever touched, like that field.
+std::string serializeToneLfos(const std::array<deckboy::effects::ParamLfo, 2>& lfos) {
+  std::array<deckboy::effects::ParamLfo, 9> all {};
+  all[0] = lfos[0];
+  all[1] = lfos[1];
+  return serializeGeometryLfos(all);
+}
+
+// Every slice's oscillators, one slice to a '|', each in the geometry
+// field's spelling (its first four). Empty when none was ever touched.
+std::string serializeSliceLfos(const std::vector<deckboy::slices::Slice>& slices) {
+  std::string out;
+  bool any = false;
+  for (std::size_t i = 0; i < slices.size(); ++i) {
+    std::array<deckboy::effects::ParamLfo, 9> all {};
+    for (std::size_t k = 0; k < 4; ++k) all[k] = slices[i].lfo[k];
+    const std::string one = serializeGeometryLfos(all);
+    any = any || !one.empty();
+    if (i) out += '|';
+    out += one;
+  }
+  return any ? out : std::string();
+}
+
+void parseSliceLfos(const std::string& text, std::vector<deckboy::slices::Slice>& slices) {
+  std::size_t at = 0;
+  for (auto& s : slices) {
+    if (at > text.size()) break;
+    const std::size_t end = std::min(text.find('|', at), text.size());
+    const auto all = parseGeometryLfos(text.substr(at, end - at));
+    for (std::size_t k = 0; k < 4; ++k) s.lfo[k] = all[k];
+    at = end + 1;
+  }
+}
+
+// A Draw cue's strokes, or nothing for every other cue: the field costs a tab.
+std::string serializeCueDrawing(const Cue& cue) {
+  if (cue.kind != CueKind::Pattern || normalizePatternTypeId(cue.path) != "draw") return std::string();
+  return deckboy::draw::serialize(cue.drawing);
+}
+
+std::array<deckboy::effects::ParamLfo, 2> parseToneLfos(const std::string& text) {
+  const auto all = parseGeometryLfos(text);
+  return {all[0], all[1]};
+}
+
+std::string serializeCueEffects(const std::vector<deckboy::effects::CueEffect>& stack) {
+  std::string out;
+  for (const auto& fx : stack) {
+    if (fx.kind == deckboy::effects::CueEffectKind::None) continue;
+    if (!out.empty()) out += '|';
+    std::ostringstream one;
+    // C and D go AFTER bypassed, not between B and it. Appending keeps every
+    // show ever saved readable, and keeps a show saved here readable by a build
+    // that predates them -- it just ignores the two extra fields.
+    one << deckboy::effects::cueEffectToken(fx.kind) << ':' << fx.amount
+        << ':' << fx.paramA << ':' << fx.paramB << ':' << (fx.bypassed ? 1 : 0)
+        << ':' << fx.paramC << ':' << fx.paramD;
+    // The LFOs go on the END, and only when at least one is armed.
+    //
+    // Appending keeps every show ever saved readable and keeps a show saved
+    // here readable by a build that predates them -- it stops at paramD and
+    // ignores the rest, which is exactly right, because an older build has no
+    // oscillators to run. Written only when armed so the format does not grow
+    // by seven numbers per parameter on every cue that never touched one.
+    //
+    // Semicolons between the LFOs and commas inside them: the colon and the
+    // pipe are already spoken for one and two levels up.
+    const bool hasLfo = deckboy::effects::cueEffectStackHasLfo({fx});
+    const bool hasColour = (fx.colour & 0xFFFFFF) != 0xFFFFFF;
+    if (hasLfo || hasColour) {
+      one << ':';
+      if (hasLfo) {
+        for (int i = 0; i < 5; ++i) {
+          if (i) one << ';';
+          writeParamLfo(one, fx.lfo[i]);
+        }
+      }
+    }
+    // The picked colour after the LFOs, and only when it is not the white
+    // every effect had before it. An empty LFO field before it reads as "no
+    // oscillators" here and in every build that predates the colour.
+    if (hasColour) {
+      char hex[8];
+      std::snprintf(hex, sizeof(hex), "%06x", static_cast<unsigned>(fx.colour & 0xFFFFFF));
+      one << ':' << hex;
+    }
+    out += one.str();
+  }
+  return out;
+}
+
+std::vector<deckboy::effects::CueEffect> parseCueEffects(const std::string& text) {
+  std::vector<deckboy::effects::CueEffect> stack;
+  if (text.empty()) return stack;
+  std::size_t start = 0;
+  for (;;) {
+    const std::size_t bar = text.find('|', start);
+    const std::string item =
+      text.substr(start, bar == std::string::npos ? std::string::npos : bar - start);
+    if (!item.empty()) {
+      std::vector<std::string> parts;
+      std::size_t p0 = 0;
+      for (;;) {
+        const std::size_t colon = item.find(':', p0);
+        parts.push_back(
+          item.substr(p0, colon == std::string::npos ? std::string::npos : colon - p0));
+        if (colon == std::string::npos) break;
+        p0 = colon + 1;
+      }
+      deckboy::effects::CueEffect fx;
+      fx.kind = deckboy::effects::cueEffectFromToken(parts[0]);
+      // An unknown token means a show saved by a NEWER build. Skipping it
+      // keeps the rest of the stack rather than refusing the whole cue.
+      if (fx.kind != deckboy::effects::CueEffectKind::None) {
+        if (parts.size() > 1) fx.amount = static_cast<float>(std::atof(parts[1].c_str()));
+        if (parts.size() > 2) fx.paramA = static_cast<float>(std::atof(parts[2].c_str()));
+        if (parts.size() > 3) fx.paramB = static_cast<float>(std::atof(parts[3].c_str()));
+        if (parts.size() > 4) fx.bypassed = std::atoi(parts[4].c_str()) != 0;
+        if (parts.size() > 5) fx.paramC = static_cast<float>(std::atof(parts[5].c_str()));
+        if (parts.size() > 6) fx.paramD = static_cast<float>(std::atof(parts[6].c_str()));
+        // The LFO block, when the show that wrote this had one. Absent on every
+        // older save, which leaves every oscillator off -- which is what those
+        // shows meant.
+        if (parts.size() > 7 && !parts[7].empty()) {
+          std::size_t at = 0;
+          for (int i = 0; i < 5 && at != std::string::npos; ++i) {
+            const std::size_t semi = parts[7].find(';', at);
+            readParamLfo(parts[7].substr(
+                           at, semi == std::string::npos ? std::string::npos : semi - at),
+                         fx.lfo[i]);
+            at = semi == std::string::npos ? std::string::npos : semi + 1;
+          }
+        }
+        if (parts.size() > 8 && parts[8].size() == 6) {
+          fx.colour = static_cast<std::uint32_t>(std::strtoul(parts[8].c_str(), nullptr, 16)) & 0xFFFFFF;
+        }
+        stack.push_back(fx);
+      }
+    }
+    if (bar == std::string::npos) break;
+    start = bar + 1;
+  }
+  return stack;
+}
+
+// A TAB IS THE SEPARATOR AND A NEWLINE IS THE RECORD, so a field containing
+// either has to say so without using one.
+//
+// This used to write a backslash and then the character ITSELF -- so a field
+// with a newline in it emitted a real newline, the record ran onto a second
+// physical line, and the loader (which reads a line at a time) dropped
+// everything after the break. Nothing hit it while every field was a single
+// line of text; per-slide speaker notes are the first thing that is not, and
+// they arrived with every paragraph after the first missing.
+//
+// Now the escape NAMES the character -- backslash-n, backslash-t -- and the
+// file stays one record per line whatever is in it.
+std::string escapeField(const std::string& value) {
+  std::string out;
+  out.reserve(value.size());
+  for (char ch : value) {
+    switch (ch) {
+      case '\\': out += "\\\\"; break;
+      case '\t': out += "\\t"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': break;   // a CR belongs to the line ending, never to the value
+      default: out.push_back(ch); break;
+    }
+  }
+  return out;
+}
+
+// Reads BOTH forms: the named escapes the writer now emits, and the older
+// "backslash then the character itself", so every show file already on disk
+// still loads. The two cannot be confused -- the old writer only ever put a
+// backslash before a backslash, a tab or a newline, so a backslash-n never
+// occurred in a file it wrote.
+std::string unescapeField(const std::string& value) {
+  std::string out;
+  out.reserve(value.size());
+  bool escaping = false;
+  for (char ch : value) {
+    if (escaping) {
+      switch (ch) {
+        case 'n': out.push_back('\n'); break;
+        case 't': out.push_back('\t'); break;
+        default:  out.push_back(ch); break;   // backslash, or the old form
+      }
+      escaping = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escaping = true;
+      continue;
+    }
+    out.push_back(ch);
+  }
+  return out;
+}
+
+std::vector<std::string> splitEscapedTabs(const std::string& line) {
+  std::vector<std::string> fields;
+  std::string current;
+  bool escaping = false;
+  // Splits on UNESCAPED tabs and decodes the escapes as it goes, so a field
+  // carrying a tab or a newline in its text does not split the record. Accepts
+  // the older "backslash then the character" form too -- see unescapeField.
+  for (char ch : line) {
+    if (escaping) {
+      switch (ch) {
+        case 'n': current.push_back('\n'); break;
+        case 't': current.push_back('\t'); break;
+        default:  current.push_back(ch); break;
+      }
+      escaping = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escaping = true;
+      continue;
+    }
+    if (ch == '\t') {
+      fields.push_back(current);
+      current.clear();
+      continue;
+    }
+    current.push_back(ch);
+  }
+  fields.push_back(current);
+  return fields;
+}
+
+
+
+
+
+// safeString / safeDouble / safeInt / safeSize / safeBool live in
+// core/utils.cpp. This file had a second set, and the two disagreed: this one's
+// safeSize used stoul, which is 32 bits on Windows and threw on any file over
+// 4GB, and its safeBool ignored the caller's fallback for a value it did not
+// recognise. The show file is read through these, so it was being read by
+// whichever copy the calling file happened to see. There is one set now.
+
+// escapeJson lives in core/utils.cpp; this file had an identical second copy.
+
+std::string escapeHtml(const std::string& value) {
+  std::string out;
+  out.reserve(value.size() + 16);
+  for (char ch : value) {
+    switch (ch) {
+      case '&': out += "&amp;"; break;
+      case '<': out += "&lt;"; break;
+      case '>': out += "&gt;"; break;
+      case '"': out += "&quot;"; break;
+      case '\'': out += "&#39;"; break;
+      default: out.push_back(ch); break;
+    }
+  }
+  return out;
+}
+
+std::string deckDefaultName(int index) {
+  return "Deck " + std::to_string(index + 1);
+}
+
+std::string makeCueId(const Cue& cue, int deckIndex, int cueIndex) {
+  std::string seed =
+    cue.path + "|" +
+    cue.name + "|" +
+    std::to_string(deckIndex) + "|" +
+    std::to_string(cueIndex) + "|" +
+    std::to_string(cue.width) + "x" + std::to_string(cue.height);
+  size_t hashValue = std::hash<std::string> {}(seed);
+  std::ostringstream output;
+  output << "cue-" << std::hex << std::nouppercase << hashValue;
+  return output.str();
+}
+
+void normalizeCueTiming(Cue& cue) {
+  if (!std::isfinite(cue.triggerTimecodeSeconds) || cue.triggerTimecodeSeconds < 0.0) {
+    cue.triggerTimecodeSeconds = -1.0;
+  }
+
+  if (!std::isfinite(cue.inPointSeconds)) {
+    cue.inPointSeconds = 0.0;
+  }
+  if (!std::isfinite(cue.outPointSeconds)) {
+    cue.outPointSeconds = 0.0;
+  }
+
+  cue.inPointSeconds = std::max(0.0, cue.inPointSeconds);
+  cue.outPointSeconds = std::max(0.0, cue.outPointSeconds);
+
+  // THE AUTHORITATIVE GATE, and it runs constantly: focusedDeckMutable() calls
+  // normalizeProject() on every call, so this executes after any edit and any
+  // access. It was the reason trim was Video-only everywhere -- the adjusters
+  // and the remote setters each tested for Video as well, but even with those
+  // opened up an audio cue's in-point was written, reported set, and zeroed
+  // again before anything could read it. A show file carrying a trim on an
+  // audio cue had it erased at load, too.
+  if (!cueSupportsTrimPoints(cue.kind) || cue.duration <= 0.0) {
+    cue.inPointSeconds = 0.0;
+    cue.outPointSeconds = 0.0;
+    return;
+  }
+
+  if (cue.outPointSeconds <= 0.0) {
+    cue.outPointSeconds = cue.duration;
+  }
+
+  cue.inPointSeconds = std::clamp(cue.inPointSeconds, 0.0, cue.duration);
+  cue.outPointSeconds = std::clamp(cue.outPointSeconds, cue.inPointSeconds, cue.duration);
+  if (cue.outPointSeconds - cue.inPointSeconds < 0.01) {
+    cue.outPointSeconds = std::min(cue.duration, cue.inPointSeconds + 0.01);
+  }
+}
+
+std::string defaultNdiSourceName(const Deck& deck, int index) {
+  std::string base = deck.name.empty() ? deckDefaultName(index) : deck.name;
+  return "Deckboy - " + base;
+}
+
+std::string defaultNdiKeySourceName(const Deck& deck, int index) {
+  return defaultNdiSourceName(deck, index) + " Key";
+}
+
+std::string defaultOutputNdiSourceName(const OutputTarget& output, int index) {
+  std::string base = trim(output.name).empty()
+    ? ("Output " + std::to_string(index + 1))
+    : output.name;
+  return "Deckboy Out - " + base;
+}
+
+std::string defaultOutputNdiKeySourceName(const OutputTarget& output, int index) {
+  return defaultOutputNdiSourceName(output, index) + " Key";
+}
+
+std::string normalizeWarpMode(std::string mode);
+
+void normalizeDeck(Deck& deck, int index) {
+  if (deck.name.empty()) {
+    deck.name = deckDefaultName(index);
+  }
+  if (deck.cues.empty()) {
+    deck.selectedIndex = -1;
+    deck.activeIndex = -1;
+  } else {
+    deck.selectedIndex = std::clamp(deck.selectedIndex, 0, static_cast<int>(deck.cues.size()) - 1);
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      deck.activeIndex = -1;
+    }
+
+    std::unordered_set<std::string> usedIds;
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      Cue& cue = deck.cues[cueIndex];
+      normalizeCueTiming(cue);
+      cue.cueId = normalizeCueIdShort(cue.cueId);
+      if (cue.cueId.empty()) {
+        cue.cueId = normalizeCueIdShort(cue.cueNumber);
+      }
+      // Repair hasAudio if audioChannels/audioSampleRate say audio exists but the flag
+      // was stored incorrectly (e.g. from the probeCue codec field-order bug).
+      if (!cue.hasAudio && (cue.audioChannels > 0 || cue.audioSampleRate > 0)) {
+        cue.hasAudio = true;
+      }
+      if (!cue.hasAudio) {
+        cue.audioEnabled = false;
+      }
+      cue.outputScaleX = std::clamp(cue.outputScaleX, 0.25f, 4.0f);
+      cue.outputScaleY = std::clamp(cue.outputScaleY, 0.25f, 4.0f);
+      cue.outputRotationDegrees = std::clamp(cue.outputRotationDegrees, -180.0f, 180.0f);
+      cue.cropLeft = std::clamp(cue.cropLeft, 0.0f, 0.90f);
+      cue.cropRight = std::clamp(cue.cropRight, 0.0f, 0.90f);
+      cue.cropTop = std::clamp(cue.cropTop, 0.0f, 0.90f);
+      cue.cropBottom = std::clamp(cue.cropBottom, 0.0f, 0.90f);
+      float maxHorizontal = std::max(0.0f, 0.95f - cue.cropLeft);
+      cue.cropRight = std::min(cue.cropRight, maxHorizontal);
+      float maxVertical = std::max(0.0f, 0.95f - cue.cropTop);
+      cue.cropBottom = std::min(cue.cropBottom, maxVertical);
+      cue.chromaKeyTolerance = std::clamp(cue.chromaKeyTolerance, 0.0f, 441.0f);
+      cue.chromaKeySoftness = std::clamp(cue.chromaKeySoftness, 0.0f, 200.0f);
+      cue.brightness = std::clamp(cue.brightness, 0.0f, 2.0f);
+      cue.contrast = std::clamp(cue.contrast, 0.0f, 2.0f);
+      cue.saturation = std::clamp(cue.saturation, 0.0f, 2.0f);
+      cue.hueShift = std::clamp(cue.hueShift, -180.0f, 180.0f);
+      cue.gotoTarget = trim(cue.gotoTarget);
+      if (cue.kind == CueKind::Composite) {
+        applyCompositePresetToCue(cue, cue.compositeLayoutPreset);
+      }
+      if (cue.id.empty()) {
+        cue.id = makeCueId(cue, index, cueIndex);
+      }
+      std::string baseId = cue.id;
+      int dedupe = 2;
+      while (usedIds.find(cue.id) != usedIds.end()) {
+        cue.id = baseId + "-" + std::to_string(dedupe++);
+      }
+      usedIds.insert(cue.id);
+    }
+    std::vector<int> normalizedSelection;
+    normalizedSelection.reserve(deck.selectedIndices.size());
+    std::unordered_set<int> seenIndices;
+    for (int selected : deck.selectedIndices) {
+      if (selected < 0 || selected >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      if (seenIndices.insert(selected).second) {
+        normalizedSelection.push_back(selected);
+      }
+    }
+    if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+      if (seenIndices.insert(deck.selectedIndex).second) {
+        normalizedSelection.push_back(deck.selectedIndex);
+      }
+    }
+    if (normalizedSelection.empty() && !deck.cues.empty()) {
+      normalizedSelection.push_back(deck.selectedIndex);
+    }
+    std::sort(normalizedSelection.begin(), normalizedSelection.end());
+    deck.selectedIndices = std::move(normalizedSelection);
+  }
+  deck.playlistOpacity = std::clamp(deck.playlistOpacity, 0.0f, 1.0f);
+  deck.playlistFadeSeconds = std::clamp(
+    std::isfinite(deck.playlistFadeSeconds) ? deck.playlistFadeSeconds : 0.8,
+    0.05, 10.0);
+  deck.playlistTimebaseFps = normalizePlaylistTimebaseFps(deck.playlistTimebaseFps);
+  deck.playlistStartOffsetSeconds = std::clamp(
+    std::isfinite(deck.playlistStartOffsetSeconds) ? deck.playlistStartOffsetSeconds : 0.0,
+    0.0, 24.0 * 60.0 * 60.0);
+  deck.playlistDefaultCueFadeSeconds = std::clamp(
+    std::isfinite(deck.playlistDefaultCueFadeSeconds) ? deck.playlistDefaultCueFadeSeconds : 1.5,
+    0.0, 10.0);
+  deck.playlistDefaultStillDurationSeconds = std::clamp(
+    std::isfinite(deck.playlistDefaultStillDurationSeconds) ? deck.playlistDefaultStillDurationSeconds : 8.0,
+    0.0, 3600.0);
+  deck.outputDisplayIndex = std::max(0, deck.outputDisplayIndex);
+  if (deck.ndiSourceName.empty()) {
+    deck.ndiSourceName = defaultNdiSourceName(deck, index);
+  }
+  if (deck.ndiKeySourceName.empty()) {
+    deck.ndiKeySourceName = defaultNdiKeySourceName(deck, index);
+  }
+  deck.canvasViewX = std::clamp(deck.canvasViewX, 0, 32768);
+  deck.canvasViewY = std::clamp(deck.canvasViewY, 0, 32768);
+  deck.warpTopLeftX = std::clamp(deck.warpTopLeftX, -4096.0f, 4096.0f);
+  deck.warpTopLeftY = std::clamp(deck.warpTopLeftY, -4096.0f, 4096.0f);
+  deck.warpTopRightX = std::clamp(deck.warpTopRightX, -4096.0f, 4096.0f);
+  deck.warpTopRightY = std::clamp(deck.warpTopRightY, -4096.0f, 4096.0f);
+  deck.warpBottomRightX = std::clamp(deck.warpBottomRightX, -4096.0f, 4096.0f);
+  deck.warpBottomRightY = std::clamp(deck.warpBottomRightY, -4096.0f, 4096.0f);
+  deck.warpBottomLeftX = std::clamp(deck.warpBottomLeftX, -4096.0f, 4096.0f);
+  deck.warpBottomLeftY = std::clamp(deck.warpBottomLeftY, -4096.0f, 4096.0f);
+  deck.warpMode = normalizeWarpMode(deck.warpMode);
+  deck.edgeBlendLeft = std::clamp(deck.edgeBlendLeft, 0.0f, 0.49f);
+  deck.edgeBlendRight = std::clamp(deck.edgeBlendRight, 0.0f, 0.49f);
+  deck.edgeBlendTop = std::clamp(deck.edgeBlendTop, 0.0f, 0.49f);
+  deck.edgeBlendBottom = std::clamp(deck.edgeBlendBottom, 0.0f, 0.49f);
+  deck.edgeBlendRight = std::min(deck.edgeBlendRight, std::max(0.0f, 0.95f - deck.edgeBlendLeft));
+  deck.edgeBlendBottom = std::min(deck.edgeBlendBottom, std::max(0.0f, 0.95f - deck.edgeBlendTop));
+  deck.transitionSeconds = std::clamp(deck.transitionSeconds, 0.0, 10.0);
+  deck.transitionStyle = transitionStyleToken(parseTransitionStyleToken(deck.transitionStyle));
+  if (!std::isfinite(deck.timecodeFps) || deck.timecodeFps < 1.0) {
+    deck.timecodeFps = 30.0;
+  }
+  deck.timecodeFreewheelSeconds = std::clamp(
+    std::isfinite(deck.timecodeFreewheelSeconds) ? deck.timecodeFreewheelSeconds : 1.0,
+    0.0, 10.0);
+  if (!std::isfinite(deck.timecodeCurrentSeconds) || deck.timecodeCurrentSeconds < 0.0) {
+    deck.timecodeCurrentSeconds = 0.0;
+  }
+  if (!std::isfinite(deck.timecodeLastSeconds) || deck.timecodeLastSeconds < 0.0) {
+    deck.timecodeLastSeconds = deck.timecodeCurrentSeconds;
+  }
+  deck.timecodeDirty = false;
+}
+
+std::string outputDefaultName(int index) {
+  return "Output " + std::to_string(index + 1);
+}
+
+std::string makeOutputId(const OutputTarget& output, int outputIndex) {
+  std::string seed =
+    output.name + "|" +
+    std::to_string(output.hostDeckIndex) + "|" +
+    std::to_string(output.displayIndex) + "|" +
+    std::to_string(outputIndex);
+  size_t hashValue = std::hash<std::string> {}(seed);
+  std::ostringstream outputId;
+  outputId << "out-" << std::hex << std::nouppercase << hashValue;
+  return outputId.str();
+}
+
+
+std::string normalizeOutputStreamProtocol(std::string protocol) {
+  std::transform(protocol.begin(), protocol.end(), protocol.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (protocol == "rtmp") {
+    return "rtmp";
+  }
+  // "rtmps" used to fall through to "srt" here, which silently made every
+  // rtmps branch in the settings UI and in buildOutputStreamArgs unreachable —
+  // selecting RTMPS gave you an SRT stream. It is its own protocol.
+  if (protocol == "rtmps") {
+    return "rtmps";
+  }
+  // "file" records the finished program to disk instead of sending it. Same
+  // pipeline, different sink -- the compositor already hands finished frames to
+  // ffmpeg's stdin, so recording is a muxer and a target away from streaming.
+  if (protocol == "file") {
+    return "file";
+  }
+  // "web" sends the output, picture AND sound, to the browsers watching the
+  // web monitor: fragmented MP4 into a private local socket the monitor's
+  // server relays (see app_network.ipp, web ingest).
+  if (protocol == "web") {
+    return "web";
+  }
+  return "srt";
+}
+
+inline bool outputStreamProtocolIsWeb(const std::string& normalizedProtocol) {
+  return normalizedProtocol == "web";
+}
+
+// True when the egress target is a file on disk rather than a network sink.
+// The streaming-only muxer flags (mpegts header resend, zero mux delay) are
+// wrong for a recording and some are rejected outright by the mp4 muxer.
+inline bool outputStreamProtocolIsFile(const std::string& normalizedProtocol) {
+  return normalizedProtocol == "file";
+}
+
+// True for the RTMP family, which is what takes a stream key and the FLV muxer.
+inline bool outputStreamProtocolIsRtmp(const std::string& normalizedProtocol) {
+  return normalizedProtocol == "rtmp" || normalizedProtocol == "rtmps";
+}
+
+std::string normalizeOutputType(std::string outputType) {
+  std::transform(outputType.begin(), outputType.end(), outputType.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (outputType == "stream") {
+    return "stream";
+  }
+  // PRESENTER is a WINDOW that shows the operator something else.
+  //
+  // It is an output type rather than a separate kind of window because
+  // everything an output already knows how to do is what a presenter view
+  // needs: pick a display, go fullscreen on it, be armed and disarmed with the
+  // rest of the show. The only thing that differs is what gets drawn in it.
+  if (outputType == "presenter") {
+    return "presenter";
+  }
+  // PROMPTER is the same trick again, for the person in front of the camera
+  // rather than the one behind it: a screen under a beamsplitter showing the
+  // script scrolling at a set pace, MIRRORED, because the glass reverses it
+  // on the way to their eye.
+  //
+  // Also an output rather than a cue kind, and for a reason beyond convenience:
+  // prompter text is drawn with real fonts at whatever size the talent needs,
+  // and the engine's frame generators only have a three-by-five digit table.
+  // A script belongs where the text renderer is.
+  if (outputType == "prompter" || outputType == "teleprompter") {
+    return "prompter";
+  }
+  // MULTIVIEW is the same trick a third time: a screen showing every playlist
+  // at once, which is what a switcher's monitor wall is for. Not a cue kind
+  // for the same reason the other two are not -- it is a thing a DESTINATION
+  // shows, not a thing a playlist plays.
+  if (outputType == "multiview" || outputType == "multi") {
+    return "multiview";
+  }
+  return "window";
+}
+
+// True for anything that lives in a window on a display, whatever it draws.
+bool outputTypeIsWindowed(const std::string& outputType) {
+  return outputType == "window" || outputType == "presenter" ||
+         outputType == "prompter";
+}
+
+std::string normalizeOutputColorSpace(std::string colorSpace) {
+  colorSpace = toLower(trim(colorSpace));
+  if (colorSpace == "709" || colorSpace == "bt709" || colorSpace == "rec709" || colorSpace == "rec-709") {
+    return "bt709";
+  }
+  if (colorSpace == "srgb" || colorSpace == "rgb") {
+    return "srgb";
+  }
+  return "auto";
+}
+
+std::string normalizeOutputLayoutMode(std::string mode) {
+  mode = toLower(trim(mode));
+  if (mode == "duplicate" || mode == "dup" || mode == "clone") {
+    return "duplicate";
+  }
+  return "span";
+}
+
+std::string normalizeWarpMode(std::string mode) {
+  mode = toLower(trim(mode));
+  if (mode == "perspective" || mode == "persp" || mode == "projective") {
+    return "perspective";
+  }
+  return "linear";
+}
+
+// An output's grid warp as one field: "cols,rows,smooth,dx,dy,dx,dy,..." --
+// commas only, so it cannot collide with the record's tabs. Empty is no grid.
+std::string serializeWarpGrid(const OutputTarget& out) {
+  if (out.warpGridCols < 2 || out.warpGridRows < 2 ||
+      out.warpGridOffsets.size() != static_cast<std::size_t>(out.warpGridCols * out.warpGridRows * 2)) {
+    return std::string();
+  }
+  std::ostringstream s;
+  // Every bit of each float: at the stream's default six digits a nudge
+  // drifted a little on every save, and an alignment should not erode.
+  s << std::setprecision(std::numeric_limits<float>::max_digits10);
+  s << out.warpGridCols << ',' << out.warpGridRows << ',' << (out.warpGridSmooth ? 1 : 0);
+  for (float v : out.warpGridOffsets) {
+    s << ',' << v;
+  }
+  return s.str();
+}
+
+// The reverse. Anything that does not add up -- a size out of range, a point
+// count that does not match it -- leaves the output with no grid rather than
+// a half-loaded one that bends the picture somewhere nobody put it.
+void parseWarpGrid(OutputTarget& out, const std::string& text) {
+  out.warpGridCols = out.warpGridRows = 0;
+  out.warpGridOffsets.clear();
+  if (text.empty()) {
+    return;
+  }
+  std::vector<double> v;
+  std::stringstream ss(text);
+  std::string part;
+  while (std::getline(ss, part, ',')) {
+    try {
+      v.push_back(std::stod(part));
+    } catch (...) {
+      return;
+    }
+  }
+  if (v.size() < 3) {
+    return;
+  }
+  const int cols = static_cast<int>(v[0]);
+  const int rows = static_cast<int>(v[1]);
+  if (cols < 2 || cols > 9 || rows < 2 || rows > 9 ||
+      v.size() != 3 + static_cast<std::size_t>(cols * rows * 2)) {
+    return;
+  }
+  out.warpGridCols = cols;
+  out.warpGridRows = rows;
+  out.warpGridSmooth = v[2] != 0.0;
+  out.warpGridOffsets.reserve(static_cast<std::size_t>(cols * rows * 2));
+  for (std::size_t i = 3; i < v.size(); ++i) {
+    out.warpGridOffsets.push_back(static_cast<float>(v[i]));
+  }
+}
+
+std::string warpModeLabel(std::string mode) {
+  std::string normalized = normalizeWarpMode(std::move(mode));
+  if (normalized == "perspective") {
+    return "Perspective";
+  }
+  return "Linear";
+}
+
+int normalizeOutputOrientationDegrees(int degrees) {
+  int normalized = degrees % 360;
+  if (normalized < 0) {
+    normalized += 360;
+  }
+  if (normalized < 45) {
+    return 0;
+  }
+  if (normalized < 135) {
+    return 90;
+  }
+  if (normalized < 225) {
+    return 180;
+  }
+  if (normalized < 315) {
+    return 270;
+  }
+  return 0;
+}
+
+std::string outputOrientationLabel(int degrees) {
+  return std::to_string(normalizeOutputOrientationDegrees(degrees)) + "°";
+}
+
+int normalizeOscQueryPort(int port) {
+  return std::clamp(port, 1, 65535);
+}
+
+int normalizeOscFeedbackRateMs(int value) {
+  return std::clamp(value, 40, 2000);
+}
+
+int normalizeArtNetPort(int value) {
+  return std::clamp(value, 1, 65535);
+}
+
+std::string defaultOutputStreamUrl(const std::string& protocol, int outputIndex) {
+  int normalizedIndex = std::max(0, outputIndex) + 1;
+  const std::string normalized = normalizeOutputStreamProtocol(protocol);
+  if (normalized == "rtmp") {
+    return "rtmp://127.0.0.1/live/output" + std::to_string(normalizedIndex);
+  }
+  if (normalized == "rtmps") {
+    // RTMPS had no default at all (it normalized to SRT), so choosing it left
+    // the operator with an srt:// URL and no clue why nothing connected.
+    return "rtmps://127.0.0.1:443/live/output" + std::to_string(normalizedIndex);
+  }
+  if (normalized == "file") {
+    // A NAME, not a final path: buildOutputStreamArgs stamps the time onto the
+    // stem at spawn so a second recording can never overwrite the first. The
+    // folder is resolved there too, because it depends on whether a show is
+    // open and this function does not know.
+    return "program-output" + std::to_string(normalizedIndex) + ".mp4";
+  }
+  // Bare host:port — the transport parameters are added from the SRT fields by
+  // applySrtUrlParameters, so they are no longer baked into the default string.
+  return "srt://127.0.0.1:9000";
+}
+
+int resolveLegacyOutputHostIndexForProject(const Project& project, int deckIndex) {
+  if (deckIndex < 0 || deckIndex >= static_cast<int>(project.decks.size())) {
+    return deckIndex;
+  }
+  int current = deckIndex;
+  std::vector<bool> visited(project.decks.size(), false);
+  while (current >= 0 && current < static_cast<int>(project.decks.size())) {
+    if (visited[current]) {
+      return deckIndex;
+    }
+    visited[current] = true;
+    int next = project.decks[current].outputRouteDeckIndex;
+    if (next < 0 || next >= static_cast<int>(project.decks.size()) || next == current) {
+      return current;
+    }
+    current = next;
+  }
+  return deckIndex;
+}
+
+void normalizeProjectOutputsAndLayers(Project& project) {
+  int deckCount = static_cast<int>(project.decks.size());
+  if (deckCount <= 0) {
+    project.outputs.clear();
+    project.focusedOutputIndex = 0;
+    return;
+  }
+
+  if (project.outputs.empty()) {
+    std::vector<int> hostDeckOrder;
+    hostDeckOrder.reserve(project.decks.size());
+    auto addHost = [&](int hostDeckIndex) {
+      if (std::find(hostDeckOrder.begin(), hostDeckOrder.end(), hostDeckIndex) == hostDeckOrder.end()) {
+        hostDeckOrder.push_back(hostDeckIndex);
+      }
+    };
+    for (int deckIndex = 0; deckIndex < deckCount; ++deckIndex) {
+      addHost(resolveLegacyOutputHostIndexForProject(project, deckIndex));
+    }
+    if (hostDeckOrder.empty()) {
+      hostDeckOrder.push_back(0);
+    }
+    project.outputs.clear();
+    for (size_t i = 0; i < hostDeckOrder.size(); ++i) {
+      OutputTarget output;
+      output.name = outputDefaultName(static_cast<int>(i));
+      output.hostDeckIndex = std::clamp(hostDeckOrder[i], 0, deckCount - 1);
+      output.displayIndex = std::max(0, project.decks[output.hostDeckIndex].outputDisplayIndex);
+      output.enabled = false;
+      project.outputs.push_back(output);
+    }
+  }
+
+  auto dedupeOutputId = [](std::unordered_set<std::string>& usedIds, const std::string& preferred) {
+    std::string normalized = trim(preferred);
+    if (normalized.empty()) {
+      normalized = "out";
+    }
+    std::string base = normalized;
+    int dedupe = 2;
+    while (usedIds.find(normalized) != usedIds.end()) {
+      normalized = base + "-" + std::to_string(dedupe++);
+    }
+    usedIds.insert(normalized);
+    return normalized;
+  };
+
+  for (size_t i = 0; i < project.outputs.size(); ++i) {
+    OutputTarget& output = project.outputs[i];
+    if (output.name.empty()) {
+      output.name = outputDefaultName(static_cast<int>(i));
+    }
+    output.hostDeckIndex = std::clamp(output.hostDeckIndex, 0, deckCount - 1);
+    // ── PROJECTION MAPPING MOVES UP FROM THE HOST DECK, ONCE ────────────
+    //
+    // Warp and edge blend used to live on the Deck and were applied through
+    // whichever deck hosted this output. A show saved that way has them on
+    // the deck and nothing on the output, so they are lifted here and the
+    // deck's are cleared -- which reproduces exactly what that show did, and
+    // cannot run twice because the deck no longer has anything to give.
+    //
+    // Only from the HOST: a deck that is merely a layer on this output never
+    // supplied its warp, so taking one now would invent an alignment nobody
+    // set.
+    {
+      Deck& host = project.decks[output.hostDeckIndex];
+      const bool outputHasNone =
+        !output.warpEnabled && output.warpTopLeftX == 0.0f && output.warpTopLeftY == 0.0f &&
+        output.warpTopRightX == 0.0f && output.warpTopRightY == 0.0f &&
+        output.warpBottomRightX == 0.0f && output.warpBottomRightY == 0.0f &&
+        output.warpBottomLeftX == 0.0f && output.warpBottomLeftY == 0.0f &&
+        output.edgeBlendLeft == 0.0f && output.edgeBlendRight == 0.0f &&
+        output.edgeBlendTop == 0.0f && output.edgeBlendBottom == 0.0f;
+      const bool deckHasSome =
+        host.warpEnabled || host.warpTopLeftX != 0.0f || host.warpTopLeftY != 0.0f ||
+        host.warpTopRightX != 0.0f || host.warpTopRightY != 0.0f ||
+        host.warpBottomRightX != 0.0f || host.warpBottomRightY != 0.0f ||
+        host.warpBottomLeftX != 0.0f || host.warpBottomLeftY != 0.0f ||
+        host.edgeBlendLeft != 0.0f || host.edgeBlendRight != 0.0f ||
+        host.edgeBlendTop != 0.0f || host.edgeBlendBottom != 0.0f;
+      if (outputHasNone && deckHasSome) {
+        output.warpEnabled = host.warpEnabled;
+        output.warpMode = host.warpMode;
+        output.warpTopLeftX = host.warpTopLeftX;
+        output.warpTopLeftY = host.warpTopLeftY;
+        output.warpTopRightX = host.warpTopRightX;
+        output.warpTopRightY = host.warpTopRightY;
+        output.warpBottomRightX = host.warpBottomRightX;
+        output.warpBottomRightY = host.warpBottomRightY;
+        output.warpBottomLeftX = host.warpBottomLeftX;
+        output.warpBottomLeftY = host.warpBottomLeftY;
+        output.edgeBlendLeft = host.edgeBlendLeft;
+        output.edgeBlendRight = host.edgeBlendRight;
+        output.edgeBlendTop = host.edgeBlendTop;
+        output.edgeBlendBottom = host.edgeBlendBottom;
+        host.warpEnabled = false;
+        host.warpTopLeftX = host.warpTopLeftY = 0.0f;
+        host.warpTopRightX = host.warpTopRightY = 0.0f;
+        host.warpBottomRightX = host.warpBottomRightY = 0.0f;
+        host.warpBottomLeftX = host.warpBottomLeftY = 0.0f;
+        host.edgeBlendLeft = host.edgeBlendRight = 0.0f;
+        host.edgeBlendTop = host.edgeBlendBottom = 0.0f;
+      }
+    }
+    output.warpMode = normalizeWarpMode(output.warpMode);
+
+    // -- VJ MODE BECOMES THIS OUTPUT'S CROSSFADER -----------------------
+    //
+    // VJ mode was a global that claimed the programme output and replaced
+    // whatever stack it had with an A/B pair. That is the layer stack again,
+    // in a weaker form: one output, exactly two decks, and every other
+    // routing decision silently discarded while it was on.
+    //
+    // So it migrates, the way warp did. The programme output gets deck A as
+    // its base and deck B as a layer over it carrying VJ's blend mode, and
+    // the crossfader takes the mix position. Then the old fields are CLEARED
+    // -- warp's migration left its originals in place and half the interface
+    // went on reading them for two releases.
+    if (project.vjModeEnabled && project.decks.size() > 1 &&
+        i == 0 && !output.crossfadeEnabled) {
+      // deckCount is already in scope from the top of this function.
+      const int deckA = std::clamp(project.vjDeckA, 0, deckCount - 1);
+      const int deckB = std::clamp(project.vjDeckB, 0, deckCount - 1);
+      if (deckA != deckB) {
+        output.hostDeckIndex = deckA;
+        // B goes on top, keeping whatever blend the crossfader was using.
+        OutputLayer over;
+        over.deckIndex = deckB;
+        over.blendMode = project.vjBlendMode.empty() ? std::string("dissolve")
+                                                     : project.vjBlendMode;
+        output.layerDecks.clear();
+        output.layerDecks.push_back(over);
+        output.crossfadeEnabled = true;
+        output.crossfadeFrom = 0;   // the base, which is deck A
+        output.crossfadeTo = 1;     // the layer, which is deck B
+        output.crossfadeMix = std::clamp(project.vjMixPosition, 0.0, 1.0);
+      }
+      // vjModeEnabled STAYS: it is the operator's switch for showing the
+      // A/B previews and the fader bar, and it is already wired to a
+      // settings button and a verb. Only the DATA moved onto the output.
+      project.vjMixPosition = 0.0;   // migrated onto the output above
+    }
+    // SUPER DECKBOY'S LAYER STACK, cleaned once here so nothing downstream
+    // has to. A deck that no longer exists, or the host repeated above
+    // itself, would each composite the same picture twice at a cost and to
+    // no effect -- and a show that once had four decks and now has two must
+    // still open.
+    {
+      std::vector<OutputLayer> cleaned;
+      for (const OutputLayer& layer : output.layerDecks) {
+        if (layer.deckIndex < 0 || layer.deckIndex >= deckCount ||
+            layer.deckIndex == output.hostDeckIndex) {
+          continue;
+        }
+        bool already = false;
+        for (const OutputLayer& kept : cleaned) {
+          already = already || kept.deckIndex == layer.deckIndex;
+        }
+        if (already) {
+          continue;
+        }
+        OutputLayer fixed = layer;
+        // Geometry kept inside the frame and never inverted: a layer with a
+        // negative width is a layer nobody can see and nothing to explain it.
+        fixed.w = std::clamp(fixed.w, 0.02f, 1.0f);
+        fixed.h = std::clamp(fixed.h, 0.02f, 1.0f);
+        fixed.x = std::clamp(fixed.x, 0.0f, 1.0f - fixed.w);
+        fixed.y = std::clamp(fixed.y, 0.0f, 1.0f - fixed.h);
+        if (fixed.blendMode.empty()) {
+          fixed.blendMode = "dissolve";
+        }
+        cleaned.push_back(fixed);
+      }
+      output.layerDecks.swap(cleaned);
+    }
+    output.displayIndex = std::max(0, output.displayIndex);
+    output.outputType = normalizeOutputType(output.outputType);
+    output.mirrorSourceOutputIndex = std::clamp(output.mirrorSourceOutputIndex, -1, static_cast<int>(project.outputs.size()) - 1);
+    if (output.outputType != "stream") {
+      output.mirrorSourceOutputIndex = -1;
+    }
+    if (output.mirrorSourceOutputIndex == static_cast<int>(i)) {
+      output.mirrorSourceOutputIndex = -1;
+    }
+    output.streamProtocol = normalizeOutputStreamProtocol(output.streamProtocol);
+    output.streamBitrateKbps = std::clamp(output.streamBitrateKbps, 500, 50000);
+    output.outputAlpha = std::clamp(output.outputAlpha, 0.0f, 1.0f);
+    output.outputDelayMs = std::clamp(output.outputDelayMs, 0, 5000);
+    output.aoiLeft   = std::clamp(output.aoiLeft,   0.0f, kAoiMaxEdge);
+    output.aoiRight  = std::clamp(output.aoiRight,  0.0f, kAoiMaxEdge);
+    output.aoiTop    = std::clamp(output.aoiTop,    0.0f, kAoiMaxEdge);
+    output.aoiBottom = std::clamp(output.aoiBottom, 0.0f, kAoiMaxEdge);
+    output.outputColorSpace = normalizeOutputColorSpace(output.outputColorSpace);
+    output.outputLayoutMode = normalizeOutputLayoutMode(output.outputLayoutMode);
+    output.outputOrientationDegrees = normalizeOutputOrientationDegrees(output.outputOrientationDegrees);
+    if (trim(output.streamUrl).empty()) {
+      output.streamUrl = defaultOutputStreamUrl(output.streamProtocol, static_cast<int>(i));
+    }
+    if (output.ndiSourceName.empty()) {
+      output.ndiSourceName = defaultOutputNdiSourceName(output, static_cast<int>(i));
+    }
+    if (output.ndiKeySourceName.empty()) {
+      output.ndiKeySourceName = defaultOutputNdiKeySourceName(output, static_cast<int>(i));
+    }
+    if (!output.ndiEnabled) {
+      output.ndiKeyEnabled = false;
+    }
+    if (trim(output.outputId).empty()) {
+      output.outputId = makeOutputId(output, static_cast<int>(i));
+    }
+  }
+
+  {
+    std::unordered_set<std::string> usedOutputIds;
+    for (size_t i = 0; i < project.outputs.size(); ++i) {
+      OutputTarget& output = project.outputs[i];
+      output.outputId = dedupeOutputId(usedOutputIds, output.outputId);
+    }
+  }
+  project.focusedOutputIndex = std::clamp(project.focusedOutputIndex, 0, static_cast<int>(project.outputs.size()) - 1);
+
+  std::vector<bool> hostDisplayAssigned(deckCount, false);
+  for (const auto& output : project.outputs) {
+    if (!output.enabled) {
+      continue;
+    }
+    int hostDeckIndex = std::clamp(output.hostDeckIndex, 0, deckCount - 1);
+    if (!hostDisplayAssigned[hostDeckIndex]) {
+      project.decks[hostDeckIndex].outputDisplayIndex = std::max(0, output.displayIndex);
+      hostDisplayAssigned[hostDeckIndex] = true;
+    }
+  }
+
+  // Single-deck: route deck 0 to output 0 directly.
+  for (int deckIndex = 0; deckIndex < deckCount; ++deckIndex) {
+    project.decks[deckIndex].outputRouteDeckIndex = deckIndex;
+  }
+}
+
+bool outputHasExplicitNdiSettings(const OutputTarget& output, int outputIndex) {
+  std::string fillName = trim(output.ndiSourceName);
+  std::string keyName = trim(output.ndiKeySourceName);
+  std::string defaultFill = defaultOutputNdiSourceName(output, outputIndex);
+  std::string defaultKey = defaultOutputNdiKeySourceName(output, outputIndex);
+  bool fillCustom = !fillName.empty() && fillName != defaultFill;
+  bool keyCustom = !keyName.empty() && keyName != defaultKey;
+  return output.ndiEnabled || output.ndiKeyEnabled || fillCustom || keyCustom;
+}
+
+void migrateLegacyDeckNdiToOutputs(Project& project) {
+  int deckCount = static_cast<int>(project.decks.size());
+  int outputCount = static_cast<int>(project.outputs.size());
+  if (deckCount <= 0 || outputCount <= 0) {
+    return;
+  }
+
+  for (int outputIndex = 0; outputIndex < outputCount; ++outputIndex) {
+    OutputTarget& output = project.outputs[outputIndex];
+    if (outputHasExplicitNdiSettings(output, outputIndex)) {
+      continue;
+    }
+
+    int sourceDeckIndex = std::clamp(output.hostDeckIndex, 0, deckCount - 1);
+    const Deck& deck = project.decks[sourceDeckIndex];
+    std::string legacyFillName = trim(deck.ndiSourceName);
+    std::string legacyKeyName = trim(deck.ndiKeySourceName);
+    bool hasLegacy = deck.ndiEnabled || deck.ndiKeyEnabled || !legacyFillName.empty() || !legacyKeyName.empty();
+    if (!hasLegacy) {
+      continue;
+    }
+
+    output.ndiEnabled = deck.ndiEnabled || deck.ndiKeyEnabled;
+    output.ndiKeyEnabled = deck.ndiKeyEnabled;
+    if (!legacyFillName.empty()) {
+      output.ndiSourceName = legacyFillName;
+    }
+    if (!legacyKeyName.empty()) {
+      output.ndiKeySourceName = legacyKeyName;
+    }
+    if (trim(output.ndiSourceName).empty()) {
+      output.ndiSourceName = defaultOutputNdiSourceName(output, outputIndex);
+    }
+    if (trim(output.ndiKeySourceName).empty()) {
+      output.ndiKeySourceName = defaultOutputNdiKeySourceName(output, outputIndex);
+    }
+    if (!output.ndiEnabled) {
+      output.ndiKeyEnabled = false;
+    }
+  }
+}
+
+
+void normalizeProject(Project& project) {
+  // EVERY PLAYLIST HAS ITS OWN KEY (Deck::runtimeKey). A new or opened one has
+  // none yet; a playlist copied whole has its original's, and the copy gets
+  // one of its own -- the first keeps the engine. Keys only ever come from
+  // here, counting up, so one from an old undo step is never handed out again.
+  {
+    static std::uint64_t nextRuntimeKey = 1;
+    for (std::size_t i = 0; i < project.decks.size(); ++i) {
+      Deck& deck = project.decks[i];
+      bool taken = deck.runtimeKey == 0;
+      for (std::size_t j = 0; j < i && !taken; ++j) {
+        taken = project.decks[j].runtimeKey == deck.runtimeKey;
+      }
+      if (taken) {
+        deck.runtimeKey = nextRuntimeKey++;
+      } else if (deck.runtimeKey >= nextRuntimeKey) {
+        nextRuntimeKey = deck.runtimeKey + 1;
+      }
+    }
+  }
+  // A MASTER CUE BELONGS TO THE TRACKER, NEVER TO A PLAYLIST. James,
+  // 2026-10-07: "as of now, I don't think master cues should exist as cues in
+  // a deck." Any found in one -- a show from before the tracker kept its own
+  // steps, a paste, an undo -- moves into the tracker here, in deck then cue
+  // order and ahead of the tracker's own steps, which is the order the
+  // tracker already showed them in. Every index into the playlist is moved
+  // with it, so the cue on air keeps its identity.
+  {
+    std::vector<Cue> migrated;
+    for (Deck& deck : project.decks) {
+      std::vector<Cue> fromDeck;
+      for (int c = static_cast<int>(deck.cues.size()) - 1; c >= 0; --c) {
+        if (deck.cues[c].kind != CueKind::Master) {
+          continue;
+        }
+        auto shiftIndex = [c](int& index) {
+          if (index == c) index = -1;
+          else if (index > c) index -= 1;
+        };
+        shiftIndex(deck.activeIndex);
+        shiftIndex(deck.standbyIndex);
+        const bool wasSelected = deck.selectedIndex == c;
+        shiftIndex(deck.selectedIndex);
+        if (wasSelected && !deck.cues.empty()) {
+          deck.selectedIndex = std::max(0, c - 1);
+        }
+        std::vector<int> kept;
+        for (int index : deck.selectedIndices) {
+          shiftIndex(index);
+          if (index >= 0) kept.push_back(index);
+        }
+        deck.selectedIndices.swap(kept);
+        fromDeck.insert(fromDeck.begin(), std::move(deck.cues[c]));
+        deck.cues.erase(deck.cues.begin() + c);
+      }
+      deck.isMasterDeck = false;
+      for (Cue& cue : fromDeck) {
+        migrated.push_back(std::move(cue));
+      }
+    }
+    if (!migrated.empty()) {
+      project.trackerSteps.insert(project.trackerSteps.begin(),
+                                  std::make_move_iterator(migrated.begin()),
+                                  std::make_move_iterator(migrated.end()));
+    }
+  }
+  if (project.decks.empty()) {
+    project.decks.push_back(Deck {});
+  }
+  for (size_t index = 0; index < project.decks.size(); ++index) {
+    normalizeDeck(project.decks[index], static_cast<int>(index));
+  }
+  // Migration (v0.78.6): Pocket Test carries the A/V sync pop, but pattern
+  // cues created before v0.78.5 were hard-muted by addPatternCue and had
+  // hasAudio=false (which hides the audio controls, so the mute couldn't
+  // even be lifted). hasAudio=false is the "never migrated" marker: flip
+  // such cues to audible once; operator mutes made afterwards persist
+  // because they leave hasAudio=true.
+  for (Deck& deck : project.decks) {
+    for (Cue& cue : deck.cues) {
+      if (cue.kind == CueKind::Pattern &&
+          stripPatternMotionSuffix(normalizePatternTypeId(cue.path)) == "pocket-test" &&
+          !cue.hasAudio) {
+        cue.hasAudio = true;
+        cue.audioEnabled = true;
+      }
+    }
+  }
+  for (size_t index = 0; index < project.decks.size(); ++index) {
+    Deck& deck = project.decks[index];
+    if (deck.outputRouteDeckIndex < 0 ||
+        deck.outputRouteDeckIndex >= static_cast<int>(project.decks.size())) {
+      deck.outputRouteDeckIndex = static_cast<int>(index);
+    }
+  }
+  // The tracker's own steps: always masters, each with an id of its own --
+  // the playhead and every open menu find a step by id.
+  {
+    std::unordered_set<std::string> usedStepIds;
+    for (int s = 0; s < static_cast<int>(project.trackerSteps.size()); ++s) {
+      Cue& step = project.trackerSteps[s];
+      step.kind = CueKind::Master;
+      if (step.id.empty()) {
+        step.id = makeCueId(step, -1, s);
+      }
+      const std::string baseId = step.id;
+      int dedupe = 2;
+      while (usedStepIds.find(step.id) != usedStepIds.end()) {
+        step.id = baseId + "-" + std::to_string(dedupe++);
+      }
+      usedStepIds.insert(step.id);
+    }
+  }
+  normalizeProjectOutputsAndLayers(project);
+  migrateLegacyDeckNdiToOutputs(project);
+  project.focusedDeckIndex = std::clamp(project.focusedDeckIndex, 0, static_cast<int>(project.decks.size()) - 1);
+  project.outputRenderWidth = std::clamp(project.outputRenderWidth, 320, 7680);
+  project.outputRenderHeight = std::clamp(project.outputRenderHeight, 180, 4320);
+  if (!std::isfinite(project.outputRefreshRateHz) || project.outputRefreshRateHz < 0.0) {
+    project.outputRefreshRateHz = 0.0;
+  }
+  project.outputRefreshRateHz = std::min(project.outputRefreshRateHz, 240.0);
+  if (project.outputBitDepth != 0 && project.outputBitDepth != 8 && project.outputBitDepth != 10) {
+    project.outputBitDepth = 0;
+  }
+  project.outputCanvasWidth = std::clamp(project.outputCanvasWidth, 320, 16384);
+  project.outputCanvasHeight = std::clamp(project.outputCanvasHeight, 180, 16384);
+  project.advancedOutputMode = project.advancedOutputMode || project.decks.size() > 1;
+  // ── ONE PLAYLIST IS PLAIN DECKBOY AGAIN ────────────────────────────────
+  //
+  // "when going from two or more decks back to one deck, deckboy should morph
+  // back to deckboy. no need for multiview or other multi out complications."
+  //
+  // The multiview of a single playlist is the programme and one tile of the
+  // same picture, which is a worse monitor than the monitor. Turned off here
+  // rather than in removeDeck so it is also true for a show that arrives with
+  // one deck and the flag set.
+  if (project.decks.size() <= 1) {
+    project.multiviewMode = 0;
+  }
+  project.jumpMode = normalizeJumpModeToken(project.jumpMode);
+  project.panicProfile = normalizePanicProfileToken(project.panicProfile);
+  project.uiTransitionsEnabled = true;
+  project.oscQueryPort = normalizeOscQueryPort(project.oscQueryPort);
+  project.oscFeedbackRateMs = normalizeOscFeedbackRateMs(project.oscFeedbackRateMs);
+  project.artNetPort = normalizeArtNetPort(project.artNetPort);
+  project.panicFadeSeconds = std::clamp(
+    std::isfinite(project.panicFadeSeconds) ? project.panicFadeSeconds : 0.9,
+    0.1, 5.0);
+}
+
+// The show file: saveProject and loadProject. See the header of that file
+// for why the record is positional and what that demands of an edit.
+#include "core/project_file.ipp"
+
+bool cueUsesFilesystemMedia(const Cue& cue) {
+  return cue.kind == CueKind::Video ||
+         cue.kind == CueKind::Image ||
+         cue.kind == CueKind::Audio ||
+         (cue.kind == CueKind::Pip && pipSourceTypeTokenFromCue(cue) == "media");
+}
+
+// ── Cue path resolution helpers ──────────────────────────────────────────────
+// These helpers resolve cue file paths relative to the project file location,
+// handling both absolute and relative paths, URIs, and edge cases.
+
+// Returns true if the path looks like a URI (contains "://", or starts with
+// "file:", "about:", "data:"). Used to skip filesystem resolution for URIs.
+bool pathLooksLikeUri(const std::string& value) {
+  std::string trimmed = trim(value);
+  if (trimmed.empty()) {
+    return false;
+  }
+  if (trimmed.find("://") != std::string::npos) {
+    return true;
+  }
+  return trimmed.rfind("file:", 0) == 0 ||
+         trimmed.rfind("about:", 0) == 0 ||
+         trimmed.rfind("data:", 0) == 0;
+}
+
+// Resolve a cue's media path to an absolute filesystem path. Relative paths
+// are resolved against the project file's parent directory. Returns nullopt
+// for non-filesystem cues (Browser, Pattern, etc.) and URI-based paths.
+std::optional<fs::path> resolveCueFilesystemPath(const Cue& cue, const fs::path& projectFile) {
+  if (!cueUsesFilesystemMedia(cue)) {
+    return std::nullopt;
+  }
+  std::string raw = trim(cue.path);
+  if (raw.empty() || pathLooksLikeUri(raw)) {
+    return std::nullopt;
+  }
+  // weakly_canonical stats every path component, and the update tick resolves
+  // the selected/active cues' paths every frame — against show media that
+  // often lives on slow USB drives already saturated by the decoder. Memoize
+  // per (raw path, project file): the result only depends on those inputs,
+  // and a RELINK rewrites cue.path itself, which lands on a different key.
+  // Shared with the engines' path-resolver callbacks, hence the mutex.
+  static std::mutex cacheMutex;
+  static std::unordered_map<std::string, fs::path> cache;
+  std::string cacheKey = raw + '\n' + projectFile.string();
+  {
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    auto it = cache.find(cacheKey);
+    if (it != cache.end()) {
+      return it->second;
+    }
+  }
+  fs::path path(raw);
+  if (!path.is_absolute()) {
+    std::error_code cwdEc;
+    fs::path base = projectFile.has_parent_path()
+      ? projectFile.parent_path()
+      : fs::current_path(cwdEc);
+    if (base.empty()) {
+      base = fs::path(".");
+    }
+    path = base / path;
+  }
+  std::error_code ec;
+  fs::path resolved = fs::weakly_canonical(path, ec);
+  if (ec || resolved.empty()) {
+    resolved = fs::absolute(path, ec);
+    if (ec || resolved.empty()) {
+      resolved = path;
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    if (cache.size() > 8192) {  // bound: big shows are ~1.5k cues
+      cache.clear();
+    }
+    cache.emplace(std::move(cacheKey), resolved);
+  }
+  return resolved;
+}
+
+std::string resolvedCueFilesystemPathString(const Cue& cue, const fs::path& projectFile) {
+  if (auto resolved = resolveCueFilesystemPath(cue, projectFile)) {
+    return resolved->string();
+  }
+  return cue.path;
+}
+
+std::string sanitizeBundleFilenameStem(std::string value) {
+  value = trim(value);
+  std::string out;
+  out.reserve(value.size());
+  for (unsigned char ch : value) {
+    if (std::isalnum(ch) || ch == '-' || ch == '_') {
+      out.push_back(static_cast<char>(ch));
+    } else if (ch == ' ' || ch == '.') {
+      out.push_back('_');
+    }
+  }
+  if (out.empty()) {
+    return "cue";
+  }
+  return out;
+}
+
+
+// ── Waveform analysis ───────────────────────────────────────────────────────
+// Peak data for the audio waveform display in the cue inspector.
+// Computed offline by running ffmpeg to extract PCM, then bucketing
+// into per-channel peak arrays (typically 512 buckets).
+struct WaveformPeaks {
+  std::vector<float> left;       // Left channel peak amplitudes (0.0–1.0)
+  std::vector<float> right;      // Right channel peak amplitudes (0.0–1.0)
+  // AND THE RMS, which is what makes a waveform look like a waveform.
+  //
+  // A peak envelope alone is a brick. There are 512 buckets whatever the file,
+  // so an eleven-minute cue puts 1.3 SECONDS in each one, and the loudest
+  // sample in 1.3 seconds of any programme material is within a couple of dB
+  // of the loudest sample in the file -- every bucket lands in the same place
+  // and the lane fills solid with a slightly jagged top. That is not a
+  // waveform, it is a level meter drawn 512 times, and it is exactly as
+  // useless for finding a line of dialogue as it sounds.
+  //
+  // The RMS of the same bucket is the part that MOVES: it drops between words
+  // and in the gaps, which is the shape an operator is actually reading. So
+  // the body of the lane is drawn from the RMS and the peak becomes the
+  // outline around it -- the way every editor has drawn audio for thirty
+  // years, and for this reason.
+  std::vector<float> leftRms;
+  std::vector<float> rightRms;
+  // True when the two channels are measurably different — i.e. the source is
+  // really stereo, not mono upmixed by the "-ac 2" analysis decode. Drives
+  // the split L/R waveform view even when cue metadata (audioChannels) is
+  // missing, as it is on cues saved by older Deckboy versions.
+  bool distinct = false;
+
+  bool empty() const {
+    return left.empty() && right.empty();
+  }
+};
+
+// Extract embedded subtitles from a media file using ffmpeg, returning SRT text.
+// ONE DEFINITION, in core, so Mini reads a file's subtitles the same way.
+static std::string extractEmbeddedSubtitles(const std::string& mediaPath, const std::string& streamId) {
+  return deckboy::core::media::extractEmbeddedSubtitleSrt(mediaPath, streamId);
+}
+
+// Load subtitle track for a cue: external .srt file or embedded stream.
+static deckboy::core::SubtitleTrack loadSubtitleTrack(const Cue& cue) {
+  // Prefer external SRT file
+  if (!cue.subtitlePath.empty()) {
+    // WHATEVER IT IS. Captions arrive as WebVTT from the web side, as SCC from
+    // anyone working to a US broadcast spec and as TTML from an archive, and
+    // an operator who has been handed one of those should not have to go and
+    // find a converter before they can start.
+    const auto format = deckboy::captions::formatForPath(cue.subtitlePath);
+    if (format != deckboy::captions::Format::Unknown &&
+        format != deckboy::captions::Format::Srt) {
+      std::ifstream file(cue.subtitlePath, std::ios::binary);
+      if (file) {
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
+        return deckboy::captions::parseText(buffer.str(), format);
+      }
+    }
+    return deckboy::core::parseSrtFile(cue.subtitlePath);
+  }
+  // Fall back to embedded subtitle stream
+  if (!cue.subtitleStreamId.empty() && !cue.path.empty()) {
+    std::string srtText = extractEmbeddedSubtitles(cue.path, cue.subtitleStreamId);
+    if (!srtText.empty()) {
+      return deckboy::core::parseSrtText(srtText);
+    }
+  }
+  return {};
+}
+
+// Offline waveform analysis: runs ffmpeg to extract stereo PCM and compute per-bucket peaks.
+// Mono sources will simply produce identical left/right lanes after ffmpeg upmix.
+static WaveformPeaks computeWaveformPeaks(const std::string& path, int numBuckets = 512) {
+  // Use spawnProcess instead of popen to avoid shell interpolation and improve
+  // portability.  The args vector passes the file path directly to ffmpeg with
+  // no shell quoting needed.
+  std::vector<std::string> args = {
+    "ffmpeg", "-i", path,
+    "-ac", "2", "-ar", "4000",
+    "-f", "s16le", "-vn",
+    "-loglevel", "quiet",
+    "pipe:1"
+  };
+
+  ChildProcess proc;
+  if (!spawnProcess(proc, args, SpawnOptions::pipedStdout())) return {};
+
+  std::vector<int16_t> samples;
+  constexpr size_t kChunk = 4096;
+  int16_t buf[kChunk];
+#ifdef _WIN32
+  int bytesRead = 0;
+  while ((bytesRead = _read(proc.readFd,
+                            reinterpret_cast<char*>(buf),
+                            static_cast<unsigned int>(sizeof(buf)))) > 0) {
+    size_t sampleCount = static_cast<size_t>(bytesRead) / sizeof(int16_t);
+    samples.insert(samples.end(), buf, buf + sampleCount);
+    // Cap at 10 minutes of AUDIO. The old bound was `samples.size() > 4000*600`,
+    // but the decode is forced to 2 channels, so that counted stereo SAMPLES —
+    // 1.2M frames — and actually cut off at FIVE minutes. Every waveform for a
+    // longer file silently showed only its first half.
+    if (samples.size() > 4000u * 600u * 2u) break;
+  }
+#else
+  ssize_t bytesRead = 0;
+  while ((bytesRead = ::read(proc.readFd, buf, sizeof(buf))) > 0) {
+    size_t sampleCount = static_cast<size_t>(bytesRead) / sizeof(int16_t);
+    samples.insert(samples.end(), buf, buf + sampleCount);
+    // Cap at 10 minutes of AUDIO. The old bound was `samples.size() > 4000*600`,
+    // but the decode is forced to 2 channels, so that counted stereo SAMPLES —
+    // 1.2M frames — and actually cut off at FIVE minutes. Every waveform for a
+    // longer file silently showed only its first half.
+    if (samples.size() > 4000u * 600u * 2u) break;
+  }
+#endif
+  // ChildProcess destructor closes the pipe fd and reaps the child process.
+  proc.stop();
+
+  if (samples.size() < 2) return {};
+  WaveformPeaks peaks;
+  peaks.left.assign(numBuckets, 0.0f);
+  peaks.right.assign(numBuckets, 0.0f);
+  peaks.leftRms.assign(numBuckets, 0.0f);
+  peaks.rightRms.assign(numBuckets, 0.0f);
+  size_t frameCount = samples.size() / 2u;
+  size_t perBucket = std::max<size_t>(1, frameCount / numBuckets);
+  // Stereo-ness is judged on the raw samples, not the bucket peaks: a
+  // centre-heavy music mix has near-identical L/R peak envelopes yet clearly
+  // different waveforms, and the peaks alone under-report that.
+  double sumAbsDiff = 0.0;
+  double sumAbs = 0.0;
+  for (int b = 0; b < numBuckets; ++b) {
+    size_t startFrame = static_cast<size_t>(b) * perBucket;
+    size_t endFrame = std::min(startFrame + perBucket, frameCount);
+    float mxL = 0.0f;
+    float mxR = 0.0f;
+    double sqL = 0.0;
+    double sqR = 0.0;
+    for (size_t frame = startFrame; frame < endFrame; ++frame) {
+      size_t sampleIndex = frame * 2u;
+      float l = samples[sampleIndex + 0] / 32768.0f;
+      float r = samples[sampleIndex + 1] / 32768.0f;
+      mxL = std::max(mxL, std::abs(l));
+      mxR = std::max(mxR, std::abs(r));
+      sqL += static_cast<double>(l) * l;
+      sqR += static_cast<double>(r) * r;
+      sumAbsDiff += std::abs(l - r);
+      sumAbs += std::abs(l) + std::abs(r);
+    }
+    const size_t taken = endFrame > startFrame ? endFrame - startFrame : 0;
+    peaks.left[static_cast<size_t>(b)] = mxL;
+    peaks.right[static_cast<size_t>(b)] = mxR;
+    peaks.leftRms[static_cast<size_t>(b)] =
+      taken ? static_cast<float>(std::sqrt(sqL / static_cast<double>(taken))) : 0.0f;
+    peaks.rightRms[static_cast<size_t>(b)] =
+      taken ? static_cast<float>(std::sqrt(sqR / static_cast<double>(taken))) : 0.0f;
+  }
+  // Side-signal energy above 1% of total = real stereo content. Mono
+  // upmixes measure exactly 0; even subtle stereo reverb tails clear 1%.
+  peaks.distinct = sumAbs > 0.0 && (sumAbsDiff / sumAbs) > 0.01;
+  return peaks;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// class App — The main Deckboy application class.
+//
+// Owns all SDL resources (windows, renderers, fonts, audio devices),
+// project state, deck runtimes, output runtimes, integration threads,
+// and the entire UI rendering pipeline. Methods are organized across
+// .ipp files included within the class body for modularity.
+//
+// Lifecycle: App::init() → App::run() → App::shutdown()
+// ════════════════════════════════════════════════════════════════════════════
+class App {
+  struct WebRemoteReply;
+ public:
+  // Initialize SDL, create windows/renderers, load fonts, set up audio.
+  bool init() {
+    deckboy::lava::registerGenerator();
+    {
+      std::error_code ec;
+      hiddenSourcesFound_ = fs::exists(Paths::stateDir() / "found-sources", ec);
+    }
+#ifdef __APPLE__
+    // NO SPACES FULLSCREEN ON macOS. A Space is entered and left through an
+    // animated transition, and Deckboy also uses a mode-changing fullscreen
+    // (a fixed raster, or a chosen refresh rate). Going from one to the other
+    // while the animation ran made AppKit end the app: "NSWindowStyleMask-
+    // FullScreen cleared on a window outside of a full screen transition"
+    // (0.99.406 CI, OUTPUT ON then VIDEO 960x540). Without Spaces every
+    // fullscreen switch is immediate and the mixed path cannot happen -- and a
+    // show output has no business sliding into a Space of its own anyway.
+    SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES, "0");
+    // OUTSIDE the _WIN32 block below, where the other window hints live: it
+    // was first put there and so was compiled into Windows builds only, and
+    // 0.99.407 shipped without it.
+#endif
+    // Never minimise a full-screen output when it loses focus, on ANY
+    // platform. This sat in the Windows block below; without Spaces, a Mac
+    // output on a set raster or refresh counts as exclusive full screen, and
+    // SDL's default minimises those on focus loss -- so clicking anywhere else
+    // on the Mac dropped the output out of full screen. See
+    // platform/mac_output_level.hpp for the menu-bar half of that.
+    SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
+#ifdef _WIN32
+    // Restrict DLL search order to System32 by default — prevents DLL hijacking
+    // via CWD, application directory, or user PATH for implicitly loaded libraries.
+    // Explicit loads (NDI, LTC) use LoadLibraryW with candidates that include
+    // absolute paths; the bare-name fallbacks still search the restricted set.
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
+
+    // (SDL3 is per-monitor-v2 DPI aware on Windows by default; the SDL2
+    // SDL_HINT_WINDOWS_DPI_AWARENESS hint is gone.)
+    // (SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS is set above, for every
+    // platform: click the control window -> output minimises -> recovery
+    // re-raises it and steals focus -> repeat, on Windows first, then on Macs.)
+#if DECKBOY_INPROC_DECODE
+    // Create D3D11 renderer devices WITHOUT D3D11_CREATE_DEVICE_SINGLETHREADED
+    // (SDL's default). The in-process d3d11va decoder shares the program
+    // output's device from a decode thread; that requires the device to
+    // accept multithread protection — on a single-threaded device the
+    // ID3D10/11Multithread QI fails and zero-copy decode degrades to CPU
+    // output (and actually sharing one would crash). Must be set before any
+    // renderer is created.
+    SDL_SetHint(SDL_HINT_RENDER_DIRECT3D_THREADSAFE, "1");
+#endif
+    // Opt out of background throttling. Windows 11 applies EcoQoS (reduced
+    // CPU scheduling) and timer-resolution coalescing to processes whose
+    // windows aren't focused — SDL_Delay(4) in the decode/audio loops
+    // degrades to ~15ms, so playback stutters the moment the operator
+    // focuses anything else. A playout engine must run full speed in the
+    // background, always.
+    {
+      PROCESS_POWER_THROTTLING_STATE throttling {};
+      throttling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+      throttling.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+      throttling.StateMask = 0;  // 0 with the mask set = explicitly OFF
+      SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                            &throttling, sizeof(throttling));
+#ifdef PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
+      throttling.ControlMask = PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+      throttling.StateMask = 0;  // keep 1ms timers while unfocused (Win11)
+      SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                            &throttling, sizeof(throttling));
+#endif
+    }
+    {
+      WSADATA wsaData {};
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "WSAStartup failed\n";
+        return false;
+      }
+    }
+#endif
+    // VIDEO AND EVENTS ARE THE APPLICATION; AUDIO IS A FEATURE OF IT.
+    //
+    // These used to be one call, so a machine whose audio subsystem would not
+    // start did not start Deckboy either -- and "plays a clip on a screen" is
+    // the whole job of a signage box, a rack rig or a VM, none of which need
+    // sound to do it. Asked for separately, a missing sound system costs the
+    // sound and nothing else.
+    SDL_SetHint(SDL_HINT_APP_ID, "io.github.utopian_academy.Deckboy");
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+      std::cerr << "SDL_Init failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+      std::cerr << "audio: no audio subsystem (" << SDL_GetError()
+                << ") -- Deckboy runs without sound\n";
+    }
+    if (!TTF_Init()) {
+      std::cerr << "TTF_Init failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+
+    // Nearest-neighbour scaling is applied per texture via deckboyCreateTexture*
+    // (SDL3 removed the global SDL_HINT_RENDER_SCALE_QUALITY hint).
+#ifndef _WIN32
+    signal(SIGPIPE, SIG_IGN);
+#endif
+    if (const char* env = std::getenv("DECKBOY_UI_PROFILE"); env && *env) {
+      std::string token = toLower(trim(env));
+      uiProfileEnabled_ = !(token == "0" || token == "false" || token == "off" || token == "no");
+      // A NUMBER IS THE THRESHOLD in ms. 50 catches a frozen interface; a
+      // 60Hz output that stutters misses by 17-35ms and never got logged.
+      const double asMs = std::atof(token.c_str());
+      if (asMs >= 2.0) {
+        uiProfileSlowFrameMs_ = asMs;
+      }
+    }
+    if (uiProfileEnabled_) {
+      uiProfileLog("ui profiling enabled (DECKBOY_UI_PROFILE)");
+    }
+    openPresentTrace();
+
+    // Pre-clamp the initial size to the primary display so we never create a
+    // window larger than a screen. The defaults (1760x1020) overflow a laptop
+    // panel — a MacBook Air's logical screen is only ~1470-1710 points wide, so
+    // the window opened "a tad big" and spilled off. SDL sizes and usable bounds
+    // are both in points, so they compare directly.
+    int startW = kControlWidth, startH = kControlHeight;
+    {
+      SDL_DisplayID disp = SDL_GetPrimaryDisplay();
+      // THE DESK HAS TO GROW WITH THE TYPE. The interface follows the display's
+      // content scale -- fonts and the kLayout* metrics both -- but the window
+      // it all has to fit inside was a fixed 1760x1020. On the 150% that
+      // Windows uses by default on a 4K panel, that is the same desk carrying
+      // one-and-a-half times the type, so the bottom bar wraps and controls
+      // start hiding: reported as "the MENU button is not visible".
+      float contentScale = disp != 0 ? SDL_GetDisplayContentScale(disp) : 1.0f;
+      if (!std::isfinite(contentScale) || contentScale < 0.5f) {
+        contentScale = 1.0f;
+      }
+      startW = static_cast<int>(std::lround(kControlWidth * contentScale));
+      startH = static_cast<int>(std::lround(kControlHeight * contentScale));
+      SDL_Rect usable{};
+      if (disp != 0 && SDL_GetDisplayUsableBounds(disp, &usable) &&
+          usable.w > 0 && usable.h > 0) {
+        // Never larger than the screen it opens on, and never filling it
+        // completely: an operator has to be able to grab the title bar and get
+        // at whatever is behind. The defaults (1760x1020) overflow a laptop
+        // panel on their own -- a MacBook Air's logical screen is only
+        // ~1470-1710 points wide -- which is what this clamp was written for.
+        startW = std::min(startW, static_cast<int>(usable.w * 0.94));
+        startH = std::min(startH, static_cast<int>(usable.h * 0.94));
+        // ...but never SMALLER than it used to open, where the screen allows
+        // it, so no existing machine loses desk because of the scaling above.
+        startW = std::max(startW, std::min(kControlWidth, usable.w));
+        startH = std::max(startH, std::min(kControlHeight, usable.h));
+      }
+    }
+    // CREATED HIDDEN, shown once there is a frame in it.
+    //
+    // A window exists the moment it is created, but it has nothing in it until
+    // something is presented -- and everything between here and the first
+    // present (renderer, fonts, themes, splash art, the show itself) takes long
+    // enough to see. The operator got a black rectangle first and the splash
+    // afterwards, which reads as the app hanging on launch.
+    //
+    // revealControlWindow() puts it up after the first present, so the first
+    // thing on screen is the first thing drawn.
+    controlWindow_ = SDL_CreateWindow(
+      kAppTitle.data(),
+      startW,
+      startH,
+      SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN
+    );
+    if (!controlWindow_) {
+      std::cerr << "Window creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    SDL_SetWindowPosition(controlWindow_, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    applyDeckboyWindowIcon(controlWindow_);
+
+    // Multi-display robust: after centering, re-clamp to the display the window
+    // ACTUALLY landed on — the primary and the target can differ wildly (a small
+    // Retina laptop panel plus a large external). Shrink-and-recenter if it
+    // overflows, and cap the minimum size so the window can always fit this
+    // screen (a fixed 1500x900 minimum could exceed a 13" panel outright).
+    //
+    // 960x540 rather than the 1500x900 it was: below the layout's design size
+    // the UI scale now shrinks to fit the window (windowFitUiScale), so a
+    // small window is a smaller desk rather than a squashed one, and a small
+    // external monitor can take it at a size that suits it.
+    int minW = 960, minH = 540;
+    {
+      SDL_Rect ub{};
+      SDL_DisplayID wd = SDL_GetDisplayForWindow(controlWindow_);
+      if (wd == 0) wd = SDL_GetPrimaryDisplay();
+      if (wd != 0 && SDL_GetDisplayUsableBounds(wd, &ub) && ub.w > 0 && ub.h > 0) {
+        int cw = 0, ch = 0;
+        SDL_GetWindowSize(controlWindow_, &cw, &ch);
+        // THE FRAME COUNTS. A window's size is its INSIDE; the title bar and
+        // borders sit outside it, and so does the taskbar's edge of the usable
+        // area. Comparing the inside with the usable bounds let a 1020-high
+        // desk open on a 1080p screen (1032 usable under the taskbar) with its
+        // bottom ~20px under the taskbar -- "just a tad too large", reported
+        // on two Windows NUCs. And centring on the DISPLAY, not the usable
+        // area, pushed even a window that fitted down under it.
+        int bt = 0, bl = 0, bb = 0, br = 0;
+        if (!SDL_GetWindowBordersSize(controlWindow_, &bt, &bl, &bb, &br) || bt <= 0) {
+          // Not known before the window is shown on some platforms: a title
+          // bar's worth at this display's scale, the usual Windows height.
+          const float s = SDL_GetDisplayContentScale(wd);
+          bt = static_cast<int>(std::lround(32.0f * (std::isfinite(s) && s >= 0.5f ? s : 1.0f)));
+          bl = bb = br = 0;
+        }
+        const int fitW = std::max(320, ub.w - bl - br);
+        const int fitH = std::max(240, ub.h - bt - bb);
+        int nw = std::min(cw, fitW), nh = std::min(ch, fitH);
+        if (nw != cw || nh != ch) {
+          SDL_SetWindowSize(controlWindow_, nw, nh);
+        }
+        SDL_SetWindowPosition(controlWindow_, ub.x + bl + (fitW - nw) / 2, ub.y + bt + (fitH - nh) / 2);
+        minW = std::min(minW, ub.w);
+        minH = std::min(minH, ub.h);
+      }
+    }
+    SDL_SetWindowMinimumSize(controlWindow_, minW, minH);
+
+    controlRenderer_ = deckboyCreateRenderer(controlWindow_);
+    if (!controlRenderer_) {
+      std::cerr << "Renderer creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    const std::string controlRendererDriver = deckboyLastRendererDriver();
+    // vsync is a per-renderer runtime property in SDL3 (was a creation flag).
+    SDL_SetRenderVSync(controlRenderer_, 1);
+    applyDeskFrameLatency();
+    // NOTE: do NOT set SDL_RenderSetLogicalSize here. The control UI reflows to
+    // the live window size every frame (layoutButtons + the SDL_GetWindowSize
+    // calls in the render/overlay code), so a fixed logical size would clamp the
+    // drawable canvas while the layout spread past it — pushing the bottom-right
+    // controls off-screen. Reflow handles resize/fullscreen on its own.
+
+    // Scanline overlay texture (1x4 pattern: 2 clear rows + 2 tinted rows)
+    createScanlineOverlay();
+
+    monitorsWindow_ = SDL_CreateWindow(
+      "Deckboy Monitors",
+      1280,
+      800,
+      SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE
+    );
+    if (monitorsWindow_) {
+      applyDeckboyWindowIcon(monitorsWindow_);
+      SDL_SetWindowMinimumSize(monitorsWindow_, 640, 400);
+      monitorsRenderer_ = deckboyCreateRenderer(monitorsWindow_);
+      if (!monitorsRenderer_) {
+        SDL_DestroyWindow(monitorsWindow_);
+        monitorsWindow_ = nullptr;
+      }
+    }
+    // UNCONDITIONAL, unlike uiProfileLog below -- this is the fact issue #6
+    // needed and never had: which backend a machine that shows the bug
+    // actually landed on. A packaged .app launched from Finder or the Dock
+    // has no terminal for std::cerr to reach, so this is the only copy of it
+    // an affected operator can ever hand back to us.
+    renderDiagnosticLog("startup " + std::string(deckboy::core::version::kVersionTag) +
+                         " control=" + controlRendererDriver +
+                         " monitors=" + (monitorsRenderer_ ? deckboyLastRendererDriver()
+                                                            : std::string("(none)")));
+
+    // Fonts are loaded through loadFonts() so the same code path runs at
+    // boot AND when the operator changes the UI scale at runtime.
+    if (!loadFonts(1.0)) {
+      std::cerr << "Font load failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    healTextBackendIfNeeded();
+    startMediaToolsCheck();
+
+    Paths::ensureDataDir();
+    loadThemeFromEnv();
+    rebuildPalette();
+    initUiAssetPackPaths();
+    preloadUiAssets();
+    // THE PACK IS HERE AND NOTHING IN IT DECODED. Raised as a prompt rather
+    // than a toast because the same helpers decode the operator's media: an
+    // app in this state will not play anything either, and blank buttons are
+    // the part you happen to see first.
+    //
+    // macOS only, deliberately. Everywhere else a decode failure means a
+    // genuinely missing or broken ffmpeg, which --self-check already reports
+    // and which has a different remedy; quarantine is the Mac's own.
+#ifdef __APPLE__
+    if (uiPackAvailable_ && uiImagesDecoded_ == 0) {
+      promptForBlockedHelpers();
+    }
+#endif
+    currentProjectFile_ = startupProjectFile();
+    prepareProjectOpen(currentProjectFile_);
+    // Startup is the case that matters most for the loading overlay — a big
+    // show is usually opened by launching into it, not by using OPEN — and it
+    // is the one path that does NOT go through openProjectFromPath. The
+    // renderer exists by now (fonts and palette are up), so the overlay can
+    // draw and present its own frames while this blocks.
+    beginLoadingOverlay("OPENING SHOW", currentProjectFile_.filename().string());
+    project_ = loadProject(currentProjectFile_, [this](double frac) {
+      loadingOverlayProgress(frac * 0.9);
+    });
+    loadingOverlayProgress(0.95, "checking the show");
+    normalizeProject(project_);
+    endLoadingOverlay();
+    // Presence scan runs async — a big playlist on a USB drive used to hold
+    // the first frame hostage for seconds of black window before the splash.
+    startMediaPresenceScanAsync(true);
+    // Project may override the boot-time splash character (deckbot default).
+    // Restore the saved audio devices. Both settings PERSISTED but neither was
+    // ever re-applied, so an operator who armed ASIO or a microphone found it
+    // silently back on the system device next launch -- the setting remembered,
+    // the effect forgotten.
+    if (project_.audioInputEnabled && !startAudioInput()) {
+      project_.audioInputEnabled = false;
+    }
+    if (!project_.asioDriverName.empty() &&
+        !armAsioOutput(project_.asioDriverName, project_.asioChannels)) {
+      // Interface not plugged in yet: keep the CHOICE so it comes back when the
+      // hardware does, rather than quietly forgetting what they picked.
+      showLog("ASIO", "saved driver unavailable at boot: " + project_.asioDriverName);
+    }
+    resolveFirstRunFlag();
+    refreshSplashAsset();
+    // Deckboy's own pointer. Built once here; rebuilt only on a scale change.
+    refreshMiamiCursor();
+    // LANGUAGE BEFORE FONTS. applyUiScale loads the faces, and which faces to
+    // load is a question only the language can answer -- a show in Japanese
+    // needs a face with Japanese in it. Loading first and asking second is how
+    // the whole interface came up as empty boxes.
+    applyProjectLanguage();
+    // Project may also carry a non-1.0 UI scale (HiDPI / 4K / Pocket 3).
+    applyUiScale();
+    // Project may carry a saved color theme; apply it unless DECKBOY_THEME
+    // was set (an explicit env override always wins at boot).
+    {
+      const char* themeEnv = std::getenv("DECKBOY_THEME");
+      if ((!themeEnv || !*themeEnv) && !project_.theme.empty()) {
+        loadTheme(project_.theme);
+      }
+    }
+    disarmAllOutputsForStartup();
+    // Output starts black — no cue is active until the operator takes one
+    for (auto& deck : project_.decks) { deck.activeIndex = -1; }
+    // Show startup dialog so operator can choose to load or start fresh
+    showStartupDialog_ = true;
+    showSplashOverlay_ = true;
+    splashStartedAt_ = SDL_GetTicks();
+    ensureUiAudioDevice();
+    // Boot chiptune — rides the splash overlay; honors the bloops toggle.
+    playStartupJingle();
+    previewMediaEngine_ = std::make_unique<MediaEngine>(
+      controlRenderer_,
+      nullptr,
+      MediaEngine::AudioTapCallback {},
+      [this](const Cue& cue) {
+        return resolvedCueFilesystemPathString(cue, currentProjectFile_);
+      }
+    );
+    if (!rebuildDeckRuntimes()) {
+      std::cerr << "Deck runtime creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    if (!rebuildOutputRuntimes()) {
+      std::cerr << "Output runtime creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    onSelectionChanged();
+    observedDisplayCount_ = deckboyGetNumVideoDisplays();
+    refreshDisplayTopology(false);
+    selectionChangedAt_ = SDL_GetTicks();
+    lastUpdateTickMs_ = selectionChangedAt_;
+    // Anything left in the update folder has already done its job -- it was
+    // either installed, in which case this build is its work, or abandoned. A
+    // 90MB installer should not sit there forever.
+    removeStaleUpdateDownloads();
+    if (project_.updateCheckEnabled) {
+      // Quietly, at startup, with nothing live. It never installs anything --
+      // see checkForUpdateAsync.
+      checkForUpdateAsync(/*quiet=*/true);
+    }
+    startCompanionControl();
+    if (project_.oscQueryEnabled) {
+      startOscQueryServer();
+    }
+    if (project_.webMonitorEnabled || project_.webRemoteEnabled) {
+      startWebMonitor();
+    }
+    // A show saved with the vMix surface on comes back with it on. It binds
+    // the same way the other listeners do, and reports if it cannot.
+    if (project_.vmixApiEnabled) {
+      startVmixServer();
+    }
+    startHyperDeckServer();
+    startAtemSwitcherClient();
+    startIntegrationBridges();
+    // Lay out against the actual (possibly display-clamped) window size, not the
+    // nominal constant, so the first frame is already correct on small screens.
+    {
+      int lw = 0, lh = 0;
+      SDL_GetWindowSize(controlWindow_, &lw, &lh);
+      if (lw <= 0 || lh <= 0) { lw = kControlWidth; lh = kControlHeight; }
+      layoutButtons(lw, lh);
+    }
+    // While nobody is watching: what the first RECORD would otherwise build.
+    prepareSpareStreamRenderer();
+    return true;
+  }
+
+  void shutdown() {
+    mediaScanGeneration_.fetch_add(1);  // signal a running scan worker to bail
+    if (mediaScanThread_.joinable()) {
+      mediaScanThread_.join();
+    }
+    stopIntegrationBridges();
+    stopHyperDeckServer();
+    stopAtemSwitcherClient();
+    stopMidiInput();
+    stopOscQueryServer();
+    stopWebMonitor();
+    stopWebIngests();
+    stopVmixServer();
+    stopScopesWorkers();
+    closeMicMeters();
+    liveCaptioner_.stop();
+    // Before the output runtimes go away: this releases any IS-05 caller parked
+    // in the patch handler, then joins the node's threads.
+    shutdownNmosNode();
+    stopCompanionControl();
+    // PIP overlay engines hold textures on the control renderer. They live in a
+    // member map, so without this they were destroyed by ~App — i.e. AFTER
+    // SDL_DestroyRenderer and SDL_Quit below — and their destructors ran
+    // SDL_DestroyTexture against a torn-down SDL.
+    for (auto& [key, runtime] : pipOverlayRuntimes_) {
+      (void) key;
+      if (runtime.mediaEngine) {
+        runtime.mediaEngine->detachAudioDevice();
+        runtime.mediaEngine->stopAll();
+      }
+    }
+    pipOverlayRuntimes_.clear();
+    for (auto& runtime : deckRuntimes_) {
+      destroyDeckRuntime(runtime);
+    }
+    deckRuntimes_.clear();
+    for (auto& runtime : outputRuntimes_) {
+      destroyOutputRuntime(runtime);
+    }
+    outputRuntimes_.clear();
+    releaseSpareStreamRenderer();
+    // Every take still being finished in the background is finished now,
+    // before the encoders or the process go away.
+    joinStreamFinalizers();
+#if defined(DECKBOY_HAS_NDI_SDK)
+    ndiApi_.shutdown();
+#endif
+    ltcApi_.shutdown();
+    if (uiAudioStream_) {
+      if (miamiCursor_) {
+        // Back to the system arrow before the cursor it points at goes away.
+        SDL_SetCursor(SDL_GetDefaultCursor());
+        SDL_DestroyCursor(miamiCursor_);
+        miamiCursor_ = nullptr;
+      }
+      SDL_DestroyAudioStream(uiAudioStream_);
+      uiAudioStream_ = nullptr;
+    }
+    releaseFonts();
+    if (thumbnailThread_.joinable()) {
+      thumbnailProcess_.killProcessOnly();
+      thumbnailThread_.join();
+      thumbnailProcess_.stop();
+    }
+    if (selectedThumbnailTex_) {
+      SDL_DestroyTexture(selectedThumbnailTex_);
+      selectedThumbnailTex_ = nullptr;
+    }
+    if (timelineStripThread_.joinable()) {
+      timelineStripProcess_.killProcessOnly();
+      timelineStripThread_.join();
+      timelineStripProcess_.stop();
+    }
+    if (timelineStripTex_) {
+      SDL_DestroyTexture(timelineStripTex_);
+      timelineStripTex_ = nullptr;
+    }
+    shutdownMotion();
+    shutdownScreens();
+    if (drawOnionTex_) {
+      SDL_DestroyTexture(drawOnionTex_);
+      drawOnionTex_ = nullptr;
+    }
+    if (previewMediaEngine_) {
+      previewMediaEngine_->detachAudioDevice();
+      previewMediaEngine_->stopAll();
+      previewMediaEngine_.reset();
+    }
+    clearPreviewCueTexture();
+    previewCueKey_.clear();
+    if (controlPreviewTex_) {
+      SDL_DestroyTexture(controlPreviewTex_);
+      controlPreviewTex_ = nullptr;
+      controlPreviewTexW_ = 0;
+      controlPreviewTexH_ = 0;
+      controlPreviewTexFormat_ = 0;
+    }
+    releaseUiAssets();
+    for (auto* t : monitorsOutputTextures_) { if (t) SDL_DestroyTexture(t); }
+    monitorsOutputTextures_.clear();
+    monitorsOutputTexW_.clear();
+    monitorsOutputTexH_.clear();
+    if (monitorsRenderer_) {
+      // Cached labels belong to the renderer that made them — same rule as the
+      // PIP overlay textures above, and the same crash if it is skipped.
+      purgeTextTextureCache(monitorsRenderer_);
+      SDL_DestroyRenderer(monitorsRenderer_);
+      monitorsRenderer_ = nullptr;
+    }
+    closeDisplayIdentify();
+    if (monitorsWindow_) {
+      SDL_DestroyWindow(monitorsWindow_);
+      monitorsWindow_ = nullptr;
+    }
+    if (scanlineOverlay_) {
+      SDL_DestroyTexture(scanlineOverlay_);
+      scanlineOverlay_ = nullptr;
+    }
+    if (controlRenderer_) {
+      purgeTextTextureCache(controlRenderer_);
+      releasePreviewTransitionRuntime();
+      SDL_DestroyRenderer(controlRenderer_);
+      controlRenderer_ = nullptr;
+    }
+    if (controlWindow_) {
+      SDL_DestroyWindow(controlWindow_);
+      controlWindow_ = nullptr;
+    }
+    TTF_Quit();
+    // ASIO before SDL: its sources' rate converters are SDL audio streams,
+    // and SDL_Quit frees every stream itself. Left to ~App, the driver closed
+    // after that and freed them a second time. The engines feeding it are
+    // gone by now (deckRuntimes_ above).
+    if (asioOutput_) {
+      asioOutput_->close();
+      asioOutput_.reset();
+    }
+    // Last thing before the subsystem goes away: anything torn down after this
+    // (a MediaEngine still owned by an App member, destroyed by ~App) must not
+    // call into SDL. A field crash on macOS was exactly that — ~MediaEngine ->
+    // stopAll -> SDL_ClearAudioStream, from runDeckboyMain's frame, i.e. after
+    // shutdown() had already returned.
+    MediaEngine::setSdlTornDown(true);
+    SDL_Quit();
+#ifdef _WIN32
+    WSACleanup();
+#endif
+  }
+
+  void run() {
+    for (;;) {
+      if (gShouldQuit.load()) {
+        if (saveProjectBeforeQuit()) break;
+        gShouldQuit.store(false);
+      }
+      auto frameStart = std::chrono::steady_clock::now();
+      auto ms = [](const auto& duration) {
+        return std::chrono::duration<double, std::milli>(duration).count();
+      };
+      processEvents();
+      auto afterEvents = std::chrono::steady_clock::now();
+      drainPickers();
+      auto afterPickers = std::chrono::steady_clock::now();
+      update();
+      tickSoak();
+      auto afterUpdate = std::chrono::steady_clock::now();
+      render();
+      tickUiDump();
+      tickContrastCheck();
+      auto afterRender = std::chrono::steady_clock::now();
+      if (uiProfileEnabled_) {
+        double frameMs = ms(afterRender - frameStart);
+        if (frameMs > uiProfileSlowFrameMs_) {
+          std::ostringstream line;
+          line << std::fixed << std::setprecision(2)
+               << "frame dt=" << frameMs << "ms"
+               << " events=" << ms(afterEvents - frameStart) << "ms"
+               << " update=" << ms(afterUpdate - afterPickers) << "ms"
+               << " layout=" << lastUiLayoutMs_ << "ms"
+               << " render=" << lastUiRenderMs_ << "ms"
+               << " (present=" << lastUiPresentMs_ << "ms)"
+               << " render+outputs=" << ms(afterRender - afterUpdate) << "ms";
+          uiProfileLog(line.str());
+        }
+        // WHAT THE LABEL CACHE IS DOING, once every five seconds. Before it
+        // existed this number was the whole problem and there was no way to
+        // see it: every label allocated and freed a texture every frame, and
+        // the only symptom was an interface with no text on a machine nobody
+        // here owned (issue #6). A hit rate near 100% is the healthy state --
+        // misses should settle to near zero once the screen stops changing.
+        static auto lastCacheLog = std::chrono::steady_clock::now();
+        if (afterRender - lastCacheLog > std::chrono::seconds(5)) {
+          lastCacheLog = afterRender;
+          const std::uint64_t total = textTextureHits_ + textTextureMisses_;
+          std::ostringstream cacheLine;
+          cacheLine << "text-cache entries=" << textTextureCache_.size()
+                    << " kb=" << (textTextureBytes_ / 1024u)
+                    << " hits=" << textTextureHits_
+                    << " misses=" << textTextureMisses_
+                    << " failures=" << textTextureFailures_;
+          if (total > 0) {
+            cacheLine << " hit-rate="
+                      << (textTextureHits_ * 100u / total) << "%";
+          }
+          uiProfileLog(cacheLine.str());
+          textTextureHits_ = 0;
+          textTextureMisses_ = 0;
+        }
+      }
+      // UNCONDITIONAL, unlike the block above -- an operator watching a blank
+      // interface has DECKBOY_UI_PROFILE set approximately never. Logged once
+      // per session, the first time it happens, so a live show is not paying
+      // per-frame std::string work for the rest of the run.
+      static bool textFailureLogged = false;
+      if (!textFailureLogged && deckboyTextureFailureCount() > 0) {
+        textFailureLogged = true;
+        renderDiagnosticLog("text texture failures=" + std::to_string(deckboyTextureFailureCount()) +
+                             " reason=" + deckboyTextureFailureReason() +
+                             " control-backend=" + deckboyLastRendererDriver());
+      }
+      // Prevent CPU spin when vsync isn't gating (hidden window, browser cue, etc.)
+      // The control window present is vsync-locked, so on a normal display this
+      // floor never engages — it only bounds the loop when nothing is blocking
+      // on a vblank. Keep it high (240 Hz) so high-refresh monitors (144/165/
+      // 240 Hz) render stills and transitions at their full native rate via
+      // vsync instead of being clamped down to 120.
+      auto frameElapsed = std::chrono::steady_clock::now() - frameStart;
+      constexpr auto kMinFrameTime = std::chrono::microseconds(1000000 / 240);
+      if (frameElapsed < kMinFrameTime) {
+        auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(kMinFrameTime - frameElapsed);
+        Uint32 delayMs = static_cast<Uint32>(std::max<long long>(
+          1, (remaining.count() + 999) / 1000));
+        SDL_Delay(delayMs);
+      }
+    }
+  }
+
+  // Native SDL dialog results run their handlers here (importing, project load,
+  // save, relink). A handler can throw — a filesystem error, a bad_alloc — and
+  // an uncaught exception on the main thread is std::terminate, which Windows
+  // reports as 0xC0000409 in ucrtbase: the app vanishes with no message.
+  // Deckboy has crashed that way before. A dialog that fails must lose the
+  // picked path, not the show.
+  void drainPickers() {
+    try {
+      drainSdlDialogActions();
+    } catch (const std::exception& e) {
+      triggerToast(std::string("file dialog failed: ") + e.what());
+    } catch (...) {
+      triggerToast("file dialog failed");
+    }
+  }
+
+  // ── Soak mode ─────────────────────────────────────────────────────────────
+  static double processRssMb() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS pmc {};
+    pmc.cb = sizeof(pmc);
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+      return static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
+    }
+    return 0.0;
+#else
+    std::ifstream statm("/proc/self/statm");
+    long pages = 0;
+    long resident = 0;
+    if (statm >> pages >> resident) {
+      return static_cast<double>(resident) * 4096.0 / (1024.0 * 1024.0);
+    }
+    return 0.0;
+#endif
+  }
+
+  void enableSoakMode(double minutes) {
+    soakMode_ = true;
+    soakMinutes_ = minutes;
+    // State dir, not the working directory: launched from Finder or a shortcut
+    // the cwd is somewhere arbitrary (or unwritable) and the log vanishes.
+    soakLogFile_.open(Paths::stateDir() / "deckboy-soak.log", std::ios::app);
+  }
+
+  // Dev/test conveniences (CLI: --import <file>, --settings [tab]) — import
+  // media as if dropped on the window, and open the settings modal at boot
+  // so scripted screenshots can reach it.
+  // Put the mascot egg into a given stage so each one can be screenshotted.
+  // Put the interface into the show's language.
+  //
+  // Reported rather than silently ignored when a catalogue is missing: a
+  // language that does not apply looks exactly like a setting that did not
+  // save, and the operator can act on "no catalogue for tlh" but not on
+  // nothing happening.
+  void applyProjectLanguage() {
+    std::string error;
+    const std::string want = project_.language.empty() ? std::string("en") : project_.language;
+    if (!deckboy::core::i18n::setLanguage(want, Paths::dataDir(), error)) {
+      triggerToast("language: " + error, ToastKind::Warning, kToastReadableMs);
+    }
+  }
+
+  // WRITE THE POINTER INTO THE CURVE.
+  //
+  // Where you are across the pad is which sample, how high you are is its
+  // value. The neighbouring samples are dragged part of the way with it so a
+  // fast sweep leaves a continuous line rather than a comb of spikes -- you
+  // are drawing with a soft pencil, not setting individual numbers.
+  void lfoDrawInto(int x, int y) {
+    if (lfoDrawRect_.w <= 0 || lfoDrawRect_.h <= 0) return;
+    auto* lfo = effectLfoAt(lfoDrawPacked_);
+    if (!lfo) return;
+    constexpr int kPts = deckboy::effects::ParamLfo::kLfoCurvePoints;
+    const double u = std::clamp(
+      static_cast<double>(x - lfoDrawRect_.x) / static_cast<double>(lfoDrawRect_.w),
+      0.0, 1.0);
+    const double v = std::clamp(
+      1.0 - static_cast<double>(y - lfoDrawRect_.y) / static_cast<double>(lfoDrawRect_.h),
+      0.0, 1.0);
+    const int idx = std::clamp(static_cast<int>(u * kPts), 0, kPts - 1);
+    lfo->curve[static_cast<std::size_t>(idx)] = static_cast<float>(v);
+    // The soft edge: half to each immediate neighbour, a quarter beyond. Wraps,
+    // because the cycle joins end to end.
+    const double falloff[2] = {0.5, 0.25};
+    for (int d = 1; d <= 2; ++d) {
+      const double w = falloff[d - 1];
+      for (int side = -1; side <= 1; side += 2) {
+        const int n = ((idx + side * d) % kPts + kPts) % kPts;
+        const double was = lfo->curve[static_cast<std::size_t>(n)];
+        lfo->curve[static_cast<std::size_t>(n)] =
+          static_cast<float>(was + (v - was) * w);
+      }
+    }
+    markProjectDirty();
+  }
+
+  // Put the inspector where the pointer is on the rail.
+  //
+  // Centres the thumb on the cursor rather than treating the press as a grab
+  // offset: on a rail this short the thumb is most of it, and "jump to where I
+  // clicked" is both what people expect and the only behaviour that can reach
+  // the ends.
+  void scrollInspectorToPointer(int y) {
+    if (cueSettingsScrollRailRect_.h <= 0 || cueSettingsScrollMax_ <= 0) {
+      return;
+    }
+    const int travel = std::max(1, cueSettingsScrollRailRect_.h - cueSettingsScrollThumbH_);
+    const int from = cueSettingsScrollRailRect_.y + cueSettingsScrollThumbH_ / 2;
+    const double frac = std::clamp(
+      static_cast<double>(y - from) / static_cast<double>(travel), 0.0, 1.0);
+    cueSettingsScroll_ = static_cast<int>(std::lround(frac * cueSettingsScrollMax_));
+  }
+
+  // Same arithmetic as the inspector's rail, against one deck's list. Kept
+  // beside it deliberately: two scrollbars that compute their thumb position
+  // differently will disagree about where "half way" is, and an operator uses
+  // both in the same minute.
+  void scrollDeckListToPointer(int deckIndex, int y) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckListScrollRails_.size())) {
+      return;
+    }
+    const SDL_Rect& rail = deckListScrollRails_[deckIndex];
+    const int scrollMax = (deckIndex < static_cast<int>(deckScrollMax_.size()))
+      ? deckScrollMax_[deckIndex] : 0;
+    if (rail.h <= 0 || scrollMax <= 0) {
+      return;
+    }
+    const int thumbH = deckListScrollThumbH_[deckIndex];
+    const int travel = std::max(1, rail.h - thumbH);
+    const int from = rail.y + thumbH / 2;
+    const double frac = std::clamp(
+      static_cast<double>(y - from) / static_cast<double>(travel), 0.0, 1.0);
+    if (deckIndex < static_cast<int>(deckScrolls_.size())) {
+      deckScrolls_[deckIndex] = static_cast<int>(std::lround(frac * scrollMax));
+      lastDeckScrollMs_ = SDL_GetTicks();
+    }
+  }
+
+  void debugAuditSettingsLayout() { auditSettingsLayout_ = true; }
+  // Screenshot checks need the same viewport and scroll as the operator.
+  // In particular SDL's dummy display is too small to draw the desk at 150%.
+  void debugUiSize(int width, int height) {
+    SDL_SetWindowSize(controlWindow_, width, height);
+    applyUiScale();
+  }
+  void debugScrollSettings(int pixels) {
+    settingsSystemScroll_ = settingsNetworkScroll_ = settingsVideoScroll_ = settingsAudioScroll_ = std::max(0, pixels);
+  }
+  // SHOW THE CARD WITHOUT IMPORTING ANYTHING. `--slide-card <done>/<total>`
+  // puts the progress card on screen so it can be captured with --ui-dump and
+  // LOOKED AT on every theme.
+  //
+  // This card is only ever on screen while a real document is being rasterised,
+  // which is a slow operation an operator watches once and a developer almost
+  // never sees. That is how it came to sweep a bar in the on-body INK colour --
+  // the darkest thing in every light theme -- and keep doing it long enough to
+  // be reported twice.
+  void debugShowSlideRenderCard(int done, int total, std::string title) {
+    slideRenderJobs_ = std::max(1, slideRenderJobs_);
+    slideRenderTitle_ = std::move(title);
+    slideRenderPage_.store(std::max(0, done), std::memory_order_relaxed);
+    slideRenderTotal_.store(std::max(0, total), std::memory_order_relaxed);
+  }
+
+
+  void debugPokeMascot(int pokes) {
+    mascotPokes_ = pokes;
+    mascotLastPokeMs_ = SDL_GetTicks();
+    // A place and a time as well as a count, so the flinch, the squint and the
+    // protest line are all on screen for the screenshot -- the reaction is the
+    // part worth looking at, and a count alone would show none of it.
+    mascotPokeAtMs_ = SDL_GetTicks();
+    mascotPokeDx_ = -0.45;
+    mascotPokeDy_ = -0.20;
+    mascotHoldReaction_ = true;
+    if (pokes >= kMascotFleeAfterPokes) {
+      mascotFleeStartedMs_ = SDL_GetTicks();
+    }
+  }
+
+  void debugImportPath(const std::string& path) {
+    // Scripted import goes straight to the deck — no splash, no startup menu.
+    showStartupDialog_ = false;
+    showSplashOverlay_ = false;
+    // No point: a scripted import is not aimed at a column, so it goes
+    // to the focused playlist the way it always has. -1 lands outside
+    // every rect, which is exactly that.
+    handleDroppedFiles({path});
+  }
+
+  // A show named on the command line — what the .deckboy file association and
+  // "open with" hand us. Opening it is the whole point of the launch, so the
+  // startup menu (which would offer to open something else) is skipped.
+  void openProjectFromCommandLine(const fs::path& projectPath) {
+    showStartupDialog_ = false;
+    showSplashOverlay_ = false;
+    std::error_code ec;
+    fs::path resolved = fs::absolute(projectPath, ec);
+    if (ec) {
+      resolved = projectPath;
+    }
+    if (!fs::exists(resolved) && newerProjectRecoveryFile(resolved).empty()) {
+      triggerToast("show not found: " + resolved.filename().string());
+      return;
+    }
+    openProjectFromPath(normalizeProjectPath(resolved));
+  }
+
+  // Scroll the cue inspector from the command line.
+  //
+  // Everything below the first screenful of the inspector -- effect
+  // parameters, the chain clipboard, the motion driver's preview -- was
+  // unverifiable from a script, because scripted input does not reach SDL3
+  // (PostMessage clicks and keys were already known not to; synthesised wheel
+  // events turn out not to either). The app already carries dev flags for
+  // exactly this reason: --settings opens a settings tab, --pattern-dump
+  // renders a pattern headless. This is the same idea for the inspector.
+  // Same reason as debugScrollInspector: the editor covers the window and
+  // nothing scriptable can open it, so --code-editor does.
+  void debugOpenCodeEditor() { openCodeEditor(); }
+  // Same argument again for the media browser: it is a dropdown over the
+  // window and scripted clicks do not reach SDL3, so --browse opens it.
+  void debugOpenMediaBrowser(const std::string& folder) { openMediaBrowser(folder); }
+
+  void debugScrollInspector(int pixels) {
+    // Held, not applied. The scroll is clamped to cueSettingsScrollMax_ every
+    // frame, and that maximum is only known once the inspector has measured
+    // its own content -- so a value set before the first frame is clamped
+    // straight back to zero and the flag looks like it does nothing.
+    pendingInspectorScroll_ = std::max(0, pixels);
+  }
+
+  void applyPendingInspectorScroll() {
+    if (pendingInspectorScroll_ < 0 || cueSettingsScrollMax_ <= 0) {
+      return;
+    }
+    // HELD until it is satisfied, not applied once.
+    //
+    // The maximum is measured from what was drawn THIS frame, so it only ever
+    // extends about one viewport past wherever the inspector is currently
+    // scrolled. Scrolling by wheel works because each notch reveals a little
+    // more and the maximum grows with it; a single jump to 2000px clamped to
+    // one viewport and stopped, which is why asking for 1900 and for 2600 both
+    // landed in exactly the same place and the effects section stayed out of
+    // reach.
+    //
+    // So the request is kept and re-applied each frame, and given up only when
+    // the maximum stops growing -- which means the bottom really has been
+    // reached.
+    const int want = std::min(pendingInspectorScroll_, cueSettingsScrollMax_);
+    lastInspectorScrollMax_ = cueSettingsScrollMax_;
+    cueSettingsScroll_ = want;
+    // Asking for more than there is means the BOTTOM, and it keeps meaning the
+    // bottom as the inspector grows. A request that gave up on arrival looked
+    // right until a section appeared below it -- arming an LFO adds a row, and
+    // the row it added was the one thing the screenshot needed to show.
+    if (pendingInspectorScroll_ <= cueSettingsScrollMax_) {
+      pendingInspectorScroll_ = -1;   // an exact position: arrived, done
+    }
+  }
+
+  // Photograph the control window from the inside, then quit.
+  //
+  // Checking a menu on three platforms means seeing it on three platforms, and
+  // the OS screenshot tools are the part that does not travel: on macOS
+  // `screencapture` over ssh returns "could not create image from display"
+  // because sshd holds no Screen Recording grant, and granting one needs
+  // somebody at the keyboard. Reading back our own renderer needs no grant
+  // from anybody -- it is our texture -- and it produces the same picture on
+  // Windows, macOS and Linux, headless included.
+  //
+  // BMP because SDL_SaveBMP is in core SDL. SDL_image would be a nicer file
+  // and a new link dependency for a test affordance.
+  void enableUiDump(const std::string& path, int afterFrames) {
+    uiDumpPath_ = path;
+    uiDumpFramesLeft_ = std::max(1, afterFrames);
+  }
+
+  // Called at the end of a rendered frame. Waits a few frames first: the first
+  // one lands before fonts, splash art and the theme have settled, and a
+  // screenshot of a half-dressed frame is how a test passes while showing
+  // nothing.
+  void tickUiDump() {
+    if (uiDumpPath_.empty()) {
+      return;
+    }
+    if (--uiDumpFramesLeft_ > 0) {
+      return;
+    }
+    SDL_Surface* shot = SDL_RenderReadPixels(controlRenderer_, nullptr);
+    if (!shot) {
+      std::fprintf(stderr, "ui-dump: read back failed: %s\n", SDL_GetError());
+      gShouldQuit.store(true);
+      uiDumpPath_.clear();
+      return;
+    }
+    if (!SDL_SaveBMP(shot, uiDumpPath_.c_str())) {
+      std::fprintf(stderr, "ui-dump: save failed: %s\n", SDL_GetError());
+    } else {
+      std::printf("ui-dump: wrote %s (%dx%d)\n", uiDumpPath_.c_str(),
+                  shot->w, shot->h);
+      std::fflush(stdout);
+    }
+    SDL_DestroySurface(shot);
+    uiDumpPath_.clear();
+    if (uiDumpThenQuit_) {
+      gShouldQuit.store(true);
+    }
+    uiDumpThenQuit_ = true;
+  }
+
+  // --contrast-check [dir]: EVERY BUNDLED THEME, ON THE REAL DESK.
+  //
+  // "All 30 themes pass" was once written after measuring the toggles alone,
+  // while Virtual Boy and Ganon still drew red on red across the rest of the
+  // desk. So this renders the whole control window in each theme, twice --
+  // under a help toast and under a warning toast -- and reports:
+  //
+  //   corrected  labels whose call site picked an unreadable ink, caught by
+  //              paletteReadableInk. Not a failure (the label is readable), but
+  //              each one is a call site worth fixing at source.
+  //   notices    the toast colours: ink >= 4.5:1 and edge >= 3:1 on the fill,
+  //              and warning visibly different from help. THESE fail the run.
+  //
+  // With a dir, each frame is also written as <theme>-<help|warning>.bmp, so a
+  // person can look -- a number alone has been wrong before.
+  void enableContrastCheck(const std::string& dir) {
+    contrastCheckDir_ = dir;
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(Paths::dataDir() / "themes", ec)) {
+      if (entry.is_directory() && fs::exists(entry.path() / "theme.txt")) {
+        contrastCheckThemes_.push_back(entry.path().filename().string());
+      }
+    }
+    std::sort(contrastCheckThemes_.begin(), contrastCheckThemes_.end());
+    contrastCheckActive_ = !contrastCheckThemes_.empty();
+    contrastCheckStep_ = 0;
+    contrastCheckFrames_ = 90;  // the first theme also waits out the boot
+    if (!contrastCheckActive_) {
+      std::fprintf(stderr, "contrast-check: no themes under %s\n",
+                   (Paths::dataDir() / "themes").string().c_str());
+      contrastCheckFailed_ = true;
+      gShouldQuit.store(true);
+    }
+  }
+
+  void tickContrastCheck() {
+    if (!contrastCheckActive_) {
+      return;
+    }
+    const std::size_t themeIndex = contrastCheckStep_ / 2;
+    const bool warning = (contrastCheckStep_ % 2) == 1;
+    const std::string& theme = contrastCheckThemes_[themeIndex];
+    if (contrastCheckFrames_ == 12) {
+      // Apply this step's theme and toast, then let a few frames settle.
+      loadTheme(theme);
+      triggerToast(warning ? "contrast check: something needs attention"
+                           : "contrast check: saved",
+                   warning ? ToastKind::Warning : ToastKind::Help, 10000);
+      toast_.startedAt = SDL_GetTicks() - 2500;  // settled: past the slide-in and the pulse
+    }
+    if (contrastCheckFrames_ == 2) {
+      // Count the corrections made while drawing exactly one frame.
+      contrastCheckBaseline_ = textInkCorrections_;
+      contrastCheckLabels_.clear();
+    }
+    if (--contrastCheckFrames_ > 0) {
+      return;
+    }
+    const std::uint64_t corrected = textInkCorrections_ - contrastCheckBaseline_;
+    const PaletteNotice look = paletteNotice(warning);
+    const double inkRatio = paletteContrastRatio(look.ink, look.fill);
+    const double edgeRatio = paletteContrastRatio(look.border, look.fill);
+    bool ok = inkRatio >= 4.5 && edgeRatio >= 3.0;
+    if (warning) {
+      const PaletteNotice help = paletteNotice(false);
+      ok = ok && paletteColorDistance(help.fill, look.fill) + paletteColorDistance(help.ink, look.ink) >= 120;
+    }
+    std::printf("contrast-check: %-16s %-7s corrected %3llu  notice ink %5.2f edge %5.2f  %s\n",
+                theme.c_str(), warning ? "warning" : "help",
+                static_cast<unsigned long long>(corrected), inkRatio, edgeRatio,
+                ok ? "ok" : "FAIL");
+    std::fflush(stdout);
+    contrastCheckFailed_ = contrastCheckFailed_ || !ok;
+    if (!warning && corrected > 0) {
+      std::string names;
+      for (const std::string& label : contrastCheckLabels_) {
+        names += (names.empty() ? "" : " | ") + label;
+      }
+      std::printf("contrast-check:   corrected labels: %s\n", names.c_str());
+    }
+    if (!contrastCheckDir_.empty()) {
+      if (SDL_Surface* shot = SDL_RenderReadPixels(controlRenderer_, nullptr)) {
+        const fs::path file = fs::path(contrastCheckDir_) /
+                              (theme + (warning ? "-warning.bmp" : "-help.bmp"));
+        SDL_SaveBMP(shot, file.string().c_str());
+        SDL_DestroySurface(shot);
+      }
+    }
+    if (++contrastCheckStep_ >= contrastCheckThemes_.size() * 2) {
+      std::printf("contrast-check: %s\n", contrastCheckFailed_ ? "FAILED" : "all themes ok");
+      std::fflush(stdout);
+      contrastCheckActive_ = false;
+      gShouldQuit.store(true);
+      return;
+    }
+    contrastCheckFrames_ = 12;
+  }
+
+  bool contrastCheckFailed() const { return contrastCheckFailed_; }
+
+  // A POPUP MENU, OPENED FROM THE COMMAND LINE.
+  //
+  // Scripted mouse input does not reach SDL3, so nothing in a harness could
+  // ever open one -- which means the menus were the one part of the UI that
+  // could not be looked at without a person doing it by hand. That is exactly
+  // where "too flat" lived unnoticed.
+  //
+  // Sits beside debugOpenSettings for the same reason it exists.
+  void debugOpenMenu(const std::string& which) {
+    showStartupDialog_ = false;
+    showSplashOverlay_ = false;
+    if (which == "source") {
+      openSourceTypeMenu();
+    } else if (which == "routing") {
+      openPlaylistRoutingMenu(project_.focusedDeckIndex, 260, 200);
+    } else if (which == "cue") {
+      const Deck& deck = focusedDeck();
+      if (!deck.cues.empty()) {
+        openContextMenu(project_.focusedDeckIndex,
+                        std::max(0, deck.selectedIndex), 260, 200);
+      }
+    }
+  }
+
+  void debugOpenSettings(int tab, int videoSubTab = 0) {
+    showStartupDialog_ = false;
+    showSplashOverlay_ = false;
+    settingsOpen_ = true;
+    settingsTab_ = std::clamp(tab, 0, 5);
+    settingsVideoSubTab_ = std::clamp(videoSubTab, 0, 3);
+  }
+
+  // ---- Show log ------------------------------------------------------------
+  // Append-only record of what actually happened, so that after a show goes
+  // wrong the operator can answer "what fired, and when?". Deckboy could not
+  // answer that at all before this. Borrowed from QLab, whose show log is the
+  // reason people trust it with real events.
+  //
+  // Deliberately dumb: line-per-event, opened once, flushed every write. A log
+  // that buffers is a log that loses the last few seconds -- which is exactly
+  // the part you need after a crash. It lives in stateDir(), never inside a
+  // macOS .app bundle.
+  void showLog(const std::string& event, const std::string& detail = "") {
+    if (!showLogEnabled_) {
+      return;
+    }
+    if (!showLogFile_.is_open()) {
+      std::error_code ec;
+      fs::create_directories(Paths::stateDir(), ec);
+      showLogFile_.open(Paths::stateDir() / "deckboy-show.log",
+                        std::ios::app);
+      if (!showLogFile_.is_open()) {
+        showLogEnabled_ = false;   // do not retry every event
+        return;
+      }
+      std::time_t t = std::time(nullptr);
+      char stamp[32] = "";
+      if (std::tm* lt = std::localtime(&t)) {
+        std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", lt);
+      }
+      showLogFile_ << "\n=== show log opened " << stamp
+                   << "  " << kAppTitle << " " << kAppVersionTag << " ===\n";
+    }
+    // Wall clock AND running milliseconds: the first tells you when in the day,
+    // the second gives exact spacing between events, which is what matters when
+    // reconstructing a sequence that went wrong.
+    std::time_t t = std::time(nullptr);
+    char stamp[16] = "";
+    if (std::tm* lt = std::localtime(&t)) {
+      std::strftime(stamp, sizeof(stamp), "%H:%M:%S", lt);
+    }
+    showLogFile_ << stamp << "  +" << SDL_GetTicks() << "ms  " << event;
+    if (!detail.empty()) {
+      showLogFile_ << "  " << detail;
+    }
+    showLogFile_ << '\n';
+    showLogFile_.flush();
+  }
+
+  // Cue identity as it will read back weeks later: number, name, and the deck it
+  // was on. An index alone is useless once the playlist has been edited.
+  std::string showLogCueRef(int deckIndex, int cueIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "(no deck)";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "(no cue)";
+    }
+    const Cue& cue = deck.cues[cueIndex];
+    return "deck" + std::to_string(deckIndex + 1) +
+           " q" + std::to_string(cueIndex + 1) +
+           " \"" + cue.name + "\"";
+  }
+
+  void soakLog(const std::string& line) {
+    std::time_t t = std::time(nullptr);
+    char stamp[32] = "";
+    if (std::tm* local = std::localtime(&t)) {
+      std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", local);
+    }
+    std::string full = std::string(stamp) + "  " + line;
+    std::cout << full << std::endl;
+    if (soakLogFile_.is_open()) {
+      soakLogFile_ << full << '\n';
+      soakLogFile_.flush();
+    }
+  }
+
+  // Same shape as soakLog, but unconditional -- not behind --soak-test or
+  // DECKBOY_UI_PROFILE. issue #6 shipped two fixes that both said, in so many
+  // words, "most likely explanation rather than a proven one", because
+  // nobody who could reproduce it had a way to tell us which backend their
+  // machine picked or whether a text texture actually failed to create. This
+  // is that data, written where a real report can find it regardless of
+  // whether any flag was set. Called at most a handful of times a session
+  // (once at startup, once if a text failure is ever seen), so there is no
+  // reason to hold the file open the way soakLogFile_ does.
+  // THE TEXT PATH, MEASURED AT STARTUP, one line in deckboy-render.log.
+  // Issue #6/#7: on some Macs every letter is missing while images draw. Three
+  // fixes were each a theory. This records the three facts that decide it:
+  // how much ink the font rasterised on the CPU, whether that became a
+  // texture, and how much ink actually lands when the GPU draws it -- read
+  // back from a render target. Whichever number is zero is the broken step.
+  // True unless the probe PROVED the GPU draws no text (ink on the CPU,
+  // none on the screen). Anything inconclusive counts as working.
+  bool probeTextPath() {
+    std::ostringstream line;
+    line << "text probe: font=" << (fontSmall_ ? "open" : "NULL");
+    if (!fontSmall_ || !controlRenderer_) {
+      renderDiagnosticLog(line.str());
+      return true;
+    }
+    SDL_Surface* glyphs = deckboy::render::shaping::renderText(fontSmall_, "Deckboy Ag", 0, SDL_Color{255, 255, 255, 255});
+    long cpuInk = 0;
+    int sw = 0, sh = 0;
+    if (glyphs) {
+      sw = glyphs->w;
+      sh = glyphs->h;
+      if (SDL_Surface* rgba = SDL_ConvertSurface(glyphs, SDL_PIXELFORMAT_RGBA32)) {
+        for (int y = 0; y < rgba->h; ++y) {
+          const auto* row = static_cast<const std::uint8_t*>(rgba->pixels) + y * rgba->pitch;
+          for (int x = 0; x < rgba->w; ++x) cpuInk += row[x * 4 + 3] > 64 ? 1 : 0;
+        }
+        SDL_DestroySurface(rgba);
+      }
+    }
+    line << " surface=" << sw << "x" << sh << " cpu-ink=" << cpuInk;
+    SDL_Texture* text = glyphs ? deckboyCreateTextureFromSurface(controlRenderer_, glyphs) : nullptr;
+    line << " texture=" << (text ? "ok" : "FAILED");
+    long gpuInk = -1;
+    if (text && sw > 0 && sh > 0) {
+      SDL_Texture* target = SDL_CreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                              SDL_TEXTUREACCESS_TARGET, sw, sh);
+      if (target) {
+        SDL_Texture* previous = SDL_GetRenderTarget(controlRenderer_);
+        SDL_SetRenderTarget(controlRenderer_, target);
+        SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 255);
+        SDL_RenderClear(controlRenderer_);
+        SDL_SetTextureBlendMode(text, SDL_BLENDMODE_BLEND);
+        SDL_FRect dst {0.0f, 0.0f, static_cast<float>(sw), static_cast<float>(sh)};
+        const bool drew = SDL_RenderTexture(controlRenderer_, text, nullptr, &dst);
+        if (SDL_Surface* back = SDL_RenderReadPixels(controlRenderer_, nullptr)) {
+          if (SDL_Surface* rgba = SDL_ConvertSurface(back, SDL_PIXELFORMAT_RGBA32)) {
+            gpuInk = 0;
+            for (int y = 0; y < rgba->h; ++y) {
+              const auto* row = static_cast<const std::uint8_t*>(rgba->pixels) + y * rgba->pitch;
+              for (int x = 0; x < rgba->w; ++x) gpuInk += row[x * 4] > 64 ? 1 : 0;
+            }
+            SDL_DestroySurface(rgba);
+          }
+          SDL_DestroySurface(back);
+        }
+        SDL_SetRenderTarget(controlRenderer_, previous);
+        SDL_DestroyTexture(target);
+        line << " draw=" << (drew ? "ok" : std::string("FAILED(") + SDL_GetError() + ")");
+      } else {
+        line << " target=FAILED(" << SDL_GetError() << ")";
+      }
+    }
+    // Test hook: the first probe reports a backend that draws no text, so the
+    // fallback in healTextBackendIfNeeded can be exercised on a healthy machine.
+    static bool simulatedOnce = false;
+    if (!simulatedOnce && std::getenv("DECKBOY_TEXT_PROBE_SIMULATE_FAIL")) {
+      simulatedOnce = true;
+      gpuInk = 0;
+      line << " (simulated failure)";
+    }
+    line << " gpu-ink=" << gpuInk << " backend=" << deckboyLastRendererDriver()
+         << " ui-scale=" << effectiveUiScale();
+    if (text) SDL_DestroyTexture(text);
+    if (glyphs) SDL_DestroySurface(glyphs);
+    renderDiagnosticLog(line.str());
+    std::cerr << line.str() << std::endl;
+    // Ink on the CPU and none on the screen -- or a texture that would not
+    // even be made from good ink -- is a backend that cannot draw text.
+    return !(cpuInk > 0 && (!text || gpuInk == 0));
+  }
+
+  // PROBE B: the function every label in the interface goes through
+  // (drawTextSafe -- localisation, fit, ellipsis, clip, label cache), drawn
+  // into an off-screen target and read back. Probe A proves the font and the
+  // GPU; this proves the path between them. Returns the ink it found.
+  long probeRealTextPath(const char* tag) {
+    if (!fontSmall_ || !controlRenderer_) return -1;
+    const int w = 420, h = 64;
+    SDL_Texture* target = SDL_CreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_TARGET, w, h);
+    if (!target) {
+      renderDiagnosticLog(std::string("text probe B (") + tag + "): no target (" + SDL_GetError() + ")");
+      return -1;
+    }
+    SDL_Texture* previous = SDL_GetRenderTarget(controlRenderer_);
+    SDL_SetRenderTarget(controlRenderer_, target);
+    SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 255);
+    SDL_RenderClear(controlRenderer_);
+    drawTextSafe(controlRenderer_, fontSmall_, SDL_Rect{4, 4, w - 8, h - 8}, "Deckboy Ag",
+                 SDL_Color{255, 255, 255, 255});
+    long ink = -1;
+    if (SDL_Surface* back = SDL_RenderReadPixels(controlRenderer_, nullptr)) {
+      if (SDL_Surface* rgba = SDL_ConvertSurface(back, SDL_PIXELFORMAT_RGBA32)) {
+        ink = 0;
+        for (int y = 0; y < rgba->h; ++y) {
+          const auto* row = static_cast<const std::uint8_t*>(rgba->pixels) + y * rgba->pitch;
+          for (int x = 0; x < rgba->w; ++x) ink += row[x * 4] > 64 ? 1 : 0;
+        }
+        SDL_DestroySurface(rgba);
+      }
+      SDL_DestroySurface(back);
+    }
+    SDL_SetRenderTarget(controlRenderer_, previous);
+    SDL_DestroyTexture(target);
+    // Test hook, as for probe A: the first label probe reports nothing.
+    static bool simulatedB = false;
+    if (!simulatedB && std::getenv("DECKBOY_TEXT_PROBE_B_SIMULATE_FAIL")) {
+      simulatedB = true;
+      ink = 0;
+    }
+    if (std::getenv("DECKBOY_TEXT_PROBE_LABEL_GPU_FAIL") &&
+        std::string(SDL_GetRendererName(controlRenderer_)) != "software") {
+      ink = 0;
+    }
+    std::ostringstream line;
+    line << "text probe B (" << tag << "): label-ink=" << ink
+         << " font-height=" << TTF_GetFontHeight(fontSmall_)
+         << " measured-w=" << measuredWidthIn(fontSmall_, "Deckboy Ag")
+         << " clip=" << (textClipDisabled_ ? "off" : "on")
+         << " backend=" << deckboyLastRendererDriver();
+    renderDiagnosticLog(line.str());
+    std::cerr << line.str() << std::endl;
+    return ink;
+  }
+
+  void createScanlineOverlay() {
+    scanlineOverlay_ = deckboyCreateTexture(controlRenderer_,
+        SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STATIC, 1, 4);
+    if (scanlineOverlay_) {
+      Uint8 a = pal.scanlineAlpha;
+      uint32_t pixels[4] = {0, 0, (uint32_t(a) << 24), (uint32_t(a) << 24)};
+      SDL_UpdateTexture(scanlineOverlay_, nullptr, pixels, sizeof(uint32_t));
+      SDL_SetTextureBlendMode(scanlineOverlay_, SDL_BLENDMODE_BLEND);
+    }
+  }
+
+  // A BACKEND THAT CANNOT DRAW TEXT IS REPLACED BEFORE ANYTHING DEPENDS ON IT.
+  // Runs straight after the fonts load, when the only texture on the control
+  // renderer is the scanline overlay: so the renderer can be swapped for the
+  // next one in the list and probed again, and the operator gets an interface
+  // with letters in it instead of a report to file.
+  // ── CAN THE MEDIA TOOLS ACTUALLY RUN? ────────────────────────────────────
+  //
+  // Present is not the same as able to run. A Mac release bundled ffmpeg and
+  // ffprobe built for macOS 14, and on Ventura neither could start ("Symbol
+  // not found") -- while the desk opened normally, with its icons blank and
+  // imports failing, and nothing anywhere said why. Both are run once at
+  // startup, off the main thread; if either cannot, the operator is told in a
+  // NATIVE alert (which does not depend on Deckboy's own drawing) and the
+  // render log keeps the tool's own words.
+  void startMediaToolsCheck() {
+    mediaToolsCheck_ = std::async(std::launch::async, []() {
+      std::string problem;
+      for (const char* tool : {"ffmpeg", "ffprobe"}) {
+        const auto run = ::runCaptured({tool, "-version"});
+        if (run.ok()) continue;
+        std::string why = run.ran ? run.output : std::string("it could not be started");
+        // The first lines are the useful ones ("dyld: Symbol not found: ...").
+        int lines = 0;
+        for (std::size_t i = 0; i < why.size(); ++i) {
+          if (why[i] == '\n' && ++lines == 3) {
+            why.resize(i);
+            break;
+          }
+        }
+        problem += std::string(problem.empty() ? "" : "\n\n") + tool + ": " + why;
+      }
+      return problem;
+    });
+  }
+
+  // From update(): report the startup check once it has an answer.
+  void serviceMediaToolsCheck() {
+    if (!mediaToolsCheck_.valid() ||
+        mediaToolsCheck_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+      return;
+    }
+    const std::string problem = mediaToolsCheck_.get();
+    if (problem.empty()) {
+      renderDiagnosticLog("media tools: ffmpeg and ffprobe run");
+      return;
+    }
+    renderDiagnosticLog("media tools: CANNOT RUN -- " + problem);
+    std::cerr << "media tools cannot run: " << problem << std::endl;
+    // Drawn INSIDE the desk, never a system message box: that one is modal,
+    // stops the main loop until somebody clicks it, and an app in that state
+    // answers no remote command and draws no output.
+    if (std::getenv("DECKBOY_TEST_NO_ALERTS") || depPrompt_.active) return;
+    showDependencyPrompt(
+      "Deckboy cannot run its media tools",
+      "Deckboy imports, makes thumbnails and plays video with ffmpeg and "
+      "ffprobe, which ship with it, and this computer would not start them, "
+      "so media will not play.\n\n" + problem +
+      "\n\nPlease report this, with deckboy-render.log from Deckboy's "
+      "settings folder.",
+      "https://github.com/Utopian-Academy/Deckboy/issues",
+      "Report it");
+  }
+
+  void healTextBackendIfNeeded() {
+    // A renderer must pass the path used by real labels as well as raw glyphs.
+    // If dropping the label clip does not recover ink, try another renderer.
+    auto labelsWork = [&]() {
+      textClipDisabled_ = false;
+      clearTextTextureCache();
+      if (!probeTextPath()) return false;
+      if (probeRealTextPath("as built") != 0) return true;
+      textClipDisabled_ = true;
+      clearTextTextureCache();
+      if (probeRealTextPath("clip off") > 0) {
+        renderDiagnosticLog("labels recovered with text clipping off");
+        return true;
+      }
+      textClipDisabled_ = false;
+      renderDiagnosticLog("label path failed with and without clipping; trying another renderer");
+      return false;
+    };
+    bool working = labelsWork();
+    if (!working) {
+      // The same two on every platform: the other GPU backend, then the CPU.
+      static const char* const kFallbacks[] = {"opengl", "software"};
+      const std::string failed = deckboyLastRendererDriver();
+      for (const char* next : kFallbacks) {
+        if (failed.rfind(next, 0) == 0) {
+          continue;
+        }
+        // A window takes ONE renderer: the old one has to go before SDL will
+        // make another for it -- and its cached label textures before it.
+        clearTextTextureCache();
+        releasePreviewTransitionRuntime();
+        if (scanlineOverlay_) {
+          SDL_DestroyTexture(scanlineOverlay_);
+          scanlineOverlay_ = nullptr;
+        }
+        SDL_DestroyRenderer(controlRenderer_);
+        controlRenderer_ = SDL_CreateRenderer(controlWindow_, next);
+        if (!controlRenderer_) {
+          renderDiagnosticLog(std::string("text fallback: ") + next + " would not open (" + SDL_GetError() + ")");
+          // Never leave the window without a renderer: back to the normal list.
+          controlRenderer_ = deckboyCreateRenderer(controlWindow_);
+          SDL_SetRenderVSync(controlRenderer_, 1);
+          applyDeskFrameLatency();
+          createScanlineOverlay();
+          continue;
+        }
+        deckboyLastRendererDriver() = next;
+        SDL_SetRenderVSync(controlRenderer_, 1);
+        createScanlineOverlay();
+        renderDiagnosticLog("text could not be drawn on " + failed + "; control window moved to " + next);
+        std::cerr << "text could not be drawn on " << failed << "; using " << next << std::endl;
+        working = labelsWork();
+        if (working) {
+          break;
+        }
+      }
+    }
+    if (!working) {
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Deckboy text rendering",
+        "The interface text could not be rendered. See deckboy-render.log in the state folder.",
+        controlWindow_);
+    }
+    clearTextTextureCache();   // nothing the probes made outlives startup
+  }
+
+  void renderDiagnosticLog(const std::string& line) {
+    std::time_t t = std::time(nullptr);
+    char stamp[32] = "";
+    if (std::tm* local = std::localtime(&t)) {
+      std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", local);
+    }
+    std::ofstream log(Paths::stateDir() / "deckboy-render.log", std::ios::app);
+    if (log) {
+      log << stamp << "  " << line << '\n';
+    }
+  }
+
+  // ── THE TEXT PATH, MEASURED ON THE REAL WINDOW ──────────────────────────
+  //
+  // Issue #6/#7, 2026-10-08: on a Mac mini (M2, Ventura, two 1080p screens)
+  // the startup probes all passed -- 440 pixels of ink on the CPU, the GPU and
+  // the label path -- while the operator saw "NEW" and almost nothing else.
+  // Those probes draw once, off screen, before the first frame; the fault is
+  // in real frames. So this samples a real one: every label the control
+  // window draws is noted (first, middle and last are kept), and just BEFORE
+  // the frame is presented the window itself is read back where each one
+  // went, and the whole frame is saved beside the log. Ink in the saved frame
+  // but not on the screen means the loss is after Deckboy hands the frame
+  // over; no ink means Deckboy's own drawing loses it, and first-vs-last says
+  // whether a frame is being cut off part way.
+  struct LiveTextSample {
+    SDL_Rect rect {};
+    std::string text;
+    SDL_Color ink {};
+    SDL_Color under {};
+    bool haveUnder = false;
+  };
+  bool liveTextCollecting_ = false;
+  int liveTextProbesDone_ = 0;
+  Uint64 liveTextFirstFrameMs_ = 0;
+  int liveTextLabels_ = 0;
+  std::vector<LiveTextSample> liveTextSamples_;
+
+  // From drawTextRaw: one label, as drawn into the control window.
+  void noteLiveTextLabel(SDL_Renderer* renderer, const SDL_Rect& rect, const std::string& text,
+                         SDL_Color ink, const SDL_Color* under) {
+    if (!liveTextCollecting_ || renderer != controlRenderer_ ||
+        SDL_GetRenderTarget(renderer) != nullptr) {
+      return;
+    }
+    ++liveTextLabels_;
+    if (liveTextSamples_.size() < 4096) {
+      LiveTextSample s;
+      s.rect = rect;
+      s.text = text.substr(0, 24);
+      s.ink = ink;
+      if (under) {
+        s.under = *under;
+        s.haveUnder = true;
+      }
+      liveTextSamples_.push_back(std::move(s));
+    }
+  }
+
+  // At the start of a control-window frame: collect this frame's labels if
+  // the probe is due -- once, 3 s after the first frame.
+  //
+  // ONCE, AND AT STARTUP. Reading the window back makes the CPU wait for the
+  // GPU, and on Metal that wait stalled the outputs: a second probe at 60 s
+  // landed inside CI's A/V timing run and put one marker ~450 ms late, twice.
+  // At 3 s nothing is on air yet, and startup is where the missing-text
+  // fault shows.
+  void beginLiveTextFrame() {
+    liveTextCollecting_ = false;
+    if (liveTextProbesDone_ >= 1 || !controlRenderer_) {
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (liveTextFirstFrameMs_ == 0) {
+      liveTextFirstFrameMs_ = now;
+    }
+    if (now - liveTextFirstFrameMs_ < 3000) {
+      return;
+    }
+    liveTextCollecting_ = true;
+    liveTextLabels_ = 0;
+    liveTextSamples_.clear();
+  }
+
+  // Just before SDL_RenderPresent on the control window.
+  void finishLiveTextFrame() {
+    if (!liveTextCollecting_) {
+      return;
+    }
+    liveTextCollecting_ = false;
+    ++liveTextProbesDone_;
+    int ww = 0, wh = 0, pw = 0, ph = 0;
+    SDL_GetWindowSize(controlWindow_, &ww, &wh);
+    SDL_GetWindowSizeInPixels(controlWindow_, &pw, &ph);
+    int displays = 0;
+    if (SDL_DisplayID* ids = SDL_GetDisplays(&displays)) SDL_free(ids);
+    std::ostringstream line;
+    line << "live text probe " << liveTextProbesDone_ << " at "
+         << (SDL_GetTicks() - liveTextFirstFrameMs_) / 1000 << "s: labels=" << liveTextLabels_
+         << " window=" << ww << "x" << wh << " pixels=" << pw << "x" << ph
+         << " density=" << SDL_GetWindowPixelDensity(controlWindow_)
+         << " display-scale=" << SDL_GetWindowDisplayScale(controlWindow_)
+         << " displays=" << displays << " backend=" << deckboyLastRendererDriver();
+    // First, middle, last: a frame cut off part way shows ink early and none late.
+    std::vector<std::size_t> pick;
+    if (!liveTextSamples_.empty()) {
+      pick = {0, liveTextSamples_.size() / 2, liveTextSamples_.size() - 1};
+    }
+    // ONE READBACK, the whole frame: each read waits on the GPU, so the labels
+    // are measured from this one copy, which is also what gets saved.
+    SDL_Surface* back = SDL_RenderReadPixels(controlRenderer_, nullptr);
+    SDL_Surface* frame = back ? SDL_ConvertSurface(back, SDL_PIXELFORMAT_RGBA32) : nullptr;
+    int inkless = 0;
+    for (std::size_t i = 0; i < pick.size(); ++i) {
+      if (i > 0 && pick[i] == pick[i - 1]) continue;
+      const LiveTextSample& s = liveTextSamples_[pick[i]];
+      long ink = -1;
+      if (frame) {
+        ink = 0;
+        const SDL_Color bg = s.haveUnder ? s.under : SDL_Color {0, 0, 0, 255};
+        const int x0 = std::max(0, s.rect.x), y0 = std::max(0, s.rect.y);
+        const int x1 = std::min(frame->w, s.rect.x + s.rect.w), y1 = std::min(frame->h, s.rect.y + s.rect.h);
+        for (int y = y0; y < y1; ++y) {
+          const auto* row = static_cast<const std::uint8_t*>(frame->pixels) + y * frame->pitch;
+          for (int x = x0; x < x1; ++x) {
+            const std::uint8_t* p = row + x * 4;
+            // Closer to the label's ink than to what is behind it.
+            const int toInk = std::abs(p[0] - s.ink.r) + std::abs(p[1] - s.ink.g) + std::abs(p[2] - s.ink.b);
+            const int toBg = std::abs(p[0] - bg.r) + std::abs(p[1] - bg.g) + std::abs(p[2] - bg.b);
+            ink += toInk < toBg ? 1 : 0;
+          }
+        }
+      }
+      inkless += ink == 0 ? 1 : 0;
+      line << " | #" << pick[i] + 1 << " \"" << s.text << "\" at " << s.rect.x << "," << s.rect.y
+           << " " << s.rect.w << "x" << s.rect.h << " ink=" << ink;
+    }
+    if (inkless > 0) {
+      line << "  <- LABELS WITH NO INK IN THE FRAME";
+    }
+    // The whole frame as Deckboy drew it, for comparing with what the screen shows.
+    if (frame) {
+      const fs::path file = Paths::stateDir() / "deckboy-live-frame.bmp";
+      line << (SDL_SaveBMP(frame, file.string().c_str()) ? " frame=saved" : " frame=save-failed");
+      SDL_DestroySurface(frame);
+    }
+    if (back) {
+      SDL_DestroySurface(back);
+    }
+    renderDiagnosticLog(line.str());
+    liveTextSamples_.clear();
+  }
+
+  void tickSoak() {
+    if (!soakMode_) {
+      return;
+    }
+    Uint64 now = SDL_GetTicks();
+    if (soakStartMs_ == 0) {
+      soakStartMs_ = now;
+      soakLastLogMs_ = now;
+      if (focusedDeck().cues.empty()) {
+        // Nothing loaded: synthesize a pattern loop so the render/audio path
+        // still gets exercised. Point DECKBOY_PROJECT (or open a show before
+        // launching) to soak real media instead.
+        addPatternCue("pocket-test");
+        addPatternCueFromMenu();
+      }
+      Deck& deck = focusedDeckMutable();
+      deck.playlistLoop = true;
+      for (auto& cue : deck.cues) {
+        cue.endAction = CueEndAction::AutoNext;
+        cue.pauseAtBeginning = false;
+        cue.pauseOnLastFrame = false;
+        cue.loop = false;
+        if (cue.kind != CueKind::Video && cue.kind != CueKind::Audio &&
+            cue.stillDurationSeconds <= 0.0) {
+          cue.stillDurationSeconds = 10.0;
+        }
+      }
+      deck.selectedIndex = deck.cues.empty() ? -1 : 0;
+      if (deck.selectedIndex >= 0) {
+        takeSelected(true);
+      }
+      std::ostringstream start;
+      start << "SOAK START cues=" << deck.cues.size()
+            << " planned=" << soakMinutes_ << "min rss=" << std::fixed
+            << std::setprecision(1) << processRssMb() << "MB";
+      soakLog(start.str());
+      return;
+    }
+    if (now - soakLastLogMs_ >= 60000) {
+      soakLastLogMs_ = now;
+      const Deck& deck = focusedDeck();
+      std::ostringstream line;
+      line << "soak +" << ((now - soakStartMs_) / 60000) << "min"
+           << " rss=" << std::fixed << std::setprecision(1) << processRssMb() << "MB"
+           << " stalls=" << decodeStallTotal_
+           << " missing=" << missingMediaCount_
+           << " active=" << deck.activeIndex
+           << "/" << deck.cues.size();
+      soakLog(line.str());
+    }
+    if (soakMinutes_ > 0.0 &&
+        now - soakStartMs_ >= static_cast<Uint64>(soakMinutes_ * 60000.0)) {
+      std::ostringstream done;
+      done << "SOAK COMPLETE " << soakMinutes_ << "min"
+           << " rss=" << std::fixed << std::setprecision(1) << processRssMb() << "MB"
+           << " stalls=" << decodeStallTotal_
+           << " missing=" << missingMediaCount_;
+      soakLog(done.str());
+      gShouldQuit.store(true);
+    }
+  }
+
+  // ── Startup self-test ─────────────────────────────────────────────────────
+#include "app/app_smoke.ipp"
+
+ private:
+  struct BusyCritter;
+  // Declared here so ipp-file helper functions can use it as a parameter type.
+  struct SettingsButton { SDL_Rect rect; int action; std::string label; };
+
+  // ── App method modules (.ipp includes) ──────────────────────────────────
+  // Each .ipp file adds member functions to the App class. They are included
+  // directly in the class body so they can access private members.
+
+  // State accessors: getters for deck/cue/output/project state
+#include "app/app_accessors.ipp"
+  // Network: OSC server, Companion integration, tally reporting
+#include "app/app_network.ipp"
+  // Output management: window lifecycle, stream writer, NDI/DeckLink
+#include "app/app_output_mgmt.ipp"
+  // Project state: save/load .deckboy files, import/export
+#include "app/app_project_state.ipp"
+  // Remote command handler: processes OSC and Companion messages
+#include "app/app_remote_command.ipp"
+  // Per-frame update: timers, transitions, auto-advance, integration poll
+#include "app/app_update.ipp"
+  // Lower-third overlay management
+#include "app/app_overlays.ipp"
+  // The MIDI and OSC monitor: every message, and what Deckboy did with it
+#include "app/app_input_monitor.ipp"
+#include "app/app_midi_map.ipp"
+#include "app/app_tutorial.ipp"
+#include "app/app_colour_picker.ipp"
+  // Masks: the library, the raster cache, and where a mask cuts
+#include "app/app_masks.ipp"
+#include "app/app_rat_dad.ipp"
+  // Render: transport control panel (play/stop/seek buttons, timeline)
+#include "app/app_render_control.ipp"
+  // Render: main control window layout and drawing
+  // (The live cue inspector is rendered by renderMainPanel below. A separate
+  // app_render_inspector.ipp once held a second, unreachable copy of it; it was
+  // deleted in v0.81.5 after ~1,646 lines of it had silently drifted out of sync
+  // with the real one and been edited by mistake more than once.)
+#include "app/app_render_main.ipp"
+  // Geometry: cue/output geometry calculations (crop, scale, rotation)
+#include "app/app_geometry.ipp"
+  // Render: output window compositor → NDI/DeckLink/Siphon blit
+#include "app/app_render_output.ipp"
+  // Reusable UI widget functions (buttons, sliders, dropdowns, toggles)
+#include "app/app_creatures.ipp"
+#include "app/app_scopes.ipp"
+#include "app/app_live_captions.ipp"
+#include "app/app_code_editor.ipp"
+#include "app/app_ui_widgets.ipp"
+  // Render: settings modal dialog (all tabs)
+#include "app/app_render_settings.ipp"
+
+  void handleMonitorsMouseDown(int x, int y) {
+    for (const auto& btn : outputMenuButtons_) {
+      if (!pointInRect(x, y, btn.rect)) continue;
+      if (btn.action == kOutputMenuActionAddOutput) {
+        addOutput(project_.focusedDeckIndex);
+        return;
+      }
+      if (btn.action == kOutputMenuActionToggleFps) {
+        outputFpsCounterEnabled_ = !outputFpsCounterEnabled_;
+        triggerToast(std::string("output fps ") + (outputFpsCounterEnabled_ ? "on" : "off"));
+        return;
+      }
+      if (btn.action == kOutputMenuActionFocus) {
+        if (btn.outputIndex >= 0) setFocusedOutputIndex(btn.outputIndex);
+        return;
+      }
+      if (btn.action == kOutputMenuActionRecover) {
+        if (btn.outputIndex >= 0) { setFocusedOutputIndex(btn.outputIndex); setFocusedOutputEnabled(true); }
+        return;
+      }
+      if (btn.action == kOutputMenuActionDisarm) {
+        if (btn.outputIndex >= 0) { setFocusedOutputIndex(btn.outputIndex); setFocusedOutputEnabled(false, false); }
+        return;
+      }
+    }
+  }
+
+  // Input: keyboard/mouse event handling (key bindings, click dispatch)
+#include "app/app_input.ipp"
+  // Cue transport: play/stop/seek/fade operations
+#include "app/app_cue_transport.ipp"
+  // Quick-action command palette (Ctrl+K search)
+#include "app/app_numeric_params.ipp"
+#include "app/app_quick_action.ipp"
+  // Cue list management: add/remove/reorder/duplicate cues
+#include "app/app_cue_mgmt.ipp"
+  struct InspectorCtx {
+    SDL_Rect ctrl;          // inspector body rect
+    int ctrlW;              // ctrl.w shorthand
+    int inset;              // left/right inset (10 docked, 12 floating)
+    int rowH;               // row height (28 both)
+    int rowStep;            // row step (34 docked, 38 floating)
+    int sectionHeaderH;     // section header height (28 both)
+    int sectionGap;         // gap between sections
+    TTF_Font* headerFont;   // section header font
+    TTF_Font* valueFont;    // value / label font
+    TTF_Font* labelFont;    // small label font
+    bool ellipsize;         // whether to ellipsize text to pixel width
+  };
+
+  static std::string fmtFloat(float value, int decimals = 2) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.*f", decimals, static_cast<double>(value));
+    return buf;
+  }
+
+  static std::string fmtPercent(float value) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.1f%%", static_cast<double>(value * 100.0f));
+    return buf;
+  }
+
+  static const char* fmtScaleMode(ScaleMode mode) {
+    switch (mode) {
+      case ScaleMode::Fit: return "Fit";
+      case ScaleMode::Fill: return "Fill";
+      case ScaleMode::Stretch: return "Stretch";
+      case ScaleMode::Unscaled: return "Unscaled";
+    }
+    return "?";
+  }
+
+  struct InspectorSectionScope {
+    SDL_Rect headerRect {};
+    bool open = false;
+    int bodyStartY = 0;
+  };
+
+  // The mask editor: its inspector rows need InspectorCtx, declared just above.
+#include "app/app_mask_editor.ipp"
+#include "app/app_motion.ipp"
+#include "app/app_draw.ipp"
+#include "app/app_slices.ipp"
+#include "app/app_screens.ipp"
+#include "app/app_bugswat.ipp"
+#include "app/app_lessons.ipp"
+
+  // Draw the cue's EFFECTIVE audio fade envelope over a waveform rect: ramp
+  // up across the fade-in after the in-point, ramp down into the out-point.
+  // Uses the audio fades when the cue overrides them (a-fade in/out), else
+  // the visual fades — the same resolution the audio thread applies.
+  void drawAudioFadeEnvelope(const SDL_Rect& rect, const Cue& cue) {
+    double dur = cue.duration > 0.0 ? cue.duration : 1.0;
+    double inPos = std::clamp(cue.inPointSeconds, 0.0, dur);
+    double outPos = cue.outPointSeconds > 0.0 ? std::clamp(cue.outPointSeconds, inPos, dur) : dur;
+    double fadeIn = cue.audioFadeInSeconds >= 0.0f
+      ? static_cast<double>(cue.audioFadeInSeconds) : cue.fadeInSeconds;
+    double fadeOut = cue.audioFadeOutSeconds >= 0.0f
+      ? static_cast<double>(cue.audioFadeOutSeconds) : cue.fadeOutSeconds;
+    if (fadeIn <= 0.001 && fadeOut <= 0.001) {
+      return;
+    }
+    auto xAt = [&](double sec) {
+      return static_cast<float>(rect.x)
+           + static_cast<float>(std::clamp(sec / dur, 0.0, 1.0) * (rect.w - 1));
+    };
+    float top = static_cast<float>(rect.y + 2);
+    float bottom = static_cast<float>(rect.y + rect.h - 2);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, pal.light.r, pal.light.g, pal.light.b, 220);
+    if (fadeIn > 0.001) {
+      float x0 = xAt(inPos);
+      float x1 = xAt(std::min(inPos + fadeIn, outPos));
+      SDL_RenderLine(controlRenderer_, x0, bottom, x1, top);
+      SDL_RenderLine(controlRenderer_, x0 + 1.0f, bottom, x1 + 1.0f, top);
+    }
+    if (fadeOut > 0.001) {
+      float x0 = xAt(std::max(outPos - fadeOut, inPos));
+      float x1 = xAt(outPos);
+      SDL_RenderLine(controlRenderer_, x0, top, x1, bottom);
+      SDL_RenderLine(controlRenderer_, x0 - 1.0f, top, x1 - 1.0f, bottom);
+    }
+  }
+
+  // Shared label column width so every inspector row type aligns its value
+  // box to the same grid. Quick/editable/status rows previously picked
+  // 108/98/98 (docked) and 88/70/70 (floating) independently, so the value
+  // column zig-zagged down the panel.
+  // The same rule, for a row that does not carry an InspectorCtx. ONE label
+  // column for the whole inspector is the point: a row that invents its own
+  // puts its label and its value cell at different x from the rows above and
+  // below it, which is what "some items in the playback menu are out of
+  // line" looks like.
+  int inspLabelColumnWidthFor(TTF_Font* labelFont, bool ellipsize,
+                              int contentW, int reservedW) const {
+    const int fontFloor = labelFont
+      ? (measuredTextWidth(labelFont, "transition") + uiScaled(10))
+      : uiScaled(64);
+    const int minValueW = uiScaled(ellipsize ? 76 : 68);
+    const int preferred = std::max(uiScaled(ellipsize ? 104 : 84), fontFloor);
+    return std::clamp(preferred, fontFloor,
+                      std::max(fontFloor, contentW - reservedW - minValueW));
+  }
+
+  int inspLabelColumnWidth(const InspectorCtx& ix, int contentW, int reservedW) const {
+    // SCALED, and wide enough for the font actually in use. These were raw
+    // pixel literals, so at a 1.5x desktop the label column stayed the width
+    // it needed at 100% while the text in it grew by half -- which is why
+    // "pattern" and "SELECTED CUE" started spilling out of their own rows.
+    //
+    // The floor is the width of a representative label rather than a number:
+    // whatever the font is, the column is at least big enough to hold one.
+    const int fontFloor = ix.labelFont
+      ? (measuredTextWidth(ix.labelFont, "transition") + uiScaled(10))
+      : uiScaled(64);
+    const int minValueW = uiScaled(ix.ellipsize ? 76 : 68);
+    const int preferred = std::max(uiScaled(ix.ellipsize ? 104 : 84), fontFloor);
+    return std::clamp(preferred, fontFloor,
+                      std::max(fontFloor, contentW - reservedW - minValueW));
+  }
+
+  // ── A ROW OF ACTIONS, NOT A VALUE WITH ARROWS AROUND IT ─────────────────
+  //
+  // inspDrawQuickRow draws every control as "- value +", which is right for a
+  // number and wrong for everything else. RESET came out as "- back to start +"
+  // -- two buttons that both reset, framing a phrase that is not a value --
+  // and the nudges came out as "- +/- 1 min +", where the middle cell showed
+  // the button's own description instead of anything about the cue.
+  //
+  // A control that DOES something is a button. This draws one to four of them
+  // across a row, all the same width, and registers each.
+  struct InspAction {
+    const char* label;
+    QuickAction action;
+    const char* tip;
+    bool lit = false;
+  };
+  void inspDrawActionButtons(const InspectorCtx& ix, int rowY,
+                             std::initializer_list<InspAction> actions) {
+    const int count = static_cast<int>(actions.size());
+    if (count <= 0) return;
+    const int gap = 6;
+    const int rx = ix.ctrl.x + ix.inset;
+    const int contentW = ix.ctrlW - ix.inset * 2;
+    const int btnW = (contentW - gap * (count - 1)) / count;
+    int bx = rx;
+    for (const InspAction& a : actions) {
+      SDL_Rect btn {bx, rowY, btnW, ix.rowH};
+      drawUIPanel(btn, paletteToggleFill(a.lit), pal.deep,
+                  a.lit ? pal.mid : pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, btn, a.label,
+                           paletteToggleInk(a.lit));
+      quickButtons_.push_back({btn, a.action, a.tip});
+      bx += btnW + gap;
+    }
+  }
+
+  // ── A CHOICE, NOT A NUMBER ──────────────────────────────────────────────
+  //
+  // One label, one value, and clicking the value moves to the next option.
+  // "mode" and "face" are lists of three and two things; drawn through the
+  // numeric row they came out as "- countdown +", which invites an operator to
+  // read them as a quantity and to expect the arrows to mean less and more.
+  //
+  // Same geometry as inspDrawQuickRow's row so a choice and a number sitting
+  // next to each other still line up.
+  void inspDrawValueRow(const InspectorCtx& ix, int rowY, const std::string& label,
+                        const std::string& value, QuickAction action,
+                        std::string tip = "") {
+    const int gap = ix.ellipsize ? 8 : 6;
+    const int rx = ix.ctrl.x + ix.inset;
+    const int contentW = ix.ctrlW - ix.inset * 2;
+    const int labelW = inspLabelColumnWidth(ix, contentW, gap);
+    SDL_Rect labelRect {rx, rowY, labelW, ix.rowH};
+    SDL_Rect valRect {rx + labelW + gap, rowY,
+                      std::max(uiScaled(60), contentW - labelW - gap), ix.rowH};
+    drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+    drawUIPanel(valRect, pal.light, pal.deep, pal.mid);
+    std::string shown = ix.ellipsize
+      ? ellipsizeToPixelWidth(ix.valueFont, value, valRect.w - 12) : value;
+    drawCenteredTextSafe(controlRenderer_, ix.valueFont, valRect, shown, pal.deep);
+    quickButtons_.push_back({valRect, action,
+                             tip.empty() ? std::string("Click to change") : tip});
+  }
+
+  // ── THE CLOCK ITSELF, BIG ───────────────────────────────────────────────
+  //
+  // A stage timer is an instrument an operator drives while looking at a
+  // stage, not a setting they configure once. The number is the whole control
+  // surface, so it is drawn at the size you can read from a metre away and in
+  // the colour the stage screen is showing -- green, amber or red at the
+  // thresholds this cue was given, so the operator's copy and the speaker's
+  // copy cannot disagree about how much trouble they are in.
+  int inspDrawTimerClock(const InspectorCtx& ix, int rowY, const Cue& cue,
+                         const std::string& text, double remaining, bool running) {
+    const int rx = ix.ctrl.x + ix.inset;
+    const int w = ix.ctrlW - ix.inset * 2;
+    const int h = std::max(ix.rowH * 2, uiScaled(46));
+    SDL_Rect face {rx, rowY, w, h};
+    drawUIPanel(face, pal.deep, pal.deep, pal.mid);
+    SDL_Color ink = pal.light;
+    if (remaining <= static_cast<double>(cue.timer.redSeconds)) {
+      ink = SDL_Color{255, 110, 110, 255};
+    } else if (remaining <= static_cast<double>(cue.timer.amberSeconds)) {
+      ink = SDL_Color{255, 200, 110, 255};
+    }
+    drawCenteredTextSafe(controlRenderer_, fontLarge_ ? fontLarge_ : ix.valueFont,
+                         face, text, ink);
+    // A held clock says so, quietly, rather than looking identical to a
+    // running one that happens not to have ticked yet.
+    if (!running) {
+      SDL_Rect tag {face.x + face.w - uiScaled(46), face.y + uiScaled(3),
+                    uiScaled(42), std::max(uiScaled(12), ix.rowH / 2)};
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, tag, "HELD", pal.inkSoft);
+    }
+    quickButtons_.push_back({face, QuickAction::TimerRunToggle,
+                             running ? "Hold the clock" : "Run the clock"});
+    return rowY + h + 4;
+  }
+
+  void inspDrawQuickRow(const InspectorCtx& ix, int rowY, const std::string& label,
+                        QuickAction decAction, const std::string& value,
+                        QuickAction incAction, QuickAction toggleAction = QuickAction::ToggleLoop,
+                        bool isToggle = false, bool toggleOn = false, std::string tip = "",
+                        bool valueEditable = false, QuickAction valueAction = QuickAction::ToggleLoop,
+                        int paramId = -1,
+                        // An optional chip on the right-hand end of the row.
+                        // Added for the parameter LFOs, where the switch has to
+                        // sit ON the parameter it modulates -- a separate list
+                        // of "things that are oscillating" somewhere else in the
+                        // inspector would be one more place to keep in sync
+                        // with reality.
+                        QuickAction trailAction = QuickAction::ToggleLoop,
+                        bool trailOn = false, int trailParam = -1,
+                        const char* trailLabel = "~",
+                        std::string trailTip = "",
+                        // A colour chip between + and the trailing chip: the
+                        // effect rows that take a colour (app_colour_picker.ipp).
+                        QuickAction chipAction = QuickAction::ToggleLoop,
+                        SDL_Color chipColour = {}, int chipParam = -1, bool chipLit = false) {
+    // A paramId is the modern way to make a value typeable: it needs no
+    // per-control action, just a row in the numeric-parameter table.
+    //
+    // ONLY WHEN THE CALLER DID NOT NAME AN ACTION. The effect rows pass their
+    // own editor AND an index -- the index is which effect, not a
+    // NumericParam -- and this used to overwrite the editor with
+    // EditNumericParam regardless. Clicking "amount" on the first effect in
+    // the stack therefore opened NumericParam 0, the video synth's SPEED:
+    // wrong on a synth cue and silently nothing on every other kind, which is
+    // exactly what a control that does nothing looks like.
+    if (paramId >= 0 && valueAction == QuickAction::ToggleLoop) {
+      valueEditable = true;
+      valueAction = QuickAction::EditNumericParam;
+    }
+    constexpr int kBtnW = 28;
+    int gap = ix.ellipsize ? 8 : 6;
+    int rx = ix.ctrl.x + ix.inset;
+    int contentW = ix.ctrlW - ix.inset * 2;
+
+    if (isToggle) {
+      // ONE QUESTION PER ROW, the same shape as every settings card and as the
+      // numeric rows directly above and below this one.
+      //
+      // A toggle used to be a full-width pill reading "label: value" -- so in
+      // a column of rows whose question sits on the left and whose answer sits
+      // on the right, the toggles alone put both in the middle, and the eye
+      // had to find the colon to work out which half was which.
+      //
+      // ON IS BRIGHTER, NOT INVERTED. A dark fill with light ink for the lit
+      // state made the switched-ON rows the hardest to read in the inspector,
+      // which is backwards: the row that is doing something is the row you
+      // most need to be able to read.
+      const int toggleGap = ix.ellipsize ? 8 : 6;
+      const int toggleLabelW = inspLabelColumnWidth(ix, contentW, toggleGap);
+      SDL_Rect labelRect {rx, rowY, toggleLabelW, ix.rowH};
+      SDL_Rect btn {rx + toggleLabelW + toggleGap, rowY,
+                    std::max(uiScaled(60), contentW - toggleLabelW - toggleGap),
+                    ix.rowH};
+      // See paletteToggleFill: screen_tile defaults to screen_light, so
+      // these two states used to be the same colour on most themes.
+      SDL_Color fill = paletteToggleFill(toggleOn);
+      SDL_Color ink  = paletteToggleInk(toggleOn);
+      drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+      drawUIPanel(btn, fill, pal.deep, pal.mid);
+      std::string text = ix.ellipsize
+        ? ellipsizeToPixelWidth(ix.valueFont, value, btn.w - 12) : value;
+      drawCenteredTextSafe(controlRenderer_, ix.valueFont, btn, text, ink);
+      quickButtons_.push_back({btn, toggleAction, tip});
+      // The label is part of the control: clicking anywhere on the row toggles
+      // it, which is what a row-shaped control implies and what the full-width
+      // pill used to give for free.
+      quickButtons_.push_back({labelRect, toggleAction, tip});
+    } else {
+      const bool hasTrail = trailAction != QuickAction::ToggleLoop;
+      const int trailW = hasTrail ? 24 : 0;
+      const bool hasChip = chipAction != QuickAction::ToggleLoop;
+      const int chipW = hasChip ? uiScaled(30) : 0;
+      int fixedW = kBtnW * 2 + gap * 3 + (hasTrail ? trailW + gap : 0) + (hasChip ? chipW + gap : 0);
+      int minValueW = ix.ellipsize ? 76 : 68;
+      int labelW = inspLabelColumnWidth(ix, contentW, fixedW);
+      int valueW = std::max(minValueW, contentW - labelW - fixedW);
+      SDL_Rect labelRect {rx, rowY, labelW, ix.rowH};
+      SDL_Rect decBtn {labelRect.x + labelRect.w + gap, rowY, kBtnW, ix.rowH};
+      SDL_Rect valRect {decBtn.x + decBtn.w + gap, rowY, valueW, ix.rowH};
+      SDL_Rect incBtn {valRect.x + valRect.w + gap, rowY, kBtnW, ix.rowH};
+      if (hasChip) {
+        SDL_Rect chipBtn {incBtn.x + incBtn.w + gap, rowY, chipW, ix.rowH};
+        // The colour itself, ringed bright while its picker is open.
+        drawUIPanel(chipBtn, chipColour, chipLit ? pal.light : pal.deep, pal.mid);
+        quickButtons_.push_back({chipBtn, chipAction,
+                                 "Pick this colour: from any screen, by hex or by name", chipParam});
+      }
+      if (hasTrail) {
+        SDL_Rect trailBtn {incBtn.x + incBtn.w + gap + (hasChip ? chipW + gap : 0), rowY, trailW, ix.rowH};
+        drawUIPanel(trailBtn, paletteToggleFill(trailOn), pal.deep,
+                    trailOn ? pal.mid : pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, trailBtn, trailLabel,
+                             paletteToggleInk(trailOn));
+        quickButtons_.push_back({trailBtn, trailAction, trailTip, trailParam});
+      }
+
+      drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+      drawUIPanel(decBtn, pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, decBtn, "-", pal.fg);
+      // THE PAYLOAD RIDES ON THE STEP BUTTONS TOO.
+      //
+      // Scrubbing the value carried paramId (valueScrubZones_ below) and
+      // clicking - or + did not, so on any row whose action needs the payload
+      // -- every effect amount and every effect parameter -- the two buttons
+      // fired with -1 and the handler bailed out. The value scrubbed and the
+      // buttons did nothing, which reads as a sticky control rather than a
+      // dead one. Harmless on the numeric-parameter rows: their step handlers
+      // take no argument.
+      quickButtons_.push_back({decBtn, decAction, tip, paramId});
+
+      drawUIPanel(valRect, pal.mid, pal.deep, pal.light);
+      std::string displayValue = ix.ellipsize
+        ? ellipsizeToPixelWidth(ix.valueFont, value, valRect.w - 12) : value;
+      drawCenteredTextSafe(controlRenderer_, ix.valueFont, valRect, displayValue, pal.deep);
+      if (valueEditable) {
+        std::string valueTip = tip.empty()
+          ? "Drag value to scrub | click to type an exact number"
+          : tip + " | drag to scrub (shift = fine), click to type exact";
+        quickButtons_.push_back({valRect, valueAction, valueTip, paramId});
+      }
+      // Every dec/inc row's value cell is scrubbable; the zone is checked
+      // before quickButtons_ on mouse-down so a click without drag still
+      // opens the exact-entry editor (valueAction) on release.
+      if (decAction != incAction) {
+        valueScrubZones_.push_back({valRect, decAction, incAction,
+                                    valueEditable ? valueAction : QuickAction::ToggleLoop,
+                                    valueEditable, paramId});
+      }
+
+      drawUIPanel(incBtn, pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, incBtn, "+", pal.fg);
+      quickButtons_.push_back({incBtn, incAction, tip, paramId});
+    }
+  }
+
+  // The oscillator's own controls, under the parameter it is driving.
+  //
+  // Drawn ONLY when the LFO is armed. A shape, a rate and a depth under every
+  // parameter of every effect would triple the length of the effects section
+  // for the ninety-odd per cent of parameters nobody is modulating -- so the
+  // row appears when the "~" is switched on and takes its space back when it
+  // is switched off.
+  //
+  // Three cells on one line rather than three rows, because the inspector is a
+  // narrow column and these three belong together: what shape, how fast, how
+  // far.
+  int inspDrawLfoRow(const InspectorCtx& ix, int rowY,
+                     const deckboy::effects::CueEffect& fx, int slot,
+                     int effectIndex) {
+    if (slot < 0 || slot > 4 || !fx.lfo[slot].on) {
+      return rowY;
+    }
+    return inspDrawLfoRowFor(ix, rowY, fx.lfo[slot], effectIndex * 8 + slot);
+  }
+
+  // A geometry parameter's oscillator: the same row, addressed in the
+  // geometry range of the packed id.
+  int inspDrawGeometryLfoRow(const InspectorCtx& ix, int rowY, const Cue& cue, int slot) {
+    if (slot < 0 || slot >= kGeoLfoCount || !cue.geometryLfo[static_cast<std::size_t>(slot)].on) {
+      return rowY;
+    }
+    return inspDrawLfoRowFor(ix, rowY, cue.geometryLfo[static_cast<std::size_t>(slot)],
+                             kGeometryLfoPackBase + slot);
+  }
+
+  int inspDrawLfoRowFor(const InspectorCtx& ix, int rowY,
+                        const deckboy::effects::ParamLfo& lfo, int packed) {
+    const int inset = ix.inset;
+    const int contentW = ix.ctrlW - inset * 2;
+    // Indented, so it reads as belonging to the row above rather than as
+    // another parameter of the effect.
+    const int indent = 14;
+    const int x0 = ix.ctrl.x + inset + indent;
+    const int w = contentW - indent;
+    const int gap = 4;
+    const int cellW = (w - gap * 2) / 3;
+
+    SDL_Rect shapeBtn {x0, rowY, cellW, ix.rowH};
+    drawUIPanel(shapeBtn, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, shapeBtn,
+                         deckboy::effects::lfoShapeToken(lfo.shape), pal.fg);
+    quickButtons_.push_back({shapeBtn, QuickAction::EffectLfoShape,
+                             "sine, triangle, saw, ramp, square, sample (one random value per "
+                             "cycle, held), drawn, audio, motion: how much a camera sees "
+                             "moving, and where (motion x, motion y), or MIDI: the last key's "
+                             "pitch, how hard it was played, a CC, or aftertouch", packed});
+
+    // Rate, and whether it is free-running or locked to the tempo. The tap
+    // tempo already exists for VJ mode; an LFO that could not use it would be
+    // a second clock in a machine that already knows what the music is doing.
+    SDL_Rect rateBtn {shapeBtn.x + cellW + gap, rowY, cellW, ix.rowH};
+    std::ostringstream rate;
+    const bool motionShape = deckboy::effects::lfoShapeIsMotion(lfo.shape);
+    const bool midiShape = deckboy::effects::lfoShapeIsMidi(lfo.shape);
+    if (motionShape) {
+      // A Motion shape has no rate: this cell says which zone it follows.
+      if (lfo.motionZone <= 0) rate << "whole picture";
+      else rate << "zone " << lfo.motionZone;
+    } else if (midiShape) {
+      // Nor a MIDI one: it says what it listens to.
+      if (lfo.shape == deckboy::effects::LfoShape::MidiCc) rate << "CC " << lfo.midiNumber;
+      else if (lfo.midiChannel <= 0) rate << "any channel";
+      else rate << "channel " << lfo.midiChannel;
+    } else if (lfo.beatSync) {
+      rate << std::fixed << std::setprecision(lfo.beats < 1.0f ? 2 : 0)
+           << lfo.beats << (lfo.beats == 1.0f ? " beat" : " beats");
+    } else {
+      rate << std::fixed << std::setprecision(2) << lfo.rateHz << " hz";
+    }
+    drawUIPanel(rateBtn, lfo.beatSync ? pal.dark : pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, rateBtn,
+                         ellipsizeToPixelWidth(fontSmall_, rate.str(), rateBtn.w - 8),
+                         lfo.beatSync ? pal.light : pal.fg);
+    // Click cycles the value; right-click is already spoken for elsewhere, so
+    // the sync toggle rides the SAME cell as a long-press would be worse: it
+    // gets its own narrow control below instead.
+    quickButtons_.push_back({rateBtn, QuickAction::EffectLfoRateInc,
+                             motionShape
+                               ? "Which part of the camera's picture it follows: the whole picture, "
+                                 "or a zone drawn in Settings > Control > Motion"
+                               : midiShape
+                               ? (lfo.shape == deckboy::effects::LfoShape::MidiCc
+                                    ? "Which CC it follows"
+                                    : "Which MIDI channel it listens to, or any")
+                               : lfo.beatSync
+                               ? "Cycle length in beats — follows the tap tempo"
+                               : "Cycles per second",
+                             packed});
+    valueScrubZones_.push_back({rateBtn, QuickAction::EffectLfoRateDec,
+                                QuickAction::EffectLfoRateInc,
+                                QuickAction::ToggleLoop, false, packed});
+
+    SDL_Rect depthBtn {rateBtn.x + cellW + gap, rowY, cellW, ix.rowH};
+    std::ostringstream depth;
+    depth << "depth " << std::fixed << std::setprecision(2) << lfo.depth;
+    drawUIPanel(depthBtn, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, depthBtn,
+                         ellipsizeToPixelWidth(fontSmall_, depth.str(), depthBtn.w - 8),
+                         pal.fg);
+    quickButtons_.push_back({depthBtn, QuickAction::EffectLfoDepthInc,
+                             "How far it swings either side of the value you "
+                             "set — drag to scrub", packed});
+    valueScrubZones_.push_back({depthBtn, QuickAction::EffectLfoDepthDec,
+                                QuickAction::EffectLfoDepthInc,
+                                QuickAction::ToggleLoop, false, packed});
+    rowY += ix.rowStep;
+
+    // The tempo switch, its own narrow row, because it changes what the middle
+    // cell above MEANS and that is worth its own control rather than a
+    // modifier-click nobody would find. Not for Audio or Motion, which follow
+    // the sound or the camera and have no rate for a tempo to replace.
+    // MIDI CC has two things to say -- the CC above, the channel here.
+    if (lfo.shape == deckboy::effects::LfoShape::MidiCc) {
+      SDL_Rect chBtn {x0, rowY, w, std::max(16, ix.rowH - 6)};
+      drawUIPanel(chBtn, pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, chBtn,
+                           lfo.midiChannel <= 0 ? std::string("on any channel")
+                                                : "on channel " + std::to_string(lfo.midiChannel),
+                           pal.inkSoft);
+      quickButtons_.push_back({chBtn, QuickAction::EffectLfoSync,
+                               "Which MIDI channel it listens to, or any", packed});
+      rowY += ix.rowStep;
+    }
+    if (!motionShape && !midiShape && lfo.shape != deckboy::effects::LfoShape::Audio) {
+      SDL_Rect syncBtn {x0, rowY, w, std::max(16, ix.rowH - 6)};
+      drawUIPanel(syncBtn, lfo.beatSync ? pal.dark : pal.tile, pal.deep,
+                  lfo.beatSync ? pal.light : pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, syncBtn,
+                           lfo.beatSync ? "locked to the tempo" : "free running",
+                           lfo.beatSync ? pal.light : pal.inkSoft);
+      quickButtons_.push_back({syncBtn, QuickAction::EffectLfoSync,
+                               "Follow the tapped tempo instead of a fixed rate",
+                               packed});
+      rowY += ix.rowStep;
+    }
+
+    // ── THE SCRIBBLE PAD ────────────────────────────────────────────────
+    //
+    // Only for the Drawn shape, and it is the whole point of that shape: a
+    // little scope you draw the wave into with the mouse. Drag across it and
+    // the curve follows your hand; the playhead rides the line you drew so you
+    // can see the parameter moving through your own shape.
+    //
+    // Deliberately small and deliberately charming. This is the one control in
+    // Deckboy you PLAY with rather than set, and a plain numeric table for a
+    // curve would be both harder to use and no fun at all.
+    if (lfo.shape == deckboy::effects::LfoShape::Drawn) {
+      const int padH = std::max(44, ix.rowH * 2);
+      SDL_Rect pad {x0, rowY, w, padH};
+      drawUIPanel(pad, pal.tile, pal.deep, pal.mid);
+
+      // Inner drawing area, inset so the curve never touches the frame.
+      SDL_Rect ink {pad.x + 4, pad.y + 4, pad.w - 8, pad.h - 8};
+
+      // A centre line to draw against, dotted so it reads as a guide rather
+      // than as part of the wave.
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(controlRenderer_, pal.fgSoft.r, pal.fgSoft.g,
+                             pal.fgSoft.b, 70);
+      for (int gx = ink.x; gx < ink.x + ink.w; gx += 6) {
+        const SDL_Rect dot {gx, ink.y + ink.h / 2, 2, 1};
+        SDL_RenderFillRect(controlRenderer_, &dot);
+      }
+
+      // The curve itself, as a filled area under the line: a stroke alone is
+      // thin and hard to read at this size, and the fill makes the shape
+      // legible at a glance.
+      const int pts = deckboy::effects::ParamLfo::kLfoCurvePoints;
+      for (int px = 0; px < ink.w; ++px) {
+        const double u = static_cast<double>(px) / std::max(1, ink.w - 1);
+        const double pos = u * pts;
+        const int i0 = static_cast<int>(pos) % pts;
+        const int i1 = (i0 + 1) % pts;
+        const double frac = pos - std::floor(pos);
+        const double a = lfo.curve[static_cast<std::size_t>(i0)];
+        const double b = lfo.curve[static_cast<std::size_t>(i1)];
+        const double v = a + (b - a) * frac;
+        const int topY = ink.y + static_cast<int>(std::lround((1.0 - v) * (ink.h - 2)));
+        SDL_SetRenderDrawColor(controlRenderer_, pal.mid.r, pal.mid.g, pal.mid.b, 110);
+        const SDL_Rect col {ink.x + px, topY, 1, ink.y + ink.h - topY};
+        SDL_RenderFillRect(controlRenderer_, &col);
+        SDL_SetRenderDrawColor(controlRenderer_, pal.fg.r, pal.fg.g, pal.fg.b, 230);
+        const SDL_Rect line {ink.x + px, topY, 1, 2};
+        SDL_RenderFillRect(controlRenderer_, &line);
+      }
+
+      // THE PLAYHEAD, riding the operator's own curve. Reads the same clock
+      // the effects read, so the dot is exactly where the parameter is -- not
+      // an animation of roughly the right speed.
+      {
+        // The SAME clock the effects read -- sampled once a frame into
+        // lfoSeconds_/lfoBeats_ -- so the dot is where the parameter actually
+        // is, not an animation of roughly the right speed.
+        const double phase = deckboy::effects::lfoPhase01(lfo, lfoSeconds_, lfoBeats_);
+        const double v = deckboy::effects::lfoUnitValue(lfo, lfoSeconds_, lfoBeats_);
+        const int hx = ink.x + static_cast<int>(std::lround(phase * (ink.w - 1)));
+        const int hy = ink.y + static_cast<int>(std::lround((1.0 - v) * (ink.h - 2)));
+        SDL_SetRenderDrawColor(controlRenderer_, pal.light.r, pal.light.g, pal.light.b, 255);
+        const SDL_Rect head {hx - 2, hy - 2, 5, 5};
+        SDL_RenderFillRect(controlRenderer_, &head);
+        // A little tail so it reads as travelling rather than blinking.
+        SDL_SetRenderDrawColor(controlRenderer_, pal.light.r, pal.light.g, pal.light.b, 90);
+        const SDL_Rect tail {hx - 6, hy - 1, 4, 3};
+        SDL_RenderFillRect(controlRenderer_, &tail);
+      }
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+      // Draggable: the drag handler writes into the curve. Registered as a
+      // scrub so a press-and-move reaches it, the same way the faders work.
+      quickButtons_.push_back({pad, QuickAction::EffectLfoDraw,
+                               "Draw the shape -- drag across to scribble a wave",
+                               packed});
+      rowY += padH + 4;
+      // NOT the -4 below. That tightening exists because the sync row is
+      // shorter than a full row; after the pad it pulls the next section up
+      // over the curve, which is what clipped the top of it.
+      return rowY;
+    }
+    return rowY - 4;
+  }
+
+  int inspDrawMessageRow(const InspectorCtx& ix, int rowY, const std::string& text,
+                         SDL_Color fill, SDL_Color ink) {
+    SDL_Rect msgRect {ix.ctrl.x + ix.inset, rowY, ix.ctrlW - ix.inset * 2, ix.rowH};
+    drawUIPanel(msgRect, fill, pal.deep, pal.mid);
+    SDL_Rect textRect {msgRect.x + 6, msgRect.y, msgRect.w - 12, msgRect.h};
+    drawTextSafe(controlRenderer_, ix.valueFont, textRect, text, ink);
+    return rowY + ix.rowStep;
+  }
+
+  int inspDrawActionRow(const InspectorCtx& ix, int rowY, const std::string& label,
+                        QuickAction action, const std::string& tip,
+                        SDL_Color fill, SDL_Color ink) {
+    int h = ix.ellipsize ? 34 : ix.rowH;
+    int step = ix.ellipsize ? 46 : ix.rowStep;
+    SDL_Rect btnRect {ix.ctrl.x + ix.inset, rowY, ix.ctrlW - ix.inset * 2, h};
+    drawUIPanel(btnRect, fill, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, ix.valueFont, btnRect, label, ink);
+    quickButtons_.push_back({btnRect, action, tip});
+    return rowY + step;
+  }
+
+  // ── A ROW THAT IS ONE CONTROL, WITH THE ANSWER ON IT ──────────────────
+  //
+  // Label on the left, and the value itself IS the button. This exists
+  // because forty rows of the new cue kinds were drawn as stepper rows --
+  // label, "-", value, "+" -- for actions that are not steppable: "fire now",
+  // "click to open the grid", "typewriter". A stepper row registers only its
+  // two 28px chevrons as controls, so on every one of those rows the label was
+  // dead, the value was dead, and the only live pixels were two arrows that
+  // had no business being there. That is precisely what "the controls are
+  // missing" looks like from the other side of the screen.
+  //
+  // Shaped like the TOGGLE row rather than the stepper row, because that is
+  // what it is: one question on the left, one answer on the right, and the
+  // whole row does the thing.
+  int inspDrawChoiceRow(const InspectorCtx& ix, int rowY, const std::string& label,
+                        const std::string& value, QuickAction action,
+                        const std::string& tip, int paramId = -1,
+                        bool emphasise = false) {
+    const int gap = ix.ellipsize ? 8 : 6;
+    const int contentW = ix.ctrlW - ix.inset * 2;
+    const int labelW = inspLabelColumnWidth(ix, contentW, gap);
+    SDL_Rect labelRect {ix.ctrl.x + ix.inset, rowY, labelW, ix.rowH};
+    SDL_Rect btn {labelRect.x + labelW + gap, rowY,
+                  std::max(uiScaled(60), contentW - labelW - gap), ix.rowH};
+    const SDL_Color fill = emphasise ? pal.mid : pal.light;
+    const SDL_Color ink  = pal.deep;
+    drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+    drawUIPanel(btn, fill, pal.deep, pal.mid);
+    const std::string text = ix.ellipsize
+      ? ellipsizeToPixelWidth(ix.valueFont, value, btn.w - 12) : value;
+    drawCenteredTextSafe(controlRenderer_, ix.valueFont, btn, text, ink);
+    // BOTH HALVES, like the toggle row: a row-shaped control that only
+    // responds on half its area is the same bug in a smaller size.
+    quickButtons_.push_back({btn, action, tip, paramId});
+    quickButtons_.push_back({labelRect, action, tip, paramId});
+    return rowY + ix.rowStep;
+  }
+
+  int inspDrawEditableRow(const InspectorCtx& ix, int rowY,
+                          const std::string& label, const std::string& value,
+                          QuickAction action, const std::string& tip,
+                          SDL_Color valueColor) {
+    int kEditW = ix.ellipsize ? 60 : 56;
+    int kGap = ix.ellipsize ? 8 : 6;
+    int contentW = ix.ctrlW - ix.inset * 2;
+    int minValueW = ix.ellipsize ? 84 : 72;
+    int labelW = inspLabelColumnWidth(ix, contentW, kEditW + kGap * 2);
+    int valueW = std::max(minValueW, contentW - labelW - kEditW - kGap * 2);
+    SDL_Rect labelRect {ix.ctrl.x + ix.inset, rowY, labelW, ix.rowH};
+    SDL_Rect valueRect {labelRect.x + labelRect.w + kGap, rowY, valueW, ix.rowH};
+    SDL_Rect editRect {valueRect.x + valueRect.w + kGap, rowY, kEditW, ix.rowH};
+    drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+    drawUIPanel(valueRect, pal.light, pal.deep, pal.mid);
+    SDL_Rect valueTextRect {valueRect.x + uiScaled(6), valueRect.y,
+                            valueRect.w - uiScaled(12), valueRect.h};
+    std::string displayValue = ix.ellipsize
+      ? ellipsizeToPixelWidth(ix.valueFont, value, valueTextRect.w) : value;
+    drawTextSafe(controlRenderer_, ix.valueFont, valueTextRect, displayValue, valueColor);
+    // A flat action button, like every other one now: pal.dark filled with
+    // pal.light ink was the inverted pairing that measured worst on the page.
+    drawUIPanel(editRect, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, editRect, "edit", pal.fg);
+    quickButtons_.push_back({editRect, action, tip});
+    return rowY + ix.rowStep;
+  }
+
+  int inspDrawStatusRow(const InspectorCtx& ix, int rowY,
+                        const std::string& label, const std::string& value, bool warning) {
+    int gap = ix.ellipsize ? 8 : 6;
+    int contentW = ix.ctrlW - ix.inset * 2;
+    int labelW = inspLabelColumnWidth(ix, contentW, gap);
+    int valueW = std::max(ix.ellipsize ? 84 : 72, contentW - labelW - gap);
+    SDL_Rect labelRect {ix.ctrl.x + ix.inset, rowY, labelW, ix.rowH};
+    SDL_Rect valueRect {labelRect.x + labelRect.w + gap, rowY, valueW, ix.rowH};
+    drawTextSafe(controlRenderer_, ix.labelFont, labelRect, label, pal.fg);
+    drawUIPanel(valueRect, pal.light, pal.deep, pal.mid);
+    SDL_Rect valueTextRect {valueRect.x + uiScaled(6), valueRect.y,
+                            valueRect.w - uiScaled(12), valueRect.h};
+    SDL_Color valueColor = warning ? SDL_Color {140, 40, 20, 255} : pal.deep;
+    std::string displayValue = ix.ellipsize
+      ? ellipsizeToPixelWidth(ix.valueFont, value, valueTextRect.w) : value;
+    drawTextSafe(controlRenderer_, ix.valueFont, valueTextRect, displayValue, valueColor);
+    return rowY + ix.rowStep;
+  }
+
+  void inspDrawKeyColorRow(const InspectorCtx& ix, int rowY, const Cue& cue) {
+    constexpr int kSwatchW = 34;
+    constexpr int kEditW = 50;
+    constexpr int kPickW = 56;
+    constexpr int kGap = 8;
+    int rx = ix.ctrl.x + ix.inset;
+    int contentW = ix.ctrlW - ix.inset * 2;
+    int hexW = std::max(88, contentW - kSwatchW - kEditW - kPickW - kGap * 3);
+    SDL_Rect swatchRect {rx, rowY, kSwatchW, ix.rowH};
+    SDL_Rect hexRect {swatchRect.x + swatchRect.w + kGap, rowY, hexW, ix.rowH};
+    SDL_Rect editRect {hexRect.x + hexRect.w + kGap, rowY, kEditW, ix.rowH};
+    SDL_Rect pickRect {editRect.x + editRect.w + kGap, rowY, kPickW, ix.rowH};
+    drawUIPanel(swatchRect, cue.chromaKeyColor, pal.deep, pal.mid);
+    drawUIPanel(hexRect, pal.light, pal.deep, pal.mid);
+    drawTextSafe(controlRenderer_, ix.valueFont,
+                 SDL_Rect {hexRect.x + 6, hexRect.y, hexRect.w - 12, hexRect.h},
+                 colorToHex(cue.chromaKeyColor), pal.deep);
+    // A flat action button, like every other one now: pal.dark filled with
+    // pal.light ink was the inverted pairing that measured worst on the page.
+    drawUIPanel(editRect, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, editRect, "HEX", pal.light);
+    SDL_Color pickFill = keyColorPickerArmed_ ? pal.dark : pal.mid;
+    SDL_Color pickInk = keyColorPickerArmed_ ? pal.light : pal.deep;
+    drawUIPanel(pickRect, pickFill, pal.deep, pal.light);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, pickRect, keyColorPickerArmed_ ? "ARM" : "PICK", pickInk);
+    quickButtons_.push_back({swatchRect, QuickAction::EditKeyColor, "Type exact key color"});
+    quickButtons_.push_back({hexRect, QuickAction::EditKeyColor, "Type exact key color"});
+    quickButtons_.push_back({editRect, QuickAction::EditKeyColor, "Type exact key color"});
+    quickButtons_.push_back({pickRect, QuickAction::PickKeyColor, "Sample key color from program or preview monitor"});
+  }
+
+  int inspDrawGeometryRows(const InspectorCtx& ix, int startY, const Cue& cue, bool includeScaleOffset) {
+    int rowY = startY;
+    auto geoLfoOn = [&](int slot) {
+      return cue.geometryLfo[static_cast<std::size_t>(slot)].on;
+    };
+    if (includeScaleOffset) {
+      inspDrawQuickRow(ix, rowY, "mode", QuickAction::CycleScaleModePrevious, fmtScaleMode(cue.scaleMode), QuickAction::CycleScaleMode,
+                       QuickAction::ToggleLoop, false, false, "Fit/Fill/Stretch/Unscaled");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "link aspect", QuickAction::ToggleAspectLink,
+                       project_.geometryAspectLinked ? "on" : "off",
+                       QuickAction::ToggleAspectLink, QuickAction::ToggleAspectLink,
+                       true, project_.geometryAspectLinked,
+                       "Changing width also scales height (and vice versa)");
+      rowY += ix.rowStep;
+      {
+        auto [baseW, baseH] = cueBaseRenderSize(cue);
+        int finalW = std::max(1, static_cast<int>(std::lround(baseW * cue.outputScaleX)));
+        int finalH = std::max(1, static_cast<int>(std::lround(baseH * cue.outputScaleY)));
+        inspDrawQuickRow(ix, rowY, "width", QuickAction::ScaleXDec, std::to_string(finalW) + "px",
+                         QuickAction::ScaleXInc, QuickAction::ToggleLoop, false, false,
+                         "Output width in pixels | click value to type exact px", true, QuickAction::EditScaleX,
+                         -1, QuickAction::EffectLfoToggle, geoLfoOn(kGeoLfoScaleX),
+                         kGeometryLfoPackBase + kGeoLfoScaleX, "~",
+                         "Pulse the size. On its own this moves width AND height "
+                         "together; give height its own ~ to squash and stretch");
+        rowY += ix.rowStep;
+        rowY = inspDrawGeometryLfoRow(ix, rowY, cue, kGeoLfoScaleX);
+        inspDrawQuickRow(ix, rowY, "height", QuickAction::ScaleYDec, std::to_string(finalH) + "px",
+                         QuickAction::ScaleYInc, QuickAction::ToggleLoop, false, false,
+                         "Output height in pixels | click value to type exact px", true, QuickAction::EditScaleY,
+                         -1, QuickAction::EffectLfoToggle, geoLfoOn(kGeoLfoScaleY),
+                         kGeometryLfoPackBase + kGeoLfoScaleY, "~",
+                         "Move the height on its own oscillator");
+        rowY += ix.rowStep;
+        rowY = inspDrawGeometryLfoRow(ix, rowY, cue, kGeoLfoScaleY);
+      }
+      inspDrawQuickRow(ix, rowY, "offset X", QuickAction::OffsetXDec, std::to_string(static_cast<int>(cue.outputOffsetX)) + "px", QuickAction::OffsetXInc,
+                       QuickAction::ToggleLoop, false, false, "Horizontal output offset in pixels", true, QuickAction::EditOffsetX,
+                       -1, QuickAction::EffectLfoToggle, geoLfoOn(kGeoLfoOffsetX),
+                       kGeometryLfoPackBase + kGeoLfoOffsetX, "~",
+                       "Sway sideways. Depth 1 is half the frame either way");
+      rowY += ix.rowStep;
+      rowY = inspDrawGeometryLfoRow(ix, rowY, cue, kGeoLfoOffsetX);
+      inspDrawQuickRow(ix, rowY, "offset Y", QuickAction::OffsetYDec, std::to_string(static_cast<int>(cue.outputOffsetY)) + "px", QuickAction::OffsetYInc,
+                       QuickAction::ToggleLoop, false, false, "Vertical output offset in pixels", true, QuickAction::EditOffsetY,
+                       -1, QuickAction::EffectLfoToggle, geoLfoOn(kGeoLfoOffsetY),
+                       kGeometryLfoPackBase + kGeoLfoOffsetY, "~",
+                       "Bob up and down. Depth 1 is half the frame either way");
+      rowY += ix.rowStep;
+      rowY = inspDrawGeometryLfoRow(ix, rowY, cue, kGeoLfoOffsetY);
+    }
+    inspDrawQuickRow(ix, rowY, "rotation", QuickAction::RotDec, fmtFloat(cue.outputRotationDegrees, 1) + " deg", QuickAction::RotInc,
+                     QuickAction::ToggleLoop, false, false, "Output rotation angle (-180..180)", true, QuickAction::EditRotation,
+                     -1, QuickAction::EffectLfoToggle, geoLfoOn(kGeoLfoRotation),
+                     kGeometryLfoPackBase + kGeoLfoRotation, "~",
+                     "Rock or spin. Depth 1 is half a turn either way; a saw at "
+                     "depth 1 turns it all the way round");
+    rowY += ix.rowStep;
+    rowY = inspDrawGeometryLfoRow(ix, rowY, cue, kGeoLfoRotation);
+    auto fmtCropPx = [&](float cropFrac, int sourceDim) -> std::string {
+      if (sourceDim <= 0) return fmtPercent(cropFrac);
+      int px = static_cast<int>(std::lround(cropFrac * sourceDim));
+      return std::to_string(px) + "px";
+    };
+    struct CropRow {
+      const char* label;
+      QuickAction dec;
+      QuickAction inc;
+      float value;
+      int dim;
+      int slot;
+      const char* tip;
+    };
+    const CropRow crops[] = {
+      {"crop left", QuickAction::CropLDec, QuickAction::CropLInc, cue.cropLeft, cue.width,
+       kGeoLfoCropLeft, "Crop from left"},
+      {"crop right", QuickAction::CropRDec, QuickAction::CropRInc, cue.cropRight, cue.width,
+       kGeoLfoCropRight, "Crop from right"},
+      {"crop top", QuickAction::CropTDec, QuickAction::CropTInc, cue.cropTop, cue.height,
+       kGeoLfoCropTop, "Crop from top"},
+      {"crop bottom", QuickAction::CropBDec, QuickAction::CropBInc, cue.cropBottom, cue.height,
+       kGeoLfoCropBottom, "Crop from bottom"},
+    };
+    for (const CropRow& c : crops) {
+      inspDrawQuickRow(ix, rowY, c.label, c.dec, fmtCropPx(c.value, c.dim), c.inc,
+                       QuickAction::ToggleLoop, false, false, c.tip, false,
+                       QuickAction::ToggleLoop, -1, QuickAction::EffectLfoToggle,
+                       geoLfoOn(c.slot), kGeometryLfoPackBase + c.slot, "~",
+                       "Open and close this edge on an oscillator -- a wipe that breathes");
+      rowY += ix.rowStep;
+      rowY = inspDrawGeometryLfoRow(ix, rowY, cue, c.slot);
+    }
+    return rowY;
+  }
+
+  int inspDrawColorRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (!cueSupportsColorControls(&cue)) return rowY;
+    inspDrawQuickRow(ix, rowY, "brightness", QuickAction::BrightnessDec, fmtFloat(cue.brightness, 2) + "x", QuickAction::BrightnessInc,
+                     QuickAction::ToggleLoop, false, false, "Brightness multiplier (0.0-2.0x)");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "contrast", QuickAction::ContrastDec, fmtFloat(cue.contrast, 2) + "x", QuickAction::ContrastInc,
+                     QuickAction::ToggleLoop, false, false, "Contrast multiplier (0.0-2.0x)");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "saturation", QuickAction::SaturationDec, fmtFloat(cue.saturation, 2) + "x", QuickAction::SaturationInc,
+                     QuickAction::ToggleLoop, false, false, "Saturation multiplier (0.0-2.0x)");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "hue", QuickAction::HueShiftDec, fmtFloat(cue.hueShift, 0) + " deg", QuickAction::HueShiftInc,
+                     QuickAction::ToggleLoop, false, false, "Hue rotation (-180 to +180 degrees)");
+    rowY += ix.rowStep;
+    return rowY;
+  }
+
+  // Per-cue effects. The status line matters more than usual here: datamosh has
+  // three states and, without it, the only way to learn which one a cue is in
+  // was to hit the toggle and read a toast.
+  // Per-cue effects. The status line matters more than usual: datamosh has
+  // three states and, without it, the only way to learn which one a cue is in
+  // was to hit the toggle and read a toast.
+  // Stage timer controls. These act on the CLOCK, not the transport: the cue
+  // stays on air on the stage screen while the operator runs, holds, resets or
+  // nudges it. That separation is the whole point of the section existing.
+  // The inspector's picture of a timer cue: rebuilt four times a second at the
+  // panel's size, 16:9, over a checkerboard where the backdrop is transparent.
+  struct TimerPreviewTex { SDL_Texture* tex = nullptr; int w = 0; int h = 0; Uint64 builtMs = 0; std::string key; };
+  TimerPreviewTex timerPreview_;
+
+  void drawTimerInspectorPreview(const Cue& cue, const SDL_Rect& area) {
+    int w = area.w - 4;
+    int h = w * 9 / 16;
+    if (h > area.h - 4) {
+      h = area.h - 4;
+      w = h * 16 / 9;
+    }
+    if (w < 16 || h < 9) return;
+    const SDL_Rect dst {area.x + (area.w - w) / 2, area.y + (area.h - h) / 2, w, h};
+    auto it = timerRuntimes_.find(cue.id);
+    const bool running = it != timerRuntimes_.end() && it->second.running;
+    const double elapsed = it != timerRuntimes_.end() ? it->second.elapsedSeconds : 0.0;
+    const Uint64 now = SDL_GetTicks();
+    const std::string key = cue.id + "|" + std::to_string(w) + "x" + std::to_string(h);
+    if (!timerPreview_.tex || timerPreview_.key != key || timerPreview_.w != w || timerPreview_.h != h ||
+        now - timerPreview_.builtMs > 250) {
+      DecodedFrame frame;
+      frame.width = w;
+      frame.height = h;
+      frame.format = FramePixelFormat::RGBA32;
+      frame.pixels.assign(static_cast<std::size_t>(w) * h * 4, 0);
+      MediaEngine::buildTimerFrame(frame, cue.timer, elapsed, running);
+      if (!timerPreview_.tex || timerPreview_.w != w || timerPreview_.h != h) {
+        if (timerPreview_.tex) SDL_DestroyTexture(timerPreview_.tex);
+        timerPreview_.tex = SDL_CreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                              SDL_TEXTUREACCESS_STREAMING, w, h);
+        if (timerPreview_.tex) SDL_SetTextureBlendMode(timerPreview_.tex, SDL_BLENDMODE_BLEND);
+      }
+      if (timerPreview_.tex) SDL_UpdateTexture(timerPreview_.tex, nullptr, frame.pixels.data(), w * 4);
+      timerPreview_.w = w;
+      timerPreview_.h = h;
+      timerPreview_.key = key;
+      timerPreview_.builtMs = now;
+    }
+    if (cue.timer.colorBackground == kTimerBackdropTransparent) {
+      const int sq = std::max(6, h / 12);
+      for (int yy = 0; yy * sq < h; ++yy) {
+        for (int xx = 0; xx * sq < w; ++xx) {
+          Primitives::fillRect(controlRenderer_,
+                               SDL_Rect {dst.x + xx * sq, dst.y + yy * sq, std::min(sq, w - xx * sq),
+                                         std::min(sq, h - yy * sq)},
+                               ((xx + yy) % 2) ? SDL_Color {90, 90, 90, 255} : SDL_Color {60, 60, 60, 255});
+        }
+      }
+    }
+    if (timerPreview_.tex) {
+      const SDL_FRect fdst {static_cast<float>(dst.x), static_cast<float>(dst.y), static_cast<float>(w),
+                            static_cast<float>(h)};
+      SDL_RenderTexture(controlRenderer_, timerPreview_.tex, nullptr, &fdst);
+    }
+  }
+
+  // BACKDROP: four presets and a colour chip, one row. Board H856G24w (James,
+  // 2026-10-30): a solid colour to key out, on every cue meant to sit over
+  // another; this replaces the timer's stepper through named colours, which
+  // had no way to give an exact key green.
+  int inspDrawBackdropRow(const InspectorCtx& ix, int rowY, int stored) {
+    const int gap = 4;
+    const int contentW = ix.ctrlW - ix.inset * 2;
+    const int labelW = inspLabelColumnWidth(ix, contentW, gap * 5 + uiScaled(34));
+    const int rx = ix.ctrl.x + ix.inset;
+    drawTextSafe(controlRenderer_, ix.labelFont, SDL_Rect {rx, rowY, labelW, ix.rowH}, "backdrop", pal.fg);
+    const int chipW = uiScaled(34);
+    const int presetsW = contentW - labelW - gap * 5 - chipW;
+    const int cellW = std::max(uiScaled(20), presetsW / 4);
+    static const char* kNames[4] = {"none", "black", "green", "blue"};
+    static const int kValues[4] = {kTimerBackdropTransparent, 0x000000, 0x00b140, 0x0047bb};
+    static const char* kTips[4] = {
+      "Transparent: only the content, to layer over another playlist",
+      "Solid black behind it",
+      "Key green (#00b140) behind it, to key out on a vision mixer",
+      "Key blue (#0047bb) behind it, to key out on a vision mixer"};
+    int cx = rx + labelW + gap;
+    for (int i = 0; i < 4; ++i) {
+      const SDL_Rect r {cx, rowY, cellW, ix.rowH};
+      const bool lit = stored == kValues[i];
+      drawUIPanel(r, paletteToggleFill(lit), pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, r, kNames[i], paletteToggleInk(lit));
+      quickButtons_.push_back({r, QuickAction::CueBackdropPreset, kTips[i], i});
+      cx += cellW + gap;
+    }
+    // The chip shows the colour; transparent shows a checkerboard.
+    const SDL_Rect chip {cx, rowY, chipW, ix.rowH};
+    if (stored == kTimerBackdropTransparent) {
+      const int sq = std::max(3, ix.rowH / 4);
+      for (int yy = 0; yy * sq < chip.h; ++yy) {
+        for (int xx = 0; xx * sq < chip.w; ++xx) {
+          const SDL_Rect cell {chip.x + xx * sq, chip.y + yy * sq, std::min(sq, chip.w - xx * sq),
+                               std::min(sq, chip.h - yy * sq)};
+          Primitives::fillRect(controlRenderer_, cell,
+                               ((xx + yy) % 2) ? SDL_Color {200, 200, 200, 255} : SDL_Color {120, 120, 120, 255});
+        }
+      }
+      Primitives::strokeRect(controlRenderer_, chip, pal.deep);
+    } else {
+      const std::uint32_t rgb = stored < 0 ? 0x000000u : static_cast<std::uint32_t>(stored);
+      drawUIPanel(chip, sdlColourOf(rgb), colourPicker_.open && colourPicker_.backdrop ? pal.light : pal.deep,
+                  pal.mid);
+    }
+    quickButtons_.push_back({chip, QuickAction::CueBackdropPick,
+                             "Any colour: from the screen, by hex or by name"});
+    return rowY + ix.rowStep;
+  }
+
+  // THE LOGO, seen: a thumbnail, its name, CHANGE and an X. It used to be a
+  // file name between a - and a + that both opened the picker, cleared by a
+  // right-click nobody found, so a logo that was set gave no sign of it.
+  struct TimerLogoThumb { std::string path; int height = 0; SDL_Texture* tex = nullptr; int w = 0; };
+  TimerLogoThumb timerLogoThumb_;
+
+  int inspDrawTimerLogoRow(const InspectorCtx& ix, int rowY, const Cue& cue) {
+    const int gap = 4;
+    const int contentW = ix.ctrlW - ix.inset * 2;
+    const int rx = ix.ctrl.x + ix.inset;
+    const int changeW = std::max(uiScaled(64), measuredWidthIn(fontSmall_, "CHANGE") + uiScaled(14));
+    const int clearW = ix.rowH;
+    const int labelW = inspLabelColumnWidth(ix, contentW, gap * 3 + changeW + clearW);
+    drawTextSafe(controlRenderer_, ix.labelFont, SDL_Rect {rx, rowY, labelW, ix.rowH}, "logo", pal.fg);
+    int cx = rx + labelW + gap;
+    const int middleW = contentW - labelW - gap * 3 - changeW - (cue.timer.logoPath.empty() ? 0 : clearW + gap);
+    const SDL_Rect middle {cx, rowY, std::max(0, middleW), ix.rowH};
+    drawUIPanel(middle, pal.mid, pal.deep, pal.light);
+    int textX = middle.x + uiScaled(6);
+    if (!cue.timer.logoPath.empty()) {
+      const int thumbH = std::max(8, ix.rowH - uiScaled(6));
+      if (timerLogoThumb_.path != cue.timer.logoPath || timerLogoThumb_.height != thumbH) {
+        if (timerLogoThumb_.tex) SDL_DestroyTexture(timerLogoThumb_.tex);
+        timerLogoThumb_ = TimerLogoThumb {};
+        timerLogoThumb_.path = cue.timer.logoPath;
+        timerLogoThumb_.height = thumbH;
+        std::vector<std::uint8_t> rgba;
+        int w = 0;
+        if (MediaEngine::timerLogoPixels(cue.timer.logoPath, thumbH, w, rgba) && w > 0) {
+          timerLogoThumb_.tex = SDL_CreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                                  SDL_TEXTUREACCESS_STATIC, w, thumbH);
+          if (timerLogoThumb_.tex) {
+            SDL_UpdateTexture(timerLogoThumb_.tex, nullptr, rgba.data(), w * 4);
+            SDL_SetTextureBlendMode(timerLogoThumb_.tex, SDL_BLENDMODE_BLEND);
+            timerLogoThumb_.w = w;
+          }
+        }
+      }
+      if (timerLogoThumb_.tex) {
+        const int tw = std::min(timerLogoThumb_.w, middle.w / 2);
+        const SDL_FRect dst {static_cast<float>(textX), static_cast<float>(rowY + uiScaled(3)),
+                             static_cast<float>(tw), static_cast<float>(timerLogoThumb_.height)};
+        SDL_RenderTexture(controlRenderer_, timerLogoThumb_.tex, nullptr, &dst);
+        textX += tw + uiScaled(6);
+      }
+    }
+    const std::string name = cue.timer.logoPath.empty() ? std::string("none")
+                                                        : fs::path(cue.timer.logoPath).filename().string();
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {textX, rowY, std::max(0, middle.x + middle.w - textX - uiScaled(4)), ix.rowH},
+                 timerLogoThumb_.tex || cue.timer.logoPath.empty() ? name : name + " (cannot read)", pal.deep);
+    quickButtons_.push_back({middle, QuickAction::TimerPickLogo, "Choose the image drawn above the clock"});
+    cx = middle.x + middle.w + gap;
+    const SDL_Rect change {cx, rowY, changeW, ix.rowH};
+    drawUIPanel(change, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, change, cue.timer.logoPath.empty() ? "CHOOSE" : "CHANGE",
+                         pal.fg);
+    quickButtons_.push_back({change, QuickAction::TimerPickLogo, "Choose the image drawn above the clock"});
+    if (!cue.timer.logoPath.empty()) {
+      const SDL_Rect clear {change.x + change.w + gap, rowY, clearW, ix.rowH};
+      drawUIPanel(clear, pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, clear, "X", pal.fg);
+      quickButtons_.push_back({clear, QuickAction::TimerClearLogo, "Remove the logo"});
+    }
+    return rowY + ix.rowStep;
+  }
+
+  int inspDrawTimerRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    auto it = timerRuntimes_.find(cue.id);
+    const bool running = it != timerRuntimes_.end() && it->second.running;
+    const double elapsed = it != timerRuntimes_.end() ? it->second.elapsedSeconds : 0.0;
+
+    auto mmss = [](double seconds) {
+      const bool neg = seconds < 0.0;
+      int t = static_cast<int>(std::floor(std::abs(seconds)));
+      char buf[32];
+      if (t >= 3600) {
+        std::snprintf(buf, sizeof(buf), "%s%d:%02d:%02d", neg ? "+" : "",
+                      t / 3600, (t % 3600) / 60, t % 60);
+      } else {
+        std::snprintf(buf, sizeof(buf), "%s%d:%02d", neg ? "+" : "", t / 60, t % 60);
+      }
+      return std::string(buf);
+    };
+
+    // ── THE INSTRUMENT, THEN THE SETTINGS ───────────────────────────────
+    //
+    // The clock, the transport and the nudges are what an operator touches
+    // DURING a talk, with their eyes mostly on the stage. They are drawn as
+    // what they are -- a readout and a row of buttons -- rather than pushed
+    // through the generic "- value +" row, which turned RESET into two buttons
+    // that both reset, framing the phrase "back to start", and turned the
+    // nudges into cells displaying their own description instead of a value.
+    //
+    // The settings below the divider are genuine numbers and stay as rows.
+    const double remaining = static_cast<double>(cue.timer.durationSeconds) - elapsed;
+    rowY = inspDrawTimerClock(ix, rowY, cue, mmss(remaining), remaining, running);
+
+    inspDrawActionButtons(ix, rowY, {
+      {running ? "STOP" : "START", QuickAction::TimerRunToggle,
+       "Start or stop the clock. The timer runs its own clock, so this does "
+       "not touch playback.", running},
+      {"RESET", QuickAction::TimerResetAction,
+       "Reset the clock to its full duration"},
+    });
+    rowY += ix.rowStep;
+
+    // Four direct nudges. Press one and it happens -- no stepper to interpret
+    // at the moment somebody on stage is running over.
+    inspDrawActionButtons(ix, rowY, {
+      {"-1 min", QuickAction::TimerNudgeDown,
+       "Take a minute off without stopping the clock"},
+      {"-10 s",  QuickAction::TimerNudgeSecDown,
+       "Trim ten seconds off"},
+      {"+10 s",  QuickAction::TimerNudgeSecUp,
+       "Give ten seconds back"},
+      {"+1 min", QuickAction::TimerNudgeUp,
+       "Give a minute back without stopping the clock"},
+    });
+    rowY += ix.rowStep;
+
+    // THE LOOK FIRST (board H856G24w): backdrop and logo were twenty rows down,
+    // under the thresholds and the chimes, and were not found.
+    rowY = inspDrawBackdropRow(ix, rowY, cue.timer.colorBackground);
+    rowY = inspDrawTimerLogoRow(ix, rowY, cue);
+    if (!cue.timer.logoPath.empty()) {
+      inspDrawQuickRow(ix, rowY, "logo size", QuickAction::TimerLogoSizeDec,
+                       std::to_string(cue.timer.logoHeightPercent) + "% of the height",
+                       QuickAction::TimerLogoSizeInc, QuickAction::ToggleLoop, false, false,
+                       "How tall the logo is above the clock");
+      rowY += ix.rowStep;
+    }
+
+    const char* modeLabel =
+      cue.timer.mode == TimerMode::CountUp   ? "count up"
+      : cue.timer.mode == TimerMode::TimeOfDay ? "time of day"
+                                               : "countdown";
+    inspDrawValueRow(ix, rowY, "mode", modeLabel, QuickAction::TimerCycleMode,
+                     "Countdown, count up, or wall clock");
+    rowY += ix.rowStep;
+
+    // Which typeface is the font row's to say, right under this one.
+    const std::string faceLabel = cue.timer.face == TimerFace::Blocky     ? std::string("blocky")
+                                  : cue.timer.face == TimerFace::Typeface ? std::string("typeface")
+                                                                          : std::string("7-segment");
+    inspDrawValueRow(ix, rowY, "face", faceLabel, QuickAction::TimerCycleFace,
+                     "7-segment, blocky, or a real font");
+    rowY += ix.rowStep;
+
+    // Only when a real face is in use -- a font picker on a seven-segment
+    // clock would do nothing, which is the kind of control this codebase has
+    // learned to leave out rather than grey out.
+    if (cue.timer.face == TimerFace::Typeface) {
+      inspDrawValueRow(ix, rowY, "font", timerFontLabel(cue.timer.fontPath), QuickAction::TimerPickFont,
+                       "Any font on this computer, Deckboy's own, or a font file");
+      rowY += ix.rowStep;
+    }
+
+    inspDrawQuickRow(ix, rowY, "duration", QuickAction::TimerDurDec,
+                     mmss(cue.timer.durationSeconds), QuickAction::TimerDurInc,
+                     QuickAction::ToggleLoop, false, false, "Total time");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "amber at", QuickAction::TimerAmberDec,
+                     mmss(cue.timer.amberSeconds), QuickAction::TimerAmberInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Seconds REMAINING when the clock turns amber");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "red at", QuickAction::TimerRedDec,
+                     mmss(cue.timer.redSeconds), QuickAction::TimerRedInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Seconds REMAINING when the clock turns red");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "overtime", QuickAction::TimerCountUpToggle,
+                     cue.timer.countUpAfterZero ? "count up" : "stop at 0",
+                     QuickAction::TimerCountUpToggle,
+                     QuickAction::TimerCountUpToggle, true,
+                     cue.timer.countUpAfterZero,
+                     "Keep counting past zero, or stop dead");
+    rowY += ix.rowStep;
+
+    // Chimes. A speaker facing the audience is not watching the clock, which
+    // is the whole reason a stage timer makes noise.
+    inspDrawQuickRow(ix, rowY, "chime amber", QuickAction::TimerChimeAmberToggle,
+                     cue.timer.chimeAtAmber ? "on" : "off",
+                     QuickAction::TimerChimeAmberToggle,
+                     QuickAction::TimerChimeAmberToggle, true,
+                     cue.timer.chimeAtAmber, "Sound when the clock turns amber");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "chime red", QuickAction::TimerChimeRedToggle,
+                     cue.timer.chimeAtRed ? "on" : "off",
+                     QuickAction::TimerChimeRedToggle,
+                     QuickAction::TimerChimeRedToggle, true,
+                     cue.timer.chimeAtRed, "Sound when the clock turns red");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "chime zero", QuickAction::TimerChimeZeroToggle,
+                     cue.timer.chimeAtZero ? "on" : "off",
+                     QuickAction::TimerChimeZeroToggle,
+                     QuickAction::TimerChimeZeroToggle, true,
+                     cue.timer.chimeAtZero, "Sound when time is up");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "chime", QuickAction::TimerCycleChimeSound,
+                     timerChimeName(cue.timer.chimeSound),
+                     QuickAction::TimerCycleChimeSound,
+                     QuickAction::ToggleLoop, false, false,
+                     "Which chime. Cycling PLAYS it, so it can be chosen by ear "
+                     "rather than by name.");
+    rowY += ix.rowStep;
+
+    // Colours. "default" is a real state, not a colour -- it means the
+    // built-in, so an untouched timer says so rather than naming a swatch.
+    inspDrawQuickRow(ix, rowY, "colour", QuickAction::TimerCycleColorNormal,
+                     timerColorLabel(cue.timer.colorNormal),
+                     QuickAction::TimerCycleColorNormal,
+                     QuickAction::ToggleLoop, false, false,
+                     "Digit colour while there is time in hand");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "amber col", QuickAction::TimerCycleColorAmber,
+                     timerColorLabel(cue.timer.colorAmber),
+                     QuickAction::TimerCycleColorAmber,
+                     QuickAction::ToggleLoop, false, false,
+                     "Digit colour once amber is reached");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "red col", QuickAction::TimerCycleColorRed,
+                     timerColorLabel(cue.timer.colorRed),
+                     QuickAction::TimerCycleColorRed,
+                     QuickAction::ToggleLoop, false, false,
+                     "Digit colour once red is reached, and in overtime");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "prog bar", QuickAction::TimerProgressToggle,
+                     cue.timer.showProgressBar ? "on" : "off",
+                     QuickAction::TimerProgressToggle,
+                     QuickAction::TimerProgressToggle, true, cue.timer.showProgressBar,
+                     "Bar across the foot - readable further back than digits");
+    rowY += ix.rowStep;
+
+    // The message was renderable and saveable but had no way to SET it, and the
+    // urgent flag had no setter at all, so the red "wrap up NOW" state could
+    // never fire. Both are editable here now.
+    rowY = inspDrawEditableRow(ix, rowY, "message",
+                               cue.timer.message.empty() ? "(none)" : cue.timer.message,
+                               QuickAction::TimerEditMessage,
+                               "Line shown under the clock",
+                               cue.timer.message.empty() ? pal.inkSoft : pal.deep);
+    inspDrawQuickRow(ix, rowY, "urgent", QuickAction::TimerUrgentToggle,
+                     cue.timer.messageIsUrgent ? "RED" : "normal",
+                     QuickAction::TimerUrgentToggle,
+                     QuickAction::TimerUrgentToggle, true, cue.timer.messageIsUrgent,
+                     "Show the message in red - the wrap up NOW state");
+    rowY += ix.rowStep;
+    return rowY;
+  }
+
+  // Tone generator rows. Frequency only appears for SINE and the sweep range
+  // only for SWEEP, because a control that does nothing for the current
+  // waveform is worse than no control -- it invites the operator to change it
+  // and wonder why nothing happened.
+  // A DMX cue's fixtures, one row each from the patch: level (click the value
+  // to send it or leave it), then its colour if it has one. Both carry an LFO.
+  bool dmxShowChannels_ = false;
+
+  int inspDrawFixtureRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (project_.fixtures.empty()) {
+      return inspDrawMessageRow(ix, rowY, "no fixtures patched - Settings > Network > FIXTURES",
+                                pal.mid, pal.deep);
+    }
+    for (std::size_t i = 0; i < project_.fixtures.size(); ++i) {
+      const deckboy::fixtures::Fixture& fixture = project_.fixtures[i];
+      const CueFixtureLevel* level = nullptr;
+      for (const CueFixtureLevel& l : cue.dmxFixtures) {
+        if (l.fixture == fixture.name) level = &l;
+      }
+      const int row = static_cast<int>(i);
+      const int packed = kFixtureLfoPackBase + row * 2;
+      inspDrawQuickRow(ix, rowY, fixture.name, QuickAction::DmxFixtureLevelDec,
+                       level ? std::to_string(static_cast<int>(std::lround(level->intensity * 100.0f))) + "%"
+                             : std::string("leave"),
+                       QuickAction::DmxFixtureLevelInc, QuickAction::ToggleLoop, false, false,
+                       "Click the value to send this fixture or leave it where the last cue put it. "
+                       "~ makes the level breathe",
+                       true, QuickAction::DmxFixtureInclude, row,
+                       level ? QuickAction::EffectLfoToggle : QuickAction::ToggleLoop,
+                       level && level->intensityLfo.on, packed, "~",
+                       "An oscillator on the level, running after GO until a later cue sets this fixture");
+      rowY += ix.rowStep;
+      if (level && level->intensityLfo.on) {
+        rowY = inspDrawLfoRowFor(ix, rowY, level->intensityLfo, packed);
+      }
+      if (level && deckboy::fixtures::fixtureHasColour(fixture.type)) {
+        inspDrawQuickRow(ix, rowY, "  colour", QuickAction::DmxFixtureColourCycle,
+                         deckboy::fixtures::colourName(level->colour),
+                         QuickAction::DmxFixtureColourCycle, QuickAction::ToggleLoop, false, false,
+                         "White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel",
+                         true, QuickAction::DmxFixtureColourCycle, row,
+                         QuickAction::EffectLfoToggle, level->colourLfo.on, packed + 1, "~",
+                         "An oscillator on the colour: depth is how far round the wheel it travels");
+        rowY += ix.rowStep;
+        if (level->colourLfo.on) {
+          rowY = inspDrawLfoRowFor(ix, rowY, level->colourLfo, packed + 1);
+        }
+      }
+    }
+    return rowY;
+  }
+
+  // MIC: which input, which part of it, how loud, and whether it is alive.
+  // The gain is the cue's own audio gain (the same field PLAYBACK's trim
+  // edits), so there is one number for "how much of this input", not two.
+  int inspDrawMicRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (cue.kind != CueKind::Mic) {
+      return rowY;
+    }
+    inspDrawQuickRow(ix, rowY, "input", QuickAction::MicInputCycle, micCueInputLabel(cue),
+                     QuickAction::MicInputCycle, QuickAction::ToggleLoop, false, false,
+                     "Steps through the inputs this computer has. 'Settings input' "
+                     "follows the input chosen in Settings > Audio.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "channel", QuickAction::MicChannelCycle,
+                     micChannelLabel(cue.micChannel), QuickAction::MicChannelCycle,
+                     QuickAction::ToggleLoop, false, false,
+                     "MONO L plays the left input in both speakers: mic 1 on most "
+                     "interfaces. STEREO is for a line source.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "gain", QuickAction::MicGainDec,
+                     (cue.audioGainDb > 0.0f ? "+" : "") + fmtFloat(cue.audioGainDb, 0) + " dB",
+                     QuickAction::MicGainInc, QuickAction::ToggleLoop, false, false,
+                     "Digital gain on the input, -40 to +40 dB. Set the interface's own "
+                     "preamp first; this is for the last few dB.");
+    rowY += ix.rowStep;
+    // LEVEL: the meter, coloured by how hot, and a latched CLIP.
+    {
+      const int gap = ix.ellipsize ? 8 : 6;
+      const int contentW = ix.ctrlW - ix.inset * 2;
+      const int clipW = uiScaled(52);
+      const int labelW = inspLabelColumnWidth(ix, contentW, clipW + gap * 2);
+      const int rx = ix.ctrl.x + ix.inset;
+      SDL_Rect labelRect {rx, rowY, labelW, ix.rowH};
+      SDL_Rect bar {rx + labelW + gap, rowY + ix.rowH / 4,
+                    std::max(uiScaled(40), contentW - labelW - clipW - gap * 2), ix.rowH / 2};
+      SDL_Rect clip {bar.x + bar.w + gap, rowY, clipW, ix.rowH};
+      bool clipped = false;
+      const float level = micCueLevel(cue, &clipped);
+      drawTextSafe(controlRenderer_, ix.labelFont, labelRect, "level", pal.fg);
+      drawMicMeter(bar, level);
+      drawUIPanel(clip, clipped ? SDL_Color {200, 50, 30, 255} : pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, clip, "CLIP",
+                           clipped ? SDL_Color {255, 255, 255, 255} : pal.fgSoft);
+      quickButtons_.push_back({clip, QuickAction::MicClipReset,
+                               "Lights when the input reached full scale with this gain. Click to clear."});
+      rowY += ix.rowStep;
+    }
+    rowY = inspDrawMessageRow(ix, rowY, micCueStatusText(cue), pal.mid, pal.deep);
+    return rowY;
+  }
+
+  int inspDrawToneRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (cue.kind != CueKind::Tone) {
+      return rowY;
+    }
+    inspDrawQuickRow(ix, rowY, "signal", QuickAction::ToneCycleWaveform,
+                     toneWaveformLabel(cue.tone.waveform),
+                     QuickAction::ToneCycleWaveform, QuickAction::ToggleLoop,
+                     false, false,
+                     "Sine for line-up, pink to ring out a PA, white to find "
+                     "rattles, sweep to hear where a room rings, identify to "
+                     "walk the outputs one at a time.");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "level", QuickAction::ToneLevelDec,
+                     fmtFloat(cue.tone.levelDbfs, 1) + " dBFS",
+                     QuickAction::ToneLevelInc, QuickAction::ToggleLoop,
+                     false, false,
+                     "-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: "
+                     "this feeds a live PA.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::ToneLevel),
+                     QuickAction::EffectLfoToggle, cue.toneLfo[kToneLfoLevel].on,
+                     kToneLfoPackBase + kToneLfoLevel, "~",
+                     "Put the level on an oscillator: Motion makes it a gate that opens as you move");
+    rowY += ix.rowStep;
+    if (cue.toneLfo[kToneLfoLevel].on) {
+      rowY = inspDrawLfoRowFor(ix, rowY, cue.toneLfo[kToneLfoLevel], kToneLfoPackBase + kToneLfoLevel);
+    }
+
+    // ── THE STING'S FOUR SLIDERS ──────────────────────────────────────
+    //
+    // Four, and no more: pitch, how long, how far it travels and how much
+    // weight it has. Everything else about a walk-up sting -- the attack, the
+    // decay curve, the harmonic weighting -- is what MAKES it a sting rather
+    // than a tone, and a control for each would be a synthesiser, which is
+    // the FDS voice next door.
+    if (cue.tone.waveform == ToneWaveform::Sting) {
+      inspDrawQuickRow(ix, rowY, "pitch", QuickAction::StingPitchDec,
+                       std::to_string(static_cast<int>(cue.tone.stingPitchHz)) + " Hz",
+                       QuickAction::StingPitchInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Where the sting starts. Under a voice it wants to stay "
+                       "out of the way; over a room it wants to cut through.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "length", QuickAction::StingLenDec,
+                       fmtFloat(cue.tone.stingSeconds, 2) + " s",
+                       QuickAction::StingLenInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "The whole gesture. This IS the cue's duration -- a "
+                       "sting is the one generated signal here that ends.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "sweep", QuickAction::StingSweepDec,
+                       fmtFloat(cue.tone.stingSweepSemitones, 1) + " st",
+                       QuickAction::StingSweepInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "How far it travels, in semitones. Up reads as arrival, "
+                       "down as departure, zero is a struck note.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "body", QuickAction::StingBodyDec,
+                       std::to_string(static_cast<int>(cue.tone.stingBody * 100.0)) + "%",
+                       QuickAction::StingBodyInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Harmonic weight: a pure chime at zero, brass at full. "
+                       "This is the difference between a ping and a fanfare.");
+      rowY += ix.rowStep;
+    } else if (cue.tone.waveform == ToneWaveform::Sine) {
+      inspDrawQuickRow(ix, rowY, "freq", QuickAction::ToneFreqDec,
+                       std::to_string(static_cast<int>(cue.tone.frequencyHz)) + " Hz",
+                       QuickAction::ToneFreqInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Steps in third-octaves, because the ear works in "
+                       "ratios. 1kHz is the convention.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::ToneFreq),
+                     QuickAction::EffectLfoToggle, cue.toneLfo[kToneLfoFreq].on,
+                     kToneLfoPackBase + kToneLfoFreq, "~",
+                     "Put the pitch on an oscillator: Motion X sweeps it like a theremin");
+      rowY += ix.rowStep;
+      if (cue.toneLfo[kToneLfoFreq].on) {
+        rowY = inspDrawLfoRowFor(ix, rowY, cue.toneLfo[kToneLfoFreq], kToneLfoPackBase + kToneLfoFreq);
+      }
+    } else if (cue.tone.waveform == ToneWaveform::Sweep) {
+      rowY = inspDrawMessageRow(ix, rowY,
+        std::to_string(static_cast<int>(cue.tone.sweepLowHz)) + "-" +
+        std::to_string(static_cast<int>(cue.tone.sweepHighHz)) + " Hz log sweep",
+        pal.mid, pal.deep);
+    }
+
+    if (cue.tone.waveform == ToneWaveform::Identify) {
+      rowY = inspDrawMessageRow(ix, rowY, "walks every output in turn",
+                                pal.mid, pal.deep);
+    } else {
+      inspDrawQuickRow(ix, rowY, "output", QuickAction::ToneChannelDec,
+                       cue.tone.channel < 0
+                         ? std::string("all")
+                         : ("ch " + std::to_string(cue.tone.channel + 1)),
+                       QuickAction::ToneChannelInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Which output channel carries the signal. 'all' feeds "
+                       "every one.");
+      rowY += ix.rowStep;
+    }
+    inspDrawQuickRow(ix, rowY, "visuals", QuickAction::ToneVisualToggle,
+                     cue.tone.visualEnabled ? "on" : "off",
+                     QuickAction::ToneVisualToggle, QuickAction::ToneVisualToggle,
+                     true, cue.tone.visualEnabled,
+                     "Draw the diagnostic over the card, or just the text.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "display", QuickAction::ToneCycleVisual,
+                     toneVisualLabel(cue.tone.visual),
+                     QuickAction::ToneCycleVisual, QuickAction::ToggleLoop,
+                     false, false,
+                     "Scope shows shape and clipping. Lissajous shows phase "
+                     "and polarity between the first two channels -- a "
+                     "diagonal the wrong way means one is inverted. Spectrum "
+                     "is third-octave bars.");
+    rowY += ix.rowStep;
+    return rowY;
+  }
+
+  // Chip voice rows. Its own section rather than more of TONE: a test signal
+  // and a synth voice are different jobs, and by the time both chips have their
+  // parameters the combined list is too long to scan mid-show.
+  int inspDrawSynthRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (cue.kind != CueKind::Tone || cue.tone.waveform != ToneWaveform::Fds) {
+      return rowY;
+    }
+    const SynthSettings& s = cue.tone.synth;
+
+    inspDrawQuickRow(ix, rowY, "chip", QuickAction::SynthCycleChip,
+                     synthChipLabel(s.chip),
+                     QuickAction::SynthCycleChip, QuickAction::ToggleLoop,
+                     false, false,
+                     "FDS is a wavetable bent by a modulator. 2A03 is the "
+                     "pulse/triangle/noise set most chiptune is made of.");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "note", QuickAction::FdsNoteDec,
+                     fdsNoteName(s.noteHz),
+                     QuickAction::FdsNoteInc, QuickAction::ToggleLoop,
+                     false, false, "Pitch, in semitones.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::SynthNote));
+    rowY += ix.rowStep;
+
+    if (s.chip == SynthChip::Nes) {
+      inspDrawQuickRow(ix, rowY, "voice", QuickAction::SynthCycleNesVoice,
+                       nesVoiceLabel(s.nesVoice),
+                       QuickAction::SynthCycleNesVoice, QuickAction::ToggleLoop,
+                       false, false,
+                       "The chip's three channels. They differ in kind: "
+                       "triangle has no volume control on the hardware, and "
+                       "noise is a shift register rather than an oscillator.");
+      rowY += ix.rowStep;
+      if (s.nesVoice == NesVoice::Pulse) {
+        inspDrawQuickRow(ix, rowY, "duty", QuickAction::SynthCycleNesDuty,
+                         nesDutyLabel(s.nesDuty),
+                         QuickAction::SynthCycleNesDuty, QuickAction::ToggleLoop,
+                         false, false,
+                         "12.5 and 25 are thin and reedy, 50 is hollow. 75 "
+                         "sounds identical to 25 -- it is here because "
+                         "trackers expose it.");
+        rowY += ix.rowStep;
+      } else if (s.nesVoice == NesVoice::Noise) {
+        inspDrawQuickRow(ix, rowY, "periodic", QuickAction::SynthToggleNoiseShort,
+                         s.nesNoiseShort ? "on" : "off",
+                         QuickAction::SynthToggleNoiseShort,
+                         QuickAction::SynthToggleNoiseShort, true, s.nesNoiseShort,
+                         "Short LFSR mode. The period is brief enough to read "
+                         "as pitched metal rather than hiss.");
+        rowY += ix.rowStep;
+      }
+      inspDrawQuickRow(ix, rowY, "4-bit", QuickAction::SynthToggleQuantise,
+                       s.nesQuantise ? "on" : "off",
+                       QuickAction::SynthToggleQuantise,
+                       QuickAction::SynthToggleQuantise, true, s.nesQuantise,
+                       "Quantise the output like the hardware. The steps ARE "
+                       "the sound; smoothing them makes it a synth imitating "
+                       "a chip.");
+      rowY += ix.rowStep;
+    } else {
+      inspDrawQuickRow(ix, rowY, "carrier", QuickAction::FdsCycleCarrier,
+                       fdsCarrierLabel(s.carrier),
+                       QuickAction::FdsCycleCarrier, QuickAction::ToggleLoop,
+                       false, false, "The 64-step wavetable, quantised to 6 "
+                       "bits like the hardware.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "modulator", QuickAction::FdsCycleModulator,
+                       fdsModulatorLabel(s.modulator),
+                       QuickAction::FdsCycleModulator, QuickAction::ToggleLoop,
+                       false, false, "Bends the carrier's PITCH rather than "
+                       "mixing with it. This is what makes FDS growl.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "depth", QuickAction::FdsDepthDec,
+                       std::to_string(s.modDepth),
+                       QuickAction::FdsDepthInc, QuickAction::ToggleLoop,
+                       false, false, "How far the modulator bends the pitch. "
+                       "0-63, the hardware's own gain range.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::FdsDepth));
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "ratio", QuickAction::FdsRatioDec,
+                       fmtFloat(s.modRatio, 3),
+                       QuickAction::FdsRatioInc, QuickAction::ToggleLoop,
+                       false, false, "Modulator speed as a ratio of the note, "
+                       "so the bend tracks pitch.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::FdsRatio));
+      rowY += ix.rowStep;
+    }
+
+    inspDrawQuickRow(ix, rowY, "tuning", QuickAction::SynthCycleTuning,
+                     synthTuningLabel(s.tuning),
+                     QuickAction::SynthCycleTuning, QuickAction::ToggleLoop,
+                     false, false,
+                     "Equal temperament buys free modulation at the cost of "
+                     "every interval being slightly wrong. Just and "
+                     "pythagorean are exactly in tune in one key. "
+                     "Bohlen-Pierce divides a twelfth, so it has no octaves.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "A =", QuickAction::SynthRefDec,
+                     fmtFloat(s.referenceHz, 0) + " Hz",
+                     QuickAction::SynthRefInc, QuickAction::ToggleLoop,
+                     false, false,
+                     "Reference pitch. 440 is modern standard, 432 the common "
+                     "alternative, and older instruments sat lower still.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "keyboard", QuickAction::SynthKeyboardToggle,
+                     project_.synthKeyboardEnabled ? "PLAYING" : "off",
+                     QuickAction::SynthKeyboardToggle,
+                     QuickAction::SynthKeyboardToggle, true,
+                     project_.synthKeyboardEnabled,
+                     "Play from the computer keyboard, Ableton layout: A W S E "
+                     "D F T G Y H U J, Z and X for octave. While this is ON "
+                     "those keys make notes instead of firing cues.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "midi in", QuickAction::SynthMidiToggle,
+                     project_.midiToSynth ? "plays synth" : "fires cues",
+                     QuickAction::SynthMidiToggle,
+                     QuickAction::SynthMidiToggle, true, project_.midiToSynth,
+                     "Whether incoming MIDI notes play this synth or trigger "
+                     "cues as they always have.");
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "attack", QuickAction::SynthAttackDec,
+                     fmtFloat(s.attackSeconds, 2) + "s",
+                     QuickAction::SynthAttackInc, QuickAction::ToggleLoop,
+                     false, false, "How long the note takes to reach full level.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::SynthAttack));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "release", QuickAction::SynthReleaseDec,
+                     fmtFloat(s.releaseSeconds, 2) + "s",
+                     QuickAction::SynthReleaseInc, QuickAction::ToggleLoop,
+                     false, false, "How long it takes to fall away after the "
+                     "attack. Only audible when retrigger is set.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::SynthRelease));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "retrigger", QuickAction::FdsRetrigDec,
+                     s.retriggerSeconds <= 0.0
+                       ? std::string("hold")
+                       : fmtFloat(s.retriggerSeconds, 2) + "s",
+                     QuickAction::FdsRetrigInc, QuickAction::ToggleLoop,
+                     false, false, "Re-strike the envelope this often. Hold "
+                     "sustains one note, which is what a drone wants.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::FdsRetrig));
+    rowY += ix.rowStep;
+    return rowY;
+  }
+
+  // Effect stack rows. One row per entry: kind (click to cycle), amount
+  // (dec/inc, drag to scrub, click to type), and the reorder/remove controls.
+  // Each carries its INDEX through QuickButton::param, which is what lets a
+  // list of arbitrary length work without an action per slot.
+  // Which cues can carry an effect stack: anything that produces pixels. An
+  // audio-only cue has nothing for an effect to act on, and offering one there
+  // would be a control that cannot do anything -- this codebase's signature
+  // bug, and not one worth adding on purpose.
+  static bool cueSupportsEffectStack(const Cue& cue) {
+    switch (cue.kind) {
+      case CueKind::Audio:
+      case CueKind::Mic:
+      // The cues that play nothing: no pixels for an effect to act on.
+      case CueKind::Dmx:
+      case CueKind::Master:
+      case CueKind::Target:
+      case CueKind::Fade:
+      case CueKind::Midi:
+      case CueKind::Network:
+      case CueKind::Timecode:
+      case CueKind::Script:
+      case CueKind::Memo:
+      case CueKind::MidiFile:
+        return false;
+      case CueKind::Tone:
+        return cue.tone.visualEnabled;   // a tone cue only has pixels if asked
+      default:
+        return true;
+    }
+  }
+
+  // What a parameter actually SETS, in the units the operator thinks in.
+  //
+  // Every effect parameter is stored 0..1, and that is not going to change --
+  // it is what lets any of them be handed to an LFO. But 0..1 is not what any
+  // of them MEAN, and the inspector printed the raw fraction and nothing else.
+  // "glyph set 0.40" tells you nothing about the picture, which is showing
+  // SYMBOLS; "columns 0.42" is a grid 96 characters wide. The number the
+  // operator needs was there all along and was being converted away.
+  //
+  // For the quantised ones, read the value back through the SAME mapping the
+  // renderer uses (cue_helpers.hpp keeps exactly one definition of each), and
+  // for the character set and the ink read the CUE's own field rather than
+  // re-deriving it -- paramC cannot express sprite sheet or font at all, so a
+  // cue holding one of those would otherwise be labelled with something it is
+  // not rendering.
+  std::string inspEffectParamValueText(const Cue& cue,
+                                       const deckboy::effects::CueEffect& fx,
+                                       int which, float raw) const {
+    if (fx.kind == deckboy::effects::CueEffectKind::TextMode) {
+      switch (which) {
+        case 0: return std::to_string(::textModeColsForParam(raw)) + " cols";
+        case 2: {
+          // Read the PARAMETER back, not the cue's field: the field is
+          // downstream of it and has not necessarily caught up (setting the
+          // parameter over the network left it a whole glyph set behind, and
+          // the row cheerfully said "blocks" about a picture full of symbols).
+          //
+          // The one exception is the one applyTextModeParams already makes:
+          // paramC cannot express sprite sheet or font AT ALL, so a cue
+          // holding either keeps it and the field is the only place it lives.
+          const int held = cue.videoSynth.asciiCharSet;
+          return vsCharSetLabel((held == 5 || held == 7)
+                                  ? held : ::textModeCharSetForParam(raw));
+        }
+        case 3: return vsInkLabel(::textModeInkForParam(raw));
+        default: break;
+      }
+    }
+    // The grading basics read in the units a levels tool uses, and curves'
+    // channel says WHICH channel -- "30%" of a channel is not a channel.
+    if (fx.kind == deckboy::effects::CueEffectKind::Curves && which == 1) {
+      return raw < 0.125f ? "all" : raw < 0.375f ? "red" : raw < 0.625f ? "green" : "blue";
+    }
+    if (fx.kind == deckboy::effects::CueEffectKind::Levels) {
+      char lv[24];
+      switch (which) {
+        case 0:   // shown as a levels tool shows gamma: above 1 is brighter
+          std::snprintf(lv, sizeof(lv), "gamma %.2f",
+                        1.0 / std::pow(3.0, (0.5 - static_cast<double>(raw)) * 2.0));
+          return lv;
+        case 1: std::snprintf(lv, sizeof(lv), "%d", static_cast<int>(std::lround(raw * 128.0f))); return lv;
+        case 2: std::snprintf(lv, sizeof(lv), "%d", 255 - static_cast<int>(std::lround(raw * 128.0f))); return lv;
+        case 3: std::snprintf(lv, sizeof(lv), "%d", static_cast<int>(std::lround(raw * 128.0f))); return lv;
+        default: break;
+      }
+    }
+    // The basics added 2026-10-29 say what they are set to in their own terms:
+    // a colour by name, the mirror's way, the strobe's rate. "62%" of a hue is
+    // not a colour anyone can picture.
+    {
+      using deckboy::effects::CueEffectKind;
+      static const char* const kHues[] = {"red", "orange", "yellow", "lime", "green", "mint",
+                                          "cyan", "sky", "blue", "violet", "magenta", "pink"};
+      const auto hueName = [](float v) {
+        return std::string(kHues[static_cast<int>(std::lround(v * 12.0f)) % 12]);
+      };
+      if (fx.kind == CueEffectKind::ColourReplace && (which == 0 || which == 2)) {
+        return hueName(raw);
+      }
+      if (fx.kind == CueEffectKind::Blur && which == 2) {
+        return std::to_string(static_cast<int>(std::lround(raw * 180.0f))) + " deg";
+      }
+      if (fx.kind == CueEffectKind::Mirror && which == 0) {
+        static const char* const kWays[] = {"flip across", "upside down", "flip both",
+                                            "right onto left", "left onto right",
+                                            "bottom onto top", "top onto bottom", "four ways"};
+        return kWays[std::min(7, static_cast<int>(raw * 8.0f))];
+      }
+      if (fx.kind == CueEffectKind::Strobe && which == 0) {
+        char rate[24];
+        std::snprintf(rate, sizeof(rate), "%.1f a second", 0.5 * std::pow(20.0, static_cast<double>(raw)));
+        return rate;
+      }
+      if (fx.kind == CueEffectKind::Strobe && which == 1) {
+        if (raw < 0.02f) return "white";
+        if (raw > 0.98f) return "black";
+        return "grey " + std::to_string(static_cast<int>(std::lround((1.0f - raw) * 100.0f))) + "%";
+      }
+    }
+    // Everything else is a genuine proportion. Shown as a percentage because
+    // that reads as a setting, where a bare "0.42" reads as the storage format
+    // leaking into the panel.
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%d%%",
+                  static_cast<int>(std::lround(raw * 100.0f)));
+    return buf;
+  }
+
+  int inspDrawEffectRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    // Cleared every pass and set again only if the bar is actually drawn. A
+    // stale rect left behind by a cue that no longer has a driver would be an
+    // invisible control that still swallowed clicks.
+    motionDriverScrubRect_ = {0, 0, 0, 0};
+    const auto& stack = cue.effects;
+    for (int i = 0; i < static_cast<int>(stack.size()); ++i) {
+      const auto& fx = stack[i];
+      // NAME OPENS THE PICKER. The label doubles as the control that changes
+      // it, so the effect's identity and the way to change it are the same
+      // object -- there is no separate "kind" button to hunt for.
+      {
+        SDL_Rect nameRect {ix.ctrl.x + ix.inset, rowY,
+                           ix.ctrlW - ix.inset * 2, ix.rowH};
+        drawUIPanel(nameRect, fx.bypassed ? pal.mid : pal.tile, pal.deep, pal.mid);
+        std::string name = std::to_string(i + 1);
+        name += ". ";
+        name += deckboy::effects::cueEffectLabel(fx.kind);
+        if (fx.bypassed) {
+          name += "  (bypassed)";
+        }
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {nameRect.x + 6, nameRect.y, nameRect.w - 20, nameRect.h},
+                     name, fx.bypassed ? pal.inkSoft : pal.fg);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                             SDL_Rect {nameRect.x + nameRect.w - 16, nameRect.y, 14, nameRect.h},
+                             "v", pal.inkSoft);
+        quickButtons_.push_back({nameRect, QuickAction::EffectCycleKind,
+                                 "Choose which effect this is", i});
+        rowY += ix.rowStep;
+      }
+      // Datamosh carries its own state instead of an amount: it is a decode
+      // behaviour, not a per-pixel strength, and showing it a 0-1 slider it
+      // does not use would be a control that does nothing.
+      if (fx.kind == deckboy::effects::CueEffectKind::Datamosh) {
+        const bool fileBacked = cue.kind == CueKind::Video && !cue.path.empty();
+        if (!fileBacked) {
+          rowY = inspDrawMessageRow(ix, rowY,
+                                    "needs file-backed video", pal.mid, pal.deep);
+        } else {
+          std::error_code moshEc;
+          const bool prepared =
+            !cue.moshPath.empty() && fs::exists(fs::path(cue.moshPath), moshEc);
+          rowY = inspDrawMessageRow(
+            ix, rowY,
+            cue.datamoshEnabled ? (prepared ? "ready" : "transcoding - plays clean until ready")
+                                : "off",
+            pal.tile, cue.datamoshEnabled ? pal.fg : pal.inkSoft);
+          inspDrawQuickRow(ix, rowY, "look", QuickAction::DatamoshLookPrev,
+                           moshLookLabelFor(cue.datamoshLook),
+                           QuickAction::DatamoshLookNext, QuickAction::ToggleLoop,
+                           false, false,
+                           "SUBTLE self-heals (H.264). CLASSIC is the real smear "
+                           "(MPEG-4). EXTREME is chunkier and smears constantly. "
+                           "Changing this re-prepares the cue.");
+          rowY += ix.rowStep;
+        }
+      } else {
+      // Percent, like every parameter row below it. It read "1.00" directly
+      // above "corruption 0%", which is two notations for the same kind of
+      // quantity in adjacent rows.
+      char amountBuf[16];
+      std::snprintf(amountBuf, sizeof(amountBuf), "%d%%",
+                    static_cast<int>(std::lround(fx.amount * 100.0f)));
+      inspDrawQuickRow(ix, rowY, "amount",
+                       QuickAction::EffectAmountDec, std::string(amountBuf),
+                       QuickAction::EffectAmountInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Drag to scrub (shift = fine), click to type exact",
+                       true, QuickAction::EffectEditAmount, i,
+                       // Slot 4 is the amount: "how much of this effect" is the
+                       // parameter people most often want breathing.
+                       QuickAction::EffectLfoToggle, fx.lfo[4].on, i * 8 + 4, "~",
+                       "Hand this to an oscillator so it moves on its own");
+      rowY += ix.rowStep;
+      rowY = inspDrawLfoRow(ix, rowY, fx, 4, i);
+      // The extra parameters, named by the effect itself. An effect that does
+      // not use one draws no row for it, so the inspector never shows a
+      // control that cannot do anything -- and one that DOES use it is no
+      // longer stuck at whatever the default happened to be.
+      for (int which = 0; which < 4; ++which) {
+        const char* paramLabel =
+          deckboy::effects::cueEffectParamLabel(fx.kind, which);
+        if (!paramLabel) {
+          continue;
+        }
+        const float rawParam = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+                             : which == 2 ? fx.paramC : fx.paramD;
+        const std::string paramText =
+          inspEffectParamValueText(cue, fx, which, rawParam);
+        const std::optional<std::uint32_t> chip = effectChipColour(fx, which);
+        inspDrawQuickRow(ix, rowY, paramLabel,
+                         which == 0 ? QuickAction::EffectParamADec
+                         : which == 1 ? QuickAction::EffectParamBDec
+                         : which == 2 ? QuickAction::EffectParamCDec
+                                      : QuickAction::EffectParamDDec,
+                         paramText,
+                         which == 0 ? QuickAction::EffectParamAInc
+                         : which == 1 ? QuickAction::EffectParamBInc
+                         : which == 2 ? QuickAction::EffectParamCInc
+                                      : QuickAction::EffectParamDInc,
+                         QuickAction::ToggleLoop, false, false,
+                         deckboy::effects::cueEffectParamTip(fx.kind, which),
+                         true,
+                         which == 0 ? QuickAction::EffectParamAEdit
+                         : which == 1 ? QuickAction::EffectParamBEdit
+                         : which == 2 ? QuickAction::EffectParamCEdit
+                                      : QuickAction::EffectParamDEdit,
+                         i,
+                         QuickAction::EffectLfoToggle, fx.lfo[which].on,
+                         i * 8 + which, "~",
+                         "Hand this parameter to an oscillator so it moves on "
+                         "its own",
+                         chip ? QuickAction::EffectColourPick : QuickAction::ToggleLoop,
+                         chip ? sdlColourOf(*chip) : SDL_Color {}, i * 8 + which,
+                         colourPicker_.open && colourPicker_.effect == i && colourPicker_.slot == which);
+        rowY += ix.rowStep;
+        rowY = inspDrawLfoRow(ix, rowY, fx, which, i);
+      }
+      // Chladni can LISTEN: its mode follows the sound's pitch.
+      if (fx.kind == deckboy::effects::CueEffectKind::Chladni) {
+        const bool listening = fx.lfo[0].on && fx.lfo[0].shape == deckboy::effects::LfoShape::AudioPitch;
+        SDL_Rect r {ix.ctrl.x + ix.inset, rowY, ix.ctrlW - ix.inset * 2, ix.rowH};
+        drawUIPanel(r, listening ? pal.dark : pal.tile, pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, r,
+                             listening ? "LISTENS: the figure follows the sound" : "LISTENS: OFF",
+                             listening ? pal.light : pal.fg);
+        quickButtons_.push_back({r, QuickAction::EffectChladniListen,
+                                 "Let the plate follow the pitch of the playlist's sound, the way a real "
+                                 "plate sings with the note it is played at", i});
+        rowY += ix.rowStep;
+      }
+      }
+      // Second row: what it is, where it sits, and getting rid of it. Split
+      // from the amount row because cramming six controls onto one line is how
+      // the inspector's text placement went wrong before.
+      {
+        const int gap = 4;
+        const int cellW = (ix.ctrlW - ix.inset * 2 - gap * 3) / 4;
+        int cx = ix.ctrl.x + ix.inset;
+        struct Cell { const char* label; QuickAction action; const char* tip; bool lit; };
+        const Cell cells[4] = {
+          {"B", QuickAction::EffectToggleBypass,
+           "Bypass: take it out of the chain but KEEP its settings. Turning the "
+           "amount to zero throws them away.", fx.bypassed},
+          {"^", QuickAction::EffectMoveUp,   "Earlier in the stack", false},
+          {"v", QuickAction::EffectMoveDown, "Later in the stack", false},
+          {"X", QuickAction::EffectRemove,      "Remove this effect", false},
+        };
+        for (const Cell& cell : cells) {
+          SDL_Rect r {cx, rowY, cellW, ix.rowH};
+          // A bypassed effect reads as OFF at a glance, which is the whole
+          // point of having the control at all.
+          drawUIPanel(r, cell.lit ? pal.dark : pal.tile, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, r, cell.label,
+                               cell.lit ? pal.light : pal.fg);
+          quickButtons_.push_back({r, cell.action, cell.tip, i});
+          cx += cellW + gap;
+        }
+        rowY += ix.rowStep;
+      }
+    }
+    if (stack.empty()) {
+      rowY = inspDrawMessageRow(ix, rowY, "no effects", pal.tile, pal.inkSoft);
+    }
+    // The driver row only appears when the stack actually contains a puppet:
+    // a "motion driver" control on a cue with no motion-puppet effect is a
+    // control that cannot do anything.
+    bool hasPuppet = false;
+    for (const auto& fx : stack) {
+      if (fx.kind == deckboy::effects::CueEffectKind::MotionPuppet) {
+        hasPuppet = true;
+        break;
+      }
+    }
+    if (hasPuppet || !cue.motionDriverPath.empty()) {
+      const std::string driver = cue.motionDriverPath.empty()
+        ? std::string("none - click to choose")
+        : fs::path(cue.motionDriverPath).filename().string();
+      rowY = inspDrawActionRow(ix, rowY, "driver: " + driver,
+                               QuickAction::MotionDriverPick,
+                               "The clip whose MOTION drives this one. Its "
+                               "pictures are never shown -- only the movement "
+                               "its codec already measured.",
+                               pal.tile, pal.fg);
+      if (!cue.motionDriverPath.empty()) {
+        // The driver is not a cue and never reaches the screen, so it has no
+        // transport of its own. These are it.
+        std::ostringstream speed;
+        speed << std::fixed << std::setprecision(2) << cue.motionDriverSpeed;
+        inspDrawQuickRow(ix, rowY, "driver speed", QuickAction::MotionDriverSpeedDec,
+                         speed.str(), QuickAction::MotionDriverSpeedInc,
+                         QuickAction::ToggleLoop, false, false,
+                         "Fields per rendered frame. 1 is one for one, 0.5 holds "
+                         "each field for two frames, 0 freezes it.",
+                         false, QuickAction::ToggleLoop,
+                         static_cast<int>(NumericParam::MotionDriverSpeed));
+        rowY += ix.rowStep;
+        inspDrawQuickRow(ix, rowY, "driver", QuickAction::MotionDriverPauseToggle,
+                         cue.motionDriverPaused ? "HELD" : "running",
+                         QuickAction::MotionDriverPauseToggle,
+                         QuickAction::MotionDriverPauseToggle,
+                         true, cue.motionDriverPaused,
+                         "Held keeps the last displacement rather than removing "
+                         "it -- the picture stays bent the way the driver left it.");
+        rowY += ix.rowStep;
+        inspDrawQuickRow(ix, rowY, "restart on take",
+                         QuickAction::MotionDriverRestartOnTakeToggle,
+                         cue.motionDriverRestartOnTake ? "on" : "off",
+                         QuickAction::MotionDriverRestartOnTakeToggle,
+                         QuickAction::MotionDriverRestartOnTakeToggle,
+                         true, cue.motionDriverRestartOnTake,
+                         "Every take starts the puppetry the same way, so a "
+                         "rehearsed look repeats instead of depending on how "
+                         "long the app has been open.");
+        rowY += ix.rowStep;
+      // A PREVIEW AND A TRANSPORT FOR THE DRIVER.
+      //
+      // The driver is not a cue: it never reaches the screen, nothing else in
+      // the app reports on it, and until now an operator who armed one had no
+      // way to tell whether it was running, where it had got to, or even
+      // whether the clip they picked was the one they meant. Two controls fix
+      // that -- a thumbnail so it can be recognised, and a bar so it can be
+      // placed.
+      //
+      // The picture costs nothing: the decoder produced it on the way to the
+      // vectors and was throwing it away.
+      if (const MotionDriver* focusedDriver =
+            motionDriverForDeck(project_.focusedDeckIndex)) {
+        deckboy::motion::MotionSourceStatus status;
+        if (focusedDriver->handle &&
+            deckboy::motion::motionSourceStatus(focusedDriver->handle, status)) {
+          const int previewH = ix.rowH * 2;
+          SDL_Rect previewRect {ix.ctrl.x + ix.inset, rowY,
+                                previewH * 16 / 9, previewH};
+          drawUIPanel(previewRect, pal.deep, pal.deep, pal.mid);
+          if (const std::uint8_t* luma =
+                deckboy::motion::motionSourceThumbnail(focusedDriver->handle)) {
+            if (status.frameIndex != motionDriverThumbFrame_ ||
+                !motionDriverThumbTex_) {
+              motionDriverThumbFrame_ = status.frameIndex;
+              std::vector<std::uint8_t> rgba(
+                static_cast<std::size_t>(status.thumbWidth) * status.thumbHeight * 4);
+              for (std::size_t i = 0; i + 0 < rgba.size() / 4; ++i) {
+                rgba[i * 4 + 0] = luma[i];
+                rgba[i * 4 + 1] = luma[i];
+                rgba[i * 4 + 2] = luma[i];
+                rgba[i * 4 + 3] = 255;
+              }
+              syncTexture(controlRenderer_, motionDriverThumbTex_,
+                          motionDriverThumbW_, motionDriverThumbH_,
+                          status.thumbWidth, status.thumbHeight,
+                          rgba.data(), status.thumbWidth * 4);
+            }
+            if (motionDriverThumbTex_) {
+              SDL_Rect inner {previewRect.x + 2, previewRect.y + 2,
+                              previewRect.w - 4, previewRect.h - 4};
+              SDL_RenderTexture(controlRenderer_, motionDriverThumbTex_, nullptr, &inner);
+            }
+          }
+          // The numbers next to it, because a thumbnail says "running" and
+          // nothing else. Seconds and the field count are what an operator
+          // needs to rehearse against.
+          std::ostringstream where;
+          where << std::fixed << std::setprecision(1) << status.positionSeconds;
+          if (status.durationSeconds > 0.0) {
+            where << " / " << status.durationSeconds;
+          }
+          where << "s  field " << status.frameIndex;
+          SDL_Rect textRect {previewRect.x + previewRect.w + 6, rowY,
+                             ix.ctrlW - ix.inset * 2 - previewRect.w - 6, ix.rowH};
+          drawTextSafe(controlRenderer_, fontSmall_, textRect, where.str(),
+                       pal.fgSoft);
+          // The bar. Registered as a scrub rect rather than a quick button:
+          // where along it you pressed IS the value, and a quick button only
+          // knows that it was hit.
+          SDL_Rect barRect {textRect.x, rowY + ix.rowH + 2,
+                            std::max(20, textRect.w), ix.rowH - 4};
+          drawUIPanel(barRect, pal.tile, pal.deep, pal.mid);
+          if (status.durationSeconds > 0.0) {
+            const double frac = std::clamp(
+              status.positionSeconds / status.durationSeconds, 0.0, 1.0);
+            SDL_Rect fill {barRect.x + 2, barRect.y + 2,
+                           std::max(2, static_cast<int>((barRect.w - 4) * frac)),
+                           barRect.h - 4};
+            Primitives::fillRect(controlRenderer_, fill, pal.fg);
+          } else {
+            // A container that will not report a duration cannot be scrubbed
+            // against one, and drawing a bar that goes nowhere would be a lie.
+            drawCenteredTextSafe(controlRenderer_, fontSmall_, barRect,
+                                 "no duration", pal.inkSoft);
+          }
+          motionDriverScrubRect_ = barRect;
+          motionDriverScrubDuration_ = status.durationSeconds;
+          motionDriverScrubDeck_ = project_.focusedDeckIndex;
+          rowY += previewH + 4;
+        }
+      }
+        rowY = inspDrawActionRow(ix, rowY, "restart driver now",
+                                 QuickAction::MotionDriverRestart,
+                                 "Jump the driver back to its first frame",
+                                 pal.tile, pal.fg);
+        rowY = inspDrawActionRow(ix, rowY, "clear driver",
+                                 QuickAction::MotionDriverClear,
+                                 "Stop puppeteering this cue", pal.tile, pal.inkSoft);
+      }
+    }
+    rowY = inspDrawActionRow(ix, rowY, "+ add effect", QuickAction::EffectAdd,
+                             "Append an effect to this cue's stack. Order is the "
+                             "effect: posterise then invert is not invert then "
+                             "posterise.",
+                             pal.tile, pal.fg);
+    // Moving a LOOK between cues, without dragging geometry and fades along
+    // with it. The whole-cue COPY above brings everything; this brings the
+    // chain and the driver and nothing else.
+    {
+      const int gap = 4;
+      const int cellW = (ix.ctrlW - ix.inset * 2 - gap) / 2;
+      SDL_Rect copyRect {ix.ctrl.x + ix.inset, rowY, cellW, ix.rowH};
+      SDL_Rect pasteRect {copyRect.x + cellW + gap, rowY, cellW, ix.rowH};
+      const bool haveChain = !effectChainClipboard_.empty();
+      drawUIPanel(copyRect, pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, copyRect,
+                           "copy chain", stack.empty() ? pal.inkSoft : pal.fg);
+      quickButtons_.push_back({copyRect, QuickAction::EffectChainCopy,
+                               "Copy this cue's whole effect chain", 0});
+      // Lit when there is something to paste, so the button says whether it
+      // will do anything before it is pressed.
+      drawUIPanel(pasteRect, haveChain ? pal.dark : pal.tile, pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, pasteRect,
+                           haveChain ? ("paste " + std::to_string(effectChainClipboard_.size())).c_str()
+                                     : "paste chain",
+                           haveChain ? pal.light : pal.inkSoft);
+      quickButtons_.push_back({pasteRect, QuickAction::EffectChainPaste,
+                               "Replace the effect chain on every selected cue "
+                               "with the copied one. Geometry, fades and colour "
+                               "are left alone.", 0});
+      rowY += ix.rowStep;
+    }
+    return rowY;
+  }
+
+  // Does this cue carry the text-mode effect, live?
+  //
+  // The settings for the character grid live on the cue whatever its kind, so
+  // the only question is whether anything is going to READ them.
+  // THE ONE MAPPING BETWEEN THE EFFECT'S FOUR PARAMETERS AND THE GRID.
+  //
+  // Used by the renderer AND by the inspector, because they disagreed and that
+  // is the whole bug: the TEXT MODE section edited cue.videoSynth while the
+  // effect overwrote columns, glyph set and ink from paramA, paramC and paramD
+  // on its way to the renderer. So the rows moved, the numbers changed, and
+  // nothing happened to the picture -- and the ink row read "green" while the
+  // frame came out in full colour, because paramD sat at its default.
+  //
+  // Only SHUFFLE appeared to work, and only because nothing overrode it.
+  static void applyTextModeParams(const deckboy::effects::CueEffect& fx,
+                                  VideoSynthSettings& vs) {
+    vs.asciiCols = ::textModeColsForParam(fx.paramA);
+    vs.glitch = std::clamp(static_cast<double>(fx.paramB), 0.0, 1.0);
+    // paramC CANNOT SAY "sprite sheet" or "font", so when the cue holds one of
+    // those it keeps it. Those two were the reason paramC was widened, and
+    // widening it moved the meaning of every value between the six original
+    // steps -- which is how James's show lost its symbols. Letting the cue
+    // field carry what the parameter has no way to express costs nothing and
+    // moves nothing.
+    const int cueChosenSet = vs.asciiCharSet;
+    if (cueChosenSet != 5 && cueChosenSet != 7) {
+      vs.asciiCharSet = ::textModeCharSetForParam(fx.paramC);
+    }
+    vs.asciiInk = ::textModeInkForParam(fx.paramD);
+  }
+
+  // The inverse, so a control can write the parameter that will be read back.
+  static float textModeParamForCols(int cols) {
+    return ::textModeParamForCols(cols);
+  }
+  static float textModeParamForCharSet(int set) {
+    return ::textModeParamForCharSet(set);
+  }
+
+  static float textModeParamForInk(int ink) {
+    return ::textModeParamForInk(ink);
+  }
+
+  // The live text-mode effect on a cue, or null. The controls edit THIS when it
+  // exists, because it is what the renderer reads.
+  const deckboy::effects::CueEffect* textModeEffectFor(const Cue& cue) const {
+    for (const auto& fx : cue.effects) {
+      if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+        return &fx;
+      }
+    }
+    return nullptr;
+  }
+
+  deckboy::effects::CueEffect* textModeEffectMutable(Cue& cue) const {
+    for (auto& fx : cue.effects) {
+      if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+        return &fx;
+      }
+    }
+    return nullptr;
+  }
+
+  bool cueHasTextModeEffect(const Cue& cue) const {
+    for (const auto& fx : cue.effects) {
+      if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The character grid's own controls. Drawn inside the VIDEO SYNTH section
+  // for a synth cue, and in a TEXT MODE section of its own for anything else
+  // carrying the effect -- same rows, same order, one implementation.
+  int inspDrawTextModeRows(const InspectorCtx& ix, int startY,
+                           const VideoSynthSettings& vRaw, const Cue& cue) {
+    // SHOW WHAT WILL RENDER.
+    //
+    // For a cue carrying the effect, the picture comes from the effect's four
+    // parameters, not from cue.videoSynth -- so displaying the cue's own
+    // columns, glyph set and ink meant the rows showed one thing and the
+    // output did another. Same mapping the renderer uses.
+    VideoSynthSettings shown = vRaw;
+    if (const deckboy::effects::CueEffect* fx = textModeEffectFor(cue)) {
+      applyTextModeParams(*fx, shown);
+    }
+    const VideoSynthSettings& v = shown;
+    int rowY = startY;
+    inspDrawQuickRow(ix, rowY, "columns", QuickAction::VsAsciiColsDec,
+                     std::to_string(v.asciiCols), QuickAction::VsAsciiColsInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Characters across. Fewer means bigger cells.");
+    rowY += ix.rowStep;
+    // Says so when it is being overridden. A custom glyph string wins over
+    // this row, so while one is loaded the label described a set that was not
+    // being drawn -- which is what made cycling it look broken.
+    inspDrawQuickRow(ix, rowY, "glyphs", QuickAction::VsCharSetCycle,
+                     v.asciiGlyphs.empty()
+                       ? std::string(vsCharSetLabel(v.asciiCharSet))
+                       : std::string(vsCharSetLabel(v.asciiCharSet)) + "  (overridden)",
+                     QuickAction::VsCharSetCycle, QuickAction::ToggleLoop,
+                     false, false,
+                     "Blocks and dithers read as density; the ASCII ramp "
+                     "reads as text; symbols read as wreckage. Cycling this "
+                     "clears a custom glyph string, since that would override "
+                     "it -- the preset row puts one back.");
+    rowY += ix.rowStep;
+    // The four controls above and below decide WHAT IS DRAWN, and they
+    // override one another in that order: a custom glyph string beats the
+    // built-in set, and a preset is just a quick way to fill that string.
+    // They sit together because that relationship is invisible otherwise --
+    // picking a preset and then cycling the set looked like the set row had
+    // stopped working.
+    // The curated sets. Each is just a string of characters drawn through a
+    // font, so picking one fills the custom glyph field below and leaves it
+    // editable -- a starting point rather than a mode.
+    {
+      const auto& presets = glyphPresets();
+      std::string presetName = "custom";
+      for (const auto& preset : presets) {
+        if (v.asciiGlyphs == preset.glyphs) { presetName = preset.name; break; }
+      }
+      if (v.asciiGlyphs.empty()) {
+        presetName = "(none)";
+      }
+      inspDrawQuickRow(ix, rowY, "preset", QuickAction::VsAsciiPresetPrev,
+                       presetName, QuickAction::VsAsciiPresetNext,
+                       QuickAction::ToggleLoop, false, false,
+                       "Curated sets of symbols and emoji -- stars, notes, "
+                       "flowers, arrows, weather, runes, faces. Picking one "
+                       "fills the custom glyphs below, which stays editable.");
+      rowY += ix.rowStep;
+    }
+    rowY = inspDrawActionRow(ix, rowY,
+                             v.asciiFontPath.empty()
+                               ? std::string("font: automatic")
+                               : "font: " + fs::path(v.asciiFontPath).filename().string(),
+                             QuickAction::VsAsciiFontPick,
+                             "Choose the typeface the glyphs are drawn with. "
+                             "Click again to go back to automatic. A chosen "
+                             "face is tried first and the system fonts still "
+                             "cover anything it lacks.",
+                             pal.tile, pal.fg);
+    rowY = inspDrawActionRow(ix, rowY,
+                             v.asciiGlyphs.empty()
+                               ? std::string("custom glyphs: (using the set above)")
+                               : "custom glyphs: " + v.asciiGlyphs,
+                             QuickAction::VsAsciiGlyphsEdit,
+                             "Build the picture from characters you choose, "
+                             "darkest first. Two characters gives binary; a "
+                             "word gives that word as texture.",
+                             pal.tile, pal.fg);
+    inspDrawQuickRow(ix, rowY, "shuffle", QuickAction::VsShuffleCycle,
+                     v.asciiShuffle == 0 ? std::string("by density")
+                                         : std::to_string(v.asciiShuffle),
+                     QuickAction::VsShuffleCycle, QuickAction::ToggleLoop,
+                     false, false,
+                     "Scramble which glyph means which brightness. Same set, "
+                     "different handwriting. Seeded, so it stays put.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "chaos", QuickAction::VsAsciiChaosDec,
+                     fmtFloat(v.asciiChaos, 2), QuickAction::VsAsciiChaosInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "0 picks the glyph the brightness asks for, 1 picks any "
+                     "glyph in the set. Turn it up to see the whole alphabet: "
+                     "ranked strictly by ink, a flat area picks one mark and "
+                     "the rest never appear.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "ink", QuickAction::VsInkCycle,
+                     vsInkLabel(v.asciiInk),
+                     QuickAction::VsInkCycle, QuickAction::ToggleLoop,
+                     false, false,
+                     "Picture takes colour from the image. Green, amber and "
+                     "cyan are terminal phosphors. Palette locks the text to "
+                     "the selected hardware palette.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "wobble", QuickAction::VsAsciiWobbleDec,
+                     fmtFloat(v.asciiWobble, 2), QuickAction::VsAsciiWobbleInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Each character rocks as though it were a card being "
+                     "tilted. Every cell has its own phase, so the grid "
+                     "breathes instead of sliding about as one sheet.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "wobble by", QuickAction::VsAsciiWobbleModeCycle,
+                     vsWobbleModeLabel(v.asciiWobbleMode),
+                     QuickAction::VsAsciiWobbleModeCycle,
+                     QuickAction::ToggleLoop, false, false,
+                     "What aims each tilt: its own position, the picture's "
+                     "luma gradient so characters lean the way the image does, "
+                     "or the cell's hue.");
+    rowY += ix.rowStep;
+    rowY = inspDrawActionRow(ix, rowY,
+                             v.asciiPhrases.empty()
+                               ? std::string("phrases: (none)")
+                               : "phrases: " + v.asciiPhrases,
+                             QuickAction::VsAsciiPhrasesEdit,
+                             "Words to surface in the field, separated by | . "
+                             "One at a time, in a new place each time.",
+                             pal.tile, pal.fg);
+    // GLITCH TEXT: marks that climb out of the characters. Up and down are
+    // separate because a stack that only grows one way is a different look
+    // from one that grows both.
+    inspDrawQuickRow(ix, rowY, "glitch up", QuickAction::VsZalgoUpDec,
+                     fmtFloat(v.asciiZalgoUp, 2), QuickAction::VsZalgoUpInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Marks stacked ABOVE the characters, the way combining "
+                     "accents overflow a line.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "glitch down", QuickAction::VsZalgoDownDec,
+                     fmtFloat(v.asciiZalgoDown, 2), QuickAction::VsZalgoDownInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Marks stacked BELOW.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "glitch through", QuickAction::VsZalgoMidDec,
+                     fmtFloat(v.asciiZalgoMid, 2), QuickAction::VsZalgoMidInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Strikes drawn ACROSS the cell, damaging the character "
+                     "rather than decorating it.");
+    rowY += ix.rowStep;
+    if (v.asciiZalgoUp > 0.001 || v.asciiZalgoDown > 0.001) {
+      inspDrawQuickRow(ix, rowY, "glitch reach", QuickAction::VsZalgoReachDec,
+                       std::to_string(v.asciiZalgoReach),
+                       QuickAction::VsZalgoReachInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "How many cells the marks may climb. They thin out as "
+                       "they go, so a tall reach trails rather than doubles.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "glitch drift", QuickAction::VsZalgoDriftDec,
+                       fmtFloat(v.asciiZalgoDrift, 2),
+                       QuickAction::VsZalgoDriftInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "0 welds them to their cell, which reads as engraved. "
+                       "Above it they re-roll, which reads as boiling.");
+      rowY += ix.rowStep;
+    }
+    if (!v.asciiPhrases.empty()) {
+      std::ostringstream hold;
+      hold << std::fixed << std::setprecision(1) << v.asciiPhraseHold << "s";
+      inspDrawQuickRow(ix, rowY, "phrase hold", QuickAction::VsAsciiHoldDec,
+                       v.asciiPhraseHold <= 0.0 ? std::string("off")
+                                                : hold.str(),
+                       QuickAction::VsAsciiHoldInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "How long each phrase stays before it moves. Zero "
+                       "hides them without losing the list.");
+      rowY += ix.rowStep;
+    }
+    (void)cue;
+    return rowY;
+  }
+
+  int inspDrawVideoSynthRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (cue.kind != CueKind::VideoSynth) return rowY;
+    const VideoSynthSettings& v = cue.videoSynth;
+
+    inspDrawQuickRow(ix, rowY, "shape", QuickAction::VsCycleShape,
+                     vsShapeLabel(v.shape), QuickAction::VsCycleShape,
+                     QuickAction::ToggleLoop, false, false,
+                     "Diamond is the hard-edged Atari Video Music lattice; "
+                     "rings tunnel well with feedback zoom.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "mirror", QuickAction::VsCycleMirror,
+                     vsMirrorLabel(v.mirror), QuickAction::VsCycleMirror,
+                     QuickAction::ToggleLoop, false, false,
+                     "Folding is what turns an arbitrary pattern into "
+                     "something that reads as designed.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "palette", QuickAction::VsCyclePalette,
+                     vsPaletteLabel(v.palette), QuickAction::VsCyclePalette,
+                     QuickAction::ToggleLoop, false, false,
+                     "Amber is closest to the 1976 single-phosphor look.");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "speed", QuickAction::VsSpeedDec,
+                     fmtFloat(v.speed, 2), QuickAction::VsSpeedInc,
+                     QuickAction::ToggleLoop, false, false, "Master oscillator rate.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsSpeed));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "scale", QuickAction::VsScaleDec,
+                     fmtFloat(v.scale, 2), QuickAction::VsScaleInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "How many features fit on screen.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsScale));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "feedback", QuickAction::VsFeedbackDec,
+                     fmtFloat(v.feedbackAmount, 2), QuickAction::VsFeedbackInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Each frame blended into the next. This is the Hypno "
+                     "signature -- at 0 it is a pattern generator, above it "
+                     "the picture starts feeding on itself.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsFeedback));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "zoom", QuickAction::VsZoomDec,
+                     fmtFloat(v.feedbackZoom, 3), QuickAction::VsZoomInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Above 1 tunnels inward, below 1 blooms outward.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsZoom));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "audio", QuickAction::VsReactDec,
+                     fmtFloat(v.audioReactivity, 2), QuickAction::VsReactInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "How much playing audio widens and brightens the "
+                     "pattern. 0 free-runs.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsReact));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "detail", QuickAction::VsResDec,
+                     std::to_string(v.resolution), QuickAction::VsResInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Internal resolution, 1 chunkiest to 5 finest. This is an "
+                     "aesthetic control as much as a speed one -- the 8-bit "
+                     "look comes from big pixels.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsResolution));
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "smear", QuickAction::VsSortDec,
+                     fmtFloat(v.pixelSort, 2), QuickAction::VsSortInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Pixel sort: runs of pixels sorted by brightness within a "
+                     "row, which is what makes datamosh look melted.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsPixelSort));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "glitch", QuickAction::VsGlitchDec,
+                     fmtFloat(v.glitch, 2), QuickAction::VsGlitchInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Torn scanline bands and RGB separation. In text mode it "
+                     "also corrupts CELLS -- whole rows lock to one repeating "
+                     "character, the way a real text screen loses sync.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsGlitch));
+    rowY += ix.rowStep;
+
+    inspDrawQuickRow(ix, rowY, "crt", QuickAction::VsCrtDec,
+                     fmtFloat(v.crt, 2), QuickAction::VsCrtInc,
+                     QuickAction::ToggleLoop, false, false,
+                     "Scanlines, phosphor bloom and RGB fringing. The bloom is "
+                     "the part that matters -- a phosphor spills sideways, "
+                     "which is why a CRT looks like it is emitting light.",
+                     false, QuickAction::ToggleLoop,
+                     static_cast<int>(NumericParam::VsCrt));
+    rowY += ix.rowStep;
+    // TEXT MODE FIRST, then sprites. It used to be the other way round, with
+    // seven sprite rows sitting between the CRT control and the character
+    // grid, so the text-mode settings landed at the very bottom of a
+    // twenty-five row section and the ones added last could not be found.
+    // Sprites are a text-mode ALPHABET -- picking a sheet switches the grid
+    // to it -- so they belong after the grid they draw into, not before it.
+    // THE EFFECT, not the retired flag. videoSynth.ascii is always false now,
+    // so reading it here would have left this row saying "off" however the cue
+    // was actually set, and hidden every text-mode row underneath it -- on the
+    // one cue kind that has no other way to reach them.
+    const bool textModeOn = cueHasTextModeEffect(cue);
+    inspDrawQuickRow(ix, rowY, "text mode", QuickAction::VsAsciiToggle,
+                     textModeOn ? "on" : "off",
+                     QuickAction::VsAsciiToggle, QuickAction::VsAsciiToggle,
+                     true, textModeOn,
+                     "Render as a character grid with a 16-colour indexed "
+                     "palette, rather than as pixels.");
+    rowY += ix.rowStep;
+    if (textModeOn) {
+      rowY = inspDrawTextModeRows(ix, rowY, v, cue);
+    }
+
+    // ONE sprite control, not two. There were two rows -- "sprites" cycling
+    // the sets in data/sprites, and "sheet" file-picking one -- both writing
+    // the same spriteSheetPath, both reading "none" until one was chosen, and
+    // separated by five rows that only exist once a sheet is loaded. So the
+    // row that turns sprites ON appeared BELOW the settings that configure
+    // them, and the two looked like duplicates of each other because they
+    // were.
+    //
+    // The value row cycles; loading an arbitrary file is a VERB and now looks
+    // like one. Both stay outside the text-mode gate: picking a sheet turns
+    // text mode on by itself, and hiding that behind an unrelated toggle was
+    // a discoverability trap the owner hit twice.
+    inspDrawQuickRow(ix, rowY, "sprites", QuickAction::VsSpriteSetPrev,
+                     currentSpriteSetLabel(cue),
+                     QuickAction::VsSpriteSetNext, QuickAction::VsSheetClear,
+                     false, false,
+                     "Sprite sets installed in data/sprites. Each folder there "
+                     "is a set; cycling picks one and wraps back to none. "
+                     "Right-click turns them off.");
+    rowY += ix.rowStep;
+    rowY = inspDrawActionRow(ix, rowY, "load a sprite sheet from a file...",
+                             QuickAction::VsSheetPick,
+                             "Any image laid out as a grid of tiles. Its tiles "
+                             "become the alphabet, picked by brightness the "
+                             "way glyphs are.",
+                             pal.dark, pal.light);
+    if (!v.spriteSheetPath.empty()) {
+      inspDrawQuickRow(ix, rowY, "tile w", QuickAction::VsTileWDec,
+                       std::to_string(v.spriteTileW),
+                       QuickAction::VsTileWInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Tile width in pixels. Must match the sheet's grid or "
+                       "the slices land across neighbouring sprites.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "tile h", QuickAction::VsTileHDec,
+                       std::to_string(v.spriteTileH),
+                       QuickAction::VsTileHInc, QuickAction::ToggleLoop,
+                       false, false, "Tile height in pixels.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "rotate", QuickAction::VsRotateCycle,
+                       vsRotateLabel(v.spriteRotate),
+                       QuickAction::VsRotateCycle, QuickAction::ToggleLoop,
+                       false, false,
+                       "Quarter turns are exact and stay crisp. Spinning "
+                       "samples at an angle, which tears pixel art -- "
+                       "sometimes that is what you want.");
+      rowY += ix.rowStep;
+      if (v.spriteRotate == 5) {
+        inspDrawQuickRow(ix, rowY, "spin", QuickAction::VsFreeAngleDec,
+                         fmtFloat(v.spriteFreeAngle, 0) + " deg/s",
+                         QuickAction::VsFreeAngleInc, QuickAction::ToggleLoop,
+                         false, false, "Rotation speed, degrees per second.",
+                         false, QuickAction::ToggleLoop,
+                         static_cast<int>(NumericParam::VsFreeAngle));
+        rowY += ix.rowStep;
+      }
+      inspDrawQuickRow(ix, rowY, "flip", QuickAction::VsFlipCycle,
+                       vsFlipLabel(v.spriteFlip),
+                       QuickAction::VsFlipCycle, QuickAction::ToggleLoop,
+                       false, false,
+                       "Alternating mirrors by cell position, which reads as "
+                       "pattern where random flipping reads as noise.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "jitter", QuickAction::VsJitterDec,
+                       fmtFloat(v.spriteJitter, 2),
+                       QuickAction::VsJitterInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Vary tile size per cell, so the grid stops looking "
+                       "like a grid.");
+      rowY += ix.rowStep;
+      inspDrawQuickRow(ix, rowY, "chaos", QuickAction::VsChaosDec,
+                       fmtFloat(v.spriteChaos, 2),
+                       QuickAction::VsChaosInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "0 picks tiles by brightness so the picture reads. 1 "
+                       "picks at random so the grid becomes texture.");
+      rowY += ix.rowStep;
+    }
+    return rowY;
+  }
+
+  // The live-coded source. Only for a pattern cue whose type is "code" --
+  // everywhere else this section does not exist, rather than showing an
+  // expression box that drives nothing.
+  bool cueIsCodeSource(const Cue& cue) const {
+    return cue.kind == CueKind::Pattern &&
+           stripPatternMotionSuffix(normalizePatternTypeId(cue.path)) == "code";
+  }
+
+  int inspDrawCodeRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    inspDrawQuickRow(ix, rowY, "render width", QuickAction::NumericParamDec,
+      std::to_string(cue.width), QuickAction::NumericParamInc, QuickAction::ToggleLoop, false, false,
+      "Source pixels, independent of output placement", true, QuickAction::EditNumericParam,
+      static_cast<int>(NumericParam::CodeWidth));
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "render height", QuickAction::NumericParamDec,
+      std::to_string(cue.height), QuickAction::NumericParamInc, QuickAction::ToggleLoop, false, false,
+      "Source pixels, independent of output placement", true, QuickAction::EditNumericParam,
+      static_cast<int>(NumericParam::CodeHeight));
+    rowY += ix.rowStep;
+    // The expression, on its own row and wide, because it is the cue.
+    rowY = inspDrawActionRow(ix, rowY, cue.codeExpression.empty()
+                               ? std::string("(tap to write an expression)")
+                               : cue.codeExpression,
+                             QuickAction::CodeOpenEditor,
+                             "One expression, or three separated by commas for "
+                             "red, green and blue. Variables: x y (0-1), cx cy "
+                             "(-1..1), r (radius), a (angle), t (seconds).",
+                             pal.tile, pal.fg);
+    // A compile error is shown HERE and the last good picture stays visible.
+    // Someone editing live is mid-keystroke most of the
+    // time, and a source that blacks out on every half-typed function is
+    // unusable on a stage.
+    const std::string problem = codeSourceProblem(cue.codeExpression);
+    if (!problem.empty()) {
+      rowY = inspDrawMessageRow(ix, rowY, problem, pal.mid, pal.deep);
+    }
+    // Into the real editor. The inspector column is 500-odd pixels wide and an
+    // expression is a program: it needs room, colour and a caret you can place,
+    // none of which belong in a value row.
+    rowY = inspDrawActionRow(ix, rowY, "open the code editor",
+                             QuickAction::CodeOpenEditor,
+                             "Full editor: syntax colour, the list of what you "
+                             "can use, and the examples",
+                             pal.dark, pal.light);
+    return rowY;
+  }
+
+  // Compile the expression purely to report on it. Cheap, and it means the
+  // inspector can say what is wrong without reaching into the engine.
+  std::string codeSourceProblem(const std::string& expression) const {
+    if (expression.empty()) {
+      return "no expression";
+    }
+    deckboy::code::CompiledSource compiled = deckboy::code::compile(expression);
+    return compiled.ok() ? std::string() : compiled.error;
+  }
+
+  int inspDrawEffectsRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    // ONE LIST. Datamosh used to be permanently present here while every other
+    // effect had to be added, which meant the section had two different rules
+    // in it and no way to see what was on offer. It is an entry in the stack
+    // now like anything else, and refuses with a message on cues it cannot
+    // work on rather than being silently absent.
+    if (!cueSupportsEffectStack(cue)) {
+      return inspDrawMessageRow(ix, startY, "no effects for this cue type",
+                                pal.mid, pal.deep);
+    }
+    int rowY = startY;
+    // WHAT THE CHAIN COSTS, measured on this machine at this raster.
+    //
+    // There is a cap of twelve effects, and a cap only bounds the damage: a
+    // dozen cheap ones are free while four expensive ones at 4K are not, so
+    // the count an operator can already see is the wrong number. This is the
+    // real one, and it is the difference between "it is stuttering, why" and
+    // "this chain costs 47ms and a 60fps frame is 16.7".
+    //
+    // Shown only once it has been measured, which means once the cue has been
+    // live: a figure invented from per-effect benchmarks would be a guess
+    // about the operator's machine, and the whole point is that it is not.
+    const double costMs = effectChainCostForDeck(project_.focusedDeckIndex);
+    if (costMs > 0.05 && deckboy::effects::cueEffectStackActive(cue.effects)) {
+      // THE BUDGET IS THE OUTPUT'S FRAME, not an assumed 60.
+      //
+      // This read "% of a 60fps frame" whatever the output was actually doing.
+      // On a 50Hz projector that is pessimistic and merely unhelpful; on a
+      // 120Hz wall it is optimistic and actively misleading -- 15ms shows as
+      // 90% of a frame while it is in fact 180% of one, and the operator is
+      // told there is headroom while the output drops frames. primaryOutputMode
+      // already carries the real refresh, so use it and say which rate the
+      // figure is against.
+      const double refreshHz = [&]() {
+        const double hz = primaryOutputMode().refreshHz;
+        return (std::isfinite(hz) && hz > 1.0) ? hz : 60.0;
+      }();
+      const double kFrameMs = 1000.0 / refreshHz;
+      const double share = 100.0 * costMs / kFrameMs;
+      std::ostringstream line;
+      line << std::fixed << std::setprecision(1) << costMs << " ms/frame  ("
+           << std::setprecision(0) << share << "% of a "
+           << std::setprecision(refreshHz < 100.0 && refreshHz != std::floor(refreshHz) ? 2 : 0)
+           << refreshHz << "fps frame)";
+      const bool over = costMs >= kFrameMs;
+      rowY = inspDrawMessageRow(ix, rowY, line.str(),
+                                over ? pal.mid : pal.tile,
+                                over ? pal.deep : pal.inkSoft);
+      if (over) {
+        rowY = inspDrawMessageRow(ix, rowY,
+                                  "over budget - video will drop frames",
+                                  pal.mid, pal.deep);
+      }
+    }
+    return inspDrawEffectRows(ix, rowY, cue);
+  }
+
+  // audioEffectParamTip returns null for a slot an effect ignores. Those slots
+  // draw no row at all, so this can only be reached with a named one -- but a
+  // std::string built from a null pointer is undefined behaviour, not an empty
+  // string, and a belt here costs nothing.
+  static std::string audioParamTipOr(deckboy::audiofx::AudioEffectKind kind,
+                                     int slot) {
+    const char* tip = deckboy::audiofx::audioEffectParamTip(kind, slot);
+    return tip ? std::string(tip) : std::string();
+  }
+
+  // THE AUDIO CHAIN, drawn the same way the picture chain is.
+  //
+  // Same row order, same four-cell control strip, same "the name IS the
+  // picker" rule -- an operator who has learned the EFFECTS section has
+  // learned this one, and the two sections sitting one above the other with
+  // different conventions would be the worse outcome by far.
+  //
+  // What is deliberately NOT here: the per-parameter LFOs. A picture parameter
+  // that breathes is a look; an audio parameter that breathes on its own
+  // during a show is a fault the operator cannot see coming. If that is ever
+  // wanted it should be asked for, not inherited by symmetry.
+  // WHY THIS EFFECT CANNOT DO ITS JOB ON THIS CUE, or empty if it can.
+  //
+  // Five of the fourteen read something the deck supplies -- the picture, the
+  // geometry, the length, the video clock -- and on a cue that has none of it
+  // they pass the signal through untouched. That is the right behaviour and
+  // the wrong silence: an operator who arms Frame lock on an audio cue and
+  // hears nothing has been given a control that does nothing, which is this
+  // codebase's signature bug. So the row says why.
+  static std::string audioEffectUnavailableReason(
+      deckboy::audiofx::AudioEffectKind kind, const Cue& cue) {
+    using K = deckboy::audiofx::AudioEffectKind;
+    switch (kind) {
+      case K::Picture:
+        // The same question cueSupportsEffectStack already answers: does this
+        // cue have pixels at all. One definition, not a second one beside it
+        // that can fall behind -- see the note on cueKindToken.
+        if (!cueSupportsEffectStack(cue)) {
+          return "no picture on this cue - nothing to follow";
+        }
+        return "follows this cue's own brightness (needs CPU frames)";
+      case K::FrameLock:
+        if (cue.kind != CueKind::Video || cue.fps <= 1.0) {
+          return "no video clock on this cue - nothing to lock to";
+        }
+        return std::string();
+      case K::Seam:
+        if (cue.duration <= 0.0) {
+          return "this cue has no known end to resolve into";
+        }
+        return std::string();
+      case K::Placement:
+        // Not an error, a fact: a full-frame centred cue IS in the middle at
+        // full size, so the effect is correctly inaudible until the geometry
+        // moves. Somebody who armed it on a full-frame cue and heard nothing
+        // would otherwise conclude it was broken.
+        if (std::fabs(cue.outputOffsetX) < 0.001f &&
+            cue.outputScaleX * cue.outputScaleY > 0.99f) {
+          return "centred and full-frame - moves when the picture does";
+        }
+        return std::string();
+      case K::Scrub:
+        if (!cueSupportsEffectStack(cue)) {
+          return "no picture on this cue - nothing decides where the playhead is";
+        }
+        return "brightness moves the playhead (needs CPU frames)";
+      case K::Short:
+        if (!cueSupportsEffectStack(cue)) {
+          return "no picture - shorts run on a timer instead of on cuts";
+        }
+        return std::string();
+      case K::Resolution:
+        if (!cueSupportsEffectStack(cue) &&
+            cue.outputScaleX * cue.outputScaleY > 0.99f) {
+          return "full-frame and no picture - bends when the picture shrinks";
+        }
+        return std::string();
+      case K::Ouroboros:
+        if (!cueSupportsEffectStack(cue)) {
+          return "no picture on this cue - nothing to close the loop through";
+        }
+        return "pair with a picture effect whose LFO is set to Audio";
+      default:
+        return std::string();
+    }
+  }
+
+  int inspDrawAudioEffectRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    const auto& stack = cue.audioEffects;
+    for (int i = 0; i < static_cast<int>(stack.size()); ++i) {
+      const auto& fx = stack[i];
+      {
+        SDL_Rect nameRect {ix.ctrl.x + ix.inset, rowY,
+                           ix.ctrlW - ix.inset * 2, ix.rowH};
+        drawUIPanel(nameRect, fx.bypassed ? pal.mid : pal.tile, pal.deep, pal.mid);
+        std::string name = std::to_string(i + 1);
+        name += ". ";
+        name += deckboy::audiofx::audioEffectLabel(fx.kind);
+        if (fx.bypassed) {
+          name += "  (bypassed)";
+        }
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {nameRect.x + 6, nameRect.y, nameRect.w - 20, nameRect.h},
+                     name, fx.bypassed ? pal.inkSoft : pal.fg);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                             SDL_Rect {nameRect.x + nameRect.w - 16, nameRect.y, 14, nameRect.h},
+                             "v", pal.inkSoft);
+        quickButtons_.push_back({nameRect, QuickAction::AudioEffectCycleKind,
+                                 "Choose which effect this is", i});
+        rowY += ix.rowStep;
+      }
+      {
+        const std::string why = audioEffectUnavailableReason(fx.kind, cue);
+        if (!why.empty()) {
+          rowY = inspDrawMessageRow(ix, rowY, why, pal.tile, pal.inkSoft);
+        }
+      }
+      // WHICH plugin, on its own row directly under the name. A Plugin slot is
+      // the one kind whose identity is not its kind, so without this row two
+      // adjacent slots both read "Plugin" and there is no way to tell a reverb
+      // from a limiter.
+      if (fx.kind == deckboy::audiofx::AudioEffectKind::Plugin) {
+        SDL_Rect pickRect {ix.ctrl.x + ix.inset, rowY,
+                           ix.ctrlW - ix.inset * 2, ix.rowH};
+        drawUIPanel(pickRect, pal.tile, pal.deep, pal.mid);
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {pickRect.x + 6, pickRect.y, 58, pickRect.h},
+                     "plugin", pal.inkSoft);
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {pickRect.x + 64, pickRect.y,
+                               pickRect.w - 84, pickRect.h},
+                     audioPluginSlotLabel(fx), pal.fg);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                             SDL_Rect {pickRect.x + pickRect.w - 16, pickRect.y,
+                                       14, pickRect.h},
+                             "v", pal.inkSoft);
+        quickButtons_.push_back({pickRect, QuickAction::AudioEffectChoosePlugin,
+                                 "Choose one of your own plugins for this slot", i});
+        rowY += ix.rowStep;
+      }
+      // AMOUNT MEANS THE SAME THING EVERY TIME. For the shaping effects it is
+      // a dry/wet mix; for the dynamics it scales the gain reduction. Either
+      // way turning it down is "less of this" and never "something else",
+      // which is the only property that makes one control serve nine effects.
+      char amountBuf[16];
+      std::snprintf(amountBuf, sizeof(amountBuf), "%d%%",
+                    static_cast<int>(std::lround(fx.amount * 100.0f)));
+      inspDrawQuickRow(ix, rowY, "amount",
+                       QuickAction::AudioEffectAmountDec, std::string(amountBuf),
+                       QuickAction::AudioEffectAmountInc, QuickAction::ToggleLoop,
+                       false, false,
+                       "Drag to scrub (shift = fine), click to type exact",
+                       true, QuickAction::AudioEffectEditAmount, i);
+      rowY += ix.rowStep;
+      // A PLUGIN NAMES ITS OWN CONTROLS. "control 1" on a row that is really
+      // the plugin's threshold is a control nobody can use during a show, so
+      // where the plugin is loaded its first four automatable parameter names
+      // replace the generic ones -- and where it is not, the generic names are
+      // what keep the saved numbers visible and editable.
+      std::string pluginParamNames[4];
+      if (fx.kind == deckboy::audiofx::AudioEffectKind::Plugin) {
+        if (auto instance = audioPluginInstanceForRow(i)) {
+          int taken = 0;
+          for (const auto& p : instance->parameters()) {
+            if (!p.automatable) {
+              continue;
+            }
+            if (taken >= 4) {
+              break;
+            }
+            pluginParamNames[taken++] = p.name;
+          }
+        }
+      }
+      for (int which = 0; which < 4; ++which) {
+        const char* paramLabel =
+          deckboy::audiofx::audioEffectParamLabel(fx.kind, which);
+        if (!paramLabel) {
+          continue;   // this effect ignores the slot; drawing it would be a
+                      // control that cannot do anything
+        }
+        std::string paramLabelText = pluginParamNames[which].empty()
+                                       ? std::string(paramLabel)
+                                       : pluginParamNames[which];
+        const float rawParam = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+                             : which == 2 ? fx.paramC : fx.paramD;
+        char paramBuf[16];
+        std::snprintf(paramBuf, sizeof(paramBuf), "%d%%",
+                      static_cast<int>(std::lround(rawParam * 100.0f)));
+        inspDrawQuickRow(ix, rowY, paramLabelText,
+                         which == 0 ? QuickAction::AudioEffectParamADec
+                         : which == 1 ? QuickAction::AudioEffectParamBDec
+                         : which == 2 ? QuickAction::AudioEffectParamCDec
+                                      : QuickAction::AudioEffectParamDDec,
+                         std::string(paramBuf),
+                         which == 0 ? QuickAction::AudioEffectParamAInc
+                         : which == 1 ? QuickAction::AudioEffectParamBInc
+                         : which == 2 ? QuickAction::AudioEffectParamCInc
+                                      : QuickAction::AudioEffectParamDInc,
+                         QuickAction::ToggleLoop, false, false,
+                         audioParamTipOr(fx.kind, which),
+                         true,
+                         which == 0 ? QuickAction::AudioEffectParamAEdit
+                         : which == 1 ? QuickAction::AudioEffectParamBEdit
+                         : which == 2 ? QuickAction::AudioEffectParamCEdit
+                                      : QuickAction::AudioEffectParamDEdit,
+                         i);
+        rowY += ix.rowStep;
+      }
+      {
+        const int gap = 4;
+        const int cellW = (ix.ctrlW - ix.inset * 2 - gap * 3) / 4;
+        int cx = ix.ctrl.x + ix.inset;
+        struct Cell { const char* label; QuickAction action; const char* tip; bool lit; };
+        const Cell cells[4] = {
+          {"B", QuickAction::AudioEffectToggleBypass,
+           "Bypass: take it out of the chain but KEEP its settings. Turning "
+           "the amount to zero throws them away.", fx.bypassed},
+          {"^", QuickAction::AudioEffectMoveUp,
+           "Earlier in the chain. A gate before a compressor is a different "
+           "sound from a compressor before a gate.", false},
+          {"v", QuickAction::AudioEffectMoveDown, "Later in the chain", false},
+          {"X", QuickAction::AudioEffectRemove, "Remove this effect", false},
+        };
+        for (const Cell& cell : cells) {
+          SDL_Rect r {cx, rowY, cellW, ix.rowH};
+          drawUIPanel(r, cell.lit ? pal.dark : pal.tile, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, r, cell.label,
+                               cell.lit ? pal.light : pal.fg);
+          quickButtons_.push_back({r, cell.action, cell.tip, i});
+          cx += cellW + gap;
+        }
+        rowY += ix.rowStep;
+      }
+    }
+    if (stack.empty()) {
+      rowY = inspDrawMessageRow(ix, rowY, "no audio effects", pal.tile, pal.inkSoft);
+    }
+    rowY = inspDrawActionRow(ix, rowY, "+ add audio effect",
+                             QuickAction::AudioEffectAdd,
+                             "Filters, dynamics, delay, room and width, run in "
+                             "the order you put them in -- between the cue's "
+                             "gain and the output limiter.",
+                             pal.tile, pal.fg);
+    return rowY;
+  }
+
+  int inspDrawKeyRows(const InspectorCtx& ix, int startY, const Cue& cue) {
+    int rowY = startY;
+    if (!cueSupportsKeying(&cue)) return rowY;
+    inspDrawQuickRow(ix, rowY, "key", QuickAction::KeyToggle,
+                     cue.chromaKeyEnabled ? "on" : "off",
+                     QuickAction::KeyToggle, QuickAction::KeyToggle, true, cue.chromaKeyEnabled,
+                     "Toggle chroma key");
+    rowY += ix.rowStep;
+    inspDrawKeyColorRow(ix, rowY, cue);
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "tolerance", QuickAction::KeyTolDec, fmtFloat(cue.chromaKeyTolerance, 1), QuickAction::KeyTolInc,
+                     QuickAction::ToggleLoop, false, false, "Key tolerance (RGB distance)");
+    rowY += ix.rowStep;
+    inspDrawQuickRow(ix, rowY, "soft", QuickAction::KeySoftDec, fmtFloat(cue.chromaKeySoftness, 1), QuickAction::KeySoftInc,
+                     QuickAction::ToggleLoop, false, false, "Key edge softness");
+    rowY += ix.rowStep;
+    return rowY;
+  }
+
+  InspectorSectionScope inspBeginSection(const InspectorCtx& ix, int rowY, const std::string& title,
+                                          bool open, QuickAction toggleAction, const std::string& tip) {
+    SDL_Rect hdr {ix.ctrl.x + ix.inset, rowY, ix.ctrlW - ix.inset * 2, ix.sectionHeaderH};
+    SDL_Color fill = open ? pal.mid : pal.tile;
+    SDL_Color ink = open ? pal.deep : pal.fg;
+    drawUIPanel(hdr, fill, pal.deep, pal.dark);
+    SDL_Rect titleRect {hdr.x + 4, hdr.y, hdr.w - 24, hdr.h};
+    SDL_Rect stateRect {hdr.x + hdr.w - 18, hdr.y, 14, hdr.h};
+    drawTextSafe(controlRenderer_, ix.headerFont, titleRect, title, ink);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, stateRect, open ? "-" : "+", ink);
+    quickButtons_.push_back({hdr, toggleAction, tip});
+    return InspectorSectionScope {hdr, open, rowY + ix.rowStep};
+  }
+
+  void inspFinishSection(const InspectorSectionScope& section, int bodyBottom) {
+    const int headerBottom = section.headerRect.y + section.headerRect.h;
+    if (!section.open) {
+      // A COLLAPSED SECTION STILL OCCUPIES ITS HEADER.
+      //
+      // This returned without touching inspectorSectionBottomMax_, which is the
+      // anchor the sections drawn AFTER the per-kind chain start from -- EFFECTS
+      // and TEXT MODE. So collapsing the sections above them left the anchor
+      // pointing at wherever the last OPEN section ended, and they drew on top
+      // of the collapsed headers. Collapse them all and the anchor is still at
+      // its initial value, the top of the panel, and everything lands in a heap
+      // there.
+      //
+      // Which is exactly what an operator does: collapse what they are not
+      // using to get down to the effects.
+      inspectorSectionBottomMax_ = std::max(inspectorSectionBottomMax_, headerBottom);
+      return;
+    }
+    int shellBottom = std::max(headerBottom, bodyBottom + 2);
+    // Track the deepest section bottom so the cue-settings scroll range covers
+    // trailing non-interactive rows (status/message rows push no quickButtons_,
+    // so the button-based scroll-max alone can leave them unreachable).
+    inspectorSectionBottomMax_ = std::max(inspectorSectionBottomMax_, shellBottom);
+    SDL_Rect shell {
+      section.headerRect.x,
+      section.headerRect.y,
+      section.headerRect.w,
+      std::max(section.headerRect.h, shellBottom - section.headerRect.y)
+    };
+    SDL_Rect bodyFill {
+      shell.x + 2,
+      section.bodyStartY - 4,
+      std::max(0, shell.w - 4),
+      std::max(0, shellBottom - section.bodyStartY + 2)
+    };
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    Primitives::fillRect(controlRenderer_, bodyFill, SDL_Color {15, 56, 15, 28});
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+    Primitives::strokeRect(controlRenderer_, shell, pal.dark);
+    // (An accent "rail" used to be drawn 8px left of the shell here. Floating
+    // outside the frame it read as a stray vertical green bar, not chrome —
+    // the shell stroke + body tint already delimit the open section.)
+  }
+
+  void drawUIPanel(const SDL_Rect& rect, SDL_Color fill, SDL_Color border, SDL_Color accent) {
+    if (rect.w <= 0 || rect.h <= 0) {
+      return;
+    }
+    // Draw exactly the rect the caller computed. This used to paint
+    // snapRectToGrid(rect) — an 8px grid snap — while Primitives::drawFramedPanel
+    // (the other half of the UI) painted the raw rect, and the text helpers were
+    // split the same way. A label could therefore sit up to a full grid unit off
+    // centre relative to the box around it, and two neighbouring controls drawn
+    // with different helper pairs disagreed visibly. One coordinate space now:
+    // the box and its label both use the caller's rect. See safeTextRect.
+    SDL_Rect snapped = rect;
+    Primitives::fillRect(controlRenderer_, snapped, fill);
+    Primitives::notePressable(controlRenderer_, snapped);
+    Primitives::strokeRect(controlRenderer_, snapped, border);
+    if (snapped.w > 4 && snapped.h > 4) {
+      // Bevel: accent brighter than fill → raised, darker → inset
+      int fillLuma  = fill.r + fill.g + fill.b;
+      int accentLuma = accent.r + accent.g + accent.b;
+      bool raised = (accentLuma >= fillLuma);
+      SDL_Color hi = raised ? accent : fill;
+      SDL_Color lo = {
+        static_cast<Uint8>(std::min(255, (raised ? fill.r : accent.r) * 2 / 3)),
+        static_cast<Uint8>(std::min(255, (raised ? fill.g : accent.g) * 2 / 3)),
+        static_cast<Uint8>(std::min(255, (raised ? fill.b : accent.b) * 2 / 3)),
+        (raised ? fill : accent).a
+      };
+      int x1 = snapped.x + 1, y1 = snapped.y + 1;
+      int x2 = snapped.x + snapped.w - 2, y2 = snapped.y + snapped.h - 2;
+      // Top + left highlight
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(controlRenderer_, hi.r, hi.g, hi.b, hi.a);
+      SDL_RenderLine(controlRenderer_, x1, y1, x2, y1);
+      SDL_RenderLine(controlRenderer_, x1, y1, x1, y2);
+      // Bottom + right shadow
+      SDL_SetRenderDrawColor(controlRenderer_, lo.r, lo.g, lo.b, lo.a);
+      SDL_RenderLine(controlRenderer_, x1, y2, x2, y2);
+      SDL_RenderLine(controlRenderer_, x2, y1, x2, y2);
+    }
+  }
+
+  // PRESSED: the bevel turned inside out and the face shaded, so the control
+  // reads as pushed in. Also the look of a button whose menu is open.
+  void drawSunkControl(const SDL_Rect& rect) {
+    if (rect.w <= 4 || rect.h <= 4) {
+      return;
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 72);
+    SDL_RenderFillRect(controlRenderer_, &rect);
+    const int edge = std::max(2, uiScaled(2));
+    const SDL_Color dark = pal.deep;
+    const SDL_Color light = pal.light;
+    for (int i = 0; i < edge; ++i) {
+      const int x1 = rect.x + 1 + i, y1 = rect.y + 1 + i;
+      const int x2 = rect.x + rect.w - 2 - i, y2 = rect.y + rect.h - 2 - i;
+      SDL_SetRenderDrawColor(controlRenderer_, dark.r, dark.g, dark.b, 255);
+      SDL_RenderLine(controlRenderer_, x1, y1, x2, y1);
+      SDL_RenderLine(controlRenderer_, x1, y1, x1, y2);
+      SDL_SetRenderDrawColor(controlRenderer_, light.r, light.g, light.b, 160);
+      SDL_RenderLine(controlRenderer_, x1, y2, x2, y2);
+      SDL_RenderLine(controlRenderer_, x2, y1, x2, y2);
+    }
+  }
+
+  // Called once at the end of the desk's frame, over everything else.
+  void drawPressFeedback() {
+    SDL_Rect target {};
+    pressTargetValid_ = Primitives::pressedTarget(&target);
+    if (pressTargetValid_) {
+      pressTarget_ = target;
+      drawSunkControl(target);
+    }
+    // OPEN: the settings and the dashboard dim the desk behind them, which
+    // also dims the pushed-in MENU. A steady ring above the dimming says
+    // which button this came from.
+    //
+    // ONLY WHERE THE BUTTON CAN BE SEEN. In a window the size of a laptop's
+    // the settings cover MENU, and the ring was drawn over whatever card sat
+    // there -- an empty box across the output limiter's meter.
+    const int ringW = std::max(2, uiScaled(2));
+    for (const auto& button : buttons_) {
+      const bool settingsButton = (button.label == "MENU" || button.label == "SETUP" ||
+                                   button.label == "SETTINGS") && settingsOpen_;
+      if (settingsButton || (button.label == "DASH" && dashboardOverlayOpen_)) {
+        const SDL_Rect cover = settingsButton ? settingsModalRect() : dashModalRect_;
+        const SDL_Rect ring {button.rect.x - ringW, button.rect.y - ringW,
+                             button.rect.w + ringW * 2, button.rect.h + ringW * 2};
+        if (SDL_HasRectIntersection(&ring, &cover)) {
+          continue;
+        }
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(controlRenderer_, pal.light.r, pal.light.g, pal.light.b, 255);
+        for (int i = 1; i <= ringW; ++i) {
+          SDL_Rect r {button.rect.x - i, button.rect.y - i, button.rect.w + i * 2, button.rect.h + i * 2};
+          SDL_RenderRect(controlRenderer_, &r);
+        }
+      }
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (now < pressFlashUntilMs_) {
+      // DONE: a ring that fades out over 150 ms after the release.
+      const double left = static_cast<double>(pressFlashUntilMs_ - now) / 150.0;
+      SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(controlRenderer_, pal.light.r, pal.light.g, pal.light.b,
+                             static_cast<Uint8>(std::clamp(left, 0.0, 1.0) * 255.0));
+      const int ring = std::max(2, uiScaled(2));
+      for (int i = 1; i <= ring; ++i) {
+        SDL_Rect r {pressFlashRect_.x - i, pressFlashRect_.y - i,
+                    pressFlashRect_.w + i * 2, pressFlashRect_.h + i * 2};
+        SDL_RenderRect(controlRenderer_, &r);
+      }
+    }
+  }
+
+  // The pointer went down or up on the desk window.
+  void notePress(bool held, int x, int y) {
+    if (!held && pressTargetValid_) {
+      pressFlashRect_ = pressTarget_;
+      pressFlashUntilMs_ = SDL_GetTicks() + 150;
+    }
+    if (!held) {
+      pressTargetValid_ = false;
+    }
+    // Controls are at most a row of the inspector wide and a bottom-bar
+    // button tall; anything larger is a panel, and a panel never presses.
+    Primitives::setPress(held, x, y, uiScaled(560), uiScaled(150));
+  }
+
+  void drawUILabel(const SDL_Rect& rect, const std::string& text, SDL_Color color, TTF_Font* font = nullptr) {
+    drawTextSafe(controlRenderer_, font ? font : fontSmall_, rect, text, color);
+  }
+
+  void drawUIButton(const SDL_Rect& rect, const std::string& text, SDL_Color fill, SDL_Color ink,
+                    bool emphasized = false, const std::string& sublabel = "") {
+    if (rect.w <= 0 || rect.h <= 0) {
+      return;
+    }
+    SDL_Color accent = emphasized ? pal.light : pal.dark;
+    drawUIPanel(rect, fill, pal.deep, accent);
+    SDL_Rect topBand {rect.x + 2, rect.y + 2, std::max(0, rect.w - 4), std::min(6, std::max(3, rect.h / 6))};
+    SDL_Color bandFill = emphasized ? pal.light : pal.mid;
+    Primitives::fillRect(controlRenderer_, topBand, bandFill);
+    TTF_Font* titleFont = (rect.h < 34 || rect.w < 112 || text.size() > 7) ? fontSmall_ : fontBase_;
+    std::string clippedTitle = ellipsizeToPixelWidth(titleFont, text, std::max(0, rect.w - 10));
+    if (sublabel.empty()) {
+      SDL_Rect titleRect {rect.x + 4, rect.y + 8, rect.w - 8, std::max(14, rect.h - 14)};
+      drawCenteredTextSafe(controlRenderer_, titleFont, titleRect, clippedTitle, ink);
+      return;
+    }
+    SDL_Rect titleRect {rect.x, rect.y + 6, rect.w, std::max(14, rect.h / 2 - 2)};
+    SDL_Rect hintRect {rect.x, rect.y + rect.h / 2 + 2, rect.w, std::max(10, rect.h / 2 - 4)};
+    drawCenteredTextSafe(controlRenderer_, titleFont, titleRect, clippedTitle, ink);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, hintRect, sublabel, ink);
+  }
+
+  // OPEN IS BRIGHTER, NOT INVERTED.
+  //
+  // An open dropdown used to fill with pal.dark and ink in pal.light, which is
+  // the same reversal that made the switched-ON controls the hardest to read on
+  // the settings pages. The house rule everywhere else is that state shows as
+  // the brightness of the fill and the ink stays dark on light; this now
+  // follows it, so the control an operator is actively using is not the one
+  // they can least read.
+  void drawUIDropdown(const SDL_Rect& rect, const std::string& label, const std::string& value,
+                      const std::string& owner) {
+    drawUIDropdownValue(rect, label.empty() ? value : (label + ": " + value), owner);
+  }
+
+  // The same control with NO label inside it, for a row that already carries
+  // the question on its left. Drawing "Device: (default system device)" inside
+  // the control puts the question in a different place from every labelled row
+  // on the same page.
+  void drawUIDropdownValue(const SDL_Rect& rect, const std::string& value,
+                           const std::string& owner) {
+    const bool active = dropdown_.open && dropdown_.owner == owner;
+    const SDL_Color fill = paletteToggleFill(active);
+    const SDL_Color dropInk = paletteToggleInk(active);
+    drawUIPanel(rect, fill, pal.deep, active ? pal.mid : pal.light);
+    const int chevW = std::min(uiScaled(18), std::max(8, rect.w / 6));
+    SDL_Rect labelRect {rect.x + 4, rect.y, std::max(4, rect.w - chevW - 6), rect.h};
+    SDL_Rect chevronRect {rect.x + rect.w - chevW - 2, rect.y, chevW, rect.h};
+    drawUILabel(labelRect, value, dropInk, fontSmall_);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, chevronRect, "\xe2\x96\xbc", dropInk);
+  }
+
+  struct UiImageAsset {
+    fs::path path;
+    SDL_Texture* texture = nullptr;
+    int width = 0;
+    int height = 0;
+    bool attemptedLoad = false;
+  };
+
+  std::optional<std::pair<int, int>> probeStillImageSize(const fs::path& path) const {
+    auto output = readAllText({
+      "ffprobe", "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "csv=p=0:s=x",
+      path.string()
+    });
+    if (!output) {
+      return std::nullopt;
+    }
+    std::string text = trim(*output);
+    size_t sep = text.find('x');
+    if (sep == std::string::npos) {
+      return std::nullopt;
+    }
+    try {
+      int w = std::stoi(text.substr(0, sep));
+      int h = std::stoi(text.substr(sep + 1));
+      if (w <= 0 || h <= 0) {
+        return std::nullopt;
+      }
+      return std::make_pair(w, h);
+    } catch (...) {
+      return std::nullopt;
+    }
+  }
+
+  bool decodeStillImageRgba(const fs::path& path, int width, int height, std::vector<std::uint8_t>& outPixels) const {
+    if (width <= 0 || height <= 0) {
+      return false;
+    }
+    constexpr size_t kMaxUiDecodeBytes = 64u * 1024u * 1024u;
+    size_t byteCount = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+    if (byteCount == 0 || byteCount > kMaxUiDecodeBytes) {
+      return false;
+    }
+
+    ChildProcess process;
+    if (!spawnPipeProcess(process, {
+      "ffmpeg", "-hide_banner", "-loglevel", "error",
+      "-i", path.string(),
+      "-frames:v", "1",
+      "-f", "rawvideo",
+      "-pix_fmt", "rgba",
+      "pipe:1"
+    })) {
+      return false;
+    }
+
+    outPixels.resize(byteCount);
+    bool ok = readExact(process.readFd, outPixels.data(), outPixels.size());
+    process.stop();
+    return ok;
+  }
+
+  void releaseUiImage(UiImageAsset& asset) {
+    if (asset.texture) {
+      SDL_DestroyTexture(asset.texture);
+      asset.texture = nullptr;
+    }
+    asset.width = 0;
+    asset.height = 0;
+    asset.attemptedLoad = false;
+  }
+
+  bool ensureUiImageLoaded(UiImageAsset& asset) {
+    if (asset.texture) {
+      return true;
+    }
+    if (asset.attemptedLoad) {
+      return false;
+    }
+    asset.attemptedLoad = true;
+    if (asset.path.empty() || !fs::exists(asset.path)) {
+      return false;
+    }
+    // IN THIS PROCESS FIRST. The desk's artwork went through the ffprobe and
+    // ffmpeg programs, and on a Mac where they cannot start (built for a newer
+    // macOS) every icon came up blank while the text drew -- the "no symbols,
+    // no buttons" a Ventura machine showed. The old way stays as the fallback.
+    std::optional<std::pair<int, int>> size;
+    std::vector<std::uint8_t> rgba;
+    // SDL's own PNG loader (SDL 3.4): every piece of the desk's artwork is a
+    // PNG, and this needs neither the ffmpeg programs nor a PNG decoder in
+    // the linked libav, which the Windows build does not carry.
+    if (SDL_Surface* loaded = SDL_LoadSurface(asset.path.string().c_str())) {
+      if (SDL_Surface* converted = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32)) {
+        rgba.resize(static_cast<std::size_t>(converted->w) * converted->h * 4);
+        for (int y = 0; y < converted->h; ++y) {
+          std::memcpy(rgba.data() + static_cast<std::size_t>(y) * converted->w * 4,
+                      static_cast<const std::uint8_t*>(converted->pixels) + y * converted->pitch,
+                      static_cast<std::size_t>(converted->w) * 4);
+        }
+        size = std::make_pair(converted->w, converted->h);
+        SDL_DestroySurface(converted);
+      }
+      SDL_DestroySurface(loaded);
+    }
+#if DECKBOY_INPROC_DECODE
+    if (!size) {
+      int w = 0;
+      int h = 0;
+      if (deckboy::libav::decodeImageRgba(asset.path.string(), w, h, rgba)) {
+        size = std::make_pair(w, h);
+      }
+    }
+#endif
+    if (!size) {
+      size = probeStillImageSize(asset.path);
+      if (!size || !decodeStillImageRgba(asset.path, size->first, size->second, rgba)) {
+        ++uiAssetsFailed_;
+        return false;
+      }
+    }
+    ++uiAssetsLoaded_;
+    SDL_Texture* texture = deckboyCreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                             SDL_TEXTUREACCESS_STATIC, size->first, size->second);
+    if (!texture) {
+      return false;
+    }
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_UpdateTexture(texture, nullptr, rgba.data(), size->first * 4);
+    asset.texture = texture;
+    asset.width = size->first;
+    asset.height = size->second;
+    return true;
+  }
+
+  bool drawUiImageContain(UiImageAsset& asset, const SDL_Rect& bounds, Uint8 alpha = 255,
+                          SDL_Color tint = {255, 255, 255, 255}) {
+    if (bounds.w <= 0 || bounds.h <= 0) {
+      return false;
+    }
+    if (!ensureUiImageLoaded(asset) || !asset.texture || asset.width <= 0 || asset.height <= 0) {
+      return false;
+    }
+    double sx = static_cast<double>(bounds.w) / static_cast<double>(asset.width);
+    double sy = static_cast<double>(bounds.h) / static_cast<double>(asset.height);
+    double scale = std::min(sx, sy);
+    int drawW = std::max(1, static_cast<int>(std::lround(static_cast<double>(asset.width) * scale)));
+    int drawH = std::max(1, static_cast<int>(std::lround(static_cast<double>(asset.height) * scale)));
+    SDL_Rect dst {
+      bounds.x + (bounds.w - drawW) / 2,
+      bounds.y + (bounds.h - drawH) / 2,
+      drawW,
+      drawH
+    };
+    SDL_SetTextureColorMod(asset.texture, tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaMod(asset.texture, alpha);
+    SDL_RenderTexture(controlRenderer_, asset.texture, nullptr, &dst);
+    SDL_SetTextureAlphaMod(asset.texture, 255);
+    SDL_SetTextureColorMod(asset.texture, 255, 255, 255);
+    return true;
+  }
+
+  bool drawUiImageContainTinted(UiImageAsset& asset, const SDL_Rect& bounds, Uint8 alpha = 255) {
+    return drawUiImageContain(asset, bounds, alpha, pal.deep);
+  }
+
+  bool drawUiImageCover(UiImageAsset& asset, const SDL_Rect& bounds, Uint8 alpha = 255) {
+    if (bounds.w <= 0 || bounds.h <= 0) return false;
+    if (!ensureUiImageLoaded(asset) || !asset.texture || asset.width <= 0 || asset.height <= 0) return false;
+    double sx = static_cast<double>(bounds.w) / static_cast<double>(asset.width);
+    double sy = static_cast<double>(bounds.h) / static_cast<double>(asset.height);
+    double scale = std::max(sx, sy);
+    int drawW = std::max(1, static_cast<int>(std::lround(static_cast<double>(asset.width) * scale)));
+    int drawH = std::max(1, static_cast<int>(std::lround(static_cast<double>(asset.height) * scale)));
+    SDL_Rect dst {
+      bounds.x + (bounds.w - drawW) / 2,
+      bounds.y + (bounds.h - drawH) / 2,
+      drawW, drawH
+    };
+    SDL_SetTextureAlphaMod(asset.texture, alpha);
+    SDL_SetRenderClipRect(controlRenderer_, &bounds);
+    SDL_RenderTexture(controlRenderer_, asset.texture, nullptr, &dst);
+    SDL_SetRenderClipRect(controlRenderer_, nullptr);
+    SDL_SetTextureAlphaMod(asset.texture, 255);
+    return true;
+  }
+
+  // ─── Theme system ─────────────────────────────────────────────────────────
+  // Reads DECKBOY_THEME env var and applies the matching theme file.
+  // Theme files live at data/themes/<name>/theme.txt.
+  // Keys map directly onto the kScreen*/kShell* color inline globals.
+
+  void applyThemeFromFile(const fs::path& path) {
+    std::ifstream f(path);
+    if (!f) return;
+    std::string line;
+    auto parseHex = [](const std::string& s) -> std::uint32_t {
+      try { return static_cast<std::uint32_t>(std::stoul(s, nullptr, 16)); }
+      catch (...) { return 0xFFFFFFFFu; }
+    };
+    themeCreatures_.clear();
+    bool sawFg = false;
+    bool sawTile = false;
+    bool sawFgSoft = false;
+    while (std::getline(f, line)) {
+      if (line.empty() || line[0] == '#') continue;
+      auto tab = line.find('\t');
+      if (tab == std::string::npos) continue;
+      std::string key = line.substr(0, tab);
+      std::string val = line.substr(tab + 1);
+      // trim trailing whitespace
+      while (!val.empty() && (val.back() == '\r' || val.back() == '\n' || val.back() == ' '))
+        val.pop_back();
+      std::uint32_t c = parseHex(val);
+      if      (key == "shell_outer")     kShellOuterColor    = c;
+      else if (key == "shell_inner")     kShellInnerColor    = c;
+      else if (key == "shell_shadow")    kShellShadowColor   = c;
+      else if (key == "screen_light")    kScreenLightColor   = c;
+      else if (key == "screen_mid")      kScreenMidColor     = c;
+      else if (key == "screen_dark")     kScreenDarkColor    = c;
+      else if (key == "screen_deep")     kScreenDeepColor    = c;
+      else if (key == "screen_ink_soft") kScreenInkSoftColor = c;
+      else if (key == "screen_fg")     { kScreenFgColor      = c; sawFg = true; }
+      else if (key == "screen_tile")   { kScreenTileColor    = c; sawTile = true; }
+      else if (key == "screen_fg_soft"){ kScreenFgSoftColor  = c; sawFgSoft = true; }
+      else if (key == "button_bezel")    kButtonBezelColor   = c;
+      else if (key == "delete_bezel")    kDeleteBezelColor   = c;
+      // creature<TAB><species><TAB><count> -- a theme asking for company.
+      // Unknown species are ignored rather than refused: a theme written for
+      // a newer build should still load, minus the animal this one has never
+      // heard of.
+      else if (key == "creature") {
+        const auto sep = val.find('\t');
+        const std::string species = val.substr(0, sep);
+        int count = 1;
+        if (sep != std::string::npos) {
+          try { count = std::clamp(std::stoi(val.substr(sep + 1)), 1, 12); }
+          catch (...) { count = 1; }
+        }
+        deckboy::creatures::Species kind;
+        if (deckboy::creatures::speciesFromToken(species, kind)) {
+          themeCreatures_.push_back({kind, count});
+        }
+      }
+      else if (key == "scanline_alpha") {
+        try { pal.scanlineAlpha = static_cast<Uint8>(std::clamp(std::stoi(val), 0, 255)); }
+        catch (...) { pal.scanlineAlpha = 18; }
+      }
+    }
+    // Back-compat: a theme without screen_fg uses its screen_deep as on-body
+    // ink, and without screen_tile uses its screen_light as tile fill —
+    // exactly the old behavior, so every existing theme is untouched.
+    if (!sawFg) kScreenFgColor = kScreenDeepColor;
+    if (!sawTile) kScreenTileColor = kScreenLightColor;
+    if (!sawFgSoft) kScreenFgSoftColor = kScreenDarkColor;
+  }
+
+  void loadTheme(const std::string& name) {
+    fs::path themePath = Paths::dataDir() / "themes" / name / "theme.txt";
+    if (!fs::exists(themePath)) {
+      std::cerr << "Theme not found: " << themePath << '\n';
+      return;
+    }
+    applyThemeFromFile(themePath);
+    rebuildPalette();
+    currentThemeName_ = name;
+    rebuildCreatures();
+  }
+
+  void loadThemeFromEnv() {
+    const char* env = std::getenv("DECKBOY_THEME");
+    if (!env || std::string(env).empty()) return;
+    loadTheme(std::string(env));
+  }
+
+  // Splash candidate chain for a given character name. The pick() helper in
+  // initUiAssetPackPaths takes the first that exists on disk. The .gif/.mp4
+  // entries are placeholders — when the splash overlay learns to play an
+  // animated form, these get tried before the static .png. The legacy v2
+  // filename (splash_boot_deckgirl@1x.png) and the v074 plain art stay at
+  // the tail so a stripped pack still boots without a missing-asset hole.
+  std::vector<fs::path> pickSplashCandidates(const std::string& character) {
+    std::string name = character.empty() ? std::string("deckbot") : character;
+    // "none" MEANS NONE. No art is offered, so the splash draws nothing and
+    // the boot goes straight to the deck.
+    if (name == "none") {
+      return {};
+    }
+    return {
+      fs::path("splash") / (std::string("deckboy_splash_") + name + ".mp4"),
+      fs::path("splash") / (std::string("deckboy_splash_") + name + ".gif"),
+      fs::path("splash") / (std::string("deckboy_splash_") + name + ".png"),
+      // THE GENERIC FALLBACK ONLY. This used to list the deckgirl boot image
+      // ahead of it, for every character -- so choosing Deckbot and having its
+      // art go missing put the deckgirl illustration back on screen, with the
+      // setting still saying Deckbot. A fallback that ignores the choice is
+      // not a fallback, it is the setting not working.
+      fs::path("splash") / "deckboy_splash_v074.png"
+    };
+  }
+
+  // Free every TTF_Font we hold. Used during shutdown and any time we need
+  // to reload fonts at a different point size (UI scale change).
+  void releaseFonts() {
+    // The ladders and the measurement cache are keyed by font POINTER, and the
+    // allocator will hand these same addresses back for the next set of fonts.
+    // Both have to go before the faces they describe do.
+    for (auto& entry : fontLadders_) {
+      for (auto& sized : entry.second.bySize) {
+        if (sized.second) {
+          deckboy::render::shaping::forgetFace(sized.second);
+          TTF_CloseFont(sized.second);
+        }
+      }
+    }
+    fontLadders_.clear();
+    textMeasureCache_.clear();
+    // Same reasoning, and it matters more here: a cached TEXTURE keyed on a
+    // recycled font pointer does not merely mis-measure, it draws the old
+    // face's glyphs at the new face's call site.
+    purgeTextTextureCache(nullptr);
+    // The shaper keys its fallback faces on the font's address, which the
+    // allocator hands to the next font opened: it forgets first.
+    auto close = [](TTF_Font*& f) {
+      if (f) {
+        deckboy::render::shaping::forgetFace(f);
+        TTF_CloseFont(f);
+        f = nullptr;
+      }
+    };
+    close(fontLarge_);
+    close(fontBase_);
+    close(fontSmall_);
+    close(fontMono_);
+    for (auto& entry : fontPreviewFaces_) close(entry.second);
+    fontPreviewFaces_.clear();
+    close(fontPixel_);
+    close(fontPixelSmall_);
+    close(fontPixelTitle_);
+  }
+
+  // Load (or reload) the six UI fonts at sizes derived from the linux
+  // baseline (large 32, base 21, small 17, mono 18, pixel 24, pixel-small
+  // 12) multiplied by the operator's UI scale. Windows historically renders
+  // ~2pt larger than the layout expects because of how its DPI baseline
+  // differs, so we apply a small platform nudge before the scale.
+  bool loadFonts(double scale) {
+    if (!std::isfinite(scale) || scale <= 0.0) {
+      scale = 1.0;
+    }
+    scale = std::clamp(scale, 0.75, 3.0);
+#ifdef _WIN32
+    const double platformNudge = 0.90;  // see comment above
+#else
+    const double platformNudge = 1.00;
+#endif
+    const double k = scale * platformNudge;
+    auto pt = [&](int base) {
+      return std::max(6, static_cast<int>(std::lround(base * k)));
+    };
+    auto sans  = Paths::fontPath(Paths::FontName::Sans).string();
+    auto mono  = Paths::fontPath(Paths::FontName::Mono).string();
+    auto pixel = Paths::fontPath(Paths::FontName::Pixel).string();
+
+    // ── THE LANGUAGE MAY NEED A DIFFERENT FACE ──────────────────────────────
+    //
+    // Liberation has no CJK, no Devanagari, no Arabic and no Alienese, so a
+    // language written in those draws as empty boxes no matter how good the
+    // translation is. The language names the faces it can use, in order, and
+    // this looks for each one in data/fonts and then among the system fonts.
+    //
+    // Almost always it is already installed: Yu Gothic ships with Windows,
+    // Hiragino with macOS, Noto with most Linux desktops. Naming all three
+    // means Deckboy reads Japanese everywhere without carrying sixteen
+    // megabytes of glyphs that every one of those machines already has.
+    //
+    // ONLY THE SANS. The pixel face used to be replaced too, because a pixel
+    // face that could not draw the language was the half of the interface an
+    // operator reads most. It can now: the shaper draws what it lacks from the
+    // fallback faces, matched to its size. Replacing it put Arabic and Persian
+    // chrome in a regular face at the pixel face's point size, which reads a
+    // third smaller -- the tiny labels on the first Arabic desk.
+    //
+    // A CYPHER'S FACE IS NEVER THE SANS. It draws the cypher's symbols and
+    // nothing else, and the sans also draws lower thirds on air. Finding it is
+    // what tells the cypher it may write those symbols; the fallback chain
+    // then draws them in every face, the chrome's included.
+    {
+      const auto candidates = deckboy::core::i18n::activeFontCandidates();
+      std::string found;
+      for (const std::string& name : candidates) {
+        std::error_code fec;
+        const fs::path bundled = Paths::dataDir() / "fonts" / name;
+        if (fs::exists(bundled, fec)) { found = bundled.string(); break; }
+        const fs::path system = Paths::systemFontDir() / name;
+        if (fs::exists(system, fec)) { found = system.string(); break; }
+      }
+      deckboy::core::i18n::noteFontResolved(!found.empty());
+      if (!found.empty() && !deckboy::core::i18n::activeIsCypher()) {
+        sans = found;
+      }
+    }
+    // HYBRID (the owner, 2026-08-19): pixel face on the CHROME, readable sans for
+    // user text. Press Start 2P looks right and reads fine on short strings you
+    // already know -- button labels, panel headers, section titles. It reads
+    // badly on arbitrary filenames: at UI sizes 0/O and 6/G are near-identical,
+    // so "S06E01" scanned as "S0GE0" in the cue list.
+    //
+    // So these three stay SANS. Chrome sites use fontPixel_/fontPixelSmall_.
+    // Do not "unify" them back to one face; the split is the whole point.
+    // Keep the working faces until their replacements open. A font path can
+    // disappear, or a language can select an existing but unreadable file.
+    // Retrying that file at 1x does not repair it, and releasing first leaves
+    // the running desk without labels after both attempts fail.
+    auto open = [&](const std::string& path, int size) {
+      TTF_Font* font = TTF_OpenFont(path.c_str(), static_cast<float>(size));
+      if (!font) {
+        renderDiagnosticLog("font load failed: " + path + " size=" +
+                            std::to_string(size) + " (" + SDL_GetError() + ")");
+      }
+      return font;
+    };
+    std::array<TTF_Font*, 7> nextFonts {
+      open(sans, pt(32)), open(sans, pt(21)), open(sans, pt(17)),
+      open(mono, pt(18)), open(pixel, pt(24)), open(pixel, pt(12)),
+      open(pixel, pt(42))
+    };
+    // Where each one actually came from and at what size, for the shaper,
+    // which opens its fallback faces to match.
+    std::array<std::string, 7> nextPaths {sans, sans, sans, mono, pixel, pixel, pixel};
+    const std::array<int, 7> nextSizes {pt(32), pt(21), pt(17), pt(18), pt(24), pt(12), pt(42)};
+    // The chrome is drawn in the pixel face. If that one will not open, draw
+    // the chrome in the sans rather than in nothing: every header and button
+    // label would otherwise be blank while the rest of the desk reads.
+    for (int i = 0; i < 3; ++i) {
+      if (!nextFonts[4 + i]) {
+        nextFonts[4 + i] = open(sans, nextSizes[4 + i]);
+        nextPaths[4 + i] = sans;
+      }
+    }
+    if (!nextFonts[0] || !nextFonts[1] || !nextFonts[2] || !nextFonts[3]) {
+      for (TTF_Font* font : nextFonts) {
+        if (font) TTF_CloseFont(font);
+      }
+      return false;
+    }
+    releaseFonts();  // also invalidates textures and measurements of the old faces
+    fontLarge_      = nextFonts[0];
+    fontBase_       = nextFonts[1];
+    fontSmall_      = nextFonts[2];
+    fontMono_       = nextFonts[3];
+    fontPixel_      = nextFonts[4];
+    fontPixelSmall_ = nextFonts[5];
+    // OPENED HERE, not after the direction block below. It used to be opened
+    // last, which put it in the right-to-left loop while it still held the
+    // PREVIOUS load's pointer -- freed by releaseFonts on any UI-scale change.
+    // Harmless in a left-to-right interface, which is the only reason it was
+    // never seen.
+    fontPixelTitle_ = nextFonts[6];  // splash/startup headline
+
+    // ── WHAT THESE FACES CANNOT DRAW ────────────────────────────────────────
+    //
+    // Liberation and the pixel face draw Latin, Greek and Cyrillic. Everything
+    // else a show can contain -- a cue named in Japanese on an English desk, an
+    // Arabic lower third, a Persian file name -- comes from the fallback chain,
+    // in the faces this machine has, ordered for the interface language.
+    deckboy::render::shaping::setFallbackChain(
+      deckboy::render::scriptFallbacks(deckboy::core::i18n::activeCode()));
+    for (std::size_t i = 0; i < nextFonts.size(); ++i) {
+      if (nextFonts[i]) {
+        deckboy::render::shaping::registerFace(nextFonts[i], nextPaths[i],
+                                               static_cast<float>(nextSizes[i]));
+      }
+    }
+
+    // What each face is and how big, so a label that overflows can be given a
+    // smaller sibling instead of resizing the one everything else is using.
+    auto ladder = [&](TTF_Font* f, const std::string& path, int size) {
+      if (f) fontLadders_[f] = FontLadder{path, size, {}};
+    };
+    ladder(fontLarge_,      sans,  pt(32));
+    ladder(fontBase_,       sans,  pt(21));
+    ladder(fontSmall_,      sans,  pt(17));
+    ladder(fontMono_,       mono,  pt(18));
+    ladder(fontPixel_,      pixel, pt(24));
+    ladder(fontPixelSmall_, pixel, pt(12));
+
+    // ── CAN THIS BUILD SHAPE AT ALL ─────────────────────────────────────────
+    //
+    // TTF_SetFontDirection returns false when SDL_ttf was built without
+    // HarfBuzz, and such a build reverses glyphs without joining them: for
+    // Arabic that looks like Arabic to somebody who does not read it and is
+    // wrong to everybody who does. So the answer is recorded once and the
+    // language layer stops offering scripts that need shaping when it is no.
+    //
+    // DIRECTION IS NO LONGER SET HERE. It used to be set on the whole font for
+    // a right-to-left language and flipped per label, which reversed the
+    // numbers inside an Arabic label ("%59"). The shaper now runs the Unicode
+    // bidi algorithm on every string and sets the direction per piece.
+    {
+      static bool probed = false;
+      if (!probed && fontSmall_) {
+        probed = true;
+        const bool can = TTF_SetFontDirection(fontSmall_, TTF_DIRECTION_RTL);
+        TTF_SetFontDirection(fontSmall_, TTF_DIRECTION_LTR);
+        deckboy::core::i18n::noteShapingAvailable(can);
+      }
+    }
+    deckboy::core::i18n::noteRtlSupported(deckboy::core::i18n::activeIsRtl() &&
+                                          deckboy::core::i18n::shapingAvailable());
+    // Kerning OFF for every UI font. At these pixel sizes a negative kern pair
+    // rounds to a whole pixel or two, which tucks the second glyph under the
+    // first hard enough that the word visibly splits — "Target URL" rendered as
+    // "Ta rget URL", "Top" as "To p". Typographically the kern is "correct";
+    // at 17px in a control label it just reads as a broken word, and it made
+    // label widths depend on which letters happened to be adjacent. Even
+    // advances keep text placement predictable, which is the contract this UI
+    // holds itself to. TTF_GetStringSize measures with the same setting, so
+    // layout and paint stay in agreement.
+    for (TTF_Font* f : {fontLarge_, fontBase_, fontSmall_, fontMono_,
+                        fontPixel_, fontPixelSmall_, fontPixelTitle_}) {
+      if (f) {
+        TTF_SetFontKerning(f, false);
+      }
+    }
+    return fontLarge_ && fontBase_ && fontSmall_ && fontMono_;
+  }
+
+  // True when the operator is in touch mode (Pocket 3 preset or a future
+  // touch-explicit setting). Used by render code to skip hover-only
+  // affordances that don't translate to a tap-only input model.
+  bool inTouchMode() const { return project_.interactionMode == "touch"; }
+
+  // Recompute the live layout-metric globals (kLayoutHeaderHeight etc.) from
+  // their immutable base values × the given scale. Snaps each result to at
+  // least 1px to avoid divide-by-zero in snapDownToGrid. Callers should hit
+  // this before the next render frame so panel/button geometry matches the
+  // new metrics.
+  // Scale a pixel constant that was authored at 1x UI scale.
+  //
+  // Fonts and the kLayout* metrics already follow Project::uiScale, but panel
+  // geometry inside the settings modal is written as literal pixels. Routing
+  // those literals through here keeps chrome and type growing together. At
+  // uiScale 1.0 this is the identity, so the 1x layout is bit-identical — that
+  // property is what makes the sweep safe to apply widely.
+  int uiScaled(int base) const {
+    // effectiveUiScale, not the raw setting. uiScale <= 0 is the "follow the
+    // desktop" sentinel, and reading it raw made every uiScaled() call fall
+    // back to 1.0 -- so on a 150% desktop the fonts grew and the metrics that
+    // hold them did not, which is why rows clipped their own labels.
+    double scale = effectiveUiScale();
+    if (!std::isfinite(scale) || scale <= 0.0) {
+      scale = 1.0;
+    }
+    if (scale == 1.0) {
+      return base;
+    }
+    int scaled = static_cast<int>(std::lround(base * scale));
+    return base > 0 ? std::max(1, scaled) : scaled;
+  }
+
+  void rebuildLayoutMetrics(double scale) {
+    if (!std::isfinite(scale) || scale <= 0.0) scale = 1.0;
+    auto sc = [scale](int base) {
+      return std::max(1, static_cast<int>(std::lround(base * scale)));
+    };
+    kLayoutSpacingUnit     = sc(kLayoutSpacingUnitBase);
+    kLayoutPanelPadding    = sc(kLayoutPanelPaddingBase);
+    kLayoutPanelGap        = sc(kLayoutPanelGapBase);
+    kLayoutPanelBorder     = std::max(1, sc(kLayoutPanelBorderBase));
+    kLayoutTextInset       = sc(kLayoutTextInsetBase);
+    kLayoutHeaderHeight    = sc(kLayoutHeaderHeightBase);
+    kLayoutBottomBarHeight = sc(kLayoutBottomBarHeightBase);
+    kLayoutButtonHeight    = sc(kLayoutButtonHeightBase);
+    kLayoutButtonPadding   = sc(kLayoutButtonPaddingBase);
+    kLayoutButtonGap       = sc(kLayoutButtonGapBase);
+    kRowHeight             = sc(kRowHeightBase);
+  }
+
+  // Re-open every font AND rebuild every layout metric at the project's
+  // current UI scale. Safe to call from the settings handler — releaseFonts
+  // drops the old textures and the existing rendering code picks the new
+  // fonts and metrics up on the next frame.
+  // WHAT THE DESKTOP IS ALREADY SET TO.
+  //
+  // SDL makes the process DPI-aware on Windows, so on a desktop at 150% the
+  // window is handed real physical pixels and Deckboy drew into them at 1:1 --
+  // which is not blurry, it is SMALL. Every other application on that machine
+  // is already a size the operator chose; arriving at two thirds of it is
+  // Deckboy disagreeing with the desktop, not a preference.
+  //
+  // Returns 1.0 when the window is not up yet or the platform has no opinion,
+  // so nothing here can make the UI vanish before the first frame.
+  double desktopUiScale() const {
+    if (!controlWindow_) return 1.0;
+    const float scale = SDL_GetWindowDisplayScale(controlWindow_);
+    if (!(scale > 0.1f) || !(scale < 8.0f)) return 1.0;
+    return static_cast<double>(scale);
+  }
+
+  // The scale actually drawn at: the operator's choice, or the desktop's when
+  // they have not made one. uiScale <= 0 is the "follow the desktop" value,
+  // which is what a show saved before this existed does NOT contain -- those
+  // carry 1.0 and keep behaving exactly as they did.
+  double chosenUiScale() const {
+    if (project_.uiScale > 0.01) return project_.uiScale;
+    return std::clamp(desktopUiScale(), 0.75, 3.0);
+  }
+
+  // THE WINDOW WINS. The layout is designed to hold together down to about
+  // 1366x768 at 1x; below that at a given scale, the bottom bar kept its full
+  // height, the timeline slid under it, and every label ellipsized -- on a
+  // small external monitor the whole desk squished. So a window smaller than
+  // the design at the chosen scale draws at a SMALLER scale, fonts and metrics
+  // together, until it fits. Never larger than chosen, and never below 0.6x,
+  // where the text stops being text.
+  //
+  // Stepped in twentieths, rounding DOWN, so a resize by a few pixels does not
+  // reload every font and the result always fits rather than nearly fits.
+  static constexpr int kFitDesignW = 1366;
+  static constexpr int kFitDesignH = 768;
+  double windowFitUiScale(double chosen) const {
+    if (!controlWindow_ || !(chosen > 0.0)) return chosen;
+    int w = 0, h = 0;
+    SDL_GetWindowSize(controlWindow_, &w, &h);
+    if (w <= 0 || h <= 0) return chosen;
+    const double fit = std::min(static_cast<double>(w) / (kFitDesignW * chosen),
+                                static_cast<double>(h) / (kFitDesignH * chosen));
+    if (fit >= 1.0) return chosen;
+    const double stepped = std::floor(chosen * fit * 20.0 + 1e-6) / 20.0;
+    return std::max(std::min(0.6, chosen), stepped);
+  }
+
+  // The scale actually drawn at RIGHT NOW: what the fonts were loaded at and
+  // the metrics built for. uiScaled() reads it, so the two can never disagree
+  // -- including in the moment between a resize and the reload it asks for.
+  double effectiveUiScale() const {
+    if (appliedUiScale_ > 0.0) return appliedUiScale_;
+    return chosenUiScale();
+  }
+
+  // Watched every tick: a resize, or a move to a screen with different
+  // desktop scaling, changes the scale the window wants. Applied once the
+  // window has held still for a moment -- dragging an edge would otherwise
+  // reload every font on every frame of the drag.
+  void serviceWindowFitScale() {
+    if (!controlWindow_ || appliedUiScale_ <= 0.0) return;
+    const double want = windowFitUiScale(chosenUiScale());
+    const auto now = std::chrono::steady_clock::now();
+    if (std::abs(want - appliedUiScale_) < 0.001) {
+      fitScalePending_ = false;
+      return;
+    }
+    if (!fitScalePending_ || std::abs(want - fitScalePendingValue_) > 0.001) {
+      fitScalePending_ = true;
+      fitScalePendingValue_ = want;
+      fitScalePendingSince_ = now;
+      return;
+    }
+    if (now - fitScalePendingSince_ >= std::chrono::milliseconds(300)) {
+      fitScalePending_ = false;
+      applyUiScale();
+    }
+  }
+
+  void applyUiScale() {
+    double scale = windowFitUiScale(chosenUiScale());
+    // Before the first project is loaded, init() opened the fonts at 1x.
+    if (appliedUiScale_ <= 0.0) appliedUiScale_ = 1.0;
+    if (!loadFonts(scale)) {
+      // A size-specific failure can recover at 1x. Otherwise keep both the
+      // old fonts and their layout metrics; changing just one misplaces text.
+      if (!loadFonts(1.0)) {
+        renderDiagnosticLog("font reload failed; keeping working fonts and UI scale");
+        return;
+      }
+      scale = 1.0;
+    }
+    appliedUiScale_ = scale;
+    rebuildLayoutMetrics(scale);
+    // The pointer is part of the furniture: it has to grow with everything
+    // else or it becomes a speck on a 4K desk.
+    refreshMiamiCursor();
+  }
+
+  // Re-resolve and reload the splash texture using the current project
+  // setting. Safe to call any time the character changes — releaseUiImage
+  // drops the cached texture so the next render frame re-decodes from disk.
+  // True only on the very first launch on this machine. Determined ONCE at
+  // boot and remembered for the session, so the answer cannot change halfway
+  // through (refreshSplashAsset runs again whenever the mascot changes).
+  //
+  // The marker lives in stateDir() because it is written state, not a bundled
+  // resource -- inside a macOS .app the resource dir is sealed by the code
+  // signature and writing there breaks `codesign --verify`.
+  void resolveFirstRunFlag() {
+    std::error_code ec;
+    const fs::path marker = Paths::stateDir() / "deckboy-first-run";
+    if (fs::exists(marker, ec)) {
+      firstRunEver_ = false;
+      return;
+    }
+    firstRunEver_ = true;
+    fs::create_directories(Paths::stateDir(), ec);
+    std::ofstream out(marker);
+    // Nothing reads the contents; a human finding the file should be able to
+    // tell what it is and that deleting it is harmless.
+    out << "Deckboy has been launched on this machine.\n"
+        << "Delete this file to see the first-run splash again.\n";
+    // If the write fails the flag still holds for THIS session -- the operator
+    // gets the branded splash once more next boot, which is harmless. Better
+    // than refusing to boot over a splash.
+  }
+
+  void refreshSplashAsset() {
+    if (!uiPackAvailable_) {
+      return;
+    }
+    // THE ABOUT MASTHEAD TOO, because it carries the same illustrated
+    // character and the mascot setting governs both. Its path is resolved once
+    // at startup, so changing the setting mid-session left the art on screen
+    // with the control saying it was off -- the setting appearing not to work,
+    // which is worse than not having it.
+    {
+      const bool wantNone = project_.splashCharacter == "none";
+      const bool haveLogo = !uiAboutLogo_.path.empty();
+      if (wantNone && haveLogo) {
+        releaseUiImage(uiAboutLogo_);
+        uiAboutLogo_.path.clear();
+      } else if (!wantNone && !haveLogo) {
+        const fs::path logo = uiPackRoot_ / "header" / "about_logo.png";
+        std::error_code logoEc;
+        if (fs::exists(logo, logoEc)) {
+          uiAboutLogo_.path = logo;
+        }
+      }
+    }
+    fs::path chosen;
+    std::error_code ec;
+    // Every boot draws a different splash, on EVERY theme. This used to be
+    // gated so the default colorway always showed the branded wordmark, which
+    // meant most operators never saw the pool at all.
+    //
+    // Two pools, differing only in how much theme tint they can take:
+    //   splash/cycle/       grayscale masters  -> full accent tint
+    //   splash/cycle_color/ finished colour art -> light tint only
+    //   splash/cycle_true/  art shown exactly as made -> no tint at all
+    std::vector<fs::path> gray, colour, trueColour;
+    // JPEG AS WELL AS PNG, because these are PHOTOGRAPHS as far as a codec is
+    // concerned. A dense painted scene re-encoded as PNG at the pool's own
+    // size came out LARGER than the source and about three times the size of
+    // the same picture as a high-quality JPEG -- for art that is drawn
+    // full-bleed behind a translucent card with a colour tint over it, where
+    // the difference is not visible at 1:1. The decoder is ffmpeg and never
+    // cared; only this filter did.
+    //
+    // Alpha is not lost by the change: the splash is drawn as a full-bleed
+    // cover with one alpha applied to the whole texture, never per-pixel.
+    auto gather = [&](const fs::path& dir, std::vector<fs::path>& into) {
+      if (!fs::is_directory(dir, ec)) return;
+      for (const auto& e : fs::directory_iterator(dir, ec)) {
+        if (!e.is_regular_file()) continue;
+        const std::string ext = toLower(e.path().extension().string());
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
+          into.push_back(e.path());
+        }
+      }
+      std::sort(into.begin(), into.end());
+    };
+    gather(uiPackRoot_ / "splash" / "cycle", gray);
+    gather(uiPackRoot_ / "splash" / "cycle_color", colour);
+    gather(uiPackRoot_ / "splash" / "cycle_true", trueColour);
+
+    // The branded wordmark splash joins the rotation rather than being a
+    // special case that suppressed it. This is also what keeps the Mascot
+    // setting HONEST: once every boot draws from the pool, a setting that only
+    // fed the old branded-only path would change nothing an operator could
+    // ever see -- a dead control.
+    std::vector<fs::path> branded;
+    for (const auto& rel : pickSplashCandidates(project_.splashCharacter)) {
+      fs::path candidate = uiPackRoot_ / rel;
+      if (fs::exists(candidate, ec)) { branded.push_back(candidate); break; }
+    }
+
+    // The VERY FIRST launch on this machine always shows the green branded
+    // splash. A first impression should be the wordmark, not a random scene --
+    // the rotation is a reward for coming back, not the introduction. Every
+    // later boot draws from the pool.
+    std::vector<fs::path> pool;
+    if (firstRunEver_ && !branded.empty()) {
+      pool.push_back(branded.front());   // a pool of exactly one: the wordmark
+    } else {
+      pool = gray;
+      pool.insert(pool.end(), colour.begin(), colour.end());
+      pool.insert(pool.end(), trueColour.begin(), trueColour.end());
+      pool.insert(pool.end(), branded.begin(), branded.end());
+    }
+    if (!pool.empty()) {
+      // Seeded from random_device, not the performance counter: the counter is
+      // read at almost the same point in every boot, so its low bits are not
+      // reliably spread across a small pool.
+      static std::mt19937 rng{std::random_device{}()};
+      std::uniform_int_distribution<std::size_t> pick(0, pool.size() - 1);
+      std::size_t idx = pick(rng);
+      // Avoid repeating the previous boot's pick when there is a choice, so
+      // "random" does not visibly stutter on the same image twice running.
+      if (pool.size() > 1 && pool[idx] == lastSplashChoice_) {
+        idx = (idx + 1) % pool.size();
+      }
+      chosen = pool[idx];
+      lastSplashChoice_ = chosen;
+      // Grayscale masters take the accent fully; finished colour art takes a
+      // little; the branded wordmark takes none, since it is already drawn in
+      // the house colours and tinting it would fight its own artwork.
+      if (std::find(branded.begin(), branded.end(), chosen) != branded.end() ||
+          std::find(trueColour.begin(), trueColour.end(), chosen) != trueColour.end()) {
+        splashTintStrength_ = 0.0f;
+      } else if (std::find(colour.begin(), colour.end(), chosen) != colour.end()) {
+        splashTintStrength_ = 0.35f;
+      } else {
+        splashTintStrength_ = 1.0f;
+      }
+    } else {
+      splashTintStrength_ = 0.0f;
+    }
+    if (chosen.empty()) {
+      auto candidates = pickSplashCandidates(project_.splashCharacter);
+      chosen = uiPackRoot_ / candidates.front();
+      for (const auto& rel : candidates) {
+        fs::path candidate = uiPackRoot_ / rel;
+        if (fs::exists(candidate)) {
+          chosen = candidate;
+          break;
+        }
+      }
+    }
+    if (uiSplashArt_.path != chosen) {
+      releaseUiImage(uiSplashArt_);
+      uiSplashArt_.path = chosen;
+    }
+    ensureUiImageLoaded(uiSplashArt_);
+  }
+
+  void initUiAssetPackPaths() {
+    fs::path dataDir = Paths::dataDir();
+    fs::path root = dataDir / kUiPackRelativePathV3;
+    if (!fs::exists(root)) {
+      root = dataDir / kUiPackRelativePathV2;
+    }
+    uiPackRoot_ = root;
+    uiPackAvailable_ = fs::exists(root);
+    if (!uiPackAvailable_) {
+      return;
+    }
+
+    auto pick = [&](const std::vector<fs::path>& relativeCandidates) -> fs::path {
+      for (const auto& rel : relativeCandidates) {
+        fs::path candidate = root / rel;
+        if (fs::exists(candidate)) {
+          return candidate;
+        }
+      }
+      return root / relativeCandidates.front();
+    };
+
+    uiHeaderArt_.path = pick({
+      fs::path("header") / "header_default.png",
+      fs::path("header") / "header_default@1x.png"
+    });
+    // The About masthead art carries the same illustrated character as the
+    // splash, so the mascot setting governs it too -- "none" means the
+    // character does not appear anywhere, which is what turning it off means.
+    // The wordmark and the rest of the page are untouched.
+    uiAboutLogo_.path = (project_.splashCharacter == "none")
+      ? fs::path()
+      : pick({fs::path("header") / "about_logo.png"});
+    // Splash is selected from project_.splashCharacter ("deckbot" or
+    // "deckgirl"). The named PNGs live next to a legacy fallback; future
+    // animated forms (.gif/.mp4) will be picked up by extending the
+    // pickSplashCandidates helper rather than by patching this list.
+    uiSplashArt_.path = pick(pickSplashCandidates(project_.splashCharacter));
+    uiMonitorFrameArt_.path = pick({
+      fs::path("monitor") / "monitor_frame.png",
+      fs::path("monitor") / "monitor_frame@1x.png"
+    });
+    uiOutputChipIdleArt_.path = pick({
+      fs::path("outputs") / "chip_idle.png",
+      fs::path("outputs") / "output_chip_idle@1x.png"
+    });
+    uiOutputChipArmedArt_.path = pick({
+      fs::path("outputs") / "chip_armed.png",
+      fs::path("outputs") / "output_chip_armed@1x.png"
+    });
+    uiOutputChipLiveArt_.path = pick({
+      fs::path("outputs") / "chip_live.png",
+      fs::path("outputs") / "output_chip_live@1x.png"
+    });
+    uiOutputChipWarnArt_.path = pick({
+      fs::path("outputs") / "chip_warning.png",
+      fs::path("outputs") / "output_chip_warn@1x.png"
+    });
+    uiOutputChipOffArt_.path = pick({
+      fs::path("outputs") / "chip_offline.png",
+      fs::path("outputs") / "output_chip_off@1x.png"
+    });
+    uiCueIconVideo_.path = pick({fs::path("cue_icons") / "video.png"});
+    uiCueIconImage_.path = pick({fs::path("cue_icons") / "image.png"});
+    uiCueIconBrowser_.path = pick({fs::path("cue_icons") / "browser.png"});
+    uiCueIconPattern_.path = pick({fs::path("cue_icons") / "pattern.png"});
+    uiCueIconPip_.path = pick({fs::path("cue_icons") / "pip.png",
+                               fs::path("cue_icons") / "source.png"});
+    uiCueIconLowerThird_.path = pick({fs::path("cue_icons") / "lowerthird.png"});
+    uiCueIconSource_.path = pick({fs::path("cue_icons") / "source.png"});
+    uiCueIconAudio_.path = pick({fs::path("cue_icons") / "audio.png"});
+    // Control / toolbar button icons
+    uiBtnImport_.path   = pick({fs::path("toolbar") / "import.png"});
+    uiBtnPlay_.path     = pick({fs::path("controls") / "play.png"});
+    uiBtnPause_.path    = pick({fs::path("controls") / "pause.png"});
+    uiBtnTake_.path     = pick({fs::path("controls") / "take.png"});
+    uiBtnStop_.path     = pick({fs::path("controls") / "stop.png"});
+    uiBtnRerack_.path   = pick({fs::path("controls") / "rerack.png"});
+    uiBtnClear_.path    = pick({fs::path("controls") / "clear.png"});
+    uiBtnSettings_.path = pick({fs::path("toolbar") / "prefs.png"});
+    uiBtnFullscreen_.path = pick({fs::path("controls") / "fullscreen.png"});
+    uiBtnWindow_.path     = pick({fs::path("controls") / "window.png"});
+    uiBtnBlackout_.path   = pick({fs::path("controls") / "blackout.png"});
+    uiModeLoopOn_.path    = pick({fs::path("mode_icons") / "loop_on.png"});
+    uiModeOnce_.path      = pick({fs::path("mode_icons") / "once.png"});
+    uiModeShuffleOn_.path = pick({fs::path("mode_icons") / "shuffle_on.png"});
+    uiModeOrder_.path     = pick({fs::path("mode_icons") / "order.png"});
+  }
+
+  void preloadUiAssets() {
+    if (!uiPackAvailable_) {
+      return;
+    }
+    ensureUiImageLoaded(uiHeaderArt_);
+    ensureUiImageLoaded(uiAboutLogo_);
+    ensureUiImageLoaded(uiSplashArt_);
+    ensureUiImageLoaded(uiMonitorFrameArt_);
+    ensureUiImageLoaded(uiOutputChipIdleArt_);
+    ensureUiImageLoaded(uiOutputChipArmedArt_);
+    ensureUiImageLoaded(uiOutputChipLiveArt_);
+    ensureUiImageLoaded(uiOutputChipWarnArt_);
+    ensureUiImageLoaded(uiOutputChipOffArt_);
+    ensureUiImageLoaded(uiCueIconVideo_);
+    ensureUiImageLoaded(uiCueIconImage_);
+    ensureUiImageLoaded(uiCueIconBrowser_);
+    ensureUiImageLoaded(uiCueIconPattern_);
+    ensureUiImageLoaded(uiCueIconPip_);
+    ensureUiImageLoaded(uiCueIconLowerThird_);
+    ensureUiImageLoaded(uiCueIconSource_);
+    ensureUiImageLoaded(uiCueIconAudio_);
+    ensureUiImageLoaded(uiBtnImport_);
+    ensureUiImageLoaded(uiBtnPlay_);
+    ensureUiImageLoaded(uiBtnPause_);
+    ensureUiImageLoaded(uiBtnTake_);
+    ensureUiImageLoaded(uiBtnStop_);
+    ensureUiImageLoaded(uiBtnRerack_);
+    ensureUiImageLoaded(uiBtnClear_);
+    ensureUiImageLoaded(uiBtnSettings_);
+    ensureUiImageLoaded(uiBtnFullscreen_);
+    ensureUiImageLoaded(uiBtnWindow_);
+    ensureUiImageLoaded(uiBtnBlackout_);
+    ensureUiImageLoaded(uiModeLoopOn_);
+    ensureUiImageLoaded(uiModeOnce_);
+    ensureUiImageLoaded(uiModeShuffleOn_);
+    ensureUiImageLoaded(uiModeOrder_);
+
+    // NOT ONE PICTURE CAME BACK. The pack is here -- uiPackAvailable_ said so
+    // above -- so this is not a missing asset, it is a decode that cannot
+    // run. Every one of these goes through ffprobe and then ffmpeg, and those
+    // same helpers decode the operator's media, so an app in this state is
+    // not going to play anything either.
+    //
+    // Counted rather than probed: this is the symptom itself, so an ffmpeg
+    // that runs and returns nothing cannot talk its way past it.
+    uiImagesDecoded_ = 0;
+    for (const UiImageAsset* asset : {
+           &uiHeaderArt_, &uiSplashArt_, &uiBtnTake_, &uiBtnStop_,
+           &uiModeLoopOn_, &uiModeOnce_, &uiCueIconVideo_ }) {
+      if (asset->texture) {
+        ++uiImagesDecoded_;
+      }
+    }
+  }
+
+  void releaseUiAssets() {
+    releaseUiImage(uiHeaderArt_);
+    releaseUiImage(uiAboutLogo_);
+    releaseUiImage(uiSplashArt_);
+    releaseUiImage(uiMonitorFrameArt_);
+    releaseUiImage(uiOutputChipIdleArt_);
+    releaseUiImage(uiOutputChipArmedArt_);
+    releaseUiImage(uiOutputChipLiveArt_);
+    releaseUiImage(uiOutputChipWarnArt_);
+    releaseUiImage(uiOutputChipOffArt_);
+    releaseUiImage(uiCueIconVideo_);
+    releaseUiImage(uiCueIconImage_);
+    releaseUiImage(uiCueIconBrowser_);
+    releaseUiImage(uiCueIconPattern_);
+    releaseUiImage(uiCueIconPip_);
+    releaseUiImage(uiCueIconLowerThird_);
+    releaseUiImage(uiCueIconSource_);
+    releaseUiImage(uiCueIconAudio_);
+    releaseUiImage(uiBtnImport_);
+    releaseUiImage(uiBtnPlay_);
+    releaseUiImage(uiBtnPause_);
+    releaseUiImage(uiBtnTake_);
+    releaseUiImage(uiBtnStop_);
+    releaseUiImage(uiBtnRerack_);
+    releaseUiImage(uiBtnClear_);
+    releaseUiImage(uiBtnSettings_);
+    releaseUiImage(uiBtnFullscreen_);
+    releaseUiImage(uiBtnWindow_);
+    releaseUiImage(uiBtnBlackout_);
+    releaseUiImage(uiModeLoopOn_);
+    releaseUiImage(uiModeOnce_);
+    releaseUiImage(uiModeShuffleOn_);
+    releaseUiImage(uiModeOrder_);
+  }
+
+  UiImageAsset* cueIconAssetForKind(CueKind kind) {
+    switch (kind) {
+      case CueKind::Video:      return &uiCueIconVideo_;
+      case CueKind::Image:      return &uiCueIconImage_;
+      case CueKind::Browser:    return &uiCueIconBrowser_;
+      case CueKind::Pattern:    return &uiCueIconPattern_;
+      case CueKind::Pip:        return &uiCueIconPip_;
+      case CueKind::LowerThird: return &uiCueIconLowerThird_;
+      case CueKind::Composite:  return &uiCueIconPattern_;
+      case CueKind::Audio:      return &uiCueIconAudio_;
+      case CueKind::Mic:        return &uiCueIconAudio_;
+      case CueKind::Timer:      return &uiCueIconPattern_;
+      case CueKind::WindowSource:
+      case CueKind::Camera:
+      case CueKind::Syphon:
+      case CueKind::NdiSource:  return &uiCueIconSource_;
+      case CueKind::SrtStream:  return &uiCueIconVideo_;
+      default:                  return nullptr;
+    }
+  }
+
+
+  struct MasterCueSidebarButtonHit {
+    SDL_Rect rect {};
+    int action = 0;
+    int presetIndex = -1;
+  };
+
+  struct MasterCueSidebarRowHit {
+    int presetIndex = -1;
+    SDL_Rect rowRect {};
+    SDL_Rect fireRect {};
+  };
+
+  struct MasterCueSidebarProgramHit {
+    int deckIndex = -1;
+    SDL_Rect rowRect {};
+    SDL_Rect selectedRect {};
+    SDL_Rect activeRect {};
+    SDL_Rect bypassRect {};
+    SDL_Rect prevRect {};
+    SDL_Rect nextRect {};
+  };
+
+  struct MonitorsTileHit {
+    int outputIndex = -1;
+    SDL_Rect rect {};
+  };
+
+  struct DecksPanelCueHit {
+    int deckIndex = -1;
+    int cueIndex = -1;
+    SDL_Rect rowRect {};
+  };
+
+  struct DecksPanelDeckButtonHit {
+    int deckIndex = -1;
+    int action = 0;
+    SDL_Rect rect {};
+  };
+
+
+  struct MasterCueRowHit {
+    int presetIndex = -1;
+    SDL_Rect rowRect {};
+    SDL_Rect fireRect {};
+    std::vector<SDL_Rect> slotRects;
+  };
+
+  struct OutputMenuButton {
+    SDL_Rect rect {};
+    int deckIndex = -1;
+    int outputIndex = -1;
+    int action = 0;
+  };
+
+  struct CueRowActionHit {
+    SDL_Rect rect {};
+    int deckIndex = -1;
+    int cueIndex = -1;
+    QuickAction action = QuickAction::ToggleLoop;
+    bool enabled = true;
+    std::string tip;
+  };
+
+  static constexpr int kDecksPanelDeckActionTake = 200;
+  static constexpr int kDecksPanelDeckActionStop = 201;
+  static constexpr int kDecksPanelDeckActionPlay = 202;
+  static constexpr int kOutputMenuActionFocus = 1;
+  static constexpr int kOutputMenuActionAddOutput = 3;
+  static constexpr int kOutputMenuActionRouteFocusDeck = 4;
+  static constexpr int kOutputMenuActionRouteAssignToggle = 5;
+  static constexpr int kOutputMenuActionRouteLayerDec = 6;
+  static constexpr int kOutputMenuActionRouteLayerInc = 7;
+  static constexpr int kOutputMenuActionRouteOutputPrev = 8;
+  static constexpr int kOutputMenuActionRouteOutputNext = 9;
+  static constexpr int kOutputMenuActionToggleFps = 10;
+  static constexpr int kOutputMenuActionRecover = 11;
+  static constexpr int kOutputMenuActionDisarm = 12;
+  static constexpr int kOutputMenuActionRouteLayerCycle = 13;
+  static constexpr int kOutputMenuActionSelectDisplay = 14;
+  static constexpr int kSettingsActionOutputRemove = 269;
+  static constexpr int kSettingsActionOutputToggle = 262;
+  static constexpr int kSettingsActionOutputDisplayPrev = 263;
+  static constexpr int kSettingsActionOutputDisplayNext = 264;
+  static constexpr int kSettingsActionOutputDisplayRescan = 265;
+  static constexpr int kSettingsActionRoutingLayerDec = 266;
+  static constexpr int kSettingsActionRoutingLayerInc = 267;
+  static constexpr int kSettingsActionRoutingAssignToggle = 268;
+  static constexpr int kSettingsActionOutputOverlayToggle = 283;
+  static constexpr int kSettingsActionOutputAlphaPrompt = 284;
+  static constexpr int kSettingsActionOutputDelayPrompt = 285;
+  static constexpr int kSettingsActionOutputColorSpaceCycle = 286;
+  static constexpr int kSettingsActionOutputDelayInc = 287;
+  static constexpr int kSettingsActionOutputLayoutSpan = 288;
+  static constexpr int kSettingsActionOutputLayoutDuplicate = 289;
+  static constexpr int kSettingsActionOutputOrientationCycle = 290;
+  static constexpr int kSettingsActionOutputTestCardToggle = 291;
+  static constexpr int kSettingsActionOutputTestCardAllToggle = 292;
+  static constexpr int kSettingsActionOutputTestCardExport = 769;   // test card -> movie files
+  static constexpr int kSettingsActionOutputWarpModeCycle = 293;
+  static constexpr int kSettingsActionOutputDisplayDropdown = 294;
+  static constexpr int kSettingsActionOutputDisplaySelectBase = 800; // 800 + displayIndex
+  static constexpr int kSettingsActionOutputStreamProtocolDropdown = 295;
+  static constexpr int kSettingsActionOutputMirrorDropdown = 296;
+  static constexpr int kSettingsActionPlaylistPrefsEdit = 500;
+  static constexpr int kSettingsActionPlaylistDefaultLoopToggle = 501;
+  static constexpr int kSettingsActionPlaylistDefaultFadeInToggle = 502;
+  static constexpr int kSettingsActionPlaylistDefaultFadeOutToggle = 503;
+  static constexpr int kSettingsActionPlaylistDefaultAudioToggle = 504;
+  static constexpr int kSettingsActionPlaylistDefaultPauseBeginToggle = 505;
+  static constexpr int kSettingsActionPlaylistDefaultPauseEndToggle = 506;
+  static constexpr int kSettingsActionPlaylistDefaultNextTransitionToggle = 507;
+  static constexpr int kSettingsActionOscQueryToggle = 508;
+  static constexpr int kSettingsActionOscQueryPortPrompt = 509;
+  static constexpr int kSettingsActionOscFeedbackMirrorToggle = 510;
+  static constexpr int kSettingsActionOscFeedbackRatePrompt = 511;
+  static constexpr int kSettingsActionIntegrationAtemToggle = 512;
+  static constexpr int kSettingsActionIntegrationNdiTriggerToggle = 513;
+  static constexpr int kSettingsActionIntegrationNmcToggle = 514;
+  static constexpr int kSettingsActionIntegrationMtcToggle = 515;
+  static constexpr int kSettingsActionIntegrationLtcToggle = 516;
+  static constexpr int kSettingsActionIntegrationArtNetToggle = 517;
+  static constexpr int kSettingsActionIntegrationArtNetPortPrompt = 518;
+  static constexpr int kSettingsActionIntegrationAllToggle = 519;
+  static constexpr int kSettingsActionIntegrationTimecodeChaseToggle = 520;
+  static constexpr int kSettingsActionIntegrationTimecodeRunToggle = 521;
+  static constexpr int kSettingsActionOutputEdgeBlendLInc = 600;
+  static constexpr int kSettingsActionOutputEdgeBlendLDec = 601;
+  static constexpr int kSettingsActionOutputEdgeBlendRInc = 602;
+  static constexpr int kSettingsActionOutputEdgeBlendRDec = 603;
+  static constexpr int kSettingsActionOutputEdgeBlendTInc = 604;
+  static constexpr int kSettingsActionOutputEdgeBlendTDec = 605;
+  static constexpr int kSettingsActionOutputEdgeBlendBInc = 606;
+  static constexpr int kSettingsActionOutputEdgeBlendBDec = 607;
+  static constexpr int kSettingsActionCanvasToggle = 608;
+  static constexpr int kSettingsActionCanvasWidthPrompt = 609;
+  static constexpr int kSettingsActionCanvasHeightPrompt = 610;
+  static constexpr int kSettingsActionTransitionSecondsDec = 611;
+  static constexpr int kSettingsActionTransitionSecondsInc = 612;
+  static constexpr int kSettingsActionTransitionStyleCycle = 613;
+  static constexpr int kSettingsActionThemeDropdown = 614;
+  // AOI is edited as a pixel rect (X/Y position + WxH size) of the output
+  // raster; the fractions in OutputTarget stay the storage format.
+  static constexpr int kSettingsActionOutputAoiXInc  = 615;
+  static constexpr int kSettingsActionOutputAoiXDec  = 616;
+  static constexpr int kSettingsActionOutputAoiYInc  = 617;
+  static constexpr int kSettingsActionOutputAoiYDec  = 618;
+  static constexpr int kSettingsActionOutputAoiWInc  = 619;
+  static constexpr int kSettingsActionOutputAoiWDec  = 620;
+  static constexpr int kSettingsActionOutputAoiHInc  = 621;
+  static constexpr int kSettingsActionOutputAoiHDec  = 622;
+  static constexpr int kSettingsActionOutputAoiReset = 623;
+  static constexpr int kSettingsActionIntegrationTslToggle    = 624;
+  static constexpr int kSettingsActionIntegrationTslPortPrompt = 625;
+  static constexpr int kSettingsActionIntegrationTslAddrPrompt = 626;
+  static constexpr int kSettingsActionAudioBufferCycle = 627;
+  static constexpr int kSettingsActionDeckLinkToggle = 628;
+  static constexpr int kSettingsActionDeckLinkDeviceDropdown = 629;
+  static constexpr int kSettingsActionDeckLinkModeDropdown = 630;
+  static constexpr int kSettingsActionDeckLink10BitToggle = 631;
+  static constexpr int kSettingsActionSpoutToggle = 632;
+  static constexpr int kSettingsActionSpoutNamePrompt = 633;
+  // Splash ON/OFF. It was the Mascot dropdown (Deckbot / Deckgirl / None);
+  // since every boot draws from the whole picture rotation, the character
+  // only ever chose one picture in ~27, so the row now keeps the part an
+  // operator can see: whether there is a splash at all.
+  static constexpr int kSettingsActionSplashToggle = 634;
+  static constexpr int kSettingsActionUiScaleDropdown = 635;
+  static constexpr int kSettingsActionPocket3Preset = 636;
+  static constexpr int kSettingsActionDisplayIdentify = 637;
+  // NOTE: 634–637 were double-allocated at one point (AllowRemote/StreamKey/
+  // VideoSubTab collided with Mascot/UiScale/Pocket3/Identify), which silently
+  // killed whichever button's handler ran second — the "Processing sub-tab
+  // does nothing" bug. Keep every id unique; next free: 647+.
+  static constexpr int kSettingsActionAllowRemoteToggle = 640;
+  static constexpr int kSettingsActionTrustedControllers = 840;
+  static constexpr int kSettingsActionCompanionPassphrase = 841;
+  static constexpr int kSettingsActionTrustLastRefused = 842;
+  // Live captions (app_live_captions.ipp): 843-849, and 850-857 one per output.
+  static constexpr int kSettingsActionLiveCaptionsToggle = 843;
+  static constexpr int kSettingsActionLiveCaptionsSource = 844;
+  static constexpr int kSettingsActionLiveCaptionsLanguage = 845;
+  static constexpr int kSettingsActionLiveCaptionsLines = 846;
+  static constexpr int kSettingsActionLiveCaptionsPosition = 847;
+  static constexpr int kSettingsActionLiveCaptionsSize = 848;
+  static constexpr int kSettingsActionLiveCaptionsTranscript = 849;
+  // 1552-1555: download one speech model (kModelChoices order). It was 851,
+  // inside the per-output block below, so OUT 2-5 fetched a model.
+  static constexpr int kSettingsActionCaptionModelBase = 1552;
+  static constexpr int kSettingsActionLiveCaptionsOutputBase = 850;  // 850-857
+  static constexpr int kSettingsActionOutputHdrToggle = 858;
+  static constexpr int kSettingsActionOutputHdrWhite = 859;
+  // The edge blend's curve, gamma, black lift and two-projector overlap.
+  static constexpr int kSettingsActionOutputBlendCurve = 860;
+  static constexpr int kSettingsActionOutputBlendGammaDec = 861;
+  static constexpr int kSettingsActionOutputBlendGammaInc = 862;
+  static constexpr int kSettingsActionOutputBlendLiftDec = 863;
+  static constexpr int kSettingsActionOutputBlendLiftInc = 864;
+  static constexpr int kSettingsActionOutputBlendPairDec = 865;
+  static constexpr int kSettingsActionOutputBlendPairInc = 866;
+  static constexpr int kSettingsActionOutputHdrSignal = 867;
+  static constexpr int kSettingsActionLearnBasics = 868;   // MENU > LEARN THE BASICS (the tour)
+  static constexpr int kSettingsActionStreamKeyPrompt = 641;
+  static constexpr int kSettingsActionVideoSubTabBase = 642; // 642–645 for 4 sub-tabs
+  static constexpr int kSettingsActionEncoderConvertAll = 647;
+  static constexpr int kSettingsActionEncoderAddFile = 648;
+  // Preset chips. 715-718 (656-701 and 715+ were the free blocks; 720 and 750
+  // are taken, so this sits in the 715 gap). Grep before allocating more.
+  static constexpr int kSettingsActionEncoderPresetDelivery = 715;
+  static constexpr int kSettingsActionEncoderPresetProxy = 716;
+  static constexpr int kSettingsActionEncoderPresetMatch = 717;
+  static constexpr int kSettingsActionEncoderPresetDatamosh = 718;
+  static constexpr int kSettingsActionEncoderPauseToggle = 719;
+  static constexpr int kSettingsActionEncoderCancelAll = 730;
+  // Per-row cancel, move up and hold for the (max 4) jobs the busy panel
+  // shows: 1540..1543, 1544..1547, 1548..1551. They were 731, 736 and 741,
+  // and seven controls allocated later inside those blocks (ATEM, HyperDeck,
+  // RESET DEFAULTS, NMC) ran the encoder's handler instead of their own.
+  // tools/audit_actions.py reads every block's width from its handler now.
+  static constexpr int kSettingsActionEncoderCancelRowBase = 1540;
+  static constexpr int kSettingsActionEncoderUpRowBase = 1544;
+  static constexpr int kSettingsActionEncoderHoldRowBase = 1548;
+  static constexpr int kSettingsActionEncoderMoshLook = 721;
+  // Encoder output overrides. 760-768; 750 was already taken, so this block
+  // starts clear of it. Next free after this is 769+.
+  static constexpr int kSettingsActionEncoderRateMode   = 760;
+  static constexpr int kSettingsActionEncoderQualityDec = 761;
+  static constexpr int kSettingsActionEncoderQualityInc = 762;
+  static constexpr int kSettingsActionEncoderFpsCycle   = 763;
+  static constexpr int kSettingsActionEncoderSizeCycle  = 764;
+  static constexpr int kSettingsActionEncoderOutDirPick = 765;
+  static constexpr int kSettingsActionEncoderOutDirClear = 766;
+  static constexpr int kSettingsActionEncoderAudioRate  = 767;
+  // One id per catalog row. 1400 block: clear of 715-734, 750 and the 800/20000
+  // ranges. Grep before allocating near it.
+  static constexpr int kSettingsActionEncoderFormatBase = 1400;
+  static constexpr int kSettingsActionAudioDelayDec = 649;
+  static constexpr int kSettingsActionAudioDelayInc = 650;
+  static constexpr int kSettingsActionAudioChannelsCycle = 651;
+  static constexpr int kSettingsActionOutputAoiXEdit = 652;
+  static constexpr int kSettingsActionOutputAoiYEdit = 653;
+  static constexpr int kSettingsActionOutputAoiWEdit = 654;
+  static constexpr int kSettingsActionOutputAoiHEdit = 655;
+  // AOI as a raster, not four edges: pick a standard size, then place it.
+  static constexpr int kSettingsActionOutputAoiSizeDropdown = 656;
+  static constexpr int kSettingsActionOutputAoiCentre = 657;
+  // The App card's switches. Hover tips and the Miami cursor were raw 656 and
+  // 657, which are the AOI size and Centre above: the cursor's handler came
+  // first in the chain, so AOI CENTRE toggled the pointer and the AOI size
+  // dropdown toggled the tips. Named here so audit_actions can see them.
+  static constexpr int kSettingsActionHoverTipsToggle = 883;
+  static constexpr int kSettingsActionMiamiCursorToggle = 884;
+  static constexpr int kSettingsActionBeastModeToggle = 885;
+  // The MIDI map page (app_midi_map.ipp). 1100-1179: the page's controls,
+  // then one per visible table row from kSettingsActionMidiMapRowBase.
+  static constexpr int kSettingsActionMidiMapOpen = 1100;
+  static constexpr int kSettingsActionMidiMapBack = 1101;
+  static constexpr int kSettingsActionMidiMapAdd = 1102;
+  static constexpr int kSettingsActionMidiMapLearn = 1103;
+  static constexpr int kSettingsActionMidiMapScrollUp = 1104;
+  static constexpr int kSettingsActionMidiMapScrollDown = 1105;
+  static constexpr int kSettingsActionMidiMapDone = 1106;
+  static constexpr int kSettingsActionMidiMapPreset = 1107;
+  static constexpr int kSettingsActionMidiMapRelearn = 1110;
+  static constexpr int kSettingsActionMidiMapChannel = 1111;
+  static constexpr int kSettingsActionMidiMapPort = 1112;
+  static constexpr int kSettingsActionMidiMapRead = 1113;
+  static constexpr int kSettingsActionMidiMapEncoder = 1114;
+  static constexpr int kSettingsActionMidiMapHold = 1115;
+  static constexpr int kSettingsActionMidiMapCommand = 1116;
+  static constexpr int kSettingsActionMidiMapRelease = 1117;
+  static constexpr int kSettingsActionMidiMapFrom = 1118;
+  static constexpr int kSettingsActionMidiMapCentre = 1119;
+  static constexpr int kSettingsActionMidiMapTo = 1120;
+  static constexpr int kSettingsActionMidiMapPickup = 1121;
+  static constexpr int kSettingsActionMidiMapTarget = 1122;
+  static constexpr int kSettingsActionMidiMapPlaylist = 1123;
+  static constexpr int kSettingsActionMidiMapCue = 1124;
+  static constexpr int kSettingsActionMidiMapOrigin = 1125;
+  static constexpr int kSettingsActionMidiMapEnabled = 1126;
+  static constexpr int kSettingsActionMidiMapDelete = 1127;
+  static constexpr int kSettingsActionMidiMapRowBase = 1140;
+  static constexpr int kMidiMapVisibleRows = 40;
+  // Scaled to fill, or pixel for pixel at the top-left (an LED tile's feed).
+  static constexpr int kSettingsActionOutputAoiPixelMode = 758;
+  // Opens the warp editor on the programme monitor for the focused output.
+  static constexpr int kSettingsActionOutputWarpEdit = 699;
+  // The web monitor card (Network tab).
+  static constexpr int kSettingsActionWebMonitorToggle = 700;
+  static constexpr int kSettingsActionWebMonitorShareToggle = 701;
+  static constexpr int kSettingsActionWebMonitorPortPrompt = 707;
+  static constexpr int kSettingsActionWebMonitorPinPrompt = 708;
+  static constexpr int kSettingsActionWebMonitorQualityDropdown = 709;
+  static constexpr int kSettingsActionWebMonitorQr = 754;
+  // DEFAULTS card (Settings > System).
+  static constexpr int kSettingsActionDefaultsSave = 735;
+  static constexpr int kSettingsActionDefaultsReset = 737;
+  // OUTPUT LIMITER card (Settings > Audio): 736, 738 and 739 came free when the
+  // encoder rows moved to 1540+. audit_actions.py check 4 is what says so.
+  static constexpr int kSettingsActionOutputLimiterToggle = 736;
+  static constexpr int kSettingsActionOutputLimiterCeilingDec = 738;
+  static constexpr int kSettingsActionOutputLimiterCeilingInc = 739;
+  // OUTPUT EFFECTS rows on the same card: per effect - , + and remove, four
+  // effects at most, so 1556..1567; then + ADD AN EFFECT and BYPASS ALL.
+  static constexpr int kSettingsActionOutputFxRowBase = 1556;
+  static constexpr int kSettingsActionOutputFxRowStride = 3;
+  static constexpr int kSettingsActionOutputFxAdd = 1568;
+  static constexpr int kSettingsActionOutputFxBypass = 1569;
+  // OUTPUTS card (Settings > Audio): per named output six controls -- its
+  // name, its interface, channel - and +, one channel or a pair, remove --
+  // and sixteen outputs at most, so 1600..1695; then + ADD AN OUTPUT.
+  static constexpr int kSettingsActionNamedOutputRowBase = 1600;
+  static constexpr int kSettingsActionNamedOutputAdd = 1696;
+  // PATCH grid: a crosspoint per playlist per named output, 2000 + deck * 16
+  // + output, so 2000..2255 for sixteen of each. (Not 1700: 1790 is the
+  // input monitor's, which audit_actions.py check 4 caught.)
+  static constexpr int kSettingsActionPatchCellBase = 2000;
+  static constexpr int kSettingsActionWebMonitorSource = 755;
+  static constexpr int kSettingsActionWebMonitorClientsPrompt = 756;
+  static constexpr int kSettingsActionWebMonitorLowLatency = 757;
+  static constexpr int kSettingsActionWebRemoteToggle = 759;
+  // PHONE & TABLET card (Settings > Network).
+  static constexpr int kSettingsActionPhonePair = 773;
+  static constexpr int kSettingsActionPhoneTailnet = 774;   // was the "Can do" level, removed 2026-10-16
+  static constexpr int kSettingsActionPhoneHaptics = 796;
+  static constexpr int kSettingsActionPhoneForget = 797;
+  static constexpr int kSettingsActionGoGuardCycle = 798;
+  // ST 2110-20 output (Devices sub-tab).
+  static constexpr int kSettingsActionSt2110Toggle = 658;
+  static constexpr int kSettingsActionSt2110AddressPrompt = 659;
+  static constexpr int kSettingsActionSt2110PortPrompt = 660;
+  static constexpr int kSettingsActionSt2110DepthToggle = 661;
+  static constexpr int kSettingsActionSt2110CopySdp = 662;
+  // Streaming destinations. Two of them (0 = SRT, 1 = RTMP), each with its own
+  // full control set, so the ids are allocated as base + dest*stride + field
+  // rather than as twenty separate constants. Next free block: 670 + 2*16 = 702.
+  // Recording gets its OWN block rather than a third stream-destination slot:
+  // dest base 670 with stride 16 would put slot 2 at 702-717, straight through
+  // the LTC generator (702-706), NMOS (710-714) and the encoder presets
+  // (715-717). A double-allocated id silently kills whichever handler runs
+  // second, which is exactly how the Processing sub-tab died in v0.76.24.
+  // Recording runtime. Mutable because buildOutputStreamArgs is const and is
+  // where the timestamped path is minted.
+  std::unique_ptr<deckboy::platform::audio::AsioOutput> asioOutput_;
+  bool hapSuggestionShown_ = false;   // once per session, whatever the answer
+  bool hapStallSeen_ = false;        // a decode actually struggled
+  mutable std::string lastRecordingPath_;
+  Uint64 recordingStartedMs_ = 0;
+  static constexpr int kSettingsActionAudioInputDropdown = 778;
+  static constexpr int kSettingsActionAudioInputToProgram = 779;
+  static constexpr int kSettingsActionAudioInputGainDec = 780;
+  static constexpr int kSettingsActionAudioInputGainInc = 781;
+  static constexpr int kSettingsActionAudioInputClipClear = 782;
+  static constexpr int kSettingsActionAudioInputMono = 783;
+
+  // 784: the theme creatures. A theme has to ASK for them before anything
+  // appears, so this is for an operator who wants a themed machine without the
+  // company -- not a guard against surprise.
+  static constexpr int kSettingsActionCreaturesToggle = 784;
+  // Off -> 24-hour -> 12-hour -> analogue -> off. Four states, one control:
+  // offering only "on" would make somebody's clock convention the default.
+  // ── PRESENTER VIEW ──────────────────────────────────────────────────────
+  // Contiguous in the 663-701 gap, except 670 which was already taken. The
+  // presenter view had eleven settings and no control for any of them: it was
+  // reachable only over the network protocol.
+  static constexpr int kSettingsActionPresenterLayout = 663;
+  static constexpr int kSettingsActionPresenterShowPrevious = 664;
+  static constexpr int kSettingsActionPresenterShowNext = 665;
+  static constexpr int kSettingsActionPresenterShowNotes = 666;
+  static constexpr int kSettingsActionPresenterShowClock = 667;
+  static constexpr int kSettingsActionPresenterShowTimers = 668;
+  static constexpr int kSettingsActionPresenterBuilds = 669;
+  static constexpr int kSettingsActionPresenterScaleDec = 671;
+  static constexpr int kSettingsActionPresenterScaleInc = 672;
+  static constexpr int kSettingsActionPresenterColourBg = 673;
+  static constexpr int kSettingsActionPresenterColourInk = 674;
+  static constexpr int kSettingsActionPresenterColourAccent = 675;
+  static constexpr int kSettingsActionPresenterReset = 676;
+  static constexpr int kSettingsActionPresenterShowLive = 677;
+  static constexpr int kSettingsActionPresenterShareDec = 678;
+  static constexpr int kSettingsActionPresenterShareInc = 679;
+  static constexpr int kSettingsActionPresenterArrange = 680;
+  // ── PROMPTER ────────────────────────────────────────────────────────────
+  // The talent's screen. Ordered so the handler can test one range.
+  static constexpr int kSettingsActionPrompterRun = 681;
+  static constexpr int kSettingsActionPrompterTop = 682;
+  static constexpr int kSettingsActionPrompterSpeedDec = 683;
+  static constexpr int kSettingsActionPrompterSpeedInc = 684;
+  static constexpr int kSettingsActionPrompterSizeDec = 685;
+  static constexpr int kSettingsActionPrompterSizeInc = 686;
+  static constexpr int kSettingsActionPrompterMirror = 687;
+  static constexpr int kSettingsActionPrompterScript = 688;
+  static constexpr int kSettingsActionPrompterReadingLine = 689;
+  static constexpr int kSettingsActionClockCycle = 790;
+  // Programme -> presenter -> stream. The output type had no control anywhere
+  // in the interface: it was reachable only from the network protocol, so the
+  // presenter view would have been a feature you could not switch on.
+  static constexpr int kSettingsActionOutputTypeCycle = 791;
+  // WHICH DECK AN OUTPUT SHOWS. The field has always been saved and there has
+  // never been a control for it, because until now every output composited
+  // deck 1 whatever it said -- so the control would have done nothing.
+  static constexpr int kSettingsActionOutputHostDeckCycle = 792;
+  static constexpr int kSettingsActionOutputAdd = 793;
+  // 690 -- from the 690-701 gap; the 700s are not contiguous (see CLAUDE.md).
+  static constexpr int kSettingsActionDeckAdd = 690;
+  static constexpr int kSettingsActionAsioDropdown   = 775;
+  static constexpr int kSettingsActionAsioChannelsDec = 776;
+  static constexpr int kSettingsActionAsioChannelsInc = 777;
+  static constexpr int kSettingsActionRecordToggle   = 770;
+  // Five settings that were STORED, PERSISTED AND UNREACHABLE. Each was saved
+  // in the show and read back on load, and no control anywhere could set it --
+  // found by tools/audit_reachable.py, wired 2026-09-05.
+  static constexpr int kSettingsActionSt2110Interface = 785;
+  static constexpr int kSettingsActionPtpDomain       = 786;
+  static constexpr int kSettingsActionRecordRemux     = 787;
+  static constexpr int kSettingsActionAsioChannels    = 788;
+  static constexpr int kSettingsActionShowControlId   = 789;
+  static constexpr int kSettingsActionInputMonitor    = 1790;
+  static constexpr int kSettingsActionRecordDirPick  = 771;
+  static constexpr int kSettingsActionRecordDirClear = 772;
+  // Two destinations of sixteen fields: 1500..1531. It was 670, and the
+  // presenter, prompter, deck, watch folder, vMix, DeckLink key, sample rate,
+  // warp and web monitor ids all landed inside its 670..701 and won.
+  static constexpr int kSettingsActionStreamDestBase = 1500;
+  static constexpr int kSettingsActionStreamDestStride = 16;
+  static constexpr int kStreamFieldToggle = 0;
+  static constexpr int kStreamFieldUrl = 1;
+  static constexpr int kStreamFieldKey = 2;
+  static constexpr int kStreamFieldBitrate = 3;
+  static constexpr int kStreamFieldKeyframe = 4;
+  static constexpr int kStreamFieldSrtLatency = 5;
+  static constexpr int kStreamFieldSrtPassphrase = 6;
+  static constexpr int kStreamFieldSrtStreamId = 7;
+  static constexpr int kStreamFieldSrtMode = 8;
+  static constexpr int kStreamFieldAudioBitrate = 9;
+  // Destination presets. The stride is 16, so 10-15 are free here.
+  static constexpr int kStreamFieldPresetYouTube = 10;
+  static constexpr int kStreamFieldPresetTwitch = 11;
+  static constexpr int kStreamFieldPresetCustom = 12;
+  // LTC generator (Audio tab).
+  static constexpr int kSettingsActionLtcOutToggle = 702;
+  static constexpr int kSettingsActionLtcOutDevice = 703;
+  static constexpr int kSettingsActionLtcOutFps = 704;
+  static constexpr int kSettingsActionLtcOutChannel = 705;
+  static constexpr int kSettingsActionLtcOutChannelCount = 706;
+  // NMOS IS-04/05 (Video Outputs > Devices sub-tab, under ST 2110).
+  // Next free after these: 715+.
+  static constexpr int kSettingsActionNmosToggle = 710;
+  static constexpr int kSettingsActionNmosRegistryPrompt = 711;
+  static constexpr int kSettingsActionNmosPortPrompt = 712;
+  static constexpr int kSettingsActionNmosInterfacePrompt = 713;
+  static constexpr int kSettingsActionNmosShowUrl = 714;
+  // VJ mode had no control anywhere in the UI -- only the wire verb.
+  //
+  // 722, not 715: the 700s are NOT one contiguous block. The NMOS ids stop at
+  // 714 and the ENCODER ids start again at 715, so "next after NMOS" landed
+  // straight on kSettingsActionEncoderPresetDelivery -- which is the
+  // double-allocation that once silently killed whichever handler ran second.
+  // audit_actions.py caught it. GREP THE VALUE before allocating another.
+  static constexpr int kSettingsActionVjModeToggle = 722;
+  // Watch folders, from the 691-701 gap. NOT 723: that is the update-check
+  // pair, and CLAUDE.md said to allocate from 723+, which is how this got
+  // double-allocated on the first attempt. audit_actions caught it -- which is
+  // the whole reason that check exists, after ids 634-637 silently killed a
+  // settings tab in v0.76.24.
+  static constexpr int kSettingsActionWatchFolderPick = 691;
+  static constexpr int kSettingsActionWatchFolderClear = 692;
+  // The vMix-compatible surface. Same gap; audit_actions.py is the check.
+  static constexpr int kSettingsActionVmixToggle = 693;
+  static constexpr int kSettingsActionVmixHttpPortPrompt = 694;
+  static constexpr int kSettingsActionVmixTcpPortPrompt = 695;
+  // Key + fill on SDI. Same 691-701 gap; audit_actions.py is the check.
+  static constexpr int kSettingsActionDeckLinkKeyFillToggle = 696;
+  static constexpr int kSettingsActionDeckLinkKeyDeviceDropdown = 697;
+  // The desk's sample rate. Same 691-701 gap; audit_actions.py is the check.
+  static constexpr int kSettingsActionAudioSampleRateDropdown = 698;
+  // 723-725: the update checker. Next free id is 726.
+  static constexpr int kSettingsActionMonitorDevice = 794;
+  static constexpr int kSettingsActionMonitorDeck = 795;
+  static constexpr int kSettingsActionUpdateCheckToggle = 723;
+  static constexpr int kSettingsActionUpdateCheckNow = 724;
+  static constexpr int kSettingsActionUpdateDownload = 725;
+  static constexpr int kSettingsActionUpdateInstall = 726;
+  // Tally-driven playback: going to air is the cue. 727/728, next free is 729.
+  static constexpr int kSettingsActionNdiTallyTriggerToggle = 727;
+  static constexpr int kSettingsActionTallySwitchOffCycle = 728;
+  static constexpr int kSettingsActionAtemTallyTriggerToggle = 729;
+  static constexpr int kSettingsActionAtemSwitcherHostPrompt = 732;
+  static constexpr int kSettingsActionAtemTallyInputPrompt = 733;
+  static constexpr int kSettingsActionHyperDeckToggle = 734;
+  // A base id reserves a RANGE, and only its first value greets you when you
+  // grep for it: tools/audit_actions.py check 4 is what finds the rest.
+  static constexpr int kSettingsActionNmcModeCycle = 740;
+  static constexpr int kSettingsActionNmcPortPrompt = 742;
+  static constexpr int kSettingsActionNmcTargetPrompt = 743;
+  static constexpr int kSettingsActionNmcSourcePrompt = 744;
+  // Matte & house overlay, per output. Next free: 750.
+  //
+  // "House" in the names because kSettingsActionOutputOverlayToggle (283) is
+  // already the burned-in time/ID overlay -- two different things that both
+  // want to be called "the output overlay", and the compiler caught the second
+  // one trying.
+  static constexpr int kSettingsActionOutputMatteCycle = 745;
+  static constexpr int kSettingsActionOutputMatteOpacity = 746;
+  static constexpr int kSettingsActionOutputHouseOverlayToggle = 747;
+  static constexpr int kSettingsActionOutputHouseOverlayOpacity = 748;
+  static constexpr int kSettingsActionOutputHouseOverlayPick = 749;
+  static constexpr int kSettingsActionOutputMaskPick = 741;   // 741 freed by the encoder rows
+  // MOTION CONTROL (app_motion.ipp), on the Audio tab under LIVE CAPTIONS.
+  static constexpr int kSettingsActionMotionToggle = 870;
+  static constexpr int kSettingsActionMotionSource = 871;
+  static constexpr int kSettingsActionMotionSensDec = 872;
+  static constexpr int kSettingsActionMotionSensInc = 873;
+  static constexpr int kSettingsActionMotionRiseDec = 874;
+  static constexpr int kSettingsActionMotionRiseInc = 875;
+  static constexpr int kSettingsActionMotionFallDec = 876;
+  static constexpr int kSettingsActionMotionFallInc = 877;
+  static constexpr int kSettingsActionMotionMirror = 878;
+  static constexpr int kSettingsActionMotionZonesClear = 879;
+  static constexpr int kSettingsActionOpenScreens = 880;   // the Screens window (slices)
+  static constexpr int kSettingsActionBugSwat = 881;       // MOTION CONTROL > PLAY BUG SWAT
+  static constexpr int kSettingsActionLessons = 882;       // MENU > LESSONS (part two)
+  static constexpr int kSettingsActionLanguageDropdown = 750;
+  static constexpr int kSettingsActionLanguagePanic = 751;
+  static constexpr int kSettingsActionTallySwitchOffPick = 752;
+  static constexpr int kSettingsActionReportProblem = 753;  // next free: 754
+  static constexpr int kSettingsActionAboutVersion = 799;   // the About version line
+  // 730/731 are the encoder's -- the audit caught that collision.
+  static constexpr int kSettingsActionOutputDisplayFocusBase = 32000;
+  static constexpr int kSettingsActionOutputAdvancedToggle = 270;
+  static constexpr int kSettingsActionRoutingModeToggle = 261;
+  static constexpr int kSettingsActionRoutingCellBase = 20000;
+  static constexpr int kSettingsActionRoutingCellStride = 256;
+  static constexpr int kSettingsActionRoutingDeckFocusBase = 26000;
+  static constexpr int kSettingsActionRoutingOutputFocusBase = 28000;
+  static constexpr int kSettingsActionRoutingTableOutputPrevBase = 34000;
+  static constexpr int kSettingsActionRoutingTableOutputNextBase = 35000;
+  static constexpr int kSettingsActionRoutingTableLayerDecBase = 36000;
+  static constexpr int kSettingsActionRoutingTableLayerIncBase = 37000;
+  static constexpr int kSettingsActionRoutingTableAssignToggleBase = 38000;
+  // The fixture patch: ADD, then eight ids a row (name, type, universe,
+  // address, find, remove).
+  static constexpr int kSettingsActionFixtureAdd = 50000;
+  static constexpr int kSettingsActionVideoDipToggle = 50001;
+  static constexpr int kSettingsActionVideoDipFade = 50002;
+  static constexpr int kSettingsActionFixtureRowBase = 50008;
+  static constexpr int kSettingsActionFixtureRowStride = 8;
+  static constexpr int kSettingsActionFixtureEnd = 50008 + 1024 * 8;
+
+  SDL_Window* controlWindow_ = nullptr;
+  // ON A MAC THE SCREEN PACES THE LOOP (platform/mac_vblank.hpp): the window
+  // whose screen it is, chosen at the top of each render(), and whether this
+  // pass has waited for it yet.
+  SDL_Window* pacingWindow_ = nullptr;
+  bool pacedThisPass_ = false;
+  // The window and renderer the first stream output adopts
+  // (prepareSpareStreamRenderer).
+  SDL_Window* spareStreamWindow_ = nullptr;
+  SDL_Renderer* spareStreamRenderer_ = nullptr;
+  SDL_Renderer* controlRenderer_ = nullptr;
+  SDL_Texture* scanlineOverlay_ = nullptr;
+  SDL_Window* monitorsWindow_ = nullptr;
+  // Screen-identify overlay: one small always-on-top window per connected
+  // display showing its number + name (like the OS "Identify" button), so
+  // the operator can tell which settings index is which physical screen.
+  struct IdentifyWindow {
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    int displayIndex = 0;
+  };
+  std::vector<IdentifyWindow> identifyWindows_;
+  Uint64 identifyUntilMs_ = 0;
+  SDL_Renderer* monitorsRenderer_ = nullptr;
+  std::vector<SDL_Texture*> monitorsOutputTextures_;
+  std::vector<int> monitorsOutputTexW_;
+  std::vector<int> monitorsOutputTexH_;
+  SDL_Cursor* miamiCursor_ = nullptr;   // Deckboy's own pointer; null = system arrow
+  int miamiCursorScale_ = 0;            // whole-pixel scale it was built at
+  // The test card's shared clock (renderOutputTestCard); 0 = no card up.
+  Uint64 testCardEpochNs_ = 0;
+  std::vector<Uint64> lastGoMsByDeck_;   // double-GO guard, per deck
+  TTF_Font* fontLarge_ = nullptr;
+  TTF_Font* fontBase_ = nullptr;
+  TTF_Font* fontSmall_ = nullptr;
+  TTF_Font* fontMono_ = nullptr;
+  TTF_Font* fontPixel_ = nullptr;
+  TTF_Font* fontPixelTitle_ = nullptr;  // big pixel headline (startup prompt)
+  TTF_Font* fontPixelSmall_ = nullptr;  // smaller pixel font for UI labels
+  SDL_AudioStream* uiAudioStream_ = nullptr;
+  // While the boot jingle plays, ordinary bloops are dropped — queueing one
+  // would SDL_ClearAudioStream the jingle mid-phrase.
+  Uint64 uiJingleUntilMs_ = 0;
+  fs::path currentProjectFile_;
+  std::string currentThemeName_;
+  Project project_;
+  std::vector<DeckRuntime> deckRuntimes_;
+  std::vector<OutputRuntime> outputRuntimes_;
+  // Async loudness-normalize results (worker threads → main tick). Keyed by
+  // Cue::id; drained in drainNormalizeResults() each update.
+  struct NormalizeResult {
+    std::string cueId;
+    double gainDb = 0.0;
+    double measuredLufs = 0.0;
+    double measuredPeakDb = 0.0;
+    // True peak once the trim is applied (measuredPeakDb + gainDb).
+    double projectedPeakDb = 0.0;
+    bool hasPeak = false;
+    // True when the normalized clip will peak above the ceiling, i.e. the deck
+    // limiter will be doing real work on it. Target loudness is still hit —
+    // this is a heads-up, not a shortfall.
+    bool peakLimited = false;
+    bool ok = false;
+  };
+  mutable std::mutex normalizeResultsMutex_;
+  std::set<std::string> normalizeInFlight_;   // cue ids under the needle now
+  std::set<std::string> normalizingIds_;      // per-frame snapshot, see refreshNormalizingIds
+
+  // Declared in app_cue_transport.ipp, which is included above this.
+  std::vector<PendingTake> deckPendingTakes_;
+  bool cueSectionSequenceOpen_ = true;
+  bool cueSectionMasterOpen_ = true;
+  bool cueSectionTargetOpen_ = true;
+  bool cueSectionTriggersOpen_ = true;
+  bool cueSectionCaptionsOpen_ = true;
+  // One captioning job at a time, off the main thread: listening to a film
+  // takes minutes. Keyed by cue id, so a reorder or a deck change while it
+  // runs still lands the captions on the right cue.
+  std::future<deckboy::captioning::Result> captionJob_;
+  std::future<std::string> mediaToolsCheck_;   // "" when ffmpeg and ffprobe both run
+  int uiAssetsLoaded_ = 0;   // the desk's artwork that decoded (UIASSETS)
+  int uiAssetsFailed_ = 0;   // ...and that did not
+  std::string captionJobCueId_;
+  bool captionJobDownloading_ = false;
+  Uint64 captionDownloadArmedAtMs_ = 0;
+  int captioningInstalled_ = -1;       // -1 not asked yet; see captioningInstalled()
+  // Learn mode: the cue (by id) whose hotkey / MIDI note the next key or
+  // note becomes. Cleared by Escape, by learning, or by selecting elsewhere.
+  std::string triggerLearnKeyCueId_;
+  std::string triggerLearnMidiCueId_;
+  bool cueSectionFadeOpen_ = true;
+  bool cueSectionMidiOpen_ = true;
+  bool cueSectionNetworkOpen_ = true;
+  bool cueSectionTimecodeOpen_ = true;
+  bool cueSectionScriptOpen_ = true;
+  bool cueSectionDmxOpen_ = true;
+  bool cueSectionMatrixOpen_ = true;
+  bool cueSectionTextOpen_ = true;
+  bool cueSectionMidiFileOpen_ = true;
+  bool cueSectionFiresideOpen_ = true;
+  bool cueSectionPortalOpen_ = true;
+  bool cueSectionDrawOpen_ = true;
+  bool cueSectionExtraOpen_ = true;
+  // The commands behind a private extra's inspector buttons, drawn this frame.
+  std::vector<std::string> extraDeskCommands_;
+  bool cueSectionSwirlOpen_ = true;
+  bool cueSectionMoireOpen_ = true;
+  // Which dashboard tile is one press away from being deleted, and when it
+  // was armed. A button that runs a command is easy to hit by accident.
+  int dashDeleteArmedSlot_ = -1;
+  Uint64 dashDeleteArmedAtMs_ = 0;   // same clock as animationNow_
+  // THE TRACKER'S TRANSPORT. The playhead is the step last fired from
+  // anywhere, held by id; trackerNextDueSeconds_ is when PLAY fires the next
+  // step (nowSeconds() clock), -1 while nothing is counting down.
+  int trackerPlayheadDeck_ = -1;
+  // The step MASTER DECK / BYPASS / CLEAR act on: last made or fired, by id.
+  std::string trackerCurrentStepId_;
+  std::string trackerPlayheadCueId_;
+  bool trackerPlaying_ = false;
+  double trackerNextDueSeconds_ = -1.0;
+  // How long the running countdown is in all, for the LEN cell's bar.
+  double trackerCountdownSpan_ = -1.0;
+  // A "when its cues end" step waiting on the cues it fired; the post-wait
+  // starts when they have all ended (trackerArmStep).
+  bool trackerWaitingForEnd_ = false;
+  double trackerWaitPostSeconds_ = 0.0;
+  std::vector<TrackerWatch> trackerWatches_;
+  // First step drawn, for a sequence longer than the page. Follows the
+  // playhead; the wheel moves it by hand.
+  int trackerScrollRow_ = 0;
+  int trackerLastFollowedRow_ = -1;
+  // The pattern view's cursor (a row, and a column among trackerShownDecks),
+  // the first column drawn when the playlists do not all fit, EDIT (whether
+  // the keyboard may change cells), and the digits being typed into a cell.
+  int trackerCursorRow_ = 0;
+  int trackerCursorCol_ = 0;
+  int trackerFirstCol_ = 0;
+  bool trackerEditMode_ = false;
+  std::string trackerDigits_;
+  int trackerDigitsCell_ = -1;
+  Uint64 trackerDigitsAtMs_ = 0;
+  // The step that just fired (or was just made) springs, like a dashboard
+  // tile does. Same clock as animationNow_.
+  int trackerSquishRow_ = -1;
+  Uint64 trackerSquishAtMs_ = 0;
+  // Where each playlist's lower third was told to leave, on that deck's
+  // transport clock; -1 while it is not leaving. Indexed by deck.
+  std::vector<double> lowerThirdOutAt_;
+  // AUDITION: the deck whose picture is being kept off the outputs so the
+  // operator can look at a cue without the room seeing it. -1 when nobody is
+  // auditioning, which is almost always.
+  //
+  // A deck index rather than a bool, because with outputs now hosted per deck
+  // "which deck" is the whole question -- auditioning deck 2 must not blank
+  // deck 1's screen.
+  int auditionDeckIndex_ = -1;
+  // True only for the instant auditionSelected spends inside takeSelected, so
+  // the take it makes itself is not mistaken for the operator putting the cue
+  // on air.
+  bool auditionStarting_ = false;
+  // PRELOAD: a cue racked and paused, decode warm, held off the outputs until
+  // it is taken. Which cue matters as well as which deck, because taking THAT
+  // cue releases the preload instantly while taking any other one throws it
+  // away.
+  int preloadDeckIndex_ = -1;
+  int preloadCueIndex_ = -1;
+  bool preloadStarting_ = false;
+  // The MIDI port a cue last asked for, kept open between cues so a run of
+  // MIDI cues on one port does not re-open it for each. Opening a port costs
+  // milliseconds and can fail; doing it once per GO would put that on the show
+  // rather than on the first cue.
+  deckboy::platform::midi::MidiOutput midiOut_;
+  // The last port that would not open, and when -- see ensureMidiOutPort.
+  // Text drawn without its clip rectangle: set only by healTextBackendIfNeeded
+  // when the real label path draws nothing and the raw one does.
+  bool textClipDisabled_ = false;
+  bool midiOutHasFailed_ = false;
+  std::string midiOutFailedKey_;
+  Uint64 midiOutRetryAtMs_ = 0;      // a refused port is not asked again before this
+  std::string midiOutFailedReason_;
+  std::string midiOutPortRequested_;
+  // Results from TCP network cues, which run off the main thread. Drained once
+  // a tick in the update loop -- the same shape as sdlDialogActions_, and for
+  // the same reason: a worker must not touch the UI.
+  // Where a timecode JAM put the clock, relative to what the deck would
+  // otherwise emit. RUNTIME, not persisted: a cue that rewrote the deck's
+  // saved start offset would leave the show permanently re-timed, which is the
+  // same reason a fade cue never writes a cue's saved gain.
+  double ltcJamOffsetSeconds_ = 0.0;
+  // How deep inside script cues we currently are. A script can TAKE a cue, and
+  // that cue can be another script -- which is useful, and which is also how a
+  // show hangs forever. See runScriptCue.
+  int scriptDepth_ = 0;
+  // SUPER DECKBOY. The second deck was the thing "Super Deckboy" meant; it
+  // shipped, so the app becomes it. evolveAt is the moment the transformation
+  // started, and drives a short one-shot animation; 0 means none is playing.
+  Uint64 superDeckboyEvolveAt_ = 0;
+  std::string windowTitle_;   // as last set, so it is only set on a change
+  std::mutex networkResultMutex_;
+  std::vector<std::string> networkResults_;
+  SDL_Rect fileCheckBtnRect_ {};
+  int showProblemCount_ = 0;        // rescanned on a cadence, not per frame
+  Uint64 lastShowCheckMs_ = 0;
+  std::vector<NormalizeResult> normalizeResults_;
+
+#if DECKBOY_INPROC_DECODE
+  // Output topology changed: re-check every playing deck's zero-copy decode
+  // device against the current program output next tick (app_output_mgmt).
+  bool decodeDeviceReconcilePending_ = false;
+  // Throttle for control-preview CPU downloads of GPU-resident frames.
+  Uint64 controlPreviewGpuLastMs_ = 0;
+  DecodedFrame controlPreviewGpuScratch_;
+#endif
+  // Per-deck PCM for the stream writer, the recorder and the NDI sender. A
+  // sliding window addressed by absolute sample position, not a queue -- see
+  // core/deck_audio_ring.hpp for why those are not the same thing.
+  deckboy::core::DeckAudioRing deckAudioRing_;
+#if defined(DECKBOY_HAS_NDI_SDK)
+  NdiApi ndiApi_;
+#endif
+  LtcApi ltcApi_;
+  std::vector<Button> buttons_;
+  std::vector<SDL_Rect> deckColumnRects_;
+  std::vector<SDL_Rect> deckListClipRects_;
+  std::vector<SDL_Rect> deckOverlayClipRects_;
+  // True once this drag has sent SDL_EVENT_DROP_POSITION, so the drop event's
+  // x/y is where the file landed rather than an unset 0,0.
+  bool dropPositionKnown_ = false;
+  // A drop arrives as one SDL event per file. They are gathered here and
+  // imported as ONE batch when the drop completes: importing each on its own
+  // raised a toast and a sound per file -- 2,117 of each for one drop.
+  std::vector<std::string> dropBatch_;
+  std::optional<SDL_Point> dropBatchAt_;
+  bool dropBatchOpen_ = false;
+  Uint64 dropBatchLastMs_ = 0;
+  SDL_Rect progressBarRect_ {};
+  SDL_Rect audioProgressBarRect_ {};  // audio lane, also click-to-seek like the video lane
+
+  // Context menu
+  bool contextMenuOpen_ = false;
+  int contextMenuDeckIdx_ = 0;
+  int contextMenuCueIdx_ = 0;
+  SDL_Rect contextMenuRect_ {};
+  // Counts layouts, so a menu row can rebuild the menu in place (the layer
+  // blend row) and the click handler knows not to close what it just opened.
+  int contextMenuLayouts_ = 0;
+  SDL_Point contextMenuAnchor_ {0, 0};
+  struct ContextItem {
+    std::string label;
+    SDL_Color swatch {0,0,0,0};
+    std::function<void()> action;
+    SDL_Rect rect {};
+  };
+  std::vector<ContextItem> contextItems_;
+  // One per deck: the routing chip on that playlist's column header.
+  std::vector<SDL_Rect> deckRoutingChipRects_;
+  // One per deck: the tab that selects it, across the top of the playlist
+  // column. Only drawn when there is more than one playlist.
+  std::vector<SDL_Rect> deckTabRects_;
+  // The windows the multiview drew this frame, in tile order -- so the
+  // click handler and the tile menu act on the same list the renderer
+  // used rather than rebuilding it and risking a different answer.
+  std::vector<MultiviewTile> multiviewPlan_;
+  // WHEN AN OVERLAY WENT UP, and when it was told to go. Keyed by deck and
+  // cue index. Runtime only: a show says which lower thirds exist, not when
+  // one happened to be on screen.
+  //
+  // A cleared overlay stays in overlayActiveIndices until its out-move has
+  // run -- something removed from that list cannot be drawn leaving.
+  std::map<std::pair<int, int>, Uint64> overlayShownAtMs_;
+  std::map<std::pair<int, int>, Uint64> overlayLeavingAtMs_;
+  SDL_Rect deckAddTabRect_ {};   // the + on the end of the strip
+  SDL_Rect deckRemoveTabRect_ {};  // and the - beside it
+  // Where the right-hand furniture of a playlist header begins, so the
+  // title can be drawn into what is left rather than across it.
+  int playlistHeaderLeftEdge_ = 0;
+  // Removing a playlist throws away its cues, so it asks twice -- the same
+  // arm-then-confirm the dashboard's delete uses.
+  int deckRemoveArmedIndex_ = -1;
+  Uint64 deckRemoveArmedAtMs_ = 0;
+  // The program monitor while nothing is live. A creature habitat -- see
+  // creatureHabitats() for why the other two are so often empty.
+  SDL_Rect idleMonitorRect_ {};
+
+  struct DropdownOptionItem {
+    std::string id;
+    std::string label;
+    std::string searchLabel;
+    int textWidth = 0;
+    // A font list draws `sample` in this face, with the label beside it in
+    // the interface's own (the timer's font list, board H856G24w).
+    std::string fontPath;
+  };
+
+  struct DropdownState {
+    bool open = false;
+    std::string owner;
+    SDL_Rect anchorRect {};
+    SDL_Rect popoverRect {};
+    std::vector<DropdownOptionItem> options;
+    std::vector<int> filteredIndices;
+    int highlightedFilteredIndex = 0;
+    int scrollRow = 0;
+    int rowHeight = 24;
+    int maxVisibleRows = 10;
+    std::string filter;
+    // Shown in the filter line while nothing is typed, so a list that is
+    // searched says so before the first key.
+    std::string searchHint;
+    std::string sample;   // what a font row draws in its own face
+    int fixedWidth = 0;   // a font list's width; 0 sizes to the widest label
+    std::function<void(const std::string&)> onSelect;
+  };
+
+  DropdownState dropdown_;
+  // Faces a font list has drawn a row in, by file: kept until the fonts are
+  // reloaded, because the text caches key on the font's address and a face
+  // closed mid-session hands that address to the next one opened.
+  std::unordered_map<std::string, TTF_Font*> fontPreviewFaces_;
+  // The computer's fonts, read the first time a font list opens.
+  std::vector<deckboy::fonts::SystemFont> systemFonts_;
+  bool systemFontsRead_ = false;
+  int dropdownLastRenderedItemCount_ = -1;
+  struct InlineTextEditorState {
+    bool open = false;
+    std::string owner;
+    std::string title;
+    std::string prompt;
+    std::string value;
+    std::string initialValue;   // what it opened with: a click away keeps an edit
+    SDL_Rect anchorRect {};
+    SDL_Rect panelRect {};
+    SDL_Rect inputRect {};
+    SDL_Rect applyRect {};
+    SDL_Rect cancelRect {};
+    // On open the existing value is treated as "selected": the first typed
+    // character (or backspace) replaces it, so the operator can just type the
+    // new value and hit enter without clearing the old one first.
+    bool freshEntry = false;
+    // Byte offset of the caret within `value`. UTF-8 aware: it only ever sits
+    // on a character boundary, because every move steps over continuation
+    // bytes rather than counting one at a time.
+    std::size_t caret = 0;
+    std::function<void(const std::string&)> onSubmit;
+  };
+  // The live-coding editor. Its own overlay rather than a mode of the inline
+  // editor, because it needs a caret you can place, wrapped text, colour and a
+  // helper rail -- none of which a one-line value field should grow.
+  struct CodeEditorState {
+    bool open = false;
+    std::string text;
+    std::size_t caret = 0;
+    // The cue is remembered by INDEX rather than by pointer: the editor stays
+    // open across frames and a pointer into the deck's vector does not survive
+    // a cue being added or removed underneath it.
+    int deckIndex = -1;
+    int cueIndex = -1;
+    // The same editor serves the code source and the script cue. They differ
+    // in one thing -- a code expression is compiled before it is kept and a
+    // script is not -- so one flag is cheaper and more honest than a second
+    // editor that would drift from this one.
+    bool script = false;
+    bool textCue = false;
+    SDL_Rect panelRect {};
+    SDL_Rect fieldRect {};
+    SDL_Rect applyRect {};
+    SDL_Rect cancelRect {};
+    SDL_Rect clearRect {};
+    std::vector<SDL_Rect> chipRects;
+    std::vector<deckboy::code::LanguageEntry> chips;
+    std::vector<SDL_Rect> exampleRects;
+  };
+  // Sampled once per frame by sampleLfoClock() and read by both the output and
+  // the preview, so every LFO in the show is at the same moment in both.
+  double lfoSeconds_ = 0.0;
+  double lfoBeats_ = 0.0;
+
+  // The theme's creatures. Empty for every theme that does not ask, which is
+  // every theme that existed before this.
+  std::vector<deckboy::creatures::Request> themeCreatures_;
+  // A creature and the gap it lives in. There used to be one list and one
+  // habitat; a theme's animals now live in several places at once, and each
+  // group is bounded by its own gap so nothing can wander onto a control.
+  struct Colony {
+    deckboy::creatures::Habitat home {};
+    std::vector<deckboy::creatures::Creature> creatures;
+  };
+  std::vector<Colony> colonies_;
+  deckboy::creatures::Habitat creatureHabitat_ {};
+  // A critter pinned to whatever is working. Keyed by a job id the caller
+  // invents; see the BUSY CRITTERS block in app_creatures.ipp.
+  struct BusyCritter {
+    std::string species;
+    SDL_Rect home {};
+    double x = 0.5;      // position along the rect, 0..1
+    double dir = 1.0;
+    double phase = 0.0;
+    double fade = 0.0;
+    Uint64 seenAtMs = 0;
+    bool foreground = true; // modal jobs draw after popups; timeline jobs before
+    // Each animal's own way of moving (busyGaitFor in app_creatures.ipp): its
+    // own clock, the run or the rest under way, how far up the rect it is, a
+    // pose the gait picks over the walk cycle, and dice of its own, so two
+    // jobs with the same animal do not move in step.
+    double clock = 0.0;
+    double runLeft = 0.0;
+    double restLeft = 0.0;
+    double hop = -1.0;        // 0..1 through a hop or a leap, -1 on the ground
+    double lift = 0.0;        // 0 on its floor .. 1 at the top of the rect
+    int pose = -1;            // a frame the gait holds, or -1 for the cycle
+    std::uint32_t dice = 1;
+  };
+  std::map<std::string, BusyCritter> busyCritters_;
+  std::map<std::string, UiImageAsset> busyCritterArt_;
+  double creatureFade_ = 0.0;       // eased, so they leave rather than blink out
+  double creatureLastTime_ = 0.0;
+  SDL_Rect playlistFreeRect_ {};    // the empty part of the focused playlist
+  // The same, per playlist. The focused one above is kept because other
+  // callers read it; the animals use all of these.
+  std::vector<SDL_Rect> playlistFreeRects_;
+  SDL_Rect inspectorBodyRect_ {};   // the inspector column, for its free space
+  // Coarse brightness of the current frame, for the displacement mesh.
+  std::vector<float> meshLumaField_;
+  int meshLumaW_ = 0;
+  int meshLumaH_ = 0;
+  double creatureLureX_ = 0.0;      // what the moths steer toward
+  double creatureLureY_ = 0.0;
+
+  CodeEditorState codeEditor_;
+  static constexpr std::size_t kCodeEditorMaxChars = 512;
+  static constexpr int kCodeFieldPad = 8;
+  int codeEditorCellW_ = 0;    // one monospaced advance, measured per frame
+  int codeEditorLineH_ = 0;
+  int codeEditorCols_ = 1;
+
+  InlineTextEditorState inlineEditor_;
+  SDL_Rect lastInlineEditorAnchorRect_ {};
+  SDL_Rect bottomBarRect_ {};
+  SDL_Rect mediaGroupRect_ {};
+  SDL_Rect transportGroupRect_ {};
+  SDL_Rect outputGroupRect_ {};
+  SDL_Rect deskGroupRect_ {};
+  SDL_Rect sourceDefaultDropdownRect_ {};
+  SDL_Rect patternDefaultDropdownRect_ {};
+  SDL_Rect cueSourceTypeDropdownRect_ {};
+  SDL_Rect cueWindowSourceDropdownRect_ {};
+  SDL_Rect cuePatternTypeDropdownRect_ {};
+  SDL_Rect cueTransitionStyleDropdownRect_ {};
+  int inspectorSectionBottomMax_ = 0;  // deepest open-section bottom this frame (scrolled space)
+  std::string sourceDefaultTypeId_ = "window";
+  std::string patternDefaultTypeId_ = "pocket-test";
+
+  // Deck settings modal
+  bool deckSettingsOpen_ = false;
+  int deckSettingsDeckIdx_ = 0;
+  SDL_Rect deckSettingsCloseBtn_ {};
+  std::vector<SDL_Rect> deckGearBtns_;
+  SDL_Rect dsTransDurMinus_ {}, dsTransDurPlus_ {};
+  std::vector<SDL_Rect> dsTransStyleBtns_;
+  SDL_Rect dsTcFpsCycle_ {}, dsTcChaseBtn_ {}, dsTcRunBtn_ {}, dsTcTrigBtn_ {};
+  SDL_Rect dsTcSetBtn_ {};
+  SDL_Rect dsNdiToggle_ {}, dsNdiRename_ {};
+
+  // Keyboard shortcuts overlay
+  bool shortcutsOverlayOpen_ = false;
+  bool dashboardOverlayOpen_ = false;
+  // The dashboard's OWN hit list. Not quickButtons_: everything pushed there
+  // after cueSettingsQuickButtonStartIndex_ is treated as an inspector
+  // control and gated to the inspector's viewport, so a centred overlay's
+  // buttons were tested against a rectangle they are nowhere near and every
+  // click was thrown away. That is why 'add a button' did nothing.
+  std::vector<QuickButton> dashButtons_;
+  SDL_Rect dashModalRect_ {};
+  SDL_Rect dashCloseRect_ {};
+  // Which tile was fired last and when, so it can squish on press. Purely
+  // cosmetic and runtime-only.
+  int dashPressedSlot_ = -1;
+  Uint64 dashPressedAtMs_ = 0;
+
+  // Undo/redo state snapshots. A step carries the file its show belongs to,
+  // and whether it is a whole other show -- NEW and OPEN put the show they
+  // replace on the stack -- rather than an edit to this one.
+  struct UndoStep {
+    Project project;
+    fs::path file;
+    bool showSwap = false;
+  };
+  std::vector<UndoStep> undoStack_;
+  std::vector<UndoStep> redoStack_;
+  static constexpr int kMaxUndoLevels = 40;
+
+  // Warp presets (named corner configurations)
+  struct WarpPreset {
+    std::string name;
+    float tlx, tly, trx, try_, brx, bry, blx, bly;
+    std::string mode;
+    int gridCols = 0, gridRows = 0;
+    bool gridSmooth = true;
+    std::vector<float> gridOffsets;
+  };
+  std::vector<WarpPreset> warpPresets_;
+  // Put the control window up, once, after the first frame has been presented.
+  // Called from every path that presents it, because which one draws first
+  // depends on whether a show is loading, and a window that never appears is a
+  // worse bug than one that flashes.
+  void revealControlWindow() {
+    if (controlWindowRevealed_ || !controlWindow_) {
+      return;
+    }
+    controlWindowRevealed_ = true;
+    if (windowsHiddenForMeasurement()) return;
+    SDL_ShowWindow(controlWindow_);
+    SDL_RaiseWindow(controlWindow_);
+  }
+  // Measurement runs on the REAL renderer (D3D11, HDR) of a machine somebody
+  // is using: DECKBOY_HIDE_WINDOWS=1 keeps the desk and every output window off
+  // their screens. The windows exist and render; they are never shown.
+  static bool windowsHiddenForMeasurement() {
+    const char* hide = std::getenv("DECKBOY_HIDE_WINDOWS");
+    return hide && *hide == '1';
+  }
+  void showOutputWindow(SDL_Window* window) {
+    if (window && !windowsHiddenForMeasurement()) SDL_ShowWindow(window);
+  }
+  bool controlWindowRevealed_ = false;
+
+  std::optional<Cue> cueSettingsClipboard_;
+  // The effect chain on its own, separate from the whole-cue clipboard above:
+  // copying a cue also brings its geometry, fades and crop, which is not what
+  // is wanted when only the LOOK is worth keeping.
+  std::vector<deckboy::effects::CueEffect> effectChainClipboard_;
+  std::string effectChainClipboardDriver_;
+  // The OUTPUT's mapping, since that is what warp is. Was a Deck, which is
+  // the struct the 0.99.374 migration moved warp OFF.
+  std::optional<OutputTarget> warpSettingsClipboard_;
+
+  // Master fader
+  SDL_Rect masterFaderRect_ {};
+  // The VJ crossfader: a drag rect like the master fader, because where along
+  // it you press IS the value.
+  SDL_Rect vjCrossfaderRect_ {};
+  // A and B preview monitors, and their textures. Uploaded from each deck's
+  // own decoded frame, which is the only picture of a deck the control window
+  // can get without a second decode.
+  SDL_Rect vjPreviewRectA_ {};
+  SDL_Rect vjPreviewRectB_ {};
+  SDL_Texture* vjPreviewTex_[2] = {nullptr, nullptr};
+  int vjPreviewTexW_[2] = {0, 0};
+  int vjPreviewTexH_[2] = {0, 0};
+  Uint32 vjPreviewTexFormat_[2] = {0, 0};
+  std::uint64_t vjPreviewFrameIdx_[2] = {UINT64_MAX, UINT64_MAX};
+  bool vjCrossfaderDragActive_ = false;
+  // Which deck's opacity fader is being dragged, or -1. A fader you can only
+  // CLICK is a fader you cannot trim: to move it you had to guess a pixel and
+  // click again, and to reach an end you had to hit the last pixel exactly.
+  int deckOpacityDragIndex_ = -1;
+  // The rail the drag actually started on. Looked up from the column's fader
+  // before, so a fader drawn anywhere else tracked the wrong rectangle.
+  SDL_Rect deckOpacityDragRail_ {};
+
+  // A rail position as a 0..1 value, with the ends made reachable.
+  //
+  // Straight linear mapping means 0 and 1 each occupy a SINGLE PIXEL at the
+  // very edge of the rail -- so "full" and "off", the two positions an
+  // operator reaches for most and the only two that must be exact, were the
+  // two hardest to hit. Anything within the end zone snaps; the rest is
+  // untouched, so the fader still resolves as finely as it always did in the
+  // middle where that matters.
+  static double faderValueFromX(int x, const SDL_Rect& rail) {
+    if (rail.w <= 0) {
+      return 0.0;
+    }
+    const double raw = std::clamp(
+      static_cast<double>(x - rail.x) / static_cast<double>(rail.w), 0.0, 1.0);
+    // Proportional so it feels the same on a narrow rail and a wide one, with
+    // a floor so it never shrinks back to the pixel-hunt it replaces.
+    const double zone = std::max(0.04, 6.0 / static_cast<double>(rail.w));
+    if (raw <= zone) return 0.0;
+    if (raw >= 1.0 - zone) return 1.0;
+    return raw;
+  }
+  // Smoothed position, for the handle's lean. The real value snaps; this is
+  // what chases it.
+  double vjMixShown_ = 0.0;
+  // When the bar started dropping in, so the reveal can be eased.
+  double vjBarRevealAt_ = 0.0;
+  int vjTakeDeck_ = -1;        // which deck asked for the held take
+  bool vjTakeFiring_ = false;  // guards the deferred take against re-queueing
+
+  // ATEM switcher client (read-only program-bus watcher)
+  // -1 means "has not been told yet", which is deliberately distinct from any
+  // real input number: the first reading is state, not a transition.
+  // WHAT THE THREAD IS ALLOWED TO READ.
+  //
+  // The switcher client runs on its own thread and must not reach into
+  // project_: the settings handlers write those fields on the main thread, and
+  // a worker reading a std::string mid-assignment is undefined behaviour, not
+  // a stale value. Restarting the client on change does not save it -- the
+  // write lands before the join.
+  //
+  // So the host is snapshotted into the thread at start (the same shape
+  // startNmcSyncBridge uses for its own config), and the input number is an
+  // atomic mirror, which also means changing which input Deckboy is does not
+  // need a reconnect.
+  // What the switcher calls each of its inputs, as it told us on connect.
+
+  // HyperDeck server
+  //
+  // 9993, because that is the port the HyperDeck Ethernet Protocol is spoken
+  // on and therefore the only one anything will dial. ATEM Software Control,
+  // Companion's HyperDeck module, a Smart Videohub -- none of them ask where to
+  // look. This answered correctly on 9992 for a long time and nothing ever
+  // found it, which is the same as not having been built.
+  //
+  // DECKBOY_HYPERDECK_PORT still moves it, for a machine that also has a real
+  // HyperDeck's control port forwarded to it.
+  int hyperDeckPort_ = 9993;
+  std::thread hyperDeckThread_;
+  std::atomic<bool> hyperDeckRunning_ {false};
+  SocketHandle hyperDeckListenFd_ = kInvalidSocket;
+
+  fs::path uiPackRoot_;
+  bool uiPackAvailable_ = false;
+  // How many of a representative handful actually decoded. Zero, with the
+  // pack present, is the state that used to be completely silent.
+  int uiImagesDecoded_ = -1;
+  UiImageAsset uiHeaderArt_;
+  UiImageAsset uiAboutLogo_;
+  UiImageAsset uiSplashArt_;
+  // How much theme accent the current splash takes: 1.0 for the grayscale
+  // masters, ~0.35 for finished colour art, 0 for the branded wordmark.
+  bool firstRunEver_ = false;   // very first launch on this machine
+  // The scale the fonts are loaded at, which the window-fit may hold below the
+  // chosen one; 0 until the first applyUiScale. See windowFitUiScale.
+  double appliedUiScale_ = 0.0;
+  bool fitScalePending_ = false;
+  double fitScalePendingValue_ = 0.0;
+  std::chrono::steady_clock::time_point fitScalePendingSince_ {};
+  float splashTintStrength_ = 0.0f;
+  fs::path lastSplashChoice_;    // so two boots running do not pick the same art
+  UiImageAsset uiMonitorFrameArt_;
+  UiImageAsset uiOutputChipIdleArt_;
+  UiImageAsset uiOutputChipArmedArt_;
+  UiImageAsset uiOutputChipLiveArt_;
+  UiImageAsset uiOutputChipWarnArt_;
+  UiImageAsset uiOutputChipOffArt_;
+  UiImageAsset uiCueIconVideo_;
+  UiImageAsset uiCueIconImage_;
+  UiImageAsset uiCueIconBrowser_;
+  UiImageAsset uiCueIconPattern_;
+  UiImageAsset uiCueIconPip_;
+  UiImageAsset uiCueIconLowerThird_;
+  UiImageAsset uiCueIconSource_;
+  UiImageAsset uiCueIconAudio_;
+  // Control / toolbar button icons
+  UiImageAsset uiBtnImport_;
+  UiImageAsset uiBtnPlay_;
+  UiImageAsset uiBtnPause_;
+  UiImageAsset uiBtnTake_;
+  UiImageAsset uiBtnStop_;
+  UiImageAsset uiBtnRerack_;
+  UiImageAsset uiBtnClear_;
+  UiImageAsset uiBtnSettings_;
+  UiImageAsset uiBtnFullscreen_;
+  UiImageAsset uiBtnWindow_;
+  UiImageAsset uiBtnBlackout_;
+  UiImageAsset uiModeLoopOn_;
+  UiImageAsset uiModeOnce_;
+  UiImageAsset uiModeShuffleOn_;
+  UiImageAsset uiModeOrder_;
+
+  std::unique_ptr<MediaEngine> previewMediaEngine_;
+  // Live preview textures track SDL pixel format so an RGBA→NV12 cue switch
+  // (or vice versa) rebuilds the texture instead of reusing a stale sampler.
+  SDL_Texture* previewCueTex_ = nullptr;
+  int previewCueTexW_ = 0;
+  int previewCueTexH_ = 0;
+  Uint32 previewCueTexFormat_ = 0;
+  std::uint64_t previewCueFrameIdx_ = static_cast<std::uint64_t>(-1);
+  std::string previewCueKey_;
+  Cue previewResolvedCue_;
+  bool previewResolvedCueValid_ = false;
+  // One small picture per playlist, for the multiview. Refreshed one deck
+  // per tick (see syncDeckPreviewTextures) so the cost does not grow with the
+  // number of playlists.
+  struct DeckPreviewTex {
+    SDL_Texture* tex = nullptr;
+    int w = 0;
+    int h = 0;
+    Uint32 fmt = 0;
+    std::uint64_t frameIdx = 0;
+  };
+  std::vector<DeckPreviewTex> deckPreviewTex_;
+  int deckPreviewCursor_ = 0;
+  std::vector<SDL_Rect> multiviewTileRects_;
+  std::vector<int> multiviewTileDecks_;   // -1 = the programme tile
+  std::vector<SDL_Rect> multiviewFaderRects_;
+  std::vector<SDL_Rect> multiviewChipRects_;   // each window's "..." menu, by window
+  SDL_Rect multiviewBtnRect_ {};
+  SDL_Rect outputBadgeRect_ {};   // the OUTPUT chip in the programme header: a switch
+
+  SDL_Texture* controlPreviewTex_ = nullptr;
+  int controlPreviewTexW_ = 0;
+  int controlPreviewTexH_ = 0;
+  Uint32 controlPreviewTexFormat_ = 0;
+  std::uint64_t controlPreviewFrameIdx_ = static_cast<std::uint64_t>(-1);
+  // Program-monitor tap bookkeeping: which output composite the control
+  // preview currently holds (vs. a raw decoder frame), and the last tap serial
+  // uploaded. Composite frames already carry the cue's geometry, so the
+  // monitor must draw them plainly instead of re-applying it.
+  bool controlPreviewIsComposite_ = false;
+  // Draws a transition on the control preview when no output is armed
+  // (renderPreviewTransition). Bound to controlRenderer_; released before it.
+  std::unique_ptr<OutputRuntime> previewTransitionRuntime_;
+  // Scratch for the preview's graded/effected copy, so the decoded frame
+  // itself is never mutated -- other consumers still need it clean.
+  DecodedFrame controlPreviewLookFrame_;
+  std::uint64_t controlPreviewTapSerial_ = 0;
+  std::vector<QuickButton> quickButtons_;
+  // OUTSNAP: the next presented frame of one output, saved as it leaves --
+  // after AOI, warp, blend and orientation, which a recording (taken from the
+  // composite) and the monitor tap (taken before warp) both miss.
+  std::string outputSnapPath_;
+  int outputSnapIndex_ = 0;
+  // Value scrubbing: click-hold-drag horizontally on an inspector value cell
+  // steps the row's dec/inc actions (like number scrubbing in AE/Resolve);
+  // a plain click (released before the drag threshold) opens the exact-entry
+  // popup as before. Zones are rebuilt each frame next to quickButtons_.
+  struct ValueScrubZone {
+    SDL_Rect rect {};
+    QuickAction decAction = QuickAction::ToggleLoop;
+    QuickAction incAction = QuickAction::ToggleLoop;
+    QuickAction clickAction = QuickAction::ToggleLoop;
+    bool hasClickAction = false;
+    int param = -1;              // see QuickButton::param
+  };
+  std::vector<ValueScrubZone> valueScrubZones_;
+  size_t cueSettingsScrubZoneStartIndex_ = 0;  // zones past this obey the settings viewport clip
+  bool valueScrubPending_ = false;   // button down on a zone, threshold not yet crossed
+  bool valueScrubEngaged_ = false;   // actively scrubbing
+  ValueScrubZone activeValueScrub_ {};
+  int valueScrubStartX_ = 0;
+  int valueScrubLastStepX_ = 0;
+  std::vector<MonitorsTileHit> monitorsTileHits_;
+  std::vector<DecksPanelCueHit> decksPanelCueHits_;
+  std::vector<DecksPanelDeckButtonHit> decksPanelDeckButtonHits_;
+  std::vector<CueRowActionHit> cueRowActionHits_;
+  std::vector<OutputMenuButton> outputMenuButtons_;
+  bool outputFpsCounterEnabled_ = true;
+  size_t cueSettingsQuickButtonStartIndex_ = 0;
+  SDL_Rect cueSettingsViewportRect_ {};
+  int cueSettingsScroll_ = 0;
+  // The inspector's scrollbar, published by the renderer so the input layer can
+  // let an operator drag it. Empty when there is nothing to scroll.
+  SDL_Rect cueSettingsScrollRailRect_ {0, 0, 0, 0};
+  int cueSettingsScrollThumbH_ = 0;
+  bool cueSettingsScrollDragActive_ = false;
+  int pendingInspectorScroll_ = -1;   // --inspector-scroll, applied once measurable
+  std::string uiDumpPath_;            // --ui-dump <file>, written once then quit
+  int uiDumpFramesLeft_ = 0;
+  bool uiDumpThenQuit_ = true;        // false for UISNAP: one picture, keep running
+  // --contrast-check state (see enableContrastCheck).
+  std::vector<std::string> contrastCheckThemes_;
+  std::string contrastCheckDir_;
+  std::size_t contrastCheckStep_ = 0;
+  int contrastCheckFrames_ = 0;
+  std::uint64_t contrastCheckBaseline_ = 0;
+  bool contrastCheckActive_ = false;
+  bool contrastCheckFailed_ = false;
+  std::set<std::string> contrastCheckLabels_;  // which labels were corrected
+  int lastInspectorScrollMax_ = -1;   // to tell "still growing" from "at the end"
+  int cueSettingsScrollMax_ = 0;
+  SDL_Rect settingsVideoViewport_ {};
+  int settingsVideoScroll_ = 0;
+  // System tab scroll: only engages when the cards are taller than the modal,
+  // which happens at large UI scales.
+  int settingsSystemScroll_ = 0;
+  // How tall the System tab actually drew last frame. The card heights above
+  // it are hand-computed and can be too small; this is measured, so nothing
+  // can end up unreachable because a constant was not kept in step.
+  int settingsSystemDrawnH_ = 0;
+  int settingsSystemScrollMax_ = 0;
+  SDL_Rect settingsSystemViewport_ {0, 0, 0, 0};
+  // Network tab scroll: same reason as System's above -- NMC IN & OUT and
+  // the TALLY card ran off the bottom of the modal with no way to reach
+  // them, reported by name.
+  // Audio tab scroll: LIVE CAPTIONS made it taller than the modal at 1x.
+  int settingsAudioScroll_ = 0;
+  int settingsAudioScrollMax_ = 0;
+  SDL_Rect settingsAudioViewport_ {0, 0, 0, 0};
+  int settingsNetworkScroll_ = 0;
+  int settingsNetworkScrollMax_ = 0;
+  SDL_Rect settingsNetworkViewport_ {0, 0, 0, 0};
+  int settingsVideoScrollMax_ = 0;
+  bool cueSectionPlaybackOpen_ = true;
+  bool cueSectionMetadataOpen_ = true;
+  bool cueSectionGeometryOpen_ = true;
+  bool cueSectionKeyOpen_ = false;
+  bool cueSectionEffectsOpen_ = true;   // datamosh lives here
+  // The audio chain, collapsed by default. Most cues never get one, and an
+  // always-open empty section pushes everything below it down the panel.
+  bool cueSectionAudioFxOpen_ = false;
+  bool cueSectionCodeOpen_ = true;      // the live expression, on code cues
+  bool cueSectionTimerOpen_ = true;     // stage timer controls
+  bool cueSectionToneOpen_ = true;      // test tone generator controls
+  bool cueSectionSynthOpen_ = true;    // chip voice controls
+  bool cueSectionVideoSynthOpen_ = true;  // video synth controls
+
+  // Motion drivers, one per deck. The driver clip is decoded ONLY for the
+  // vectors its codec already computed -- 900fps for 720p, measured -- so this
+  // costs a fraction of a millisecond a frame and its pictures are discarded.
+  struct MotionDriver {
+    std::string path;
+    void* handle = nullptr;
+    deckboy::motion::MotionField field;
+    bool exhausted = false;
+    bool haveField = false;
+    // Fractional advance. Speed is fields per RENDERED frame, so 0.5 holds
+    // each field for two frames and 2.0 skips one. Accumulating rather than
+    // rounding per frame keeps a slow driver smooth instead of stuttering
+    // between "advance" and "do not".
+    double advanceCredit = 0.0;
+    // The driver has more than one consumer now -- the output composite and
+    // the control preview both ask for it, and an NDI-only show has the first
+    // without the second. Advancing per ASKER would run the driver at a
+    // multiple of its speed depending on what happened to be armed, so the
+    // first ask of each frame advances and the rest are served the same field.
+    std::uint64_t lastAdvancedFrame = 0;
+    // ACCUMULATED displacement. The raw field is what the driver moved in ONE
+    // frame, which is a twitch. A puppet holds its pose: this integrates the
+    // motion so a driver clip SCULPTS the picture over time and then lets it
+    // spring back, which is the difference between a wobble and being
+    // puppeteered.
+    deckboy::motion::MotionField accumulated;
+    // What the last caller was handed. The guards below serve the SAME field to
+    // every consumer in a frame, and after the preview started advancing the
+    // driver too there are two -- so serving the raw field there quietly undid
+    // the accumulation for whichever asked second, which was the output.
+    const deckboy::motion::MotionField* served = nullptr;
+  };
+  std::uint64_t motionDriverFrameCounter_ = 0;
+  std::unordered_map<int, MotionDriver> motionDrivers_;
+  // Per-deck scratch for the effects that remember things, one slot per
+  // position in that deck's chain. Kept here rather than inside the effects
+  // because the stack is stateless by design: it has to be runnable twice,
+  // dumpable headlessly, and it does not know which cue it is working on.
+  //
+  // Keyed by stack POSITION, so feedback and scotopic in one chain get a slot
+  // each. Sized on demand and never shrunk while a cue is live -- a chain that
+  // gains an effect must not renumber the memory of the ones already running.
+  using EffectStateSlots = std::vector<std::vector<std::uint8_t>>;
+  std::unordered_map<int, EffectStateSlots> effectStateBuffers_;
+
+  EffectStateSlots* effectStateForDeck(int deckIndex, std::size_t slots) {
+    EffectStateSlots& s = effectStateBuffers_[deckIndex];
+    if (s.size() < slots) s.resize(slots);
+    return &s;
+  }
+
+  // A deck's recent played audio, unrolled into time order for the picture
+  // effects that draw with it. One buffer per deck, reused: the engine hands
+  // over a few thousand floats and a fresh allocation per frame per output
+  // would be pure churn. Only filled when the chain actually contains an
+  // effect that reads it.
+  std::unordered_map<int, std::vector<float>> deckAudioTraceBuffers_;
+  std::vector<float>& deckAudioTraceScratch(int deckIndex) {
+    return deckAudioTraceBuffers_[deckIndex];
+  }
+
+  // What this deck's effect chain actually costs per frame, on this machine, at
+  // this raster.
+  //
+  // There is a cap of twelve effects, but a cap only bounds the damage: twelve
+  // cheap ones are free and four expensive ones at 4K are not, so a count is
+  // the wrong thing to tell an operator. This is the measurement, smoothed,
+  // shown in the inspector next to the chain that caused it.
+  //
+  // Smoothed rather than instantaneous because the number is being READ: a
+  // figure that flickers between 8 and 40 tells you nothing you can act on.
+  std::unordered_map<int, double> effectChainCostMs_;
+
+  void noteEffectChainCost(int deckIndex, double ms) {
+    double& held = effectChainCostMs_[deckIndex];
+    held = held <= 0.0 ? ms : held * 0.9 + ms * 0.1;
+  }
+
+  double effectChainCostForDeck(int deckIndex) const {
+    auto it = effectChainCostMs_.find(deckIndex);
+    return it == effectChainCostMs_.end() ? 0.0 : it->second;
+  }
+
+  // True for the FIRST consumer of this deck this frame, false for every one
+  // after it. Two window outputs showing the same deck both run the stack, and
+  // without this the second would step the echo again -- so the two screens
+  // would show different frames of the same loop.
+  std::unordered_map<int, std::uint64_t> feedbackAdvancedFrame_;
+  bool claimDeckFeedbackAdvance(int deckIndex) {
+    auto it = feedbackAdvancedFrame_.find(deckIndex);
+    if (it != feedbackAdvancedFrame_.end() &&
+        it->second == motionDriverFrameCounter_) {
+      return false;
+    }
+    feedbackAdvancedFrame_[deckIndex] = motionDriverFrameCounter_;
+    return true;
+  }
+
+  // The control preview keeps its OWN memory. It runs at a different rate and
+  // sometimes not at all, and sharing the output's would advance every stateful
+  // effect twice on any frame where both ran -- so the preview would show a
+  // faster decay than the audience sees.
+  std::unordered_map<int, EffectStateSlots> previewEffectStateBuffers_;
+  EffectStateSlots* previewEffectStateForDeck(int deckIndex, std::size_t slots) {
+    EffectStateSlots& s = previewEffectStateBuffers_[deckIndex];
+    if (s.size() < slots) s.resize(slots);
+    return &s;
+  }
+
+  // Everything this deck's effects were remembering, forgotten. Each one
+  // re-seeds from the picture it is next handed, so this fades up rather than
+  // flashing black.
+  void resetDeckFeedback(int deckIndex) {
+    auto output = effectStateBuffers_.find(deckIndex);
+    if (output != effectStateBuffers_.end()) output->second.clear();
+    auto preview = previewEffectStateBuffers_.find(deckIndex);
+    if (preview != previewEffectStateBuffers_.end()) preview->second.clear();
+  }
+
+  // The inspector's driver preview and scrub bar. The driver has no cue, no
+  // engine and no transport of its own, so this is the only place any of its
+  // state is visible.
+  const MotionDriver* motionDriverForDeck(int deckIndex) const {
+    auto it = motionDrivers_.find(deckIndex);
+    return it == motionDrivers_.end() ? nullptr : &it->second;
+  }
+
+  void seekMotionDriver(int deckIndex, double seconds) {
+    auto it = motionDrivers_.find(deckIndex);
+    if (it == motionDrivers_.end() || !it->second.handle) {
+      return;
+    }
+    deckboy::motion::seekMotionSource(it->second.handle, std::max(0.0, seconds));
+    it->second.advanceCredit = 0.0;
+    it->second.exhausted = false;
+  }
+
+  SDL_Texture* motionDriverThumbTex_ = nullptr;
+  int motionDriverThumbW_ = 0;
+  int motionDriverThumbH_ = 0;
+  std::uint64_t motionDriverThumbFrame_ = UINT64_MAX;
+  // Set while the bar is on screen and cleared when it is not, so a press
+  // cannot scrub a driver that is no longer being shown.
+  SDL_Rect motionDriverScrubRect_ {0, 0, 0, 0};
+  double motionDriverScrubDuration_ = 0.0;
+  int motionDriverScrubDeck_ = -1;
+  bool motionDriverScrubActive_ = false;
+
+  // The LFO scribble pad, while the pointer is down inside it.
+  bool lfoDrawActive_ = false;
+  SDL_Rect lfoDrawRect_ {0, 0, 0, 0};
+  int lfoDrawPacked_ = -1;
+
+  // Opens or re-points the deck's driver, advances it one frame, and returns
+  // the field to displace by -- or null when nothing is armed. Loops, because
+  // the driver has no transport of its own and a puppet that stops moving when
+  // its driver ends is a puppet that looks broken.
+  const deckboy::motion::MotionField* advanceMotionDriver(int deckIndex,
+                                                          const Cue& cue) {
+    const std::string& want = cue.motionDriverPath;
+    MotionDriver& driver = motionDrivers_[deckIndex];
+    if (driver.path != want) {
+      if (driver.handle) {
+        deckboy::motion::closeMotionSource(driver.handle);
+        driver.handle = nullptr;
+      }
+      driver.path = want;
+      driver.field = {};
+      driver.exhausted = false;
+      driver.haveField = false;
+      driver.advanceCredit = 0.0;
+      if (!want.empty()) {
+        driver.handle = deckboy::motion::openMotionSource(want);
+        if (!driver.handle) {
+          // Said once, not every frame: a driver that will not open is an
+          // operator problem, and a toast per frame is unusable.
+          triggerToast("motion driver would not open");
+          driver.exhausted = true;
+        }
+      }
+    }
+    if (!driver.handle || driver.exhausted) {
+      return nullptr;
+    }
+    if (driver.lastAdvancedFrame == motionDriverFrameCounter_) {
+      return driver.served;   // same field to every consumer this frame
+    }
+    driver.lastAdvancedFrame = motionDriverFrameCounter_;
+    // PAUSED holds the current field rather than stopping the effect: the
+    // picture stays displaced by whatever the driver was doing, which is a
+    // usable look in itself. Stopping would just snap back to undisplaced.
+    if (cue.motionDriverPaused) {
+      return driver.served ? driver.served
+                           : (driver.haveField ? &driver.field : nullptr);
+    }
+    driver.advanceCredit +=
+      std::clamp(static_cast<double>(cue.motionDriverSpeed), 0.0, 4.0);
+    int steps = static_cast<int>(driver.advanceCredit);
+    if (steps <= 0) {
+      // Slower than one field per frame: hold what we have until enough
+      // credit accrues.
+      return driver.haveField ? &driver.field : nullptr;
+    }
+    driver.advanceCredit -= steps;
+    steps = std::min(steps, 4);   // a speed spike must not decode unbounded
+    for (int i = 0; i < steps; ++i) {
+      if (!deckboy::motion::readMotionField(driver.handle, driver.field)) {
+        deckboy::motion::rewindMotionSource(driver.handle);
+        if (!deckboy::motion::readMotionField(driver.handle, driver.field)) {
+          driver.exhausted = true;   // yields nothing twice: it is done
+          return nullptr;
+        }
+      }
+      driver.haveField = true;
+    }
+    return integrateMotionDriver(driver, cue);
+  }
+
+  // Fold this frame's motion into the driver's memory and hand back whichever
+  // field the cue actually asked for.
+  //
+  // memory 0 returns the raw per-frame field, which is exactly what this did
+  // before it had a memory -- and it is what every existing show carries, so
+  // none of them change.
+  const deckboy::motion::MotionField* integrateMotionDriver(MotionDriver& driver,
+                                                            const Cue& cue) {
+    double memory = 0.0;
+    double spring = 0.5;
+    for (const auto& fx : cue.effects) {
+      if (fx.kind == deckboy::effects::CueEffectKind::MotionPuppet && !fx.bypassed) {
+        spring = std::clamp(static_cast<double>(fx.paramA), 0.0, 1.0);
+        memory = std::clamp(static_cast<double>(fx.paramB), 0.0, 1.0);
+        break;
+      }
+    }
+    if (memory <= 0.0005 || driver.field.empty()) {
+      driver.served = driver.haveField ? &driver.field : nullptr;
+      return driver.served;
+    }
+    // Reshape on the first frame or if the driver changed size.
+    if (driver.accumulated.cols != driver.field.cols ||
+        driver.accumulated.rows != driver.field.rows ||
+        driver.accumulated.dx.size() != driver.field.dx.size()) {
+      driver.accumulated = driver.field;
+      std::fill(driver.accumulated.dx.begin(), driver.accumulated.dx.end(), 0.0f);
+      std::fill(driver.accumulated.dy.begin(), driver.accumulated.dy.end(), 0.0f);
+    }
+    driver.accumulated.sourceWidth = driver.field.sourceWidth;
+    driver.accumulated.sourceHeight = driver.field.sourceHeight;
+    driver.accumulated.frameIndex = driver.field.frameIndex;
+    // Spring is how fast it returns to rest, memory how much each frame adds.
+    // Both are needed: memory alone runs away, and a return alone never builds.
+    const float keep = static_cast<float>(1.0 - (0.02 + spring * 0.28));
+    const float add = static_cast<float>(0.3 + memory * 1.7);
+    for (std::size_t i = 0; i < driver.accumulated.dx.size(); ++i) {
+      driver.accumulated.dx[i] = driver.accumulated.dx[i] * keep + driver.field.dx[i] * add;
+      driver.accumulated.dy[i] = driver.accumulated.dy[i] * keep + driver.field.dy[i] * add;
+    }
+    driver.served = &driver.accumulated;
+    return driver.served;
+  }
+
+  // Back to the driver's first frame. Called on TAKE when the cue asks for it,
+  // so a rehearsed look repeats exactly rather than depending on how long the
+  // app has been open.
+  void restartMotionDriver(int deckIndex) {
+    auto it = motionDrivers_.find(deckIndex);
+    if (it == motionDrivers_.end() || !it->second.handle) {
+      return;
+    }
+    deckboy::motion::rewindMotionSource(it->second.handle);
+    it->second.advanceCredit = 0.0;
+    it->second.exhausted = false;
+  }
+
+  void closeMotionDrivers() {
+    for (auto& [deckIndex, driver] : motionDrivers_) {
+      (void) deckIndex;
+      if (driver.handle) {
+        deckboy::motion::closeMotionSource(driver.handle);
+        driver.handle = nullptr;
+      }
+    }
+    motionDrivers_.clear();
+  }
+
+  // Smoothed output level, 0..1, for anything that reacts to audio.
+  // Smoothed because a raw peak makes a visualiser twitch rather than move.
+  double reactiveAudioLevel_ = 0.0;
+  SDL_AudioStream* audioInputStream_ = nullptr;
+  std::string audioInputActiveDevice_;   // what actually opened, not what was asked for
+  double audioInputPeak_ = 0.0;          // 0..1, decays; drives the meter
+  std::vector<std::int16_t> audioInputScratch_;
+  // Each egress reads captured input independently, just as it reads a deck.
+  deckboy::core::DeckAudioRing inputAudioRing_;
+  bool cueSectionRoutingOpen_ = true;
+  bool cueSectionAudioOpen_ = true;
+  struct TimelineStripCacheEntry {
+    DecodedFrame frame;
+    int readyTiles = 0;
+  };
+  static constexpr size_t kThumbnailCacheLimit = 24;
+  // One small texture per playlist row that has a still. Uploaded from the
+  // shared thumbnail cache the first time a row draws, and bounded well above
+  // a screenful so scrolling does not thrash it.
+  static constexpr size_t kRowThumbLimit = 64;
+  std::map<std::string, SDL_Texture*> rowThumbTex_;
+  std::deque<std::string> rowThumbOrder_;
+  // The next row that wants one. Filled during the playlist pass, acted on
+  // after it, so exactly one decode is in flight however long the list is.
+  std::string rowThumbWantedKey_;
+  // The audio row that asked for a waveform this frame. One per frame, for the
+  // same reason as the thumbnail above it: the analysis costs a thread and an
+  // ffmpeg apiece.
+  std::string rowWaveWantedPath_;
+  int rowThumbWantedDeck_ = -1;
+  int rowThumbWantedCue_ = -1;
+  static constexpr size_t kTimelineStripCacheLimit = 24;
+  // 9 stills per clip (was 5) so the filmstrip reads as a continuous strip
+  // and samples the clip densely enough now that the timeline lane can be
+  // enlarged via the program/timeline splitter — fewer, wider-stretched tiles
+  // looked sparse and seamy when expanded.
+  static constexpr int kTimelineStripThumbCount = 9;
+  // 2x thumbnail resolution so the filmstrip stays sharp when the timeline
+  // lane is enlarged. Rendered with linear filtering (see app_render_main.ipp)
+  // rather than the UI's default nearest scale, since photographic thumbnails
+  // upscale badly point-sampled.
+  static constexpr int kTimelineStripThumbW = 256;
+  static constexpr int kTimelineStripThumbH = 144;
+  static constexpr int kTimelineStripPadding = 2;
+  // Per-selection thumbnail (decoded from the selected cue via ffmpeg)
+  ChildProcess thumbnailProcess_;
+  std::thread thumbnailThread_;
+  std::mutex thumbnailMutex_;
+  std::optional<DecodedFrame> pendingThumbnail_;
+  std::atomic<bool> thumbnailPending_ {false};
+  std::atomic<bool> thumbnailLoading_ {false};
+  SDL_Texture* selectedThumbnailTex_ = nullptr;
+  int selectedThumbnailTexW_ = 0;
+  int selectedThumbnailTexH_ = 0;
+  std::string selectedThumbnailCueKey_;
+  std::map<std::string, DecodedFrame> selectedThumbnailCache_;
+  std::deque<std::string> selectedThumbnailCacheOrder_;
+  ChildProcess timelineStripProcess_;
+  std::thread timelineStripThread_;
+  std::mutex timelineStripMutex_;
+  std::optional<DecodedFrame> pendingTimelineStrip_;
+  int pendingTimelineStripReadyTiles_ = 0;
+  std::atomic<bool> timelineStripPending_ {false};
+  std::atomic<bool> timelineStripLoading_ {false};
+  SDL_Texture* timelineStripTex_ = nullptr;
+  int timelineStripTexW_ = 0;
+  int timelineStripTexH_ = 0;
+  int timelineStripTexReadyTiles_ = 0;
+  std::string timelineStripCueKey_;
+  std::string timelineStripCueId_;
+  std::string timelineStripFailedCueKey_;
+  Uint64 timelineStripFailedAtMs_ = 0;
+  std::map<std::string, TimelineStripCacheEntry> timelineStripCache_;
+  std::deque<std::string> timelineStripCacheOrder_;
+  std::atomic<std::uint64_t> timelineStripJobSerial_ {0};
+  // Timer cues run their OWN clock, deliberately not the transport (the owner,
+  // 2026-08-20). The cue stays live on the stage screen while the operator
+  // starts, pauses, resets or jumps the countdown -- tying it to transport
+  // meant pausing the clock also took the display off air.
+  //
+  // Keyed by cue id rather than index so it survives reordering, insertion and
+  // deletion in the cue list.
+  std::map<std::string, TimerRuntime> timerRuntimes_;
+  Uint64 lastTimerPruneSec_ = 0;
+  // Show log: append-only record of what fired and when. See showLog().
+  std::ofstream showLogFile_;
+  bool showLogEnabled_ = true;
+  double lastScheduleCheckSeconds_ = -1.0;  // see processScheduledStarts()
+
+  std::unordered_map<std::string, PipOverlayRuntime> pipOverlayRuntimes_;
+  std::vector<int> deckScrolls_;
+  std::vector<int> deckScrollMax_;                  // per-deck clamp bound, set at render
+  std::vector<int> deckFollowedActive_;             // auto-follow: last live index we revealed
+  std::vector<Uint64> deckScrollSettleMs_;          // per-deck last-frame time for the spring dt
+  Uint64 lastDeckScrollMs_ = 0;                     // last wheel input, for rubber-band settle
+  static constexpr int kDeckScrollOverscroll = 44;  // px of springy over-scroll past the bottom
+  // The playlist scrollbar, published by the renderer for the input layer --
+  // the same arrangement the inspector's rail uses, and for the same reason:
+  // only the renderer knows where the list ended up.
+  std::vector<SDL_Rect> deckListScrollRails_;
+  std::vector<int> deckListScrollThumbH_;
+  int deckListScrollDragDeck_ = -1;                 // which deck's thumb is held
+  // Middle-button autoscroll: the deck it is anchored in, and the pointer Y it
+  // was anchored at. -1 = not running. Latched, like Windows: one press starts
+  // it, the next press anywhere stops it.
+  int autoScrollDeck_ = -1;
+  int autoScrollAnchorY_ = 0;
+  double autoScrollRemainder_ = 0.0;
+  std::vector<int> deckOverlayScrolls_;
+  int mouseX_ = 0;
+  int mouseY_ = 0;
+  // Whether the pointer is over the control window now. The creatures react
+  // to it, and a position left over from before it went away is not a pointer.
+  bool mouseInControlWindow_ = false;
+  bool confirmQuit_ = false;
+  SDL_Rect quitYesBtn_ {};
+  SDL_Rect quitNoBtn_ {};
+
+  // Modal prompt shown when the operator tries to enable an output backend or
+  // create a cue kind whose runtime dependency is not installed on this
+  // machine (NDI Runtime, Blackmagic Desktop Video, WebView2 Runtime). The
+  // CTA button opens the official vendor download page in the default
+  // browser; Close just dismisses. The prompt is lazy — it only appears
+  // when the operator actually attempts the gated action.
+  struct DependencyPromptState {
+    bool active = false;
+    std::string title;       // e.g. "NDI Runtime required"
+    std::string body;        // e.g. one or two sentences of context
+    std::string url;         // vendor download page (https://...)
+    std::string ctaLabel;    // e.g. "Open NDI Tools download page"
+    std::string closeLabel = "CLOSE";
+    // When set, the CTA RUNS this instead of opening url. Lets the same modal
+    // carry an offer to act (convert these cues) as well as a download link,
+    // rather than growing a second prompt system beside this one.
+    std::function<void()> onCta;
+    // Run when the operator CLOSES the prompt. A suggestion that should never
+    // come back needs somewhere to record that, and closing was the only
+    // signal available: dismissDependencyPrompt is shared by every prompt and
+    // could not tell which one it was shutting.
+    std::function<void()> onDismiss;
+    SDL_Rect ctaRect {};
+    SDL_Rect closeRect {};
+  };
+  DependencyPromptState depPrompt_;
+  int pendingLiveDeleteConfirmDeckIndex_ = -1;
+  std::string pendingLiveDeleteConfirmSignature_;
+  std::string pendingLiveDeleteConfirmMessage_;
+  Uint64 pendingLiveDeleteConfirmUntilMs_ = 0;
+  // NEW's press-again guard. Not deck-scoped the way the delete one is: NEW
+  // takes the whole show, so there is nothing to key it to.
+  std::string pendingNewShowConfirmMessage_;
+  Uint64 pendingNewShowConfirmUntilMs_ = 0;
+  bool showStartupDialog_ = false;
+  bool showSplashOverlay_ = true;
+  Uint64 splashStartedAt_ = 0;
+  SDL_Rect startupLoadBtn_ {};
+  SDL_Rect startupNewBtn_ {};
+  SDL_Rect startupUpdateRect_ {};   // the splash, its updates line
+  int startupUpdateLogLine_ = -1;    // the boot log line that says whether a newer Deckboy is out
+  SDL_Rect startupOpenSavedBtn_ {};
+  SDL_Rect startupExamplesBtn_ {};
+  SDL_Rect startupLearnBtn_ {};
+  // Recent-show rows on the splash, in the order they are drawn: index i is
+  // recent i, which is also the digit that opens it.
+  std::vector<SDL_Rect> startupRecentBtns_;
+  // SDL3 native file-dialog results, marshalled from the dialog callback onto
+  // the main thread. See the async dialog helpers in app_cue_mgmt.ipp — this
+  // replaces the osascript/powershell/zenity subprocess pickers, which had to
+  // run on a background thread and could not fork a GUI subprocess from a
+  // non-main thread on macOS (why IMPORT silently did nothing there).
+  std::mutex sdlDialogMutex_;
+  std::vector<std::function<void()>> sdlDialogActions_;
+  // ATOMIC on purpose: SDL's docs say the dialog callback "may be invoked from
+  // the same thread or from a different thread", so this flag is set true on the
+  // main thread (showXDialog) and cleared from the callback, which may be
+  // another thread. A plain bool would be a data race.
+  std::atomic<bool> sdlDialogOpen_ {false};   // one native dialog at a time
+  // Async media-presence scan (boot / project open). The worker stats every
+  // file cue off-thread; results land on the update tick by cue id. The
+  // generation counter supersedes stale workers (they bail at their next
+  // check, so joining before a restart is bounded by ~one fs::exists).
+  std::thread mediaScanThread_;
+  std::atomic<std::uint64_t> mediaScanGeneration_ {0};
+  std::mutex mediaScanMutex_;
+  std::vector<std::pair<std::string, bool>> mediaScanResults_;  // cue id → missing
+  std::uint64_t mediaScanResultsGeneration_ = 0;
+  std::atomic<bool> mediaScanReady_ {false};
+  bool mediaScanAnnounce_ = false;
+
+  // Count from the last scanProjectMediaPresence() — drives the toolbar
+  // RELINK button (only visible when > 0).
+  int missingMediaCount_ = 0;
+
+  // -- Soak mode (--soak [minutes]) -------------------------------------------
+  // Long-run stability harness: loops the loaded show (or synthesized
+  // patterns) through the REAL app loop, logging RSS/stall counters once a
+  // minute to stdout + deckboy-soak.log, then quits after the duration.
+  // Never persists project changes (flushDirtyProject is gated) so the
+  // AutoNext rewiring below can't leak into the operator's show file.
+  // Shuffle RNG — seeded once from a real entropy source so the "random" next
+  // cue differs run to run. std::rand() (the old call) is seeded to 1 by
+  // default and Deckboy never called srand, so every launch shuffled to the
+  // exact same order.
+  std::mt19937 shuffleRng_{std::random_device{}()};
+
+  bool soakMode_ = false;
+  double soakMinutes_ = 0.0;
+  Uint64 soakStartMs_ = 0;
+  Uint64 soakLastLogMs_ = 0;
+  int decodeStallTotal_ = 0;
+  // Button feedback: the control under a held press last frame, and the ring
+  // that flashes on it for a moment after the release.
+  bool pressTargetValid_ = false;
+  SDL_Rect pressTarget_ {};
+  SDL_Rect pressFlashRect_ {};
+  Uint64 pressFlashUntilMs_ = 0;
+  // Last transport state written to the show log, per deck (-1 = none yet).
+  std::vector<int> loggedTransport_;   // watchdog trips this run (counted always, logged by soak)
+  std::ofstream soakLogFile_;
+  DragState drag_;
+  enum class TrimDragMode { None, In, Out };
+  enum class LayoutDragMode { None, Playlist, Inspector, Timeline };
+  LayoutDragMode layoutDragMode_ = LayoutDragMode::None;
+  TrimDragMode trimDragMode_ = TrimDragMode::None;
+  bool timelineScrubActive_ = false;
+  bool scrubWasPlaying_ = false;
+  SDL_Rect trimInHandleRect_ {};
+  SDL_Rect trimOutHandleRect_ {};
+  SDL_Rect contentAreaRect_ {};
+  SDL_Rect mainPanelLayoutRect_ {};
+  SDL_Rect playlistSplitterRect_ {};
+  SDL_Rect inspectorSplitterRect_ {};
+  int playlistPaneWidth_ = 0;
+  // How many playlists there were when the splitter was last dragged. Two or
+  // more and the operator chose that width with Deck 2 in view, so it stands.
+  int playlistDraggedAtDecks_ = 0;
+  bool testThrowPending_ = false;   // TESTTHROW: the next frame throws, for the crash-log check
+  int inspectorPaneWidth_ = 0;
+  // Program-monitor <-> timeline vertical split. timelineExtraH_ is the extra
+  // height (px) the operator has stolen from the preview to enlarge the
+  // timeline lanes, dragged via timelineSplitterRect_. programAreaRect_ and
+  // programFullMonitorH_ are captured each render so the drag handler can
+  // clamp. Runtime-only, like the pane widths above.
+  SDL_Rect timelineSplitterRect_ {};
+  SDL_Rect programAreaRect_ {};
+  int programFullMonitorH_ = 0;
+  int timelineExtraH_ = 0;
+  static constexpr int kProgramMonitorMinH = 200;
+  // The floor the last frame actually used: kProgramMonitorMinH scaled, and
+  // lower when a short window could not hold it. The splitter drag clamps
+  // against this so it agrees with what was drawn.
+  int programMonitorFloorH_ = kProgramMonitorMinH;
+  // Startup mascot: an animated kawaii Deckboy face with rotating tips fills
+  // the empty program monitor until the first clip is loaded into it this
+  // session. Once a clip loads, it retires for the rest of the run.
+  // Scratch for the localised form of the string being drawn. A member rather
+  // than a local so the pass-through case can bind a reference and copy
+  // nothing; only ever touched by the two text helpers, on the main thread,
+  // and never held past the call that filled it.
+  std::string localisedScratch_;
+
+  // One-shot request to report overlapping settings controls; see the audit at
+  // the end of renderSettingsModal.
+  bool auditSettingsLayout_ = false;
+  // Where the EFFECTS section sits in the inspector's content, so a scripted
+  // capture can scroll straight to it. Runtime only.
+  int inspectorEffectsSectionY_ = 0;
+  struct SettingsCardRect { SDL_Rect rect; std::string title; };
+  std::vector<SettingsCardRect> settingsCards_;
+
+  // When each flying cue left its perch, keyed by cue id. Runtime only: the
+  // name is the state, so nothing here is saved and nothing needs cleaning up.
+  std::map<std::string, Uint64> flightTakeoffMs_;
+
+  bool mascotHidden_ = false;   // something is live, so the face is not on the monitor
+  // When the programme last had a picture up; 0 = not yet this session.
+  Uint64 programmeLastLiveMs_ = 0;
+  // When the face last came back onto the monitor, for its fade in; 0 = off.
+  Uint64 mascotShownSinceMs_ = 0;
+
+  // ── The mascot notices you ──────────────────────────────────────────────
+  //
+  // Poke the startup face and it stops being a face. It looks back at the
+  // cursor, then shies away from it, then gives up and wanders off out of the
+  // monitor. Konami stays the real secret (Terrarium); this is the one that
+  // finds YOU, because it is discoverable by exactly the kind of person who
+  // idly clicks the thing on the screen while waiting for a show to load.
+  //
+  // Nothing here exists once a clip is loaded -- the mascot only lives in an
+  // empty program monitor -- so none of it can reach a live show.
+  int mascotPokes_ = 0;
+  Uint64 mascotLastPokeMs_ = 0;
+  Uint64 mascotFleeStartedMs_ = 0;   // 0 until it decides to leave
+  // A SAYING FOR THE LANGUAGE YOU JUST PICKED (James, 2026-10-21: "make up some
+  // cheeky ones"). Said for a few seconds after an explicit switch, never at boot.
+  std::string mascotGreeting_;
+  Uint64 mascotGreetUntilMs_ = 0;
+  bool fourTwentyGreeted_ = false;   // said its 4:20 line this launch
+  // Hidden sources (core/private_extras.hpp, Generator::hidden) the desk has
+  // found. Remembered in the state folder, so finding them is once per machine.
+  bool hiddenSourcesFound_ = false;
+  // Three clicks on the About version line set the art swinging.
+  int aboutVersionClicks_ = 0;
+  Uint64 aboutVersionLastClickMs_ = 0;
+  Uint64 aboutSwingStartMs_ = 0;
+  // SEQUENCES (SEQ): a list of commands with waits, run in the background.
+  // One run per owner: a DASH tile index, or -1 for one started directly.
+  std::vector<SequenceRun> sequenceRuns_;
+  int sequenceOwnerHint_ = -1;   // set while a DASH tile hands its command over
+  // Slow to start, quick to finish: the first step is the discovery, and by
+  // the time somebody has noticed the eyes move they are already committed.
+  static constexpr int kMascotWatchAfterPokes = 3;
+  static constexpr int kMascotShyAfterPokes = 6;
+  static constexpr int kMascotFleeAfterPokes = 10;
+  int mascotPointerX_ = 0;
+  int mascotPointerY_ = 0;
+  // WHERE THE FACE ACTUALLY IS, written by the renderer each frame.
+  //
+  // The face hovers, rocks and drifts, so the only honest hit test is against
+  // where it was last drawn. Poking the empty monitor a foot away from it is
+  // not poking it -- and the egg is much better when you have to actually hit
+  // the thing.
+  int mascotFaceCx_ = 0;
+  int mascotFaceCy_ = 0;
+  int mascotFaceRadius_ = 0;
+  // The last poke, as an offset from the face centre in units of its own size,
+  // and when it landed. This is what makes it react to WHERE it was poked
+  // rather than merely to having been poked.
+  double mascotPokeDx_ = 0.0;
+  double mascotPokeDy_ = 0.0;
+  Uint64 mascotPokeAtMs_ = 0;
+  // Test instrumentation: hold the poke reaction open instead of letting it
+  // decay, so --mascot-pokes can actually be screenshotted. A half-second
+  // flinch is the part worth looking at and the part a capture always misses.
+  bool mascotHoldReaction_ = false;
+  // ── ARRANGING THE PRESENTER SCREEN ──────────────────────────────────────
+  //
+  // The panels are dragged on a miniature drawn in the program monitor, which
+  // is where the warp editor already lives: the biggest rectangle in the
+  // interface, and the one you are already looking at to see what an output is
+  // doing.
+  bool presenterLayoutEditMode_ = false;
+  SDL_Rect presenterLayoutBtnRect_ {};
+  SDL_Rect presenterLayoutMonitorRect_ {};
+  SDL_Rect presenterLayoutStageRect_ {};
+  SDL_Rect presenterLayoutDoneRect_ {};
+  SDL_Rect presenterLayoutResetRect_ {};
+  // 0 = nothing, otherwise 1 + the panel index (live, previous, next, notes).
+  int presenterDragPanel_ = 0;
+  // Which edges the drag is moving. All four false is a move of the whole
+  // panel; any of them true is a resize from that edge or corner.
+  bool presenterDragL_ = false;
+  bool presenterDragT_ = false;
+  bool presenterDragR_ = false;
+  bool presenterDragB_ = false;
+  // Where in the panel it was grabbed, as fractions of the stage, so a move
+  // does not jump the panel's corner to the pointer.
+  double presenterDragGrabX_ = 0.0;
+  double presenterDragGrabY_ = 0.0;
+
+  // Warp editor state
+  bool warpEditMode_ = false;
+  int warpDragCorner_ = -1;  // -1=none, 0=TL, 1=TR, 2=BR, 3=BL
+  // The point the typed X / Y and the arrow keys act on: 0-3 a corner, 100+i
+  // grid point i, -1 none. Set by pressing a handle and kept after release --
+  // "warp points need to be assignable per pixel, not just dragged around".
+  // The routing key armed by its first press while live (see confirmLiveKey).
+  int deckOpacityGrabX_ = 0;           // where a layer fader was taken hold of
+  double deckOpacityGrabValue_ = 1.0;
+  int masterFaderGrabX_ = 0;           // where the master fader was taken hold of
+  double masterFaderGrabValue_ = 1.0;  // and its level then
+  SDL_Keycode liveKeyArmed_ = 0;
+  Uint64 liveKeyArmedAtMs_ = 0;
+  int warpSelPoint_ = -1;
+  SDL_Rect warpSelXRect_ {};
+  SDL_Rect warpSelYRect_ {};
+  int warpDragGridPoint_ = -1;   // grid point being dragged (row * cols + col), -1 = none
+  // -- Web monitor (app_network.ipp) -------------------------------------------
+  static constexpr int kWebMonitorMaxOutputs = 16;
+  struct WebMonitorSlot {
+    std::mutex mutex;                          // guards jpeg + serial
+    std::condition_variable cv;
+    std::shared_ptr<const std::string> jpeg;   // latest picture
+    std::uint64_t serial = 0;
+    std::atomic<int> viewers {0};              // browsers streaming this output
+    Uint64 lastFedMs = 0;                      // main thread only
+    // Encoder hand-off, guarded by webMonitorEncodeMutex_.
+    std::vector<std::uint8_t> pendingRgb;
+    int pendingW = 0, pendingH = 0;
+    bool pending = false;
+    // WEB route (picture AND sound): the encoder's fragmented MP4 arrives on a
+    // private local socket and is relayed to every browser playing /av/N.
+    SocketHandle ingestListen = kInvalidSocket;
+    int ingestPort = 0;
+    std::thread ingestThread;
+    std::atomic<bool> ingestStop {false};
+    std::string avInit;                 // ftyp + moov; guarded by mutex
+    std::deque<std::pair<std::uint64_t, std::shared_ptr<const std::string>>> avFragments;
+    std::uint64_t avFragmentSeq = 0;    // guarded by mutex
+    std::uint64_t avGeneration = 0;     // bumps when the encoder restarts
+    double avFragmentSeconds = 0.5;    // fixed GOP duration; guarded by mutex
+    // WALL CLOCK for the HLS PROGRAM-DATE-TIME: the first fragment of an
+    // encoder run is stamped with when it arrived, and every later one by
+    // whole fragment durations from there, so the timeline stays exactly as
+    // steady as the stream itself. Every viewer gets the same stamps, which
+    // is all that keeping screens in step needs. Guarded by mutex.
+    std::int64_t avPdtBaseMs = 0;
+    std::uint64_t avPdtBaseSeq = 0;
+  };
+  std::array<WebMonitorSlot, kWebMonitorMaxOutputs> webMonitorSlots_;
+  std::mutex webMonitorEncodeMutex_;
+  std::condition_variable webMonitorEncodeCv_;
+  std::thread webMonitorEncoder_;
+  std::thread webMonitorThread_;
+  struct WebMonitorClient {
+    std::thread thread;
+    std::shared_ptr<std::atomic<bool>> done;
+  };
+  std::vector<WebMonitorClient> webMonitorClients_;   // accept thread + stop only
+  std::atomic<bool> webMonitorStop_ {true};
+  SocketHandle webMonitorListen_ = kInvalidSocket;
+  SocketHandle webMonitorTailnetListen_ = kInvalidSocket;   // phone control on the Tailscale address
+  std::string webRemoteTailnetAddress_;
+  bool webMonitorReady_ = false;
+  // The phone-access QR overlay (openWebMonitorQr). The modules are encoded
+  // once per address, not per frame.
+  bool webMonitorQrOpen_ = false;
+  std::string webMonitorQrText_;
+  std::string webMonitorQrShown_;   // the line under the code
+  std::string webMonitorQrHint_;
+  std::vector<bool> webMonitorQrModules_;
+  int webMonitorQrSize_ = 0;
+  // What the browser threads may read -- never project_ itself.
+  std::mutex webMonitorDirMutex_;
+  std::vector<std::string> webMonitorOutputNames_;
+  std::vector<bool> webMonitorOutputSound_;   // routed to WEB: has a player with sound
+  int webMonitorProgrammeOutput_ = -1;       // programme player on the home page
+  std::string webMonitorSourceLabel_ = "Programme";  // what it carries, for the page title
+  std::atomic<int> webMonitorMaxClients_ {8};        // accept thread reads; main thread sets
+  bool webMonitorLowLatencySnapshot_ = false;        // guarded by webMonitorDirMutex_
+  int webMonitorSourceSnapshot_ = -1;                // what the web output mirrors
+  int webEncodeEase_ = 0;                            // 0 as chosen; 1-3 lighter steps
+  std::string webMonitorPinSnapshot_;
+  bool webRemoteEnabledSnapshot_ = false; // guarded by webMonitorDirMutex_
+  bool webTabletopUnlockedSnapshot_ = false; // same mutex; the HTTP thread never reads Project
+  // PAIRING (same mutex): the one-time code the desk's QR carries, and the keys
+  // of phones that have paired. Keys live in the state folder, never the show
+  // file -- a show file gets shared, and a key in it would open the desk.
+  std::string webRemotePairToken_;
+  std::chrono::steady_clock::time_point webRemotePairExpiry_ {};
+  std::vector<std::pair<std::string, std::string>> webRemoteDeviceKeys_;   // key, name
+  bool webRemoteDeviceKeysLoaded_ = false;
+  bool webMonitorEnabledSnapshot_ = false;  // same mutex: the server can run for the phone alone
+  bool webMonitorShareSnapshot_ = false;    // same mutex
+  std::string webRemoteStateSnapshot_;
+  std::string webRemoteStyleSnapshot_;
+  int webRemoteFailedPins_ = 0;
+  int webRemoteLockouts_ = 0;  // consecutive, so each one waits twice as long
+  std::chrono::steady_clock::time_point webRemoteRetryAt_ {}; // same mutex
+  int webMonitorHeightSnapshot_ = 1080;
+  Uint64 webMonitorDirSyncedMs_ = 0;
+  SDL_Rect warpGridBtnRect_ {};
+  SDL_Rect warpGridSmoothBtnRect_ {};
+  // What the warp editor's handles move: the OUTPUT's warp, or -- when the
+  // focused deck is a layer on the focused output -- that layer's corner pin.
+  bool warpEditLayer_ = false;
+  SDL_Rect warpTargetBtnRect_ {};
+  // Where the program monitor's chrome ends at the top and begins again at
+  // the bottom, measured from the badge and the caption as they are laid
+  // out. The picture goes between them. Members rather than locals because
+  // the badge, the picture and the caption are drawn hundreds of lines
+  // apart and two copies of this arithmetic is how they drifted.
+  // The monitor's dot field, rebuilt only when its rect or pitch changes --
+  // it is tens of thousands of points and recomputing them every frame to
+  // draw the same thing would be silly.
+  std::vector<SDL_FPoint> monitorDots_;
+  SDL_Rect monitorDotsRect_ {};
+  int monitorDotsPitch_ = 0;
+  int monitorChromeTop_ = 0;
+  int monitorChromeBottom_ = 0;
+  SDL_Rect warpEditBtnRect_ {};
+  SDL_Rect warpModeBtnRect_ {};
+  SDL_Rect warpResetBtnRect_ {};
+  SDL_Rect warpSaveBtnRect_ {};
+  SDL_Rect warpCopyBtnRect_ {};
+  SDL_Rect warpPasteBtnRect_ {};
+  SDL_Rect warpRecallBtnRect_ {};
+  SDL_Rect shuffleBtnRect_ {};
+  SDL_Rect warpMonitorInner_ {};  // the inner video area used for mapping warp coords
+  SDL_Rect previewMonitorInner_ {};
+  bool keyColorPickerArmed_ = false;
+  ToastState toast_;
+  // Every toast ever raised this session, for a test to count blips.
+  std::uint64_t toastsRaised_ = 0;
+  Uint64 animationNow_ = 0;
+  // UI vsync is dropped while anything is being recorded or streamed, so the
+  // programme output alone paces the loop (see App::render).
+  int controlVsyncApplied_ = 1;
+  Uint64 lastControlDrawMs_ = 0;
+  Uint64 selectionChangedAt_ = 0;
+  bool uiProfileEnabled_ = false;
+  double uiProfileSlowFrameMs_ = 50.0;   // DECKBOY_UI_PROFILE=<ms> lowers it
+  std::unique_ptr<std::ofstream> presentTrace_;   // DECKBOY_PRESENT_TRACE=<file> (openPresentTrace)
+  std::uint64_t presentTracePasses_ = 0;
+  double lastUiLayoutMs_ = 0.0;
+  // THE DESK'S OWN SMOOTHNESS, counted like an output's (presents, hitches,
+  // worst gap). Outputs had this; the desk did not, and a desk that stutters
+  // with the scopes up on a 4K screen could not be measured (2026-10-21).
+  Uint64 deskLastPresentNs_ = 0;
+  Uint64 deskPresents_ = 0;
+  Uint64 deskHitches_ = 0;
+  double deskWorstGapMs_ = 0.0;
+  double deskLayoutMsAvg_ = 0.0;
+  double lastUiRenderMs_ = 0.0;
+  double lastUiPresentMs_ = 0.0;   // of lastUiRenderMs_, the desk's present alone
+  Uint64 lastUpdateTickMs_ = 0;
+  Uint64 lastDisplayPollMs_ = 0;
+  Uint64 lastOutputRecoveryPollMs_ = 0;
+  Uint64 lastEscapeKeyMs_ = 0;
+  int escapePressStreak_ = 0;
+  // One PTP client for the machine — there is one clock, and binding ports
+  // 319/320 twice would fail. Started lazily the first time an ST 2110 output
+  // actually needs it, so a show that never streams 2110 puts no PTP traffic
+  // on the network and never touches those ports.
+  deckboy::platform::video::PtpClient ptpClient_;
+  bool ptpStartAttempted_ = false;
+
+  // One NMOS node for the machine, advertising every armed ST 2110 sender.
+  // Like PTP this binds a port, so there can only be one. Its IS-05 patch
+  // handler runs on the node's HTTP thread and hands work to the main thread
+  // through nmosPendingPatches_ — see applyPendingNmosPatches().
+  //
+  // The handler BLOCKS until the main thread has really applied the change (or
+  // a timeout expires and it reports failure). Returning success the instant a
+  // patch is queued would tell a broadcast controller the route moved before it
+  // had, which is the exact class of lie that makes a plant untrustworthy.
+  struct PendingNmosPatch {
+    deckboy::platform::video::NmosSenderPatch patch;
+    bool done = false;
+    bool applied = false;
+  };
+  deckboy::platform::video::NmosNode nmosNode_;
+  bool nmosStarted_ = false;
+  // True when NMOS is on and a registry is configured but the network is set to
+  // LOCAL ONLY, so we are deliberately withholding registration rather than
+  // publishing an href nothing can reach.
+  bool nmosLocalOnlyBlocked_ = false;
+  bool nmosLastEnabled_ = false;
+  bool nmosLastAllowRemote_ = false;
+  int nmosLastPort_ = 0;
+  std::string nmosLastRegistry_;
+  std::mutex nmosPatchMutex_;
+  std::condition_variable nmosPatchCv_;
+  std::vector<std::shared_ptr<PendingNmosPatch>> nmosPendingPatches_;
+
+  // LTC generator (timecode OUT). Main-thread only: pumped from the update tick
+  // and torn down there too, so no locking is needed.
+  SDL_AudioStream* ltcOutStream_ = nullptr;
+  void* ltcEncoder_ = nullptr;
+  std::string ltcOutDeviceName_;
+  double ltcOutFps_ = 30.0;
+  int ltcOutChannels_ = 2;
+  int ltcOutChannel_ = 0;
+  double ltcOutBaseSeconds_ = 0.0;
+  long long ltcOutEmittedFrames_ = 0;
+  bool ltcOutPrimed_ = false;
+  std::vector<std::uint8_t> ltcOutFrameBuf_;
+  std::vector<std::int16_t> ltcOutPcm_;
+
+  // ST 2110-30 senders, reachable from the AUDIO THREAD.
+  // The tap that feeds them runs on the audio thread, and walking
+  // project_.outputs/outputRuntimes_ from there would race the main thread
+  // creating and destroying outputs. Main thread publishes raw pointers here
+  // under the mutex; the audio thread only ever reads this list.
+
+  // Loading overlay (see app_overlays.ipp). Only used while the main render
+  // loop is stopped, so it owns its own present.
+  bool loadingActive_ = false;
+  std::string loadingTitle_;
+  std::string loadingDetail_;
+  double loadingFrac_ = 0.0;
+  Uint64 loadingStartMs_ = 0;
+  Uint64 loadingLastPresentMs_ = 0;
+  unsigned loadingQuipSeed_ = 0;
+  int observedDisplayCount_ = -1;
+  // Per-display "name@x,y,w,h" fingerprints from the last topology scan.
+  // Compared entry-by-entry so a hot-plug re-homes only the outputs whose
+  // display actually moved, changed size, or was swapped for another panel —
+  // count alone misses same-count swaps and resolution changes.
+  std::vector<std::string> displaySignatureEntries_;
+  // What the OS says is behind each SDL display -- one screen or a mirror set.
+  // Filled lazily, cleared by every topology scan (mirror <-> extend always
+  // changes the display list, so the scan always sees it).
+  mutable std::vector<deckboy::platform::DisplayMirrorInfo> displayMirrorInfo_;
+  Uint64 displayTopologyRecheckAtMs_ = 0;  // debounce deadline for the display-event burst
+  Uint64 audioDeviceRecheckAtMs_ = 0;      // and for the audio-device-event burst
+  Uint64 lastAudioDevicePollMs_ = 0;       // backstop for drivers that emit neither
+  // The system output as last seen by reconcileDeckAudioDevices, so a change
+  // of it is said once; and the one the UI sounds were last moved to, so a
+  // device that will not open is not retried every two seconds.
+  std::string systemOutputSeen_;
+  std::string uiAudioFollowTried_;
+  bool projectDirty_ = false;
+  std::chrono::steady_clock::time_point projectDirtyAt_;
+  bool projectSaveFailed_ = false;
+  std::chrono::steady_clock::time_point projectSaveRetryAt_;
+  fs::path pendingProjectRecoveryFile_;
+  bool projectRecoveryPromptShown_ = false;
+  bool engineCueSyncPending_ = false;  // refresh engine cue snapshots next tick (set by markProjectDirty)
+  bool masterFaderDragActive_ = false; // header master fader is being dragged
+  int konamiIndex_ = 0;                // progress through the Konami sequence (easter egg)
+  int tabletopCodeIndex_ = 0;
+  Uint64 tabletopCodeLastKeyMs_ = 0;
+  std::vector<std::string> startupBootLog_;  // splash boot-console lines (built once per boot)
+  std::vector<Uint64> startupBootLogAtMs_;   // per-line randomized reveal times (ms from splash start)
+  int companionPort_ = 5510;
+  bool companionReady_ = false;
+  std::atomic<bool> companionStop_ {false};
+  std::thread companionThread_;
+  std::mutex remoteCommandMutex_;
+  // A queued command, plus the Companion client (if any) waiting to be told
+  // what happened to it. Commands arriving from OSC/MIDI/ATEM/NDI have no
+  // reply socket and carry kInvalidSocket.
+  struct WebRemoteReply {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::string pin;
+    bool paired = false;   // authorised by a paired phone's key, not the passphrase
+    std::string text;
+    bool cancelled = false;
+    const std::chrono::steady_clock::time_point deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  };
+  struct PendingRemoteCommand {
+    std::string text;
+    SocketHandle replyTo = kInvalidSocket;
+    std::uint64_t replyGeneration = 0;
+    std::shared_ptr<WebRemoteReply> webReply;
+    // Sent by another machine (not loopback). Some verbs only this computer may use.
+    bool fromNetworkPeer = false;
+    // Where it came from, for the MIDI and OSC monitor; empty for commands
+    // Deckboy queues for itself, which the monitor leaves out.
+    std::string monitorKind;
+    std::string monitorFrom;
+    std::string monitorMessage;
+    std::string monitorClock;
+    int monitorMidiNote = -1;
+    std::string monitorOscAddress;
+  };
+  std::deque<PendingRemoteCommand> remoteCommands_;
+
+  // The MIDI and OSC monitor (app_input_monitor.ipp). The log is written from
+  // the MIDI and network threads as well as the main one, hence the mutex.
+  std::mutex inputMonitorMutex_;
+  std::deque<InputMonitorEntry> inputMonitor_;
+  std::uint64_t inputMonitorSerial_ = 0;
+  std::atomic<bool> inputMonitorPaused_ {false};
+  bool inputMonitorOpen_ = false;
+  int inputMonitorFilter_ = 0;            // ALL, MIDI, OSC, REMOTE, ONLY WHAT DID NOTHING
+  std::uint64_t inputMonitorSelected_ = 0;
+  int inputMonitorScroll_ = 0;            // rows back from the newest
+  SDL_Rect inputMonitorPanelRect_ {};
+  std::array<SDL_Rect, 5> inputMonitorFilterRects_ {};
+  SDL_Rect inputMonitorPauseRect_ {};
+  SDL_Rect inputMonitorClearRect_ {};
+  SDL_Rect inputMonitorCopyRect_ {};
+  SDL_Rect inputMonitorMakeRect_ {};
+  std::vector<std::pair<std::uint64_t, SDL_Rect>> inputMonitorRowRects_;
+  std::map<std::string, Uint64> inputMonitorRefusedMs_;   // one refusal row a second per address
+  std::string midiMonitorPortName_;                       // under inputMonitorMutex_
+  // Set true at the top of handleRemoteCommand and cleared only by falling off
+  // its end, which is what an unrecognized verb does. Read straight after the
+  // call in processRemoteCommands to answer OK or ERR.
+  bool remoteCommandRecognized_ = true;
+  // WHO ASKED, carried through every nested dispatch (DECK n <cmd>, a DASH
+  // slot, a script line), and how deep the nesting is. The 10-19 audit found
+  // the local-only check applied to the outer verb only, so DECK 1 TRUST from
+  // another machine worked, and a DASH slot that reached itself through DECK
+  // overflowed the stack and closed the app.
+  bool remoteCallerIsNetwork_ = false;
+  int remoteDispatchDepth_ = 0;
+  // Each level costs about 195 KB of stack (handleRemoteCommand is one very
+  // large function; measured 2026-10-21), so 12 levels is ~2.3 MB: inside the
+  // 8 MB main-thread stack of macOS and Linux, and the 16 MB the Windows link
+  // asks for (CMakeLists). A script nested kMaxScriptDepth (4) deep passes
+  // through here about twice a level, so honest shows stay well under it.
+  static constexpr int kMaxRemoteDispatchDepth = 12;
+  // Set by failRemoteCommand() when a verb was understood but its arguments
+  // were not — an ERR with a reason, not a bare OK.
+  std::string remoteCommandError_;
+  // Set by a verb that ran and has something to report back. Appended to the
+  // OK reply, so a query answers with its answer instead of only a toast.
+  std::string remoteCommandDetail_;
+  std::mutex statusSnapshotMutex_;
+  std::string statusSnapshot_;
+  std::string statusSnapshotJson_;
+  // STATUS ENCODER, built on the main thread with the other snapshots. It was
+  // built on the network thread straight from conversionJobs_, which the main
+  // thread adds to and removes from -- a vector read mid-reallocation.
+  std::string statusEncoderSnapshot_;
+  std::string statusCueSnapshot_;
+  std::vector<std::string> statusDeckSnapshots_;
+  // Structured snapshot for the HyperDeck server. Its handlers run on the
+  // HyperDeck TCP thread, which must never read project_/decks directly
+  // (main thread mutates them) and must not infer state by substring-
+  // matching human-readable snapshot text. Guarded by statusSnapshotMutex_.
+  struct HyperDeckSnapshot {
+    std::string transport = "stopped";  // "play" | "paused" | "stopped"
+    int clipId = 0;                      // 1-based active cue (0 = none)
+    bool loop = false;
+    std::vector<std::pair<std::string, std::string>> clips;  // {name, duration label}
+  };
+  HyperDeckSnapshot hyperDeckSnapshot_;
+  std::map<int, std::unordered_set<std::string>> timecodeTriggeredCueIds_;
+  std::vector<Uint64> deckTimecodeLastExternalMs_;
+  std::vector<double> deckTimecodeLastExternalSeconds_;
+  std::vector<bool> deckTimecodeHasExternal_;
+  double lastMtcIngestSeconds_ = -1.0;
+  double lastMtcIngestFps_ = 0.0;
+  std::string lastCueFindToken_;
+  std::vector<int> lastCueFindMatches_;
+  int lastCueFindCursor_ = -1;
+  int lastCueFindDeckIndex_ = -1;
+  std::string typedCueSearchBuffer_;
+  Uint64 typedCueSearchLastKeyAtMs_ = 0;
+  std::vector<float> deckPlaylistOpacityTargets_;
+  std::vector<SDL_Rect> deckOpacityFaderRects_;
+  std::vector<std::int16_t> vuSamples_;
+  std::mutex vuSamplesMutex_;
+  std::atomic<int> vuFocusedDeck_ {0};
+  Uint64 vuSamplesUpdatedAtMs_ = 0;
+  Uint64 vuDisplayUpdatedAtMs_ = 0;
+  float vuDisplayRmsLeft_ = 0.0f;
+  float vuDisplayRmsRight_ = 0.0f;
+  float vuDisplayPeakLeft_ = 0.0f;
+  float vuDisplayPeakRight_ = 0.0f;
+  // Per-cue row display cache — avoids a measuring loop in
+  // ellipsizeToPixelWidth every frame
+  struct CueRowDisplayCache {
+    // Inputs (for staleness check)
+    std::string name;
+    int nameW = 0;
+    std::string cueId;
+    std::string cueNumber;
+    int index = -1;
+    CueKind kind = CueKind::Video;
+    double duration = 0.0;
+    double stillDurationSeconds = 0.0;
+    CueEndAction endAction = CueEndAction::Inherit;
+    int width = 0;
+    int height = 0;
+    bool pathEmpty = true;
+    // Cached outputs
+    std::string token;
+    std::string kindUpper;
+    std::string ellipsizedName;
+    std::string meta;
+  };
+  std::unordered_map<std::string, CueRowDisplayCache> cueRowDisplayCache_;
+
+  // ── NOTE BUILDS ─────────────────────────────────────────────────────────
+  //
+  // A cue's notes split on a line that is exactly "---", and the presenter
+  // advances through the parts without changing the slide. A long note is then
+  // read at the speaker's pace rather than arriving all at once, which is what
+  // a "build" does for a slide and had no equivalent for what you say over it.
+  //
+  // The step is per DECK and lives only as long as the session: it is where
+  // the speaker is, not something about the show, and it resets when a cue is
+  // taken so the next slide always starts at the top of its own notes.
+  std::map<int, int> presenterNoteStep_;
+
+  // The parts of a cue's notes. Always at least one element, so callers never
+  // have to special-case a cue with no notes at all.
+  static std::vector<std::string> noteBuildParts(const std::string& notes) {
+    std::vector<std::string> parts;
+    std::string current;
+    std::istringstream lines(notes);
+    std::string line;
+    while (std::getline(lines, line)) {
+      // trim() also strips the carriage return a CRLF file leaves on the
+      // end of every line, which is what makes this work on a show file
+      // written on Windows and opened on a Mac.
+      const std::string trimmed = trim(line);
+      if (trimmed == "---") {
+        parts.push_back(current);
+        current.clear();
+        continue;
+      }
+      if (!current.empty()) current += "\n";
+      current += line;
+    }
+    parts.push_back(current);
+    return parts;
+  }
+
+  // ── WHAT WAS UP BEFORE THIS ─────────────────────────────────────────────
+  //
+  // The cue that was live on this deck before the current one, recorded when a
+  // take changes it. Not "the cue above it in the list": the two agree for a
+  // talk read top to bottom, and for a show where the operator jumps about it
+  // is the one the presenter actually just had on screen that they want to see.
+  //
+  // Before anything has been taken this session there is no such cue, and the
+  // list neighbour is the honest guess -- a deck opened at slide 20 shows 19
+  // as the previous one, which is what it is.
+  std::map<int, int> presenterPreviousCue_;
+
+  int presenterPreviousCueIndex(int deckIndex) const {
+    const auto at = presenterPreviousCue_.find(deckIndex);
+    if (at != presenterPreviousCue_.end()) {
+      return at->second;
+    }
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return -1;
+    }
+    return project_.decks[static_cast<std::size_t>(deckIndex)].activeIndex - 1;
+  }
+
+  // Called from the take: the cue leaving the screen becomes the previous one,
+  // and the incoming cue starts at the top of its own notes.
+  void presenterOnCueTaken(int deckIndex, int leavingIndex) {
+    if (leavingIndex >= 0) {
+      presenterPreviousCue_[deckIndex] = leavingIndex;
+    }
+    presenterNoteStep_[deckIndex] = 0;
+  }
+
+  int presenterNoteStepFor(int deckIndex) const {
+    const auto at = presenterNoteStep_.find(deckIndex);
+    return at == presenterNoteStep_.end() ? 0 : at->second;
+  }
+
+  // ── THE NOTES PANE SCROLLS, RATHER THAN ENDING ──────────────────────────
+  //
+  // A build longer than the pane used to stop at a "... more below" marker
+  // that nothing could act on: the words the speaker still had to say were
+  // three lines under the bottom of the panel and there was no way to reach
+  // them. The pane is now a scrolling document.
+  //
+  // Where it is scrolled to is kept in PIXELS and eased toward its target, so
+  // the text moves under the reader's eye instead of being replaced by
+  // different text. That is the difference between a presenter screen you can
+  // read from and one you have to re-find your place in.
+  std::map<int, double> presenterNoteScroll_;
+  std::map<int, Uint64> presenterNoteScrollClock_;
+
+  // Rows the clicker has pushed WITHIN the current build. Reset whenever the
+  // build changes, so every build starts at its own first line.
+  std::map<int, int> presenterNoteExtraRows_;
+
+  int presenterNoteExtraRowsFor(int deckIndex) const {
+    const auto at = presenterNoteExtraRows_.find(deckIndex);
+    return at == presenterNoteExtraRows_.end() ? 0 : at->second;
+  }
+
+  // What the last render measured. The wrap depends on the font and the box,
+  // which only the renderer knows -- so it publishes, and the transport asks.
+  // One frame stale, which at 60fps nobody can see.
+  struct PresenterNoteMetrics {
+    int totalLines = 0;
+    int rows = 1;
+    int currentFirst = 0;   // first line of the build being spoken
+  };
+  std::map<int, PresenterNoteMetrics> presenterNoteMetrics_;
+
+  // The first visible row: the current build's start with a line of lead-in,
+  // plus whatever the clicker has pushed, never past the end. ONE definition,
+  // used by the renderer to place the text and by the transport to decide
+  // whether there is anything left to scroll to.
+  int presenterNoteTopRow(int deckIndex) const {
+    const auto at = presenterNoteMetrics_.find(deckIndex);
+    if (at == presenterNoteMetrics_.end()) {
+      return 0;
+    }
+    const PresenterNoteMetrics& m = at->second;
+    const int wanted =
+      std::max(0, m.currentFirst - 1) + presenterNoteExtraRowsFor(deckIndex);
+    return std::clamp(wanted, 0, std::max(0, m.totalLines - m.rows));
+  }
+
+  bool presenterNoteMoreBelow(int deckIndex) const {
+    const auto at = presenterNoteMetrics_.find(deckIndex);
+    if (at == presenterNoteMetrics_.end()) {
+      return false;
+    }
+    return presenterNoteTopRow(deckIndex) + at->second.rows < at->second.totalLines;
+  }
+
+  // A screenful less one line, so the line the speaker was reading stays on
+  // screen as the anchor for the next one.
+  int presenterNoteScrollPage(int deckIndex) const {
+    const auto at = presenterNoteMetrics_.find(deckIndex);
+    const int rows = (at == presenterNoteMetrics_.end()) ? 1 : at->second.rows;
+    return std::max(1, rows - 1);
+  }
+
+  // How many builds the live cue has left to spend. Used by the transport when
+  // buildsConsumeAdvance is on, and by the presenter view to say so.
+  int presenterBuildsRemaining(int deckIndex) const {
+    const Cue* cue = activeCuePtr(deckIndex);
+    if (!cue || cue->notes.empty()) return 0;
+    const int total = static_cast<int>(noteBuildParts(cue->notes).size());
+    const int builds = std::max(0, total - 1 - presenterNoteStepFor(deckIndex));
+    // A build with more of itself below the fold is not finished with, so the
+    // clicker must not leave the cue while any of it is still unread.
+    return builds + (presenterNoteMoreBelow(deckIndex) ? 1 : 0);
+  }
+
+  void presenterNoteStepSet(int deckIndex, int step) {
+    const Cue* cue = activeCuePtr(deckIndex);
+    const int total = cue ? static_cast<int>(noteBuildParts(cue->notes).size()) : 1;
+    presenterNoteStep_[deckIndex] = std::clamp(step, 0, std::max(0, total - 1));
+    // A new build starts at its own first line.
+    presenterNoteExtraRows_[deckIndex] = 0;
+  }
+
+  // FORWARD MEANS "SHOW ME MORE", whatever more happens to be: the rest of
+  // this build if any of it is below the fold, and only then the next build.
+  // Backward is its exact opposite. That makes one clicker button walk a long
+  // note from top to bottom without the speaker having to know whether they
+  // are inside a build or at the end of one.
+  void presenterNoteStepAdvance(int deckIndex, int delta) {
+    if (delta > 0 && presenterNoteMoreBelow(deckIndex)) {
+      presenterNoteExtraRows_[deckIndex] =
+        presenterNoteExtraRowsFor(deckIndex) + presenterNoteScrollPage(deckIndex);
+      return;
+    }
+    if (delta < 0 && presenterNoteExtraRowsFor(deckIndex) > 0) {
+      presenterNoteExtraRows_[deckIndex] = std::max(
+        0, presenterNoteExtraRowsFor(deckIndex) - presenterNoteScrollPage(deckIndex));
+      return;
+    }
+    presenterNoteStepSet(deckIndex, presenterNoteStepFor(deckIndex) + delta);
+  }
+
+  // Fine scrolling, a row at a time, for anybody driving from outside.
+  void presenterNoteScrollBy(int deckIndex, int rows) {
+    presenterNoteExtraRows_[deckIndex] =
+      std::max(0, presenterNoteExtraRowsFor(deckIndex) + rows);
+  }
+
+  // True when at least one armed output is showing a presenter view, so the
+  // transport can tell whether note builds are visible to anybody at all.
+  bool presenterViewLive() const {
+    for (const OutputTarget& out : project_.outputs) {
+      if (out.enabled && normalizeOutputType(out.outputType) == "presenter") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ── SHOULD THE CLICKER SPEND A BUILD INSTEAD OF CHANGING THE SLIDE? ──────
+  //
+  // Only when all three are true: an armed presenter view is showing THIS
+  // deck, its operator asked for builds to take the advance, and the live cue
+  // still has parts left to reveal. Any one of them missing and Page Down goes
+  // straight back to being "take the next cue", which is what it is for every
+  // show that does not use notes at all.
+  bool presenterAdvanceSpendsBuild(int deckIndex) const {
+    return presenterBuildsRemaining(deckIndex) > 0 &&
+           presenterAdvanceSpendsBuildBackwards(deckIndex);
+  }
+
+  // The same three conditions without "is there a build left", which is the
+  // half that going BACKWARDS asks differently.
+  bool presenterAdvanceSpendsBuildBackwards(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    for (const OutputTarget& out : project_.outputs) {
+      if (!out.enabled || normalizeOutputType(out.outputType) != "presenter") {
+        continue;
+      }
+      if (!out.presenter.buildsConsumeAdvance || !out.presenter.showNotes) {
+        continue;
+      }
+      const int host = std::clamp(out.hostDeckIndex, 0,
+                                  static_cast<int>(project_.decks.size()) - 1);
+      if (host == deckIndex) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ── THE SHRUNKEN SIBLINGS, AND WHAT A LABEL COSTS TO MEASURE ────────────
+  //
+  // A label that does not fit its box is drawn a little smaller (see
+  // fontThatFits). That used to be done by resizing the SHARED font and
+  // putting it back afterwards -- and TTF_SetFontSize flushes that face's
+  // glyph cache, so one overflowing label forced every other label in the
+  // frame to be rasterised again from its outlines. On a 16-cue show at a
+  // 1.5x desktop that was 225 resizes a frame and 24fps.
+  //
+  // So each font keeps a ladder of smaller siblings, opened once and reused,
+  // and shrinking a label means picking a different font object rather than
+  // altering one that everything else is drawing with.
+  struct FontLadder {
+    std::string path;
+    int baseSize = 0;
+    std::unordered_map<int, TTF_Font*> bySize;   // nullptr caches a failed open
+  };
+  mutable std::unordered_map<TTF_Font*, FontLadder> fontLadders_;
+
+  // Every fit decision is a text measurement, and a measurement is a full
+  // shape of the string -- the expensive half of drawing it. The width of a
+  // given string in a given font does not change, so it is asked once.
+  struct TextMeasureKey {
+    TTF_Font* font = nullptr;
+    std::string text;
+    bool operator==(const TextMeasureKey& o) const {
+      return font == o.font && text == o.text;
+    }
+  };
+  struct TextMeasureKeyHash {
+    std::size_t operator()(const TextMeasureKey& k) const {
+      return std::hash<const void*>{}(static_cast<const void*>(k.font)) * 1000003u
+           ^ std::hash<std::string>{}(k.text);
+    }
+  };
+  mutable std::unordered_map<TextMeasureKey, int, TextMeasureKeyHash> textMeasureCache_;
+
+  // ── THE RASTERISED LABEL ITSELF, KEPT ───────────────────────────────────
+  //
+  // Measurement was cached here years ago. Rasterisation was not: every label
+  // in the interface rendered a fresh surface, created a texture, drew it and
+  // destroyed it, once per label PER FRAME. 312 call sites, most of them
+  // inside loops over cues and settings rows, at sixty frames a second.
+  //
+  // On Windows and on Metal that is merely wasteful. It stopped being merely
+  // wasteful on macOS 26, where OpenGL is an emulation layer over Metal:
+  // issue #6 is an interface with every rectangle, icon and image intact and
+  // no text anywhere, which is what this app looks like when texture creation
+  // starts failing and nothing else does. Images survive because they are
+  // allocated once; primitives survive because they allocate nothing. Only
+  // the text path churned, so only the text path went.
+  //
+  // The types themselves are defined in app_cue_mgmt.ipp, ABOVE the functions
+  // that return them: a nested type has to be declared before a member
+  // declaration can name it, and that include lands earlier in this class than
+  // this line does. Function BODIES see the whole class, which is why the
+  // counters below can stay here next to the measure cache they belong with.
+  mutable std::unordered_map<TextTextureKey, TextTextureEntry, TextTextureKeyHash>
+    textTextureCache_;
+  // Recency is counted in LOOKUPS, not frames. That needs no hook in the three
+  // places that present a frame, and it orders eviction correctly regardless.
+  mutable std::uint64_t textTextureTick_ = 0;
+  mutable std::size_t textTextureBytes_ = 0;
+  // What the cache saved, for --font-check and the diagnostics line.
+  mutable std::uint64_t textTextureHits_ = 0;
+  mutable std::uint64_t textTextureMisses_ = 0;
+  mutable std::uint64_t textTextureFailures_ = 0;
+  // Labels whose ink paletteReadableInk had to replace. Zero on a theme whose
+  // call sites all pick readable inks; --contrast-check reports it per theme.
+  std::uint64_t textInkCorrections_ = 0;
+  // Only visible labels are drawn, so the live set is bounded by the screen.
+  // A large UI scale makes each one bigger, hence a byte ceiling as well as a
+  // count: whichever is hit first trims the least recently used quarter.
+  static constexpr std::size_t kTextTextureMaxEntries = 1536;
+  static constexpr std::size_t kTextTextureMaxBytes = 48u * 1024u * 1024u;
+  // Async cue probe futures (path → probed Cue)
+  struct PendingProbe {
+    int deckIndex;
+    std::string path;  // filesystem path, used to find cue in deck
+    std::future<std::optional<Cue>> future;
+  };
+  // PROBES ARE QUEUED, NOT LAUNCHED ON SIGHT.
+  //
+  // importPaths used to fire one std::async(launch::async) per file the moment
+  // it made the cue. Each of those is an OS thread that immediately spawns an
+  // ffprobe process, so dropping in two thousand cues asked Windows for two
+  // thousand threads and two thousand processes inside one frame -- which is
+  // the freeze, not the cue-making. Same shape as the encoder queue below: a
+  // waiting list, and a small number in flight.
+  struct QueuedProbe {
+    int deckIndex = -1;
+    std::string path;
+  };
+  std::vector<PendingProbe> probeFutures_;
+  std::deque<QueuedProbe> probeQueue_;
+  // Loudness analysis rides the same kind of queue, for the same reason.
+  struct QueuedNormalize {
+    std::string cueId;
+    std::string path;
+    double targetLufs = -16.0;
+  };
+  // Which decks were drawn as playlist columns on the last frame. An edit is
+  // allowed to reach a deck other than the focused one only if the operator
+  // can SEE that deck's selection -- see forEachSelectedCueEverywhere.
+  std::vector<int> visiblePlaylistDecks_;
+  // ---- MIDI clock follower ------------------------------------------------
+  // 24 ticks to the quarter note. Only every 24th is timed, so the tempo comes
+  // from a whole beat rather than from one tick's jitter.
+  Uint64 midiClockBeatStartMs_ = 0;
+  int midiClockTicks_ = 0;
+  double midiClockBpm_ = 0.0;
+  Uint64 midiClockLastTickMs_ = 0;
+  bool midiClockRunning_ = false;
+  // WHAT THE POINTER IS RESTING ON.
+  //
+  // Set by drawHoverTip -- so every tip source feeds it, whatever drew it --
+  // and read a frame later by the mascot, which is drawn earlier in the frame
+  // than most of the controls. One frame of lag is not visible; reaching into
+  // the future is not possible.
+  std::string hoverTipPending_;
+  std::string hoverTipLast_;
+  // The toolbar's tip is drawn after the toolbar rather than inside it: a tip
+  // panel is taller than the gap above a button on the top row, so drawn in
+  // place it covered the very button being explained.
+  std::string toolbarHoverTip_;
+  SDL_Rect toolbarHoverAt_ {};
+  // Dwell timing, so a tip does not flash up on every control the pointer
+  // merely crosses on its way somewhere else.
+  int hoverTipReqAnchorX_ = 0;
+  int hoverTipReqAnchorY_ = 0;
+  bool hoverTipReqBelow_ = false;
+  std::string hoverTipDwellText_;
+  Uint64 hoverTipDwellSinceMs_ = 0;
+  std::deque<QueuedNormalize> normalizeQueue_;
+  std::atomic<int> normalizeRunning_ {0};
+  int normalizeBatchTotal_ = 0;
+  // Denominator for the progress readout: how many were asked for in the run
+  // that is currently draining. Reset to 0 when the queue empties.
+  int probeBatchTotal_ = 0;
+  // What a many-file probe run found wrong, said ONCE when the run ends
+  // rather than as a toast per cue -- which blipped once for every heavy file.
+  int probeBatchPoorCount_ = 0;
+  int probeBatchUnreadableCount_ = 0;
+  std::string probeBatchFirstPoor_;
+  // Set while a folder drop is being walked on a worker thread. The count is
+  // what the walk has found so far, so the card counts up as it goes.
+  std::atomic<bool> importScanBusy_ {false};
+  std::atomic<int> importScanFound_ {0};
+  std::string importScanLabel_;
+  // ── Built-in media converter ───────────────────────────────────────────
+  // Async ffmpeg transcode of cues Deckboy can't play (or would play poorly)
+  // into a compatible H.264 MP4, kept portable in <show>/_converted/.
+  // A queued encode. Jobs are ENQUEUED by convertCueMedia and only started by
+  // pumpConversionQueue, at most kEncoderMaxConcurrent at a time. Before this
+  // every flagged cue span its own ffmpeg the instant it was added, so
+  // "convert all" on a big show launched one encoder per cue simultaneously.
+  enum class ConversionState { Queued, Running, Done, Failed };
+
+
+  struct ConversionJob {
+    int deckIndex;
+    std::string sourcePath;
+    std::string destPath;
+    std::string label;    // cue name, shown on the busy panel
+    ConversionState state = ConversionState::Queued;
+    EncoderPreset preset = EncoderPreset::DeliveryH264;
+    // Datamosh output sits BESIDE the original (the effect swaps between the
+    // two), so completion sets cue.moshPath instead of repointing cue.path.
+    bool keepsOriginal = false;
+    std::string formatId;   // catalog row this job encodes with
+    // Held jobs are skipped by the scheduler until released. Distinct from the
+    // whole-queue pause: this parks ONE job while the rest continue.
+    bool held = false;
+    // Set by the UI to ask a running encode to stop; the worker checks it
+    // between pipe reads and kills ffmpeg.
+    std::shared_ptr<std::atomic<bool>> cancel;
+    double sourceSeconds = 0.0;   // probed duration, the divisor for progress
+    // 0..1 while encoding, <0 until ffmpeg reports anything. Shared rather than
+    // held by value because the job is moved into the vector while the worker
+    // thread writes it from the other side.
+    std::shared_ptr<std::atomic<double>> progress;
+    std::future<bool> future;
+  };
+  std::vector<ConversionJob> conversionJobs_;
+  // One at a time by default: encoding must never outbid playback for CPU
+  // or for the drive the media is streaming off during a show.
+  int encoderConcurrency_ = 1;
+  EncoderPreset encoderPreset_ = EncoderPreset::DeliveryH264;
+  // Lazily probed from "ffmpeg -encoders"; see availableEncoders().
+  bool encoderProbeDone_ = false;
+  std::set<std::string> encoderProbeResult_;
+  std::string encoderFormatId_ = "h264";   // selected row of the format matrix
+  // Which datamosh flavour the DATAMOSH preset prepares. Both are moshable;
+  // they differ only in how the smear looks (see the catalog comment).
+  bool moshClassicLook_ = false;   // Encoder-tab manual converts only; cue
+                                   // datamosh reads Cue::datamoshLook instead
+  EncoderOverrides encoderOverrides_;  // quality/bitrate/fps/size/destination
+  bool encoderQueuePaused_ = false;
+  std::set<std::string> unreadablePaths_;  // probe returned nothing → offer convert
+  // Waveform analysis cache (path → peaks vector)
+  std::map<std::string, WaveformPeaks> waveformCache_;
+  std::map<std::string, std::future<WaveformPeaks>> waveformFutures_;
+  std::mutex waveformMutex_;
+  // Subtitle track cache (path → parsed SRT)
+  std::map<std::string, deckboy::core::SubtitleTrack> subtitleCache_;
+  // Settings modal
+  bool settingsOpen_ = false;
+  int settingsTab_ = 0; // 0=System 1=Audio 2=Network 3=Video Outputs 4=About
+  int settingsVideoSubTab_ = 0; // 0=Display 1=Processing 2=Backends 3=Streaming
+  bool videoOutputsAdvanced_ = false;
+  bool routingMoveMode_ = true; // true=single-output move, false=add/remove fan-out
+  SDL_Rect settingsCloseBtn_ {};
+  SDL_Rect settingsGearRect_ {};
+  SDL_Rect deckSidebarToggleRect_ {};
+  SDL_Rect blackoutBtnRect_ {};
+  SDL_Rect fileNewBtnRect_ {};
+  SDL_Rect fileOpenBtnRect_ {};
+  SDL_Rect fileSaveBtnRect_ {};
+  SDL_Rect fileBundleBtnRect_ {};
+  SDL_Rect fileRelinkBtnRect_ {};
+  SDL_Rect playlistJumpBtnRect_ {};   // "jump to live cue" button in the playlist header
+  SDL_Rect fileSaveAsBtnRect_ {};
+  SDL_Rect deckLoopBtnRect_ {};
+  SDL_Rect deckShuffleBtnRect_ {};
+  SDL_Rect fullscreenBtnRect_ {};
+  double masterDimmerTarget_ = 1.0;  // target for animated masterDimmer (0=black, 1=full)
+  bool panicProfilePending_ = false;
+  std::string pendingPanicProfileToken_;
+  Uint64 panicProfileRequestedAt_ = 0;
+  double panicRestoreDimmerTarget_ = 1.0;
+  std::vector<SettingsButton> settingsBtns_;
+  // THE PATCH GRID'S CELLS, for "click to cycle, drag to set": the press is
+  // taken before the settings click (which acts on the way down), and what it
+  // was is decided on the way up -- no movement is a click.
+  struct PatchCellHit {
+    SDL_Rect rect {};
+    int deck = -1;
+    int output = -1;
+  };
+  std::vector<PatchCellHit> settingsPatchCells_;
+  struct PatchScrub {
+    bool active = false;
+    bool moved = false;
+    int deck = -1;
+    int output = -1;
+    int startX = 0;
+    int startY = 0;
+    float startDb = 0.0f;
+  };
+  PatchScrub patchScrub_;
+  bool midiEnabled_ = false;
+  // The port actually open, which is not always the one requested: a control
+  // surface that is unplugged, not switched on, or still enumerating leaves the
+  // request standing and nothing connected. Same split as the audio device.
+  std::string midiDeviceInUse_;
+  Uint64 lastMidiDevicePollMs_ = 0;
+  // The MIDI map (app_midi_map.ipp). The queue is filled by the MIDI and OSC
+  // threads and drained once a frame; everything else is main-thread only.
+  deckboy::midimap::Engine midiMap_;
+  std::mutex midiMapQueueMutex_;
+  std::vector<MidiMapQueued> midiMapQueue_;
+  std::mutex midiMapOscMutex_;
+  std::vector<std::string> midiMapOscAddresses_;
+  std::vector<deckboy::midimap::Row> midiMapComputerRows_;
+  bool midiMapLoaded_ = false;
+  std::uint64_t midiMapComputerVersion_ = 0;
+  std::string midiMapSignature_;
+  bool midiMapLearnArmed_ = false;
+  std::optional<deckboy::midimap::Message> midiMapLearned_;
+  std::vector<int> midiMapLearnedValues_;
+  std::vector<float> audioPitchScratch_;   // serviceAudioPitch
+  // The MAP page.
+  bool settingsMidiMapOpen_ = false;
+  MidiMapEdit midiMapEdit_;
+  int midiMapScroll_ = 0;
+  int midiMapLearnInto_ = 0;  // 1: learn makes a new row; 2: re-learn the edited row
+  std::vector<std::pair<deckboy::midimap::Origin, int>> midiMapListed_;
+  std::map<std::pair<int, int>, Uint64> midiMapRowHitMs_;
+  // LED feedback: its own output, opened on the input's port by name.
+  deckboy::platform::midi::MidiOutput midiMapOut_;
+  std::string midiMapFeedbackPort_;
+  std::string midiMapFeedbackSig_;
+  Uint64 midiMapFeedbackAtMs_ = 0;
+  std::map<int, int> midiMapFeedbackSent_;
+  std::vector<std::string> midiMapFeedbackLog_;
+#if !defined(DECKBOY_HAS_ALSA) && defined(DECKBOY_HAS_MIDI)
+  // Cross-platform MIDI input (Windows/macOS). ALSA builds use midiSeq_ below.
+  deckboy::platform::midi::MidiInput midiRt_;
+#endif
+  // The chosen MIDI port lives in the show now (Project::midiDeviceName) so it
+  // survives a restart. This accessor keeps the call sites short.
+  std::string& midiDeviceName_() { return project_.midiDeviceName; }
+  const std::string& midiDeviceName_() const { return project_.midiDeviceName; }
+#if defined(DECKBOY_HAS_ALSA)
+  snd_seq_t* midiSeq_ = nullptr;
+  int midiSeqPort_ = -1;
+  std::thread midiThread_;
+  std::atomic<bool> midiStop_ {false};
+#endif
+  // NOT platform-gated, because timecode is not. These sat inside the ALSA
+  // block with the decoder, which is how Deckboy came to accept MIDI timecode
+  // on Linux and ignore it on Windows and macOS -- where the MIDI input is
+  // perfectly capable of carrying the same bytes.
+  deckboy::core::MtcQuarterFrameDecoder midiMtcDecoder_;
+  double midiMtcLastSentSeconds_ = -1.0;
+  double midiMtcLastSentFps_ = 0.0;
+
+  // Companion / OSC / integration bridge state (cross-platform)
+  SocketHandle companionTcpListen_ = kInvalidSocket;
+  SocketHandle companionUdpSocket_ = kInvalidSocket;
+  SocketHandle oscQueryTcpListen_ = kInvalidSocket;
+  // ── THE POINTER OVER THE PICTURE ──────────────────────────────────────────
+  //
+  // Hidden after a few still seconds while it is over the program monitor or
+  // an output window, and brought straight back by any movement. SDL's cursor
+  // visibility is per-PROCESS, so the state has to be tracked here and undone
+  // reliably -- an operator who cannot find their mouse is a worse problem
+  // than the one this solves.
+  Uint64 lastPointerMoveMs_ = 0;
+  Uint32 lastPointerWindowId_ = 0;
+  bool pointerHiddenForIdle_ = false;
+
+  bool oscQueryReady_ = false;
+  std::atomic<bool> oscQueryStop_ {false};
+  std::thread oscQueryThread_;
+
+  // vMix-compatible surface: HTTP on 8088 and the text protocol on 8099, both
+  // served by one thread so they cannot disagree or be half-running.
+  SocketHandle vmixHttpListen_ = kInvalidSocket;
+  SocketHandle vmixTcpListen_ = kInvalidSocket;
+  bool vmixReady_ = false;
+  std::atomic<bool> vmixStop_ {false};
+  std::thread vmixThread_;
+  std::mutex vmixClientsMutex_;            // protects the two containers below
+  std::vector<SocketHandle> vmixClients_;
+  std::set<SocketHandle> vmixSubscribers_;
+  // The document and the tally string, rebuilt on the MAIN thread beside the
+  // status snapshot. The server thread only ever reads these two strings, so
+  // it never walks the project while the main thread is editing it.
+  std::mutex vmixSnapshotMutex_;
+  std::string vmixXmlSnapshot_;
+  std::string vmixTallySnapshot_;
+  // Server-thread only: what was last pushed, so subscribers get a frame when
+  // the tally CHANGES rather than one per tick.
+  std::string vmixLastPushedTally_;
+  std::mutex companionClientsMutex_;  // protects companionClients_ + companionClientBuffers_
+  std::vector<SocketHandle> companionClients_;
+  std::map<SocketHandle, std::string> companionClientBuffers_;
+  std::map<SocketHandle, std::string> companionClientPeer_;   // its address, for the monitor
+  std::map<SocketHandle, std::string> companionClientReplies_;
+  std::map<SocketHandle, std::uint64_t> companionClientGenerations_;
+  std::uint64_t companionNextGeneration_ = 1;
+  std::map<SocketHandle, Uint64> companionReplyStartedAt_;
+  // Which connections have already had their first line inspected (see the
+  // HTTP guard in app_network.ipp).
+  std::set<SocketHandle> companionClientFirstLine_;
+  // Companion TCP clients on another machine, and which of those have sent the
+  // passphrase (companionClientsMutex_).
+  std::set<SocketHandle> companionClientRemote_;
+  std::set<SocketHandle> companionClientAuthed_;
+  std::map<SocketHandle, int> companionClientAuthFailures_;
+  // The trust rules as the network threads see them (controlTrustMutex_).
+  std::mutex controlTrustMutex_;
+  std::vector<std::pair<std::uint32_t, std::uint32_t>> controlTrustNets_;  // address, mask
+  std::string controlTrustSource_;
+  std::string controlPassphrase_;
+  bool controlTrustRemote_ = false;
+  bool controlTrustPrimed_ = false;
+  // Refused peers waiting to be told about on the main thread, and the last.
+  std::vector<std::pair<std::string, std::string>> controlRefused_;  // address, port name
+  std::map<std::string, Uint64> controlRefusedToldMs_;
+  std::string controlLastRefused_;
+  // Clients that half-closed (sent EOF) but are still owed an OK/ERR for a
+  // command already queued. Value is the SDL_GetTicks deadline after which the
+  // socket is closed regardless. See the linger note in the reader loop.
+  std::map<SocketHandle, Uint64> companionDrainingClients_;
+  static constexpr Uint64 kCompanionDrainMs = 750;
+  std::map<std::string, std::pair<sockaddr_in, Uint64>> oscSubscribers_;
+  Uint64 lastOscFeedbackBroadcastMs_ = 0;
+  std::string lastOscFeedbackPayload_;
+  Uint64 lastOscMirrorFeedbackBroadcastMs_ = 0;
+  std::string lastOscMirrorFeedbackPayload_;
+  // The NMC bridge owns its socket, its thread and its change detection --
+  // see platform/nmc_sync.hpp for why that is not sixteen members here.
+  deckboy::platform::NmcSync nmcSync_;
+  deckboy::platform::ArtNetBridge artNetBridge_;
+  deckboy::platform::AtemTallyBridge atemTallyBridge_;
+  deckboy::platform::AtemSwitcherClient atemSwitcher_;
+  bool atemSwitcherHooked_ = false;
+  bool atemBridgeHooked_ = false;
+  bool artNetHooked_ = false;
+  bool nmcSyncHooked_ = false;
+  std::thread ndiTriggerThread_;
+  std::atomic<bool> ndiTriggerStop_ {false};
+  std::atomic<bool> ndiTriggerRunning_ {false};
+  NdiTriggerApi ndiTriggerApi_;
+  std::string ndiTriggerConnectedSource_;
+  std::string ndiTriggerLastError_;
+  std::string ndiTriggerLastAnnouncedError_;
+  Uint64 ndiTriggerRestartBlockedUntilMs_ = 0;
+
+  // LTC ingest state (cross-platform — libltc loaded dynamically at runtime)
+  std::thread ltcThread_;
+  std::atomic<bool> ltcStop_ {false};
+  SDL_AudioStream* ltcCaptureStream_ = nullptr;  // SDL3 recording stream for LTC ingest
+  int ltcCaptureSampleRate_ = 0;
+  int ltcCaptureChannels_ = 0;
+  std::string ltcCaptureDeviceName_;
+  std::string ltcLastError_;
+  std::string ltcLastAnnouncedError_;
+  Uint64 ltcRestartBlockedUntilMs_ = 0;
+  // TSL/Tally socket — cross-platform (UDP send-only)
+  deckboy::platform::SocketHandle tslTallySocket_ = deckboy::platform::kInvalidSocket;
+};
+
+}  // namespace
+
+// ════════════════════════════════════════════════════════════════════════════
+// Entry points
+// ════════════════════════════════════════════════════════════════════════════
+
+// Shared entry point for both main() and WinMain(). Parses the command line
+// (see the block comment above runDeckboyMain for the rules and `--help` for
+// the flags), runs a mode flag headless if one is present, otherwise:
+// acquire instance lock → App::init() → App::run() → App::shutdown()
+// WHERE THE CRASH LOG GOES, DECIDED AT STARTUP.
+//
+// Shared by both handlers. The POSIX one has always resolved this once into a
+// fixed buffer, for the good reason written above it: allocating inside a
+// SIGSEGV handler is how a crash reporter becomes a second crash.
+//
+// The Windows handler did not, and built the path with dbfs at the
+// moment of the fault instead. That works for a crash mid-show and fails for
+// exactly the crash worth having a logger for -- one during SHUTDOWN, where
+// Paths::stateDir() answers out of state that has already been torn down. It
+// returned empty, the log was opened relative to the working directory, and
+// what landed was a zero-byte file with no stack in it. A crash logger that
+// only works while the app is healthy is not a crash logger.
+static char g_crashLogPath[1024] = {0};
+
+static void captureCrashLogPath() {
+  const std::string path = (Paths::stateDir() / "deckboy-crash.log").string();
+  if (path.size() < sizeof(g_crashLogPath)) {
+    std::memcpy(g_crashLogPath, path.c_str(), path.size() + 1);
+  }
+}
+
+#ifdef _WIN32
+// ── Crash-time formatting, hand-rolled ──────────────────────────────────────
+// No CRT, and no wsprintfA either. The first raw handler used wsprintfA and the
+// exception code came out as 0x0000087A for a crash whose real code was
+// 0xC0000005: wsprintf is a Win16 inheritance with its own ideas about integer
+// widths, and a crash logger that lies about the exception code is worse than
+// one that stays quiet. These write bytes. There is nothing left to be wrong.
+namespace crashfmt {
+
+inline char* put(char* p, char* end, const char* s) {
+  while (*s && p < end) *p++ = *s++;
+  return p;
+}
+
+inline char* hex(char* p, char* end, unsigned long long v, int digits) {
+  static const char kHex[] = "0123456789ABCDEF";
+  for (int i = digits - 1; i >= 0 && p < end; --i) *p++ = kHex[(v >> (i * 4)) & 0xF];
+  return p;
+}
+
+inline char* dec(char* p, char* end, unsigned long long v) {
+  char tmp[24];
+  int n = 0;
+  do { tmp[n++] = static_cast<char>('0' + (v % 10)); v /= 10; } while (v && n < 24);
+  while (n && p < end) *p++ = tmp[--n];
+  return p;
+}
+
+// module+0xRVA for one address, or nothing if it belongs to no loaded module.
+//
+// This is the part that makes the log readable on its own. Raw addresses need a
+// module map from the same boot to mean anything, and by the time anybody reads
+// a crash log that map is long gone -- the first PDF stack had to be resolved by
+// relaunching the app and diffing base addresses, which only worked because the
+// machine had not been rebooted.
+inline char* module(char* p, char* end, unsigned long long addr) {
+  HMODULE mod = nullptr;
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCWSTR>(addr), &mod) ||
+      !mod) {
+    return p;
+  }
+  wchar_t modPath[MAX_PATH] {};
+  if (!GetModuleFileNameW(mod, modPath, MAX_PATH)) return p;
+  const wchar_t* name = modPath;
+  for (const wchar_t* c = modPath; *c; ++c) {
+    if (*c == L'\\' || *c == L'/') name = c + 1;
+  }
+  char nameA[MAX_PATH] {};
+  if (!WideCharToMultiByte(CP_UTF8, 0, name, -1, nameA, MAX_PATH, nullptr, nullptr)) return p;
+  p = put(p, end, "  ");
+  p = put(p, end, nameA);
+  p = put(p, end, "+0x");
+  const unsigned long long rva = addr - reinterpret_cast<unsigned long long>(mod);
+  int digits = 1;
+  for (unsigned long long v = rva >> 4; v; v >>= 4) ++digits;
+  return hex(p, end, rva, digits);
+}
+
+// WHAT WAS THROWN, when the crash is an uncaught C++ exception (0xE06D7363).
+// The frames cannot say: the 2026-10-24 crash on RECORD STOP pointed into the
+// runtime, and naming it std::bad_alloc took a disassembly of the CRT's own
+// layout. The exception record carries it. On x64, [2] is MSVC's ThrowInfo
+// and [3] the base its offsets count from; the first catchable type is the one
+// thrown, and a std::exception among the rest gives what(). Copied out under
+// __try, because in a crash handler a pointer is only a suggestion.
+inline char* thrown(char* p, char* end, const EXCEPTION_RECORD* record) {
+#if defined(_MSC_VER) && defined(_WIN64)
+  if (!record || record->ExceptionCode != 0xE06D7363 || record->NumberParameters < 4) return p;
+  char type[160] {};
+  char what[240] {};
+  __try {
+    const auto base = static_cast<std::uintptr_t>(record->ExceptionInformation[3]);
+    const auto* info = reinterpret_cast<const std::int32_t*>(record->ExceptionInformation[2]);
+    const auto object = static_cast<std::uintptr_t>(record->ExceptionInformation[1]);
+    if (base && info && info[3]) {
+      const auto* types =
+        reinterpret_cast<const std::int32_t*>(base + static_cast<std::uint32_t>(info[3]));
+      for (std::int32_t i = 0; i < types[0] && i < 32; ++i) {
+        // CatchableType: properties, type, then mdisp/pdisp/vdisp.
+        const auto* ct =
+          reinterpret_cast<const std::int32_t*>(base + static_cast<std::uint32_t>(types[1 + i]));
+        // TypeDescriptor: vtable, spare, then the decorated name.
+        const char* name = reinterpret_cast<const char*>(
+          base + static_cast<std::uint32_t>(ct[1])) + 2 * sizeof(void*);
+        if (i == 0) {
+          for (std::size_t n = 0; n + 1 < sizeof(type) && name[n]; ++n) type[n] = name[n];
+        }
+        if (object && ct[3] == -1 && std::strcmp(name, ".?AVexception@std@@") == 0) {
+          const char* said = reinterpret_cast<const std::exception*>(object + ct[2])->what();
+          for (std::size_t n = 0; said && n + 1 < sizeof(what) && said[n]; ++n) what[n] = said[n];
+        }
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+  if (!type[0]) return p;
+  p = put(p, end, "thrown: ");
+  p = put(p, end, type);
+  if (what[0]) {
+    p = put(p, end, "  \"");
+    p = put(p, end, what);
+    p = put(p, end, "\"");
+  }
+  return put(p, end, "\r\n");
+#else
+  (void)end;
+  (void)record;
+  return p;
+#endif
+}
+
+}  // namespace crashfmt
+
+// ── Crash logger ────────────────────────────────────────────────────────────
+// Deckboy has been dying silently: Windows Error Reporting keeps a dump and a
+// module name, but the app leaves nothing behind, so a crash mid-show tells the
+// operator (and the next debugging session) nothing at all. Several crashes are
+// on record with only "faulting module SDL3.dll" to go on.
+//
+// This writes a symbolised stack to deckboy-crash.log next to the data dir the
+// moment an unhandled SEH exception fires — before the process is gone. It is
+// diagnosis, not recovery: the app still dies, it just says why.
+LONG WINAPI deckboyCrashHandler(EXCEPTION_POINTERS* info) {
+  // BOUNDED, not one-shot. The guard used to stop after a single entry, so a
+  // fault raised while logging the first one was swallowed whole -- which is
+  // how the PDF shutdown crash produced an empty file for so long. The facts
+  // block below is now raw Win32 and self-contained, so letting a handful
+  // through costs nothing and a cascade still terminates.
+  static std::atomic<int> entries {0};
+  if (entries.fetch_add(1) >= 4) {
+    return EXCEPTION_EXECUTE_HANDLER;
+  }
+  const bool firstEntry = entries.load() == 1;
+  // The path captured at startup, not one built now: see captureCrashLogPath.
+  const char* logPath = g_crashLogPath[0] != '\0' ? g_crashLogPath
+                                                  : "deckboy-crash.log";
+
+  // THE FACTS GO DOWN WITH RAW WIN32, BEFORE ANY C++ RUNTIME IS INVOLVED.
+  //
+  // The ofstream below is comfortable and cannot be trusted here. A crash
+  // during SHUTDOWN -- which is the crash a logger is most needed for -- runs
+  // after the CRT's own statics have gone, and operator<< reaches into locale
+  // and chrono machinery that no longer exists. The handler opened the file,
+  // faulted mid-format, and the re-entry guard swallowed the second fault: a
+  // zero-byte log, every time, for every shutdown crash this app has ever had.
+  //
+  // CreateFile/WriteFile and wsprintfA are Win32, not CRT, and hold no static
+  // state of their own. This is the Windows equivalent of the open/write the
+  // POSIX handler already restricts itself to, and for the same reason.
+  {
+    HANDLE raw = CreateFileA(logPath, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                             OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (raw != INVALID_HANDLE_VALUE) {
+      char head[4096];
+      char* const end = head + sizeof(head) - 1;
+      char* p = head;
+      const DWORD tid = GetCurrentThreadId();
+      const DWORD mainTid = gMainThreadId.load();
+      p = crashfmt::put(p, end, "\r\n=== Deckboy crash ");
+      p = crashfmt::put(p, end, deckboy::core::version::kVersionTag);
+      p = crashfmt::put(p, end, " ===\r\nthread: ");
+      p = crashfmt::dec(p, end, tid);
+      p = crashfmt::put(p, end, tid == mainTid ? "  (main)  main: " : "  (NOT main)  main: ");
+      p = crashfmt::dec(p, end, mainTid);
+      p = crashfmt::put(p, end, "\r\n");
+      if (info && info->ExceptionRecord) {
+        p = crashfmt::put(p, end, "code: 0x");
+        p = crashfmt::hex(p, end, info->ExceptionRecord->ExceptionCode, 8);
+        p = crashfmt::put(p, end, "  address: 0x");
+        p = crashfmt::hex(p, end,
+                          reinterpret_cast<unsigned long long>(
+                              info->ExceptionRecord->ExceptionAddress),
+                          16);
+        p = crashfmt::module(
+            p, end,
+            reinterpret_cast<unsigned long long>(info->ExceptionRecord->ExceptionAddress));
+        p = crashfmt::put(p, end, "\r\n");
+        p = crashfmt::thrown(p, end, info->ExceptionRecord);
+      }
+      // Raw frames, each tagged with module+RVA. Symbolising through DbgHelp is
+      // what tends to fault during shutdown, and module+RVA resolves offline
+      // against the matching build anyway -- so this is the version that has to
+      // survive, and the pretty one below is the bonus.
+      void* rawFrames[40] {};
+      const USHORT rawCount = CaptureStackBackTrace(0, 40, rawFrames, nullptr);
+      for (USHORT i = 0; i < rawCount && p < end - 96; ++i) {
+        const auto addr = reinterpret_cast<unsigned long long>(rawFrames[i]);
+        p = crashfmt::put(p, end, "  <");
+        p = crashfmt::dec(p, end, i);
+        p = crashfmt::put(p, end, "> 0x");
+        p = crashfmt::hex(p, end, addr, 16);
+        p = crashfmt::module(p, end, addr);
+        p = crashfmt::put(p, end, "\r\n");
+      }
+      DWORD wrote = 0;
+      WriteFile(raw, head, static_cast<DWORD>(p - head), &wrote, nullptr);
+      FlushFileBuffers(raw);
+      CloseHandle(raw);
+    }
+  }
+
+  std::ofstream log(firstEntry ? logPath : "", std::ios::app);
+  if (log) {
+    const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    log << "\n=== Deckboy crash " << deckboy::core::version::kVersionTag << " ===\n";
+    log << "time: " << now << "\n";
+    // WHICH THREAD, and whether it is the one that owns the renderers.
+    //
+    // Four crashes are now logged with byte-identical stacks -- an access
+    // violation inside SDL's D3D11 vertex buffer, reached from an ordinary
+    // rectangle draw -- across v0.83.1, v0.83.2, v0.87.0 and v0.91.0. The stack
+    // alone cannot separate the two candidate causes: a renderer used after its
+    // device went away, or a renderer touched from two threads at once. This
+    // separates them, and costs nothing until something goes wrong.
+    log << "thread: " << GetCurrentThreadId()
+        << (GetCurrentThreadId() == gMainThreadId.load() ? "  (main)" : "  (NOT main)")
+        << "  main: " << gMainThreadId.load() << "\n";
+    if (info && info->ExceptionRecord) {
+      log << "code: 0x" << std::hex << info->ExceptionRecord->ExceptionCode << std::dec
+          << "  address: " << info->ExceptionRecord->ExceptionAddress << "\n";
+    }
+    // FLUSH THE FACTS BEFORE ATTEMPTING THE LUXURIES.
+    //
+    // Everything below reaches into DbgHelp to turn addresses into names, and
+    // DbgHelp is not guaranteed to be in a fit state during shutdown -- which
+    // is exactly when the crash worth logging happens. If it faults, the
+    // re-entry guard above swallows the second fault and the process dies with
+    // this file still in the stream buffer: a zero-byte log, which is what the
+    // PDF shutdown crash produced every time.
+    //
+    // The code, the address and the thread are the part that cannot be
+    // reconstructed afterwards. They go to disk first, and the stack is a
+    // bonus on top.
+    log.flush();
+    HANDLE process = GetCurrentProcess();
+    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
+    SymInitialize(process, nullptr, TRUE);
+    void* frames[62] {};
+    const USHORT captured = CaptureStackBackTrace(0, 62, frames, nullptr);
+    alignas(SYMBOL_INFO) char symbolBuffer[sizeof(SYMBOL_INFO) + 512] {};
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = 511;
+    for (USHORT i = 0; i < captured; ++i) {
+      const DWORD64 addr = reinterpret_cast<DWORD64>(frames[i]);
+      log << "  [" << i << "] " << frames[i];
+      // Per frame, for the same reason as the header flush: if resolving THIS
+      // frame is what faults, every frame already written is still on disk and
+      // the log stops where the trouble is instead of vanishing entirely.
+      log.flush();
+      // Log module + RVA even when no PDB is loaded. Deckboy's own frames have
+      // no runtime symbols, so SymFromAddr falls back to the nearest EXPORT
+      // (wrong — e.g. "RtMidiError::what" for an App:: method). module+0xRVA is
+      // exact and resolves offline against the matching build's .pdb/.map, which
+      // is the only way to read a release crash. Format: Deckboy.exe+0x231b07.
+      HMODULE mod = nullptr;
+      if (GetModuleHandleExW(
+              GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+              reinterpret_cast<LPCWSTR>(addr), &mod) && mod) {
+        wchar_t modPath[MAX_PATH] {};
+        if (GetModuleFileNameW(mod, modPath, MAX_PATH)) {
+          const wchar_t* base = wcsrchr(modPath, L'\\');
+          const wchar_t* name = base ? base + 1 : modPath;
+          char nameA[MAX_PATH] {};
+          WideCharToMultiByte(CP_UTF8, 0, name, -1, nameA, MAX_PATH, nullptr, nullptr);
+          const DWORD64 rva = addr - reinterpret_cast<DWORD64>(mod);
+          log << "  " << nameA << "+0x" << std::hex << rva << std::dec;
+        }
+      }
+      DWORD64 displacement = 0;
+      if (SymFromAddr(process, addr, &displacement, symbol)) {
+        log << "  " << symbol->Name;
+      }
+      IMAGEHLP_LINE64 line {};
+      line.SizeOfStruct = sizeof(line);
+      DWORD lineDisp = 0;
+      if (SymGetLineFromAddr64(process, addr, &lineDisp, &line) && line.FileName) {
+        log << "  (" << line.FileName << ":" << line.LineNumber << ")";
+      }
+      log << "\n";
+    }
+    log.flush();
+  }
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+#ifndef _WIN32
+// POSIX counterpart to deckboyCrashHandler above. Without it a crash on Linux
+// or macOS leaves NOTHING behind — no faulting module, no stack, nothing — so
+// the platform where we have the least debugging history was also the platform
+// that told us the least. Same contract as the Windows handler: this is
+// diagnosis, not recovery. The process still dies, it just says why.
+//
+// Everything here runs in a signal handler, so it is restricted to
+// async-signal-safe calls: open/write/_exit and backtrace_symbols_fd. That is
+// why the log path is resolved ONCE at startup into a fixed buffer rather than
+// being built with dbfs when the fault arrives — allocating inside a
+// SIGSEGV handler is how a crash reporter becomes a second crash.
+extern "C" void deckboyPosixCrashHandler(int sig) {
+  static volatile sig_atomic_t handled = 0;
+  if (handled) {
+    _exit(128 + sig);           // a second fault while logging the first
+  }
+  handled = 1;
+
+  if (g_crashLogPath[0] != '\0') {
+    const int fd = open(g_crashLogPath, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) {
+      auto emit = [fd](const char* text) {
+        ssize_t ignored = write(fd, text, std::strlen(text));
+        (void) ignored;
+      };
+      emit("\n=== Deckboy crash ");
+      emit(deckboy::core::version::kVersionTag);
+      emit(" ===\nsignal: ");
+      switch (sig) {
+        case SIGSEGV: emit("SIGSEGV (invalid memory access)"); break;
+        case SIGBUS:  emit("SIGBUS (bad address / misaligned)"); break;
+        case SIGFPE:  emit("SIGFPE (arithmetic fault)"); break;
+        case SIGILL:  emit("SIGILL (illegal instruction)"); break;
+        case SIGABRT: emit("SIGABRT (abort / uncaught exception)"); break;
+        default:      emit("unknown"); break;
+      }
+      emit("\nstack:\n");
+      void* frames[62];
+      const int captured = backtrace(frames, 62);
+      backtrace_symbols_fd(frames, captured, fd);
+      close(fd);
+    }
+  }
+
+  // Re-raise with the default handler so the shell and any supervisor still see
+  // a genuine crash (and a core file is still produced if enabled), rather than
+  // a tidy exit code that hides the fault.
+  signal(sig, SIG_DFL);
+  raise(sig);
+}
+
+static void installPosixCrashHandler() {
+  captureCrashLogPath();
+  for (int sig : {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT}) {
+    struct sigaction sa {};
+    sa.sa_handler = deckboyPosixCrashHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND;
+    sigaction(sig, &sa, nullptr);
+  }
+}
+#endif
+
+// Put the executable's own directory on PATH, ahead of everything else.
+//
+// Deckboy spawns helpers by bare name ("ffmpeg", "ffprobe"), and on POSIX that
+// goes through execvp, which searches PATH and nothing else. A portable bundle
+// therefore ships an ffmpeg that the app can never actually find: it falls
+// through to a system copy if one exists, and simply fails to decode on a clean
+// machine — which is exactly the machine a portable build is for.
+//
+// Windows does not need this (CreateProcess searches the application directory
+// first), but doing it everywhere keeps one behaviour to reason about.
+//
+// In a dev build the executable's directory holds no ffmpeg, so the lookup
+// falls straight through to the system one and nothing changes.
+static void prependExecutableDirToPath() {
+  const dbfs::path exe = deckboy::core::Paths::executablePath();
+  if (exe.empty()) {
+    return;
+  }
+  const std::string dir = exe.parent_path().string();
+  if (dir.empty()) {
+    return;
+  }
+#ifdef _WIN32
+  const char kSep = ';';
+#else
+  const char kSep = ':';
+#endif
+  const char* existing = std::getenv("PATH");
+  std::string updated = dir;
+  if (existing && existing[0] != '\0') {
+    updated += kSep;
+    updated += existing;
+  }
+#ifdef _WIN32
+  _putenv_s("PATH", updated.c_str());
+#else
+  setenv("PATH", updated.c_str(), 1);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Command line
+//
+// Flags come in two shapes:
+//   MODE flags take the process over: they run headless and exit (--smoke,
+//     --pattern-dump, --decode-bench, …). At most one may appear.
+//   OPTION flags modify a run (--import, --settings, --soak) or apply to any
+//     run at all (--no-inproc-decode, --no-hw-decode, --allow-multi-instance).
+//
+// Three rules this parser enforces, each of which used to fail SILENTLY:
+//   * option flags are read wherever they sit on the line, not only in argv[1]
+//     ("--decode-bench clip.mp4 --no-inproc-decode" ignored the modifier, and
+//     swapping the order launched the GUI instead);
+//   * "--flag=value" is accepted as well as "--flag value"
+//     ("--pattern-bench=terrarium" launched the GUI);
+//   * an unknown flag, or a mode flag missing its operands, is an ERROR with a
+//     message — never a fall-through into the GUI.
+// A bare path is the show (or media) to open, which is what the Windows
+// .deckboy file association and a Finder/Explorer "open with" actually pass.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct CliFlagHelp {
+  const char* usage;
+  const char* text;
+};
+
+constexpr CliFlagHelp kCliModeHelp[] = {
+  {"--help, -h", "print this help and exit"},
+  {"--version", "print the version and exit"},
+  {"--self-check", "report ffmpeg / SDK / runtime availability and exit"},
+  {"--smoke", "run the built-in smoke suite and exit"},
+  {"--autosave-check <dir>", "check retry, quit and recovery headlessly; use a new directory and set DECKBOY_STATE_DIR=<dir>/state"},
+  {"--sync-pop-test", "run the A/V sync pop test and exit"},
+  {"--hap-probe <file.mov>", "demux a HAP file to blocks and report, no window"},
+  {"--asio-probe [name]", "list ASIO drivers; with a name, load and report its channels"},
+  {"--sheet-probe <png> [tw] [th]", "slice a sprite sheet and report the tile grid"},
+  {"--asio-tone <name> [secs] [ch]", "play a quiet 440Hz tone through an ASIO driver"},
+  {"--timer-dump <out.ppm> [dur] [elapsed]", "render one stage-timer frame to a PPM"},
+  {"--pattern-bench <pattern> [WxH] [frames]", "time pattern generation, no window or IO"},
+  {"--lower-third-bench [WxH] [frames] [arabic]", "time every lower-third look with a GPU completion fence"},
+  {"--pattern-dump <pattern[:variant]> <out.ppm> [WxH] [seconds]", "render one pattern frame to a PPM file"},
+  {"--code-dump <expression|@file> <out.ppm> [WxH] [seconds]", "render one expression source to a PPM file"},
+  {"--code-check", "assert the expression language against expected values"},
+  {"--image-check", "can this machine decode the interface's icons and splash art"},
+  {"--ui-dump <out.bmp> [frames]", "save one frame of the control window, then quit"},
+  {"--ui-size <width> <height>", "set the control-window size for a UI check"},
+  {"--settings-scroll <pixels>", "scroll the settings tab opened by --settings for a UI check"},
+  {"--contrast-check [dir]", "render every bundled theme with help and warning toasts; fail on an unreadable notice"},
+  {"--slide-card [done/total]", "show the PDF import progress card, for --ui-dump"},
+  {"--font-check", "open every UI face and render with it; names the step that fails"},
+  {"--colour-check", "check typed colours, the hue maths and the saved effect colour; no window"},
+  {"--effect-dump <token[:amt[:a[:b]]]> <in.ppm> <out.ppm> [frame]",
+     "apply one effect to one picture, no window"},
+  {"--transition-dump <style> <out.ppm> <in.ppm> <dst.ppm> [p] [secs]",
+     "one frame of one transition, composited, no window"},
+    {"--effect-bench <token[:amt[:a[:b]]]> [WxH] [frames]",
+     "time one effect per frame at a raster"},
+    {"--pdf-probe <file> [outdir] [width]",
+     "rasterise a slide deck, no window"},
+    {"--decode-bench <file> [seconds] [cli]", "decode a file, report gpu/cpu frame counts"},
+  {"--motion-probe <file> [frames]", "read the clip's motion vectors, report coverage"},
+  {"--ltc-generate <out.wav> [tc] [fps] [seconds]", "write a SMPTE LTC timecode WAV"},
+};
+
+constexpr CliFlagHelp kCliOptionHelp[] = {
+  {"--import <path>", "import media at launch (skips splash and startup menu)"},
+  {"--settings [tab[.subtab]]", "open the settings modal at boot, e.g. --settings 3.1"},
+  {"--soak [minutes]", "long-run stability harness (default 1440); logs to deckboy-soak.log"},
+  {"--devices", "list the audio, display and capture hardware this machine offers"},
+  {"--plugins", "list the audio plugins this machine has, and where they were found"},
+  {"--plugin-chain-check", "run a plugin in a cue chain and measure that it, and its controls, do something"},
+  {"--check-update", "ask GitHub whether there is a newer release, print it, and exit"},
+  {"--no-inproc-decode", "keep every decode on the ffmpeg CLI pipe path"},
+  {"--no-hw-decode", "decode in software (the A/B for the hardware path)"},
+  {"--allow-multi-instance", "bypass the single-instance lock"},
+};
+
+constexpr const char* kCliModeFlags[] = {
+  "--version", "--self-check", "--smoke", "--autosave-check", "--sync-pop-test",
+  "--pattern-bench", "--pattern-dump", "--code-dump", "--code-check",
+  "--effect-dump", "--effect-bench", "--image-check", "--transition-dump", "--lower-third-bench",
+  "--decode-bench", "--ltc-generate", "--audio-fx-check", "--mtc-check", "--colour-check",
+  "--hap-probe", "--asio-probe", "--asio-tone", "--sheet-probe", "--timer-dump",
+  "--motion-probe", "--pdf-probe", "--pdf-render", "--pptx-notes", "--atem-probe",
+  "--devices", "--plugins", "--plugin-chain-check", "--check-update", "--font-check",
+};
+
+constexpr CliFlagHelp kCliEnvHelp[] = {
+  {"DECKBOY_ROOT", "project root holding data/ (also makes that dir the writable one)"},
+  {"DECKBOY_NO_HW_DECODE", "force software decode -- the A/B for the hardware path"},
+  {"DECKBOY_STATE_DIR", "where shows/state/crash logs are written"},
+  {"DECKBOY_PROJECT", "show file to open instead of the remembered one"},
+  {"DECKBOY_COMPANION_PORT", "Companion control port (default 5510)"},
+  {"DECKBOY_FFMPEG / DECKBOY_FFPROBE", "explicit paths to the ffmpeg binaries"},
+  {"DECKBOY_EGRESS_READBACK", "sync = force the portable recording readback (diagnostic)"},
+};
+
+bool isCliModeFlag(const std::string& token) {
+  for (const char* flag : kCliModeFlags) {
+    if (token == flag) return true;
+  }
+  return false;
+}
+
+void printDeckboyUsage(std::ostream& out) {
+  printDeckboyVersion(out);
+  out << "\nUsage:\n"
+      << "  Deckboy [show.deckboy | media...] [options]\n"
+      << "  Deckboy <mode> [arguments]\n"
+      << "\nModes (run headless and exit):\n";
+  for (const CliFlagHelp& help : kCliModeHelp) {
+    out << "  " << std::left << std::setw(52) << help.usage << help.text << '\n';
+  }
+  out << "\nOptions:\n";
+  for (const CliFlagHelp& help : kCliOptionHelp) {
+    out << "  " << std::left << std::setw(52) << help.usage << help.text << '\n';
+  }
+  out << "\nEnvironment:\n";
+  for (const CliFlagHelp& help : kCliEnvHelp) {
+    out << "  " << std::left << std::setw(52) << help.usage << help.text << '\n';
+  }
+  out << "\nBoth spellings work everywhere: --flag value and --flag=value.\n"
+      << std::right;
+}
+
+void printCliError(const std::string& message) {
+  std::cerr << "deckboy: " << message << "\nTry 'Deckboy --help'.\n";
+}
+
+// Normalize argv for parsing: split "--flag=value", and drop the process-serial
+// argument macOS's Finder appends when it launches a bundle (it is not ours and
+// must not be reported as an unknown flag).
+std::vector<std::string> normalizeCliArgs(int argc, char** argv) {
+  std::vector<std::string> out;
+  out.reserve(static_cast<size_t>(argc > 1 ? argc - 1 : 0));
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i] ? argv[i] : "";
+    if (arg.empty() || arg.rfind("-psn_", 0) == 0) {
+      continue;
+    }
+    if (arg.rfind("--", 0) == 0) {
+      const auto eq = arg.find('=');
+      if (eq != std::string::npos && eq > 2) {
+        out.push_back(arg.substr(0, eq));
+        out.push_back(arg.substr(eq + 1));
+        continue;
+      }
+    }
+    out.push_back(std::move(arg));
+  }
+  return out;
+}
+
+// "1920x1080" → raster. Shared by the operand lists of --pattern-bench and
+// --pattern-dump, where sizes and counts may appear in either order.
+bool parseCliRaster(const std::string& token, int& width, int& height) {
+  const auto xPos = token.find('x');
+  if (xPos == std::string::npos || xPos == 0) {
+    return false;
+  }
+  const int w = std::atoi(token.substr(0, xPos).c_str());
+  const int h = std::atoi(token.substr(xPos + 1).c_str());
+  if (w <= 0 || h <= 0) {
+    return false;
+  }
+  width = w;
+  height = h;
+  return true;
+}
+
+// Run a mode flag. `ops` is everything after it, with the global modifiers
+// already removed, so a modifier may sit anywhere on the line.
+int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& ops) {
+  auto missing = [&](const char* operands) {
+    printCliError(mode + " needs " + operands);
+    return 2;
+  };
+
+  if (mode == "--version") {
+    printDeckboyVersion(std::cout);
+    return 0;
+  }
+  if (mode == "--self-check") {
+    return App::runSelfCheck();
+  }
+  if (mode == "--smoke") {
+    try {
+      return App::runSmoke();
+    } catch (const std::exception& error) {
+      std::cerr << "smoke exception: " << error.what() << '\n';
+      return 1;
+    }
+  }
+  if (mode == "--autosave-check") {
+    if (ops.empty()) return missing("<new-directory>");
+    return App::runAutosaveCheck(fs::path(ops[0]));
+  }
+  if (mode == "--timer-dump") {
+    // Render one timer frame headlessly. ops: <out.ppm> [duration] [elapsed]
+    if (ops.empty()) return missing("<out.ppm> [durationSeconds] [elapsedSeconds]");
+    TimerSettings cfg;
+    if (ops.size() > 1) cfg.durationSeconds = std::atoi(ops[1].c_str());
+    if (ops.size() > 3) cfg.message = ops[3];
+    // ops[4]: 0 countdown, 1 count-up, 2 time-of-day. Lets the modes be diffed
+    // headlessly, which is how the dead-control bug in them was caught.
+    if (ops.size() > 4) {
+      cfg.mode = static_cast<TimerMode>(std::clamp(std::atoi(ops[4].c_str()), 0, 2));
+    }
+    const double elapsed = ops.size() > 2 ? std::atof(ops[2].c_str()) : 0.0;
+    cfg.blinkAtZero = false;
+    DecodedFrame f;
+    f.width = 960; f.height = 540;
+    f.pixels.assign(static_cast<std::size_t>(f.width) * f.height * 4, 0);
+    MediaEngine::buildTimerFrame(f, cfg, elapsed, true);
+    std::ofstream ppm(ops[0], std::ios::binary);
+    ppm << "P6" << '\n' << f.width << " " << f.height << " 255" << '\n';
+    for (std::size_t i = 0; i + 3 < f.pixels.size(); i += 4) {
+      ppm.put(static_cast<char>(f.pixels[i]));
+      ppm.put(static_cast<char>(f.pixels[i + 1]));
+      ppm.put(static_cast<char>(f.pixels[i + 2]));
+    }
+    std::cout << "timer-dump: " << ops[0] << '\n';
+    return 0;
+  }
+  if (mode == "--asio-tone") {
+    // Deliberately opt-in and time-limited. This OPENS the operator's audio
+    // interface and makes noise through it, so it is never run automatically
+    // and never runs unbounded.
+    if (ops.empty()) return missing("<driver-name> [seconds] [channels] [two]");
+    const double seconds = ops.size() > 1 ? std::max(0.5, std::atof(ops[1].c_str())) : 2.0;
+    const int chans = ops.size() > 2 ? std::max(1, std::atoi(ops[2].c_str())) : 2;
+    // "two": a second source at 660Hz on its own thread, as two decks would
+    // play at once -- the case one shared ring could not do. With
+    // DECKBOY_ASIO_CAPTURE set, the mix that reached the driver is written out.
+    const bool two = ops.size() > 3 && ops[3] == "two";
+    deckboy::platform::audio::AsioOutput out;
+    std::string err;
+    if (!out.open(ops[0], chans, 48000.0, err)) {
+      std::cerr << "asio-tone: " << err << "\n";
+      return 1;
+    }
+    std::cout << "asio-tone: " << ops[0]
+              << "  channels=" << out.channels()
+              << " rate=" << out.sampleRate()
+              << " buffer=" << out.bufferFrames() << " frames"
+              << (two ? "  two sources (440 + 660 Hz)" : "") << "\n";
+    // Quiet sines. Quiet on purpose: this may be going to a PA. Written at
+    // the engine's 48k, as the engines write; the output converts if the
+    // driver runs at another rate.
+    const double rate = 48000.0;
+    const std::size_t total = static_cast<std::size_t>(rate * seconds);
+    auto play = [&out, chans, rate, total](deckboy::platform::audio::AsioOutput::Source& source,
+                                           double hz) {
+      std::vector<std::int16_t> chunk(static_cast<std::size_t>(chans) * 256);
+      std::size_t written = 0;
+      double phase = 0.0;
+      const double step = 2.0 * 3.14159265358979 * hz / rate;
+      while (written < total) {
+        const std::size_t frames = std::min<std::size_t>(256, total - written);
+        for (std::size_t f = 0; f < frames; ++f) {
+          const std::int16_t v = static_cast<std::int16_t>(std::sin(phase) * 3000.0);
+          phase += step;
+          for (int c = 0; c < chans; ++c) chunk[f * chans + c] = v;
+        }
+        std::size_t done = 0;
+        while (done < frames) {
+          const std::size_t n = out.write(source, chunk.data() + done * chans, frames - done);
+          done += n;
+          if (n == 0) SDL_Delay(1);   // ring full: let the driver drain
+        }
+        written += frames;
+      }
+      // Let the tail play out before tearing the driver down.
+      while (out.queuedFrames(source) > 0) SDL_Delay(1);
+    };
+    auto first = out.openSource();
+    auto second = two ? out.openSource() : nullptr;
+    if (!first || (two && !second)) {
+      std::cerr << "asio-tone: could not open a source\n";
+      return 1;
+    }
+    std::thread other;
+    if (second) other = std::thread([&] { play(*second, 660.0); });
+    play(*first, 440.0);
+    if (other.joinable()) other.join();
+    SDL_Delay(50);
+    const std::uint64_t under = out.underruns();
+    out.close();
+    std::cout << "asio-tone: done, underruns=" << under << "\n";
+    return under == 0 ? 0 : 3;
+  }
+
+  if (mode == "--sheet-probe") {
+    // Reports every stage of the slice so a sheet that produces no tiles can
+    // be diagnosed without opening the app: decode, grid, and how many tiles
+    // survived the coverage filter.
+    if (ops.empty()) return missing("<sheet.png> [tileW] [tileH]");
+    const int tw = ops.size() > 1 ? std::max(2, std::atoi(ops[1].c_str())) : 16;
+    const int th = ops.size() > 2 ? std::max(2, std::atoi(ops[2].c_str())) : tw;
+    MediaEngine probe(nullptr, nullptr, MediaEngine::AudioTapCallback {},
+                      [](const Cue&) { return std::string(); });
+    const bool ok = probe.ensureSpriteSheet(ops[0], tw, th);
+    std::cout << "sheet: " << ops[0] << '\n'
+              << "  decoded: " << probe.spriteSheetWidth() << "x"
+              << probe.spriteSheetHeight() << '\n'
+              << "  tile: " << tw << "x" << th << '\n'
+              << "  grid: " << probe.spriteSheetCols() << " x "
+              << probe.spriteSheetRows() << " = "
+              << (probe.spriteSheetCols() * probe.spriteSheetRows())
+              << " tiles" << '\n'
+              << "  usable after coverage filter: "
+              << probe.spriteUsableTiles() << '\n'
+              << "  result: " << (ok ? "OK" : "FAILED") << '\n';
+    return ok ? 0 : 1;
+  }
+
+  if (mode == "--asio-probe") {
+    // No operand: list what is installed, which is cheap and touches no
+    // driver. With a name: LOAD that driver and report its real capabilities,
+    // which is intrusive enough that it must stay opt-in.
+    if (!deckboy::platform::audio::asioSupportCompiled()) {
+      std::cerr << "asio-probe: this build has no ASIO support\n";
+      return 1;
+    }
+    auto devices = deckboy::platform::audio::listAsioDevices();
+    if (ops.empty()) {
+      std::cout << "asio drivers installed: " << devices.size() << '\n';
+      for (const auto& dev : devices) {
+        std::cout << "  " << dev.name << '\n';
+      }
+      return devices.empty() ? 2 : 0;
+    }
+    deckboy::platform::audio::AsioDeviceInfo info;
+    if (!deckboy::platform::audio::probeAsioDevice(ops[0], info)) {
+      std::cerr << "asio-probe: " << (info.error.empty() ? "failed" : info.error) << '\n';
+      return 1;
+    }
+    std::cout << "asio driver: " << info.name << '\n'
+              << "  inputs=" << info.inputChannels
+              << " outputs=" << info.outputChannels << '\n'
+              << "  preferred-buffer=" << info.preferredBufferFrames
+              << " frames" << '\n'
+              << "  sample-rate=" << info.sampleRate << '\n'
+              << "  output-latency=" << info.outputLatencyFrames << " frames" << '\n';
+    return 0;
+  }
+
+  if (mode == "--hap-probe") {
+    if (ops.empty()) return missing("<file.mov>");
+#if DECKBOY_INPROC_DECODE
+    deckboy::libav::HapProbeResult r {};
+    std::string err;
+    if (!deckboy::libav::probeHapFile(ops[0], r, err)) {
+      std::cerr << "hap-probe: " << err << '\n';
+      return 1;
+    }
+    // Optional second operand: dump frame 1 as a PPM so the CPU expansion can
+    // be diffed against a reference decoder pixel for pixel.
+    if (ops.size() > 1 && !r.rgbaFirstFrame.empty()) {
+      std::ofstream ppm(ops[1], std::ios::binary);
+      ppm << "P6" << '\n' << r.width << " " << r.height << " 255" << '\n';
+      for (std::size_t px = 0; px + 3 < r.rgbaFirstFrame.size(); px += 4) {
+        ppm.put(static_cast<char>(r.rgbaFirstFrame[px]));
+        ppm.put(static_cast<char>(r.rgbaFirstFrame[px + 1]));
+        ppm.put(static_cast<char>(r.rgbaFirstFrame[px + 2]));
+      }
+      std::cout << "  wrote " << ops[1] << '\n';
+    }
+    std::cout << "hap-probe: " << ops[0] << '\n'
+              << "  stream=hap " << r.width << "x" << r.height
+              << " fps=" << r.fps << '\n'
+              << "  frames-decoded=" << r.frames
+              << " texture=" << r.textureFormat
+              << " block-bytes=" << r.blockBytes << '\n';
+    return 0;
+#else
+    std::cerr << "hap-probe: this build has no in-process decoder" << '\n';
+    return 2;
+#endif
+  }
+  if (mode == "--devices") {
+    return App::runDeviceReport();
+  }
+  if (mode == "--plugins") {
+    return App::runPluginReport();
+  }
+  if (mode == "--check-update") {
+    return App::runUpdateCheckReport();
+  }
+  if (mode == "--sync-pop-test") {
+    return App::runSyncPopTest();
+  }
+  if (mode == "--pattern-bench") {
+    if (ops.empty()) return missing("<pattern> [WxH] [frames]");
+    int bw = 3840, bh = 2160, bframes = 60;
+    for (size_t i = 1; i < ops.size(); ++i) {
+      if (parseCliRaster(ops[i], bw, bh)) continue;
+      const int n = std::atoi(ops[i].c_str());
+      if (n > 0) bframes = n;
+    }
+    return App::runPatternBench(ops[0], bw, bh, bframes);
+  }
+  if (mode == "--pattern-dump") {
+    if (ops.size() < 2) return missing("<pattern> <out.ppm> [WxH] [seconds]");
+    int dumpW = 1280, dumpH = 720;
+    double dumpT = 30.0;
+    for (size_t i = 2; i < ops.size(); ++i) {
+      if (parseCliRaster(ops[i], dumpW, dumpH)) continue;
+      const double parsed = std::atof(ops[i].c_str());
+      if (parsed >= 0.0) dumpT = parsed;
+    }
+    return App::runPatternDump(ops[0], ops[1], dumpW, dumpH, dumpT);
+  }
+  if (mode == "--code-check") {
+    // Arithmetic: no window, no GPU, no media. Runs in CI and over ssh.
+    return App::runCodeCheck();
+  }
+  if (mode == "--code-dump") {
+    if (ops.size() < 2) return missing("<expression|@file> <out.ppm> [WxH] [seconds]");
+    int codeW = 1280, codeH = 720;
+    double codeT = 0.0;
+    for (size_t i = 2; i < ops.size(); ++i) {
+      if (parseCliRaster(ops[i], codeW, codeH)) continue;
+      const double parsed = std::atof(ops[i].c_str());
+      if (parsed >= 0.0) codeT = parsed;
+    }
+    return App::runCodeDump(ops[0], ops[1], codeW, codeH, codeT);
+  }
+  if (mode == "--plugin-chain-check") {
+    // Optional plugin name or id. With none it takes the first that loads,
+    // which is what makes this runnable on a machine nobody has described.
+    return App::runPluginChainCheck(ops.empty() ? std::string() : ops[0]);
+  }
+  if (mode == "--audio-fx-check") {
+    // Optional token: one effect, for when a change is being made to it.
+    // Optional rate: run the whole battery at something other than 48k, which
+    // is how the rate-aware effect chain is proven.
+    std::string fxOnly;
+    int fxRate = 48000;
+    for (const std::string& op : ops) {
+      const int asRate = std::atoi(op.c_str());
+      if (asRate >= 8000) {
+        fxRate = asRate;
+      } else if (fxOnly.empty()) {
+        fxOnly = op;
+      }
+    }
+    return App::runAudioFxCheck(fxOnly, fxRate);
+  }
+  if (mode == "--image-check") {
+    // The other half of the chrome. Needs no window and no GPU, for the same
+    // reason --font-check does not: it stops at the decoded pixels, which is
+    // the step that fails.
+    return App::runImageCheck();
+  }
+  if (mode == "--font-check") {
+    // Needs no window and no GPU, so it runs over ssh on the machine that has
+    // the fault -- which is the entire point of it.
+    //
+    // The optional LANGUAGE is what makes it useful to anyone not running in
+    // English. The check opens the face the interface would open, and for a
+    // language the bundled faces cannot draw that is a system font named by the
+    // catalogue -- a font which draws Latin perfectly well and may have nothing
+    // for the script in question. Without this the check always answered for
+    // English and could pass on a machine whose interface was entirely boxes.
+    return App::runFontCheck(ops.empty() ? std::string() : ops[0]);
+  }
+  if (mode == "--colour-check") {
+    // Typed colours, the hue maths and the saved effect colour: no window.
+    return App::runColourCheck();
+  }
+  if (mode == "--mtc-check") {
+    // No hardware, no cable, no platform: the timecode decoder is arithmetic.
+    return App::runMtcCheck();
+  }
+  if (mode == "--lower-third-bench") {
+    int bw = 3840, bh = 2160, frames = 180;
+    bool arabic = false;
+    for (const std::string& operand : ops) {
+      if (operand == "arabic") { arabic = true; continue; }
+      if (parseCliRaster(operand, bw, bh)) continue;
+      frames = std::clamp(std::atoi(operand.c_str()), 30, 3600);
+    }
+    if (bw < 64 || bh < 64 || bw > 7680 || bh > 4320) return missing("[64x64..7680x4320] [30..3600 frames]");
+    return App::runLowerThirdBench(bw, bh, frames, arabic);
+  }
+  if (mode == "--effect-bench") {
+    if (ops.empty()) return missing("<token[:amount[:a[:b]]]> [WxH] [frames]");
+    int bw = 1920, bh = 1080, bframes = 30;
+    for (size_t i = 1; i < ops.size(); ++i) {
+      if (parseCliRaster(ops[i], bw, bh)) continue;
+      const int n = std::atoi(ops[i].c_str());
+      if (n > 0) bframes = n;
+    }
+    return App::runEffectBench(ops[0], bw, bh, bframes);
+  }
+  if (mode == "--transition-dump") {
+    if (ops.size() < 4) {
+      return missing("<style> <outgoing.ppm> <incoming.ppm> <dst.ppm> [progress] [seconds]");
+    }
+    const double p = ops.size() > 4 ? std::atof(ops[4].c_str()) : 0.5;
+    const double secs = ops.size() > 5 ? std::atof(ops[5].c_str()) : 1.0;
+    return App::runTransitionDump(ops[0], ops[1], ops[2], ops[3], p, secs);
+  }
+  if (mode == "--effect-dump") {
+    if (ops.size() < 3) {
+      return missing("<token[:amount[:a[:b]]]> <in.ppm> <out.ppm> [frame] [passes]");
+    }
+    const int dumpFrame = ops.size() > 3 ? std::atoi(ops[3].c_str()) : 0;
+    const int dumpPasses = ops.size() > 4 ? std::atoi(ops[4].c_str()) : 1;
+    return App::runEffectDump(ops[0], ops[1], ops[2], dumpFrame, dumpPasses);
+  }
+  // What notes Deckboy would take out of a slide deck, and which slide each
+  // lands on. The mapping is the part worth checking: notesSlide7 is usually
+  // slide 7's, but only because most decks have notes on every slide, and a
+  // deck with gaps puts them somewhere else entirely.
+  if (mode == "--pptx-notes") {
+    if (ops.empty()) return missing("<file.pptx> [slide count]");
+    const int count = ops.size() > 1 ? std::atoi(ops[1].c_str()) : 0;
+    const auto notes = deckboy::platform::slideNotesFromPptx(
+      dbfs::path(ops[0]),
+      static_cast<std::size_t>(count > 0 ? count : 200));
+    int withNotes = 0;
+    for (std::size_t i = 0; i < notes.size(); ++i) {
+      if (notes[i].empty()) continue;
+      ++withNotes;
+      std::string oneLine = notes[i];
+      for (char& ch : oneLine) {
+        if (ch == '\n') ch = '|';
+      }
+      if (oneLine.size() > 100) oneLine = oneLine.substr(0, 100) + "...";
+      std::printf("slide %zu: %s\n", i + 1, oneLine.c_str());
+    }
+    // The transitions too, from the same file, because the question an
+    // operator asks about an imported deck is "did it bring ITS deck across",
+    // and notes are only half of that.
+    const auto moves = deckboy::platform::slideTransitionsFromPptx(
+      dbfs::path(ops[0]),
+      static_cast<std::size_t>(count > 0 ? count : 200));
+    int withMoves = 0;
+    for (std::size_t i = 0; i < moves.size(); ++i) {
+      if (moves[i].style.empty()) continue;
+      ++withMoves;
+      std::printf("slide %zu: %s", i + 1, moves[i].style.c_str());
+      if (moves[i].seconds >= 0.0) std::printf("  %.2fs", moves[i].seconds);
+      if (moves[i].advanceAfterSeconds > 0.0) {
+        std::printf("  advance after %.1fs", moves[i].advanceAfterSeconds);
+      }
+      std::printf("\n");
+    }
+    std::printf("slides with notes: %d  with transitions: %d\n",
+                withNotes, withMoves);
+    return (withNotes > 0 || withMoves > 0) ? 0 : 1;
+  }
+  if (mode == "--pdf-probe") {
+    if (ops.empty()) return missing("<file.pdf> [outdir] [width]");
+    const std::string outDir = ops.size() > 1 ? ops[1] : std::string();
+    const int width = ops.size() > 2 ? std::atoi(ops[2].c_str()) : 3840;
+    return App::runPdfProbe(ops[0], outDir, width > 0 ? width : 3840);
+  }
+  // ── The child half of the Windows PDF import ────────────────────────────
+  //
+  // Not a diagnostic like the probes around it: this is a working part of the
+  // feature. rasterisePdf spawns it, reads these lines, and the show process
+  // therefore never loads Edge's PDF renderer -- which is what stopped Deckboy
+  // crashing on exit after every PDF import. See pdf_import.cpp.
+  //
+  // One line per event, nothing else on stdout, so the parent can parse it
+  // without a format to get wrong:
+  //   PROGRESS <index> <count>     as each page finishes
+  //   PAGE <index> <count> <path>  the results, in order, at the end
+  //   ERROR <message>              nothing was produced
+  if (mode == "--pdf-render") {
+#ifdef _WIN32
+    if (ops.size() < 2) return missing("<file.pdf> <outdir> [width]");
+    const int width = ops.size() > 2 ? std::atoi(ops[2].c_str()) : 3840;
+    // PROGRESS goes out as each page lands, so the parent's import bar moves
+    // during the render rather than jumping at the end -- a 62-page deck takes
+    // long enough that the difference is the whole point of having a bar.
+    const auto r = deckboy::platform::rasterisePdfInProcess(
+        ops[0], ops[1], width > 0 ? width : 3840, [](int index, int count) {
+          std::cout << "PROGRESS " << index << " " << count << std::endl;
+        });
+    if (!r.error.empty()) {
+      std::cout << "ERROR " << r.error << std::endl;
+      return 1;
+    }
+    const int total = static_cast<int>(r.pagePaths.size());
+    for (int i = 0; i < total; ++i) {
+      std::cout << "PAGE " << (i + 1) << " " << total << " " << r.pagePaths[i] << std::endl;
+    }
+    std::cout.flush();
+    return 0;
+#else
+    std::cerr << "pdf-render: Windows only (other platforms rasterise in process)\n";
+    return 2;
+#endif
+  }
+  // Watch a real switcher's program bus and say what it does.
+  //
+  // The tally trigger is the kind of feature that cannot be tested by reading
+  // it: either the handshake is right and the switcher talks, or it is not and
+  // nothing happens, and those look identical from inside the app. This makes
+  // the difference visible without a show, a cue, or an armed output.
+  if (mode == "--atem-probe") {
+    if (ops.empty()) return missing("<switcher-ip> [seconds]");
+    const int seconds = ops.size() > 1 ? std::max(1, std::atoi(ops[1].c_str())) : 20;
+    return App::runAtemProbe(ops[0], seconds);
+  }
+  if (mode == "--motion-probe") {
+    if (ops.empty()) return missing("<file> [frames]");
+    int wanted = 60;
+    if (ops.size() > 1) {
+      wanted = std::max(1, std::atoi(ops[1].c_str()));
+    }
+    void* src = deckboy::motion::openMotionSource(ops[0]);
+    if (!src) {
+      std::cerr << "motion-probe: could not open " << ops[0]
+                << " (built without in-process decode?)\n";
+      return 1;
+    }
+    deckboy::motion::MotionField field;
+    int frames = 0, withVectors = 0, emptyFrames = 0;
+    double sumMagnitude = 0.0, peakMagnitude = 0.0;
+    std::size_t movingCells = 0, totalCells = 0;
+    const Uint64 startMs = SDL_GetTicks();
+    while (frames < wanted && deckboy::motion::readMotionField(src, field)) {
+      ++frames;
+      if (field.empty()) {
+        ++emptyFrames;
+        continue;
+      }
+      ++withVectors;
+      totalCells += field.dx.size();
+      for (std::size_t i = 0; i < field.dx.size(); ++i) {
+        const double m = std::sqrt(static_cast<double>(field.dx[i]) * field.dx[i] +
+                                   static_cast<double>(field.dy[i]) * field.dy[i]);
+        if (m > 0.01) ++movingCells;
+        sumMagnitude += m;
+        peakMagnitude = std::max(peakMagnitude, m);
+      }
+    }
+    const Uint64 elapsedMs = SDL_GetTicks() - startMs;
+    deckboy::motion::closeMotionSource(src);
+
+    std::cout << "motion-probe " << ops[0] << "\n";
+    std::cout << "  frames read      " << frames << "\n";
+    std::cout << "  with vectors     " << withVectors << "\n";
+    std::cout << "  empty (I-frames) " << emptyFrames << "\n";
+    if (withVectors > 0 && totalCells > 0) {
+      std::cout << "  grid             " << field.cols << "x" << field.rows
+                << " cells over " << field.sourceWidth << "x" << field.sourceHeight << "\n";
+      std::cout << "  cells in motion  "
+                << (100.0 * static_cast<double>(movingCells) /
+                    static_cast<double>(totalCells)) << "%\n";
+      std::cout << "  mean magnitude   "
+                << (sumMagnitude / static_cast<double>(totalCells)) << " px\n";
+      std::cout << "  peak magnitude   " << peakMagnitude << " px\n";
+    }
+    std::cout << "  decode time      " << elapsedMs << "ms for " << frames
+              << " frames (" << (frames > 0 ? (1000.0 * frames / std::max<Uint64>(1, elapsedMs)) : 0.0)
+              << " fps)\n";
+    // The question this probe exists to answer.
+    const bool usable = withVectors > 0 && movingCells > 0;
+    std::cout << "  VERDICT          "
+              << (usable ? "vectors usable" : "NO USABLE VECTORS") << "\n";
+    return usable ? 0 : 1;
+  }
+
+  if (mode == "--decode-bench") {
+    if (ops.empty()) return missing("<file> [seconds] [cli|download]");
+    double benchSeconds = 10.0;
+    // --no-inproc-decode is the documented way to force the pipe path, so it
+    // has to reach the bench too — otherwise the CLI decode path could not be
+    // benchmarked at all. "cli" stays as the positional spelling.
+    bool forceCli = MediaEngine::inprocDecodeDisabled();
+    // The A/B that isolates zero-copy: the hardware decoder stays, the frames
+    // come back through a download instead of staying on the GPU.
+    bool forceDownload = false;
+    for (size_t i = 1; i < ops.size(); ++i) {
+      if (ops[i] == "cli") {
+        forceCli = true;
+        continue;
+      }
+      if (ops[i] == "download") {
+        forceDownload = true;
+        continue;
+      }
+      const double parsed = std::atof(ops[i].c_str());
+      if (parsed > 0.0) benchSeconds = parsed;
+    }
+    return App::runDecodeBench(ops[0], benchSeconds, forceCli, forceDownload);
+  }
+  if (mode == "--ltc-generate") {
+    if (ops.empty()) return missing("<out.wav> [tc] [fps] [seconds]");
+    const std::string startTc = ops.size() > 1 ? ops[1] : "10:00:00:00";
+    const double fps = ops.size() > 2 ? std::atof(ops[2].c_str()) : 30.0;
+    const double secs = ops.size() > 3 ? std::atof(ops[3].c_str()) : 2.0;
+    return App::runLtcGenerate(ops[0], startTc, fps > 0.0 ? fps : 30.0,
+                               secs > 0.0 ? secs : 2.0);
+  }
+
+  printCliError("unhandled mode " + mode);  // unreachable while kCliModeFlags matches
+  return 2;
+}
+
+}  // namespace
+
+int runDeckboyMain(int argc, char** argv) {
+  // Before anything can draw a pattern, the CLI dumps and checks included;
+  // both main() and WinMain() arrive here.
+  deckboy::lava::registerGenerator();
+#ifdef _WIN32
+  gMainThreadId.store(GetCurrentThreadId());
+  captureCrashLogPath();   // before the filter, so a fault at any point has it
+  SetUnhandledExceptionFilter(deckboyCrashHandler);
+#else
+  installPosixCrashHandler();
+#endif
+  // Before anything that might spawn ffmpeg — including --self-check, which
+  // reports whether ffmpeg is reachable and must therefore report the truth
+  // about THIS build's lookup path.
+  prependExecutableDirToPath();
+
+  const std::vector<std::string> args = normalizeCliArgs(argc, argv);
+  // A STAND-IN FOR THE INSTALLER, for tools/check_update_install.py. INSTALL &
+  // RESTART starts it exactly as it starts the installer, with /fromupdater=1,
+  // and it opens nothing: it lives DECKBOY_TEST_STANDIN_MS, then writes
+  // DECKBOY_TEST_STANDIN_MARK and exits with DECKBOY_TEST_STANDIN_EXIT. Keyed
+  // on the argument as well as the variable, because the Deckboy that starts
+  // it has the same environment.
+  if (args.size() == 1 && args[0] == "/fromupdater=1") {
+    if (const char* lives = std::getenv("DECKBOY_TEST_STANDIN_MS"); lives && *lives) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(std::atoi(lives)));
+      if (const char* mark = std::getenv("DECKBOY_TEST_STANDIN_MARK"); mark && *mark) {
+        std::ofstream(mark) << "lived\n";
+      }
+      const char* code = std::getenv("DECKBOY_TEST_STANDIN_EXIT");
+      return code ? std::atoi(code) : 0;
+    }
+  }
+  for (const std::string& arg : args) {
+    if (arg == "--help" || arg == "-h" || arg == "-?" || arg == "/?") {
+      printDeckboyUsage(std::cout);
+      return 0;
+    }
+  }
+
+  // Global modifiers first, and removed from the line, so they may appear
+  // before or after a mode flag and its operands.
+  bool allowMultiInstance = false;
+  std::vector<std::string> rest;
+  rest.reserve(args.size());
+  for (const std::string& arg : args) {
+    if (arg == "--no-inproc-decode") {
+      // Operator break-glass: keep every decode on the ffmpeg CLI pipe path
+      // for this run (robustness over Pocket performance).
+      MediaEngine::setInprocDecodeDisabled(true);
+      continue;
+    }
+    if (arg == "--no-hw-decode") {
+      // The OTHER break-glass, and a different one: keep the in-process
+      // decoder but make it decode in software. A hardware decoder is not
+      // always the faster of the two -- an old iGPU asked for 4K can be slower
+      // than the CPU beside it -- and an operator who finds that out needs a
+      // switch they can reach, not an environment variable.
+      //
+      // Sets the same variable DECKBOY_NO_HW_DECODE does, because the decoder
+      // reads that once and there is no reason to have two answers.
+#ifdef _WIN32
+      _putenv_s("DECKBOY_NO_HW_DECODE", "1");
+#else
+      setenv("DECKBOY_NO_HW_DECODE", "1", 1);
+#endif
+      continue;
+    }
+    if (arg == "--allow-multi-instance") {
+      allowMultiInstance = true;
+      continue;
+    }
+    rest.push_back(arg);
+  }
+
+  for (size_t i = 0; i < rest.size(); ++i) {
+    if (!isCliModeFlag(rest[i])) {
+      continue;
+    }
+    if (i != 0) {
+      printCliError(rest[i] + " must come before its arguments (saw '" + rest[0] + "' first)");
+      return 2;
+    }
+    return runDeckboyCliMode(rest[0], {rest.begin() + 1, rest.end()});
+  }
+
+  double soakMinutes = -1.0;
+  std::vector<std::string> importPathsArg;
+  int mascotPokesArg = 0;
+  bool auditSettingsLayoutArg = false;
+  fs::path startupProjectArg;
+  int openSettingsTab = -1;
+  std::string openMenuName;
+  int inspectorScrollArg = -1;
+  int settingsScrollArg = -1;
+  int uiWidthArg = 0, uiHeightArg = 0;
+  int slideCardDoneArg = -1;
+  int slideCardTotalArg = 0;
+  std::string uiDumpArg;
+  int uiDumpFramesArg = 90;   // ~1.5s at 60fps: fonts, theme and splash settled
+  bool contrastCheckArg = false;
+  std::string contrastCheckDirArg;
+  bool openCodeEditorArg = false;
+  std::string browseFolderArg;
+  int openSettingsSubTab = 0;
+  for (size_t i = 0; i < rest.size(); ++i) {
+    const std::string& arg = rest[i];
+    if (arg == "--import") {
+      if (i + 1 >= rest.size()) {
+        printCliError("--import needs a path");
+        return 2;
+      }
+      importPathsArg.push_back(rest[++i]);
+      continue;
+    }
+    // Opens the code editor at boot. Scripted clicks and keys do not reach
+    // SDL3, so without a flag the editor cannot be screenshotted -- and this
+    // codebase has learned twice over that a UI element nobody has LOOKED at is
+    // not finished.
+    // Poke the mascot from the command line.
+    //
+    // Scripted clicks do not reach SDL3 -- PostMessage input is ignored -- so
+    // without this the egg's three stages could be built, shipped and never
+    // once looked at. The same reason --code-editor exists.
+    // Report any settings control sitting on top of another, for the tab the
+    // run opens on. A dead control is invisible in a screenshot; an overlapping
+    // pair of rectangles is not.
+    if (arg == "--audit-settings-layout") {
+      auditSettingsLayoutArg = true;
+      continue;
+    }
+    if (arg == "--ui-size" || arg == "--settings-scroll") {
+      const int count = arg == "--ui-size" ? 2 : 1;
+      int values[2] {};
+      for (int n = 0; n < count; ++n) {
+        if (i + 1 >= rest.size()) { printCliError(arg + " needs numeric arguments"); return 2; }
+        const std::string& token = rest[++i];
+        if (token.empty() || token.size() > 5 || token.find_first_not_of("0123456789") != std::string::npos) {
+          printCliError(arg + " needs numeric arguments"); return 2;
+        }
+        values[n] = std::atoi(token.c_str());
+      }
+      if (count == 2) {
+        if (values[0] < 960 || values[0] > 7680 || values[1] < 540 || values[1] > 4320) {
+          printCliError("--ui-size accepts width 960..7680 and height 540..4320"); return 2;
+        }
+        uiWidthArg = values[0]; uiHeightArg = values[1];
+      } else {
+        settingsScrollArg = values[0];
+      }
+      continue;
+    }
+    if (arg == "--mascot-pokes") {
+      if (i + 1 >= rest.size()) {
+        printCliError("--mascot-pokes needs a count");
+        return 2;
+      }
+      mascotPokesArg = std::max(0, std::atoi(rest[++i].c_str()));
+      continue;
+    }
+    if (arg == "--code-editor") {
+      openCodeEditorArg = true;
+      continue;
+    }
+    // The media browser, for the same reason --code-editor exists: scripted
+    // clicks do not reach SDL3, so without this there is no way to open it
+    // and look at it.
+    if (arg == "--browse") {
+      browseFolderArg = i + 1 < rest.size() ? rest[++i] : std::string(".");
+      continue;
+    }
+    if (arg == "--inspector-scroll") {
+      if (i + 1 >= rest.size()) {
+        printCliError("--inspector-scroll needs a pixel offset");
+        return 2;
+      }
+      inspectorScrollArg = std::atoi(rest[++i].c_str());
+      continue;
+    }
+    if (arg == "--slide-card") {
+      // <done>/<total>, so the card can be captured part-way through a deck.
+      // A bare flag shows the "converting..." state, which is the one with no
+      // page count yet and its own animation.
+      if (i + 1 < rest.size() && rest[i + 1].find('/') != std::string::npos) {
+        const std::string spec = rest[++i];
+        const std::size_t slash = spec.find('/');
+        slideCardDoneArg = std::atoi(spec.substr(0, slash).c_str());
+        slideCardTotalArg = std::atoi(spec.substr(slash + 1).c_str());
+      } else {
+        slideCardDoneArg = 0;
+        slideCardTotalArg = 0;
+      }
+      continue;
+    }
+    if (arg == "--contrast-check") {
+      contrastCheckArg = true;
+      // Optional directory for one screenshot per theme and toast kind.
+      if (i + 1 < rest.size() && !rest[i + 1].empty() && rest[i + 1][0] != '-') {
+        contrastCheckDirArg = rest[++i];
+      }
+      continue;
+    }
+    if (arg == "--ui-dump") {
+      if (i + 1 >= rest.size()) {
+        printCliError("--ui-dump needs an output .bmp path");
+        return 2;
+      }
+      uiDumpArg = rest[++i];
+      // Optional frame count: how long to let the UI settle first.
+      if (i + 1 < rest.size() && !rest[i + 1].empty() &&
+          rest[i + 1].find_first_not_of("0123456789") == std::string::npos) {
+        uiDumpFramesArg = std::atoi(rest[++i].c_str());
+      }
+      continue;
+    }
+    if (arg == "--settings") {
+      // Optional "tab" or "tab.subtab" (video sub-tab), e.g. --settings 3.1
+      openSettingsTab = 0;
+      if (i + 1 < rest.size()) {
+        char* end = nullptr;
+        const long parsed = std::strtol(rest[i + 1].c_str(), &end, 10);
+        if (end && end != rest[i + 1].c_str() && (*end == '\0' || *end == '.')) {
+          openSettingsTab = static_cast<int>(parsed);
+          if (*end == '.') {
+            openSettingsSubTab = static_cast<int>(std::strtol(end + 1, nullptr, 10));
+          }
+          ++i;
+        }
+      }
+      continue;
+    }
+    if (arg == "--menu") {
+      // --menu source|routing|cue -- open a popup so a harness can see it.
+      if (i + 1 < rest.size()) {
+        openMenuName = rest[i + 1];
+        ++i;
+      }
+      continue;
+    }
+    if (arg == "--soak") {
+      // Long-run stability harness on the real app loop. Optional minutes
+      // argument; default 24 h. Loops the loaded show (see tickSoak).
+      soakMinutes = 1440.0;
+      if (i + 1 < rest.size()) {
+        const double parsed = std::atof(rest[i + 1].c_str());
+        if (parsed > 0.0) {
+          soakMinutes = parsed;
+          ++i;
+        }
+      }
+      continue;
+    }
+    if (arg.rfind("-", 0) == 0) {
+      printCliError("unknown flag " + arg);
+      return 2;
+    }
+    // Bare path: a show opens as the project, anything else is imported. This
+    // is the shape the .deckboy file association hands us.
+    fs::path candidate(arg);
+    if (startupProjectArg.empty() && candidate.extension() == ".deckboy") {
+      startupProjectArg = candidate;
+    } else {
+      importPathsArg.push_back(arg);
+    }
+  }
+#ifndef _WIN32
+  SingleInstanceGuard instanceGuard;
+  if (!allowMultiInstance) {
+    fs::path lockPath = "/tmp/deckboy-native.instance.lock";
+    try {
+      lockPath = fs::temp_directory_path() / "deckboy-native.instance.lock";
+    } catch (...) {
+    }
+    if (!instanceGuard.acquire(lockPath)) {
+      std::cerr << "Refusing to launch another instance (" << lockPath.string() << "): "
+                << instanceGuard.lastError() << '\n';
+      std::cerr << "Use --allow-multi-instance to bypass this safety lock.\n";
+      return 2;
+    }
+  }
+#endif
+
+  App app;
+  if (!app.init()) {
+    app.shutdown();
+    return 1;
+  }
+
+  if (soakMinutes > 0.0) {
+    app.enableSoakMode(soakMinutes);
+  }
+  if (!startupProjectArg.empty()) {
+    app.openProjectFromCommandLine(startupProjectArg);
+  }
+  for (const std::string& importPath : importPathsArg) {
+    app.debugImportPath(importPath);
+  }
+  if (!openMenuName.empty()) {
+    app.debugOpenMenu(openMenuName);
+  }
+  if (openSettingsTab >= 0) {
+    app.debugOpenSettings(openSettingsTab, openSettingsSubTab);
+  }
+  if (uiWidthArg > 0) app.debugUiSize(uiWidthArg, uiHeightArg);
+  if (settingsScrollArg >= 0) app.debugScrollSettings(settingsScrollArg);
+  if (openCodeEditorArg) {
+    app.debugOpenCodeEditor();
+  }
+  if (!browseFolderArg.empty()) {
+    app.debugOpenMediaBrowser(browseFolderArg);
+  }
+  if (mascotPokesArg > 0) {
+    app.debugPokeMascot(mascotPokesArg);
+  }
+  if (auditSettingsLayoutArg) {
+    app.debugAuditSettingsLayout();
+  }
+  if (inspectorScrollArg >= 0) {
+    app.debugScrollInspector(inspectorScrollArg);
+  }
+  if (slideCardDoneArg >= 0) {
+    app.debugShowSlideRenderCard(slideCardDoneArg, slideCardTotalArg,
+                                 "a test deck");
+  }
+  if (!uiDumpArg.empty()) {
+    app.enableUiDump(uiDumpArg, uiDumpFramesArg);
+  }
+  if (contrastCheckArg) {
+    app.enableContrastCheck(contrastCheckDirArg);
+  }
+  app.run();
+  const bool contrastFailed = contrastCheckArg && app.contrastCheckFailed();
+  app.shutdown();
+  return contrastFailed ? 1 : 0;
+}
+
+int main(int argc, char** argv) {
+  return runDeckboyMain(argc, argv);
+}
+
+#ifdef _WIN32
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+  auto argvStorage = windowsCommandLineArgsUtf8();
+  if (argvStorage.empty()) {
+    argvStorage.emplace_back("Deckboy");
+  }
+
+  std::vector<char*> argv;
+  argv.reserve(argvStorage.size());
+  for (auto& arg : argvStorage) {
+    argv.push_back(arg.data());
+  }
+  return runDeckboyMain(static_cast<int>(argv.size()), argv.data());
+}
+#endif

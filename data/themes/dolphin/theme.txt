@@ -1,0 +1,26 @@
+# Deckboy Theme: dolphin
+# Family: tinted chassis -- dark enough for a booth, but a real coloured body
+# rather than true black, so it reads as its own machine.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	16262AFF
+shell_inner	1E3238FF
+shell_shadow	0A1416FF
+screen_light	40D8F0FF
+screen_mid	1E96AEFF
+screen_dark	0E5462FF
+screen_deep	041418FF
+screen_ink_soft	8AC8D6FF
+screen_fg	7EE0F5FF
+screen_fg_soft	58A8BCFF
+screen_tile	0E2228FF
+button_bezel	2E7A8AFF
+delete_bezel	C0503AFF
+scanline_alpha	14
+# hide themselves the moment an output goes live.
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	fish	4
+creature	jellyfish	2

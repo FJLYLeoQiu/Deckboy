@@ -1,0 +1,11173 @@
+// ============================================================================
+// app_output_mgmt.ipp — Output window and stream lifecycle management.
+//
+// The largest .ipp file (~4000 lines). Manages the complete lifecycle of
+// output destinations: SDL windows, ffmpeg streams, NDI senders, and
+// DeckLink card outputs.
+//
+// Output window management:
+//   setFocusedOutputEnabled()       — arm/disarm an output destination
+//   addOutput() / removeOutput()    — add/remove output targets
+//   applyOutputDisplaySelection()   — configure display/monitor assignment
+//   setOutputFullscreen()           — toggle fullscreen on output windows
+//
+// Stream writer:
+//   startStreamWriter()     — spawn ffmpeg subprocess for SRT/RTMP streaming
+//   stopStreamWriter()      — shut down the stream writer thread
+//   queueStreamPacket()     — push a captured frame + audio to the writer
+//   streamWriterLoop()      — background thread: reads packets, pipes to ffmpeg
+//
+// NDI output:
+//   initNdiSender()         — create NDI sender via dynamic library
+//   shutdownNdiSender()     — destroy NDI sender
+//   sendNdiFrame()          — send BGRA frame to NDI
+//
+// DeckLink output:
+//   initDeckLinkOutput()    — open DeckLink device, set mode
+//   shutdownDeckLinkOutput() — release DeckLink resources
+//   sendDeckLinkFrame()     — convert and send frame to DeckLink card
+//
+// Output health state machine:
+//   Off → Armed → Live → (Error → Recovering → Live)
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Enable or disable the focused output. When enabling a window output,
+  // automatically enables display-follow mode and applies fullscreen.
+  bool setFocusedOutputEnabled(bool enabled, bool autoFullscreenWhenEnabling = true) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return false;
+    }
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    OutputTarget& output = project_.outputs[outputIndex];
+    bool windowOutput = normalizeOutputType(output.outputType) == "window";
+    bool autoSwitchedToNative = false;
+    if (enabled && windowOutput && !project_.outputFollowDisplay) {
+      project_.outputFollowDisplay = true;
+      autoSwitchedToNative = true;
+    }
+
+    if (output.enabled == enabled) {
+      if (enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Recovering,
+                             windowOutput ? "reasserting fullscreen" : "restarting egress");
+        if (autoSwitchedToNative) {
+          applyOutputDisplaySelectionAllOutputs(true, true);
+        }
+        setOutputRecoveryPausedByEscape(outputIndex, false);
+        if (windowOutput) {
+          bool recovered = recoverWindowOutputIfNeeded(outputIndex, true);
+          if (!recovered) {
+            bool fullscreenOk = enableOutputFullscreen(outputIndex, false);
+            if (fullscreenOk) {
+              setOutputHealthState(outputIndex, OutputHealthState::Live);
+              triggerToast("output on");
+            } else {
+              setOutputHealthState(outputIndex, OutputHealthState::Error, "fullscreen unavailable");
+              triggerToast("output recover failed: fullscreen unavailable");
+            }
+          }
+          if (autoSwitchedToNative) {
+            triggerToast("output recovered: auto native");
+          }
+        } else {
+          stopOutputStream(outputIndex);
+          if (auto* runtime = runtimeForOutput(outputIndex)) {
+            runtime->streamStartFailed = false;
+          }
+          applyOutputNdiSettings(outputIndex, false);
+          setOutputHealthState(outputIndex, OutputHealthState::Armed);
+          triggerToast("output recovering: stream");
+        }
+        playUiSound(UiSoundEffect::Toggle);
+        if (autoSwitchedToNative) {
+          markProjectDirty();
+        }
+        return true;
+      }
+      setOutputHealthState(outputIndex, OutputHealthState::Off);
+      triggerToast("output: off");
+      return false;
+    }
+
+    output.enabled = enabled;
+    if (outputIndex == scopesOutputIndex()) releaseScopesCapture();
+    setOutputRecoveryPausedByEscape(outputIndex, false);
+    
+    // Ensure runtimes exist for newly enabled outputs
+    if (enabled) {
+      ensureOutputRuntimesSynced();
+    }
+
+    if (!enabled) {
+      stopOutputStream(outputIndex);
+      if (auto* runtime = runtimeForOutput(outputIndex)) {
+        runtime->delayFrames.clear();
+        runtime->latestCapturedFrame = {};
+      }
+      setOutputHealthState(outputIndex, OutputHealthState::Off);
+    } else {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed);
+    }
+    
+    if (autoSwitchedToNative) {
+      applyOutputDisplaySelectionAllOutputs(true, true);
+    } else {
+      applyOutputDisplaySelection(outputIndex, !enabled);
+    }
+
+    if (enabled && autoFullscreenWhenEnabling && windowOutput) {
+      // Defer fullscreen by one event loop tick so macOS commits the window to
+      // the target display (NSWindow.screen) before SDL_SetWindowFullscreen is
+      // called. Synchronous fullscreen here lands on the wrong display on macOS
+      // when an HDMI or Blackmagic switcher is the target.
+      if (OutputRuntime* runtime = runtimeForOutput(outputIndex)) {
+        runtime->fullscreenIntended = true;
+        runtime->pendingDisplayMoveFullscreen = true;
+        runtime->displayMoveRetryAtMs = SDL_GetTicks() + 100;
+        runtime->lastRecoveryAttemptMs = SDL_GetTicks();
+      }
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "entering fullscreen");
+      triggerToast("output on: " + currentDisplayLabel() + (autoSwitchedToNative ? "  auto native" : ""));
+    } else {
+      if (!enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Off);
+      }
+      triggerToast(std::string("output: ") + (enabled ? "on" : "off"));
+    }
+
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  void toggleFocusedOutputEnabled() {
+    setFocusedOutputEnabled(!focusedOutput().enabled);
+  }
+
+  // THE OUTPUT CHIP IS A SWITCH (first-time walkthrough, 2026-10-26). It read
+  // OUTPUT OFF above the big preview and looked like a button, and a click did
+  // nothing: the switch was three clicks away under MENU. Off, a click turns
+  // the output on, as MENU > OUTPUT ON does. On, a click only OFFERS -- turn
+  // off, or Video Outputs -- and never switches it off by itself, so a stray
+  // click mid-show cannot cut the picture. With several outputs the chip is
+  // one of them, so it opens Video Outputs, where they all are.
+  void openVideoOutputsSettings() {
+    settingsOpen_ = true;
+    settingsTab_ = 3;
+    uiWatchdogPopupEvent("settings_modal", true);
+  }
+
+  void handleOutputBadgeClick() {
+    if (project_.outputs.size() > 1) {
+      openVideoOutputsSettings();
+      return;
+    }
+    if (!focusedOutput().enabled) {
+      setFocusedOutputEnabled(true);
+      return;
+    }
+    openDropdown("output.badge", outputBadgeRect_,
+                 {{"off", "TURN OFF"}, {"outputs", "VIDEO OUTPUTS"}}, "",
+                 [this](const std::string& id) {
+                   if (id == "off") {
+                     if (focusedOutput().enabled) setFocusedOutputEnabled(false);
+                   } else if (id == "outputs") {
+                     openVideoOutputsSettings();
+                   }
+                 });
+  }
+
+  bool setFocusedOutputType(const std::string& outputType) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return false;
+    }
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    OutputTarget& output = project_.outputs[outputIndex];
+    std::string current = normalizeOutputType(output.outputType);
+    std::string nextType = normalizeOutputType(outputType);
+    if (current == nextType) {
+      triggerToast("output type: " + current);
+      return false;
+    }
+    output.outputType = nextType;
+    if (nextType == "stream") {
+      output.streamEnabled = true;
+    } else {
+      output.mirrorSourceOutputIndex = -1;
+    }
+    stopOutputStream(outputIndex);
+    if (rebuildOutputRuntimes()) {
+      if (project_.outputs[outputIndex].enabled && nextType == "window") {
+        // createOutputRuntime already scheduled deferred fullscreen via
+        // pendingDisplayMoveFullscreen — don't race it with a synchronous call here.
+        // Health state is set to Recovering inside createOutputRuntime.
+      } else if (project_.outputs[outputIndex].enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Armed);
+      } else {
+        setOutputHealthState(outputIndex, OutputHealthState::Off);
+      }
+      triggerToast("output type: " + nextType);
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+      return true;
+    }
+    setOutputHealthState(outputIndex, OutputHealthState::Error, "output type change failed");
+    triggerToast("output type change failed");
+    return false;
+  }
+
+  bool setFocusedOutputMirrorSource(int sourceOutputIndex) {
+    normalizeProject(project_);
+    int normalized = sourceOutputIndex;
+    if (normalized < 0 || normalized >= static_cast<int>(project_.outputs.size()) ||
+        normalized == project_.focusedOutputIndex) {
+      normalized = -1;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    if (output.mirrorSourceOutputIndex == normalized) {
+      triggerToast("source: " + outputSourceLabel(normalized));
+      return false;
+    }
+    output.mirrorSourceOutputIndex = normalized;
+    stopOutputStream(project_.focusedOutputIndex);
+    webMonitorDirSyncedMs_ = 0;
+    triggerToast("source: " + outputSourceLabel(normalized));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  void cycleFocusedOutputMirrorSource(int direction) {
+    normalizeProject(project_);
+    std::vector<int> candidates;
+    candidates.push_back(-1);
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (i == project_.focusedOutputIndex) {
+        continue;
+      }
+      candidates.push_back(i);
+    }
+    if (candidates.empty()) {
+      return;
+    }
+    int current = focusedOutput().mirrorSourceOutputIndex;
+    auto it = std::find(candidates.begin(), candidates.end(), current);
+    int index = (it == candidates.end()) ? 0 : static_cast<int>(std::distance(candidates.begin(), it));
+    int next = (index + direction + static_cast<int>(candidates.size())) % static_cast<int>(candidates.size());
+    setFocusedOutputMirrorSource(candidates[next]);
+  }
+
+  bool setFocusedOutputStreamEnabled(bool enabled) {
+    normalizeProject(project_);
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    OutputTarget& output = focusedOutputMutable();
+    if (output.streamEnabled == enabled) {
+      triggerToast("stream: " + std::string(enabled ? "on" : "off"));
+      return false;
+    }
+    output.streamEnabled = enabled;
+    output.streamProtocol = normalizeOutputStreamProtocol(output.streamProtocol);
+    if (trim(output.streamUrl).empty()) {
+      output.streamUrl = defaultOutputStreamUrl(output.streamProtocol, outputIndex);
+    }
+    stopOutputStream(outputIndex);
+    if (OutputRuntime* runtime = runtimeForOutput(outputIndex)) {
+      runtime->streamStartFailed = false;
+    }
+    if (!output.enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Off);
+    } else if (enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed);
+    } else {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed);
+    }
+    triggerToast("stream: " + std::string(enabled ? "on" : "off"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  void toggleFocusedOutputStreamEnabled() {
+    setFocusedOutputStreamEnabled(!focusedOutput().streamEnabled);
+  }
+
+  bool setFocusedOutputStreamProtocol(const std::string& protocol) {
+    normalizeProject(project_);
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    OutputTarget& output = focusedOutputMutable();
+    std::string current = normalizeOutputStreamProtocol(output.streamProtocol);
+    std::string nextProtocol = normalizeOutputStreamProtocol(protocol);
+    if (nextProtocol == current) {
+      triggerToast("stream protocol: " + toUpper(current));
+      return false;
+    }
+    output.streamProtocol = nextProtocol;
+    if (trim(output.streamUrl).empty() || output.streamUrl == defaultOutputStreamUrl(current, outputIndex)) {
+      output.streamUrl = defaultOutputStreamUrl(nextProtocol, outputIndex);
+    }
+    stopOutputStream(outputIndex);
+    if (OutputRuntime* runtime = runtimeForOutput(outputIndex)) {
+      runtime->streamStartFailed = false;
+    }
+    if (output.enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed);
+    }
+    triggerToast("stream protocol: " + toUpper(nextProtocol));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool cycleFocusedOutputStreamProtocol(int direction) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    // Derived from the dropdown rather than repeated here. The two lists had
+    // already drifted -- this one was {"srt","rtmp"} while the dropdown offered
+    // more -- so cycling could never reach the extra protocols.
+    const auto choices = outputStreamProtocolDropdownChoices();
+    if (choices.empty()) return false;
+    const int count = static_cast<int>(choices.size());
+    std::string current = normalizeOutputStreamProtocol(output.streamProtocol);
+    int index = 0;
+    for (int i = 0; i < count; ++i) {
+      if (choices[i].first == current) {
+        index = i;
+        break;
+      }
+    }
+    int next = ((index + direction) % count + count) % count;
+    return setFocusedOutputStreamProtocol(choices[next].first);
+  }
+
+  bool setFocusedOutputStreamUrl(const std::string& streamUrl) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    std::string normalized = trim(streamUrl);
+    if (normalized.empty()) {
+      normalized = defaultOutputStreamUrl(output.streamProtocol, project_.focusedOutputIndex);
+    }
+    // Validate URL scheme — only allow known streaming protocols
+    {
+      std::string lower = normalized;
+      std::transform(lower.begin(), lower.end(), lower.begin(),
+                     [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+      bool validScheme = lower.rfind("srt://", 0) == 0
+                      || lower.rfind("rtmp://", 0) == 0
+                      || lower.rfind("rtmps://", 0) == 0
+                      || lower.rfind("rtsp://", 0) == 0
+                      || lower.rfind("udp://", 0) == 0
+                      || lower.rfind("tcp://", 0) == 0
+                      || lower.rfind("rtp://", 0) == 0;
+      if (!validScheme) {
+        triggerToast("stream url: unsupported scheme");
+        return false;
+      }
+    }
+    if (output.streamUrl == normalized) {
+      triggerToast("stream url unchanged");
+      return false;
+    }
+    output.streamUrl = normalized;
+    stopOutputStream(project_.focusedOutputIndex);
+    triggerToast("stream url set");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool setFocusedOutputStreamBitrateKbps(int bitrateKbps) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    int clamped = std::clamp(bitrateKbps, 500, 50000);
+    if (output.streamBitrateKbps == clamped) {
+      triggerToast("stream bitrate: " + std::to_string(clamped) + " kbps");
+      return false;
+    }
+    output.streamBitrateKbps = clamped;
+    stopOutputStream(project_.focusedOutputIndex);
+    triggerToast("stream bitrate: " + std::to_string(clamped) + " kbps");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool setFocusedOutputAlpha(float alpha) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    float clamped = std::clamp(alpha, 0.0f, 1.0f);
+    if (std::fabs(output.outputAlpha - clamped) < 0.001f) {
+      int pct = static_cast<int>(std::lround(clamped * 100.0f));
+      triggerToast("output alpha: " + std::to_string(pct) + "%");
+      return false;
+    }
+    output.outputAlpha = clamped;
+    int pct = static_cast<int>(std::lround(clamped * 100.0f));
+    triggerToast("output alpha: " + std::to_string(pct) + "%");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool setFocusedOutputDelayMs(int delayMs) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    int clamped = std::clamp(delayMs, 0, 5000);
+    if (output.outputDelayMs == clamped) {
+      triggerToast("output delay: " + std::to_string(clamped) + " ms");
+      return false;
+    }
+    output.outputDelayMs = clamped;
+    if (auto* runtime = runtimeForOutput(project_.focusedOutputIndex)) {
+      runtime->delayFrames.clear();
+    }
+    triggerToast("output delay: " + std::to_string(clamped) + " ms");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool setFocusedOutputTimeOverlayEnabled(bool enabled) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    if (output.outputTimeOverlayEnabled == enabled) {
+      triggerToast(enabled ? "output overlay on" : "output overlay off");
+      return false;
+    }
+    output.outputTimeOverlayEnabled = enabled;
+    triggerToast(enabled ? "output overlay on" : "output overlay off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool toggleFocusedOutputTimeOverlayEnabled() {
+    return setFocusedOutputTimeOverlayEnabled(!focusedOutput().outputTimeOverlayEnabled);
+  }
+
+  bool setFocusedOutputColorSpace(const std::string& colorSpaceToken) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    std::string next = normalizeOutputColorSpace(colorSpaceToken);
+    if (output.outputColorSpace == next) {
+      triggerToast("color space: " + toUpper(next));
+      return false;
+    }
+    output.outputColorSpace = next;
+    stopOutputStream(project_.focusedOutputIndex);
+    triggerToast("color space: " + toUpper(next));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool cycleFocusedOutputColorSpace(int direction) {
+    normalizeProject(project_);
+    static const std::array<std::string, 3> kColorSpaces {"auto", "bt709", "srgb"};
+    std::string current = normalizeOutputColorSpace(focusedOutput().outputColorSpace);
+    int index = 0;
+    for (int i = 0; i < static_cast<int>(kColorSpaces.size()); ++i) {
+      if (kColorSpaces[i] == current) {
+        index = i;
+        break;
+      }
+    }
+    int next = (index + direction + static_cast<int>(kColorSpaces.size())) % static_cast<int>(kColorSpaces.size());
+    return setFocusedOutputColorSpace(kColorSpaces[next]);
+  }
+
+  bool setFocusedOutputLayoutMode(const std::string& modeToken) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    std::string next = normalizeOutputLayoutMode(modeToken);
+    if (normalizeOutputLayoutMode(output.outputLayoutMode) == next) {
+      triggerToast("layout: " + next);
+      return false;
+    }
+    output.outputLayoutMode = next;
+    triggerToast("layout: " + next);
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool cycleFocusedOutputLayoutMode(int direction) {
+    normalizeProject(project_);
+    static const std::array<std::string, 2> kModes {"span", "duplicate"};
+    std::string current = normalizeOutputLayoutMode(focusedOutput().outputLayoutMode);
+    int index = 0;
+    for (int i = 0; i < static_cast<int>(kModes.size()); ++i) {
+      if (kModes[i] == current) {
+        index = i;
+        break;
+      }
+    }
+    int next = (index + direction + static_cast<int>(kModes.size())) % static_cast<int>(kModes.size());
+    return setFocusedOutputLayoutMode(kModes[next]);
+  }
+
+  bool setFocusedOutputOrientationDegrees(int degrees) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    int normalized = normalizeOutputOrientationDegrees(degrees);
+    if (normalizeOutputOrientationDegrees(output.outputOrientationDegrees) == normalized) {
+      triggerToast("orientation: " + outputOrientationLabel(normalized));
+      return false;
+    }
+    output.outputOrientationDegrees = normalized;
+    if (auto* runtime = runtimeForOutput(project_.focusedOutputIndex)) {
+      runtime->delayFrames.clear();
+      runtime->latestCapturedFrame = {};
+    }
+    triggerToast("orientation: " + outputOrientationLabel(normalized));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool cycleFocusedOutputOrientation(int direction) {
+    normalizeProject(project_);
+    static const std::array<int, 4> kOrientations {0, 90, 180, 270};
+    int current = normalizeOutputOrientationDegrees(focusedOutput().outputOrientationDegrees);
+    int index = 0;
+    for (int i = 0; i < static_cast<int>(kOrientations.size()); ++i) {
+      if (kOrientations[i] == current) {
+        index = i;
+        break;
+      }
+    }
+    int next = (index + direction + static_cast<int>(kOrientations.size())) % static_cast<int>(kOrientations.size());
+    return setFocusedOutputOrientationDegrees(kOrientations[next]);
+  }
+
+  bool setFocusedOutputTestCardEnabled(bool enabled) {
+    normalizeProject(project_);
+    OutputTarget& output = focusedOutputMutable();
+    const std::string where = outputLabel(project_.focusedOutputIndex);
+    if (output.outputTestCardEnabled == enabled) {
+      triggerToast(std::string("test card ") + (enabled ? "already on " : "already off ") + where);
+      return false;
+    }
+    output.outputTestCardEnabled = enabled;
+    if (auto* runtime = runtimeForOutput(project_.focusedOutputIndex)) {
+      runtime->delayFrames.clear();
+      runtime->latestCapturedFrame = {};
+    }
+    restartTestCardClockIfNoneUp();
+    triggerToast(std::string("test card ") + (enabled ? "on " : "off ") + where);
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  // The card's shared clock starts again from zero the next time one goes up,
+  // so a frame count read off a screen is the count since the card appeared.
+  void restartTestCardClockIfNoneUp() {
+    for (const auto& out : project_.outputs) {
+      if (out.outputTestCardEnabled) return;
+    }
+    testCardEpochNs_ = 0;
+  }
+
+  bool toggleFocusedOutputTestCardEnabled() {
+    return setFocusedOutputTestCardEnabled(!focusedOutput().outputTestCardEnabled);
+  }
+
+  bool setAllOutputsTestCardEnabled(bool enabled) {
+    normalizeProject(project_);
+    bool changed = false;
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      // Every SCREEN, not the recording: a recording keeps recording
+      // programme (James, 2026-10-15). It can still be given one on its own.
+      const bool recording = normalizeOutputType(output.outputType) == "stream" &&
+        outputStreamProtocolIsFile(normalizeOutputStreamProtocol(output.streamProtocol));
+      if (output.outputTestCardEnabled == enabled || (enabled && recording)) {
+        continue;
+      }
+      output.outputTestCardEnabled = enabled;
+      if (auto* runtime = runtimeForOutput(outputIndex)) {
+        runtime->delayFrames.clear();
+        runtime->latestCapturedFrame = {};
+      }
+      changed = true;
+    }
+    restartTestCardClockIfNoneUp();
+    triggerToast(std::string("test card ") + (enabled ? "on every output" : "off every output"));
+    if (changed) {
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+    }
+    return changed;
+  }
+
+  // Operator buffer-size setting → SDL3 device buffer hint. Must be set
+  // before a device open; replaces the SDL2 SDL_AudioSpec.samples field.
+  void applyAudioBufferSizeHint() {
+    std::string samples = std::to_string(std::clamp(project_.audioBufferSamples, 256, 2048));
+    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, samples.c_str());
+  }
+
+  bool ensureUiAudioDevice() {
+    if (uiAudioStream_) {
+      return true;
+    }
+
+    applyAudioBufferSizeHint();
+    SDL_AudioSpec desired {};
+    desired.freq = kAudioRate;
+    desired.format = kAudioFormat;
+    desired.channels = kAudioChannels;
+    // Opens a logical device + bound stream in one call; starts paused.
+    const SDL_AudioDeviceID target = systemDefaultPlaybackTarget();
+    uiAudioStream_ = SDL_OpenAudioDeviceStream(target, &desired, nullptr, nullptr);
+    if (!uiAudioStream_ && target != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+      uiAudioStream_ = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired, nullptr, nullptr);
+    }
+    return uiAudioStream_ != nullptr;
+  }
+
+  // Resolve a persisted device name to a live SDL3 playback device id.
+  // Returns 0 when the name is not currently present.
+  SDL_AudioDeviceID audioPlaybackDeviceIdForName(const std::string& name) {
+    if (name.empty()) {
+      return SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    }
+    SDL_AudioDeviceID result = 0;
+    int count = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioPlaybackDevices(&count)) {
+      for (int index = 0; index < count; ++index) {
+        const char* deviceName = SDL_GetAudioDeviceName(ids[index]);
+        if (deviceName && name == deviceName) {
+          result = ids[index];
+          break;
+        }
+      }
+      SDL_free(ids);
+    }
+    return result;
+  }
+
+  // THE SYSTEM OUTPUT, CHECKED RATHER THAN TRUSTED.
+  //
+  // A stream opened on SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK is moved by SDL to
+  // each new default -- when SDL hears of the change and can open the new
+  // device. On a Mac it can miss it (platform/mac_audio_default.hpp), and then
+  // the show plays on into the speakers with headphones plugged in, until a
+  // restart. So on the Mac the OS is asked; elsewhere SDL's answer is all there
+  // is, which still catches a move SDL started and could not finish.
+  //
+  // DECKBOY_TEST_SYSTEM_OUTPUT_FILE names a file whose first line stands in
+  // for the OS's answer, read afresh each time, so tools/check_audio_follow.py
+  // can move "the system output" under a running app while SDL's default stays
+  // put -- which is what SDL looks like when it has missed the change.
+  static std::string osDefaultPlaybackName() {
+    if (const char* file = std::getenv("DECKBOY_TEST_SYSTEM_OUTPUT_FILE"); file && *file) {
+      std::ifstream in(file);
+      std::string line;
+      if (std::getline(in, line) && !trim(line).empty()) {
+        return trim(line);
+      }
+    }
+    return deckboy::platform::macDefaultPlaybackDeviceName();
+  }
+
+  static std::string sdlDefaultPlaybackName() {
+    const char* name = SDL_GetAudioDeviceName(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK);
+    return name ? name : "";
+  }
+
+  // The device a stream's sound is actually going to, after any move SDL made.
+  // A stream on a limited device answers for its shared device even while it
+  // is paused (unbound), or a paused playlist would read as on no device.
+  static std::string audioStreamDeviceName(SDL_AudioStream* stream) {
+    const char* name = stream ? SDL_GetAudioDeviceName(deckboyAudioStreamDevice(stream)) : nullptr;
+    return name ? name : "";
+  }
+
+  // ── OUTPUT EFFECTS AND THE LIMITER ────────────────────────────────────────
+  //
+  // A chain on a whole device (Settings > Audio, OUTPUT EFFECTS): the cue's
+  // own effects, then a ceiling. Every deck stream and extra send going there
+  // shares one logical device, whose postmix callback runs them on the mix:
+  // everything that plays to it, after the mix (deckboyOpenSharedPlaybackStream).
+  // The headphone monitor, the desk's own sounds and LTC open devices of their
+  // own and stay out of it. Under ASIO the show's sound is on the driver,
+  // which this does not reach yet.
+  static constexpr std::size_t kMaxOutputEffects = 4;
+  struct OutputLimiterBus {
+    deckboy::audiofx::BusLimiter limiter;      // the audio thread's alone
+    std::atomic<double> ceilingDb {-1.0};
+    std::atomic<bool> limiterOn {false};
+    std::atomic<bool> bypassAll {false};
+    // The chain before the limiter. The desk publishes a fresh copy; the
+    // audio thread takes a reference under the lock, held only for that.
+    // chainShape moves when the KINDS change, and then the effects' filter
+    // memory starts again rather than running one effect on another's.
+    std::mutex chainMutex;
+    std::shared_ptr<const std::vector<deckboy::audiofx::AudioEffect>> chain;
+    std::uint64_t chainShape = 0;
+    std::vector<int> publishedKinds;           // the desk's
+    std::vector<deckboy::audiofx::AudioEffectState> chainStates;   // the audio thread's: one per channel pair
+    std::vector<double> scratch;
+    std::uint64_t appliedShape = 0;
+    std::atomic<double> reductionDb {0.0};     // the last callback's, for the meter
+    std::atomic<double> outPeakDb {-120.0};    // what left for the device, for OUTPUTFX
+    std::atomic<std::uint64_t> clamped {0};
+    std::atomic<std::uint64_t> callbacks {0};
+    std::FILE* capture = nullptr;              // DECKBOY_LIMITER_CAPTURE: what the device was given
+    bool captureHeader = false;
+    ~OutputLimiterBus() {
+      if (capture) std::fclose(capture);
+    }
+  };
+  std::map<std::string, std::unique_ptr<OutputLimiterBus>> outputLimiterBuses_;
+  double limiterMeterHeldDb_ = 0.0;   // Settings' LIMITING meter, held briefly
+  Uint64 limiterMeterHeldAtMs_ = 0;
+
+  // The chain, a channel pair at a time: the effects are stereo, a device may
+  // not be. In the int16 scale the effects are written for (their thresholds
+  // are), and back.
+  static void runOutputChain(OutputLimiterBus& bus, const std::vector<deckboy::audiofx::AudioEffect>& chain,
+                             float* buffer, std::size_t frames, int channels, int rate) {
+    const int pairs = (channels + 1) / 2;
+    if (static_cast<int>(bus.chainStates.size()) < pairs) bus.chainStates.resize(static_cast<std::size_t>(pairs));
+    bus.scratch.resize(frames * 2);
+    deckboy::audiofx::AudioEffectContext ctx;
+    ctx.sampleRate = rate;
+    const std::size_t stride = static_cast<std::size_t>(channels);
+    for (int pair = 0; pair < pairs; ++pair) {
+      const std::size_t left = static_cast<std::size_t>(pair) * 2;
+      const std::size_t right = std::min(left + 1, stride - 1);
+      for (std::size_t i = 0; i < frames; ++i) {
+        bus.scratch[i * 2] = buffer[i * stride + left] * 32768.0;
+        bus.scratch[i * 2 + 1] = buffer[i * stride + right] * 32768.0;
+      }
+      deckboy::audiofx::applyAudioEffectStack(bus.scratch, chain, bus.chainStates[static_cast<std::size_t>(pair)], ctx);
+      for (std::size_t i = 0; i < frames; ++i) {
+        buffer[i * stride + left] = static_cast<float>(bus.scratch[i * 2] / 32768.0);
+        if (right != left) buffer[i * stride + right] = static_cast<float>(bus.scratch[i * 2 + 1] / 32768.0);
+      }
+    }
+  }
+
+  // On the audio thread, once a device period.
+  static void SDLCALL outputLimiterPostmix(void* userdata, const SDL_AudioSpec* spec, float* buffer, int buflen) {
+    auto* bus = static_cast<OutputLimiterBus*>(userdata);
+    if (!bus || !spec || !buffer || buflen <= 0) return;
+    const int channels = std::max(1, spec->channels);
+    const std::size_t frames = static_cast<std::size_t>(buflen) / sizeof(float) / static_cast<std::size_t>(channels);
+    const bool limiting = bus->limiterOn.load(std::memory_order_relaxed);
+    if (!bus->bypassAll.load(std::memory_order_relaxed)) {
+      std::shared_ptr<const std::vector<deckboy::audiofx::AudioEffect>> chain;
+      std::uint64_t shape = 0;
+      {
+        std::lock_guard<std::mutex> lock(bus->chainMutex);
+        chain = bus->chain;
+        shape = bus->chainShape;
+      }
+      if (chain && !chain->empty()) {
+        if (shape != bus->appliedShape) {
+          for (auto& state : bus->chainStates) state.clear();
+          bus->appliedShape = shape;
+        }
+        runOutputChain(*bus, *chain, buffer, frames, channels, spec->freq);
+      }
+      if (limiting) {
+        bus->limiter.setCeilingDb(bus->ceilingDb.load(std::memory_order_relaxed));
+        bus->limiter.process(buffer, frames, channels, spec->freq);
+      }
+    }
+    const bool limited = limiting && !bus->bypassAll.load(std::memory_order_relaxed);
+    bus->reductionDb.store(limited ? bus->limiter.gainReductionDb() : 0.0, std::memory_order_relaxed);
+    bus->clamped.store(bus->limiter.clampedSamples(), std::memory_order_relaxed);
+    float peak = 0.0f;
+    for (std::size_t i = 0; i < frames * static_cast<std::size_t>(channels); ++i) peak = std::max(peak, std::fabs(buffer[i]));
+    bus->outPeakDb.store(peak > 1e-6f ? 20.0 * std::log10(peak) : -120.0, std::memory_order_relaxed);
+    bus->callbacks.fetch_add(1, std::memory_order_relaxed);
+    if (bus->capture) {   // tests only: raw float frames after "DBLC", channels, rate
+      if (!bus->captureHeader) {
+        const std::int32_t header[3] {0x434C4244, channels, spec->freq};
+        std::fwrite(header, sizeof(header), 1, bus->capture);
+        bus->captureHeader = true;
+      }
+      std::fwrite(buffer, sizeof(float), frames * static_cast<std::size_t>(channels), bus->capture);
+      std::fflush(bus->capture);
+    }
+  }
+
+  OutputLimiterSetting* outputLimiterSetting(const std::string& deviceName) {
+    for (auto& limiter : project_.outputLimiters) {
+      if (limiter.deviceName == deviceName) return &limiter;
+    }
+    return nullptr;
+  }
+
+  // Whether a device's sound has to go through the shared device at all.
+  static bool outputBusWanted(const OutputLimiterSetting* setting) {
+    return setting && (setting->enabled || !setting->effects.empty());
+  }
+
+  // Created on first use; always handed back carrying the current settings.
+  OutputLimiterBus& outputLimiterBus(const std::string& deviceName) {
+    auto& slot = outputLimiterBuses_[deviceName];
+    if (!slot) {
+      slot = std::make_unique<OutputLimiterBus>();
+      if (const char* path = std::getenv("DECKBOY_LIMITER_CAPTURE"); path && *path) {
+        slot->capture = std::fopen(path, "wb");
+      }
+    }
+    const OutputLimiterSetting* setting = outputLimiterSetting(deviceName);
+    slot->ceilingDb.store(setting ? setting->ceilingDb : -1.0, std::memory_order_relaxed);
+    slot->limiterOn.store(setting && setting->enabled, std::memory_order_relaxed);
+    slot->bypassAll.store(setting && setting->bypassAll, std::memory_order_relaxed);
+    auto chain = std::make_shared<const std::vector<deckboy::audiofx::AudioEffect>>(
+      setting ? setting->effects : std::vector<deckboy::audiofx::AudioEffect> {});
+    std::vector<int> kinds;
+    for (const auto& fx : *chain) kinds.push_back(static_cast<int>(fx.kind));
+    {
+      std::lock_guard<std::mutex> lock(slot->chainMutex);
+      if (kinds != slot->publishedKinds) {
+        slot->publishedKinds = kinds;
+        ++slot->chainShape;
+      }
+      slot->chain = std::move(chain);
+    }
+    return *slot;
+  }
+
+  // The device a playlist's sound is on, as the limiter settings name it.
+  std::string deckLimiterDeviceName(int deckIndex) const {
+    const DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    return runtime ? runtime->audioDeviceInUse : std::string();
+  }
+
+  // Every change to a device's chain goes through here. A change that puts
+  // the device's sound onto the shared device, or takes it off (the first
+  // effect or the limiter in, the last one out), moves the playlists on that
+  // device, which is a reopen like any device change: mid-cue they keep
+  // playing. Anything else is read by the audio thread and needs no reopen.
+  void editOutputBus(const std::string& deviceName, const std::function<void(OutputLimiterSetting&)>& edit) {
+    OutputLimiterSetting* setting = outputLimiterSetting(deviceName);
+    if (!setting) {
+      project_.outputLimiters.push_back(OutputLimiterSetting {deviceName, false, -1.0, {}, false});
+      setting = &project_.outputLimiters.back();
+    }
+    const bool wasShared = outputBusWanted(setting);
+    edit(*setting);
+    setting->ceilingDb = std::clamp(std::round(setting->ceilingDb * 10.0) / 10.0, -40.0, 0.0);
+    if (setting->effects.size() > kMaxOutputEffects) setting->effects.resize(kMaxOutputEffects);
+    const bool shared = outputBusWanted(setting);
+    outputLimiterBus(deviceName);   // publishes the new settings
+    markProjectDirty();
+    if (shared == wasShared) return;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[d];
+      bool sendsThere = deckLimiterDeviceName(d) == deviceName;
+      for (const std::string& name : deck.extraAudioDeviceNames) sendsThere = sendsThere || trim(name) == deviceName;
+      if (sendsThere) reopenDeckAudioOutput(d, deck.audioOutputDeviceName);
+    }
+    applyAudioMonitorSelection();   // the reopen gave each deck a fresh monitor stream
+  }
+
+  void setOutputLimiter(const std::string& deviceName, std::optional<bool> enabled,
+                        std::optional<double> ceilingDb) {
+    editOutputBus(deviceName, [&](OutputLimiterSetting& setting) {
+      if (enabled) setting.enabled = *enabled;
+      if (ceilingDb) setting.ceilingDb = *ceilingDb;
+    });
+  }
+
+  // ── THE CARD'S ONE KNOB PER EFFECT ──────────────────────────────────────
+  //
+  // Five effects make sense on a whole PA: high pass, low pass, tilt,
+  // compressor, width. Each shows its first knob in its own units, and one
+  // press of - or + moves it a step an engineer would: a sixth of an octave,
+  // half a decibel, a decibel of threshold, ten percent of width. The rest of
+  // each effect keeps the value it arrives with (audioEffectDefaults).
+  static constexpr std::array<deckboy::audiofx::AudioEffectKind, 5> kOutputEffectKinds {
+    deckboy::audiofx::AudioEffectKind::HighPass, deckboy::audiofx::AudioEffectKind::LowPass,
+    deckboy::audiofx::AudioEffectKind::Tilt, deckboy::audiofx::AudioEffectKind::Compressor,
+    deckboy::audiofx::AudioEffectKind::Width};
+
+  static float outputEffectStep(deckboy::audiofx::AudioEffectKind kind) {
+    using Kind = deckboy::audiofx::AudioEffectKind;
+    switch (kind) {
+      case Kind::HighPass:
+      case Kind::LowPass: return static_cast<float>(std::log(2.0) / 6.0 / std::log(100.0));
+      case Kind::Tilt: return 0.5f / 24.0f;
+      case Kind::Compressor: return 1.0f / 60.0f;
+      default: return 0.05f;
+    }
+  }
+
+  static std::string outputEffectReadout(const deckboy::audiofx::AudioEffect& fx) {
+    using Kind = deckboy::audiofx::AudioEffectKind;
+    const double a = std::clamp(static_cast<double>(fx.paramA), 0.0, 1.0);
+    char text[48] = "";
+    switch (fx.kind) {
+      case Kind::HighPass:
+      case Kind::LowPass: {
+        const double hz = (fx.kind == Kind::HighPass ? 20.0 : 200.0) * std::pow(100.0, a);
+        if (hz >= 1000.0) std::snprintf(text, sizeof(text), "%.1f kHz", hz / 1000.0);
+        else std::snprintf(text, sizeof(text), "%.0f Hz", hz);
+        break;
+      }
+      case Kind::Tilt: {
+        const double tiltDb = (a - 0.5) * 24.0;
+        if (std::fabs(tiltDb) < 0.05) std::snprintf(text, sizeof(text), "flat");
+        else std::snprintf(text, sizeof(text), "%s %.1f dB", tiltDb < 0.0 ? "darker" : "brighter", std::fabs(tiltDb));
+        break;
+      }
+      case Kind::Compressor:
+        std::snprintf(text, sizeof(text), "%.0f dBFS, %.1f:1", -60.0 + a * 60.0,
+                      1.0 + std::clamp(static_cast<double>(fx.paramB), 0.0, 1.0) * 19.0);
+        break;
+      case Kind::Width:
+        std::snprintf(text, sizeof(text), "%.0f%% wide", a * 200.0);
+        break;
+      default:
+        std::snprintf(text, sizeof(text), "%.0f%%", a * 100.0);
+        break;
+    }
+    return text;
+  }
+
+  std::string systemDefaultPlaybackName() const {
+    const std::string os = osDefaultPlaybackName();
+    return os.empty() ? sdlDefaultPlaybackName() : os;
+  }
+
+  // Where to open a stream that belongs on the system output: SDL's default
+  // while SDL agrees with the OS, so SDL keeps moving it; the device itself
+  // while SDL is behind, and then reconcileDeckAudioDevices does the moving.
+  SDL_AudioDeviceID systemDefaultPlaybackTarget() {
+    const std::string os = osDefaultPlaybackName();
+    if (!os.empty() && os != sdlDefaultPlaybackName()) {
+      if (const SDL_AudioDeviceID id = audioPlaybackDeviceIdForName(os)) {
+        return id;
+      }
+    }
+    return SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+  }
+
+  // THE DECK PLAYBACK DEVICE, opened at the rate the show asks for.
+  //
+  // Only this one follows the setting. The UI sound effects are bundled 48k
+  // assets, the mic input path converts to 48k mono of its own accord, and
+  // LTC is generated against 48k -- all three are deliberately left alone,
+  // because none of them is the signal the operator chose a rate for.
+  SDL_AudioStream* openMainAudioDevice(const std::string& preferredDeviceName, std::string& effectiveName,
+                                       int channels = kAudioChannels, bool joinOutputLimiter = true,
+                                       bool exactWidth = false) {
+    applyAudioBufferSizeHint();
+    SDL_AudioSpec desired {};
+    desired.freq = project_.audioSampleRate > 0 ? project_.audioSampleRate
+                                                : kAudioRate;
+    desired.format = kAudioFormat;
+    // Even channel counts only (stereo pairs); SDL folds down when the
+    // physical device has fewer outs. EXACT for the patch, which opens a
+    // device at its own width: SDL converts between widths by speaker layout,
+    // so four channels into an eight-channel device would put "3" on out 5.
+    desired.channels = exactWidth
+      ? std::clamp(channels, 1, 8)
+      : std::clamp(channels - (channels % 2), static_cast<int>(kAudioChannels), 8);
+
+    effectiveName = preferredDeviceName;
+    SDL_AudioDeviceID target = audioPlaybackDeviceIdForName(preferredDeviceName);
+    if (target == 0) {
+      // Preferred device not present — fall back to the system default.
+      effectiveName.clear();
+      target = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    }
+    if (target == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+      // The system output as the OS has it, which SDL's default may not be.
+      // effectiveName stays empty either way: this IS the system default.
+      target = systemDefaultPlaybackTarget();
+    }
+
+    // A device with effects or its limiter on: onto the device every stream
+    // for it shares, so they work on the mix.
+    if (joinOutputLimiter) {
+      const OutputLimiterSetting* limiter = outputLimiterSetting(effectiveName);
+      if (outputBusWanted(limiter)) {
+        if (SDL_AudioStream* shared = deckboyOpenSharedPlaybackStream(
+              target, &desired, outputLimiterPostmix, &outputLimiterBus(effectiveName))) {
+          return shared;
+        }
+        std::cerr << "audio: could not share "
+                  << (effectiveName.empty() ? std::string("the system output") : effectiveName)
+                  << " for its output effects (" << SDL_GetError() << "); playing it without them\n";
+      }
+    }
+
+    SDL_AudioStream* mainOut = SDL_OpenAudioDeviceStream(target, &desired, nullptr, nullptr);
+    if (!mainOut && target != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+      effectiveName.clear();
+      mainOut = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired, nullptr, nullptr);
+    }
+    // Stream starts paused; the media engine resumes it per transport state.
+    return mainOut;
+  }
+
+  // ── SMPTE LTC generator (timecode OUT) ─────────────────────────────────────
+  // Deckboy's own show clock, encoded as LTC onto a real audio device. This is
+  // what makes Deckboy a timecode MASTER rather than only a chaser: feed the
+  // chosen output to a spare pair or an interface's TC out and everything else
+  // on the floor can lock to the deck.
+  //
+  // The timecode emitted is the focused deck's playlist start offset plus the
+  // live cue's position. When nothing is playing the generator HOLDS the last
+  // value and keeps emitting it, rather than stopping — a receiver that loses
+  // carrier drops out of lock, and coming back from that is far more disruptive
+  // than sitting on a stationary code.
+  double ltcOutputTimecodeSeconds() const {
+    const Deck& deck = focusedDeck();
+    double seconds = deck.playlistStartOffsetSeconds;
+    if (const MediaEngine* engine = focusedMediaEngine()) {
+      seconds += std::max(0.0, engine->position());
+    }
+    // Plus whatever a timecode cue jammed the clock to. Added here rather
+    // than written into the deck, so it disappears when the app does.
+    return std::max(0.0, seconds + ltcJamOffsetSeconds_);
+  }
+
+  bool startLtcOutput() {
+    if (ltcOutStream_) {
+      return true;
+    }
+    if (!ltcApi_.ensureLoaded()) {
+      triggerToast("ltc out: libltc unavailable");
+      return false;
+    }
+    if (!ltcApi_.encoderAvailable) {
+      triggerToast("ltc out: libltc has no encoder");
+      return false;
+    }
+    // 48 kHz s16. LTC is a single-channel biphase-mark signal, but the device is
+    // opened with the operator's channel count so the code can be placed on ONE
+    // channel and every other channel held silent — timecode is a control
+    // signal and must not leak into the programme mix.
+    ltcOutChannels_ = std::clamp(project_.ltcOutputChannelCount, 1, 8);
+    ltcOutChannel_ = std::clamp(project_.ltcOutputChannel, 0, ltcOutChannels_ - 1);
+    SDL_AudioSpec desired {};
+    desired.freq = 48000;
+    desired.format = SDL_AUDIO_S16;
+    desired.channels = ltcOutChannels_;
+
+    ltcOutDeviceName_ = trim(project_.ltcOutputDeviceName);
+    SDL_AudioDeviceID target = audioPlaybackDeviceIdForName(ltcOutDeviceName_);
+    if (target == 0) {
+      ltcOutDeviceName_.clear();
+      target = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    }
+    ltcOutStream_ = SDL_OpenAudioDeviceStream(target, &desired, nullptr, nullptr);
+    if (!ltcOutStream_ && target != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+      ltcOutDeviceName_.clear();
+      ltcOutStream_ = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired, nullptr, nullptr);
+    }
+    if (!ltcOutStream_) {
+      triggerToast("ltc out: no audio device");
+      return false;
+    }
+
+    ltcOutFps_ = std::clamp(project_.ltcOutputFps, 23.0, 60.0);
+    // standard 0 = LTC_TV_525_60, the generic choice for 30/29.97.
+    ltcEncoder_ = ltcApi_.encoderCreateFn(48000.0, ltcOutFps_, 0, 0);
+    if (!ltcEncoder_) {
+      SDL_DestroyAudioStream(ltcOutStream_);
+      ltcOutStream_ = nullptr;
+      triggerToast("ltc out: encoder failed");
+      return false;
+    }
+    if (ltcApi_.encoderSetVolumeFn) {
+      // -3 dBFS: hot enough for a reader to lock, short of clipping.
+      ltcApi_.encoderSetVolumeFn(ltcEncoder_, -3.0);
+    }
+    ltcOutFrameBuf_.assign(static_cast<std::size_t>(48000.0 / ltcOutFps_) + 64, 0);
+    ltcOutPrimed_ = false;
+    deckboySetAudioPaused(ltcOutStream_, false);
+    triggerToast("ltc out: on @ " + fmtFloat(ltcOutFps_, 2) + "fps"
+                 + (ltcOutDeviceName_.empty() ? " (default device)" : (" - " + ltcOutDeviceName_)));
+    return true;
+  }
+
+  void stopLtcOutput() {
+    if (ltcEncoder_) {
+      ltcApi_.encoderFreeFn(ltcEncoder_);
+      ltcEncoder_ = nullptr;
+    }
+    if (ltcOutStream_) {
+      SDL_DestroyAudioStream(ltcOutStream_);
+      ltcOutStream_ = nullptr;
+    }
+    ltcOutPrimed_ = false;
+  }
+
+  // Called every tick. Keeps roughly 120 ms of LTC queued: enough that a
+  // scheduling hiccup cannot punch a hole in the carrier, short enough that the
+  // code a receiver reads is never far behind the deck.
+  void pumpLtcOutput() {
+    if (!project_.ltcOutputEnabled) {
+      if (ltcOutStream_) {
+        stopLtcOutput();
+      }
+      return;
+    }
+    // Re-open on a settings change (device or rate).
+    const double wantFps = std::clamp(project_.ltcOutputFps, 23.0, 60.0);
+    if (ltcOutStream_ && (std::abs(wantFps - ltcOutFps_) > 0.001 ||
+                          trim(project_.ltcOutputDeviceName) != ltcOutDeviceName_ ||
+                          std::clamp(project_.ltcOutputChannelCount, 1, 8) != ltcOutChannels_ ||
+                          std::clamp(project_.ltcOutputChannel, 0, ltcOutChannels_ - 1) != ltcOutChannel_)) {
+      stopLtcOutput();
+    }
+    if (!ltcOutStream_ && !startLtcOutput()) {
+      // Don't retry every frame on a hard failure — the operator turns it off.
+      project_.ltcOutputEnabled = false;
+      return;
+    }
+
+    constexpr int kTargetQueuedMs = 120;
+    // s16 x channels: the queue target must scale with the opened channel
+    // count or a multi-channel route would be starved.
+    const int targetBytes = 48000 * 2 * ltcOutChannels_ * kTargetQueuedMs / 1000;
+
+    double sourceSeconds = ltcOutputTimecodeSeconds();
+    int guard = 0;
+    while (SDL_GetAudioStreamQueued(ltcOutStream_) < targetBytes && guard++ < 32) {
+      // Re-seat the encoder when it has drifted more than a frame from the
+      // deck, but let it free-run otherwise: re-setting every frame from a
+      // jittery position read would make the emitted code stutter, and a
+      // stuttering master is worse than a slightly late one.
+      const double encoderSeconds = ltcOutEmittedFrames_ / ltcOutFps_ + ltcOutBaseSeconds_;
+      if (!ltcOutPrimed_ || std::abs(sourceSeconds - encoderSeconds) > (2.0 / ltcOutFps_)) {
+        const long long totalFrames =
+          static_cast<long long>(std::llround(sourceSeconds * ltcOutFps_));
+        const long long fpsWhole = static_cast<long long>(std::llround(ltcOutFps_));
+        LtcSmpteTimecode tc {};
+        std::snprintf(tc.timezone, sizeof(tc.timezone), "+0000");
+        tc.frame = static_cast<unsigned char>(totalFrames % std::max(1LL, fpsWhole));
+        const long long totalSecs = totalFrames / std::max(1LL, fpsWhole);
+        tc.secs  = static_cast<unsigned char>(totalSecs % 60);
+        tc.mins  = static_cast<unsigned char>((totalSecs / 60) % 60);
+        tc.hours = static_cast<unsigned char>((totalSecs / 3600) % 24);
+        ltcApi_.encoderSetTimecodeFn(ltcEncoder_, &tc);
+        ltcOutBaseSeconds_ = sourceSeconds;
+        ltcOutEmittedFrames_ = 0;
+        ltcOutPrimed_ = true;
+      }
+
+      ltcApi_.encoderEncodeFrameFn(ltcEncoder_);
+      const int got = ltcApi_.encoderGetBufferFn(ltcEncoder_, ltcOutFrameBuf_.data());
+      if (got <= 0) {
+        break;
+      }
+      // libltc emits unsigned 8-bit centred on 128; widen to s16 and place it on
+      // the routed channel only, leaving the rest silent.
+      const std::size_t frames = static_cast<std::size_t>(got);
+      ltcOutPcm_.assign(frames * static_cast<std::size_t>(ltcOutChannels_), 0);
+      for (std::size_t f = 0; f < frames; ++f) {
+        const int centred = static_cast<int>(ltcOutFrameBuf_[f]) - 128;
+        ltcOutPcm_[f * static_cast<std::size_t>(ltcOutChannels_) +
+                   static_cast<std::size_t>(ltcOutChannel_)] =
+          static_cast<std::int16_t>(std::clamp(centred * 256, -32768, 32767));
+      }
+      SDL_PutAudioStreamData(ltcOutStream_, ltcOutPcm_.data(),
+                             static_cast<int>(ltcOutPcm_.size() * sizeof(std::int16_t)));
+      if (ltcApi_.encoderBufferFlushFn) {
+        ltcApi_.encoderBufferFlushFn(ltcEncoder_);
+      }
+      ltcApi_.encoderIncTimecodeFn(ltcEncoder_);
+      ++ltcOutEmittedFrames_;
+    }
+  }
+
+  double defaultLtcCaptureFpsHint() const {
+    if (project_.focusedDeckIndex >= 0 &&
+        project_.focusedDeckIndex < static_cast<int>(project_.decks.size())) {
+      double fps = project_.decks[project_.focusedDeckIndex].timecodeFps;
+      if (std::isfinite(fps) && fps > 1.0) {
+        return fps;
+      }
+    }
+    return 30.0;
+  }
+
+  std::string preferredLtcCaptureDeviceName() const {
+    if (const char* env = std::getenv("DECKBOY_LTC_DEVICE"); env && *env) {
+      return std::string(env);
+    }
+    return {};
+  }
+
+  void ltcLoop(void* decoder, SDL_AudioStream* captureStream, int sampleRate, int channelCount, double fpsHint) {
+    std::vector<std::int16_t> interleavedSamples(4096u * static_cast<size_t>(std::max(1, channelCount)));
+    std::vector<std::int16_t> monoSamples(4096);
+    std::array<std::uint8_t, LtcApi::kFrameExtBytes> frameExt {};
+    std::int64_t samplePos = 0;
+    LtcFpsEstimator fpsEstimator;
+    fpsEstimator.estimate = std::isfinite(fpsHint) && fpsHint > 1.0 ? fpsHint : 30.0;
+    double lastSentSeconds = -1.0;
+    double lastSentFps = 0.0;
+
+    while (!ltcStop_.load()) {
+      Uint32 queuedBytes = static_cast<Uint32>(
+        std::max(0, SDL_GetAudioStreamAvailable(captureStream)));
+      Uint32 minBytes = static_cast<Uint32>(sizeof(std::int16_t) * std::max(1, channelCount));
+      if (queuedBytes < minBytes) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        continue;
+      }
+
+      size_t sampleFramesAvailable = queuedBytes / (sizeof(std::int16_t) * static_cast<size_t>(std::max(1, channelCount)));
+      size_t framesToRead = std::clamp<size_t>(sampleFramesAvailable, 1, 4096);
+      interleavedSamples.resize(framesToRead * static_cast<size_t>(std::max(1, channelCount)));
+      int bytesRead = SDL_GetAudioStreamData(
+        captureStream,
+        interleavedSamples.data(),
+        static_cast<int>(interleavedSamples.size() * sizeof(std::int16_t)));
+      size_t samplesRead = bytesRead > 0 ? static_cast<size_t>(bytesRead) / sizeof(std::int16_t) : 0;
+      size_t framesRead = samplesRead / static_cast<size_t>(std::max(1, channelCount));
+      if (framesRead == 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        continue;
+      }
+
+      monoSamples.resize(framesRead);
+      for (size_t frameIndex = 0; frameIndex < framesRead; ++frameIndex) {
+        monoSamples[frameIndex] = interleavedSamples[frameIndex * static_cast<size_t>(std::max(1, channelCount))];
+      }
+
+      ltcApi_.decoderWriteS16Fn(decoder, monoSamples.data(), monoSamples.size(), samplePos);
+      samplePos += static_cast<std::int64_t>(monoSamples.size());
+
+      while (ltcApi_.decoderQueueLengthFn(decoder) > 0) {
+        if (ltcApi_.decoderReadFn(decoder, frameExt.data()) <= 0) {
+          break;
+        }
+        auto decoded = decodeLtcFrameBytes(frameExt.data());
+        if (!decoded) {
+          continue;
+        }
+
+        fpsEstimator.observe(*decoded);
+        double decodedFps = fpsEstimator.current(fpsHint);
+        if (!std::isfinite(decodedFps) || decodedFps <= 1.0) {
+          decodedFps = 30.0;
+        }
+        double tcSeconds = decoded->hours * 3600.0
+          + decoded->minutes * 60.0
+          + decoded->seconds
+          + (decoded->frames / decodedFps);
+
+        bool changed = std::fabs(tcSeconds - lastSentSeconds) > (0.5 / std::max(1.0, decodedFps))
+                     || std::fabs(decodedFps - lastSentFps) > 0.01;
+        if (!changed) {
+          continue;
+        }
+
+        std::ostringstream secondsText;
+        secondsText << std::fixed << std::setprecision(6) << tcSeconds;
+        std::ostringstream fpsText;
+        if (std::fabs(decodedFps - 29.97) < 0.01) {
+          fpsText << "29.97";
+        } else {
+          fpsText << std::fixed << std::setprecision(2) << decodedFps;
+        }
+        enqueueRemoteCommand("LTCEXT " + secondsText.str() + " " + fpsText.str());
+        lastSentSeconds = tcSeconds;
+        lastSentFps = decodedFps;
+      }
+    }
+
+    ltcApi_.decoderQueueFlushFn(decoder);
+    ltcApi_.decoderFreeFn(decoder);
+  }
+
+  // Resolve a preferred recording device name to a live SDL3 device id.
+  // ---- Live audio input ----------------------------------------------------
+  // Opening someone's microphone is not something to do implicitly, so this is
+  // strictly opt-in and reports the device that actually opened rather than the
+  // one that was asked for -- they differ whenever the saved device has been
+  // unplugged, and silently falling back to a different mic is the kind of
+  // surprise that ruins a recording.
+  bool startAudioInput() {
+    stopAudioInput();
+    SDL_AudioSpec desired {};
+    desired.freq = kAudioRate;
+    desired.format = SDL_AUDIO_S16;
+    desired.channels = 2;
+
+    std::string wanted = project_.audioInputDeviceName;
+    std::string effective = wanted;
+    SDL_AudioDeviceID target = audioRecordingDeviceIdForName(wanted);
+    if (target == 0) {
+      effective.clear();
+      target = SDL_AUDIO_DEVICE_DEFAULT_RECORDING;
+    }
+    SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(target, &desired, nullptr, nullptr);
+    if (!stream && target != SDL_AUDIO_DEVICE_DEFAULT_RECORDING) {
+      effective.clear();
+      stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_RECORDING, &desired, nullptr, nullptr);
+    }
+    if (!stream) {
+      failRemoteCommand("audio input: device unavailable");
+      showLog("AUDIO IN FAIL", wanted.empty() ? "(default)" : wanted);
+      return false;
+    }
+    // A recording stream opens PAUSED like any other; without this it captures
+    // nothing and the meter sits at zero looking like a dead microphone.
+    deckboySetAudioPaused(stream, false);
+    audioInputStream_ = stream;
+    audioInputActiveDevice_ = effective;
+    const std::string shown = effective.empty() ? "(system default)" : effective;
+    triggerToast("audio input: " + shown);
+    showLog("AUDIO IN", shown);
+    if (!wanted.empty() && effective.empty()) {
+      // Said out loud rather than swallowed: the operator chose a device and
+      // is getting a different one.
+      triggerToast("requested input missing - using default");
+    }
+    return true;
+  }
+
+  void stopAudioInput() {
+    if (!audioInputStream_) return;
+    SDL_DestroyAudioStream(audioInputStream_);
+    audioInputStream_ = nullptr;
+    audioInputActiveDevice_.clear();
+    audioInputPeak_ = 0.0;
+    // Drop anything captured but not yet muxed, or the next recording would
+    // open with audio from the previous session.
+    inputAudioRing_.clear(1);
+  }
+
+  bool audioInputRunning() const { return audioInputStream_ != nullptr; }
+
+  // Drain the device each tick, meter it, and retain programme input in a
+  // bounded ring that every active egress can read independently.
+  void pumpAudioInput() {
+    if (!audioInputStream_) return;
+    const int avail = SDL_GetAudioStreamAvailable(audioInputStream_);
+    if (avail <= 0) return;
+    audioInputScratch_.resize(static_cast<std::size_t>(avail) / sizeof(std::int16_t));
+    const int got = SDL_GetAudioStreamData(
+      audioInputStream_, audioInputScratch_.data(), avail);
+    if (got <= 0) return;
+    const std::size_t n = static_cast<std::size_t>(got) / sizeof(std::int16_t);
+    const double gain = std::pow(10.0, std::clamp(project_.audioInputGainDb, -40.0, 40.0) / 20.0);
+    double peak = 0.0;
+    // Gain is applied to the SAMPLES, not just to the meter. Metering a level
+    // the recording does not actually carry would make the meter a liar.
+    for (std::size_t i = 0; i < n; ++i) {
+      const double scaled = audioInputScratch_[i] * gain;
+      // Clip is detected BEFORE the clamp. Checking the clamped value can only
+      // ever report exactly full scale, which real signals rarely hit even
+      // when badly overdriven.
+      if (std::abs(scaled) >= 32767.0) project_.audioInputClipLatch = true;
+      audioInputScratch_[i] = static_cast<std::int16_t>(std::clamp(scaled, -32768.0, 32767.0));
+      const double v = std::abs(audioInputScratch_[i] / 32768.0);
+      if (v > peak) peak = v;
+    }
+    // A mono source captured as stereo lands in one leg with silence in the
+    // other. Sum to both so it plays back centred rather than one-sided.
+    if (project_.audioInputMono) {
+      for (std::size_t i = 0; i + 1 < n; i += 2) {
+        const int mixL = audioInputScratch_[i];
+        const int mixR = audioInputScratch_[i + 1];
+        const std::int16_t m = static_cast<std::int16_t>(
+          std::clamp((mixL + mixR) / 2, -32768, 32767));
+        audioInputScratch_[i] = m;
+        audioInputScratch_[i + 1] = m;
+      }
+    }
+    // Live captions listening to the input need it too, programme or not.
+    if (project_.audioInputToProgram || liveCaptionsListensToInput()) {
+      audioInputScratch_.resize(n);
+      inputAudioRing_.push(0, audioInputScratch_);
+    }
+    // Fast attack, slow release. A meter that falls as fast as it rises is
+    // unreadable, and a visualiser driven by one twitches instead of moving.
+    if (peak > audioInputPeak_) {
+      audioInputPeak_ = peak;
+    } else {
+      audioInputPeak_ += (peak - audioInputPeak_) * 0.08;
+    }
+  }
+
+  SDL_AudioDeviceID audioRecordingDeviceIdForName(const std::string& name) {
+    if (name.empty()) {
+      return SDL_AUDIO_DEVICE_DEFAULT_RECORDING;
+    }
+    SDL_AudioDeviceID result = 0;
+    int count = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioRecordingDevices(&count)) {
+      for (int index = 0; index < count; ++index) {
+        const char* deviceName = SDL_GetAudioDeviceName(ids[index]);
+        if (deviceName && name == deviceName) {
+          result = ids[index];
+          break;
+        }
+      }
+      SDL_free(ids);
+    }
+    return result;
+  }
+
+  bool startLtcIngest() {
+    if (ltcThread_.joinable() || ltcCaptureStream_ != nullptr) {
+      return true;
+    }
+    if (!ltcApi_.ensureLoaded()) {
+      ltcLastError_ = ltcApi_.loadError.empty() ? "ltc runtime missing" : ltcApi_.loadError;
+      return false;
+    }
+
+    // The SDL3 recording stream converts to this spec regardless of the
+    // hardware format, so no "obtained"-spec handling is needed: the read
+    // side is always 48 kHz mono S16.
+    SDL_AudioSpec desired {};
+    desired.freq = kAudioRate;
+    desired.format = SDL_AUDIO_S16;
+    desired.channels = 1;
+
+    std::string preferredDevice = preferredLtcCaptureDeviceName();
+    std::string effectiveDevice = preferredDevice;
+    SDL_AudioDeviceID target = audioRecordingDeviceIdForName(preferredDevice);
+    if (target == 0) {
+      effectiveDevice.clear();
+      target = SDL_AUDIO_DEVICE_DEFAULT_RECORDING;
+    }
+    SDL_AudioStream* captureStream = SDL_OpenAudioDeviceStream(target, &desired, nullptr, nullptr);
+    if (!captureStream && target != SDL_AUDIO_DEVICE_DEFAULT_RECORDING) {
+      effectiveDevice.clear();
+      captureStream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_RECORDING, &desired, nullptr, nullptr);
+    }
+    if (!captureStream) {
+      ltcLastError_ = "ltc audio input unavailable";
+      return false;
+    }
+
+    int sampleRate = kAudioRate;
+    int channelCount = 1;
+    double fpsHint = defaultLtcCaptureFpsHint();
+    int apv = static_cast<int>(std::llround(static_cast<double>(sampleRate) / std::max(1.0, fpsHint)));
+    apv = std::clamp(apv, 200, 4000);
+    void* decoder = ltcApi_.decoderCreateFn(apv, 32);
+    if (!decoder) {
+      SDL_DestroyAudioStream(captureStream);
+      ltcLastError_ = "ltc decoder init failed";
+      return false;
+    }
+
+    ltcCaptureStream_ = captureStream;
+    ltcCaptureSampleRate_ = sampleRate;
+    ltcCaptureChannels_ = channelCount;
+    ltcCaptureDeviceName_ = effectiveDevice;
+    ltcLastError_.clear();
+    ltcLastAnnouncedError_.clear();
+    ltcRestartBlockedUntilMs_ = 0;
+    ltcStop_.store(false);
+    ltcThread_ = std::thread([this, decoder, captureStream, sampleRate, channelCount, fpsHint]() {
+      ltcLoop(decoder, captureStream, sampleRate, channelCount, fpsHint);
+    });
+    SDL_ResumeAudioStreamDevice(captureStream);
+    return true;
+  }
+
+  void stopLtcIngest() {
+    ltcRestartBlockedUntilMs_ = 0;
+    ltcStop_.store(true);
+    if (ltcThread_.joinable()) {
+      ltcThread_.join();
+    }
+    if (ltcCaptureStream_) {
+      SDL_DestroyAudioStream(ltcCaptureStream_);
+      ltcCaptureStream_ = nullptr;
+    }
+    ltcCaptureSampleRate_ = 0;
+    ltcCaptureChannels_ = 0;
+    ltcCaptureDeviceName_.clear();
+  }
+
+  void refreshLtcCaptureState() {
+    if (!project_.ltcIngestEnabled) {
+      stopLtcIngest();
+      ltcLastError_.clear();
+      ltcLastAnnouncedError_.clear();
+      return;
+    }
+    if (ltcThread_.joinable() || ltcCaptureStream_ != nullptr) {
+      return;
+    }
+    Uint64 now = SDL_GetTicks();
+    if (ltcRestartBlockedUntilMs_ > now) {
+      return;
+    }
+    if (!startLtcIngest()) {
+      ltcRestartBlockedUntilMs_ = now + 3000;
+      if (!ltcLastError_.empty() && ltcLastError_ != ltcLastAnnouncedError_) {
+        triggerToast("ltc: " + ltcLastError_);
+        ltcLastAnnouncedError_ = ltcLastError_;
+      }
+    }
+  }
+
+  void destroyDeckRuntime(DeckRuntime& runtime) {
+    finishOutgoingTail(runtime);   // its engine and streams first, same rules
+    if (runtime.mediaEngine) {
+      // Take the device back BEFORE tearing the engine down. Without this the
+      // engine still holds the stream through stopAll() and again through
+      // ~MediaEngine's own stopAll(), touching an SDL audio stream while the
+      // rest of the shutdown is pulling the audio subsystem apart around it.
+      runtime.mediaEngine->detachAudioDevice();
+      runtime.mediaEngine->stopAll();
+      runtime.mediaEngine.reset();
+    }
+    if (runtime.browserRenderer) {
+      runtime.browserRenderer->stop();
+      runtime.browserRenderer.reset();
+    }
+    runtime.browserCueLive = false;
+    if (runtime.audioStream) {
+      SDL_DestroyAudioStream(runtime.audioStream);
+      runtime.audioStream = nullptr;
+    }
+    // The monitor is opened per deck, so it is closed per deck. Adding a
+    // playlist rebuilds every runtime, so a miss here leaks one audio device
+    // per deck per rebuild rather than once.
+    if (runtime.monitorAudioStream) {
+      SDL_DestroyAudioStream(runtime.monitorAudioStream);
+      runtime.monitorAudioStream = nullptr;
+    }
+    if (runtime.outputRenderer) {
+      SDL_DestroyRenderer(runtime.outputRenderer);
+      runtime.outputRenderer = nullptr;
+    }
+    if (runtime.outputWindow) {
+      SDL_DestroyWindow(runtime.outputWindow);
+      runtime.outputWindow = nullptr;
+    }
+  }
+
+  static std::string shellQuoteSingle(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size() + 8);
+    escaped.push_back('\'');
+    for (char ch : value) {
+      if (ch == '\'') {
+        escaped += "'\"'\"'";
+      } else {
+        escaped.push_back(ch);
+      }
+    }
+    escaped.push_back('\'');
+    return escaped;
+  }
+
+  struct OutputBackendRuntimeRoute {
+    bool windowSupported = true;
+    bool streamSupported = false;
+    bool ndiSupported = false;
+    bool deckLinkSupported = false;
+    bool spoutSupported = false;
+    std::string summary;
+  };
+
+  const deckboy::platform::OutputBackendCatalog& outputBackendCatalog() const {
+    static std::unique_ptr<deckboy::platform::OutputBackendCatalog> catalog =
+      deckboy::platform::createOutputBackendCatalog();
+    return *catalog;
+  }
+
+  deckboy::platform::OutputBackendRouteRequest outputBackendRouteRequestForOutput(int outputIndex) const {
+    deckboy::platform::OutputBackendRouteRequest request;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return request;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    request.outputType = normalizeOutputType(output.outputType);
+    request.streamEnabled = output.streamEnabled;
+    request.ndiEnabled = output.ndiEnabled || output.ndiKeyEnabled;
+    request.deckLinkEnabled = output.deckLinkEnabled;
+    request.spoutEnabled = output.spoutEnabled;
+    return request;
+  }
+
+  OutputBackendRuntimeRoute resolveOutputBackendRuntimeRoute(int outputIndex) const {
+    OutputBackendRuntimeRoute route;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      route.summary = "invalid";
+      return route;
+    }
+    auto request = outputBackendRouteRequestForOutput(outputIndex);
+    auto plan = deckboy::platform::planOutputBackendRoute(request, outputBackendCatalog());
+    std::ostringstream summary;
+    bool wroteToken = false;
+    for (const auto& step : plan.steps) {
+      if (wroteToken) {
+        summary << '+';
+      }
+      summary << step.backendId << '[' << (step.supported ? "ok" : "stub") << ']';
+      wroteToken = true;
+      switch (step.kind) {
+        case deckboy::platform::OutputRouteKind::Window:
+          route.windowSupported = step.supported;
+          break;
+        case deckboy::platform::OutputRouteKind::Stream:
+          route.streamSupported = step.supported;
+          break;
+        case deckboy::platform::OutputRouteKind::Ndi:
+          route.ndiSupported = step.supported;
+          break;
+        case deckboy::platform::OutputRouteKind::DeckLink:
+          route.deckLinkSupported = step.supported;
+          break;
+        case deckboy::platform::OutputRouteKind::Spout:
+          route.spoutSupported = step.supported;
+          break;
+      }
+    }
+    route.summary = wroteToken ? summary.str() : "none";
+    return route;
+  }
+
+  std::string outputBackendRouteSummary(int outputIndex) const {
+    return resolveOutputBackendRuntimeRoute(outputIndex).summary;
+  }
+
+  struct IntegrationBackendRuntimeRoute {
+    bool atemEnabled = false;
+    bool atemSupported = false;
+    bool ndiTriggerEnabled = false;
+    bool ndiTriggerSupported = false;
+    bool nmcSyncEnabled = false;
+    bool nmcSyncSupported = false;
+    std::string nmcSyncMode;
+    bool mtcIngestEnabled = false;
+    bool mtcIngestSupported = false;
+    bool ltcIngestEnabled = false;
+    bool ltcIngestSupported = false;
+    bool dmxArtNetEnabled = false;
+    bool dmxArtNetSupported = false;
+    std::string summary;
+  };
+
+  const deckboy::platform::IntegrationBackendCatalog& integrationBackendCatalog() const {
+    static std::unique_ptr<deckboy::platform::IntegrationBackendCatalog> catalog =
+      deckboy::platform::createIntegrationBackendCatalog();
+    return *catalog;
+  }
+
+  deckboy::platform::IntegrationBackendRouteRequest integrationBackendRouteRequest() const {
+    deckboy::platform::IntegrationBackendRouteRequest request;
+    request.atemTriggerEnabled = project_.atemTriggerEnabled;
+    request.ndiTriggerEnabled = project_.ndiTriggerEnabled;
+    request.nmcSyncEnabled = project_.nmcSyncEnabled;
+    request.mtcIngestEnabled = project_.mtcIngestEnabled;
+    request.ltcIngestEnabled = project_.ltcIngestEnabled;
+    request.dmxArtNetEnabled = project_.dmxArtNetEnabled;
+    return request;
+  }
+
+  IntegrationBackendRuntimeRoute resolveIntegrationBackendRuntimeRoute() const {
+    IntegrationBackendRuntimeRoute route;
+    auto plan = deckboy::platform::planIntegrationBackendRoute(
+      integrationBackendRouteRequest(),
+      integrationBackendCatalog());
+    std::ostringstream summary;
+    bool wroteToken = false;
+    for (const auto& step : plan.steps) {
+      if (wroteToken) {
+        summary << ',';
+      }
+      summary << step.backendId
+              << '[' << (step.enabled ? "on" : "off") << ','
+              << (step.supported ? "ok" : "stub");
+      switch (step.kind) {
+        case deckboy::platform::IntegrationBackendKind::AtemTrigger:
+          route.atemEnabled = step.enabled;
+          route.atemSupported = step.supported;
+          break;
+        case deckboy::platform::IntegrationBackendKind::NdiTrigger:
+          route.ndiTriggerEnabled = step.enabled;
+          route.ndiTriggerSupported = step.supported;
+          break;
+        case deckboy::platform::IntegrationBackendKind::NmcSync:
+          route.nmcSyncEnabled = step.enabled;
+          route.nmcSyncSupported = step.supported;
+          route.nmcSyncMode = resolvedNmcSyncMode();
+          if (step.enabled && step.supported) {
+            summary << ',' << (route.nmcSyncMode == "output" ? "out" : "in");
+          }
+          break;
+        case deckboy::platform::IntegrationBackendKind::MtcIngest:
+          route.mtcIngestEnabled = step.enabled;
+          route.mtcIngestSupported = step.supported;
+          break;
+        case deckboy::platform::IntegrationBackendKind::LtcIngest:
+          route.ltcIngestEnabled = step.enabled;
+          route.ltcIngestSupported = step.supported;
+          break;
+        case deckboy::platform::IntegrationBackendKind::DmxArtNet:
+          route.dmxArtNetEnabled = step.enabled;
+          route.dmxArtNetSupported = step.supported;
+          break;
+      }
+      summary << ']';
+      wroteToken = true;
+    }
+    route.summary = wroteToken ? summary.str() : "none";
+    return route;
+  }
+
+  std::string integrationBackendRouteSummary() const {
+    return resolveIntegrationBackendRuntimeRoute().summary;
+  }
+
+  // The rate a RECORDING is written at. Stated explicitly, never inferred:
+  // a deliverable has to land on the standard it claims, and "whatever the
+  // operator's monitor refreshes at" is not a standard. 0 = follow programme.
+  double recordingFps(double fpsHint) const {
+    if (std::isfinite(project_.recordingFps) && project_.recordingFps > 1.0) {
+      return std::clamp(project_.recordingFps, 1.0, 120.0);
+    }
+    return outputStreamFps(fpsHint);
+  }
+
+  // Video encoder for RECORDINGS, probed once against the ffmpeg actually
+  // installed. Software x264 cannot hold a broadcast rate here: the app is
+  // already compositing a 4K programme, and at 1080p50 the encoder fell behind,
+  // built a backlog and the take was truncated when the muxer was closed
+  // (MEASURED: 601 frames delivered, 100 in the file). A GPU encoder runs
+  // 1080p50 at 222fps -- 4.4x realtime -- and costs the CPU nothing.
+  //
+  // Order is by how widely each is available on show hardware. Empty means no
+  // hardware encoder, and the caller falls back to libx264.
+  const std::string& recordingVideoEncoder() const {
+    static bool probed = false;
+    static std::string chosen;
+    if (probed) {
+      return chosen;
+    }
+    probed = true;
+    if (auto text = readAllText({"ffmpeg", "-hide_banner", "-encoders"})) {
+      for (const char* candidate : {"h264_nvenc", "h264_qsv", "h264_amf"}) {
+        if (text->find(candidate) != std::string::npos) {
+          chosen = candidate;
+          break;
+        }
+      }
+    }
+    return chosen;
+  }
+
+  // Is anything actually going OUT of the box right now — a recording, a
+  // stream, NDI, DeckLink, Spout or ST 2110? While something is, the capture
+  // path is on the critical path and the UI must not pace the loop.
+  bool anyOutputEgressActive() const {
+    for (const OutputTarget& out : project_.outputs) {
+      if (!out.enabled) {
+        continue;
+      }
+      if (out.streamEnabled || out.ndiEnabled || out.ndiKeyEnabled ||
+          out.deckLinkEnabled || out.spoutEnabled || out.st2110Enabled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Is an output window on a screen, waiting for that screen's refresh each
+  // frame? Then it must be the ONLY wait in the loop. With the desk vsynced as
+  // well, every pass waited for two screens; a 60 Hz desk beside a 59.94 Hz
+  // output measured 57.4 fps on the output and 155 ms worst gaps (James's
+  // machine, 2026-10-22, 0.99.417 and 0.99.418 alike), and any extra desk work
+  // -- a 4K desk, the scopes -- pushed it down to 40.
+  bool anyOutputWindowPresenting() {
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (!project_.outputs[i].enabled) continue;
+      const OutputRuntime* runtime = runtimeForOutput(i);
+      if (!runtime || !runtime->outputWindow || !runtime->outputRenderer) continue;
+      if (SDL_GetWindowFlags(runtime->outputWindow) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)) continue;
+      return true;
+    }
+    return false;
+  }
+
+  // Should the take roll onto a new file now?
+  //
+  // Two operator-set caps (time and size), plus a hard ceiling that is not
+  // optional. FAT32 -- which is what most USB media arrives formatted as --
+  // cannot hold a file over 4GB, and the failure mode is losing the take at the
+  // moment it crosses the line. Every hardware recorder segments for exactly
+  // this reason; AJA does it at both the operator's cap and the filesystem's.
+  // Rolling at 3.8GB costs nothing on NTFS or exFAT and saves the show on FAT32.
+  bool shouldRollRecordingSegment(OutputRuntime& runtime) const {
+    if (runtime.recordPacerStartMs == 0) {
+      return false;
+    }
+    const Uint64 nowMs = SDL_GetTicks();
+    const int minutes = std::clamp(project_.recordingSegmentMinutes, 0, 240);
+    if (minutes > 0 &&
+        (nowMs - runtime.recordPacerStartMs) >=
+          static_cast<Uint64>(minutes) * 60000u) {
+      return true;
+    }
+    // Size is a filesystem stat ON A FILE THE ENCODER IS ACTIVELY WRITING, so
+    // it is deliberately infrequent: every five seconds, not every frame. Even
+    // at DNxHR HQ rates it takes minutes to cover the gap between checks, and
+    // this runs on the render thread where a stall costs frames.
+    if (nowMs - runtime.lastSegmentSizeCheckMs < 5000) {
+      return false;
+    }
+    runtime.lastSegmentSizeCheckMs = nowMs;
+    constexpr std::uintmax_t kFat32Ceiling =
+      static_cast<std::uintmax_t>(3800) * 1024u * 1024u;
+    const std::uintmax_t cap =
+      project_.recordingSegmentMegabytes > 0
+        ? std::min<std::uintmax_t>(
+            static_cast<std::uintmax_t>(project_.recordingSegmentMegabytes) * 1024u * 1024u,
+            kFat32Ceiling)
+        : kFat32Ceiling;
+    return recordingBytesOnDisk() >= cap;
+  }
+
+  // Rewrite a finished recording from fragmented into an ordinary MP4/MOV.
+  //
+  // Fragmented is what makes a killed or crashed encoder still leave a playable
+  // file, and that is worth keeping. But a fragmented file is awkward
+  // downstream: browsers cannot show its duration, seeking misbehaves in some
+  // players, and plenty of editors reject it outright. OBS solved this with
+  // what they call hybrid MP4 -- fragmented while recording, rewritten to a
+  // normal file at stop. This is the same trade done with a stream copy, so it
+  // costs seconds and not a single re-encoded pixel.
+  //
+  // Detached: a long take takes a moment to rewrite and the operator must not
+  // wait for it. The original is only replaced once the rewrite has succeeded
+  // and produced a non-empty file, so a failure here can never cost the take.
+  void queueRecordingRemux(const std::string& path) {
+    if (path.empty()) {
+      return;
+    }
+    std::thread([path]() {
+      std::error_code ec;
+      if (!fs::exists(path, ec) || fs::file_size(path, ec) == 0) {
+        return;
+      }
+      const fs::path src(path);
+      const fs::path tmp = fs::path(src).replace_extension(
+        ".remux" + src.extension().string());
+      const std::vector<std::string> args {
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+        "-y", "-i", path,
+        "-c", "copy",
+        // Index at the FRONT, which is what makes the file seek instantly and
+        // is the whole point of the rewrite.
+        "-movflags", "+faststart",
+        tmp.string()
+      };
+      if (!readAllText(args)) {
+        fs::remove(tmp, ec);
+        return;   // keep the fragmented original; it is still playable
+      }
+      if (!fs::exists(tmp, ec) || fs::file_size(tmp, ec) == 0) {
+        fs::remove(tmp, ec);
+        return;
+      }
+      fs::remove(src, ec);
+      fs::rename(tmp, src, ec);
+      if (ec) {
+        // Rename failed (AV scanner, permissions): leave both rather than lose
+        // the take.
+        return;
+      }
+    }).detach();
+  }
+
+  // ── Recording codec ────────────────────────────────────────────────────────
+  static std::string normalizeRecordingCodec(std::string token) {
+    token = toLower(trim(token));
+    static const std::set<std::string> known {
+      "h264", "hevc",
+      "prores_proxy", "prores_lt", "prores_422", "prores_hq", "prores_4444",
+      "dnxhr_lb", "dnxhr_sq", "dnxhr_hq", "dnxhr_hqx"
+    };
+    return known.count(token) ? token : std::string("h264");
+  }
+
+  static bool recordingCodecIsProRes(const std::string& c) {
+    return c.rfind("prores", 0) == 0;
+  }
+  static bool recordingCodecIsDnx(const std::string& c) {
+    return c.rfind("dnxhr", 0) == 0;
+  }
+
+  // The container a codec has to live in. ProRes and DNxHR are QuickTime-native
+  // and an .mp4 wrapper is exactly the kind of file an edit suite bounces.
+  std::string recordingContainerExtension() const {
+    const std::string c = normalizeRecordingCodec(project_.recordingCodec);
+    return (recordingCodecIsProRes(c) || recordingCodecIsDnx(c)) ? ".mov" : ".mp4";
+  }
+
+  // Encoder arguments for the chosen codec. ProRes profile numbers follow
+  // prores_ks: 0 proxy, 1 LT, 2 standard(422), 3 HQ, 4 4444.
+  std::vector<std::string> recordingCodecArgs() const {
+    const std::string c = normalizeRecordingCodec(project_.recordingCodec);
+    if (recordingCodecIsProRes(c)) {
+      const char* profile = c == "prores_proxy" ? "0"
+                          : c == "prores_lt"    ? "1"
+                          : c == "prores_422"   ? "2"
+                          : c == "prores_4444"  ? "4"
+                                                : "3";   // hq
+      // 4444 carries alpha and needs a 4:4:4 pixel format; everything else is
+      // 10-bit 4:2:2, which is what ProRes actually is -- feeding it 8-bit
+      // yuv420p would throw away the reason for choosing it.
+      return {"-c:v", "prores_ks", "-profile:v", profile,
+              "-pix_fmt", (c == "prores_4444") ? "yuva444p10le" : "yuv422p10le",
+              "-vendor", "apl0"};
+    }
+    if (recordingCodecIsDnx(c)) {
+      const std::string profile =
+        c == "dnxhr_lb"  ? "dnxhr_lb"  :
+        c == "dnxhr_sq"  ? "dnxhr_sq"  :
+        c == "dnxhr_hqx" ? "dnxhr_hqx" : "dnxhr_hq";
+      // HQX is the 10-bit rung; LB/SQ/HQ are 8-bit 4:2:2.
+      return {"-c:v", "dnxhd", "-profile:v", profile,
+              "-pix_fmt", (c == "dnxhr_hqx") ? "yuv422p10le" : "yuv422p"};
+    }
+    if (c == "hevc") {
+      return {"-c:v", "libx265", "-preset", "veryfast", "-pix_fmt", "yuv420p"};
+    }
+    return {"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"};
+  }
+
+  // HDR recording: a 10-bit codec carrying HDR10. ProRes (10-bit 4:2:2 or
+  // 4:4:4) and DNxHR HQX are 10-bit already and keep the operator's choice;
+  // H.264 and HEVC become HEVC Main10 with HDR10 signalling (H.264 HDR is not a
+  // thing players honour). The mastering display is given as BT.2020 at 1000
+  // nits, the common default; MaxCLL/MaxFALL are left unknown (0) rather than
+  // guessed. HLG carries no static metadata: it is relative to the display by
+  // design, so it is tagged and nothing more.
+  // A HARDWARE HEVC Main10 encoder, when this machine has one that works.
+  // MEASURED (RTX 4070 laptop, 4K50 from the same rgb48 + zscale input):
+  // libx265 veryfast 25 fps on its own and about 5 inside a running show --
+  // an HDR stream that falls further behind every second -- against NVENC's
+  // 72. Each candidate is asked to ENCODE a frame, not just found in the
+  // list: ffmpeg builds list NVENC on machines with no NVIDIA card at all.
+  static const std::string& hdrHardwareHevcEncoder() {
+    static const std::string chosen = [] {
+      // DECKBOY_HDR_ENCODER=hevc_qsv (or libx265 for the CPU) overrides the choice.
+      if (const char* forced = std::getenv("DECKBOY_HDR_ENCODER"); forced && *forced) {
+        return std::string(forced) == "libx265" ? std::string() : std::string(forced);
+      }
+      for (const char* candidate : {"hevc_nvenc", "hevc_qsv", "hevc_amf"}) {
+        if (readAllText({"ffmpeg", "-hide_banner", "-v", "error", "-f", "lavfi", "-i",
+                         "color=c=black:s=256x144:r=25", "-frames:v", "1", "-pix_fmt", "p010le",
+                         "-c:v", candidate, "-profile:v", "main10", "-f", "null", "-"})) {
+          return std::string(candidate);
+        }
+      }
+      return std::string();
+    }();
+    return chosen;
+  }
+
+  std::vector<std::string> hdrRecordingCodecArgs(bool hlg, bool stream = false) const {
+    const std::string c = normalizeRecordingCodec(project_.recordingCodec);
+    // A STREAM is HEVC Main10 whatever the recording codec says: ProRes over
+    // SRT or RTMP is not a thing anything receives.
+    if (!stream && (recordingCodecIsProRes(c) || c == "dnxhr_hqx")) {
+      return recordingCodecArgs();
+    }
+    // The colour tags go into the VUI from the -color_* options the caller
+    // adds; HDR10's mastering metadata is x265's alone, and optional.
+    const std::string& hardware = hdrHardwareHevcEncoder();
+    if (!hardware.empty()) {
+      std::vector<std::string> args {"-c:v", hardware, "-profile:v", "main10", "-pix_fmt", "p010le", "-tag:v", "hvc1"};
+      if (hardware == "hevc_nvenc") {
+        args.insert(args.end(), {"-preset", "p4"});
+        if (stream) args.insert(args.end(), {"-tune", "ll"});
+      }
+      return args;
+    }
+    if (hlg) {
+      return {"-c:v", "libx265", "-preset", "veryfast", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
+              "-x265-params",
+              "log-level=error:repeat-headers=1:colorprim=bt2020:transfer=arib-std-b67:"
+              "colormatrix=bt2020nc:range=limited"};
+    }
+    return {"-c:v", "libx265", "-preset", "veryfast", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
+            "-x265-params",
+            "log-level=error:hdr10=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:"
+            "colormatrix=bt2020nc:range=limited:"
+            "master-display=G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,50):max-cll=0,0"};
+  }
+
+  // Mezzanine codecs are CONSTANT quality by profile -- a bitrate ceiling is
+  // meaningless and ffmpeg rejects some of these combinations outright.
+  bool recordingCodecUsesBitrate() const {
+    const std::string c = normalizeRecordingCodec(project_.recordingCodec);
+    return !recordingCodecIsProRes(c) && !recordingCodecIsDnx(c);
+  }
+
+  // ── Broadcast rates are RATIONAL ───────────────────────────────────────────
+  // 23.976, 29.97 and 59.94 are 24000/1001, 30000/1001 and 60000/1001. Writing
+  // them as two-decimal strings ("23.98", "29.97") is close but WRONG: 23.98
+  // against 23.976023976 drifts about 0.6 seconds an hour, which is nothing to
+  // a viewer and fatal to anything conformed against timecode. ffmpeg accepts
+  // the exact ratio, so give it the exact ratio.
+  static std::string exactRateToken(double fps) {
+    struct Known { double value; const char* token; };
+    static const Known table[] = {
+      {24000.0 / 1001.0, "24000/1001"},
+      {30000.0 / 1001.0, "30000/1001"},
+      {60000.0 / 1001.0, "60000/1001"},
+      {120000.0 / 1001.0, "120000/1001"},
+    };
+    for (const Known& k : table) {
+      // Generous window: the operator may have typed 23.98, 23.976 or 23.9760.
+      if (std::fabs(fps - k.value) < 0.02) {
+        return k.token;
+      }
+    }
+    std::ostringstream out;
+    if (std::fabs(fps - std::lround(fps)) < 1e-6) {
+      out << std::lround(fps);        // 25, 30, 50 -- no spurious decimals
+    } else {
+      out << std::fixed << std::setprecision(6) << fps;
+    }
+    return out.str();
+  }
+
+  // True when the rate is one of the NTSC fractional family, which is the only
+  // case where drop-frame timecode means anything.
+  static bool rateIsFractional(double fps) {
+    return std::fabs(fps - std::lround(fps)) > 1e-6;
+  }
+
+  // Drop-frame skips two timecode NUMBERS at the top of every minute except
+  // every tenth, so the count tracks wall clock at 29.97/59.94. No video frame
+  // is ever lost -- only labels. At an integer rate it is meaningless, and AJA
+  // resolves it exactly this way: auto-select by the detected rate.
+  bool recordingUsesDropFrame(double rate) const {
+    const std::string mode = toLower(trim(project_.recordingTimecodeDropFrame));
+    if (mode == "df")  return rateIsFractional(rate);
+    if (mode == "ndf") return false;
+    return rateIsFractional(rate);
+  }
+
+  // The timecode stamped onto the take. Separator carries the DF/NDF flag:
+  // ';' before the frames field means drop-frame, ':' means non-drop. That is
+  // the SMPTE convention and what ffmpeg's tmcd writer reads.
+  // ---- SMPTE timecode arithmetic ------------------------------------------
+  // Needed because a SEGMENTED recording must carry CONTINUOUS timecode. Each
+  // segment is a fresh encoder invocation with its own -timecode, and every one
+  // of them was handed the same start value -- so rolling a take into four
+  // files gave four files all starting at 00:00:00:00, which cannot be laid end
+  // to end or conformed against a running order. Segmentation exists for long
+  // takes; long takes are exactly the ones that get conformed.
+  //
+  // Drop-frame is a renumbering, never a dropped picture: at 29.97 and 59.94 it
+  // skips two frame NUMBERS (four at 59.94) at the top of each minute except
+  // every tenth, so the count keeps pace with the wall clock.
+  static int timecodeNominalRate(double rate) {
+    return std::max(1, static_cast<int>(std::lround(rate)));
+  }
+
+  static std::uint64_t timecodeToFrames(int hh, int mm, int ss, int ff,
+                                        double rate, bool dropFrame) {
+    const int nominal = timecodeNominalRate(rate);
+    std::int64_t frames = static_cast<std::int64_t>(hh) * nominal * 3600 +
+                          static_cast<std::int64_t>(mm) * nominal * 60 +
+                          static_cast<std::int64_t>(ss) * nominal + ff;
+    if (dropFrame) {
+      const std::int64_t dropPerMinute = 2 * (nominal / 30);
+      const std::int64_t totalMinutes = static_cast<std::int64_t>(hh) * 60 + mm;
+      frames -= dropPerMinute * (totalMinutes - totalMinutes / 10);
+    }
+    return static_cast<std::uint64_t>(std::max<std::int64_t>(0, frames));
+  }
+
+  static void framesToTimecode(std::uint64_t frameNumber, double rate, bool dropFrame,
+                               int& hh, int& mm, int& ss, int& ff) {
+    const int nominal = timecodeNominalRate(rate);
+    std::uint64_t frames = frameNumber;
+    if (dropFrame) {
+      const std::uint64_t dropPerMinute = 2u * static_cast<std::uint64_t>(nominal / 30);
+      const std::uint64_t framesPerTenMinutes =
+        static_cast<std::uint64_t>(nominal) * 600u - 9u * dropPerMinute;
+      const std::uint64_t framesPerMinute =
+        static_cast<std::uint64_t>(nominal) * 60u - dropPerMinute;
+      const std::uint64_t tens = frames / framesPerTenMinutes;
+      const std::uint64_t rest = frames % framesPerTenMinutes;
+      frames += dropPerMinute * 9u * tens;
+      if (rest >= dropPerMinute) {
+        frames += dropPerMinute * ((rest - dropPerMinute) / framesPerMinute);
+      }
+    }
+    const std::uint64_t n = static_cast<std::uint64_t>(nominal);
+    ff = static_cast<int>(frames % n);
+    ss = static_cast<int>((frames / n) % 60u);
+    mm = static_cast<int>((frames / (n * 60u)) % 60u);
+    hh = static_cast<int>((frames / (n * 3600u)) % 24u);
+  }
+
+  std::string recordingStartTimecode(double rate,
+                                     std::uint64_t offsetFrames = 0) const {
+    int hh = 0, mm = 0, ss = 0, ff = 0;
+    if (toLower(trim(project_.recordingTimecodeMode)) == "timeofday") {
+      const std::time_t now = std::time(nullptr);
+      if (std::tm* lt = std::localtime(&now)) {
+        hh = lt->tm_hour; mm = lt->tm_min; ss = lt->tm_sec;
+      }
+    } else {
+      const std::string& s = project_.recordingTimecodeStart;
+      if (std::sscanf(s.c_str(), "%d:%d:%d:%d", &hh, &mm, &ss, &ff) != 4) {
+        hh = mm = ss = ff = 0;
+      }
+    }
+    const int maxFrame = timecodeNominalRate(rate) - 1;
+    hh = std::clamp(hh, 0, 23);
+    mm = std::clamp(mm, 0, 59);
+    ss = std::clamp(ss, 0, 59);
+    ff = std::clamp(ff, 0, maxFrame);
+    const bool df = recordingUsesDropFrame(rate);
+    if (offsetFrames > 0) {
+      // A SEGMENT's start is the take's start plus everything already written.
+      framesToTimecode(timecodeToFrames(hh, mm, ss, ff, rate, df) + offsetFrames,
+                       rate, df, hh, mm, ss, ff);
+    }
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d%c%02d",
+                  hh, mm, ss, df ? ';' : ':', ff);
+    return buf;
+  }
+
+  // Human-readable recording standard, for toasts, STATUS and the settings UI.
+  std::string recordingFormatLabel() const {
+    std::string raster = (project_.recordingWidth > 0 && project_.recordingHeight > 0)
+      ? (std::to_string(project_.recordingWidth) + "x" +
+         std::to_string(project_.recordingHeight))
+      : std::string("programme");
+    std::string rate;
+    if (std::isfinite(project_.recordingFps) && project_.recordingFps > 1.0) {
+      char buf[32];
+      // 23.98/29.97/59.94 must not be rounded away in the label; a trailing
+      // ".00" on an integer rate is noise.
+      const double r = project_.recordingFps;
+      if (std::fabs(r - std::lround(r)) < 0.005) {
+        std::snprintf(buf, sizeof(buf), "%ld", std::lround(r));
+      } else {
+        std::snprintf(buf, sizeof(buf), "%.2f", r);
+      }
+      rate = buf;
+    } else {
+      rate = "programme";
+    }
+    return raster + " @ " + rate;
+  }
+
+  // What the stream is DOING, in one line: rate, throughput, uptime, losses.
+  //
+  // Deliberately the measured numbers rather than the configured ones. A panel
+  // that reads back the settings you typed cannot tell you the stream is in
+  // trouble, and this one is here precisely for the moments when it is.
+  std::string outputStreamTelemetryLine(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->streamWriter || runtime->streamStartedAtMs == 0) {
+      return {};
+    }
+    std::uint64_t written = 0, dropped = 0;
+    {
+      std::lock_guard<std::mutex> lock(runtime->streamWriter->mutex);
+      written = runtime->streamWriter->packetsWritten;
+      dropped = runtime->streamWriter->packetsDropped;
+    }
+    const Uint64 upMs = SDL_GetTicks() - runtime->streamStartedAtMs;
+    const int secs = static_cast<int>(upMs / 1000) % 60;
+    const int mins = static_cast<int>(upMs / 60000) % 60;
+    const int hours = static_cast<int>(upMs / 3600000);
+    char buf[160];
+    if (hours > 0) {
+      std::snprintf(buf, sizeof(buf), "%.1f fps   up %d:%02d:%02d   %llu sent   %llu dropped",
+                    runtime->streamMeasuredKbps, hours, mins, secs,
+                    static_cast<unsigned long long>(written),
+                    static_cast<unsigned long long>(dropped));
+    } else {
+      std::snprintf(buf, sizeof(buf), "%.1f fps   up %d:%02d   %llu sent   %llu dropped",
+                    runtime->streamMeasuredKbps, mins, secs,
+                    static_cast<unsigned long long>(written),
+                    static_cast<unsigned long long>(dropped));
+    }
+    return buf;
+  }
+
+  // THE PICTURE THE WEB MONITOR ENCODES: the operator's maximum, eased down
+  // when this computer has shown it cannot keep up (stepDownWebEncode).
+  int webEncodeHeight() const {
+    int h = (project_.webMonitorMaxHeight == 720 || project_.webMonitorMaxHeight == 1440 ||
+             project_.webMonitorMaxHeight == 2160) ? project_.webMonitorMaxHeight : 1080;
+    if (webEncodeEase_ >= 3) h = std::min(h, 540);
+    else if (webEncodeEase_ >= 2) h = std::min(h, 720);
+    return h;
+  }
+
+  // One step lighter: the fastest encoder preset first (a slightly softer
+  // picture), then 720p, then 540p. Each step says so. Reset when the
+  // operator changes the quality or turns the monitor on.
+  void stepDownWebEncode() {
+    if (webEncodeEase_ >= 3) return;
+    ++webEncodeEase_;
+    triggerToast(webEncodeEase_ == 1
+                   ? "web monitor: this computer is behind - using a lighter encoder"
+                   : "web monitor: this computer is behind - sending " +
+                       std::to_string(webEncodeHeight()) + "p",
+                 ToastKind::Warning, kToastReadableMs);
+    webMonitorDirSyncedMs_ = 0;
+  }
+
+  // The refresh of the display an output is on, exact for 59.94 and 29.97
+  // (SDL's rational rate); a stream or recording output, which has no display,
+  // takes the one of the output it mirrors. 0 when nobody knows.
+  double outputDisplayRefreshHz(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) return 0.0;
+    const OutputTarget& out = project_.outputs[static_cast<std::size_t>(outputIndex)];
+    if (normalizeOutputType(out.outputType) == "stream") {
+      const int mirror = out.mirrorSourceOutputIndex;
+      if (mirror < 0 || mirror == outputIndex || mirror >= static_cast<int>(project_.outputs.size())) return 0.0;
+      outputIndex = mirror;
+    }
+    const int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) return 0.0;
+    const int displayIndex = std::clamp(outputDisplayIndex(outputIndex), 0, displayCount - 1);
+    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(deckboyDisplayIdFromIndex(displayIndex));
+    if (!mode) return 0.0;
+    if (mode->refresh_rate_numerator > 0 && mode->refresh_rate_denominator > 0) {
+      return static_cast<double>(mode->refresh_rate_numerator) / mode->refresh_rate_denominator;
+    }
+    return mode->refresh_rate > 0.0f ? static_cast<double>(mode->refresh_rate) : 0.0;
+  }
+
+  double outputStreamFps(double fpsHint) const {
+    if (std::isfinite(project_.outputRefreshRateHz) && project_.outputRefreshRateHz > 1.0) {
+      return std::clamp(project_.outputRefreshRateHz, 1.0, 120.0);
+    }
+    if (std::isfinite(fpsHint) && fpsHint > 1.0) {
+      return std::clamp(fpsHint, 1.0, 120.0);
+    }
+    return 30.0;
+  }
+
+  void clearDeckStreamAudioBuffers() {
+    deckAudioRing_.clear(project_.decks.size());
+  }
+
+  std::vector<int> streamAudioDecksForOutput(int outputIndex) const {
+    std::vector<int> deckIndices;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) || project_.decks.empty()) {
+      return deckIndices;
+    }
+    int routedOutputIndex = outputIndex;
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (output.mirrorSourceOutputIndex >= 0 &&
+        output.mirrorSourceOutputIndex < static_cast<int>(project_.outputs.size())) {
+      routedOutputIndex = output.mirrorSourceOutputIndex;
+    }
+    for (const auto& entry : layeredDeckEntriesForOutput(routedOutputIndex)) {
+      if (entry.second >= 0 && entry.second < static_cast<int>(project_.decks.size())) {
+        deckIndices.push_back(entry.second);
+      }
+    }
+    if (deckIndices.empty()) {
+      int hostDeck = std::clamp(project_.outputs[routedOutputIndex].hostDeckIndex, 0,
+                                static_cast<int>(project_.decks.size()) - 1);
+      deckIndices.push_back(hostDeck);
+    }
+    std::sort(deckIndices.begin(), deckIndices.end());
+    deckIndices.erase(std::unique(deckIndices.begin(), deckIndices.end()), deckIndices.end());
+    return deckIndices;
+  }
+
+  // Merge the operator's SRT settings into the destination URL as query
+  // parameters. Until now these could only be set by hand-typing a query
+  // string, which is not a thing to ask of someone mid-show.
+  //
+  // ANYTHING ALREADY PRESENT IN THE URL WINS — shows that were configured the
+  // old way (and receiver-specific keys Deckboy has no field for) must keep
+  // working untouched.
+  std::string applySrtUrlParameters(const OutputTarget& output, std::string url) const {
+    if (normalizeOutputStreamProtocol(output.streamProtocol) != "srt") {
+      return url;
+    }
+    const std::string existing = url.find('?') != std::string::npos
+      ? toLower(url.substr(url.find('?') + 1)) : std::string();
+    auto hasParam = [&](const std::string& keyName) {
+      return existing.find(keyName + "=") != std::string::npos;
+    };
+    std::vector<std::pair<std::string, std::string>> params;
+    if (!hasParam("mode")) {
+      params.emplace_back("mode", output.srtMode == "listener" ? "listener" : "caller");
+    }
+    if (!hasParam("transtype")) {
+      params.emplace_back("transtype", "live");
+    }
+    if (!hasParam("latency")) {
+      // ffmpeg's SRT latency is in MICROseconds.
+      params.emplace_back("latency",
+                          std::to_string(std::clamp(output.srtLatencyMs, 20, 8000) * 1000));
+    }
+    const std::string passphrase = trim(output.srtPassphrase);
+    // SRT rejects passphrases shorter than 10 characters outright, so a short
+    // one would silently kill the connection rather than stream unencrypted.
+    if (!passphrase.empty() && passphrase.size() >= 10 && !hasParam("passphrase")) {
+      params.emplace_back("passphrase", passphrase);
+    }
+    const std::string streamId = trim(output.srtStreamId);
+    if (!streamId.empty() && !hasParam("streamid")) {
+      params.emplace_back("streamid", streamId);
+    }
+    for (const auto& [k, v] : params) {
+      url += (url.find('?') == std::string::npos) ? '?' : '&';
+      url += k + "=" + v;
+    }
+    return url;
+  }
+
+  // True when the SRT passphrase is set but too short for SRT to accept.
+  // Surfaced in the UI rather than left to fail as a mystery connection error.
+  bool srtPassphraseTooShort(const OutputTarget& output) const {
+    const std::string p = trim(output.srtPassphrase);
+    return !p.empty() && p.size() < 10;
+  }
+
+  // ── Stream destinations ────────────────────────────────────────────────────
+  // Streaming is not a property of "whichever output is focused" — it carries
+  // the programme, and an operator wants SRT and RTMP configured side by side
+  // and able to run at the same time. Each protocol therefore gets its OWN
+  // dedicated stream output, found by protocol and created on demand.
+  //
+  // This reuses the existing per-output stream runtime rather than adding a
+  // second streaming system: a stream OutputTarget already spawns an encoder
+  // fed from the programme composite, so two of them is genuinely two streams.
+  int findStreamOutputForProtocol(const std::string& protocol) const {
+    const std::string wanted = normalizeOutputStreamProtocol(protocol);
+    for (std::size_t i = 0; i < project_.outputs.size(); ++i) {
+      const OutputTarget& out = project_.outputs[i];
+      if (normalizeOutputType(out.outputType) == "stream" &&
+          normalizeOutputStreamProtocol(out.streamProtocol) == wanted) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  }
+
+  // WHICH OUTPUT IS "THE PROGRAMME" for something that wants to copy it.
+  //
+  // The first window output, because that is the one an audience is looking
+  // at; a show made only of streams falls back to the first output that is
+  // not the one asking. -1 means there is nothing to mirror, which a caller
+  // must treat as "render your own".
+  int primaryProgrammeOutputIndex(int excludingIndex) const {
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (i == excludingIndex) {
+        continue;
+      }
+      if (normalizeOutputType(project_.outputs[i].outputType) == "window") {
+        return i;
+      }
+    }
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (i != excludingIndex) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Created only when the operator actually turns a destination on, so an
+  // untouched show never accumulates phantom outputs.
+  int ensureStreamOutputForProtocol(const std::string& protocol) {
+    const std::string wanted = normalizeOutputStreamProtocol(protocol);
+    int existing = findStreamOutputForProtocol(wanted);
+    if (existing >= 0) {
+      return existing;
+    }
+    int previousFocus = project_.focusedOutputIndex;
+    int index = addOutput(project_.focusedDeckIndex, "stream");
+    if (index < 0 || index >= static_cast<int>(project_.outputs.size())) {
+      return -1;
+    }
+    OutputTarget& out = project_.outputs[index];
+    out.streamProtocol = wanted;
+    out.name = (wanted == "srt")  ? "SRT Stream"
+             : (wanted == "file") ? "Program Recording"
+             : (wanted == "web")  ? "Web (with sound)"
+                                  : "RTMP Stream";
+    out.streamUrl = defaultOutputStreamUrl(wanted, index);
+    out.streamEnabled = false;   // configured, not yet live
+    out.enabled = false;
+    // IT RECORDS THE PROGRAMME, NOT A DECK.
+    //
+    // This output was created hosting whatever deck happened to be focused,
+    // and then recorded that deck alone for the rest of the session. On a
+    // single-deck show the two were the same thing and nobody could tell.
+    // With Super Deckboy they are not: an operator with a lower-thirds
+    // playlist layered over a camera would record the camera, and a file
+    // named "Program Recording" that does not contain the programme is the
+    // worst kind of wrong -- it is only discovered afterwards.
+    //
+    // Mirroring is how a stream output already says "show what that one
+    // shows", layer stack included, so it costs no new path.
+    out.mirrorSourceOutputIndex = primaryProgrammeOutputIndex(index);
+    // addOutput focuses what it creates; the Streaming page is not an output
+    // picker, so put the operator's focus back where it was.
+    project_.focusedOutputIndex = std::clamp(previousFocus, 0,
+                                             static_cast<int>(project_.outputs.size()) - 1);
+    markProjectDirty();
+    return index;
+  }
+
+  std::string buildOutputStreamSpec(int outputIndex, int width, int height, double fpsHint) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return {};
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    std::string protocol = normalizeOutputStreamProtocol(output.streamProtocol);
+    const bool toWeb = outputStreamProtocolIsWeb(protocol);
+    std::string url = trim(output.streamUrl);
+    if (url.empty()) {
+      url = defaultOutputStreamUrl(protocol, outputIndex);
+    }
+    std::string key = trim(output.streamKey);
+    if (!key.empty() && outputStreamProtocolIsRtmp(protocol)) {
+      if (url.back() != '/') url += '/';
+      url += key;
+    }
+    url = applySrtUrlParameters(output, url);
+    int bitrateKbps = std::clamp(output.streamBitrateKbps, 500, 50000);
+    if (toWeb) {
+      const int maxHeight = webEncodeHeight();
+      const int qualityFloorKbps = maxHeight >= 2160 ? 30000
+                                  : maxHeight >= 1440 ? 16000
+                                  : maxHeight >= 1080 ? 8000 : 4000;
+      bitrateKbps = std::max(bitrateKbps, qualityFloorKbps);
+    }
+    double fps = outputStreamProtocolIsFile(protocol)
+      ? recordingFps(fpsHint) : outputStreamFps(fpsHint);
+    std::string colorSpace = normalizeOutputColorSpace(output.outputColorSpace);
+    std::ostringstream spec;
+    spec << protocol << '|'
+         << url << '|'
+         << width << 'x' << height << '|'
+         << std::fixed << std::setprecision(2) << fps << '|'
+         << bitrateKbps << '|'
+         << (toWeb ? webEncodeHeight() * 10 + webEncodeEase_ : 0) << '|'
+         << colorSpace << '|';
+    // An HDR recording is fed the compositor's raster, so a change of THAT
+    // has to restart the encoder too: frames of one size down a pipe opened
+    // for another are a sheared picture (measured, the first HDR take).
+    if (hdrRecordingFor(outputIndex)) {
+      const OutputRuntime& rt = outputRuntimes_[static_cast<std::size_t>(hdrRecordingSource(outputIndex))];
+      // ...and so does a change of signal, or the file's tags would lie.
+      spec << "hdr" << rt.compositorWidth << 'x' << rt.compositorHeight
+           << (hdrSignalHlg(hdrRecordingSource(outputIndex)) ? "hlg" : "pq");
+    } else {
+      spec << "sdr";
+    }
+    return spec.str();
+  }
+
+  // A recording records HDR -- HEVC Main10 (or the chosen 10-bit mezzanine)
+  // in PQ BT.2020 -- when the picture it records is HDR: its own output, or
+  // the output it mirrors (the usual case: the recording mirrors Output 1).
+  // It reads THAT output's float compositor. The recording output's own
+  // renderer is a different GPU device, so it cannot take a zero-copy HDR
+  // frame and composites the SDR conversion instead -- measured, a first HDR
+  // recording of its own compositor had every highlight clipped at 203 nits.
+  int hdrRecordingSource(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+        outputIndex >= static_cast<int>(outputRuntimes_.size())) return -1;
+    const OutputTarget& out = project_.outputs[static_cast<std::size_t>(outputIndex)];
+    // A file or a stream (SRT, RTMP). Not the Web Monitor: a browser's
+    // MediaSource wants H.264 8-bit, and that is what it gets.
+    if (outputStreamProtocolIsWeb(normalizeOutputStreamProtocol(out.streamProtocol))) return -1;
+    const int mirror = out.mirrorSourceOutputIndex;
+    if (mirror >= 0 && mirror < static_cast<int>(outputRuntimes_.size()) &&
+        outputRuntimes_[static_cast<std::size_t>(mirror)].hdr &&
+        outputRuntimes_[static_cast<std::size_t>(mirror)].compositorTexture) {
+      return mirror;
+    }
+    return outputRuntimes_[static_cast<std::size_t>(outputIndex)].hdr ? outputIndex : -1;
+  }
+  bool hdrRecordingFor(int outputIndex) const {
+    return hdrRecordingSource(outputIndex) >= 0;
+  }
+
+  // Turn the operator's recording NAME into a real path, stamped with the
+  // start time. Two invariants:
+  //   1. A recording never overwrites a previous take. The operator is running
+  //      a live show; losing the last one to a same-named restart is not a
+  //      recoverable mistake.
+  //   2. It never writes inside a macOS .app bundle. A bare name lands in
+  //      recordings/ beside the show, or in stateDir() when no show is open --
+  //      the same rule the converted-media cache follows.
+  // An absolute path from the operator is honoured as-is, minus the stamp.
+  // ---- Program recording ---------------------------------------------------
+  // Recording IS a stream output whose sink is a file, so it reuses the whole
+  // egress path. These wrap that so the operator never has to know.
+  int recordingOutputIndex() const { return findStreamOutputForProtocol("file"); }
+
+  bool recordingActive() const {
+    const int idx = recordingOutputIndex();
+    if (idx < 0) return false;
+    const OutputTarget& out = project_.outputs[idx];
+    return out.enabled && out.streamEnabled;
+  }
+
+  double recordingElapsedSeconds() const {
+    if (!recordingActive() || recordingStartedMs_ == 0) return 0.0;
+    return (SDL_GetTicks() - recordingStartedMs_) / 1000.0;
+  }
+
+  // Size of the file being written right now. Cheap enough to poll per frame,
+  // and it is the only honest confirmation that bytes are actually landing --
+  // an armed output that is silently failing looks identical otherwise.
+  std::uintmax_t recordingBytesOnDisk() const {
+    if (lastRecordingPath_.empty()) return 0;
+    std::error_code ec;
+    auto n = fs::file_size(fs::path(lastRecordingPath_), ec);
+    return ec ? 0 : n;
+  }
+
+  void toggleRecording() {
+    const bool wasActive = recordingActive();
+    int idx = wasActive ? recordingOutputIndex() : ensureStreamOutputForProtocol("file");
+    if (idx < 0 || idx >= static_cast<int>(project_.outputs.size())) {
+      failRemoteCommand("record: could not create a recording output");
+      return;
+    }
+    OutputTarget& out = project_.outputs[idx];
+    out.enabled = !wasActive;
+    out.streamEnabled = !wasActive;
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Toggle);
+    if (wasActive) {
+      const std::uintmax_t bytes = recordingBytesOnDisk();
+      triggerToast(bytes > 0
+        ? "RECORDING STOPPED - " + std::to_string(bytes / (1024 * 1024)) + " MB"
+        : "RECORDING STOPPED");
+      showLog("RECORD STOP", lastRecordingPath_);
+      recordingStartedMs_ = 0;
+    } else {
+      recordingStartedMs_ = SDL_GetTicks();
+      lastRecordingPath_.clear();   // filled in when the args are built
+      triggerToast("RECORDING");
+      showLog("RECORD START", recordingDirLabel());
+    }
+  }
+
+  // Where recordings will land, for display. Mirrors resolveRecordingPath's
+  // rules so the label can never disagree with what actually happens.
+  std::string recordingDirLabel() const {
+    if (!project_.recordingDir.empty()) return project_.recordingDir;
+    fs::path base = (!currentProjectFile_.empty() && currentProjectFile_.has_parent_path())
+      ? currentProjectFile_.parent_path()
+      : Paths::stateDir();
+    return (base / "recordings").string();
+  }
+
+  // True when recordings would land on the same volume Deckboy is running
+  // from. Worth saying out loud: a live recording competes for seek bandwidth
+  // with media playback, and a disk that fills takes the app down too.
+  bool recordingSharesAppVolume() const {
+    std::error_code ec;
+    const fs::path rec(recordingDirLabel());
+    const fs::path app = Paths::stateDir();
+    return fs::path(rec).root_name().string() == fs::path(app).root_name().string();
+  }
+
+  void pickRecordingDir() {
+    showFolderDialog([this](std::vector<std::string> chosen) {
+      if (chosen.empty() || chosen.front().empty()) return;
+      project_.recordingDir = chosen.front();
+      markProjectDirty();
+      triggerToast(recordingSharesAppVolume()
+        ? "record folder set - SAME DISK as Deckboy"
+        : "record folder set");
+    });
+  }
+
+  std::string resolveRecordingPath(const std::string& nameOrPath) const {
+    std::error_code ec;
+    fs::path given(trim(nameOrPath));
+    fs::path dir;
+    fs::path stem = given.stem();
+    std::string ext = given.extension().string();
+    if (given.is_absolute() && given.has_parent_path()) {
+      dir = given.parent_path();
+    } else if (!project_.recordingDir.empty()) {
+      // An explicitly chosen record volume. Separate from the encoder's output
+      // directory on purpose: recording a live show to the same disk Deckboy is
+      // reading media from costs seek bandwidth, and a disk that fills takes
+      // both the recording AND the app down with it.
+      dir = fs::path(project_.recordingDir);
+    } else {
+      fs::path base = (!currentProjectFile_.empty() && currentProjectFile_.has_parent_path())
+        ? currentProjectFile_.parent_path()
+        : Paths::stateDir();
+      dir = base / "recordings";
+    }
+    if (stem.empty()) stem = "program";
+    // The CODEC decides the container, not whatever extension the URL happens
+    // to carry. A ProRes or DNxHR essence in an .mp4 wrapper is the kind of
+    // file an edit suite bounces, and the default URL says .mp4 for everything.
+    ext = recordingContainerExtension();
+    std::time_t now = std::time(nullptr);
+    char stamp[32] = "";
+    if (std::tm* lt = std::localtime(&now)) {
+      std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", lt);
+    }
+    fs::create_directories(dir, ec);
+    // Remembered so the UI can report the size of the file actually being
+    // written. Mutable because the args builder is const; the alternative was
+    // recomputing the timestamp for display, which would drift from the real
+    // filename.
+    lastRecordingPath_ = (dir / (stem.string() + "_" + stamp + ext)).string();
+    return lastRecordingPath_;
+  }
+
+  std::vector<std::string> buildOutputStreamArgs(int outputIndex,
+                                                 int width,
+                                                 int height,
+                                                 double fpsHint,
+                                                 const std::string& videoInputPath,
+                                                 const std::string& audioInputPath = {},
+                                                 std::uint64_t takeFramesSoFar = 0) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return {};
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    std::string protocol = normalizeOutputStreamProtocol(output.streamProtocol);
+    std::string url = trim(output.streamUrl);
+    if (url.empty()) {
+      url = defaultOutputStreamUrl(protocol, outputIndex);
+    }
+    std::string key = trim(output.streamKey);
+    if (!key.empty() && outputStreamProtocolIsRtmp(protocol)) {
+      if (url.back() != '/') url += '/';
+      url += key;
+    }
+    // Recording resolves to a real path with a timestamp stamped on so a
+    // second take can never overwrite the first.
+    const bool toFile = outputStreamProtocolIsFile(protocol);
+    const bool toWeb = outputStreamProtocolIsWeb(protocol);
+    if (toFile) {
+      url = resolveRecordingPath(url);
+    }
+    if (toWeb) {
+      // The private ingest socket for this output, opened before the spawn.
+      const int port = (outputIndex >= 0 && outputIndex < kWebMonitorMaxOutputs)
+        ? webMonitorSlots_[static_cast<std::size_t>(outputIndex)].ingestPort : 0;
+      if (port <= 0) {
+        return {};
+      }
+      url = "tcp://127.0.0.1:" + std::to_string(port);
+    }
+    url = applySrtUrlParameters(output, url);
+    int bitrateKbps = std::clamp(output.streamBitrateKbps, 500, 50000);
+    if (toWeb) {
+      const int maxHeight = webEncodeHeight();
+      const int qualityFloorKbps = maxHeight >= 2160 ? 30000
+                                  : maxHeight >= 1440 ? 16000
+                                  : maxHeight >= 1080 ? 8000 : 4000;
+      bitrateKbps = std::max(bitrateKbps, qualityFloorKbps);
+    }
+    int bufferKbps = std::clamp(bitrateKbps * 2, 1000, 100000);
+    double fps = outputStreamProtocolIsFile(protocol)
+      ? recordingFps(fpsHint) : outputStreamFps(fpsHint);
+    // GOP was hardcoded to one second. A keyframe every second is a lot of
+    // bitrate spent on I-frames; most platforms want 2s, and some (YouTube)
+    // require <= 4s. Now the operator's setting.
+    int gop = std::max(1, static_cast<int>(std::lround(
+      fps * std::clamp(output.streamKeyframeSeconds, 1, 10))));
+    // A browser joins on a keyframe, so a web viewer waits up to one GOP for
+    // its first picture: half a second, not the stream's usual two.
+    if (toWeb) {
+      gop = std::max(1, static_cast<int>(std::lround(fps * 0.5)));
+    }
+    // RTMPS is RTMP over TLS — same FLV muxer. It used to normalize to "srt"
+    // and land here as mpegts, which no RTMP server would accept.
+    // A recording follows its own EXTENSION -- an .mp4 written as mpegts is a
+    // file most editors will not open.
+    std::string mux = outputStreamProtocolIsRtmp(protocol) ? "flv"
+                    : toWeb ? "mp4" : "mpegts";
+    if (toFile) {
+      const std::string ext = toLower(fs::path(url).extension().string());
+      mux = (ext == ".mov")  ? "mov"
+          : (ext == ".mkv")  ? "matroska"
+          : (ext == ".ts")   ? "mpegts"
+          : (ext == ".avi")  ? "avi"
+                             : "mp4";
+    }
+    std::string colorSpace = normalizeOutputColorSpace(output.outputColorSpace);
+    // HDR recording: the frames are the float compositor's, at its raster, as
+    // 16-bit PQ BT.2020 R'G'B' -- converted to 10-bit BT.2020 Y'CbCr by the
+    // encoder's scaler (matrix only; the transfer is already PQ).
+    const bool hdrRecord = !toWeb && hdrRecordingFor(outputIndex);
+    if (hdrRecord) {
+      const OutputRuntime& rt = outputRuntimes_[static_cast<std::size_t>(hdrRecordingSource(outputIndex))];
+      width = std::max(1, rt.compositorWidth);
+      height = std::max(1, rt.compositorHeight);
+    }
+    std::ostringstream fpsText;
+    if (toFile) {
+      fpsText << exactRateToken(fps);
+    } else {
+      fpsText << std::fixed << std::setprecision(2) << fps;
+    }
+
+    std::vector<std::string> args {
+      "ffmpeg",
+      "-hide_banner",
+      "-nostdin",
+      "-loglevel", "error",
+      // Sized in FRAMES, and these frames are raw BGRA: at 4K one packet is
+      // 33MB, so the old flat 2048 authorised sixty-eight GIGABYTES of input
+      // queue. When the encoder fell behind (it does at 4K) ffmpeg grew to
+      // 1.5GB rather than applying backpressure, and the app kept shovelling.
+      // Cap the queue by BYTES instead so the ceiling is the same at every
+      // raster, and a slow encoder pushes back on the writer as it should.
+      "-thread_queue_size", std::to_string(std::clamp(
+        (256 * 1024 * 1024) /
+          std::max(1, width * height * (hdrRecord ? 3 : 4)), 8, 512)),
+      "-f", "rawvideo",
+      "-pix_fmt", hdrRecord ? "p010le" : "bgra",
+      "-video_size", std::to_string(width) + "x" + std::to_string(height),
+      "-framerate", fpsText.str(),
+      // KNOWN LIMITATION, measured twice. -framerate is a PROMISE the capture
+      // path cannot keep: at 4K it delivers ~13fps against a declared 30,
+      // because each frame is 33MB of raw BGRA down a pipe. Every undelivered
+      // frame shortens the file, so a 20-second take lands as 8.07s and plays
+      // ~2.5x fast.
+      //
+      // -use_wallclock_as_timestamps is the textbook fix and works when ffmpeg
+      // is driven directly, but NOT here: retested after the deadlock and
+      // -shortest bugs were fixed, it made the same take 2.17s. Do not reach
+      // for it again without re-measuring.
+      //
+      // The real fix is to move fewer bytes -- NV12 is 12bpp against BGRA's 32,
+      // which is 2.7x less down the pipe -- or to record a smaller raster.
+      "-i", videoInputPath.empty() ? "pipe:0" : videoInputPath,
+      // Real programme audio when a pipe is available, silence only as a
+      // fallback. anullsrc was UNCONDITIONAL on Windows, so every SRT stream,
+      // RTMP stream and file recording carried a silent audio track while the
+      // deck audio sat buffered and unread. NDI was unaffected because it
+      // reads those buffers directly.
+      "-f", audioInputPath.empty() ? "lavfi" : "s16le"
+    };
+    if (hdrRecord) {
+      // The INPUT says what it is: P010, BT.2020 NCL limited, in the output's
+      // transfer -- the writer thread made it so (HdrEncoder::convertHalfToP010).
+      // Untagged, ffmpeg took an earlier rgb48 version of this for SDR and
+      // CONVERTED it, encoding an already-PQ signal twice (measured: 4000 nits
+      // recorded as ~8900).
+      args.insert(std::find(args.begin(), args.end(), "-i"),
+                  {"-color_primaries", "bt2020",
+                   "-color_trc", hdrSignalHlg(hdrRecordingSource(outputIndex)) ? "arib-std-b67" : "smpte2084",
+                   "-colorspace", "bt2020nc", "-color_range", "tv"});
+    }
+    if (audioInputPath.empty()) {
+      // lavfi takes its rate and layout INSIDE the graph description. Passing
+      // -ar/-ac as input options to it is an error on current ffmpeg
+      // ("Option sample_rate not found") and kills the whole encode, so the
+      // silence fallback could never have run on this build.
+      args.insert(args.end(), {"-i", "anullsrc=r=48000:cl=stereo"});
+    } else {
+      // s16le carries no header, so the rate and layout must be stated or
+      // ffmpeg guesses and the audio plays at the wrong speed.
+      args.insert(args.end(), {"-ar", "48000", "-ac", "2", "-i", audioInputPath});
+    }
+    args.insert(args.end(), {"-map", "0:v:0", "-map", "1:a:0"});
+    if (!hdrRecord) {
+      args.insert(args.end(), {"-pix_fmt", "yuv420p"});
+    }
+    if (toFile) {
+      // Normally the composite is scaled to the recording raster on the GPU
+      // before readback, so the frames arriving here are already the right
+      // size and this filter is absent. It is needed only where the captured
+      // frame is SHARED with NDI, DeckLink, Spout, ST 2110 or the output delay:
+      // those must have the programme raster, so the capture keeps it and the
+      // encoder resizes instead. Slower than the GPU blit, and correct -- the
+      // alternative was silently sending every one of them at the recording's
+      // size.
+      const int wantW = project_.recordingWidth;
+      const int wantH = project_.recordingHeight;
+      const bool resize = wantW > 0 && wantH > 0 && (wantW != width || wantH != height);
+      if (resize) {
+        // An HDR frame arrives as P010 already: the scale stays in Y'CbCr.
+        args.insert(args.end(),
+                    {"-vf", "scale=" + std::to_string(wantW) + ":" +
+                            std::to_string(wantH) + ":flags=bicubic"});
+      }
+      const std::vector<std::string> codecArgs = hdrRecord ? hdrRecordingCodecArgs(hdrSignalHlg(hdrRecordingSource(outputIndex))) : recordingCodecArgs();
+      args.insert(args.end(), codecArgs.begin(), codecArgs.end());
+    } else if (hdrRecord) {
+      // An HDR STREAM (SRT, RTMP -- RTMP carries HEVC as enhanced RTMP): the
+      // writer's P010 straight into 10-bit HEVC, as an HDR recording.
+      const std::vector<std::string> codecArgs =
+        hdrRecordingCodecArgs(hdrSignalHlg(hdrRecordingSource(outputIndex)), true);
+      args.insert(args.end(), codecArgs.begin(), codecArgs.end());
+    } else {
+      args.insert(args.end(),
+                  {"-c:v", "libx264", "-preset",
+                   toWeb && webEncodeEase_ >= 1 ? "ultrafast" : "veryfast", "-pix_fmt", "yuv420p"});
+      if (toWeb) {
+        // A fixed profile and level, so the page can name the codec to the
+        // browser's MediaSource without parsing the stream: avc1.4D4029.
+        // Respect the operator's Web Monitor maximum picture height. Keep the
+        // source aspect ratio and never upscale a smaller programme raster.
+        const int maxHeight = webEncodeHeight();
+        const std::string level = maxHeight >= 2160 ? "5.2"
+                                : maxHeight >= 1440 ? "5.1" : "4.2";
+        args.insert(args.end(), {"-profile:v", "main", "-level:v", level,
+                                 "-sc_threshold", "0",
+                                 "-vf", "scale=-2:min(" + std::to_string(maxHeight) + "\\,ih):flags=bicubic"});
+      }
+    }
+    if (!toFile && !(hdrRecord && !hdrHardwareHevcEncoder().empty())) {
+      // zerolatency exists to cut STREAM delay: it disables lookahead and
+      // B-frames, which costs real quality. A recording is not watched live,
+      // so it keeps the encoder's normal behaviour. An HDR stream on a
+      // hardware encoder has its own low-latency tune (hdrRecordingCodecArgs);
+      // this one is x264's and x265's, and NVENC refuses it.
+      args.insert(args.end(), {"-tune", "zerolatency"});
+    }
+    if (hdrRecord) {
+      args.insert(args.end(), {
+        "-colorspace", "bt2020nc",
+        "-color_primaries", "bt2020",
+        "-color_trc", hdrSignalHlg(hdrRecordingSource(outputIndex)) ? "arib-std-b67" : "smpte2084",
+        "-color_range", "tv"
+      });
+    } else if (colorSpace == "bt709") {
+      args.insert(args.end(), {
+        "-colorspace", "bt709",
+        "-color_primaries", "bt709",
+        "-color_trc", "bt709"
+      });
+    } else if (colorSpace == "srgb") {
+      args.insert(args.end(), {
+        "-colorspace", "bt709",
+        "-color_primaries", "bt709",
+        "-color_trc", "iec61966-2-1"
+      });
+    }
+    args.insert(args.end(), {"-fflags", "+genpts"});
+    if (toFile) {
+      // A real tmcd track, so the take can be conformed against a running
+      // order. mov and mp4 both carry it; ';' in the value is the drop-frame
+      // flag. Without this the file has no timecode at all, which on its own
+      // disqualifies it as a deliverable.
+      args.insert(args.end(),
+                  {"-timecode", recordingStartTimecode(fps, takeFramesSoFar)});
+    }
+    if (!toFile || recordingCodecUsesBitrate()) {
+      // Rate control belongs to the long-GOP codecs only. A mezzanine codec is
+      // constant quality chosen by PROFILE; handing prores_ks a -b:v/-maxrate
+      // is at best ignored and at worst refused.
+      args.insert(args.end(), {
+        "-g", std::to_string(gop),
+        "-b:v", std::to_string(bitrateKbps) + "k",
+        "-maxrate", std::to_string(bitrateKbps) + "k",
+        "-bufsize", std::to_string(bufferKbps) + "k"
+      });
+    }
+    if (toFile && !recordingCodecUsesBitrate()) {
+      // Uncompressed audio alongside a mezzanine picture: a facility expects
+      // PCM in a ProRes/DNx MOV, not a lossy AAC track.
+      args.insert(args.end(), {"-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"});
+    } else {
+      args.insert(args.end(), {
+        "-c:a", "aac",
+        "-b:a", std::to_string(std::clamp(output.streamAudioBitrateKbps, 32, 512)) + "k",
+        "-ar", "48000",
+        "-ac", "2"
+      });
+    }
+    if (toFile) {
+      // -shortest ONLY for the anullsrc fallback, whose silence is INFINITE:
+      // without it the recording never ends when the video pipe closes, it
+      // keeps muxing silence forever (MEASURED: a 2s source produced a 26MB
+      // file and was still growing when killed).
+      //
+      // It must NOT be applied to the real audio pipe. With a live pipe that
+      // has not yet delivered a packet, -shortest lets ffmpeg treat the output
+      // as already finished: it went on draining our video pipe -- eleven
+      // GIGABYTES of it -- while reporting frame=0 and leaving the file at its
+      // bare header. That pipe ends on its own when we close it at stop, so
+      // there is nothing for -shortest to do here anyway.
+      if (audioInputPath.empty()) {
+        args.insert(args.end(), {"-shortest"});
+      }
+      // FRAGMENTED mp4, deliberately NOT +faststart. faststart rewrites the
+      // whole file at close to move the moov atom to the front; shutdown
+      // closes stdin and force-kills after 500ms, which on a show-length
+      // recording lands mid-rewrite and leaves a file with NO moov atom at
+      // all. MEASURED: ffprobe on such a file reports "moov atom not found"
+      // and it will not open anywhere. A fragmented file is valid at every
+      // instant, so a killed -- or crashed -- recording is still playable up
+      // to the last keyframe. That matters more here than the marginal
+      // compatibility faststart buys.
+      if (mux == "mp4" || mux == "mov") {
+        // +frag_keyframe starts a fragment at every keyframe. On a long-GOP
+        // codec that is once per GOP, which is what we want. On an INTRA codec
+        // -- ProRes, DNxHR -- every frame is a keyframe, so it would emit a
+        // fragment per frame and bloat the file with thousands of moof boxes.
+        // Those rely on the time-based cap alone.
+        args.insert(args.end(), {"-movflags",
+          recordingCodecUsesBitrate()
+            ? "+frag_keyframe+empty_moov+default_base_moof"
+            : "+empty_moov+default_base_moof"});
+        // A fragment lands on every keyframe -- ONE PER GOP, and the GOP is in
+        // FRAMES. At 4K the encoder runs well under realtime, so a 120-frame
+        // GOP is most of a minute of wall clock: a short take reached its
+        // second keyframe never, no fragment was ever emitted, and the moov sat
+        // in the muxer's buffer until the process died. MEASURED: every
+        // recording under a minute was exactly 28 bytes on disk -- the ftyp box
+        // and nothing else. A time-based fragment cap makes the file grow on a
+        // schedule the operator can actually observe.
+        args.insert(args.end(), {"-frag_duration", "2000000"});
+      }
+      // Flush as we go. This was on the network branch only, on the reasoning
+      // that latency is a streaming concern -- but an unflushed RECORDING is
+      // worse than a late one: the bytes exist nowhere until the muxer decides
+      // to write them, so a crash mid-show loses a take that looked healthy.
+      args.insert(args.end(), {"-flush_packets", "1"});
+    } else {
+      // Low-latency muxing, for network sinks only. resend_headers is an
+      // mpegts option and the mp4 muxer rejects it outright.
+      args.insert(args.end(), {
+        "-max_interleave_delta", "0",
+        "-flush_packets", "1",
+        "-muxdelay", "0",
+        "-muxpreload", "0"
+      });
+      if (mux == "mpegts") {
+        args.insert(args.end(), {"-mpegts_flags", "+resend_headers"});
+      }
+      if (toWeb) {
+        // A fragment per keyframe, each self-contained: what MediaSource
+        // appends, and what lets a late viewer start on any fragment.
+        args.insert(args.end(), {"-movflags", "+frag_keyframe+empty_moov+default_base_moof"});
+      }
+    }
+    args.insert(args.end(), {"-f", mux, url});
+    return args;
+  }
+
+  std::string shellCommandString(const std::vector<std::string>& args) const {
+    std::ostringstream command;
+    bool first = true;
+    for (const std::string& arg : args) {
+      if (!first) {
+        command << ' ';
+      }
+      first = false;
+      command << shellQuoteSingle(arg);
+    }
+    return command.str();
+  }
+
+  static void setFdBlockingMode(int fd, bool blocking) {
+#ifndef _WIN32
+    if (fd < 0) {
+      return;
+    }
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+      return;
+    }
+    if (blocking) {
+      flags &= ~O_NONBLOCK;
+    } else {
+      flags |= O_NONBLOCK;
+    }
+    fcntl(fd, F_SETFL, flags);
+#else
+    (void) fd;
+    (void) blocking;
+#endif
+  }
+
+  static bool writeOutputStreamBytesBlocking(
+      const std::shared_ptr<OutputStreamWriterState>& writer,
+      int fd,
+      const std::uint8_t* bytes,
+      size_t byteCount,
+      const char* reason) {
+    size_t offset = 0;
+    while (offset < byteCount) {
+      {
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        if (writer->stop) {
+          return false;
+        }
+      }
+#ifdef _WIN32
+      int written = _write(fd, bytes + offset, static_cast<unsigned int>(std::min(byteCount - offset, size_t(0x7FFFFFFFu))));
+#else
+      ssize_t written = write(fd, bytes + offset, byteCount - offset);
+#endif
+      if (written > 0) {
+        offset += static_cast<size_t>(written);
+        continue;
+      }
+#ifndef _WIN32
+      if (written < 0 && errno == EINTR) {
+        continue;
+      }
+      if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        SDL_Delay(1);
+        continue;
+      }
+#endif
+      std::lock_guard<std::mutex> lock(writer->mutex);
+      writer->failed = true;
+      writer->failureReason = reason ? reason : "stream write failed";
+      writer->stop = true;
+      writer->queue.clear();
+      return false;
+    }
+    return true;
+  }
+
+  static bool writeOutputStreamBytesBestEffort(
+      const std::shared_ptr<OutputStreamWriterState>& writer,
+      int fd,
+      const std::uint8_t* bytes,
+      size_t byteCount,
+      const char* reason,
+      // An AUDIO write failure must not abort the take. The egress-wide failed
+      // flag tears the encoder down and opens a NEW file, so a transient on the
+      // audio pipe -- which happens around take boundaries, where ffmpeg has
+      // connected but is being replaced -- cost the operator the top of the
+      // next recording as a stray 0.05-second fragment. MEASURED: the teardown
+      // reason was this failure path, twice across three takes.
+      //
+      // Video is the essence. Losing audio is a defect worth reporting, not
+      // worth throwing the recording away for.
+      bool fatal = true) {
+    size_t offset = 0;
+    while (offset < byteCount) {
+      {
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        if (writer->stop) {
+          return false;
+        }
+      }
+#ifdef _WIN32
+      int written = _write(fd, bytes + offset, static_cast<unsigned int>(std::min(byteCount - offset, size_t(0x7FFFFFFFu))));
+#else
+      ssize_t written = write(fd, bytes + offset, byteCount - offset);
+#endif
+      if (written > 0) {
+        offset += static_cast<size_t>(written);
+        continue;
+      }
+#ifndef _WIN32
+      if (written < 0 && errno == EINTR) {
+        continue;
+      }
+      if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return true;
+      }
+#endif
+      std::lock_guard<std::mutex> lock(writer->mutex);
+      if (!fatal) {
+        return false;   // this pipe gives up; the take carries on without it
+      }
+      writer->failed = true;
+      writer->failureReason = reason ? reason : "stream write failed";
+      writer->stop = true;
+      writer->queue.clear();
+      return false;
+    }
+    return true;
+  }
+
+  // Hand PCM to the writer's audio thread.
+  //
+  // Bounded at about two seconds of 48k stereo: if the audio pipe ever does
+  // stall, drop the oldest rather than grow without limit -- a gap beats the
+  // app eating memory during a show.
+  static void pushOutputStreamAudio(
+      const std::shared_ptr<OutputStreamWriterState>& writer,
+      const std::vector<std::int16_t>& samples) {
+    if (!writer || samples.empty()) {
+      return;
+    }
+    {
+      std::lock_guard<std::mutex> lock(writer->audioMutex);
+      constexpr std::size_t kMaxPendingSamples = 48000 * 2 * 2;
+      writer->pendingAudio.insert(writer->pendingAudio.end(),
+                                  samples.begin(), samples.end());
+      if (writer->pendingAudio.size() > kMaxPendingSamples) {
+        if (writer->preserveAudioTimeline) {
+          // Dropping PCM shortens the audio timeline permanently. Restart
+          // this live encoder instead, with a matching picture/sound epoch.
+          std::lock_guard<std::mutex> stateLock(writer->mutex);
+          writer->failed = true;
+          writer->failureReason = "web audio encoder cannot keep up";
+          writer->stop = true;
+          writer->pendingAudio.clear();
+          writer->cv.notify_one();
+          writer->audioCv.notify_one();
+          return;
+        }
+        writer->pendingAudio.erase(
+          writer->pendingAudio.begin(),
+          writer->pendingAudio.begin() +
+            static_cast<std::ptrdiff_t>(writer->pendingAudio.size() -
+                                        kMaxPendingSamples));
+      }
+    }
+    writer->audioCv.notify_one();
+  }
+
+  void startOutputStreamWriter(OutputRuntime& runtime, bool preserveAudioTimeline) {
+#ifdef _WIN32
+    int videoPipeFd = runtime.streamProcess.writeFd;
+    int audioPipeFd = -1;  // audio muxed via ffmpeg stdin on Windows
+    if (runtime.streamWriter || videoPipeFd < 0) {
+      return;
+    }
+#else
+    if (runtime.streamWriter || runtime.streamPipeFd < 0) {
+      return;
+    }
+    int videoPipeFd = runtime.streamPipeFd;
+    int audioPipeFd = runtime.streamAudioPipeFd;
+#endif
+    auto writer = std::make_shared<OutputStreamWriterState>();
+    writer->preserveAudioTimeline = preserveAudioTimeline;
+    writer->videoPipeFd = videoPipeFd;
+    writer->audioPipeFd.store(audioPipeFd, std::memory_order_release);
+    writer->thread = std::thread([writer]() {
+      // An HDR packet's half floats, encoded here into P010, once per distinct
+      // picture (the pacer's repeats share the same buffer, so they share this
+      // too) -- and WHILE the previous picture is still going down the pipe.
+      // Converting and writing one after the other added up: at 4K, 12-19 ms
+      // of conversion plus ~12 of pipe held an HLG stream to 45 fps
+      // (MEASURED). Two buffers and the write on its own thread make it the
+      // longer of the two instead of the sum. One write in flight at a time,
+      // so frames still go down the pipe in order.
+      std::array<std::vector<std::uint8_t>, 2> encoded;
+      std::array<std::shared_ptr<const std::vector<std::uint8_t>>, 2> encodedFrom;
+      std::future<bool> inFlight;
+      int inFlightBuffer = -1;
+      std::size_t inFlightBytes = 0;
+      std::shared_ptr<const std::vector<std::uint8_t>> inFlightHold;   // its bytes, alive until written
+      auto finishWrite = [&]() -> bool {
+        if (!inFlight.valid()) return true;
+        const bool ok = inFlight.get();
+        if (ok) {
+          std::lock_guard<std::mutex> lock(writer->mutex);
+          writer->packetsWritten += 1;
+          writer->videoBytesWritten += static_cast<std::uint64_t>(inFlightBytes);
+        }
+        inFlightBuffer = -1;
+        inFlightHold.reset();
+        return ok;
+      };
+      for (;;) {
+        OutputStreamPacket packet;
+        {
+          std::unique_lock<std::mutex> lock(writer->mutex);
+          writer->cv.wait(lock, [&]() {
+            return writer->stop || !writer->queue.empty();
+          });
+          if (writer->stop) {
+            break;
+          }
+          packet = std::move(writer->queue.front());
+          writer->queue.pop_front();
+        }
+
+        // Audio is handed to its own thread (see OutputStreamWriterState): the
+        // video write below BLOCKS, and doing both here is what deadlocked the
+        // encoder.
+        if (!packet.audioSamples.empty()) {
+          pushOutputStreamAudio(writer, packet.audioSamples);
+        }
+
+        if (packet.videoBytes && !packet.videoBytes->empty() &&
+            writer->videoPipeFd >= 0) {
+          const std::vector<std::uint8_t>* bytes = packet.videoBytes.get();
+          int buffer = -1;
+          if (packet.hdrEncoder) {
+            const std::size_t pixels = static_cast<std::size_t>(packet.width) * packet.height;
+            if (packet.videoBytes->size() < pixels * 8) continue;
+            for (int k = 0; k < 2; ++k) {
+              if (encodedFrom[static_cast<std::size_t>(k)] == packet.videoBytes) buffer = k;
+            }
+            if (buffer < 0) {
+              buffer = inFlightBuffer == 0 ? 1 : 0;   // never the one being written
+              static const bool bench = [] {
+                const char* e = std::getenv("DECKBOY_EGRESS_BENCH");
+                return e && *e;
+              }();
+              const Uint64 c0 = SDL_GetPerformanceCounter();
+              // P010: a luma plane, then interleaved chroma at half height.
+              std::vector<std::uint8_t>& out = encoded[static_cast<std::size_t>(buffer)];
+              out.resize(pixels * 3);
+              auto* yPlane = reinterpret_cast<std::uint16_t*>(out.data());
+              packet.hdrEncoder->convertHalfToP010(reinterpret_cast<const std::uint16_t*>(packet.videoBytes->data()),
+                                                   packet.width, packet.height, packet.width * 4,
+                                                   yPlane, yPlane + pixels);
+              encodedFrom[static_cast<std::size_t>(buffer)] = packet.videoBytes;
+              if (bench) {
+                static int n = 0;
+                static double sum = 0;
+                sum += (SDL_GetPerformanceCounter() - c0) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+                if (++n == 60) {
+                  std::cerr << "hdr-writer convert=" << sum / n << "ms" << std::endl;
+                  n = 0;
+                  sum = 0;
+                }
+              }
+            }
+            bytes = &encoded[static_cast<std::size_t>(buffer)];
+          }
+          if (!finishWrite()) {
+            break;
+          }
+          inFlightBuffer = buffer;
+          inFlightBytes = bytes->size();
+          inFlightHold = packet.videoBytes;
+          const int fd = writer->videoPipeFd;
+          inFlight = std::async(std::launch::async, [writer, fd, bytes]() {
+            return writeOutputStreamBytesBlocking(writer, fd, bytes->data(), bytes->size(), "stream video stopped");
+          });
+        }
+      }
+      finishWrite();
+      // Nothing more will be queued, so release anyone waiting on audio.
+      {
+        std::lock_guard<std::mutex> audioLock(writer->audioMutex);
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        writer->stop = true;
+      }
+      writer->audioCv.notify_all();
+    });
+    writer->audioThread = std::thread([writer]() {
+      std::vector<std::int16_t> chunk;
+      for (;;) {
+        {
+          std::unique_lock<std::mutex> lock(writer->audioMutex);
+          writer->audioCv.wait(lock, [&]() {
+            std::lock_guard<std::mutex> stopLock(writer->mutex);
+            return writer->stop || (!writer->pendingAudio.empty() &&
+              (!writer->preserveAudioTimeline || writer->audioPipeFd.load(std::memory_order_acquire) >= 0));
+          });
+          if (writer->pendingAudio.empty()) {
+            break;   // stopping, and nothing left to flush
+          }
+          chunk.swap(writer->pendingAudio);
+          writer->pendingAudio.clear();
+        }
+        // Read the fd fresh each time: on Windows it is assigned once ffmpeg
+        // connects to the named pipe, which happens after this thread starts.
+        const int audioFd = writer->audioPipeFd.load(std::memory_order_acquire);
+        if (audioFd < 0) {
+          continue;   // encoder has not opened its end yet; drop this chunk
+        }
+        const std::uint8_t* audioBytes =
+          reinterpret_cast<const std::uint8_t*>(chunk.data());
+        const std::size_t audioByteCount = chunk.size() * sizeof(std::int16_t);
+        const bool audioWritten = writer->preserveAudioTimeline
+          ? writeOutputStreamBytesBlocking(writer, audioFd, audioBytes, audioByteCount,
+                                          "web audio stopped")
+          : writeOutputStreamBytesBestEffort(writer, audioFd, audioBytes, audioByteCount,
+                                            "stream audio stopped", /*fatal=*/false);
+        if (!audioWritten) {
+          break;
+        }
+        {
+          std::lock_guard<std::mutex> lock(writer->mutex);
+          writer->audioBytesWritten += static_cast<std::uint64_t>(audioByteCount);
+        }
+      }
+    });
+    runtime.streamWriter = writer;
+  }
+
+  std::string outputStreamWriterFailure(OutputRuntime& runtime) const {
+    auto writer = runtime.streamWriter;
+    if (!writer) {
+      return {};
+    }
+    std::lock_guard<std::mutex> lock(writer->mutex);
+    if (!writer->failed) {
+      return {};
+    }
+    return writer->failureReason.empty() ? "stream write failed" : writer->failureReason;
+  }
+
+  // TAKES FINISHING IN THE BACKGROUND. A stopped stream's last waits -- its
+  // writer threads, the encoder writing the file's trailer, the remux -- run
+  // here instead of on the render thread. Finished ones are reaped at the next
+  // launch; quitting waits for all of them (joinStreamFinalizers), so no take
+  // is ever cut short by closing Deckboy.
+  struct StreamFinalizer {
+    std::thread thread;
+    std::shared_ptr<std::atomic<bool>> done;
+    StreamFinalizer(std::thread t, std::shared_ptr<std::atomic<bool>> d)
+      : thread(std::move(t)), done(std::move(d)) {}
+    StreamFinalizer(StreamFinalizer&&) = default;
+    StreamFinalizer& operator=(StreamFinalizer&&) = default;
+    // One launched after the last join (a late teardown) is still waited for,
+    // never abandoned: a joinable std::thread destroyed ends the process.
+    ~StreamFinalizer() {
+      if (thread.joinable()) thread.join();
+    }
+  };
+  std::mutex streamFinalizersMutex_;
+  std::vector<StreamFinalizer> streamFinalizers_;
+
+  void launchStreamFinalizer(std::function<void()> work) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    std::thread thread([work = std::move(work), done]() {
+      work();
+      done->store(true);
+    });
+    std::lock_guard<std::mutex> lock(streamFinalizersMutex_);
+    for (auto it = streamFinalizers_.begin(); it != streamFinalizers_.end();) {
+      if (it->done->load()) {
+        it->thread.join();
+        it = streamFinalizers_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    streamFinalizers_.emplace_back(std::move(thread), done);
+  }
+
+  void joinStreamFinalizers() {
+    std::vector<StreamFinalizer> pending;
+    {
+      std::lock_guard<std::mutex> lock(streamFinalizersMutex_);
+      pending.swap(streamFinalizers_);
+    }
+    for (auto& finalizer : pending) {
+      if (finalizer.thread.joinable()) {
+        finalizer.thread.join();
+      }
+    }
+  }
+
+  void stopOutputStreamRuntime(OutputRuntime& runtime, bool rollingSegment = false) {
+    flushOutputStreamAudioTail(runtime);
+    runtime.streamLockedFps = 0.0;
+    runtime.webFramesQueued = 0;
+    runtime.webClockSeconds = 0.0;
+    runtime.webAudioClockSeconds = 0.0;
+    runtime.webClockUpdatedMs = 0;
+    runtime.webClockDeck = -1;
+    runtime.webClockSamples = 0;
+    runtime.streamStartedAtMs = 0;
+    runtime.streamMeasuredKbps = 0.0;
+    // Captured BEFORE the platform split and acted on after it: the remux is
+    // not a Windows feature, and it lived inside the #ifdef so a macOS or
+    // Linux recording stayed fragmented forever.
+    const bool remuxThisTake = runtime.streamToFile && project_.recordingRemuxOnStop;
+    const std::string remuxPath = lastRecordingPath_;
+#ifdef _WIN32
+    // Close the audio pipe's SERVER end. Once ffmpeg connected, the handle was
+    // adopted by a CRT fd and closing that fd closes it -- but if the encoder
+    // never connected (bad URL, instant exit) the handle is still ours, and
+    // leaking one per stream start would accumulate over a long show.
+    if (runtime.streamAudioPipeHandle &&
+        runtime.streamWriter &&
+        runtime.streamWriter->audioPipeFd.load(std::memory_order_acquire) < 0) {
+      CloseHandle(reinterpret_cast<HANDLE>(runtime.streamAudioPipeHandle));
+    }
+    runtime.streamAudioPipeHandle = nullptr;
+#endif
+    auto writer = runtime.streamWriter;
+    runtime.streamWriter.reset();
+    if (writer) {
+      {
+        std::lock_guard<std::mutex> audioLock(writer->audioMutex);
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        writer->stop = true;
+        writer->queue.clear();
+      }
+      writer->cv.notify_all();
+      writer->audioCv.notify_all();
+    }
+#ifdef _WIN32
+    // Close the write pipe first so ffmpeg gets EOF on stdin and exits gracefully
+    if (runtime.streamProcess.writeFd >= 0) {
+      _close(runtime.streamProcess.writeFd);
+      runtime.streamProcess.writeFd = -1;
+    }
+    // EOF on the AUDIO input, BEFORE joining its thread. Two reasons, and the
+    // order is load-bearing for both.
+    //
+    // 1. ffmpeg needs EOF on input 1 or it never reaches its finalize: closing
+    //    stdin only ends input 0, so the grace period below always expired into
+    //    a force-kill with the mp4 header still unflushed. MEASURED: an
+    //    eight-second recording produced a 28-byte file, the ftyp box alone.
+    // 2. The audio writer BLOCKS on a full pipe. Joining it before closing its
+    //    fd hangs the main thread for as long as the encoder is wedged -- which
+    //    is exactly when a stop matters. Closing first makes the blocked write
+    //    fail immediately and the thread exit.
+    if (writer) {
+      const int audioFd = writer->audioPipeFd.exchange(-1, std::memory_order_acq_rel);
+      if (audioFd >= 0) {
+        _close(audioFd);
+      }
+    }
+    // THE REST HAPPENS OFF THE RENDER THREAD (launchStreamFinalizer): the
+    // writers finishing and ffmpeg writing its trailer took 300 ms at every
+    // stop and every segment roll, all of it with every output frozen. The
+    // process is handed over field by field -- ChildProcess kills in its
+    // destructor, so a copy would end the encoder mid-trailer.
+    auto encoder = std::make_shared<ChildProcess>();
+    encoder->hProcess = runtime.streamProcess.hProcess;
+    encoder->readFd = runtime.streamProcess.readFd;
+    runtime.streamProcess.hProcess = INVALID_HANDLE_VALUE;
+    runtime.streamProcess.readFd = -1;
+    const bool encoderToFile = runtime.streamToFile;
+    launchStreamFinalizer([this, writer, encoder, encoderToFile,
+                           remux = remuxThisTake ? remuxPath : std::string()]() {
+      if (writer && writer->thread.joinable()) {
+        writer->thread.join();
+      }
+      if (writer && writer->audioThread.joinable()) {
+        writer->audioThread.join();
+      }
+      // Give ffmpeg a moment to exit gracefully before force-killing. A network
+      // sink has nothing to finalize, so 500ms is plenty; a file has to flush and
+      // write its trailer, and killing it early is exactly what corrupts the take
+      // the operator is least able to redo.
+      if (encoder->running()) {
+        WaitForSingleObject(encoder->hProcess, encoderToFile ? 8000 : 500);
+      }
+      encoder->stop();
+      if (!remux.empty()) {
+        queueRecordingRemux(remux);
+      }
+    });
+#else
+    pid_t streamPid = runtime.streamPid;
+    runtime.streamPid = -1;
+    if (streamPid > 0) {
+      kill(streamPid, SIGTERM);
+    }
+    if (runtime.streamPipeFd >= 0) {
+      close(runtime.streamPipeFd);
+      runtime.streamPipeFd = -1;
+    }
+    if (runtime.streamAudioPipeFd >= 0) {
+      close(runtime.streamAudioPipeFd);
+      runtime.streamAudioPipeFd = -1;
+    }
+    // The connector publishes into the writer, so the writer holds the fd.
+    // Closed BEFORE the joins: a write blocked on a wedged encoder fails at
+    // once instead of hanging the main thread (see the Windows branch).
+    if (writer) {
+      const int audioFd = writer->audioPipeFd.exchange(-1, std::memory_order_acq_rel);
+      if (audioFd >= 0) {
+        close(audioFd);
+      }
+    }
+    // THE ENCODER GOES FIRST, THEN THE WRITERS. A writer can be blocked inside
+    // write() on a full FIFO, and on macOS and Linux closing that fd from this
+    // thread does not wake it. ffmpeg stops reading once it has SIGTERM, so
+    // joining first waited for a write that could never finish, while the
+    // SIGKILL that would have ended it sat after the join: Deckboy hung on
+    // quit with ffmpeg still alive (caught in CI on macOS). Once ffmpeg has
+    // gone the blocked write fails with EPIPE and the thread returns.
+    // The waiting happens off the render thread (see the Windows branch).
+    const bool encoderToFile = runtime.streamToFile;
+    const std::string audioPipePath = runtime.streamAudioPipePath;
+    const std::string videoPipePath = runtime.streamVideoPipePath;
+    runtime.streamAudioPipePath.clear();
+    runtime.streamVideoPipePath.clear();
+    launchStreamFinalizer([this, writer, streamPid, encoderToFile, audioPipePath, videoPipePath,
+                           remux = remuxThisTake ? remuxPath : std::string()]() {
+      if (streamPid > 0) {
+        int status = 0;
+        // Same asymmetry as the Windows branch: a file has a trailer to write,
+        // and SIGKILLing the muxer mid-finalize is what leaves an unopenable take.
+        Uint64 deadline = SDL_GetTicks() + (encoderToFile ? 8000 : 500);
+        while (waitpid(streamPid, &status, WNOHANG) == 0 && SDL_GetTicks() < deadline) {
+          SDL_Delay(10);
+        }
+        if (waitpid(streamPid, &status, WNOHANG) == 0) {
+          kill(streamPid, SIGKILL);
+          waitpid(streamPid, &status, 0);
+        }
+      }
+      if (writer && writer->thread.joinable()) {
+        writer->thread.join();
+      }
+      if (writer && writer->audioThread.joinable()) {
+        writer->audioThread.join();
+      }
+      if (!audioPipePath.empty()) {
+        unlink(audioPipePath.c_str());
+      }
+      if (!videoPipePath.empty()) {
+        unlink(videoPipePath.c_str());
+      }
+      if (!remux.empty()) {
+        queueRecordingRemux(remux);
+      }
+    });
+#endif
+    runtime.streamSpec.clear();
+    runtime.streamToFile = false;
+    // Per TAKE, not per session: take two must start its own frame clock.
+    runtime.recordPacerStartMs = 0;
+    // A roll continues the take, so its sound carries on through the line.
+    if (!rollingSegment) {
+      runtime.recordAudioDelayLine.clear();
+      runtime.recordAudioDelayChunks = 0;
+      runtime.recordClock = RecordClockSteer{};
+    }
+    runtime.recordFramesWritten = 0;
+    runtime.recordFreshFrames = 0;
+    runtime.lastFreshCaptureMs = 0;
+    // Per TAKE, not per segment: a roll is the same take continuing.
+    if (!rollingSegment) {
+      runtime.recordTakeFrames = 0;
+      runtime.programAudioStates.erase(&runtime.streamAudioReadSamplesByDeck);
+      if (runtime.meteredAudioSink == &runtime.streamAudioReadSamplesByDeck)
+        runtime.meteredAudioSink = nullptr;
+    }
+    runtime.lastSegmentSizeCheckMs = 0;
+    runtime.lastDropWarnMs = 0;
+    runtime.recordDroppedFrames = 0;
+    runtime.streamCommand.clear();
+    runtime.streamAudioReadSamplesByDeck.clear();
+    runtime.streamAudioSampleRemainder = 0.0;
+    runtime.streamFrameWidth = 0;
+    runtime.streamFrameHeight = 0;
+    runtime.lastStreamCaptureSentAtMs = 0;
+    resetOutputStreamFpsTelemetry(runtime);
+  }
+
+  // Stop a disabled output's encoder. Called from the render loop, which is the
+  // ONLY place that runs for a disabled output: renderOutputWindow holds the
+  // other teardown but the loop never calls it once the output is off, and
+  // clearDisabledOutputWindow returns immediately for a stream output because
+  // it has no window. So nothing stopped the encoder -- and turning an output
+  // off is exactly what STOP RECORDING does. MEASURED: ffmpeg ran on holding
+  // the file open, outlived the app, and the next start reused it, appending
+  // three separate takes into one file (8s -> 20s -> 32s).
+  //
+  // Guarded so the common case (an output that has been off all show) costs a
+  // pointer check per frame rather than a full teardown.
+  void stopEgressForDisabledOutput(int outputIndex) {
+    if (outputIndex == scopesOutputIndex() && scopesCaptureRenderer_) releaseScopesCapture();
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return;
+    }
+    const bool egressAlive =
+      runtime->streamWriter != nullptr
+#ifdef _WIN32
+      || runtime->streamProcess.running();
+#else
+      || runtime->streamPid > 0;
+#endif
+    if (!egressAlive) {
+      return;
+    }
+    stopOutputStreamRuntime(*runtime);
+    resetOutputStreamFpsTelemetry(*runtime);
+  }
+
+  void stopOutputStream(int outputIndex) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return;
+    }
+    stopOutputStreamRuntime(*runtime);
+  }
+
+#ifdef _WIN32
+  // Windows: spawn ffmpeg with stdin pipe for video input.
+  // The args should use "pipe:0" or "-" as the input path for reading from stdin.
+  // A Windows child gets exactly one piped stdin, which video already uses, so
+  // audio needs its own channel. A NAMED PIPE is the way: ffmpeg opens it by
+  // path like any other input, and converting the handle to a CRT fd afterwards
+  // means the existing writer code works unchanged.
+  std::string createOutputAudioPipe(OutputRuntime& runtime, int outputIndex) {
+    // UNIQUE PER START. The name used to be just pid-outputIndex, i.e. the same
+    // string for every take on an output, and the pipe is created with
+    // nMaxInstances = 1. Starting a second recording while the previous
+    // instance was still closing therefore failed, and the encoder died and was
+    // retried until the old handle finally went away. MEASURED: take one wrote
+    // a single clean file; take two produced two stray 0.055-second fragments
+    // first. The POSIX fifo path already stamps its name for this reason.
+    static std::atomic<unsigned> pipeSerial {0};
+    const std::string name = "\\\\.\\pipe\\deckboy-audio-" +
+                             std::to_string(GetCurrentProcessId()) + "-" +
+                             std::to_string(outputIndex) + "-" +
+                             std::to_string(pipeSerial.fetch_add(1,
+                                              std::memory_order_relaxed));
+    HANDLE h = CreateNamedPipeA(
+      name.c_str(),
+      PIPE_ACCESS_OUTBOUND,
+      PIPE_TYPE_BYTE | PIPE_WAIT,
+      1,                      // one client: ffmpeg
+      1 << 20, 1 << 20,       // 1MB each way, ample for 48k stereo
+      0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+      return {};
+    }
+    runtime.streamAudioPipeHandle = reinterpret_cast<void*>(h);
+    return name;
+  }
+
+  // ConnectNamedPipe BLOCKS until ffmpeg opens its end, so it cannot run on the
+  // main thread -- arming an output would freeze the UI until the encoder got
+  // round to it. Detached, and it publishes the fd when the connection lands.
+  void connectOutputAudioPipeAsync(OutputRuntime& runtime) {
+    HANDLE h = reinterpret_cast<HANDLE>(runtime.streamAudioPipeHandle);
+    if (h == nullptr || h == INVALID_HANDLE_VALUE) return;
+    auto writer = runtime.streamWriter;
+    std::thread([h, writer]() {
+      const BOOL ok = ConnectNamedPipe(h, nullptr);
+      if (!ok && GetLastError() != ERROR_PIPE_CONNECTED) {
+        CloseHandle(h);
+        return;
+      }
+      const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(h), 0);
+      if (fd < 0) {
+        CloseHandle(h);
+        return;
+      }
+      if (writer) {
+        // Teardown can win the race with ConnectNamedPipe. Publish only to a
+        // live writer; otherwise this detached connector would leak its fd.
+        {
+          std::lock_guard<std::mutex> audioLock(writer->audioMutex);
+          std::lock_guard<std::mutex> lock(writer->mutex);
+          if (writer->stop) { _close(fd); return; }
+          writer->audioPipeFd.store(fd, std::memory_order_release);
+        }
+        writer->audioCv.notify_one();
+      } else {
+        _close(fd);
+      }
+    }).detach();
+  }
+
+  bool spawnOutputStreamProcess(OutputRuntime& runtime,
+                                const std::vector<std::string>& args) {
+    if (args.empty()) {
+      return false;
+    }
+    runtime.streamProcess.stop();
+    if (!spawnProcess(runtime.streamProcess, args, SpawnOptions::pipedStdin())) {
+      return false;
+    }
+    return runtime.streamProcess.writeFd >= 0;
+  }
+#else
+  // ffmpeg opens its inputs in order and reads the video one before it opens
+  // this, so waiting for it here would deadlock against the video writer that
+  // has not started yet. Detached, polling the FIFO until ffmpeg's end is open
+  // (ENXIO until then), and publishing to a live writer only -- the same
+  // contract as the Windows named-pipe connector.
+  void connectOutputAudioPipeAsync(OutputRuntime& runtime) {
+    const std::string path = runtime.streamAudioPipePath;
+    auto writer = runtime.streamWriter;
+    if (path.empty() || !writer) return;
+    std::thread([path, writer]() {
+      const Uint64 deadline = SDL_GetTicks() + 15000;
+      int fd = -1;
+      while (fd < 0 && SDL_GetTicks() < deadline) {
+        {
+          std::lock_guard<std::mutex> lock(writer->mutex);
+          if (writer->stop) return;
+        }
+        fd = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+        if (fd >= 0) break;
+        if (errno != ENXIO && errno != EINTR && errno != ENOENT) return;
+        SDL_Delay(10);
+      }
+      if (fd < 0) return;
+      setCloseOnExec(fd);
+      setFdBlockingMode(fd, true);
+      {
+        std::lock_guard<std::mutex> audioLock(writer->audioMutex);
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        if (writer->stop) { close(fd); return; }
+        writer->audioPipeFd.store(fd, std::memory_order_release);
+      }
+      writer->audioCv.notify_one();
+    }).detach();
+  }
+
+  bool spawnOutputStreamProcess(OutputRuntime& runtime,
+                                const std::vector<std::string>& args,
+                                const std::string& videoInputPath) {
+    if (args.empty() || videoInputPath.empty()) {
+      return false;
+    }
+
+    unlink(videoInputPath.c_str());
+    if (mkfifo(videoInputPath.c_str(), 0600) != 0) {
+      return false;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+      unlink(videoInputPath.c_str());
+      return false;
+    }
+
+    if (pid == 0) {
+      int stdinFd = open("/dev/null", O_RDONLY);
+      if (stdinFd >= 0) {
+        dup2(stdinFd, STDIN_FILENO);
+        close(stdinFd);
+      }
+      int stdoutFd = open("/dev/null", O_WRONLY);
+      if (stdoutFd >= 0) {
+        dup2(stdoutFd, STDOUT_FILENO);
+        close(stdoutFd);
+      }
+
+      std::vector<char*> argv;
+      argv.reserve(args.size() + 1);
+      for (const auto& arg : args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+      }
+      argv.push_back(nullptr);
+      execvp(argv[0], argv.data());
+      _exit(127);
+    }
+
+    int videoFd = -1;
+    Uint64 deadline = SDL_GetTicks() + 1000;
+    while (videoFd < 0 && SDL_GetTicks() < deadline) {
+      videoFd = open(videoInputPath.c_str(), O_WRONLY | O_NONBLOCK);
+      if (videoFd >= 0) {
+        break;
+      }
+      if (errno != ENXIO && errno != ENOENT && errno != EINTR) {
+        break;
+      }
+      SDL_Delay(10);
+    }
+    if (videoFd < 0) {
+      kill(pid, SIGTERM);
+      int status = 0;
+      waitpid(pid, &status, 0);
+      unlink(videoInputPath.c_str());
+      return false;
+    }
+
+    runtime.streamPid = pid;
+    runtime.streamVideoPipePath = videoInputPath;
+    runtime.streamPipeFd = videoFd;
+    runtime.streamAudioPipeFd = -1;
+    setCloseOnExec(runtime.streamPipeFd);
+    setFdBlockingMode(runtime.streamPipeFd, true);
+    return true;
+  }
+#endif
+
+  void primeOutputStreamAudioReadPositions(int outputIndex, OutputRuntime& runtime) {
+    runtime.streamAudioReadSamplesByDeck.clear();
+    inputAudioRing_.primeEndPositions({0},
+      runtime.inputAudioReadSamplesBySink[&runtime.streamAudioReadSamplesByDeck]);
+    runtime.streamAudioDecks = streamAudioDecksForOutput(outputIndex);
+    deckAudioRing_.primeEndPositions(runtime.streamAudioDecks,
+                                     runtime.streamAudioReadSamplesByDeck);
+    runtime.streamAudioOwedSamples = 0;
+    runtime.streamAudioDecksQuiet = true;
+  }
+
+  // ── flushOutputStreamAudioTail ──────────────────────────────────────────────
+  // The last few milliseconds of a take. The pull takes fewer samples than a
+  // frame's worth whenever the decks are momentarily behind (see
+  // collectOutputAudioFrameSamples), so when recording stops there is still
+  // sound in the ring that was played but never written: MEASURED, the audio
+  // track finished 50ms before the picture. This hands it over before the
+  // writer is told to stop -- its audio thread drains what is pending before it
+  // exits, so the samples reach the encoder.
+  //
+  // A deck that has gone quiet is not waited for and nothing is padded: a short
+  // tail is honest, a tail of manufactured silence is not.
+  void flushOutputStreamAudioTail(OutputRuntime& runtime) {
+    if (!runtime.streamWriter || runtime.streamAudioDecks.empty() ||
+        runtime.streamAudioOwedSamples == 0) {
+      return;
+    }
+    const std::size_t mixable = deckAudioRing_.mixableSamples(
+      runtime.streamAudioDecks, runtime.streamAudioReadSamplesByDeck, 2000);
+    if (mixable == deckboy::core::DeckAudioRing::kUnlimited || mixable == 0) {
+      return;
+    }
+    std::uint64_t take = std::min<std::uint64_t>(runtime.streamAudioOwedSamples, mixable);
+    take -= take % 2;
+    if (take == 0) {
+      return;
+    }
+    std::vector<std::int32_t> mixed(static_cast<std::size_t>(take), 0);
+    deckAudioRing_.mixDecks(runtime.streamAudioDecks,
+                            runtime.streamAudioReadSamplesByDeck, mixed,
+                            static_cast<std::size_t>(take), project_.decks.size());
+    auto out = runtime.programAudioStates[&runtime.streamAudioReadSamplesByDeck].process(mixed);
+    runtime.streamAudioOwedSamples -= take;
+    pushOutputStreamAudio(runtime.streamWriter, out);
+  }
+
+  // NDI audio priming and sample collection — cross-platform (used by NDI send
+  // and potentially DeckLink audio). Moved out of #ifndef _WIN32 so NDI audio
+  // works on Windows.
+  void primeOutputNdiAudioReadPositions(int outputIndex, OutputRuntime& runtime) {
+    runtime.programAudioStates.erase(&runtime.ndiAudioReadSamplesByDeck);
+    inputAudioRing_.primeEndPositions({0},
+      runtime.inputAudioReadSamplesBySink[&runtime.ndiAudioReadSamplesByDeck]);
+    runtime.ndiAudioReadSamplesByDeck.clear();
+    deckAudioRing_.primeEndPositions(streamAudioDecksForOutput(outputIndex),
+                                     runtime.ndiAudioReadSamplesByDeck);
+  }
+
+  std::vector<std::int16_t> collectOutputAudioFrameSamples(
+      int outputIndex,
+      std::map<int, std::uint64_t>& readSamplesByDeck,
+      double& sampleRemainder,
+      double fpsHint,
+      std::uint64_t* owedSamples = nullptr,
+      bool* quiet = nullptr,
+      RecordClockSteer* steer = nullptr) {
+    constexpr int kSampleRate = 48000;
+    constexpr int kChannels = 2;
+
+    // Must be the SAME rate the video is written at, or audio and video drift:
+    // this decides how many samples accompany one frame.
+    const double fps =
+      (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+       outputStreamProtocolIsFile(
+         normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol)))
+        ? recordingFps(fpsHint)
+        : outputStreamFps(fpsHint);
+    double exactFrames = (static_cast<double>(kSampleRate) / std::max(1.0, fps)) + sampleRemainder;
+    int sampleFrames = std::max(1, static_cast<int>(std::floor(exactFrames)));
+    sampleRemainder = exactFrames - static_cast<double>(sampleFrames);
+    int interleavedSamples = sampleFrames * kChannels;
+
+    // CARRY A SHORT CHUNK, DO NOT PAD IT. The decks push audio at the sound
+    // card's cadence and this pull happens at the recording's frame rate, so
+    // the ring is regularly a few milliseconds short of one frame's worth for a
+    // moment. Taking the shortfall as silence wrote that hole into the file for
+    // good -- three runs of 5-19ms in every five-second take, measured. The
+    // samples are still in the ring (the read position only advanced by what
+    // was mixed), so this takes fewer samples now and more on a later frame.
+    // Nothing else is anchored to the chunk length: the encoder reads PCM as a
+    // stream, and sync comes from the RATE, which this preserves exactly.
+    //
+    // The carry is capped, and the cap is a SYNC tolerance, not a buffer size.
+    // Audio the recorder could not take yet is written later than the picture it
+    // belongs with, and a deck never runs faster than realtime, so a debt taken
+    // on is never repaid on its own -- it becomes a fixed offset for the rest of
+    // the take. MEASURED with a 400ms cap: no holes anywhere, but the sound ran
+    // up to 213ms ahead of the picture. Past the cap the chunk is filled out
+    // with silence, which is also the honest answer for a deck that has stopped
+    // and would otherwise starve the encoder -- on a network sink that wedges it
+    // hard (see the note where a stream's audio is pushed).
+    constexpr std::uint64_t kMaxCarrySamples = 48000 * kChannels * 6 / 100;  // 60ms
+    if (owedSamples != nullptr) {
+      const std::size_t mixable = deckAudioRing_.mixableSamples(
+        streamAudioDecksForOutput(outputIndex), readSamplesByDeck);
+      const bool decksQuiet = (mixable == deckboy::core::DeckAudioRing::kUnlimited);
+      // A DECK THAT HAS JUST OPENED ITS MOUTH OWES NOTHING FOR THE SILENCE
+      // BEFORE IT. Audio reaches this ring once the device has actually played
+      // it, so the first ~130ms of a take is legitimately silent -- the sound
+      // had not been heard yet either. Counting that as a debt made the take
+      // start with a 90ms hole and then run permanently early. Measured on real
+      // hardware: 90ms and 20ms holes at the head of every take, gone with this.
+      if (quiet != nullptr) {
+        if (*quiet && !decksQuiet) {
+          *owedSamples = 0;
+        }
+        *quiet = decksQuiet;
+      }
+      *owedSamples += static_cast<std::uint64_t>(interleavedSamples);
+      // The recording's clock reads the balance HERE, before the take: the
+      // sound the ring holds unread less the sound the frames have asked for.
+      if (steer != nullptr) {
+        if (decksQuiet) {
+          steer->quiet();
+        } else {
+          steer->observe((static_cast<double>(mixable) - static_cast<double>(*owedSamples)) /
+                           static_cast<double>(kSampleRate * kChannels),
+                         1.0 / std::max(1.0, fps));
+        }
+      }
+      std::uint64_t take = std::min<std::uint64_t>(*owedSamples, mixable);
+      if (*owedSamples - take > kMaxCarrySamples) {
+        take = *owedSamples - kMaxCarrySamples;
+      }
+      // Whole sample frames only: half a frame would swap the channels for the
+      // rest of the take.
+      take -= take % static_cast<std::uint64_t>(kChannels);
+      *owedSamples -= take;
+      interleavedSamples = static_cast<int>(take);
+      if (interleavedSamples <= 0) {
+        return {};
+      }
+    }
+
+    std::vector<std::int32_t> mixed(interleavedSamples, 0);
+
+    deckAudioRing_.mixDecks(streamAudioDecksForOutput(outputIndex),
+                            readSamplesByDeck, mixed,
+                            static_cast<std::size_t>(interleavedSamples),
+                            project_.decks.size());
+
+    // Live input, summed with the deck mix. This reaches the STREAM and the
+    // RECORDING but never the speakers, which is deliberate -- see
+    // Project::audioInputToProgram.
+    if (project_.audioInputToProgram) {
+      if (OutputRuntime* runtime = runtimeForOutput(outputIndex)) {
+        auto& inputRead = runtime->inputAudioReadSamplesBySink[&readSamplesByDeck];
+        if (inputRead.empty()) inputAudioRing_.primeEndPositions({0}, inputRead);
+        inputAudioRing_.mixDecks({0}, inputRead, mixed,
+          static_cast<std::size_t>(interleavedSamples), 1);
+      }
+    }
+
+    if (OutputRuntime* runtime = runtimeForOutput(outputIndex)) {
+      const void* sink = &readSamplesByDeck;
+      // Prefer the recorded/streamed mix for the monitor when it is present.
+      if (!runtime->meteredAudioSink || sink == &runtime->streamAudioReadSamplesByDeck)
+        runtime->meteredAudioSink = sink;
+      return runtime->programAudioStates[sink].process(mixed);
+    }
+    std::vector<std::int16_t> out(interleavedSamples, 0);
+    for (int i = 0; i < interleavedSamples; ++i) {
+      out[i] = static_cast<std::int16_t>(std::clamp(mixed[i], -32768, 32767));
+    }
+    return out;
+  }
+
+  bool ensureOutputStreamRunning(int outputIndex, int width, int height, double fpsHint) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputRenderer) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "stream runtime unavailable");
+      return false;
+    }
+    if (!output.streamEnabled) {
+      stopOutputStreamRuntime(*runtime);
+      if (output.enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Armed);
+      }
+      return false;
+    }
+    Uint64 nowMs = SDL_GetTicks();
+    if (runtime->streamStartFailed &&
+        runtime->streamRestartBlockedUntilMs > nowMs) {
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering,
+        runtime->streamFailureReason.empty() ? std::string("stream retrying")
+                                             : "stream retrying: " + runtime->streamFailureReason);
+      return false;
+    }
+    width = std::max(1, width);
+    height = std::max(1, height);
+    output.streamProtocol = normalizeOutputStreamProtocol(output.streamProtocol);
+    output.streamBitrateKbps = std::clamp(output.streamBitrateKbps, 500, 50000);
+    if (trim(output.streamUrl).empty()) {
+      output.streamUrl = defaultOutputStreamUrl(output.streamProtocol, outputIndex);
+    }
+    std::string desiredSpec = buildOutputStreamSpec(outputIndex, width, height, fpsHint);
+    bool processAlive = false;
+#ifdef _WIN32
+    processAlive = runtime->streamProcess.running();
+#else
+    processAlive = runtime->streamPid > 0;
+#endif
+    if (runtime->streamSpec == desiredSpec && processAlive) {
+      if (output.enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Live);
+      }
+      return true;
+    }
+    // A RECORDING never restarts mid-take. Restarting closes the current file
+    // and opens a new one, so a spec change a few frames in silently splits the
+    // take in two and the operator loses the top of it in a stray fragment.
+    // MEASURED: every recording produced an extra 0.088-second file -- two
+    // frames -- before the real one, because the fps in the spec settles just
+    // after the output comes up.
+    //
+    // A network sink genuinely should re-dial on a parameter change; a file
+    // sink should keep writing with the parameters it opened with. The new
+    // settings apply to the NEXT take, which is when the operator expects them.
+    if (processAlive && !runtime->streamSpec.empty() && runtime->streamToFile) {
+      if (output.enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Live);
+      }
+      return true;
+    }
+
+    // Captured and put back around the stop below. That call clears the take
+    // counter -- correctly, it is the generic teardown -- but it runs HERE, on
+    // the way in, immediately before the arguments are built. So the segment's
+    // timecode offset was read after the thing that zeroes it and every
+    // segment started at the take's base value, which is the whole defect this
+    // counter exists to fix.
+    const std::uint64_t takeFramesSoFar = runtime->recordTakeFrames;
+    stopOutputStreamRuntime(*runtime);
+    runtime->recordTakeFrames = takeFramesSoFar;
+    setOutputHealthState(outputIndex, OutputHealthState::Recovering, "starting stream");
+    if (outputStreamProtocolIsWeb(normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol))) {
+      // Its viewers are on the web monitor, so routing an output to WEB
+      // switches the monitor on; and the encoder needs its socket to exist.
+      if (!project_.webMonitorEnabled) {
+        setWebMonitorEnabled(true);
+      }
+      ensureWebIngest(outputIndex);
+      {
+        auto& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+        std::lock_guard<std::mutex> lock(slot.mutex);
+        const double rate = outputStreamFps(fpsHint);
+        slot.avFragmentSeconds = std::max(1, static_cast<int>(std::lround(rate * 0.5))) / rate;
+      }
+    }
+#ifdef _WIN32
+    // Windows: video over stdin (pipe:0), audio over a named pipe. The pipe
+    // must EXIST before ffmpeg starts, or its open fails and the encoder dies
+    // with a confusing "no such file" on an input the operator never chose.
+    const std::string audioPipeName = createOutputAudioPipe(*runtime, outputIndex);
+    std::vector<std::string> args =
+      buildOutputStreamArgs(outputIndex, width, height, fpsHint, "", audioPipeName,
+                            takeFramesSoFar);
+    // Remove -nostdin since we're piping video via stdin
+    args.erase(std::remove(args.begin(), args.end(), "-nostdin"), args.end());
+#else
+    std::string videoInputPath = (fs::temp_directory_path() /
+      ("deckboy_stream_video_" + std::to_string(outputIndex) + "_" + std::to_string(SDL_GetTicks()) + ".fifo")).string();
+    // SOUND ON macOS AND LINUX. Only Windows had an audio pipe: here ffmpeg was
+    // given no audio input at all and filled the track with anullsrc, so every
+    // stream, recording and Web Monitor on these platforms carried SILENCE --
+    // and the Web Monitor, which will not drop a sample, waited forever for a
+    // pipe that never came and restarted its encoder in a loop. A FIFO beside
+    // the video one, connected in the background as the Windows pipe is.
+    std::string audioInputPath = (fs::temp_directory_path() /
+      ("deckboy_stream_audio_" + std::to_string(outputIndex) + "_" + std::to_string(SDL_GetTicks()) + ".fifo")).string();
+    unlink(audioInputPath.c_str());
+    if (mkfifo(audioInputPath.c_str(), 0600) != 0) {
+      audioInputPath.clear();   // silence, as before, rather than no stream
+    }
+    runtime->streamAudioPipePath = audioInputPath;
+    std::vector<std::string> args = buildOutputStreamArgs(
+      outputIndex, width, height, fpsHint, videoInputPath, audioInputPath, takeFramesSoFar);
+#endif
+    runtime->streamHdr = hdrRecordingFor(outputIndex) &&
+      !outputStreamProtocolIsWeb(normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol));
+    if (runtime->streamHdr) {
+      const OutputRuntime& source = outputRuntimes_[static_cast<std::size_t>(hdrRecordingSource(outputIndex))];
+      runtime->streamHdrWidth = source.compositorWidth;
+      runtime->streamHdrHeight = source.compositorHeight;
+    }
+    runtime->hdrRecordFrame = {};
+    if (args.empty()) {
+      runtime->streamStartFailed = true;
+      runtime->streamRestartBlockedUntilMs = SDL_GetTicks() + 1500;
+      stopOutputStreamRuntime(*runtime);
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "stream command invalid");
+      return false;
+    }
+#ifdef _WIN32
+    if (!spawnOutputStreamProcess(*runtime, args)) {
+#else
+    if (!spawnOutputStreamProcess(*runtime, args, videoInputPath)) {
+#endif
+      stopOutputStreamRuntime(*runtime);
+      if (!runtime->streamStartFailed && outputIndex == project_.focusedOutputIndex) {
+        triggerToast("stream failed");
+      }
+      runtime->streamStartFailed = true;
+      runtime->streamRestartBlockedUntilMs = SDL_GetTicks() + 1500;
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "stream process failed");
+      return false;
+    }
+    runtime->streamSpec = desiredSpec;
+    runtime->streamToFile = outputStreamProtocolIsFile(
+      normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol));
+    // A LIVE STREAM KEEPS THE RATE IT DIALLED WITH.
+    //
+    // The rate is part of the encoder's command line, so changing it means a
+    // new encoder, which means dropping the connection and dialling again. It
+    // changes the moment a cue is taken -- the hint comes from the cue's own
+    // fps, so 30.00 becomes 23.98 and the stream reconnects underneath the
+    // operator at the worst possible moment.
+    //
+    // Down a wire that is fatal rather than untidy: the first encoder still
+    // holds the socket, and an SRT or RTMP listener accepts ONE caller, so the
+    // replacement blocks on connect for ever. It never reads its input, the
+    // writer's blocking write never returns, and the stream is dead with the
+    // health readout still saying "live". UDP survived only because it has no
+    // connection to lose.
+    runtime->streamLockedFps = runtime->streamToFile ? 0.0
+                                                     : outputStreamFps(fpsHint);
+    runtime->streamStartedAtMs = SDL_GetTicks();
+    runtime->streamLastDrainAtMs = runtime->streamStartedAtMs;
+    runtime->streamLastSeenWritten = 0;
+    runtime->streamRateSampledAtMs = runtime->streamStartedAtMs;
+    runtime->streamRateSampleBytes = 0;
+    runtime->streamMeasuredKbps = 0.0;
+    runtime->streamCommand = shellCommandString(args);
+    runtime->streamFrameWidth = width;
+    runtime->streamFrameHeight = height;
+    runtime->streamAudioSampleRemainder = 0.0;
+    primeOutputStreamAudioReadPositions(outputIndex, *runtime);
+    runtime->streamStartFailed = false;
+    runtime->streamRestartBlockedUntilMs = 0;
+    startOutputStreamWriter(*runtime, outputStreamProtocolIsWeb(
+      normalizeOutputStreamProtocol(output.streamProtocol)));
+    // Must come AFTER the writer exists: the connect thread publishes the fd
+    // into it once ffmpeg opens the pipe.
+    connectOutputAudioPipeAsync(*runtime);
+    setOutputHealthState(outputIndex, OutputHealthState::Live);
+    return true;
+  }
+
+  bool rotateCapturedFramePixels(const std::vector<std::uint8_t>& sourcePixels,
+                                 int sourceW,
+                                 int sourceH,
+                                 int orientationDegrees,
+                                 std::vector<std::uint8_t>& destPixels,
+                                 int& destW,
+                                 int& destH) const {
+    int normalized = normalizeOutputOrientationDegrees(orientationDegrees);
+    if (sourceW <= 0 || sourceH <= 0) {
+      return false;
+    }
+    if (normalized == 0) {
+      destW = sourceW;
+      destH = sourceH;
+      destPixels = sourcePixels;
+      return true;
+    }
+
+    if (normalized == 90 || normalized == 270) {
+      destW = sourceH;
+      destH = sourceW;
+    } else {
+      destW = sourceW;
+      destH = sourceH;
+    }
+    destPixels.assign(static_cast<size_t>(destW) * static_cast<size_t>(destH) * 4u, 0);
+    if (destPixels.empty()) {
+      return false;
+    }
+
+    for (int y = 0; y < sourceH; ++y) {
+      for (int x = 0; x < sourceW; ++x) {
+        int dx = x;
+        int dy = y;
+        if (normalized == 90) {
+          dx = sourceH - 1 - y;
+          dy = x;
+        } else if (normalized == 180) {
+          dx = sourceW - 1 - x;
+          dy = sourceH - 1 - y;
+        } else if (normalized == 270) {
+          dx = y;
+          dy = sourceW - 1 - x;
+        }
+        size_t srcOffset = (static_cast<size_t>(y) * static_cast<size_t>(sourceW) + static_cast<size_t>(x)) * 4u;
+        size_t dstOffset = (static_cast<size_t>(dy) * static_cast<size_t>(destW) + static_cast<size_t>(dx)) * 4u;
+        std::memcpy(destPixels.data() + dstOffset, sourcePixels.data() + srcOffset, 4u);
+      }
+    }
+    return true;
+  }
+
+  // ── Program-monitor tap ───────────────────────────────────────────────────
+  // The control window used to preview the *decoder's* frame. On the GPU
+  // zero-copy path that meant a full-resolution hwframe download, which is far
+  // too expensive per frame, so it ran at ~10fps and visibly trailed the
+  // program feed. Instead, sample the output's finished composite here — on
+  // the output's own render pass, once per presented frame — scaled down to a
+  // preview-sized target first. The readback is ~0.5MB instead of 3-12MB, so
+  // it can run every frame, and because it is taken from the same pass that
+  // presents, the preview cannot drift away from the output.
+  //
+  // Tapped BEFORE warp/AOI/edge-blend (those are applied at present time in
+  // presentOutputCompositorToWindow): the monitor shows the programme, not one
+  // projector's correction of it. EXCEPT while the warp editor is open on this
+  // output (previewTapShowsWarp): then the tap is drawn the way the window
+  // presents it, so the warp shows in the monitor and the handles -- drawn
+  // where the corners land -- sit on the picture's own corners. Before, they
+  // floated over a flat picture and only the projector showed the warp.
+  static constexpr int kPreviewTapMaxW = 640;
+  static constexpr int kPreviewTapMaxH = 360;
+
+  bool captureOutputPreviewTap(OutputRuntime& runtime, const SDL_Rect& sourceRect,
+                               int outputIndex = -1, int presentW = 0, int presentH = 0) {
+    if (!runtime.outputRenderer || !runtime.compositorTexture) {
+      return false;
+    }
+    // Only a window warps, so an output with no window keeps the flat tap.
+    const bool warped = presentW > 0 && presentH > 0 && previewTapShowsWarp(outputIndex);
+    int srcW = std::max(1, warped ? presentW : sourceRect.w);
+    int srcH = std::max(1, warped ? presentH : sourceRect.h);
+    // Fit the output's aspect inside the preview budget; never upscale.
+    double scale = std::min({1.0,
+                             static_cast<double>(kPreviewTapMaxW) / srcW,
+                             static_cast<double>(kPreviewTapMaxH) / srcH});
+    int tapW = std::max(2, static_cast<int>(std::lround(srcW * scale)) & ~1);
+    int tapH = std::max(2, static_cast<int>(std::lround(srcH * scale)) & ~1);
+
+    // WITHOUT WAITING ON THE GPU, where the renderer allows it.
+    //
+    // SDL_RenderReadPixels makes the output pass wait for the GPU to finish
+    // the frame. Measured with every core busy: that wait was 15-57ms of a
+    // 16.7ms frame and every hitch the output showed was inside it -- the
+    // control window's monitor was what made the programme stutter while a
+    // game ran beside it. The staging ring copies and maps a frame from two
+    // ticks back instead, which a monitor thumbnail can easily afford. The
+    // ring is BGRA (it is shared with recording), so the tap target is too.
+    const bool tapAsync = !runtime.previewTapReadbackUnavailable &&
+                          egressReadbackMode() == kEgressReadbackAuto;
+    const SDL_PixelFormat tapFormat = tapAsync ? SDL_PIXELFORMAT_BGRA32
+                                               : SDL_PIXELFORMAT_RGBA32;
+    if (runtime.previewTapTexture &&
+        (runtime.previewTapTextureW != tapW || runtime.previewTapTextureH != tapH ||
+         runtime.previewTapTexture->format != tapFormat)) {
+      SDL_DestroyTexture(runtime.previewTapTexture);
+      runtime.previewTapTexture = nullptr;
+      runtime.previewTapTextureW = 0;
+      runtime.previewTapTextureH = 0;
+      if (runtime.previewTapReadback) {
+        deckboy::gpu::destroyStagingReadback(runtime.previewTapReadback);
+        runtime.previewTapReadback = nullptr;
+      }
+    }
+    if (!runtime.previewTapTexture) {
+      runtime.previewTapTexture = deckboyCreateTexture(runtime.outputRenderer,
+                                                       tapFormat,
+                                                       SDL_TEXTUREACCESS_TARGET,
+                                                       tapW, tapH);
+      if (!runtime.previewTapTexture) {
+        return false;
+      }
+      runtime.previewTapTextureW = tapW;
+      runtime.previewTapTextureH = tapH;
+    }
+
+    SDL_Texture* previousTarget = SDL_GetRenderTarget(runtime.outputRenderer);
+    SDL_SetRenderTarget(runtime.outputRenderer, runtime.previewTapTexture);
+    // Linear only for this downscale — nearest-neighbour minification of moving
+    // video shimmers badly. The compositor's own nearest mode is restored
+    // immediately so the real output present is untouched.
+    SDL_ScaleMode previousScale = SDL_SCALEMODE_NEAREST;
+    SDL_GetTextureScaleMode(runtime.compositorTexture, &previousScale);
+    SDL_SetTextureScaleMode(runtime.compositorTexture, SDL_SCALEMODE_LINEAR);
+    SDL_SetRenderDrawColor(runtime.outputRenderer, 0, 0, 0, 255);
+    SDL_RenderClear(runtime.outputRenderer);
+    if (warped) {
+      // The window's own present, drawn small: the same warp, AOI, edge blend
+      // and orientation, in the window's pixels, scaled down to the tap.
+      SDL_SetRenderScale(runtime.outputRenderer,
+                         static_cast<float>(tapW) / static_cast<float>(presentW),
+                         static_cast<float>(tapH) / static_cast<float>(presentH));
+      presentOutputCompositorToWindowLevels(outputIndex, presentW, presentH);
+      SDL_SetRenderScale(runtime.outputRenderer, 1.0f, 1.0f);
+    } else {
+      SDL_FRect src {static_cast<float>(sourceRect.x), static_cast<float>(sourceRect.y),
+                     static_cast<float>(srcW), static_cast<float>(srcH)};
+      SDL_RenderTexture(runtime.outputRenderer, runtime.compositorTexture, &src, nullptr);
+    }
+
+    bool ok = false;
+    bool tapDone = false;
+    if (tapAsync) {
+      if (!runtime.previewTapReadback) {
+        runtime.previewTapReadback =
+          deckboy::gpu::createStagingReadback(runtime.outputRenderer, tapW, tapH);
+        runtime.previewTapReadbackUnavailable = runtime.previewTapReadback == nullptr;
+        runtime.previewTapReadbackMisses = 0;
+      }
+      if (runtime.previewTapReadback) {
+        tapDone = true;   // a miss holds the last picture; never block for one
+        const std::size_t bytes = static_cast<std::size_t>(tapW) *
+                                  static_cast<std::size_t>(tapH) * 4u;
+        runtime.previewTapScratch.resize(bytes);
+        const bool got = deckboy::gpu::stagingReadbackFrame(
+          runtime.previewTapReadback, runtime.previewTapTexture,
+          runtime.previewTapScratch.data(), bytes, tapW, tapH);
+        if (got) {
+          runtime.previewTapReadbackMisses = 0;
+          runtime.previewTapPixels.resize(bytes);
+          ok = SDL_ConvertPixels(tapW, tapH, SDL_PIXELFORMAT_BGRA32,
+                                 runtime.previewTapScratch.data(), tapW * 4,
+                                 SDL_PIXELFORMAT_RGBA32,
+                                 runtime.previewTapPixels.data(), tapW * 4);
+          if (ok) {
+            runtime.previewTapW = tapW;
+            runtime.previewTapH = tapH;
+            runtime.previewTapWarped = warped;
+            ++runtime.previewTapSerial;
+          }
+        } else if (++runtime.previewTapReadbackMisses >= 60) {
+          // A second of nothing: the same retirement recording does, so the
+          // monitor can never freeze on one picture while the output runs.
+          deckboy::gpu::destroyStagingReadback(runtime.previewTapReadback);
+          runtime.previewTapReadback = nullptr;
+          runtime.previewTapReadbackUnavailable = true;
+          tapDone = false;
+        }
+      }
+    }
+    if (tapDone) {
+      // nothing more to read this frame
+    } else if (SDL_Surface* captured = SDL_RenderReadPixels(runtime.outputRenderer, nullptr)) {
+      std::size_t stride = static_cast<std::size_t>(captured->w) * 4u;
+      std::size_t bytes = stride * static_cast<std::size_t>(captured->h);
+      if (runtime.previewTapPixels.size() != bytes) {
+        runtime.previewTapPixels.resize(bytes);
+      }
+      ok = !runtime.previewTapPixels.empty() &&
+           SDL_ConvertPixels(captured->w, captured->h,
+                             captured->format, captured->pixels, captured->pitch,
+                             SDL_PIXELFORMAT_RGBA32,
+                             runtime.previewTapPixels.data(),
+                             static_cast<int>(stride));
+      if (ok) {
+        runtime.previewTapW = captured->w;
+        runtime.previewTapH = captured->h;
+        runtime.previewTapWarped = warped;
+        ++runtime.previewTapSerial;
+      }
+      SDL_DestroySurface(captured);
+    }
+
+    SDL_SetTextureScaleMode(runtime.compositorTexture, previousScale);
+    SDL_SetRenderTarget(runtime.outputRenderer, previousTarget);
+    return ok;
+  }
+
+  void releaseOutputPreviewTap(OutputRuntime& runtime) {
+    if (runtime.previewTapReadback) {
+      deckboy::gpu::destroyStagingReadback(runtime.previewTapReadback);
+      runtime.previewTapReadback = nullptr;
+    }
+    runtime.previewTapReadbackMisses = 0;
+    runtime.previewTapScratch.clear();
+    if (runtime.previewTapTexture) {
+      SDL_DestroyTexture(runtime.previewTapTexture);
+      runtime.previewTapTexture = nullptr;
+    }
+    runtime.previewTapTextureW = 0;
+    runtime.previewTapTextureH = 0;
+    runtime.previewTapPixels.clear();
+    runtime.previewTapW = 0;
+    runtime.previewTapH = 0;
+    runtime.previewTapSerial = 0;
+    runtime.previewTapWarped = false;
+  }
+
+  // Which output the control window's program monitor mirrors: the focused
+  // deck's primary output, when that output is actually compositing.
+  std::optional<int> previewTapOutputIndex() {
+    // AN AUDITIONED DECK IS NOT ON ITS OUTPUT, so its output's composite is
+    // black and tapping it would show the operator the nothing that the room
+    // is correctly seeing. Refusing the tap drops the preview to the decoder
+    // path, which draws the cue and applies its look itself -- see the
+    // fallback in app_update.ipp.
+    if (deckIsHeldOffOutput(project_.focusedDeckIndex)) {
+      return std::nullopt;
+    }
+    auto primary = primaryOutputIndexForDeck(project_.focusedDeckIndex);
+    if (!primary) {
+      return std::nullopt;
+    }
+    // WHILE THE WARP EDITOR IS OPEN, THE MONITOR IS THE OUTPUT BEING WARPED.
+    // The editor works on the focused output; the monitor tapped the deck's
+    // primary one. With two window outputs on one deck -- a desk monitor and
+    // the projector being lined up -- warping the projector left the monitor
+    // on the other, flat output, and only the projector showed the warp
+    // (James, 0.99.418). A stream draws no window, so it is never warped.
+    if (warpEditorVisible()) {
+      const int focused = project_.focusedOutputIndex;
+      if (focused >= 0 && focused < static_cast<int>(project_.outputs.size()) && focused != *primary) {
+        const OutputTarget& out = project_.outputs[static_cast<std::size_t>(focused)];
+        const bool showsDeck = out.hostDeckIndex == project_.focusedDeckIndex ||
+                               assignmentIndexForDeckOutput(project_.focusedDeckIndex, focused).has_value();
+        if (out.enabled && normalizeOutputType(out.outputType) != "stream" && showsDeck) {
+          return focused;
+        }
+      }
+    }
+    int outputIndex = *primary;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return std::nullopt;
+    }
+    if (!project_.outputs[outputIndex].enabled) {
+      return std::nullopt;
+    }
+    return outputIndex;
+  }
+
+  // How the recording frame gets off the GPU. AUTO takes the asynchronous
+  // staging ring where the backend has one (D3D11 today) and falls back to the
+  // plain synchronous read where it does not -- which is macOS and Linux.
+  //
+  // DECKBOY_EGRESS_READBACK=sync forces the fallback on a machine that HAS the
+  // fast path, which is the only way to measure the other platforms' behaviour
+  // from here. Measured on a 4K programme, 14s takes:
+  //
+  //     1080p50     700/700      1080p59.94  838/839
+  //     2160p25     349/350      2160p50     326/700
+  //
+  // So the fallback is frame-exact for every raster and rate a show is likely
+  // to deliver, and only 4K above 30p outruns it. The cost is the GPU round
+  // trip inside SDL_RenderReadPixels (16.8-18.8ms at 4K); the CPU-side format
+  // conversion is 2.9ms of it, so there is nothing to win by tightening this
+  // side of the call. A ping-pong between two scale targets -- read the one the
+  // GPU finished with last frame -- was tried and MEASURED NO BETTER (311 vs
+  // 326 frames), because SDL copies and maps in a single call and the map waits
+  // on the copy regardless of the texture's age. Closing the 4K gap needs a
+  // real per-backend async path (GL pixel buffer objects, a Metal blit with a
+  // completion handler), not a rearrangement of SDL calls.
+  static constexpr int kEgressReadbackAuto = 0;
+  static constexpr int kEgressReadbackSync = 1;
+
+  static int egressReadbackMode() {
+    static const int mode = [] {
+      const char* env = std::getenv("DECKBOY_EGRESS_READBACK");
+      if (!env || !*env) return kEgressReadbackAuto;
+      return deckboy::core::utils::toLower(env) == "sync" ? kEgressReadbackSync
+                                                          : kEgressReadbackAuto;
+    }();
+    return mode;
+  }
+
+  // The renderer an OUTPUT window gets. This is deliberately not the default on
+  // every platform: recording reads each frame back off the GPU, and only two
+  // backends can do that without stalling the render thread -- D3D11, through
+  // its staging ring, and SDL_GPU, through SDL_DownloadFromGPUTexture. Anything
+  // else falls back to a synchronous read that costs 16.8-18.8ms at 4K, which
+  // 60fps (16.7ms a frame in total) simply cannot afford.
+  //
+  // So Windows keeps its default D3D11 renderer, and macOS and Linux ask for
+  // "gpu" -- Metal and Vulkan underneath -- falling back to the default if it
+  // will not create. DECKBOY_OUTPUT_RENDERER overrides the choice by driver
+  // name, both to force "gpu" on a Windows desk (which is how this path gets
+  // tested at all) and to get an operator back to the old behaviour in a hurry
+  // if a driver misbehaves in the field.
+  // STREAM-ONLY OUTPUTS ON SDL'S GPU RENDERER RENDER OFFSCREEN. That renderer
+  // hands its frame to the GPU only at SDL_RenderPresent, and a stream output
+  // never presented its hidden window (that would wait on a swapchain the
+  // compositor throttles). So nothing it drew ever reached the GPU: the
+  // recording read back one stale picture, or after a second of misses fell
+  // back to the slow synchronous read. An offscreen renderer (no window) is
+  // presented every frame, which only submits -- no swapchain, no vsync.
+  // Direct3D 11 runs every draw at once and needs none of this.
+  SDL_Renderer* createOffscreenGpuRenderer(bool hdr) {
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+    if (hdr) {
+      return nullptr;   // offscreen HDR is not offered; the window renderer is used
+    }
+    const char* forced = std::getenv("DECKBOY_OUTPUT_RENDERER");
+#if defined(_WIN32)
+    const bool wantsGpu = forced && std::string(forced) == "gpu";
+#else
+    const bool wantsGpu = !forced || !*forced || std::string(forced) == "gpu";
+#endif
+    if (!wantsGpu) {
+      return nullptr;
+    }
+    return SDL_CreateGPURenderer(nullptr, nullptr);
+#else
+    (void) hdr;
+    return nullptr;
+#endif
+  }
+
+  SDL_Renderer* createOutputRenderer(SDL_Window* window, bool hdr = false) {
+    // HDR: the renderer outputs scRGB (linear BT.709 primaries, 1.0 = 80 nits,
+    // values above it reach the display's HDR range). Direct3D 11 on Windows,
+    // SDL's GPU renderer (Metal/Vulkan) elsewhere. Asked first; the caller
+    // checks the colourspace it actually got.
+    if (hdr) {
+      const SDL_PropertiesID props = SDL_CreateProperties();
+      SDL_SetPointerProperty(props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window);
+      SDL_SetNumberProperty(props, SDL_PROP_RENDERER_CREATE_OUTPUT_COLORSPACE_NUMBER, SDL_COLORSPACE_SRGB_LINEAR);
+#ifdef _WIN32
+      SDL_SetStringProperty(props, SDL_PROP_RENDERER_CREATE_NAME_STRING, "direct3d11");
+#else
+      SDL_SetStringProperty(props, SDL_PROP_RENDERER_CREATE_NAME_STRING, "gpu");
+#endif
+      SDL_Renderer* r = SDL_CreateRendererWithProperties(props);
+      SDL_DestroyProperties(props);
+      if (r) return r;
+      std::cerr << "output-renderer: an HDR (scRGB) renderer could not be created: " << SDL_GetError()
+                << " -- this output stays SDR" << std::endl;
+    }
+    if (const char* forced = std::getenv("DECKBOY_OUTPUT_RENDERER")) {
+      if (*forced) {
+        if (SDL_Renderer* r = SDL_CreateRenderer(window, forced)) {
+          return r;
+        }
+        std::cerr << "output-renderer: DECKBOY_OUTPUT_RENDERER=" << forced
+                  << " could not be created, falling back" << std::endl;
+      }
+    }
+#if !defined(_WIN32)
+    if (SDL_Renderer* r = SDL_CreateRenderer(window, "gpu")) {
+      return r;
+    }
+#endif
+    // NAMED ORDER, not SDL's default. Passing null lets SDL walk its own list,
+    // and when D3D11 creation fails -- which it does under GPU resource
+    // pressure, several app instances holding devices at once -- it falls
+    // through to the DIRECT3D 9 renderer, which crashes inside the NVIDIA
+    // driver: 0xC0000005 in nvd3dumx.dll under D3D_CreateRenderer. Caught by a
+    // test harness whose recordings died at random, which looked for a while
+    // like a bug in the effects it happened to be exercising.
+    //
+    // So the fallbacks are spelled out and D3D9 is not among them. Every one of
+    // these is a renderer this app is actually tested on.
+    return deckboyCreateRenderer(window);
+  }
+
+  // Whether an output's HDR leaves as HLG rather than PQ (Project::hdrHlgOutputs).
+  bool hdrSignalHlg(int outputIndex) const {
+    return outputIndex >= 0 && outputIndex < 32 && ((project_.hdrHlgOutputs >> outputIndex) & 1u) != 0;
+  }
+
+  // The HDR recording's frame: the whole float compositor read back and
+  // encoded as 16-bit BT.2020, PQ or HLG as the HDR output it comes FROM asks
+  // (core/hdr_to_sdr.hpp HdrEncoder) -- the signal is how that output's
+  // picture leaves, whichever recording mirrors it -- stamped with the same
+  // capture time as the BGRA frame so the pacer treats them as one.
+  void captureHdrRecordFrame(OutputRuntime& runtime, OutputRuntime& into, Uint64 capturedAtMs) {
+    const bool hlg = hdrSignalHlg(static_cast<int>(&runtime - outputRuntimes_.data()));
+    if (readHdrCompositorSignal(runtime, into.hdrRecordFrame, hlg)) into.hdrRecordFrame.capturedAtMs = capturedAtMs;
+  }
+
+  // The float compositor of an HDR output, read back whole and encoded as
+  // 16-bit BT.2020 R'G'B' (6 bytes a pixel), PQ or HLG. False when there is none.
+  bool readHdrCompositorSignal(OutputRuntime& runtime, OutputRuntime::CapturedFrame& frame, bool hlg) {
+    std::shared_ptr<const deckboy::core::hdr::HdrEncoder>& encoder = hdrRecordEncoders_[hlg ? 1 : 0];
+    int& white = hdrRecordEncoderWhite_[hlg ? 1 : 0];
+    if (!encoder || white != project_.hdrSdrWhiteNits) {
+      encoder = std::make_shared<const deckboy::core::hdr::HdrEncoder>(
+        project_.hdrSdrWhiteNits, hlg ? deckboy::core::hdr::Transfer::Hlg : deckboy::core::hdr::Transfer::Pq);
+      white = project_.hdrSdrWhiteNits;
+    }
+    // A pooled buffer nobody else holds any more (the writer has written it),
+    // or a new one; a handful at most, since the writer's queue is bounded.
+    auto pooledBuffer = [this](std::size_t bytes) {
+      for (auto& pooled : hdrFramePool_) {
+        if (pooled.use_count() == 1 && pooled->size() == bytes) return pooled;
+      }
+      hdrFramePool_.erase(std::remove_if(hdrFramePool_.begin(), hdrFramePool_.end(),
+                                         [&](const auto& b) { return b.use_count() == 1 && b->size() != bytes; }),
+                          hdrFramePool_.end());
+      auto fresh = std::make_shared<std::vector<std::uint8_t>>(bytes);
+      if (hdrFramePool_.size() < 12) hdrFramePool_.push_back(fresh);
+      return fresh;
+    };
+    // GPU P010 FIRST (Direct3D 11): the shader does what the writer's CPU
+    // conversion would, and the frame goes down the pipe as it comes back.
+    if (runtime.hdr && runtime.compositorTexture && !runtime.hdrP010Unavailable) {
+      const int w = runtime.compositorWidth, h = runtime.compositorHeight;
+      if (runtime.hdrP010Readback && (runtime.hdrReadbackW != w || runtime.hdrReadbackH != h)) {
+        deckboy::gpu::destroyHdrP010Readback(runtime.hdrP010Readback);
+        runtime.hdrP010Readback = nullptr;
+      }
+      if (!runtime.hdrP010Readback) {
+        runtime.hdrP010Readback = deckboy::gpu::createHdrP010Readback(runtime.outputRenderer, w, h);
+        runtime.hdrReadbackW = w;
+        runtime.hdrReadbackH = h;
+        runtime.hdrP010Unavailable = runtime.hdrP010Readback == nullptr;
+      }
+      if (runtime.hdrP010Readback) {
+        const std::size_t bytes = static_cast<std::size_t>(w) * h * 3;
+        std::shared_ptr<std::vector<std::uint8_t>> buffer = pooledBuffer(bytes);
+        if (deckboy::gpu::hdrP010ReadbackFrame(runtime.hdrP010Readback, runtime.compositorTexture,
+                                               static_cast<float>(project_.hdrSdrWhiteNits), hlg,
+                                               buffer->data(), bytes)) {
+          frame.width = w;
+          frame.height = h;
+          frame.pixels.clear();
+          frame.shared = buffer;
+          frame.hdrEncoder = nullptr;   // P010 already: the writer sends it as it is
+          runtime.hdrP010Misses = 0;
+          return true;
+        }
+        if (++runtime.hdrP010Misses >= 30) {
+          std::cerr << "hdr-capture: GPU P010 produced nothing for " << runtime.hdrP010Misses
+                    << " frames; converting on the CPU" << std::endl;
+          deckboy::gpu::destroyHdrP010Readback(runtime.hdrP010Readback);
+          runtime.hdrP010Readback = nullptr;
+          runtime.hdrP010Unavailable = true;
+        }
+        return false;
+      }
+    }
+    // ASYNCHRONOUS: the ring hands back a frame the GPU finished a few frames
+    // ago and never waits. False is "nothing new yet": the previous frame
+    // stands, as on the SDR path.
+    if (runtime.hdr && runtime.compositorTexture && !runtime.hdrReadbackUnavailable) {
+      const int w = runtime.compositorWidth, h = runtime.compositorHeight;
+      if (runtime.hdrReadback && (runtime.hdrReadbackW != w || runtime.hdrReadbackH != h)) {
+        deckboy::gpu::destroyStagingReadback(runtime.hdrReadback);
+        runtime.hdrReadback = nullptr;
+      }
+      if (!runtime.hdrReadback) {
+        runtime.hdrReadback = deckboy::gpu::createStagingReadback(runtime.outputRenderer, w, h, true);
+        runtime.hdrReadbackW = w;
+        runtime.hdrReadbackH = h;
+        runtime.hdrReadbackUnavailable = runtime.hdrReadback == nullptr;
+      }
+      if (runtime.hdrReadback) {
+        const std::size_t bytes = static_cast<std::size_t>(w) * h * 8;
+        std::shared_ptr<std::vector<std::uint8_t>> buffer = pooledBuffer(bytes);
+        if (deckboy::gpu::stagingReadbackFrame(runtime.hdrReadback, runtime.compositorTexture,
+                                               buffer->data(), bytes, w, h)) {
+          frame.width = w;
+          frame.height = h;
+          frame.pixels.clear();
+          frame.shared = buffer;
+          frame.hdrEncoder = encoder;
+          runtime.hdrReadbackMisses = 0;
+          return true;
+        }
+        // A second of nothing is not a slow GPU, it is a path that does not
+        // work here: retire it and read synchronously from now on.
+        if (++runtime.hdrReadbackMisses >= 30) {
+          std::cerr << "hdr-capture: asynchronous readback produced nothing for "
+                    << runtime.hdrReadbackMisses << " frames; reading synchronously" << std::endl;
+          deckboy::gpu::destroyStagingReadback(runtime.hdrReadback);
+          runtime.hdrReadback = nullptr;
+          runtime.hdrReadbackUnavailable = true;
+        }
+        return false;
+      }
+    }
+    SDL_Surface* got = readHdrCompositorRaw(runtime);
+    if (!got) return false;
+    frame.shared = nullptr;   // the synchronous read fills `pixels`
+    // Half floats are what the writer encodes, whatever the renderer read
+    // back as -- one conversion for every HDR frame, so the writer only ever
+    // has the one kind to turn into P010.
+    if (got->format != SDL_PIXELFORMAT_RGBA64_FLOAT) {
+      SDL_Surface* asHalf = SDL_ConvertSurfaceAndColorspace(got, SDL_PIXELFORMAT_RGBA64_FLOAT, nullptr,
+                                                            SDL_COLORSPACE_SRGB_LINEAR, 0);
+      SDL_DestroySurface(got);
+      got = asHalf;
+      if (!got) return false;
+    }
+    // The compositor's own half floats are handed over AS THEY ARE, with the
+    // encoder; the writer thread encodes them (OutputStreamPacket::hdrEncoder).
+    if (got->format == SDL_PIXELFORMAT_RGBA64_FLOAT) {
+      const std::size_t row = static_cast<std::size_t>(got->w) * 8;
+      frame.width = got->w;
+      frame.height = got->h;
+      frame.pixels.resize(row * static_cast<std::size_t>(got->h));
+      for (int y = 0; y < got->h; ++y) {
+        std::memcpy(frame.pixels.data() + row * static_cast<std::size_t>(y),
+                    static_cast<const std::uint8_t*>(got->pixels) + static_cast<std::size_t>(got->pitch) * y, row);
+      }
+      frame.hdrEncoder = encoder;
+      SDL_DestroySurface(got);
+      return true;
+    }
+    frame.hdrEncoder = nullptr;
+    return encodeHdrSurface(got, *encoder, frame);
+  }
+
+  // The readback alone (render thread): the compositor as the GPU holds it.
+  SDL_Surface* readHdrCompositorRaw(const OutputRuntime& runtime) {
+    if (!runtime.hdr || !runtime.compositorTexture || !runtime.outputRenderer) return nullptr;
+    SDL_Texture* previous = SDL_GetRenderTarget(runtime.outputRenderer);
+    SDL_SetRenderTarget(runtime.outputRenderer, runtime.compositorTexture);
+    // The whole compositor, said explicitly: a null rect reads the current
+    // VIEWPORT, which was 16 rows short of the raster, and frames shorter than
+    // the encoder was told wrapped the recorded picture down the screen.
+    const SDL_Rect whole {0, 0, runtime.compositorWidth, runtime.compositorHeight};
+    SDL_Surface* got = SDL_RenderReadPixels(runtime.outputRenderer, &whole);
+    SDL_SetRenderTarget(runtime.outputRenderer, previous);
+    return got;
+  }
+
+  // Any thread: a read-back surface to 16-bit BT.2020 in the encoder's
+  // transfer, and the surface freed. The scopes run this on their worker, off
+  // the render thread.
+  static bool encodeHdrSurface(SDL_Surface* got, const deckboy::core::hdr::HdrEncoder& encoder,
+                                 OutputRuntime::CapturedFrame& frame) {
+    if (!got) return false;
+    // The compositor's own half floats, encoded directly (see convertHalf).
+    if (got->format == SDL_PIXELFORMAT_RGBA64_FLOAT) {
+      frame.width = got->w;
+      frame.height = got->h;
+      frame.pixels.resize(static_cast<std::size_t>(got->w) * got->h * 6);
+      encoder.convertHalf(static_cast<const std::uint16_t*>(got->pixels), got->w, got->h, got->pitch / 2,
+                          reinterpret_cast<std::uint16_t*>(frame.pixels.data()));
+      SDL_DestroySurface(got);
+      return true;
+    }
+    // Any other format: half floats to float, same linear colourspace both
+    // sides, through SDL.
+    SDL_Surface* f = SDL_ConvertSurfaceAndColorspace(got, SDL_PIXELFORMAT_RGBA128_FLOAT, nullptr,
+                                                     SDL_COLORSPACE_SRGB_LINEAR, 0);
+    SDL_DestroySurface(got);
+    if (!f) return false;
+    frame.width = f->w;
+    frame.height = f->h;
+    frame.pixels.resize(static_cast<std::size_t>(f->w) * f->h * 6);
+    encoder.convert(static_cast<const float*>(f->pixels), f->w, f->h, f->pitch / 4,
+                    reinterpret_cast<std::uint16_t*>(frame.pixels.data()));
+    SDL_DestroySurface(f);
+    return true;
+  }
+  std::array<std::shared_ptr<const deckboy::core::hdr::HdrEncoder>, 2> hdrRecordEncoders_;   // PQ, HLG
+  std::vector<std::shared_ptr<std::vector<std::uint8_t>>> hdrFramePool_;   // readHdrCompositorSignal
+  std::array<int, 2> hdrRecordEncoderWhite_ {};
+
+  // hdrOnly: the HDR stream or recording is this output's ONLY consumer, so
+  // its own SDR picture would be read back and thrown away. MEASURED: that
+  // was 8-12 ms of a 1080p frame's render thread, and what held a 60 Hz HDR
+  // output to 25 once the stream captured every frame.
+  bool captureOutputFrameForEgress(int outputIndex,
+                                   OutputRuntime& runtime,
+                                   const SDL_Rect& requestedRect,
+                                   double fpsHint,
+                                   bool hdrOnly = false) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) || !runtime.outputRenderer) {
+      return false;
+    }
+    Uint64 nowMs = SDL_GetTicks();
+    // A recording captures at ITS OWN rate. This used the stream rate, which
+    // follows the display refresh or a 30fps default -- so asking for a 50 or
+    // 59.94 recording still only ever captured ~30 frames a second and the file
+    // came out short no matter how fast the readback and the encoder were.
+    double captureFps =
+      (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+       outputStreamProtocolIsFile(
+         normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol)))
+        ? recordingFps(fpsHint)
+        : outputStreamFps(fpsHint);
+    // A RUNNING DEADLINE, not "long enough since the last one". The loop
+    // only looks every frame of the output, so the old gate -- capture once
+    // 40 ms have passed -- caught the first look AFTER 40 ms: 50 ms on a 60 Hz
+    // output, and a 25 fps stream went out at 20 (MEASURED, SDR and HDR
+    // alike; 50 fps came out 30). The deadline advances by the interval
+    // itself, so the gaps alternate 50, 33, 50, 33 and the rate is the rate.
+    const double captureIntervalMs = 1000.0 / std::max(1.0, captureFps);
+    const double now = static_cast<double>(nowMs);
+    const OutputRuntime::CapturedFrame& held = hdrOnly ? runtime.hdrRecordFrame : runtime.latestCapturedFrame;
+    if (held.width > 0 && held.height > 0 && !held.empty() &&
+        runtime.nextEgressCaptureDueMs > 0.0 &&
+        now < runtime.nextEgressCaptureDueMs) {
+      return true;
+    }
+    // Late by more than a whole interval (a stall, the first frame): start
+    // again from now rather than firing a burst to catch up.
+    runtime.nextEgressCaptureDueMs =
+      runtime.nextEgressCaptureDueMs > 0.0 && now - runtime.nextEgressCaptureDueMs < captureIntervalMs
+        ? runtime.nextEgressCaptureDueMs + captureIntervalMs
+        : now + captureIntervalMs;
+    if (hdrOnly) {
+      const int source = hdrRecordingSource(outputIndex);
+      // A source showing the test card has already handed over its programme
+      // (renderOutputCompositor); reading it now would record the card.
+      if (source >= 0 && !project_.outputs[static_cast<std::size_t>(source)].outputTestCardEnabled) {
+        captureHdrRecordFrame(outputRuntimes_[static_cast<std::size_t>(source)], runtime, nowMs);
+      }
+      runtime.lastEgressCaptureAtMs = nowMs;
+      return true;
+    }
+    SDL_Rect captureRect = requestedRect;
+    captureRect.w = std::max(1, captureRect.w);
+    captureRect.h = std::max(1, captureRect.h);
+    captureRect.x = std::max(0, captureRect.x);
+    captureRect.y = std::max(0, captureRect.y);
+    if (runtime.compositorTexture) {
+      int texW = std::max(1, runtime.compositorWidth);
+      int texH = std::max(1, runtime.compositorHeight);
+      if (captureRect.x >= texW || captureRect.y >= texH) {
+        return false;
+      }
+      captureRect.w = std::min(captureRect.w, texW - captureRect.x);
+      captureRect.h = std::min(captureRect.h, texH - captureRect.y);
+    } else {
+      captureRect.x = 0;
+      captureRect.y = 0;
+    }
+
+    int captureW = std::max(1, captureRect.w);
+    int captureH = std::max(1, captureRect.h);
+
+    // ── Scale to the RECORDING raster on the GPU, before readback ───────────
+    // Reading the full programme raster back and letting something downstream
+    // resize it is what made a broadcast rate unreachable: at 4K the readback
+    // alone costs 21-24ms per frame (MEASURED), i.e. a ~45fps ceiling before
+    // the encoder is handed anything, on the render thread. Blitting the
+    // composite into a target already at the delivery raster is a GPU
+    // operation, and the readback then moves (recW*recH)/(progW*progH) of the
+    // bytes -- a quarter, for 1080 off a 4K programme.
+    //
+    // Only the file-recording output takes this path. NDI, DeckLink and Spout
+    // read the same captured frame and must keep the programme raster.
+    SDL_Texture* readbackTarget = runtime.compositorTexture;
+    SDL_Rect readbackRect = captureRect;
+    // EVERY file recording takes this path, including the default one that
+    // follows the input raster. It was gated on an explicit recording size,
+    // which meant the DEFAULT configuration -- the one most shows will use --
+    // fell through to the synchronous readback and its 21ms-per-frame stall at
+    // 4K. MEASURED: 320 frames where 360 were owed, purely from that.
+    //
+    // The blit is 1:1 when no resize is asked for, and nearly free; its real
+    // job is putting the frame into a BGRA target we own, which is what the
+    // asynchronous staging readback needs.
+    // The captured frame is SHARED. NDI, DeckLink, Spout, ST 2110 and the output
+    // delay buffer all read `latestCapturedFrame`, and they must have the
+    // PROGRAMME raster. Scaling it to the recording's raster silently dropped
+    // every one of them to the recording size -- a 4K NDI send became 1080
+    // because someone armed a 1080 recording on the same output. The comment
+    // above claimed this could not happen; the guard did not enforce it, and
+    // these are independent per-output flags that can all be on at once.
+    //
+    // So the fast path is taken only when the recording is the frame's ONLY
+    // consumer, which is the ordinary case. Where it is not, the capture keeps
+    // the programme raster and the recording is scaled by the encoder instead
+    // (see recordingScaleFilterArgs) -- slower, and correct.
+    const OutputTarget& egressOutput = project_.outputs[outputIndex];
+    const bool sharedWithOtherEgress =
+      egressOutput.ndiEnabled || egressOutput.ndiKeyEnabled ||
+      egressOutput.deckLinkEnabled || egressOutput.spoutEnabled ||
+      egressOutput.st2110Enabled ||
+      (runtime.hdr && scopesWatching(outputIndex) && !scopesReadsHdr(outputIndex, runtime)) ||
+      std::clamp(egressOutput.outputDelayMs, 0, 5000) > 0;
+    const bool webEgress = outputStreamProtocolIsWeb(
+      normalizeOutputStreamProtocol(egressOutput.streamProtocol));
+    const bool scaledEgress =
+      (outputStreamProtocolIsFile(
+        normalizeOutputStreamProtocol(egressOutput.streamProtocol)) || webEgress) &&
+      !sharedWithOtherEgress &&
+      runtime.compositorTexture;
+    const int readbackMode = egressReadbackMode();
+    if (scaledEgress) {
+      // 0 means "follow the input", which is the default and the sane one: a
+      // recording should look like what went in unless someone says otherwise.
+      const int webHeight = std::min(captureH, webEncodeHeight());
+      const int targetW = webEgress
+        ? std::max(2, static_cast<int>(std::lround(static_cast<double>(captureW) * webHeight / captureH / 2.0)) * 2)
+        : project_.recordingWidth > 0 ? project_.recordingWidth : captureW;
+      const int targetH = webEgress ? std::max(2, webHeight / 2 * 2)
+        : project_.recordingHeight > 0 ? project_.recordingHeight : captureH;
+      if (runtime.egressScaleTexture &&
+          (runtime.egressScaleW != targetW || runtime.egressScaleH != targetH)) {
+        SDL_DestroyTexture(runtime.egressScaleTexture);
+        runtime.egressScaleTexture = nullptr;
+      }
+      if (!runtime.egressScaleTexture) {
+        // The held frame is now the WRONG SIZE. The async path serves the
+        // previous picture whenever the staging ring has nothing ready, so
+        // without dropping it here the first frames of a take after a raster
+        // change are the old raster -- and the encoder is started from the
+        // first frame it sees, so it locks to the old size for the whole take.
+        // MEASURED: a recording asked for 1280x720 came back 1920x1080.
+        runtime.latestCapturedFrame = {};
+        // BGRA32 so the staging readback lands in exactly the byte order the
+        // encoder is fed (-pix_fmt bgra) and no conversion pass is needed.
+        runtime.egressScaleTexture = deckboyCreateTexture(
+          runtime.outputRenderer, SDL_PIXELFORMAT_BGRA32,
+          SDL_TEXTUREACCESS_TARGET, targetW, targetH);
+        runtime.egressScaleW = targetW;
+        runtime.egressScaleH = targetH;
+      }
+      if (runtime.egressScaleTexture) {
+        SDL_Texture* savedTarget = SDL_GetRenderTarget(runtime.outputRenderer);
+        SDL_SetRenderTarget(runtime.outputRenderer, runtime.egressScaleTexture);
+        SDL_SetRenderDrawColor(runtime.outputRenderer, 0, 0, 0, 255);
+        SDL_RenderClear(runtime.outputRenderer);
+        const SDL_FRect src {static_cast<float>(captureRect.x),
+                             static_cast<float>(captureRect.y),
+                             static_cast<float>(captureW),
+                             static_cast<float>(captureH)};
+        SDL_RenderTexture(runtime.outputRenderer, runtime.compositorTexture,
+                          &src, nullptr);
+        SDL_SetRenderTarget(runtime.outputRenderer, savedTarget);
+        readbackTarget = runtime.egressScaleTexture;
+        readbackRect = SDL_Rect {0, 0, targetW, targetH};
+        captureW = targetW;
+        captureH = targetH;
+      }
+    }
+
+    // Say which path this recording is taking, once, whenever it changes. The
+    // difference between them is the difference between keeping up at 4K and
+    // delivering a third of the frames, and until now the only way to know
+    // which one an operator was on was to infer it from the damage.
+    if (outputStreamProtocolIsFile(
+          normalizeOutputStreamProtocol(egressOutput.streamProtocol))) {
+      const int path = !scaledEgress ? 0 : (readbackMode != kEgressReadbackAuto ? 1 : 2);
+      if (runtime.egressPathLogged != path) {
+        runtime.egressPathLogged = path;
+        const char* how =
+          path == 0 ? "programme-raster SYNCHRONOUS readback (the frame is shared "
+                      "with NDI/DeckLink/Spout/ST2110 or an output delay, so it "
+                      "cannot be scaled; the encoder resizes instead)"
+        : path == 1 ? "scaled, synchronous readback (forced by "
+                      "DECKBOY_EGRESS_READBACK)"
+                    : "scaled, asynchronous readback";
+        std::cerr << "recording-capture: output " << outputIndex << " using "
+                  << how << " at " << captureW << "x" << captureH << std::endl;
+        showLog("RECORD PATH", how);
+      }
+    }
+
+    size_t stride = static_cast<size_t>(captureW) * 4u;
+    size_t frameBytes = stride * static_cast<size_t>(captureH);
+    // Sized only where the frame is read into `pixels`: the pooled read below
+    // never touches it, and resizing it there would zero 33 MB a frame at 4K.
+    auto ensurePixels = [&]() {
+      if (runtime.latestCapturedFrame.pixels.size() != frameBytes) {
+        runtime.latestCapturedFrame.pixels.resize(frameBytes);
+      }
+      return !runtime.latestCapturedFrame.pixels.empty();
+    };
+    const int orientationDegrees =
+      normalizeOutputOrientationDegrees(project_.outputs[outputIndex].outputOrientationDegrees);
+
+    // A second at 30fps: long enough that a slow GPU or a filling ring is not
+    // mistaken for a stall, short enough that a bad take is not lost.
+    constexpr int kEgressAsyncStallFrames = 30;
+    bool asyncCaptured = false;
+    // ── Asynchronous path ──────────────────────────────────────────────────
+    // Only for the scaled recording target, which is a plain RGBA render target
+    // we own. Everything else keeps the synchronous readback below.
+    // The staging ring does not yet carry the original composition timestamp.
+    // Web audio is current, so use the already-scaled synchronous readback
+    // for this live sink rather than adding unmeasured picture latency.
+    if (scaledEgress && !webEgress && readbackMode == kEgressReadbackAuto &&
+        readbackTarget == runtime.egressScaleTexture) {
+      if (runtime.egressReadback &&
+          (runtime.egressReadbackW != captureW || runtime.egressReadbackH != captureH)) {
+        deckboy::gpu::destroyStagingReadback(runtime.egressReadback);
+        runtime.egressReadback = nullptr;
+      }
+      if (!runtime.egressReadback && !runtime.egressReadbackUnavailable) {
+        runtime.egressReadback = deckboy::gpu::createStagingReadback(
+          runtime.outputRenderer, captureW, captureH);
+        runtime.egressReadbackW = captureW;
+        runtime.egressReadbackH = captureH;
+        // A renderer with no asynchronous path says so once. Without this the
+        // creation was attempted EVERY FRAME for the whole session, on the
+        // render thread, for a null that was never going to change.
+        runtime.egressReadbackUnavailable = runtime.egressReadback == nullptr;
+      }
+      if (runtime.egressReadback) {
+        // Straight into the egress buffer. The earlier version allocated and
+        // zero-filled an 8MB temporary EVERY FRAME and then walked it twice
+        // more (memcpy, then a format conversion) -- about 24MB of pointless
+        // traffic per frame on the render thread.
+        //
+        // AND INTO A POOLED BUFFER, handed to the writer as it is, as the HDR
+        // frames already were. Read into `pixels`, every frame was copied a
+        // SECOND time on the render thread when it was published to the
+        // writer, into a 33 MB buffer allocated fresh for that frame and freed
+        // after it. MEASURED at 4K60 on Direct3D 11: the recording's share of
+        // each frame was 18-24 ms median, which does not fit in a 16.7 ms
+        // frame, so recording at 4K dropped the programme's frames; pooled, it
+        // is 4.5 ms. A rotated output still reads into `pixels`, because the
+        // rotation works there.
+        bool got = false;
+        if (orientationDegrees == 0) {
+          std::shared_ptr<std::vector<std::uint8_t>> buffer = pooledEgressBuffer(runtime, frameBytes);
+          got = deckboy::gpu::stagingReadbackFrame(
+            runtime.egressReadback, runtime.egressScaleTexture,
+            buffer->data(), buffer->size(), captureW, captureH);
+          if (got) {
+            runtime.latestCapturedFrame.shared = std::move(buffer);
+            std::vector<std::uint8_t>().swap(runtime.latestCapturedFrame.pixels);
+          }
+        } else if (ensurePixels()) {
+          got = deckboy::gpu::stagingReadbackFrame(
+            runtime.egressReadback, runtime.egressScaleTexture,
+            runtime.latestCapturedFrame.pixels.data(),
+            runtime.latestCapturedFrame.pixels.size(), captureW, captureH);
+          if (got) runtime.latestCapturedFrame.shared = nullptr;
+        }
+        // NOT a return: this used to hand the frame straight back, which
+        // skipped the orientation rotation below -- so a rotated output
+        // recorded UNROTATED on the asynchronous path and rotated on the
+        // synchronous one. Falling through means both paths agree.
+        asyncCaptured = got;
+        // A HELD FRAME IS ONLY EVER A STOPGAP.
+        //
+        // Missing a frame is normal: the ring is filling, or the GPU is a frame
+        // behind, and repeating the last picture is exactly right. Missing
+        // EVERY frame is not -- the recording becomes one still image for its
+        // whole length while the capture reports itself healthy, which is what
+        // a macOS take did: three recordings of different live content came
+        // back byte-identical.
+        //
+        // So the miss is counted, and after a second of nothing the
+        // asynchronous path is retired for the session and the synchronous read
+        // takes over. Slower, and it always produces a picture.
+        if (got) {
+          runtime.egressReadbackMisses = 0;
+        } else if (++runtime.egressReadbackMisses >= kEgressAsyncStallFrames) {
+          std::cerr << "recording-capture: asynchronous readback produced nothing for "
+                    << runtime.egressReadbackMisses
+                    << " frames; falling back to the synchronous read"
+                    << std::endl;
+          showLog("RECORD PATH", "async stalled -- switched to synchronous readback");
+          deckboy::gpu::destroyStagingReadback(runtime.egressReadback);
+          runtime.egressReadback = nullptr;
+          runtime.egressReadbackUnavailable = true;
+          runtime.egressReadbackMisses = 0;
+          // The synchronous read is not late, so the sound stops waiting:
+          // a tenth of a second skipped once beats being late for the take.
+          runtime.recordAudioDelayLine.clear();
+          runtime.recordAudioDelayChunks = 0;
+        }
+        // Nothing ready: keep the previous picture. The CFR pacer will repeat
+        // it, which is exactly the right behaviour -- a held frame, never a
+        // gap in the timeline. The held frame was already rotated when it was
+        // captured, so this one DOES return early.
+        if (!got && runtime.latestCapturedFrame.width > 0) {
+          runtime.lastEgressCaptureAtMs = nowMs;
+          return true;
+        }
+      }
+    }
+
+    bool ok = asyncCaptured;
+    if (!asyncCaptured) {
+      // The synchronous read fills `pixels`, so the frame lives there now.
+      if (!ensurePixels()) {
+        return false;
+      }
+      runtime.latestCapturedFrame.shared = nullptr;
+    }
+    SDL_Texture* previousTarget = SDL_GetRenderTarget(runtime.outputRenderer);
+    if (!asyncCaptured && readbackTarget) {
+      SDL_SetRenderTarget(runtime.outputRenderer, readbackTarget);
+    }
+    // SDL3: read into a temporary surface, then convert into the persistent
+    // BGRA egress buffer (SDL2 wrote the requested format directly).
+    if (SDL_Surface* captured = asyncCaptured
+          ? nullptr
+          : SDL_RenderReadPixels(runtime.outputRenderer, &readbackRect)) {
+      if (SDL_ISPIXELFORMAT_FLOAT(captured->format)) {
+        // An HDR output's float compositor. Plain SDL_ConvertPixels assumes a
+        // default HDR headroom for linear float and tonemaps: measured, SDR
+        // white at 203 of 255 and 75% bars at 161 in every snapshot, NDI and
+        // SDI frame. Said explicitly: white is 1.0, no headroom, so SDR comes
+        // out exact and HDR highlights clip at white.
+        const SDL_PropertiesID srcProps = SDL_CreateProperties();
+        SDL_SetFloatProperty(srcProps, SDL_PROP_SURFACE_SDR_WHITE_POINT_FLOAT, 1.0f);
+        SDL_SetFloatProperty(srcProps, SDL_PROP_SURFACE_HDR_HEADROOM_FLOAT, 1.0f);
+        ok = captured->w == captureW && captured->h == captureH &&
+             SDL_ConvertPixelsAndColorspace(captured->w, captured->h,
+                                            captured->format, SDL_COLORSPACE_SRGB_LINEAR, srcProps,
+                                            captured->pixels, captured->pitch,
+                                            SDL_PIXELFORMAT_BGRA32, SDL_COLORSPACE_SRGB, 0,
+                                            runtime.latestCapturedFrame.pixels.data(),
+                                            static_cast<int>(stride));
+        SDL_DestroyProperties(srcProps);
+      } else {
+        ok = captured->w == captureW && captured->h == captureH &&
+             SDL_ConvertPixels(captured->w, captured->h,
+                               captured->format, captured->pixels, captured->pitch,
+                               SDL_PIXELFORMAT_BGRA32,
+                               runtime.latestCapturedFrame.pixels.data(),
+                               static_cast<int>(stride));
+      }
+      SDL_DestroySurface(captured);
+    }
+    if (!asyncCaptured && readbackTarget) {
+      SDL_SetRenderTarget(runtime.outputRenderer, previousTarget);
+    }
+    if (!ok) {
+      return false;
+    }
+
+    if (orientationDegrees != 0) {
+      std::vector<std::uint8_t> rotatedPixels;
+      int rotatedW = captureW;
+      int rotatedH = captureH;
+      if (!rotateCapturedFramePixels(
+            runtime.latestCapturedFrame.pixels,
+            captureW,
+            captureH,
+            orientationDegrees,
+            rotatedPixels,
+            rotatedW,
+            rotatedH)) {
+        return false;
+      }
+      runtime.latestCapturedFrame.pixels.swap(rotatedPixels);
+      captureW = rotatedW;
+      captureH = rotatedH;
+    }
+
+    nowMs = SDL_GetTicks();
+    runtime.latestCapturedFrame.width = captureW;
+    runtime.latestCapturedFrame.height = captureH;
+    runtime.latestCapturedFrame.capturedAtMs = nowMs;
+    runtime.lastEgressCaptureAtMs = nowMs;
+    if (runtime.streamHdr) {
+      const int source = hdrRecordingSource(outputIndex);
+      // A source showing the test card has already handed over its programme
+      // (renderOutputCompositor); reading it now would record the card.
+      if (source >= 0 && !project_.outputs[static_cast<std::size_t>(source)].outputTestCardEnabled) {
+        captureHdrRecordFrame(outputRuntimes_[static_cast<std::size_t>(source)], runtime, nowMs);
+      }
+    }
+
+    int delayMs = std::clamp(project_.outputs[outputIndex].outputDelayMs, 0, 5000);
+    if (delayMs <= 0) {
+      runtime.delayFrames.clear();
+      return true;
+    }
+
+    OutputRuntime::CapturedFrame delayedFrame;
+    delayedFrame.width = captureW;
+    delayedFrame.height = captureH;
+    delayedFrame.capturedAtMs = nowMs;
+    delayedFrame.pixels.assign(runtime.latestCapturedFrame.data(),
+                               runtime.latestCapturedFrame.data() + runtime.latestCapturedFrame.bytes());
+    runtime.delayFrames.push_back(std::move(delayedFrame));
+
+    size_t maxFrames = static_cast<size_t>(std::clamp(delayMs / 8 + 12, 16, 900));
+    while (runtime.delayFrames.size() > maxFrames) {
+      runtime.delayFrames.pop_front();
+    }
+    while (runtime.delayFrames.size() > 2 &&
+           nowMs > runtime.delayFrames.front().capturedAtMs + static_cast<Uint64>(delayMs + 2500)) {
+      runtime.delayFrames.pop_front();
+    }
+    return true;
+  }
+
+  // A buffer for the asynchronous readback to write into: one nobody else
+  // holds any more (the writer has written it, and no packet, held frame or
+  // publication still points at it), or a new one. A handful at most, since
+  // the writer's queue is bounded.
+  std::shared_ptr<std::vector<std::uint8_t>> pooledEgressBuffer(OutputRuntime& runtime, std::size_t bytes) {
+    for (auto& pooled : runtime.egressFramePool) {
+      if (pooled.use_count() == 1 && pooled->size() == bytes) return pooled;
+    }
+    auto& pool = runtime.egressFramePool;
+    pool.erase(std::remove_if(pool.begin(), pool.end(),
+                              [&](const auto& b) { return b.use_count() == 1 && b->size() != bytes; }),
+               pool.end());
+    auto fresh = std::make_shared<std::vector<std::uint8_t>>(bytes);
+    if (pool.size() < 12) pool.push_back(fresh);
+    return fresh;
+  }
+
+  const OutputRuntime::CapturedFrame* outputFrameForEgress(int outputIndex, OutputRuntime& runtime) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return nullptr;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    int delayMs = std::clamp(output.outputDelayMs, 0, 5000);
+    if (delayMs > 0) {
+      Uint64 nowMs = SDL_GetTicks();
+      const OutputRuntime::CapturedFrame* selected = nullptr;
+      for (const auto& frame : runtime.delayFrames) {
+        if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+          continue;
+        }
+        if (nowMs >= frame.capturedAtMs + static_cast<Uint64>(delayMs)) {
+          selected = &frame;
+        }
+      }
+      if (selected) {
+        return selected;
+      }
+    }
+    if (runtime.latestCapturedFrame.width > 0 &&
+        runtime.latestCapturedFrame.height > 0 &&
+        !runtime.latestCapturedFrame.empty()) {
+      return &runtime.latestCapturedFrame;
+    }
+    return nullptr;
+  }
+
+  const OutputRuntime::CapturedFrame* ensureBlackOutputFrameForEgress(
+      int outputIndex,
+      OutputRuntime& runtime,
+      int width,
+      int height) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return nullptr;
+    }
+    width = std::max(1, width);
+    height = std::max(1, height);
+    int orientationDegrees = normalizeOutputOrientationDegrees(project_.outputs[outputIndex].outputOrientationDegrees);
+    if (orientationDegrees == 90 || orientationDegrees == 270) {
+      std::swap(width, height);
+    }
+    size_t frameBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+    if (runtime.latestCapturedFrame.pixels.size() != frameBytes) {
+      runtime.latestCapturedFrame.pixels.assign(frameBytes, 0u);
+    } else {
+      std::fill(runtime.latestCapturedFrame.pixels.begin(), runtime.latestCapturedFrame.pixels.end(), 0u);
+    }
+    if (runtime.latestCapturedFrame.pixels.empty()) {
+      return nullptr;
+    }
+    runtime.latestCapturedFrame.shared = nullptr;   // the black frame is in `pixels`
+    Uint64 nowMs = SDL_GetTicks();
+    runtime.latestCapturedFrame.width = width;
+    runtime.latestCapturedFrame.height = height;
+    runtime.latestCapturedFrame.capturedAtMs = nowMs;
+    runtime.lastEgressCaptureAtMs = nowMs;
+    return &runtime.latestCapturedFrame;
+  }
+
+  void sendOutputStreamFrame(int outputIndex, int width, int height, double fpsHint) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return;
+    }
+    const OutputRuntime::CapturedFrame* frame = outputFrameForEgress(outputIndex, *runtime);
+    if (runtime->streamHdr) {
+      // The encoder takes the HDR frame (P010 from the writer): never the BGRA one, and
+      // only at the raster it was started with (the spec restarts it on a
+      // change; until then a frame of another size is not sent).
+      const auto& hdrFrame = runtime->hdrRecordFrame;
+      frame = (hdrFrame.empty() || hdrFrame.width != runtime->streamHdrWidth ||
+               hdrFrame.height != runtime->streamHdrHeight) ? nullptr : &hdrFrame;
+    }
+    if ((!frame || frame->width <= 0 || frame->height <= 0 || frame->empty()) &&
+        width > 0 && height > 0 && !runtime->streamHdr) {
+      // A placeholder the size of what the capture makes. For a recording
+      // scaled on the GPU that is the RECORDING's raster, not the
+      // programme's: the encoder is started at the first frame's size, so a
+      // programme-sized placeholder locked a 1080p take of a 4K programme to
+      // 4K, and every real frame after it went down the pipe misread --
+      // MEASURED, a flat grey picture, the video track 5 s of a 12 s take.
+      int placeholderW = width;
+      int placeholderH = height;
+      if (runtime->egressScaleTexture && runtime->egressScaleW > 0 && runtime->egressScaleH > 0) {
+        placeholderW = runtime->egressScaleW;
+        placeholderH = runtime->egressScaleH;
+      }
+      frame = ensureBlackOutputFrameForEgress(outputIndex, *runtime, placeholderW, placeholderH);
+    }
+    if (!frame || frame->width <= 0 || frame->height <= 0 || frame->empty()) {
+      return;
+    }
+
+    std::string writerFailure = outputStreamWriterFailure(*runtime);
+    if (!writerFailure.empty()) {
+      runtime->streamStartFailed = true;
+      runtime->streamRestartBlockedUntilMs = SDL_GetTicks() + 1500;
+      setOutputHealthState(outputIndex, OutputHealthState::Error, writerFailure);
+      stopOutputStreamRuntime(*runtime);
+      if (outputIndex == project_.focusedOutputIndex) {
+        triggerToast(writerFailure);
+      }
+      return;
+    }
+
+    if (!ensureOutputStreamRunning(outputIndex, frame->width, frame->height, fpsHint)) {
+      return;
+    }
+    runtime = runtimeForOutput(outputIndex);
+    // Starting the encoder may have just made it an HDR one, AFTER the frame
+    // above was chosen: the first packet of every HDR take was a BGRA frame,
+    // two thirds of an rgb48 one, and every frame after it landed 1440 rows
+    // out of place (measured). So the HDR frame is chosen again, here.
+    if (runtime && runtime->streamHdr) {
+      const auto& hdrFrame = runtime->hdrRecordFrame;
+      if (hdrFrame.empty() || hdrFrame.width != runtime->streamHdrWidth ||
+          hdrFrame.height != runtime->streamHdrHeight) {
+        return;
+      }
+      frame = &hdrFrame;
+    }
+    bool processAlive = false;
+#ifdef _WIN32
+    processAlive = runtime && runtime->streamProcess.running();
+#else
+    processAlive = runtime && runtime->streamPid > 0;
+#endif
+    if (!processAlive || !runtime->streamWriter) {
+      return;
+    }
+    // ── Frame pacing ───────────────────────────────────────────────────────
+    // A network stream sends only what is NEW: a duplicate frame costs
+    // bandwidth and buys nothing, and the receiver has its own clock.
+    //
+    // A RECORDING is the opposite. The muxer stamps frames by arrival order at
+    // the declared rate, so a frame we fail to deliver does not slow the file
+    // down -- it shortens it. That is the whole "20-second take is 8 seconds
+    // long and plays 2.5x fast" defect: it was never a timestamp problem, it
+    // was a frame-COUNT problem. So the recording delivers exactly
+    // rate x elapsed frames, repeating the last picture to cover a gap, which
+    // is what a broadcast recorder does and what makes the duration correct by
+    // construction instead of dependent on the capture keeping up.
+    const bool toFileSink = outputStreamProtocolIsFile(
+      normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol));
+    const bool toWebSink = outputStreamProtocolIsWeb(
+      normalizeOutputStreamProtocol(project_.outputs[outputIndex].streamProtocol));
+    // Roll onto a new file at the operator's cap or the filesystem's. The take
+    // keeps running; only the file changes, and the next frame opens the next
+    // segment with a fresh timestamped name.
+    if (toFileSink && shouldRollRecordingSegment(*runtime)) {
+      // Rolling, not stopping: the take continues into the next file, so its
+      // frame count -- and therefore its timecode -- must carry over.
+      stopOutputStreamRuntime(*runtime, /*rollingSegment=*/true);
+      return;
+    }
+    // Captured this tick, or the same picture the pacer is repeating?
+    const bool frameIsFresh =
+      runtime->lastStreamCaptureSentAtMs != frame->capturedAtMs;
+    int pacerRepeats = 1;
+    if (toFileSink) {
+      const Uint64 nowMs = SDL_GetTicks();
+      if (runtime->recordPacerStartMs == 0) {
+        runtime->recordPacerStartMs = nowMs;
+        runtime->recordFramesWritten = 0;
+        runtime->recordFreshFrames = 0;
+        runtime->lastFreshCaptureMs = nowMs;
+        runtime->recordClock.restart(nowMs);
+        // The sound waits as long as the picture does (recordAudioDelayLine).
+        runtime->recordAudioDelayChunks =
+          runtime->egressReadback && !runtime->egressReadbackUnavailable
+            ? static_cast<std::size_t>(deckboy::gpu::kAsyncReadbackDepth) : 0;
+      }
+      const double rate = std::max(1.0, recordingFps(fpsHint));
+      // Owed by the take's own clock, which follows the sound card while a
+      // deck is sounding (RecordClockSteer) and is the PC's clock otherwise.
+      runtime->recordClock.advance(nowMs);
+      const std::uint64_t owed =
+        static_cast<std::uint64_t>(runtime->recordClock.seconds * rate) + 1;
+      // ── Dropped-frame alarm ──────────────────────────────────────────────
+      // The pacer knows exactly what the timeline owes and exactly what has
+      // been delivered, so a shortfall is measurable rather than inferred. Both
+      // AJA and OBS treat this as a first-class warning, and rightly: a
+      // recording that quietly runs short looks perfectly healthy until an
+      // editor opens it. Deckboy dropped frames silently, which is how a
+      // twenty-second take became eight seconds with nobody the wiser.
+      //
+      // Reported once a second while it persists, so a wedged disk is loud
+      // without spamming the operator every frame.
+      // The asynchronous readback is a PIPELINE: the frame handed to the writer
+      // is kAsyncReadbackDepth behind the one just rendered, so a perfectly
+      // healthy recording sits a constant few frames behind what the pacer says
+      // is owed. Reporting that as a drop meant EVERY 4K take raised
+      // "RECORDING DROPPING FRAMES - 3 behind" once a second for its whole
+      // length and drove the output into an error state -- while the file came
+      // out 449 frames of 450. An alarm that cries wolf on every take is worse
+      // than no alarm, because the operator learns to ignore the one that
+      // matters. MEASURED after this: 4K at 30, 50 and 60 all silent, and the
+      // genuinely starved synchronous path at 2160p50 still shouts.
+      //
+      // The floor is a QUARTER SECOND of frames, not a frame count, because
+      // that is the thing an operator can act on: "you are 5 frames behind at
+      // 60" is jitter the pacer absorbs, while "you are a quarter second
+      // behind" is a disk or an encoder in trouble. A starved capture sits
+      // HUNDREDS behind and trips this instantly.
+      const std::uint64_t pacerAllowance = std::max<std::uint64_t>(
+        static_cast<std::uint64_t>(deckboy::gpu::kAsyncReadbackDepth) + 2u,
+        static_cast<std::uint64_t>(rate / 4.0));
+      // Two different faults, and they need two different tests.
+      //
+      // Counting FRESH frames against the recording rate looks right and is
+      // not: a 30fps source recorded at 60 is half repeats BY DEFINITION, so
+      // that test fires on a perfectly good take. It was fired on every
+      // standard above the source rate before this was noticed.
+      //
+      // What actually matters is whether the picture has gone STALE -- the
+      // capture stopped producing anything new -- because the pacer will
+      // happily paper over that with repeats and hand back a duration-correct
+      // file of one still image, reporting no fault at all.
+      // A STILL IS NOT A STALL, and an alarm that cannot tell them apart is
+      // worse than no alarm -- it teaches the operator to ignore the one that
+      // matters. Recording a slide, a graphic, a paused clip or an audio cue
+      // produces no new picture BY DESIGN, and this used to raise the output
+      // into an ERROR state and toast about it once a second for the length of
+      // the take.
+      //
+      // So it asks whether the picture is SUPPOSED to be moving. A still-kind
+      // cue, an audio cue, a deck with nothing live, and a transport that is
+      // not playing are all legitimately frozen. Everything else -- a video, a
+      // camera, a capture card, an NDI source, mid-playback -- is not, and a
+      // frozen picture there is the fault this alarm was written for.
+      //
+      // A still with an animating effect stack still produces fresh frames, so
+      // it never reaches here in the first place.
+      const bool pictureShouldBeMoving = [&]() {
+        if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+            project_.decks.empty()) {
+          return false;
+        }
+        const int lastDeck = static_cast<int>(project_.decks.size()) - 1;
+        const int wanted = project_.outputs[static_cast<std::size_t>(outputIndex)].hostDeckIndex;
+        const int hostDeck = std::clamp(wanted, 0, lastDeck);
+        const Cue* live = activeCuePtr(hostDeck);
+        if (!live) return false;                      // nothing on air
+        if (live->kind == CueKind::Audio) return false;  // no picture at all
+        if (isDefaultStillDurationCueKind(live->kind)) return false;
+        const DeckRuntime* deckRuntime = runtimeForDeck(hostDeck);
+        if (!deckRuntime || !deckRuntime->mediaEngine) return false;
+        return deckRuntime->mediaEngine->state() == TransportState::Playing;
+      }();
+      // THREE SECONDS, AND ONCE. Half a second of an unchanged picture is not
+      // a fault -- a slide, a held last frame, a shot of a locked-off camera
+      // on a still set, or simply a video of something that is not moving.
+      // What this is for is a file that will be ONE FRAME for its whole
+      // length, and that is still obvious after three seconds.
+      //
+      // It also said it once a second for the length of the take, which is how
+      // an alarm teaches an operator to ignore it. Now it speaks once per
+      // stall and goes quiet again the moment the picture moves.
+      if (pictureShouldBeMoving && runtime->lastFreshCaptureMs != 0 &&
+          nowMs - runtime->lastFreshCaptureMs > 3000) {
+        if (!runtime->recordStallWarned) {
+          runtime->recordStallWarned = true;
+          runtime->lastDropWarnMs = nowMs;
+          const std::string msg =
+            "RECORDING PICTURE STALLED - no new frame for " +
+            std::to_string((nowMs - runtime->lastFreshCaptureMs) / 1000) + "s";
+          setOutputHealthState(outputIndex, OutputHealthState::Error, msg);
+          triggerToast(msg);
+          showLog("RECORD STALL", msg);
+          std::cerr << "record-drop: " << msg << " (output " << outputIndex
+                    << ")" << std::endl;
+        }
+      }
+      // And the original: are we DELIVERING what the timeline owes? With the
+      // catch-up in place this should not happen, which is exactly why it is
+      // worth keeping -- if it fires, the writer is not draining.
+      if (owed > runtime->recordFramesWritten + pacerAllowance) {
+        const std::uint64_t behind = owed - runtime->recordFramesWritten;
+        if (nowMs - runtime->lastDropWarnMs >= 1000) {
+          runtime->lastDropWarnMs = nowMs;
+          const std::string msg =
+            "RECORDING DROPPING FRAMES - " + std::to_string(behind) + " behind";
+          setOutputHealthState(outputIndex, OutputHealthState::Error, msg);
+          triggerToast(msg);
+          showLog("RECORD DROP", msg);
+          // Also to stderr. The three lines above reach the operator's screen
+          // and the show log, which is the right place for an operator -- but
+          // it left the condition invisible to anything reading the process's
+          // output: a support bundle, a CI harness, a field diagnosis over ssh.
+          // A recording running short is exactly the thing you want in the log
+          // you actually have.
+          std::cerr << "record-drop: " << msg << " (output " << outputIndex
+                    << ")" << std::endl;
+        }
+        runtime->recordDroppedFrames = behind;
+      }
+      if (runtime->recordFramesWritten >= owed) {
+        return;   // ahead of schedule; nothing is due yet
+      }
+      // CATCH UP, within reason. One frame per render tick can never close a
+      // deficit -- if the loop runs at 9fps and the recording wants 30, the
+      // file comes out a third of its length however long the take is.
+      //
+      // Two earlier attempts at this wedged the encoder, and it is worth being
+      // clear why they cannot now: back then every packet COPIED the raster
+      // (33MB at 4K) and the writer had a single mailbox slot, so a burst
+      // meant megabytes of copying to produce one written frame. Packets now
+      // share one immutable buffer and the writer has a real queue, so a
+      // repeat costs a pointer.
+      //
+      // Capped at four a tick and bounded by the queue anyway: a recorder that
+      // is behind should recover over a second, not empty its deficit into the
+      // encoder in one go and lurch.
+      const std::uint64_t behindNow = owed - runtime->recordFramesWritten;
+      pacerRepeats = static_cast<int>(std::min<std::uint64_t>(behindNow, 4u));
+
+    } else if (toWebSink) {
+      // Raw video has no timestamps. Its frame count must follow the same
+      // clock as PCM, including when rendering supplies a repeated picture.
+      const Uint64 nowMs = SDL_GetTicks();
+      const double elapsed = runtime->webClockUpdatedMs == 0 ? 0.0
+        : static_cast<double>(nowMs - runtime->webClockUpdatedMs) / 1000.0;
+      runtime->webClockUpdatedMs = nowMs;
+      runtime->webClockSeconds += elapsed;
+      const auto clock = deckAudioRing_.clockSample(streamAudioDecksForOutput(outputIndex), runtime->webClockDeck);
+      if (clock.deckIndex >= 0) {
+        if (clock.deckIndex != runtime->webClockDeck || clock.samples < runtime->webClockSamples) {
+          // A different deck, a cleared ring, or audio returning after silence:
+          // keep the mux timeline continuous and establish a new sample origin.
+          runtime->webAudioClockSeconds = runtime->webClockSeconds - clock.ageSeconds;
+        } else {
+          runtime->webAudioClockSeconds += static_cast<double>(clock.samples - runtime->webClockSamples) / 96000.0;
+        }
+        runtime->webClockSamples = clock.samples;
+        runtime->webClockSeconds = runtime->webAudioClockSeconds + clock.ageSeconds;
+      }
+      runtime->webClockDeck = clock.deckIndex;
+      const double rate = outputStreamFps(fpsHint);
+      const std::uint64_t owed = static_cast<std::uint64_t>(
+        std::max(0.0, runtime->webClockSeconds) * rate) + 1;
+      if (runtime->webFramesQueued >= owed) return;
+      if (owed - runtime->webFramesQueued > static_cast<std::uint64_t>(rate * 2.0)) {
+        // A sustained overload cannot be repaired by sending old audio with
+        // a current picture. Rejoin at a new, synchronized encoder epoch --
+        // and LIGHTER, a step at a time, or a machine that cannot encode this
+        // picture in time restarts forever and nobody ever sees a monitor.
+        stepDownWebEncode();
+        stopOutputStreamRuntime(*runtime);
+        setOutputHealthState(outputIndex, OutputHealthState::Recovering, "web encoder cannot keep up");
+        return;
+      }
+      pacerRepeats = static_cast<int>(std::min<std::uint64_t>(owed - runtime->webFramesQueued, 4));
+      // Only the main thread adds packets. Reserving capacity before pulling
+      // PCM prevents audio advancing when the corresponding video is refused.
+      std::lock_guard<std::mutex> lock(runtime->streamWriter->mutex);
+      pacerRepeats = std::min(pacerRepeats, static_cast<int>(
+        OutputStreamWriterState::kMaxQueuedPackets - runtime->streamWriter->queue.size()));
+      if (pacerRepeats == 0) return;
+    } else if (runtime->lastStreamCaptureSentAtMs == frame->capturedAtMs) {
+      return;
+    }
+
+    width = frame->width;
+    height = frame->height;
+    size_t stride = static_cast<size_t>(width) * 4u;
+    size_t frameBytes = stride * static_cast<size_t>(height);
+    if (frameBytes == 0) {
+      return;
+    }
+    OutputStreamPacket packet;
+    packet.width = width;
+    packet.height = height;
+    packet.capturedAtMs = frame->capturedAtMs;
+    // Published once per CAPTURED frame, then shared by every packet the pacer
+    // emits from it. capturedAtMs is the identity: the pacer hands the same
+    // frame back for each repeat, and re-copying it was pure waste.
+    if (frame->shared) {
+      runtime->egressPublished = frame->shared;   // pooled, written in place: no copy
+      runtime->egressPublishedAtMs = frame->capturedAtMs;
+    } else if (!runtime->egressPublished ||
+        runtime->egressPublishedAtMs != frame->capturedAtMs ||
+        runtime->egressPublished->size() != frame->pixels.size()) {
+      runtime->egressPublished =
+        std::make_shared<const std::vector<std::uint8_t>>(frame->pixels);
+      runtime->egressPublishedAtMs = frame->capturedAtMs;
+    }
+    packet.videoBytes = runtime->egressPublished;
+    packet.hdrEncoder = frame->hdrEncoder;
+    // One entry per frame this tick will WRITE, filled below for a file sink
+    // and handed out to the packets as they are queued. A network sink pushes
+    // straight down the audio pipe instead and leaves this empty.
+    std::vector<std::vector<std::int16_t>> audioChunks;
+    // Cross-platform. This was inside #ifndef _WIN32, so on Windows the packet
+    // NEVER carried audio -- the deck mix sat buffered and unread while the
+    // encoder muxed silence. Gated on the writer actually having somewhere to
+    // put it, which on Windows arrives once ffmpeg connects to the named pipe.
+    {
+      // The connector publishes the fd into the writer on every platform.
+      const bool haveAudioSink = runtime->streamWriter &&
+                                 runtime->streamWriter->audioPipeFd.load(
+                                   std::memory_order_acquire) >= 0;
+      // Collect WEB PCM from frame zero even while the Windows named pipe is
+      // connecting. Its writer waits for the fd without dropping the head.
+      if (haveAudioSink || toWebSink) {
+        // ── ONE FRESH CHUNK PER FRAME WRITTEN, NOT PER FRAME CAPTURED ──────
+        //
+        // The pacer repeats a picture when the capture loop falls behind the
+        // wall clock, so one captured frame can become up to four written
+        // frames. The audio arithmetic is "48000/fps samples accompany one
+        // frame", which is right for the frames that get WRITTEN -- so a
+        // repeat needs its own chunk, read fresh from the ring.
+        //
+        // It used to collect one chunk and let the repeats COPY it along with
+        // the raster. The sample count still matched the frame count, which is
+        // why this survived every duration and frame-count check, but the
+        // samples were duplicates: every repeated frame replayed its 1/fps of
+        // audio. MEASURED, at 25fps against a marker clip: clicks arrived
+        // 1.033s apart instead of 1.000s, a constant 3.3% stretch, because the
+        // pacer was repeating about one frame in thirty. It grew to 10% at
+        // 60fps, where the loop had less slack -- and shrank back to 3.8% when
+        // the label texture cache freed up the main thread, which is what
+        // pointed here. Video was unaffected throughout: a repeated FRAME is
+        // correct output, a repeated SAMPLE is not.
+        //
+        // Collected before the writer lock is taken: the ring has its own
+        // mutex and pushOutputStreamAudio takes the audio mutex, so gathering
+        // these underneath writer->mutex would be a lock-order inversion.
+        const int audioChunksNeeded = std::max(1, pacerRepeats);
+        if (toFileSink) {
+          audioChunks.reserve(static_cast<std::size_t>(audioChunksNeeded));
+          for (int i = 0; i < audioChunksNeeded; ++i) {
+            std::vector<std::int16_t> chunk = collectOutputAudioFrameSamples(
+              outputIndex,
+              runtime->streamAudioReadSamplesByDeck,
+              runtime->streamAudioSampleRemainder,
+              fpsHint,
+              &runtime->streamAudioOwedSamples,
+              &runtime->streamAudioDecksQuiet,
+              &runtime->recordClock);
+            if (runtime->recordAudioDelayChunks > 0) {
+              // Through the delay line: out comes the chunk from as many
+              // frames ago as the picture is behind, or silence the same
+              // length while it fills, so every written frame still carries
+              // exactly its share of samples.
+              const std::size_t length = chunk.size();
+              runtime->recordAudioDelayLine.push_back(std::move(chunk));
+              if (runtime->recordAudioDelayLine.size() > runtime->recordAudioDelayChunks) {
+                chunk = std::move(runtime->recordAudioDelayLine.front());
+                runtime->recordAudioDelayLine.pop_front();
+              } else {
+                chunk.assign(length, 0);
+              }
+            }
+            audioChunks.push_back(std::move(chunk));
+          }
+        } else {
+          // A NETWORK SINK MUST NEVER WAIT ON THE VIDEO QUEUE FOR ITS AUDIO.
+          //
+          // The encoder is given two inputs -- raw video on a pipe, PCM on a
+          // second one -- and it reads them in one loop. Starve the audio and
+          // it blocks there, which means it stops draining video, which means
+          // the writer's 3.7MB blocking write never returns, which means the
+          // queue fills, which means no further packet can be enqueued -- and
+          // the audio only ever travelled ON a packet. That loop has no way
+          // out of itself: measured, every network stream delivered exactly
+          // two frames and 66ms of audio and then sat there for ever with the
+          // health readout still saying "live".
+          //
+          // So audio goes straight to the audio thread, which has always had
+          // its own pipe, its own mutex and its own condition variable. It is
+          // one frame's worth per frame WRITTEN either way (the collector pads
+          // with silence when a deck is quiet, so a silent show still feeds
+          // the encoder), which is what keeps the counts -- and therefore the
+          // sync -- aligned.
+          //
+          // TODAY THIS LOOP RUNS ONCE. pacerRepeats is only ever raised inside
+          // the toFileSink branch above; a stream returns early on a repeated
+          // capture and never emits the same picture twice. The loop is here
+          // so the two sinks compute audio the same way and a future change
+          // that lets a stream repeat cannot reintroduce the recording's bug.
+          // It is NOT fixing a fault a stream can currently have -- an earlier
+          // version of this comment claimed it was, on a reading of the code
+          // rather than a measurement, and that was wrong.
+          for (int i = 0; i < audioChunksNeeded; ++i) {
+            pushOutputStreamAudio(
+              runtime->streamWriter,
+              collectOutputAudioFrameSamples(
+                outputIndex,
+                runtime->streamAudioReadSamplesByDeck,
+                runtime->streamAudioSampleRemainder,
+                fpsHint,
+                toWebSink ? &runtime->streamAudioOwedSamples : nullptr,
+                toWebSink ? &runtime->streamAudioDecksQuiet : nullptr));
+          }
+        }
+      }
+    }
+
+    auto writer = runtime->streamWriter;
+    bool writerFailed = false;
+    std::string writerFailureReason;
+    {
+      std::lock_guard<std::mutex> lock(writer->mutex);
+      writerFailed = writer->failed;
+      writerFailureReason = writer->failureReason;
+    }
+    if (writerFailed) {
+      runtime->streamStartFailed = true;
+      runtime->streamRestartBlockedUntilMs = SDL_GetTicks() + 1500;
+      setOutputHealthState(
+        outputIndex,
+        OutputHealthState::Error,
+        writerFailureReason.empty() ? "stream write failed" : writerFailureReason);
+      stopOutputStreamRuntime(*runtime);
+      if (outputIndex == project_.focusedOutputIndex) {
+        triggerToast("stream stopped");
+      }
+      return;
+    }
+    int accepted = 0;
+    {
+      std::lock_guard<std::mutex> lock(writer->mutex);
+      for (int repeat = 0; repeat < pacerRepeats; ++repeat) {
+        if (writer->queue.size() >= OutputStreamWriterState::kMaxQueuedPackets) {
+          // Genuinely lost: the encoder is not draining. Counted so the pacer's
+          // accounting stays honest -- it used to increment regardless, so a
+          // file that ran short still reported every frame delivered.
+          writer->packetsDropped += 1;
+          break;
+        }
+        // The last repeat may move; the others share the same buffer, so each
+        // costs a pointer rather than a raster.
+        if (repeat + 1 < pacerRepeats) {
+          writer->queue.push_back(packet);
+        } else {
+          writer->queue.push_back(std::move(packet));
+        }
+        writer->packetsQueued += 1;
+        ++accepted;
+      }
+    }
+    // EACH QUEUED FRAME'S SOUND GOES TO THE AUDIO THREAD NOW, not when the
+    // writer reaches that frame. It used to ride on the packet, and the
+    // writer only moves to the next packet once the picture before it is
+    // down the pipe -- while ffmpeg reads the sound in 1024-sample blocks and
+    // will not read more picture while the sound is short of it. At 60 fps a
+    // frame carries 800 samples, so four frames in the sound was short of a
+    // block, ffmpeg waited for sound, the writer waited for ffmpeg, and the
+    // take stopped dead: MEASURED, ProRes at 60 fps wrote a 0-byte file, four
+    // frames delivered, for the whole take (H.264's AAC path happened not to
+    // stall). A network sink already pushes its sound straight to the thread
+    // for the same reason. The chunks are the accepted frames' own, in order,
+    // so the counts -- and the sync -- are what they were; a refused frame's
+    // sound goes with it. Outside writer->mutex: pushOutputStreamAudio takes
+    // the audio mutex, and the audio thread takes them the other way round.
+    for (int i = 0; i < accepted && static_cast<std::size_t>(i) < audioChunks.size(); ++i) {
+      if (!audioChunks[static_cast<std::size_t>(i)].empty()) {
+        pushOutputStreamAudio(writer, audioChunks[static_cast<std::size_t>(i)]);
+      }
+    }
+    // ── Is it draining? ────────────────────────────────────────────────────
+    //
+    // Health used to be set to Live purely because a process existed and a
+    // socket had opened. It said "live" for eleven seconds about a stream that
+    // had delivered two frames and would never deliver another. A sink that
+    // has not accepted a packet in three seconds while frames are waiting is
+    // not live, and the operator is the person who most needs to know.
+    if (!toFileSink) {
+      const Uint64 nowMs = SDL_GetTicks();
+      std::uint64_t written = 0;
+      std::uint64_t queued = 0;
+      std::uint64_t vbytes = 0;
+      {
+        std::lock_guard<std::mutex> lock(writer->mutex);
+        written = writer->packetsWritten;
+        queued = writer->queue.size();
+        vbytes = writer->videoBytesWritten;
+      }
+      if (written != runtime->streamLastSeenWritten) {
+        runtime->streamLastSeenWritten = written;
+        runtime->streamLastDrainAtMs = nowMs;
+      } else if (queued > 0 && runtime->streamLastDrainAtMs > 0 &&
+                 nowMs - runtime->streamLastDrainAtMs > 3000) {
+        setOutputHealthState(outputIndex, OutputHealthState::Error,
+                             "stream stalled - the far end is not taking frames");
+      }
+      // DELIVERED FRAMES PER SECOND, sampled about once a second.
+      //
+      // Not a bit rate: videoBytesWritten counts the BGRA handed to the
+      // encoder, which at 720p24 is 707 Mb/s of raster and says nothing about
+      // what reaches the far end -- ffmpeg owns the compressed size and does
+      // not report it back. Frames delivered is the number that actually
+      // answers "is it keeping up", and it is ours to measure honestly.
+      (void) vbytes;
+      if (runtime->streamRateSampledAtMs > 0 &&
+          nowMs - runtime->streamRateSampledAtMs >= 1000) {
+        const double secs = static_cast<double>(nowMs - runtime->streamRateSampledAtMs) / 1000.0;
+        const std::uint64_t delta =
+          written >= runtime->streamRateSampleBytes ? written - runtime->streamRateSampleBytes : 0;
+        runtime->streamMeasuredKbps = static_cast<double>(delta) / secs;   // fps
+        runtime->streamRateSampledAtMs = nowMs;
+        runtime->streamRateSampleBytes = written;
+      }
+    }
+    if (!toFileSink) {
+      // Mark the capture dealt with even when the queue refused it. Its audio
+      // has already gone, and the next capture is 16ms away -- retrying a
+      // stale frame would collect that frame's audio a second time and walk
+      // the two apart.
+      runtime->lastStreamCaptureSentAtMs = frame->capturedAtMs;
+    }
+    if (accepted == 0) {
+      return;
+    }
+    writer->cv.notify_one();
+    runtime->lastStreamCaptureSentAtMs = frame->capturedAtMs;
+    if (toWebSink) runtime->webFramesQueued += static_cast<std::uint64_t>(accepted);
+    if (toFileSink) {
+      runtime->recordFramesWritten += static_cast<std::uint64_t>(accepted);
+      runtime->recordTakeFrames += static_cast<std::uint64_t>(accepted);
+      if (frameIsFresh) {
+        runtime->recordFreshFrames += 1;
+        runtime->lastFreshCaptureMs = SDL_GetTicks();
+        runtime->recordStallWarned = false;   // it moved; it may warn again
+      }
+    }
+  }
+
+  void destroyOutputRuntime(OutputRuntime& runtime) {
+    if (runtime.outputRenderer) releaseScopesCapture(runtime.outputRenderer);
+    stopOutputStreamRuntime(runtime);
+    // The house overlay belongs to this output's renderer, so it dies with it.
+    if (runtime.overlayTexture) {
+      SDL_DestroyTexture(runtime.overlayTexture);
+      runtime.overlayTexture = nullptr;
+    }
+    runtime.overlayTexturePath.clear();
+#if defined(DECKBOY_HAS_NDI_SDK)
+    if (runtime.ndiKeySender && ndiApi_.sendDestroyFn) {
+      ndiApi_.sendDestroyFn(runtime.ndiKeySender);
+      runtime.ndiKeySender = nullptr;
+    }
+    runtime.ndiKeySenderName.clear();
+    runtime.ndiKeyFrameBuffer.clear();
+    if (runtime.ndiSender && ndiApi_.sendDestroyFn) {
+      ndiApi_.sendDestroyFn(runtime.ndiSender);
+      runtime.ndiSender = nullptr;
+    }
+    runtime.ndiSenderName.clear();
+    runtime.ndiFrameBuffer.clear();
+#endif
+    runtime.ndiAudioReadSamplesByDeck.clear();
+    runtime.ndiAudioSampleRemainder = 0.0;
+    runtime.latestCapturedFrame = {};
+    runtime.delayFrames.clear();
+    for (auto& [sourceDeckIndex, texture] : runtime.layerBridgeTextures) {
+      (void) sourceDeckIndex;
+      if (texture) {
+        SDL_DestroyTexture(texture);
+      }
+    }
+    runtime.layerBridgeTextures.clear();
+    runtime.layerBridgeTextureWidths.clear();
+    runtime.layerBridgeTextureHeights.clear();
+    runtime.layerBridgeTextureFormats.clear();
+    runtime.layerBridgeFrameIndices.clear();
+    runtime.layerBridgePixelPointers.clear();
+    runtime.layerBridgeCueKeys.clear();
+    for (auto& [overlayKey, texture] : runtime.overlayBridgeTextures) {
+      (void) overlayKey;
+      if (texture) {
+        SDL_DestroyTexture(texture);
+      }
+    }
+    runtime.overlayBridgeTextures.clear();
+    runtime.overlayBridgeTextureWidths.clear();
+    runtime.overlayBridgeTextureHeights.clear();
+    runtime.overlayBridgeTextureFormats.clear();
+    runtime.overlayBridgeFrameIndices.clear();
+    runtime.overlayBridgeCueKeys.clear();
+    // The render targets go the same way. A texture left behind when a runtime
+    // is torn down outlives its renderer, and destroying it afterwards is a
+    // use-after-free rather than a leak.
+    for (auto& [targetKey, slot] : runtime.overlayBridgeTargets) {
+      (void) targetKey;
+      if (slot.texture) {
+        SDL_DestroyTexture(slot.texture);
+      }
+    }
+    runtime.overlayBridgeTargets.clear();
+    runtime.transitionUploadStamps.clear();
+    runtime.transitionCpuFrames.clear();
+    runtime.layerLookFrames.clear();
+    runtime.heldLookFrames.clear();
+    runtime.layerBridgeScratchPixels.clear();
+#if DECKBOY_INPROC_DECODE
+    // The pixel-buffer wraps go too. They hold a Metal view of an IOSurface
+    // the decoder owns; outliving this renderer is a use-after-free, and the
+    // AVFrame ref keeping the surface alive is released when the frame is.
+    for (auto& [pbDeckIndex, texture] : runtime.layerPixelBufferTextures) {
+      (void) pbDeckIndex;
+      if (texture) {
+        SDL_DestroyTexture(texture);
+      }
+    }
+    runtime.layerPixelBufferTextures.clear();
+    runtime.layerPixelBufferFrameIndices.clear();
+    for (auto& [gpuDeckIndex, texture] : runtime.layerGpuTextures) {
+      (void) gpuDeckIndex;
+      if (texture) {
+        SDL_DestroyTexture(texture);  // wrapped texture first…
+      }
+    }
+    runtime.layerGpuTextures.clear();
+    for (auto& [gpuDeckIndex, texture2D] : runtime.layerGpuTexture2Ds) {
+      (void) gpuDeckIndex;
+      deckboy::libav::releaseD3D11Texture(texture2D);  // …then its backing D3D11 texture
+    }
+    runtime.layerGpuTexture2Ds.clear();
+    runtime.layerGpuTextureSizes.clear();
+    runtime.layerGpuTextureFormats.clear();
+    runtime.layerGpuFrameIndices.clear();
+    runtime.gpuDownloadScratch = DecodedFrame{};
+    if (runtime.rendererD3DDevice) {
+      runtime.rendererD3DDevice = nullptr;
+      // This device is going away — zero-copy decks bound to it must restart.
+      scheduleDecodeDeviceReconcile();
+    }
+#endif
+    if (runtime.compositorTexture) {
+      SDL_DestroyTexture(runtime.compositorTexture);
+      runtime.compositorTexture = nullptr;
+    }
+    releaseMaskTextures(runtime);
+    if (runtime.testCardCanvas) {
+      SDL_DestroyTexture(runtime.testCardCanvas);
+      runtime.testCardCanvas = nullptr;
+      runtime.testCardCanvasW = runtime.testCardCanvasH = 0;
+    }
+    if (runtime.testCardPatch) {
+      SDL_DestroyTexture(runtime.testCardPatch);
+      runtime.testCardPatch = nullptr;
+      runtime.testCardPatchCell = 0;
+    }
+    if (runtime.egressScaleTexture) {
+      SDL_DestroyTexture(runtime.egressScaleTexture);
+      runtime.egressScaleTexture = nullptr;
+      runtime.egressScaleW = 0;
+      runtime.egressScaleH = 0;
+    }
+    if (runtime.egressReadback) {
+      deckboy::gpu::destroyStagingReadback(runtime.egressReadback);
+      runtime.egressReadback = nullptr;
+      runtime.egressReadbackW = 0;
+      runtime.egressReadbackH = 0;
+    }
+    if (runtime.hdrReadback) {
+      deckboy::gpu::destroyStagingReadback(runtime.hdrReadback);
+      runtime.hdrReadback = nullptr;
+    }
+    if (runtime.hdrP010Readback) {
+      deckboy::gpu::destroyHdrP010Readback(runtime.hdrP010Readback);
+      runtime.hdrP010Readback = nullptr;
+    }
+    if (runtime.hdrWireReadback) {
+      deckboy::gpu::destroyHdrP010Readback(runtime.hdrWireReadback);
+      runtime.hdrWireReadback = nullptr;
+    }
+    runtime.hdrWireUnavailable = false;
+    runtime.hdrWireMisses = 0;
+    runtime.hdrP010Unavailable = false;
+    runtime.hdrP010Misses = 0;
+    runtime.hdrReadbackUnavailable = false;
+    runtime.hdrReadbackMisses = 0;
+    // Outside the branch above: when the renderer had no asynchronous path
+    // there is no handle to free, and clearing the latch only inside it would
+    // mean a new renderer never got asked.
+    runtime.egressReadbackUnavailable = false;
+    runtime.egressPublished.reset();
+    runtime.egressPublishedAtMs = 0;
+    releaseOutputPreviewTap(runtime);
+    runtime.compositorWidth = 0;
+    runtime.compositorHeight = 0;
+    runtime.compositorFormat = SDL_PIXELFORMAT_UNKNOWN;
+    runtime.compositorBitDepth = 8;
+    // Flush a final black frame before the window goes away so the physical
+    // display — and capture dongles that latch the last signal they received —
+    // clears to black instead of freezing on the last-shown frame. Only a
+    // visible window has anything on screen; hidden/stream runtimes skip this.
+    if (runtime.outputRenderer && runtime.outputWindow &&
+        !(SDL_GetWindowFlags(runtime.outputWindow) & SDL_WINDOW_HIDDEN)) {
+      SDL_SetRenderTarget(runtime.outputRenderer, nullptr);
+      SDL_SetRenderDrawColor(runtime.outputRenderer, 0, 0, 0, 255);
+      // Two swaps: double/triple-buffered chains need a couple of presents to
+      // push black all the way to the scanout buffer the dongle samples.
+      for (int i = 0; i < 2; ++i) {
+        SDL_RenderClear(runtime.outputRenderer);
+        SDL_RenderPresent(runtime.outputRenderer);
+      }
+    }
+    if (runtime.outputRenderer) {
+      SDL_DestroyRenderer(runtime.outputRenderer);
+      runtime.outputRenderer = nullptr;
+    }
+    if (runtime.outputWindow) {
+      SDL_DestroyWindow(runtime.outputWindow);
+      runtime.outputWindow = nullptr;
+    }
+    runtime.pendingDisplayRuntimeRebuild = false;
+    runtime.pendingDisplayMoveFullscreen = false;
+    runtime.displayMoveRetryAtMs = 0;
+    runtime.suppressRecoveryUntilMs = 0;
+    runtime.recoveryPausedByEscape = false;
+    runtime.fullscreenIntended = false;
+    runtime.lastFullscreenRequestMs = 0;
+    runtime.lastRecoveryAttemptMs = 0;
+    runtime.healthState = OutputHealthState::Off;
+    runtime.healthReason.clear();
+    runtime.healthUpdatedAtMs = 0;
+    runtime.fpsSampleStartedAtMs = 0;
+    runtime.fpsFrameCount = 0;
+    runtime.fpsMeasured = 0.0;
+    runtime.lastPresentNs = 0;
+    runtime.presentsCounted = 0;
+    runtime.presentHitches = 0;
+    runtime.presentsMissed = 0;
+    runtime.presentTargetHz = 0.0;
+    runtime.worstPresentGapMs = 0.0;
+    runtime.lastMissNs = 0;
+    runtime.missWindowStartNs = 0;
+    runtime.missedInWindow = 0;
+    runtime.lastMissWarningMs = 0;
+    runtime.lastWarnedMissed = 0;
+    runtime.firstPresentNs = 0;
+    // Its clock is measured afresh; the warning stays said for the session.
+    runtime.pacedSumMs = 0.0;
+    runtime.pacedCount = 0;
+    runtime.pacedWindowStartNs = 0;
+    runtime.presentPacedHz = 0.0;
+    runtime.presentPath = {};
+    runtime.presentClockSuspect = false;
+    runtime.presentClockLogged.clear();
+    runtime.onTop = false;
+    runtime.onTopCheckedMs = 0;
+    runtime.onTopRaises = 0;
+  }
+
+#if DECKBOY_INPROC_DECODE
+  // The D3D11 device in-process decode should target: the first enabled
+  // window-type output's renderer, so zero-copy frames land on the device
+  // that composites the program output. Falls back to any output runtime
+  // with a hardware renderer; null means CPU-output decode.
+  void* primaryOutputDecodeDevice() {
+    void* anyDevice = nullptr;
+    for (size_t i = 0; i < outputRuntimes_.size() && i < project_.outputs.size(); ++i) {
+      OutputRuntime& runtime = outputRuntimes_[i];
+      if (!runtime.outputRenderer || !runtime.rendererD3DDevice) {
+        continue;
+      }
+      const OutputTarget& output = project_.outputs[i];
+      if (output.enabled && output.outputType != "stream") {
+        return runtime.rendererD3DDevice;
+      }
+      if (!anyDevice) {
+        anyDevice = runtime.rendererD3DDevice;
+      }
+    }
+    return anyDevice;
+  }
+
+  void scheduleDecodeDeviceReconcile() {
+    decodeDeviceReconcilePending_ = true;
+  }
+
+  // After output topology changes, restart decode on decks whose zero-copy
+  // frames are bound to the wrong (or a destroyed) device — and on decks
+  // that decoded to CPU because no device existed yet. RGBA effects cues
+  // never bind a device and their frames report RGBA, so they are skipped.
+  void reconcileDecodeDevices() {
+    if (!decodeDeviceReconcilePending_) {
+      return;
+    }
+    decodeDeviceReconcilePending_ = false;
+    void* wanted = primaryOutputDecodeDevice();
+    for (size_t deckIndex = 0; deckIndex < deckRuntimes_.size(); ++deckIndex) {
+      MediaEngine* engine = deckRuntimes_[deckIndex].mediaEngine.get();
+      if (!engine || !engine->inprocDecodeActive()) {
+        continue;
+      }
+      const Cue* cue = engine->activeCue();
+      if (!cue || cue->kind != CueKind::Video) {
+        continue;
+      }
+      if (engine->activeDecodeDevice() == wanted) {
+        continue;
+      }
+      const DecodedFrame* frame = engine->currentFrame();
+      if (frame && frame->format != FramePixelFormat::NV12 &&
+          frame->format != FramePixelFormat::P010) {
+        continue;  // RGBA effects path — device is irrelevant
+      }
+      engine->refreshActiveCueRuntime();
+    }
+  }
+#endif
+
+  // The live mode of the display the operator currently has the program
+  // output on: first enabled window-type output's renderer size + that
+  // display's refresh rate (the project's explicit refresh override wins).
+  // Patterns build at this raster (pixel-precision instruments stay 1:1
+  // with the physical display) and animate at this refresh rate, tracking
+  // display switches automatically.
+  MediaEngine::OutputModeHint primaryOutputMode() {
+    MediaEngine::OutputModeHint fallback;
+    for (size_t i = 0; i < outputRuntimes_.size() && i < project_.outputs.size(); ++i) {
+      OutputRuntime& runtime = outputRuntimes_[i];
+      if (!runtime.outputRenderer) {
+        continue;
+      }
+      int rw = 0;
+      int rh = 0;
+      if (!SDL_GetCurrentRenderOutputSize(runtime.outputRenderer, &rw, &rh) || rw <= 0 || rh <= 0) {
+        continue;
+      }
+      MediaEngine::OutputModeHint mode;
+      mode.width = rw;
+      mode.height = rh;
+      if (project_.outputRefreshRateHz > 0.0) {
+        mode.refreshHz = project_.outputRefreshRateHz;  // "unless otherwise set"
+      } else if (runtime.outputWindow) {
+        SDL_DisplayID display = SDL_GetDisplayForWindow(runtime.outputWindow);
+        if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(display)) {
+          mode.refreshHz = dm->refresh_rate;
+        }
+      }
+      const OutputTarget& output = project_.outputs[i];
+      if (output.enabled && output.outputType != "stream") {
+        return mode;
+      }
+      if (fallback.width == 0) {
+        fallback = mode;
+      }
+    }
+    return fallback;
+  }
+
+  // Put each deck back on the device its operator asked for, whenever the set
+  // of devices changes.
+  //
+  // Two directions, and both matter in a venue:
+  //
+  //   GONE   -- the interface a deck is playing through has been unplugged, or
+  //             powered off, or its driver has restarted. The logical device is
+  //             dead and SDL will not migrate it, so audio stops with nothing
+  //             on screen to say why. Reopening lands on the system default,
+  //             which is at least audible.
+  //   BACK   -- the interface named in the show has appeared. That is the
+  //             ordinary case of a rack powered on after the PC, and until now
+  //             it needed a restart: the fallback was permanent for the run.
+  //
+  // A deck that asked for the system default is left alone. SDL follows the
+  // system default on its own for a stream opened that way, and reopening it
+  // would interrupt audio to achieve nothing.
+  // ── THE SAMPLE RATE THE DESK RUNS AT ──────────────────────────────────────
+  //
+  // Changing it reopens every deck's audio device, because the rate is a
+  // property of the open device and there is no way to change one in place.
+  // Refused outright while anything is playing: reopening a device under a
+  // live cue is a gap in the sound, and the operator asking for 96k in the
+  // middle of a show has almost certainly clicked the wrong thing.
+  // Returns false and fills `why` when it refused, so the remote verb can
+  // answer ERR with a reason -- "understood but cannot act" is an error, not
+  // an OK, and a script setting a rate needs to know which it got.
+  bool setAudioSampleRate(int rate, std::string* why = nullptr) {
+    static const int kRates[] = {44100, 48000, 88200, 96000, 192000};
+    bool known = false;
+    for (int candidate : kRates) {
+      if (candidate == rate) { known = true; break; }
+    }
+    if (!known) {
+      const std::string reason = std::to_string(rate) + " is not one of "
+        "44100, 48000, 88200, 96000, 192000";
+      if (why) *why = reason;
+      triggerToast("sample rate: " + reason,
+                   ToastKind::Warning, kToastReadableMs);
+      return false;
+    }
+    if (project_.audioSampleRate == rate) {
+      triggerToast("sample rate: " + std::to_string(rate) + " Hz");
+      return true;   // already there is not a failure
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      if (engine && engine->state() == TransportState::Playing) {
+        const std::string reason = "not while a cue is playing";
+        if (why) *why = reason;
+        triggerToast("sample rate: " + reason,
+                     ToastKind::Warning, kToastReadableMs);
+        return false;
+      }
+    }
+    project_.audioSampleRate = rate;
+    // Every deck's engine, then the devices: the engine has to know the rate
+    // before the device it will feed is opened at it.
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+        engine->setAudioRate(rate);
+      }
+    }
+    // Hand every device back and let the reconcile reopen them at the new
+    // rate. detachAudioDevice FIRST on each, for the reason destroyDeckRuntime
+    // gives: the engine must not be holding a stream while it is destroyed.
+    for (DeckRuntime& runtime : deckRuntimes_) {
+      // A tail mid-fade is still on the old rate's streams; it ends now.
+      finishOutgoingTail(runtime);
+      if (runtime.mediaEngine) {
+        runtime.mediaEngine->detachAudioDevice();
+      }
+      if (runtime.audioStream) {
+        SDL_DestroyAudioStream(runtime.audioStream);
+        runtime.audioStream = nullptr;
+      }
+      runtime.audioDeviceInUse.clear();
+    }
+    reconcileDeckAudioDevices();
+    triggerToast("sample rate: " + std::to_string(rate) + " Hz");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  void reconcileDeckAudioDevices() {
+    std::vector<std::string> present;
+    int count = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioPlaybackDevices(&count)) {
+      present.reserve(static_cast<std::size_t>(count));
+      for (int i = 0; i < count; ++i) {
+        if (const char* name = SDL_GetAudioDeviceName(ids[i])) {
+          present.emplace_back(name);
+        }
+      }
+      SDL_free(ids);
+    }
+    // An empty list is not the same as "every device went away" -- it is also
+    // what a driver reports mid-restart. Acting on it would move every deck to
+    // a default that is itself missing, so wait for the next event.
+    if (present.empty()) {
+      return;
+    }
+    auto isPresent = [&present](const std::string& name) {
+      return std::find(present.begin(), present.end(), name) != present.end();
+    };
+
+    // Where the system's sound goes now (systemDefaultPlaybackTarget says why
+    // this is asked rather than left to SDL). Unknown, or a device SDL has not
+    // listed, and there is nothing a reopen could reach: leave things be.
+    const std::string systemOutput = systemDefaultPlaybackName();
+    const bool systemOutputKnown = !systemOutput.empty() && isPresent(systemOutput);
+    const bool systemOutputMoved =
+      systemOutputKnown && !systemOutputSeen_.empty() && systemOutput != systemOutputSeen_;
+    if (systemOutputKnown) {
+      systemOutputSeen_ = systemOutput;
+    }
+    bool followingSystemOutput = false;   // a deck's sound is on it after this pass
+
+    for (std::size_t deckIndex = 0; deckIndex < project_.decks.size(); ++deckIndex) {
+      DeckRuntime* runtime = runtimeForDeck(static_cast<int>(deckIndex));
+      if (!runtime || !runtime->audioStream) {
+        continue;
+      }
+      const std::string wanted = project_.decks[deckIndex].audioOutputDeviceName;
+      if (runtime->audioDeviceInUse.empty()) {
+        // ON THE SYSTEM OUTPUT -- asked for, or fallen back to while a named
+        // device is away. SDL moves these when the system output changes;
+        // this catches the times it does not.
+        if (systemOutputKnown && audioStreamDeviceName(runtime->audioStream) != systemOutput &&
+            runtime->audioFollowTried != systemOutput) {
+          runtime->audioFollowTried = systemOutput;
+          const std::string was = audioStreamDeviceName(runtime->audioStream);
+          reopenDeckAudioOutput(static_cast<int>(deckIndex), wanted);
+          const bool moved = audioStreamDeviceName(runtime->audioStream) == systemOutput;
+          std::cerr << "audio: deck " << (deckIndex + 1) << " was still on "
+                    << (was.empty() ? std::string("no device") : was)
+                    << " after the system output moved to " << systemOutput << "; "
+                    << (moved ? "moved it" : "it would not open there") << '\n';
+          if (!moved) {
+            triggerToast("audio: deck " + std::to_string(deckIndex + 1) + " could not move to " +
+                           systemOutput,
+                         ToastKind::Warning, kToastReadableMs);
+          }
+        }
+        if (systemOutputKnown && audioStreamDeviceName(runtime->audioStream) == systemOutput) {
+          runtime->audioFollowTried.clear();
+          followingSystemOutput = true;
+        }
+        if (wanted.empty()) {
+          continue;
+        }
+      }
+      const std::string inUse = runtime->audioDeviceInUse;
+      const bool onIt = (inUse == wanted);
+      if (onIt && isPresent(wanted)) {
+        continue;                       // where it should be, and it is there
+      }
+      if (!onIt && !isPresent(wanted)) {
+        continue;                       // still absent; already on the fallback
+      }
+      if (reopenDeckAudioOutput(static_cast<int>(deckIndex), wanted) &&
+          runtime->audioDeviceInUse == wanted) {
+        triggerToast("audio: deck " + std::to_string(deckIndex + 1) + " back on " + wanted);
+      }
+    }
+
+    // The desk's own sounds, by the same rule. Nothing but the main thread
+    // writes to this stream, so it can simply be opened again -- the new one
+    // first, because nothing else would ever reopen it if that failed.
+    if (uiAudioStream_ && systemOutputKnown) {
+      if (audioStreamDeviceName(uiAudioStream_) == systemOutput) {
+        uiAudioFollowTried_.clear();
+      } else if (uiAudioFollowTried_ != systemOutput) {
+        uiAudioFollowTried_ = systemOutput;
+        SDL_AudioStream* previous = uiAudioStream_;
+        uiAudioStream_ = nullptr;
+        if (ensureUiAudioDevice()) {
+          SDL_DestroyAudioStream(previous);
+        } else {
+          uiAudioStream_ = previous;
+        }
+      }
+    }
+
+    // Said whichever of SDL or the lines above did the moving, so the desk
+    // reads the same every time the sound changes place. Not under ASIO,
+    // where the show's sound is on the ASIO driver and did not move at all.
+    if (systemOutputMoved && followingSystemOutput && !asioArmed()) {
+      std::cerr << "audio: now on " << systemOutput << '\n';
+      triggerToast("audio: now on " + systemOutput);
+    }
+  }
+
+  // ── NAMED OUTPUTS AND THE PATCH ───────────────────────────────────────────
+  //
+  // Settings > Audio, OUTPUTS and PATCH. A named output is a channel or a pair
+  // on an interface; a playlist with a crosspoint into any of them is in the
+  // patch, and the patch, not the playlist's own device, decides where it
+  // sounds. Each interface the names are on is opened once per patched
+  // playlist, at that interface's own width, and the gains do the rest
+  // (MediaEngine::setPatchRouting) -- so turning a crosspoint on or off, or
+  // changing its level, never reopens anything.
+
+  static constexpr const char* kAsioDevicePrefix = "ASIO: ";
+
+  bool deckInPatch(const Deck& deck) const { return !deck.audioPatch.empty(); }
+
+  const NamedAudioOutput* namedAudioOutput(const std::string& name) const {
+    for (const NamedAudioOutput& named : project_.namedAudioOutputs) {
+      if (named.name == name) return &named;
+    }
+    return nullptr;
+  }
+
+  const AudioPatchPoint* audioPatchPoint(const Deck& deck, const std::string& output) const {
+    for (const AudioPatchPoint& point : deck.audioPatch) {
+      if (point.output == output) return &point;
+    }
+    return nullptr;
+  }
+
+  // An interface's own width: what SDL says the device runs at, which is what
+  // a stream must be opened with for channel n to land on its out n. Eight at
+  // most, SDL's own limit. DECKBOY_TEST_DEVICE_CHANNELS widens every device,
+  // so a test machine with nothing but stereo outs can check a patch onto
+  // channels 3 to 8 (SDL's dummy driver takes any width it is given).
+  int playbackDeviceChannels(const std::string& deviceName) {
+    const SDL_AudioDeviceID id = deviceName.empty() ? systemDefaultPlaybackTarget()
+                                                    : audioPlaybackDeviceIdForName(deviceName);
+    if (id == 0) return 0;
+    SDL_AudioSpec spec {};
+    int frames = 0;
+    int channels = SDL_GetAudioDeviceFormat(id, &spec, &frames) ? spec.channels : 2;
+    if (const char* wide = std::getenv("DECKBOY_TEST_DEVICE_CHANNELS"); wide && *wide) {
+      channels = std::max(channels, std::atoi(wide));
+    }
+    return std::clamp(channels, 1, 8);
+  }
+
+  // Where a named output is right now, and if nowhere, why. The why is shown
+  // on its row in OUTPUTS and over the wire: an output that cannot be reached
+  // says so rather than going somewhere else.
+  struct NamedOutputReach {
+    bool reachable = false;
+    bool asio = false;
+    std::string device;     // the SDL device, empty being the system output
+    int deviceChannels = 0;
+    std::string why;
+  };
+  NamedOutputReach namedOutputReach(const NamedAudioOutput& named) {
+    NamedOutputReach reach;
+    const int lastChannel = named.firstChannel + std::max(1, named.width) - 1;
+    const std::string prefix = kAsioDevicePrefix;
+    if (named.deviceName.rfind(prefix, 0) == 0) {
+      reach.asio = true;
+#if defined(DECKBOY_HAS_ASIO)
+      const std::string driver = named.deviceName.substr(prefix.size());
+      if (!asioArmed()) {
+        reach.why = "ASIO is off";
+      } else if (driver != project_.asioDriverName) {
+        reach.why = "ASIO is on " + project_.asioDriverName;
+      } else if (lastChannel > asioOutput_->channels()) {
+        reach.why = "channel " + std::to_string(lastChannel) + ", ASIO has " +
+                    std::to_string(asioOutput_->channels()) + " (ASIO outs)";
+      } else {
+        reach.reachable = true;
+        reach.deviceChannels = asioOutput_->channels();
+      }
+#else
+      reach.why = "no ASIO in this build";
+#endif
+      return reach;
+    }
+    reach.device = named.deviceName;
+#if defined(DECKBOY_HAS_ASIO)
+    if (asioArmed()) {
+      reach.why = "the show plays through ASIO";
+      return reach;
+    }
+#endif
+    reach.deviceChannels = playbackDeviceChannels(named.deviceName);
+    if (reach.deviceChannels <= 0) {
+      reach.why = "not connected";
+    } else if (lastChannel > reach.deviceChannels) {
+      reach.why = "channel " + std::to_string(lastChannel) + ", but it has " +
+                  std::to_string(reach.deviceChannels);
+    } else {
+      reach.reachable = true;
+    }
+    return reach;
+  }
+
+  // What a playlist in the patch is opened on: every interface any name is
+  // on, so a cue whose own matrix sends somewhere the playlist's crosspoints
+  // do not still has a stream to go out on. Under ASIO there is one
+  // destination, the driver.
+  struct DeckPatchPlan {
+    std::vector<std::string> devices;     // SDL device names, in order; destination 0 first
+    std::vector<int> channels;
+    MediaEngine::PatchRouting routing;
+    std::string signature;
+  };
+  DeckPatchPlan deckPatchPlan(int deckIndex) {
+    DeckPatchPlan plan;
+    const Deck& deck = project_.decks[static_cast<std::size_t>(deckIndex)];
+    plan.routing.active = deckInPatch(deck);
+    if (!plan.routing.active) {
+      return plan;
+    }
+#if defined(DECKBOY_HAS_ASIO)
+    const bool viaAsio = asioArmed();
+#else
+    const bool viaAsio = false;
+#endif
+    for (const NamedAudioOutput& named : project_.namedAudioOutputs) {
+      MediaEngine::PatchRouting::Output out;
+      out.name = named.name;
+      out.firstChannel = named.firstChannel - 1;
+      out.width = named.width;
+      if (const AudioPatchPoint* point = audioPatchPoint(deck, named.name)) {
+        out.on = true;
+        out.gainDb = point->gainDb;
+      }
+      const NamedOutputReach reach = namedOutputReach(named);
+      if (reach.reachable && viaAsio) {
+        out.dest = 0;
+        if (plan.channels.empty()) plan.channels.push_back(reach.deviceChannels);
+      } else if (reach.reachable) {
+        const auto found = std::find(plan.devices.begin(), plan.devices.end(), reach.device);
+        if (found != plan.devices.end()) {
+          out.dest = static_cast<int>(found - plan.devices.begin());
+        } else if (static_cast<int>(plan.devices.size()) < MediaEngine::kMaxAudioDestinations) {
+          out.dest = static_cast<int>(plan.devices.size());
+          plan.devices.push_back(reach.device);
+          plan.channels.push_back(reach.deviceChannels);
+        }
+      }
+      plan.routing.outputs.push_back(out);
+    }
+    plan.routing.destChannels = plan.channels;
+    plan.signature = viaAsio ? std::string("asio") : std::string("sdl");
+    for (std::size_t i = 0; i < plan.channels.size(); ++i) {
+      plan.signature += "|" + (i < plan.devices.size() ? plan.devices[i] : std::string()) + "#" +
+                        std::to_string(plan.channels[i]);
+    }
+    return plan;
+  }
+
+  // ── EDITING THEM: one set of functions for the cards and the wire ────────
+
+  static std::string namedOutputChannelsLabel(const NamedAudioOutput& named) {
+    return named.width >= 2
+      ? std::to_string(named.firstChannel) + "-" + std::to_string(named.firstChannel + 1)
+      : std::to_string(named.firstChannel);
+  }
+
+  static std::string namedOutputDeviceLabel(const NamedAudioOutput& named) {
+    return named.deviceName.empty() ? std::string("system output") : named.deviceName;
+  }
+
+  // "" when it was added; otherwise why not.
+  std::string addNamedOutput(const std::string& rawName, const std::string& deviceName,
+                             int firstChannel, int width) {
+    const std::string name = cleanAudioOutputName(rawName);
+    if (name.empty()) return "a name is needed";
+    if (namedAudioOutput(name)) return name + " already exists";
+    if (static_cast<int>(project_.namedAudioOutputs.size()) >= kMaxNamedAudioOutputs) {
+      return "sixteen outputs at most";
+    }
+    NamedAudioOutput named;
+    named.name = name;
+    named.deviceName = deviceName;
+    named.firstChannel = std::clamp(firstChannel, 1, kMaxAudioOutputs);
+    named.width = width == 1 ? 1 : 2;
+    project_.namedAudioOutputs.push_back(named);
+    markProjectDirty();
+    return {};
+  }
+
+  // Its crosspoints go with it: a patch point to a name that is not there
+  // would sit in the show doing nothing. A cue's matrix keeps its points, so
+  // an output removed by mistake and added back finds its cues as they were.
+  void removeNamedOutput(const std::string& name) {
+    auto& list = project_.namedAudioOutputs;
+    list.erase(std::remove_if(list.begin(), list.end(),
+                              [&](const NamedAudioOutput& o) { return o.name == name; }),
+               list.end());
+    for (Deck& deck : project_.decks) {
+      deck.audioPatch.erase(std::remove_if(deck.audioPatch.begin(), deck.audioPatch.end(),
+                                           [&](const AudioPatchPoint& p) { return p.output == name; }),
+                            deck.audioPatch.end());
+    }
+    markProjectDirty();
+  }
+
+  // A rename carries everything that sends to the name: the patch and every
+  // cue's matrix.
+  std::string renameNamedOutput(const std::string& from, const std::string& rawTo) {
+    const std::string to = cleanAudioOutputName(rawTo);
+    if (to.empty()) return "a name is needed";
+    if (to == from) return {};
+    if (namedAudioOutput(to)) return to + " already exists";
+    bool found = false;
+    for (NamedAudioOutput& named : project_.namedAudioOutputs) {
+      if (named.name == from) { named.name = to; found = true; }
+    }
+    if (!found) return "no output called " + from;
+    for (Deck& deck : project_.decks) {
+      for (AudioPatchPoint& point : deck.audioPatch) {
+        if (point.output == from) point.output = to;
+      }
+      for (Cue& cue : deck.cues) {
+        for (AudioCrosspoint& p : cue.audioMatrix) {
+          if (p.output == from) p.output = to;
+        }
+      }
+    }
+    markProjectDirty();
+    return {};
+  }
+
+  // A crosspoint on, at a level, or (no level) off.
+  void setAudioPatchPoint(int deckIndex, const std::string& output, std::optional<float> gainDb) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) return;
+    auto& row = project_.decks[static_cast<std::size_t>(deckIndex)].audioPatch;
+    auto it = std::find_if(row.begin(), row.end(),
+                           [&](const AudioPatchPoint& p) { return p.output == output; });
+    if (!gainDb) {
+      if (it != row.end()) row.erase(it);
+    } else if (it != row.end()) {
+      it->gainDb = std::clamp(*gainDb, kAudioPatchMinDb, kAudioPatchMaxDb);
+    } else {
+      row.push_back(AudioPatchPoint {output, std::clamp(*gainDb, kAudioPatchMinDb, kAudioPatchMaxDb)});
+    }
+    markProjectDirty();
+  }
+
+  static std::string audioPatchLevelLabel(float gainDb) {
+    char text[16];
+    std::snprintf(text, sizeof(text), "%.0f", static_cast<double>(gainDb));
+    return std::string(text) == "-0" ? std::string("0") : std::string(text);
+  }
+
+  // A playlist's patch row and its streams agree, or it is reopened. Run each
+  // tick: an interface plugged in or out, an output moved to another device,
+  // a playlist going into the patch or out of it all change what has to be
+  // open. Comparing a string per deck costs nothing next to a reopen.
+  std::string patchInputsKey_;            // what the plans were last worked out from
+  Uint64 patchDevicesCheckedAtMs_ = 0;
+
+  void servicePatchRouting() {
+    // Worked out again when the outputs or a crosspoint change, and twice a
+    // second anyway for an interface arriving or leaving. Asking SDL about
+    // every device for every playlist sixty times a second would be the
+    // costliest thing in the tick for no reason.
+    std::string key;
+    for (const NamedAudioOutput& named : project_.namedAudioOutputs) {
+      // Tabs and line breaks: the one thing a name cannot hold.
+      key += named.name + '\t' + named.deviceName + '\t' + std::to_string(named.firstChannel) + ':' +
+             std::to_string(named.width) + '\n';
+    }
+    for (const Deck& deck : project_.decks) {
+      key += '|';
+      for (const AudioPatchPoint& point : deck.audioPatch) {
+        key += point.output + '=' + std::to_string(point.gainDb) + ';';
+      }
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (key == patchInputsKey_ && now - patchDevicesCheckedAtMs_ < 500) {
+      return;
+    }
+    patchInputsKey_ = key;
+    patchDevicesCheckedAtMs_ = now;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      DeckRuntime* runtime = runtimeForDeck(d);
+      if (!runtime || !runtime->mediaEngine) continue;
+      const Deck& deck = project_.decks[static_cast<std::size_t>(d)];
+      if (!deckInPatch(deck) && runtime->patchSignature.empty()) continue;
+      const DeckPatchPlan plan = deckPatchPlan(d);
+      if (plan.signature != runtime->patchSignature) {
+        reopenDeckAudioOutput(d, deck.audioOutputDeviceName);
+      } else if (plan.routing.active) {
+        // Same streams; the levels and the crosspoints may have changed.
+        runtime->mediaEngine->setPatchRouting(plan.routing);
+      }
+    }
+  }
+
+  bool reopenDeckAudioOutput(int deckIndex, const std::string& preferredDeviceName) {
+    Deck& deck = project_.decks[deckIndex];
+    DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime) {
+      return false;
+    }
+
+    // IN THE PATCH, the patch opens the devices; under ASIO every playlist
+    // plays through the driver whatever it is patched to, so there the patch
+    // only routes inside it and the streams are opened the old way.
+    DeckPatchPlan plan = deckPatchPlan(deckIndex);
+#if defined(DECKBOY_HAS_ASIO)
+    const bool openByPatch = plan.routing.active && !asioArmed();
+#else
+    const bool openByPatch = plan.routing.active;
+#endif
+    std::vector<SDL_AudioStream*> patchExtras;
+    int mainChannels = deck.audioOutputChannels;
+    std::string effectiveName;
+    SDL_AudioStream* newMain = nullptr;
+    if (openByPatch) {
+      // Named or nothing, every one of them: a patch that fell back to the
+      // system output would put a press feed into the PA.
+      std::vector<int> openedChannels;
+      std::vector<int> remap(plan.devices.size(), -1);
+      for (std::size_t i = 0; i < plan.devices.size(); ++i) {
+        std::string got;
+        SDL_AudioStream* stream =
+          openMainAudioDevice(plan.devices[i], got, plan.channels[i], true, true);
+        if (stream && got != plan.devices[i]) {
+          SDL_DestroyAudioStream(stream);
+          stream = nullptr;
+        }
+        if (!stream) {
+          triggerToast("audio: could not open " +
+                       (plan.devices[i].empty() ? std::string("the system output") : plan.devices[i]) +
+                       " for the patch", ToastKind::Warning, kToastReadableMs);
+          continue;
+        }
+        remap[i] = static_cast<int>(openedChannels.size());
+        openedChannels.push_back(plan.channels[i]);
+        if (!newMain) {
+          newMain = stream;
+          effectiveName = plan.devices[i];
+        } else {
+          deckboySetAudioPaused(stream, false);   // the extras run; see below
+          patchExtras.push_back(stream);
+        }
+      }
+      for (auto& out : plan.routing.outputs) {
+        out.dest = out.dest >= 0 && out.dest < static_cast<int>(remap.size()) ? remap[static_cast<std::size_t>(out.dest)] : -1;
+      }
+      plan.routing.destChannels = openedChannels;
+      mainChannels = openedChannels.empty() ? 2 : openedChannels.front();
+    } else {
+      newMain = openMainAudioDevice(preferredDeviceName, effectiveName, deck.audioOutputChannels);
+    }
+    // NO DEVICE IS NOT NO DECK, and this used to return here -- which mattered
+    // far more than it looks, because THE MEDIA ENGINE IS CREATED BELOW. A
+    // machine with no sound card therefore got a deck with no engine, and a
+    // deck with no engine cannot show a picture: TAKE answered OK and nothing
+    // went up. Reported from a test runner with no audio, and it describes
+    // every signage box, VM and rack rig there is.
+    //
+    // So the run continues with a null stream, which every audio path already
+    // tolerates -- that is how a deck behaves while it is between devices --
+    // and the function still returns false at the end so the CALLER can say
+    // "no audio" once. False means "no sound", not "no deck".
+    const bool haveDevice = newMain != nullptr;
+
+    SDL_AudioStream* oldStream = runtime->audioStream;
+    runtime->audioStream = newMain;
+
+    // ── THE EXTRA DESTINATIONS ──────────────────────────────────────────
+    //
+    // Opened HERE, with the primary, because this is the one place a deck's
+    // audio devices change and the engine's contract is that streams are
+    // swapped from the main thread while it owns them. Opening them anywhere
+    // else would mean a second lifecycle to keep in step with this one.
+    std::vector<SDL_AudioStream*> oldExtras;
+    oldExtras.swap(runtime->extraAudioStreams);
+    std::vector<SDL_AudioStream*> newExtras = patchExtras;
+    // In the patch the extras are the patch's other interfaces, opened above;
+    // the playlist's own extra sends are what it does outside the patch.
+    for (const std::string& name : openByPatch ? std::vector<std::string> {} : deck.extraAudioDeviceNames) {
+      if (trim(name).empty()) {
+        continue;
+      }
+      std::string gotName;
+      SDL_AudioStream* extra = openMainAudioDevice(name, gotName, deck.audioOutputChannels);
+      if (!extra) {
+        triggerToast("audio: could not open " + name);
+        continue;
+      }
+      // NAMED OR NOTHING. The primary falls back to the system default
+      // because a deck with no sound at all is worse; an EXTRA destination
+      // falling back would quietly double the sound onto a device the
+      // operator never asked for, which is worse than silence.
+      if (gotName != name) {
+        triggerToast("audio: " + name + " not found - not sending there");
+        SDL_DestroyAudioStream(extra);
+        continue;
+      }
+      // STARTED. A device stream opens paused, and the engine's transport
+      // drives only the main one, so every extra send sat paused and silent
+      // from v0.99.374 -- with every gate and report saying it was sending.
+      // Nothing reaches it except while the playlist plays, so running is
+      // what silence between cues already looks like.
+      deckboySetAudioPaused(extra, false);
+      newExtras.push_back(extra);
+    }
+    runtime->extraAudioStreams = newExtras;
+
+    // -- AND THE MONITOR ------------------------------------------------
+    //
+    // Opened for EVERY deck, not just the one being listened to, so that
+    // choosing a different playlist to monitor is a store rather than a
+    // device reopen. Reopening would click, and with the monitor following
+    // the focused playlist it would click on every arrow key.
+    //
+    // Named or nothing, like the extras: a monitor that quietly fell back to
+    // the system default would put the thing you are auditioning into the
+    // room, which is the exact opposite of what a monitor is for.
+    // HANDED OVER, NOT FREED HERE. The old stream is kept until after the
+    // engine has been given the new one, exactly as oldExtras is: the audio
+    // thread may be part way through a write to it, and freeing it while the
+    // engine still points at it is a write to freed memory.
+    SDL_AudioStream* oldMonitor = runtime->monitorAudioStream;
+    runtime->monitorAudioStream = nullptr;
+    const std::string monitorWanted = trim(project_.monitorDeviceName);
+    if (!monitorWanted.empty() && monitorWanted != effectiveName) {
+      std::string monitorGot;
+      // Stereo in the patch: the monitor is the playlist's own sound,
+      // whatever the patch spreads it across.
+      SDL_AudioStream* monitor =
+        openMainAudioDevice(monitorWanted, monitorGot, openByPatch ? 2 : deck.audioOutputChannels, false);
+      if (monitor && monitorGot == monitorWanted) {
+        deckboySetAudioPaused(monitor, false);   // see the extras above: paused, it was silent from v0.99.376
+        runtime->monitorAudioStream = monitor;
+      } else if (monitor) {
+        SDL_DestroyAudioStream(monitor);
+      }
+    }
+    // The REQUEST is kept, not the result.
+    //
+    // This used to store the effective name here, so a named interface that
+    // was not present at open -- the rack powered on after the PC, a USB
+    // device still enumerating, anything on a switched PDU -- silently
+    // replaced the operator's routing with "system default", and the next save
+    // wrote that away permanently. The request is what belongs in the show
+    // file; what we actually got belongs to this run.
+    deck.audioOutputDeviceName = preferredDeviceName;
+    runtime->audioDeviceInUse = effectiveName;
+    if (!openByPatch && haveDevice && !preferredDeviceName.empty() && effectiveName != preferredDeviceName) {
+      triggerToast("audio: " + preferredDeviceName + " not found — using system default");
+    }
+    runtime->patchSignature = plan.routing.active ? plan.signature : std::string();
+    if (runtime->mediaEngine) {
+      // Hot-swap the output device on the existing engine so a device change
+      // mid-cue keeps playing instead of tearing the engine down.
+      runtime->mediaEngine->setAudioDevice(newMain, mainChannels);
+      runtime->mediaEngine->setExtraAudioStreams(newExtras);
+      runtime->mediaEngine->setPatchRouting(plan.routing);
+      runtime->mediaEngine->setMonitorStream(runtime->monitorAudioStream);
+      if (const char* capture = std::getenv("DECKBOY_PATCH_CAPTURE"); capture && *capture) {
+        runtime->mediaEngine->setPatchCapture(std::string(capture) + "/deck" + std::to_string(deckIndex + 1));
+      }
+      // In the patch, "to the room" is what the crosspoints say.
+      runtime->mediaEngine->setMainDeviceMuted(!openByPatch && !deck.audioToProgram);
+    } else {
+      runtime->mediaEngine = std::make_unique<MediaEngine>(
+        runtime->outputRenderer,
+        runtime->audioStream,
+        // WHERE THIS PLAYLIST IS NOW, not where it was when the engine was
+        // made: the slot moves when playlists do (reconcileDeckRuntimes).
+        [this, slot = runtime->slot](const std::vector<std::int16_t>& samples) {
+          deckAudioRing_.push(*slot, samples);
+          // Capture samples for VU meter (only from focused deck)
+          if (slot->load(std::memory_order_relaxed) == vuFocusedDeck_.load(std::memory_order_relaxed)) {
+            {
+              std::lock_guard<std::mutex> lock(vuSamplesMutex_);
+              vuSamples_ = samples;
+              vuSamplesUpdatedAtMs_ = SDL_GetTicks();
+            }
+            // The sound scopes keep EVERY sample, not the latest chunk: an
+            // integrated loudness that skipped some would read wrong. Two
+            // seconds' worth at most, in case the desk stops draining.
+            if (soundScopeWanted_.load(std::memory_order_relaxed)) {
+              std::lock_guard<std::mutex> lock(soundScopeMutex_);
+              if (soundScopeFifo_.size() < static_cast<std::size_t>(kAudioRate) * 4) {
+                soundScopeFifo_.insert(soundScopeFifo_.end(), samples.begin(), samples.end());
+              }
+            }
+          }
+        },
+        [this](const Cue& cue) {
+          return resolvedCueFilesystemPathString(cue, currentProjectFile_);
+        },
+#if DECKBOY_INPROC_DECODE
+        // Deck engines decode zero-copy onto the program output's device.
+        [this]() { return primaryOutputDecodeDevice(); },
+#else
+        MediaEngine::DecodeDeviceProvider {},
+#endif
+        // Patterns build pixel-mapped to the live program-output raster and
+        // animate at its refresh rate (project override wins).
+        [this]() { return primaryOutputMode(); }
+      );
+      // This deck's renderer belongs to a window created HIDDEN, purely as an
+      // upload target -- so nothing else will ever present it, and without a
+      // present the driver never frees what we upload. See uploadFrame.
+      runtime->mediaEngine->setHiddenUploadTarget(true);
+      runtime->mediaEngine->setAudioDeviceChannels(mainChannels);
+      // Everything the hot-swap path installs, so a new engine starts with
+      // the deck's whole routing rather than its main stream alone.
+      runtime->mediaEngine->setExtraAudioStreams(newExtras);
+      runtime->mediaEngine->setPatchRouting(plan.routing);
+      runtime->mediaEngine->setMonitorStream(runtime->monitorAudioStream);
+      runtime->mediaEngine->setMainDeviceMuted(!openByPatch && !deck.audioToProgram);
+      if (const char* capture = std::getenv("DECKBOY_PATCH_CAPTURE"); capture && *capture) {
+        runtime->mediaEngine->setPatchCapture(std::string(capture) + "/deck" + std::to_string(deckIndex + 1));
+      }
+      // An engine made while ASIO is armed -- a playlist added mid-show, or the
+      // fresh engine a transition hands a deck (handOffToOutgoingTail) --
+      // plays through ASIO like the rest, from a source of its own. Arming
+      // only reached the engines that existed at the time, so these went to
+      // the system device instead.
+      if (asioArmed()) {
+        runtime->mediaEngine->setExternalAudioSink(makeAsioSink());
+      }
+    }
+    for (SDL_AudioStream* extra : oldExtras) {
+      // After the engine has been given the new set, never before: the audio
+      // thread may be part way through a write to one of these.
+      if (extra) {
+        SDL_DestroyAudioStream(extra);
+      }
+    }
+    if (oldMonitor) {
+      SDL_DestroyAudioStream(oldMonitor);   // same rule, same reason
+    }
+    if (oldStream) {
+      SDL_DestroyAudioStream(oldStream);
+    }
+    // False means THERE IS NO SOUND, not that there is no deck: the
+    // engine above exists either way and the picture plays.
+    return haveDevice;
+  }
+
+  bool ensureNdiRuntimeReady(std::string* errorMessage = nullptr) {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    if (ndiApi_.ensureLoaded()) {
+      return true;
+    }
+    if (errorMessage) {
+      *errorMessage = ndiApi_.loadError;
+    }
+    return false;
+#else
+    if (errorMessage) {
+      *errorMessage = "built without NDI SDK headers";
+    }
+    return false;
+#endif
+  }
+
+  void applyOutputNdiSettings(int outputIndex, bool withToast) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      if (output.enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Error, "ndi runtime unavailable");
+      }
+      return;
+    }
+
+#if defined(DECKBOY_HAS_NDI_SDK)
+    auto clearFillSender = [&]() {
+      if (runtime->ndiSender && ndiApi_.sendDestroyFn) {
+        ndiApi_.sendDestroyFn(runtime->ndiSender);
+      }
+      runtime->ndiSender = nullptr;
+      runtime->ndiSenderName.clear();
+      runtime->ndiFrameBuffer.clear();
+      runtime->ndiAudioReadSamplesByDeck.clear();
+      runtime->ndiAudioSampleRemainder = 0.0;
+    };
+    auto clearKeySender = [&]() {
+      if (runtime->ndiKeySender && ndiApi_.sendDestroyFn) {
+        ndiApi_.sendDestroyFn(runtime->ndiKeySender);
+      }
+      runtime->ndiKeySender = nullptr;
+      runtime->ndiKeySenderName.clear();
+      runtime->ndiKeyFrameBuffer.clear();
+    };
+    auto clearSenders = [&]() {
+      clearFillSender();
+      clearKeySender();
+    };
+
+    if (!output.ndiEnabled) {
+      clearSenders();
+      output.ndiKeyEnabled = false;
+      if (output.enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Armed);
+      }
+      if (withToast) {
+        triggerToast("ndi off");
+      }
+      return;
+    }
+
+    std::string loadError;
+    if (!ensureNdiRuntimeReady(&loadError)) {
+      output.ndiEnabled = false;
+      output.ndiKeyEnabled = false;
+      clearSenders();
+      setOutputHealthState(outputIndex, OutputHealthState::Error,
+                           loadError.empty() ? "ndi unavailable" : ("ndi unavailable: " + loadError));
+      if (withToast) {
+        triggerToast("ndi unavailable");
+      }
+      return;
+    }
+
+    if (trim(output.ndiSourceName).empty()) {
+      output.ndiSourceName = defaultOutputNdiSourceName(output, outputIndex);
+    }
+    if (trim(output.ndiKeySourceName).empty()) {
+      output.ndiKeySourceName = defaultOutputNdiKeySourceName(output, outputIndex);
+    }
+
+    clearSenders();
+
+    NDIlib_send_create_t fillCreate {};
+    fillCreate.p_ndi_name = output.ndiSourceName.c_str();
+    fillCreate.p_groups = nullptr;
+    fillCreate.clock_video = false;
+    fillCreate.clock_audio = false;
+    runtime->ndiSender = ndiApi_.sendCreateFn ? ndiApi_.sendCreateFn(&fillCreate) : nullptr;
+    if (!runtime->ndiSender) {
+      output.ndiEnabled = false;
+      output.ndiKeyEnabled = false;
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "ndi sender failed");
+      if (withToast) {
+        triggerToast("ndi sender failed");
+      }
+      return;
+    }
+    runtime->ndiSenderName = output.ndiSourceName;
+    primeOutputNdiAudioReadPositions(outputIndex, *runtime);
+    runtime->ndiAudioSampleRemainder = 0.0;
+
+    if (output.ndiKeyEnabled) {
+      NDIlib_send_create_t keyCreate {};
+      keyCreate.p_ndi_name = output.ndiKeySourceName.c_str();
+      keyCreate.p_groups = nullptr;
+      keyCreate.clock_video = false;
+      keyCreate.clock_audio = false;
+      runtime->ndiKeySender = ndiApi_.sendCreateFn ? ndiApi_.sendCreateFn(&keyCreate) : nullptr;
+      if (!runtime->ndiKeySender) {
+        output.ndiKeyEnabled = false;
+      } else {
+        runtime->ndiKeySenderName = output.ndiKeySourceName;
+      }
+    }
+    if (output.enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Live);
+    }
+
+    if (withToast) {
+      triggerToast("ndi: " + currentNdiOutputLabel());
+    }
+#else
+    (void) output;
+    (void) runtime;
+    if (project_.outputs[outputIndex].enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "ndi unsupported build");
+    }
+    if (withToast) {
+      triggerToast("ndi unsupported build");
+    }
+#endif
+  }
+
+  void setFocusedOutputNdiEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    if (output.ndiEnabled == enabled) {
+      return;
+    }
+    // Enable path is operator-initiated by every path that reaches this
+    // setter (UI toggle, hotkey, OSC command). Project file load writes
+    // the field directly and never comes through here, so prompting here
+    // never surprises a project being opened from disk.
+    if (enabled && !ndiRuntimeAvailable()) {
+      promptForNdiRuntime();
+      return;
+    }
+    output.ndiEnabled = enabled;
+    if (!output.ndiEnabled) {
+      output.ndiKeyEnabled = false;
+    }
+    applyOutputNdiSettings(project_.focusedOutputIndex, true);
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleFocusedOutputNdi() {
+    setFocusedOutputNdiEnabled(!focusedOutput().ndiEnabled);
+  }
+
+  // DeckLink enable wrapper — gates on deckLinkRuntimeAvailable() so the
+  // dependency prompt fires from every operator-initiated path (settings
+  // toggle, OSC command, hotkey if one ever exists). Project file load
+  // writes the field directly and stays silent.
+  void setFocusedOutputDeckLinkEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    if (output.deckLinkEnabled == enabled) {
+      return;
+    }
+    if (enabled && !deckLinkRuntimeAvailable()) {
+      promptForDeckLinkRuntime();
+      return;
+    }
+    output.deckLinkEnabled = enabled;
+    if (!output.deckLinkEnabled) {
+      auto& rt = outputRuntimes_[project_.focusedOutputIndex];
+      shutdownOutputDeckLink(rt);
+    }
+    triggerToast(std::string("decklink: ") + (output.deckLinkEnabled ? "on" : "off"));
+    markProjectDirty();
+  }
+
+  void toggleFocusedOutputDeckLink() {
+    setFocusedOutputDeckLinkEnabled(!focusedOutput().deckLinkEnabled);
+  }
+
+  // SPOUT HAD NO SETTER AT ALL, and so no verb, no hotkey and no OSC path --
+  // the only way to route an output to Spout was to edit the show file by
+  // hand, which is how it was tested. NDI and DeckLink beside it have had
+  // these since they were written.
+  void setFocusedOutputSpoutEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    if (output.spoutEnabled == enabled) {
+      return;
+    }
+    output.spoutEnabled = enabled;
+    // A sender with no name is invisible to a receiver, so give it one the
+    // first time it is turned on rather than leaving that to be discovered.
+    if (enabled && trim(output.spoutSenderName).empty()) {
+      output.spoutSenderName = "Deckboy";
+    }
+    playUiSound(UiSoundEffect::Toggle);
+    triggerToast(enabled ? ("spout: " + output.spoutSenderName) : "spout: off");
+    markProjectDirty();
+  }
+
+  void toggleFocusedOutputSpout() {
+    setFocusedOutputSpoutEnabled(!focusedOutput().spoutEnabled);
+  }
+
+  void setFocusedOutputSpoutName(const std::string& requestedName) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    std::string normalized = trim(requestedName);
+    if (normalized.empty()) {
+      normalized = "Deckboy";
+    }
+    output.spoutSenderName = normalized;
+    triggerToast("spout name: " + normalized);
+    markProjectDirty();
+  }
+
+  void setFocusedOutputNdiName(const std::string& requestedName) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    std::string normalized = trim(requestedName);
+    if (normalized.empty()) {
+      normalized = defaultOutputNdiSourceName(output, project_.focusedOutputIndex);
+    }
+    if (output.ndiSourceName == normalized) {
+      return;
+    }
+    output.ndiSourceName = normalized;
+    if (output.ndiEnabled) {
+      applyOutputNdiSettings(project_.focusedOutputIndex, true);
+    } else {
+      triggerToast("ndi name: " + output.ndiSourceName);
+    }
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setFocusedOutputNdiKeyEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    if (output.ndiKeyEnabled == enabled && (!enabled || output.ndiEnabled)) {
+      return;
+    }
+    // Enabling the key also implicitly enables the main NDI sender below,
+    // so the runtime check applies to both sides of the path.
+    if (enabled && !ndiRuntimeAvailable()) {
+      promptForNdiRuntime();
+      return;
+    }
+    if (enabled) {
+      output.ndiEnabled = true;
+      if (trim(output.ndiKeySourceName).empty()) {
+        output.ndiKeySourceName = defaultOutputNdiKeySourceName(output, project_.focusedOutputIndex);
+      }
+    }
+    output.ndiKeyEnabled = enabled;
+    applyOutputNdiSettings(project_.focusedOutputIndex, true);
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleFocusedOutputNdiKey() {
+    setFocusedOutputNdiKeyEnabled(!focusedOutput().ndiKeyEnabled);
+  }
+
+  void setFocusedOutputNdiKeyName(const std::string& requestedName) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    std::string normalized = trim(requestedName);
+    if (normalized.empty()) {
+      normalized = defaultOutputNdiKeySourceName(output, project_.focusedOutputIndex);
+    }
+    if (output.ndiKeySourceName == normalized) {
+      return;
+    }
+    output.ndiKeySourceName = normalized;
+    if (output.ndiEnabled && output.ndiKeyEnabled) {
+      applyOutputNdiSettings(project_.focusedOutputIndex, true);
+    } else {
+      triggerToast("ndi key name: " + output.ndiKeySourceName);
+    }
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void sendOutputNdiAudioFrame(int outputIndex, double fpsHint) {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->ndiSender || !ndiApi_.sendAudioInterleaved16sFn) {
+      return;
+    }
+    std::vector<std::int16_t> samples = collectOutputAudioFrameSamples(
+      outputIndex,
+      runtime->ndiAudioReadSamplesByDeck,
+      runtime->ndiAudioSampleRemainder,
+      fpsHint);
+    if (samples.empty()) {
+      return;
+    }
+    constexpr int kChannels = 2;
+    int sampleCount = static_cast<int>(samples.size() / static_cast<size_t>(kChannels));
+    if (sampleCount <= 0) {
+      return;
+    }
+    NDIlib_audio_frame_interleaved_16s_t frame {};
+    frame.sample_rate = kAudioRate;
+    frame.no_channels = kChannels;
+    frame.no_samples = sampleCount;
+    frame.timecode = NDIlib_send_timecode_synthesize;
+    frame.reference_level = 0;
+    frame.p_data = samples.data();
+    ndiApi_.sendAudioInterleaved16sFn(runtime->ndiSender, &frame);
+#else
+    (void) outputIndex;
+    (void) fpsHint;
+#endif
+  }
+
+  // ── Going to air is the cue ─────────────────────────────────────────────
+  //
+  // An NDI receiver reports back to the sender whether it is showing that
+  // source on program or preview. On a switched show that is the only signal
+  // that matters: the operator's hands are on the switcher, and the roll should
+  // start because the clip was just put to air -- not because somebody also
+  // remembered to press GO on the playout machine.
+  //
+  // EDGE TRIGGERED, both ways. Tally is a level, and a level would re-fire the
+  // take on every frame it stayed high; only the transition is an event. The
+  // previous state is per output, because two outputs can be watched by two
+  // different receivers and the one that changed is the one that means it.
+  //
+  // Nothing here happens unless the operator asked for it. A machine that
+  // silently starts rolling because a receiver glanced at it is a worse show
+  // than one that does nothing.
+  void pollOutputNdiTally(int outputIndex, OutputRuntime& outputRuntime) {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    if (!project_.ndiTallyTriggerEnabled || !outputRuntime.ndiSender ||
+        !ndiApi_.sendTallyFn) {
+      return;
+    }
+    NDIlib_tally_t tally {};
+    // Zero timeout: this is polled from the render loop and must never block a
+    // frame waiting on a receiver that has gone quiet.
+    ndiApi_.sendTallyFn(outputRuntime.ndiSender, &tally, 0);
+    const bool onProgram = tally.on_program;
+    if (onProgram == outputRuntime.ndiTallyOnProgram) {
+      return;
+    }
+    outputRuntime.ndiTallyOnProgram = onProgram;
+    // FIRST READING IS NOT A TRANSITION. A sender that comes up already on
+    // program would otherwise fire a take during startup, which is how a
+    // rehearsal becomes a broadcast.
+    if (!outputRuntime.ndiTallySeen) {
+      outputRuntime.ndiTallySeen = true;
+      return;
+    }
+    handleTallyTransition(onProgram, "NDI");
+#else
+    (void)outputIndex;
+    (void)outputRuntime;
+#endif
+  }
+
+  // The switch-off vocabulary, in one place, so the label an operator reads and
+  // the branch that runs can never drift apart.
+  static const std::vector<std::string>& tallySwitchOffOrder() {
+    static const std::vector<std::string> kOrder {
+      "nothing", "next", "pause", "stop", "clear"};
+    return kOrder;
+  }
+
+  static std::string tallySwitchOffLabel(const std::string& action) {
+    if (action == "next") return "LOAD NEXT";
+    if (action == "pause") return "PAUSE";
+    if (action == "stop") return "STOP";
+    if (action == "clear") return "CLEAR";
+    return "NOTHING";
+  }
+
+  void cycleTallySwitchOffAction() {
+    const auto& order = tallySwitchOffOrder();
+    auto it = std::find(order.begin(), order.end(), project_.tallySwitchOffAction);
+    const std::size_t next = (it == order.end()) ? 0
+                                                 : (static_cast<std::size_t>(it - order.begin()) + 1) % order.size();
+    project_.tallySwitchOffAction = order[next];
+    markProjectDirty();
+    triggerToast("off air: " + tallySwitchOffLabel(project_.tallySwitchOffAction));
+  }
+
+  // What a tally edge means, for every tally source there will ever be.
+  //
+  // Kept in one place deliberately: an ATEM's program bus and an NDI receiver's
+  // tally are the same statement about the same show, and an operator who sets
+  // "on switch-off: load next cue" must not have to discover that the two
+  // integrations interpret it differently.
+  void handleTallyTransition(bool onProgram, const char* sourceLabel) {
+    if (onProgram) {
+      handleRemoteCommand("TAKE");
+      triggerToast(std::string(sourceLabel) + " tally: on program -- take");
+      return;
+    }
+    const std::string& action = project_.tallySwitchOffAction;
+    if (action == "next") {
+      handleRemoteCommand("NEXT");
+    } else if (action == "pause") {
+      handleRemoteCommand("PAUSE");
+    } else if (action == "stop") {
+      handleRemoteCommand("STOP");
+    } else if (action == "clear") {
+      handleRemoteCommand("CLEAR");
+    } else {
+      return;   // "nothing" -- and nothing is a legitimate answer
+    }
+    triggerToast(std::string(sourceLabel) + " tally: off program -- " + action);
+  }
+
+  // ── The house frame ─────────────────────────────────────────────────────
+  //
+  // A matte and a bug belong to the SCREEN, not to what is playing on it. A
+  // 2.39 letterbox or a station logo has to survive every cut, every clear and
+  // every panic -- doing it with an overlay cue means attaching it to all of
+  // them and losing it the moment anything goes wrong.
+  //
+  // Drawn into the output's own compositor while it is still the render target,
+  // so it reaches the recording, the stream, NDI and the program monitor as
+  // part of the one picture rather than as four separate near-misses.
+
+  // The largest centred rect of `aspect` that fits inside w x h.
+  //
+  // Returns the whole frame for "off" or anything unparseable: an unrecognised
+  // token must mean NO MASK. Guessing a ratio would black out part of a show
+  // over a typo.
+  static SDL_Rect matteContentRect(const std::string& aspect, int w, int h) {
+    SDL_Rect full {0, 0, w, h};
+    const std::string token = trim(aspect);
+    if (token.empty() || toUpper(token) == "OFF" || w <= 0 || h <= 0) {
+      return full;
+    }
+    double num = 0.0, den = 0.0;
+    const std::size_t colon = token.find(':');
+    if (colon == std::string::npos) {
+      return full;
+    }
+    try {
+      num = std::stod(token.substr(0, colon));
+      den = std::stod(token.substr(colon + 1));
+    } catch (...) {
+      return full;
+    }
+    if (!(num > 0.0) || !(den > 0.0)) {
+      return full;
+    }
+    const double want = num / den;
+    const double have = static_cast<double>(w) / static_cast<double>(h);
+    if (std::abs(want - have) < 0.0005) {
+      return full;   // already that shape; no bars to draw
+    }
+    SDL_Rect out = full;
+    if (want > have) {
+      // Wider than the raster: bars top and bottom.
+      out.h = std::max(1, static_cast<int>(std::lround(w / want)));
+      out.y = (h - out.h) / 2;
+    } else {
+      // Taller: bars left and right.
+      out.w = std::max(1, static_cast<int>(std::lround(h * want)));
+      out.x = (w - out.w) / 2;
+    }
+    return out;
+  }
+
+  // Decode the overlay still once and keep it against the path it came from.
+  //
+  // Through the same ffmpeg single-frame decode every other still in Deckboy
+  // uses, rather than a second image loader that would support a different set
+  // of formats than the rest of the app.
+  SDL_Texture* ensureOutputOverlayTexture(OutputRuntime& runtime, const std::string& path) {
+    if (path.empty()) {
+      if (runtime.overlayTexture) {
+        SDL_DestroyTexture(runtime.overlayTexture);
+        runtime.overlayTexture = nullptr;
+      }
+      runtime.overlayTexturePath.clear();
+      return nullptr;
+    }
+    if (runtime.overlayTexture && runtime.overlayTexturePath == path) {
+      return runtime.overlayTexture;
+    }
+    if (runtime.overlayTexture) {
+      SDL_DestroyTexture(runtime.overlayTexture);
+      runtime.overlayTexture = nullptr;
+    }
+    // Remembered even on failure, so a missing or unreadable file is attempted
+    // once rather than on every frame for the length of the show.
+    runtime.overlayTexturePath = path;
+    if (!runtime.outputRenderer || deckRuntimes_.empty() || !deckRuntimes_[0].mediaEngine) {
+      return nullptr;
+    }
+    ChildProcess decodeProcess;
+    auto frame = deckRuntimes_[0].mediaEngine->decodeSingleFrame(
+      decodeProcess, path, 0, 0, 0.0);
+    if (!frame || frame->width <= 0 || frame->height <= 0 || frame->pixels.empty()) {
+      triggerToast("overlay: could not read " + fs::path(path).filename().string(),
+                   ToastKind::Warning, kToastReadableMs);
+      return nullptr;
+    }
+    SDL_Texture* tex = deckboyCreateTexture(runtime.outputRenderer, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STATIC,
+                                            frame->width, frame->height);
+    if (!tex) {
+      return nullptr;
+    }
+    // LINEAR, not the app default. This is scaled to the output raster and a
+    // nearest-neighbour bug crawls with jagged edges.
+    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+    SDL_UpdateTexture(tex, nullptr, frame->pixels.data(), frame->width * 4);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    runtime.overlayTexture = tex;
+    return tex;
+  }
+
+  void drawOutputMatteAndOverlay(int outputIndex, OutputRuntime& runtime,
+                                 int renderW, int renderH) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+        !runtime.outputRenderer) {
+      return;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+
+    // A mask in the matte slot ("mask:<id>"); matteContentRect reads that
+    // token as no bars, so the two cannot both draw.
+    drawMaskMatte(outputIndex, runtime, renderW, renderH);
+    const SDL_Rect content = matteContentRect(output.matteAspect, renderW, renderH);
+    const bool hasMatte = (content.w != renderW || content.h != renderH) &&
+                          output.matteOpacity > 0.001;
+    if (hasMatte) {
+      const Uint8 alpha = static_cast<Uint8>(
+        std::clamp(output.matteOpacity, 0.0, 1.0) * 255.0);
+      SDL_SetRenderDrawBlendMode(runtime.outputRenderer, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(runtime.outputRenderer, 0, 0, 0, alpha);
+      // All four, unconditionally: a rect of zero width or height draws
+      // nothing, so the letterbox and pillarbox cases need no branch.
+      const SDL_Rect bars[4] {
+        {0, 0, renderW, content.y},
+        {0, content.y + content.h, renderW, renderH - (content.y + content.h)},
+        {0, content.y, content.x, content.h},
+        {content.x + content.w, content.y, renderW - (content.x + content.w), content.h},
+      };
+      for (const SDL_Rect& bar : bars) {
+        if (bar.w > 0 && bar.h > 0) {
+          SDL_RenderFillRect(runtime.outputRenderer, &bar);
+        }
+      }
+      SDL_SetRenderDrawBlendMode(runtime.outputRenderer, SDL_BLENDMODE_NONE);
+    }
+
+    if (output.overlayEnabled && !output.overlayImagePath.empty() &&
+        output.overlayOpacity > 0.001) {
+      if (SDL_Texture* tex = ensureOutputOverlayTexture(runtime, output.overlayImagePath)) {
+        SDL_SetTextureAlphaMod(tex, static_cast<Uint8>(
+          std::clamp(output.overlayOpacity, 0.0, 1.0) * 255.0));
+        // OVER THE WHOLE RASTER, including any matte bars. A bug that sits in
+        // the black of a letterbox is a normal thing to want, and a matte that
+        // covered it would make the two features contradict each other.
+        const SDL_Rect whole {0, 0, renderW, renderH};
+        SDL_RenderTexture(runtime.outputRenderer, tex, nullptr, &whole);
+      }
+    } else if (!output.overlayEnabled && runtime.overlayTexture) {
+      // Let go of the picture when it is switched off; a 4K still per output is
+      // real memory to hold for something nobody is looking at.
+      SDL_DestroyTexture(runtime.overlayTexture);
+      runtime.overlayTexture = nullptr;
+      runtime.overlayTexturePath.clear();
+    }
+  }
+
+  void sendOutputNdiFrame(int outputIndex, OutputRuntime& outputRuntime, int width, int height, double fpsHint) {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) || !outputRuntime.outputRenderer) {
+      return;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.ndiEnabled) {
+      return;
+    }
+    if (!outputRuntime.ndiSender || (output.ndiKeyEnabled && !outputRuntime.ndiKeySender)) {
+      applyOutputNdiSettings(outputIndex, false);
+      if (!outputRuntime.ndiSender || (output.ndiKeyEnabled && !outputRuntime.ndiKeySender)) {
+        return;
+      }
+    }
+    const OutputRuntime::CapturedFrame* frameCapture = outputFrameForEgress(outputIndex, outputRuntime);
+    if (!frameCapture || frameCapture->width <= 0 || frameCapture->height <= 0 || frameCapture->pixels.empty()) {
+      frameCapture = ensureBlackOutputFrameForEgress(outputIndex, outputRuntime, width, height);
+    }
+    if (!frameCapture || frameCapture->width <= 0 || frameCapture->height <= 0 || frameCapture->pixels.empty()) {
+      return;
+    }
+    width = frameCapture->width;
+    height = frameCapture->height;
+
+    size_t stride = static_cast<size_t>(width) * 4u;
+    size_t frameBytes = stride * static_cast<size_t>(height);
+    if (outputRuntime.ndiFrameBuffer.size() != frameBytes) {
+      outputRuntime.ndiFrameBuffer.resize(frameBytes);
+    }
+    if (outputRuntime.ndiFrameBuffer.empty()) {
+      return;
+    }
+
+    std::memcpy(outputRuntime.ndiFrameBuffer.data(), frameCapture->pixels.data(), frameBytes);
+
+    int frameRateN = 30000;
+    int frameRateD = 1000;
+    if (std::isfinite(fpsHint) && fpsHint > 1.0) {
+      frameRateN = std::max(1, static_cast<int>(std::round(fpsHint * 1000.0)));
+    }
+
+    NDIlib_video_frame_v2_t frame {};
+    frame.xres = width;
+    frame.yres = height;
+    frame.FourCC = NDIlib_FourCC_video_type_BGRA;
+    frame.frame_rate_N = frameRateN;
+    frame.frame_rate_D = frameRateD;
+    frame.picture_aspect_ratio = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : (16.0f / 9.0f);
+    frame.frame_format_type = NDIlib_frame_format_type_progressive;
+    frame.timecode = NDIlib_send_timecode_synthesize;
+    frame.p_data = outputRuntime.ndiFrameBuffer.data();
+    frame.line_stride_in_bytes = static_cast<int>(stride);
+    frame.p_metadata = nullptr;
+    frame.timestamp = 0;
+    ndiApi_.sendVideoFn(outputRuntime.ndiSender, &frame);
+
+    if (output.ndiKeyEnabled && outputRuntime.ndiKeySender) {
+      if (outputRuntime.ndiKeyFrameBuffer.size() != frameBytes) {
+        outputRuntime.ndiKeyFrameBuffer.resize(frameBytes);
+      }
+      if (!outputRuntime.ndiKeyFrameBuffer.empty()) {
+        for (size_t i = 0; i + 3 < outputRuntime.ndiFrameBuffer.size(); i += 4) {
+          Uint8 a = outputRuntime.ndiFrameBuffer[i + 3];
+          outputRuntime.ndiKeyFrameBuffer[i + 0] = a;
+          outputRuntime.ndiKeyFrameBuffer[i + 1] = a;
+          outputRuntime.ndiKeyFrameBuffer[i + 2] = a;
+          outputRuntime.ndiKeyFrameBuffer[i + 3] = 255;
+        }
+        NDIlib_video_frame_v2_t keyFrame {};
+        keyFrame.xres = width;
+        keyFrame.yres = height;
+        keyFrame.FourCC = NDIlib_FourCC_video_type_BGRA;
+        keyFrame.frame_rate_N = frameRateN;
+        keyFrame.frame_rate_D = frameRateD;
+        keyFrame.picture_aspect_ratio = frame.picture_aspect_ratio;
+        keyFrame.frame_format_type = NDIlib_frame_format_type_progressive;
+        keyFrame.timecode = NDIlib_send_timecode_synthesize;
+        keyFrame.p_data = outputRuntime.ndiKeyFrameBuffer.data();
+        keyFrame.line_stride_in_bytes = static_cast<int>(stride);
+        keyFrame.p_metadata = nullptr;
+        keyFrame.timestamp = 0;
+        ndiApi_.sendVideoFn(outputRuntime.ndiKeySender, &keyFrame);
+      }
+    }
+    sendOutputNdiAudioFrame(outputIndex, fpsHint);
+#else
+    (void) outputIndex;
+    (void) outputRuntime;
+    (void) width;
+    (void) height;
+    (void) fpsHint;
+#endif
+  }
+
+  void sendOutputDeckLinkFrame(int outputIndex, OutputRuntime& outputRuntime, int width, int height, double fpsHint) {
+#if defined(DECKBOY_HAS_DECKLINK)
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) || !outputRuntime.outputRenderer) {
+      return;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.deckLinkEnabled) {
+      return;
+    }
+    // Lazy-init DeckLink output
+    if (!outputRuntime.deckLinkOutput) {
+      outputRuntime.deckLinkOutput = std::make_unique<deckboy::platform::video::DeckLinkOutput>();
+    }
+    if (!outputRuntime.deckLinkOutput->isInitialized()) {
+      auto mode = deckboy::platform::video::parseDeckLinkMode(output.deckLinkMode);
+      if (!outputRuntime.deckLinkOutput->init(output.deckLinkDeviceId, mode, output.deckLink10Bit)) {
+        return;
+      }
+      outputRuntime.deckLinkAudioReadSamplesByDeck.clear();
+      outputRuntime.programAudioStates.erase(&outputRuntime.deckLinkAudioReadSamplesByDeck);
+      inputAudioRing_.primeEndPositions({0},
+        outputRuntime.inputAudioReadSamplesBySink[&outputRuntime.deckLinkAudioReadSamplesByDeck]);
+      outputRuntime.deckLinkAudioSampleRemainder = 0.0;
+      deckAudioRing_.primeEndPositions(streamAudioDecksForOutput(outputIndex),
+                                       outputRuntime.deckLinkAudioReadSamplesByDeck);
+    }
+    const OutputRuntime::CapturedFrame* frameCapture = outputFrameForEgress(outputIndex, outputRuntime);
+    if (!frameCapture || frameCapture->width <= 0 || frameCapture->height <= 0 || frameCapture->pixels.empty()) {
+      frameCapture = ensureBlackOutputFrameForEgress(outputIndex, outputRuntime, width, height);
+    }
+    if (!frameCapture || frameCapture->width <= 0 || frameCapture->height <= 0 || frameCapture->pixels.empty()) {
+      return;
+    }
+    int fw = frameCapture->width;
+    int fh = frameCapture->height;
+    int stride = fw * 4;
+
+    const auto audio = collectOutputAudioFrameSamples(outputIndex,
+      outputRuntime.deckLinkAudioReadSamplesByDeck,
+      outputRuntime.deckLinkAudioSampleRemainder, fpsHint);
+    if (!audio.empty() && !outputRuntime.deckLinkOutput->sendAudio(
+        audio.data(), static_cast<int>(audio.size() / 2), 48000, 2))
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "SDI audio scheduling failed");
+
+    // HDR SDI: an HDR output on a 10-bit route sends its picture in its
+    // signal, tagged Rec.2020 PQ/HLG. NOT TESTED ON A CARD (see
+    // DeckLinkOutput::sendFrameHdr). Key+fill stays the SDR pair below.
+    if (!output.deckLinkKeyFill && output.deckLink10Bit && outputHdrWireAvailable(outputRuntime)) {
+      const int hw = outputRuntime.compositorWidth & ~1, hh = outputRuntime.compositorHeight & ~1;
+      if (hw > 0 && hh > 0 && readHdrWireFrame(outputIndex, outputRuntime, hw, hh)) {
+        if (!outputRuntime.deckLinkOutput->sendFrameHdr(
+              reinterpret_cast<const std::uint16_t*>(outputRuntime.hdrWirePlanes.data()), hw, hh,
+              hdrSignalHlg(outputIndex)))
+          setOutputHealthState(outputIndex, OutputHealthState::Recovering, "SDI video scheduling failed");
+        return;
+      }
+      // Nothing new from the ring yet: the card repeats its last frame. If the
+      // GPU path has just retired, fall through and send SDR instead.
+      if (outputHdrWireAvailable(outputRuntime)) return;
+    }
+    if (!output.deckLinkKeyFill) {
+      if (!outputRuntime.deckLinkOutput->sendFrame(frameCapture->pixels.data(), fw, fh, stride))
+        setOutputHealthState(outputIndex, OutputHealthState::Recovering, "SDI video scheduling failed");
+      return;
+    }
+
+    // ── KEY + FILL ───────────────────────────────────────────────────────
+    //
+    // Two signals out of one composite. The FILL is the picture and the KEY
+    // is a greyscale matte saying how opaque it is; a vision mixer downstream
+    // lays the fill over its programme through the key.
+    //
+    // THE FILL IS PREMULTIPLIED. Every hardware keyer expects fill = RGB x
+    // alpha: a half-transparent white goes out as mid grey at 50% key, not
+    // white at 50% key. Sending straight RGB puts a bright fringe around
+    // every soft edge, which is the classic "why does my lower third have a
+    // halo" fault and is invisible until it is on air.
+    //
+    // Both buffers are kept on the runtime rather than allocated per frame:
+    // at 1080p that would be sixteen megabytes of churn a frame.
+    const std::size_t pixels = static_cast<std::size_t>(fw) * fh;
+    const std::size_t bytes = pixels * 4;
+    if (outputRuntime.deckLinkFillBuffer.size() != bytes) {
+      outputRuntime.deckLinkFillBuffer.assign(bytes, 0);
+    }
+    if (outputRuntime.deckLinkKeyBuffer.size() != bytes) {
+      outputRuntime.deckLinkKeyBuffer.assign(bytes, 0);
+    }
+    // The arithmetic lives in core so it can be checked without a card --
+    // see splitKeyAndFill in output_runtime.hpp and its --smoke case.
+    std::uint8_t* fill = outputRuntime.deckLinkFillBuffer.data();
+    std::uint8_t* key = outputRuntime.deckLinkKeyBuffer.data();
+    splitKeyAndFill(frameCapture->pixels.data(), pixels, fill, key);
+    if (!outputRuntime.deckLinkOutput->sendFrame(fill, fw, fh, stride))
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "SDI fill scheduling failed");
+
+    // The key goes out of a SECOND device. Without one there is nothing to
+    // send it down, and sending only the fill would be worse than not
+    // offering the mode -- the fill alone is a premultiplied picture on
+    // black, which is not what the operator asked for and looks almost right.
+    if (output.deckLinkKeyDeviceId < 0) {
+      return;
+    }
+    if (!outputRuntime.deckLinkKeyOutput) {
+      outputRuntime.deckLinkKeyOutput =
+        std::make_unique<deckboy::platform::video::DeckLinkOutput>();
+    }
+    if (!outputRuntime.deckLinkKeyOutput->isInitialized()) {
+      auto mode = deckboy::platform::video::parseDeckLinkMode(output.deckLinkMode);
+      if (!outputRuntime.deckLinkKeyOutput->init(output.deckLinkKeyDeviceId, mode,
+                                                 output.deckLink10Bit, false)) {
+        return;
+      }
+    }
+    if (!outputRuntime.deckLinkKeyOutput->sendFrame(key, fw, fh, stride))
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "SDI key scheduling failed");
+#else
+    (void) outputIndex;
+    (void) outputRuntime;
+    (void) width;
+    (void) height;
+    (void) fpsHint;
+#endif
+  }
+
+  void shutdownOutputDeckLink(OutputRuntime& outputRuntime) {
+#if defined(DECKBOY_HAS_DECKLINK)
+    if (outputRuntime.deckLinkOutput) {
+      outputRuntime.deckLinkOutput->shutdown();
+      outputRuntime.deckLinkOutput.reset();
+    }
+    if (outputRuntime.deckLinkKeyOutput) {
+      outputRuntime.deckLinkKeyOutput->shutdown();
+      outputRuntime.deckLinkKeyOutput.reset();
+    }
+    outputRuntime.deckLinkFrameBuffer.clear();
+    outputRuntime.deckLinkFillBuffer.clear();
+    outputRuntime.deckLinkKeyBuffer.clear();
+#else
+    (void) outputRuntime;
+#endif
+  }
+
+  // ── Spout output ──────────────────────────────────────────────────────────
+  void sendOutputSpoutFrame(int outputIndex, OutputRuntime& outputRuntime, int width, int height) {
+#if defined(DECKBOY_HAS_SPOUT)
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.spoutEnabled) {
+      return;
+    }
+    // Lazy-init Spout sender
+    if (!outputRuntime.spoutSender) {
+      std::string name = trim(output.spoutSenderName);
+      if (name.empty()) {
+        name = "Deckboy Output " + std::to_string(outputIndex + 1);
+      }
+      outputRuntime.spoutSender = std::make_unique<deckboy::platform::video::SiphonSpoutSender>(name);
+      if (!outputRuntime.spoutSender->init(width, height)) {
+        std::cerr << "[Spout] Failed to init sender for output " << outputIndex << "\n";
+        outputRuntime.spoutSender.reset();
+        return;
+      }
+    }
+    // Check if sender name changed
+    std::string desiredName = trim(output.spoutSenderName);
+    if (desiredName.empty()) {
+      desiredName = "Deckboy Output " + std::to_string(outputIndex + 1);
+    }
+    if (outputRuntime.spoutSender->getName() != desiredName) {
+      outputRuntime.spoutSender->setName(desiredName);
+    }
+    // Get the latest captured frame and send via Spout using the output texture
+    if (!outputRuntime.outputRenderer) {
+      return;
+    }
+    // Use the composited output texture from the render target
+    const auto& frameCapture = outputRuntime.latestCapturedFrame;
+    if (frameCapture.pixels.empty()) {
+      return;
+    }
+    int fw = frameCapture.width;
+    int fh = frameCapture.height;
+    if (fw <= 0 || fh <= 0) {
+      return;
+    }
+    // Straight out of the capture buffer, the way DeckLink and ST2110 below
+    // are already fed. This used to build a streaming texture every frame,
+    // copy the capture into it, and hand that over -- and the sender locked it
+    // and copied the pixels back out to get to the bytes that were already
+    // here. Two full-frame copies and a texture create/destroy per frame, some
+    // 66MB of memcpy at 4K, for no change to the pixels.
+    // DECKBOY_SPOUT_DUMP writes ONE frame of exactly what goes to the sender,
+    // as a PPM, and says what the corners and the alpha are. When a receiver
+    // shows the picture flipped or the wrong colour, the first question is
+    // whether the fault is in what we sent or in how it was interpreted, and
+    // that cannot be answered by looking at the receiver.
+    static bool dumpedSpoutFrame = false;
+    if (!dumpedSpoutFrame) {
+      if (const char* dumpPath = std::getenv("DECKBOY_SPOUT_DUMP")) {
+        // A PROPERLY LIT FRAME, not merely a non-black one. Requiring "any
+        // content" caught the first frame of a fade-in -- 5% of the raster
+        // lit -- and made a faithful render of a nearly-black picture look
+        // like an effect that covers a quarter of the screen. The dump is
+        // for judging what the output looks like, so it has to wait for a
+        // frame worth judging.
+        std::size_t litPixels = 0;
+        const std::size_t pixelCount = frameCapture.pixels.size() / 4;
+        for (std::size_t i = 0; i + 3 < frameCapture.pixels.size(); i += 4) {
+          if (frameCapture.pixels[i] > 8 || frameCapture.pixels[i + 1] > 8 ||
+              frameCapture.pixels[i + 2] > 8) {
+            ++litPixels;
+          }
+        }
+        if (pixelCount == 0 || litPixels * 5 < pixelCount) {
+          return;   // under 20% lit: still fading in, or genuinely dark
+        }
+        dumpedSpoutFrame = true;
+        const std::uint8_t* px = frameCapture.pixels.data();
+        auto at = [&](int x, int y) { return px + (static_cast<std::size_t>(y) * fw + x) * 4; };
+        std::fprintf(stderr,
+          "spout-dump: %dx%d  BGRA bytes  topleft=%u,%u,%u,%u  "
+          "topright=%u,%u,%u,%u  bottomleft=%u,%u,%u,%u\n",
+          fw, fh,
+          at(2, 2)[0], at(2, 2)[1], at(2, 2)[2], at(2, 2)[3],
+          at(fw - 3, 2)[0], at(fw - 3, 2)[1], at(fw - 3, 2)[2], at(fw - 3, 2)[3],
+          at(2, fh - 3)[0], at(2, fh - 3)[1], at(2, fh - 3)[2], at(2, fh - 3)[3]);
+        if (std::FILE* f = std::fopen(dumpPath, "wb")) {
+          std::fprintf(f, "P6\n%d %d\n255\n", fw, fh);
+          std::vector<std::uint8_t> row(static_cast<std::size_t>(fw) * 3);
+          for (int y = 0; y < fh; ++y) {
+            const std::uint8_t* s = at(0, y);
+            for (int x = 0; x < fw; ++x) {
+              // BGRA in memory -> RGB out, so the PPM shows what the pixels
+              // MEAN rather than repeating any confusion about their order.
+              row[static_cast<std::size_t>(x) * 3 + 0] = s[x * 4 + 2];
+              row[static_cast<std::size_t>(x) * 3 + 1] = s[x * 4 + 1];
+              row[static_cast<std::size_t>(x) * 3 + 2] = s[x * 4 + 0];
+            }
+            std::fwrite(row.data(), 1, row.size(), f);
+          }
+          std::fclose(f);
+          std::fprintf(stderr, "spout-dump: wrote %s\n", dumpPath);
+        }
+      }
+    }
+    outputRuntime.spoutSender->sendFrame(frameCapture.pixels.data(), fw, fh,
+                                         fw * 4);
+#else
+    (void) outputIndex;
+    (void) outputRuntime;
+    (void) width;
+    (void) height;
+#endif
+  }
+
+  void shutdownOutputSpout(OutputRuntime& outputRuntime) {
+#if defined(DECKBOY_HAS_SPOUT)
+    if (outputRuntime.spoutSender) {
+      outputRuntime.spoutSender->shutdown();
+      outputRuntime.spoutSender.reset();
+    }
+#else
+    (void) outputRuntime;
+#endif
+  }
+
+  // ── ST 2110-20 egress ──────────────────────────────────────────────────────
+  // Same shape as the Spout/DeckLink senders: lazily open on first frame,
+  // reopen when the operator changes anything the socket or packetiser depends
+  // on, and feed it the BGRA egress capture the other backends already use.
+  void sendOutputSt2110Frame(int outputIndex, OutputRuntime& outputRuntime,
+                             int width, int height, double fpsHint) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.st2110Enabled) {
+      return;
+    }
+    const auto& frameCapture = outputRuntime.latestCapturedFrame;
+    // AN HDR OUTPUT GOES OUT HDR: its compositor converted on the GPU to
+    // 10-bit 4:2:2 in its signal (PQ or HLG), and the SDP says so. Where that
+    // conversion is not available the route stays SDR, as before.
+    const bool hdrWire = outputHdrWireAvailable(outputRuntime);
+    if (!hdrWire && (frameCapture.pixels.empty() || frameCapture.width <= 0 || frameCapture.height <= 0)) {
+      return;
+    }
+    // ST 2110-20 carries 4:2:2, so the raster must be an even number of pixels
+    // wide — a half pgroup cannot be expressed on the wire.
+    const int sendW = (hdrWire ? outputRuntime.compositorWidth : frameCapture.width) & ~1;
+    const int sendH = hdrWire ? (outputRuntime.compositorHeight & ~1) : frameCapture.height;
+    if (sendW <= 0 || sendH <= 0) {
+      return;
+    }
+
+    using deckboy::platform::video::St2110Config;
+    using deckboy::platform::video::St2110Sampling;
+    St2110Config wanted;
+    wanted.enabled = true;
+    wanted.destinationAddress = trim(output.st2110Address).empty()
+      ? std::string("239.20.10.1") : trim(output.st2110Address);
+    wanted.interfaceAddress = trim(output.st2110Interface);
+    wanted.destinationPort = std::clamp(output.st2110Port, 1, 65535);
+    wanted.sourcePort = output.st2110VideoSourcePort;
+    wanted.width = sendW;
+    wanted.height = sendH;
+    wanted.frameRate = st2110FrameRate(outputIndex, fpsHint);
+    wanted.hdrTransfer = hdrWire ? (hdrSignalHlg(outputIndex) ? 2 : 1) : 0;
+    wanted.sampling = output.st2110TenBit ? St2110Sampling::YCbCr422_10bit
+                                          : St2110Sampling::YCbCr422_8bit;
+
+    const bool videoWanted = output.st2110VideoMasterEnabled && output.st2110VideoRtpEnabled;
+    const bool audioWanted = output.st2110AudioMasterEnabled && output.st2110AudioRtpEnabled;
+    if (videoWanted || audioWanted) ensurePtpClientStarted();
+    if (!videoWanted) outputRuntime.st2110Sender.reset();
+    const bool needsReopen = videoWanted && (
+      !outputRuntime.st2110Sender ||
+      !outputRuntime.st2110Sender->isOpen() ||
+      outputRuntime.st2110Sender->config().width != wanted.width ||
+      outputRuntime.st2110Sender->config().height != wanted.height ||
+      outputRuntime.st2110Sender->config().destinationAddress != wanted.destinationAddress ||
+      outputRuntime.st2110Sender->config().interfaceAddress != wanted.interfaceAddress ||
+      outputRuntime.st2110Sender->config().destinationPort != wanted.destinationPort ||
+      outputRuntime.st2110Sender->config().sourcePort != wanted.sourcePort ||
+      outputRuntime.st2110Sender->config().frameRate != wanted.frameRate ||
+      outputRuntime.st2110Sender->config().sampling != wanted.sampling ||
+      outputRuntime.st2110Sender->config().hdrTransfer != wanted.hdrTransfer);
+
+    if (needsReopen) {
+      outputRuntime.st2110Sender =
+        std::make_unique<deckboy::platform::video::St2110Output>();
+      outputRuntime.st2110Sender->setPtpClient(&ptpClient_);
+      if (!outputRuntime.st2110Sender->open(wanted)) {
+        triggerToast("st 2110: " + outputRuntime.st2110Sender->lastError());
+        outputRuntime.st2110Sender.reset();
+      }
+    }
+    // Each advertised essence has an independent transport and enable state.
+    const auto audioCfg = st2110AudioConfigForOutput(outputIndex);
+    if (!audioWanted) outputRuntime.st2110AudioSender.reset();
+    if (audioWanted && (!outputRuntime.st2110AudioSender ||
+        !outputRuntime.st2110AudioSender->isOpen() ||
+        outputRuntime.st2110AudioSender->config().destinationAddress != audioCfg.destinationAddress ||
+        outputRuntime.st2110AudioSender->config().destinationPort != audioCfg.destinationPort ||
+        outputRuntime.st2110AudioSender->config().interfaceAddress != audioCfg.interfaceAddress ||
+        outputRuntime.st2110AudioSender->config().sourcePort != audioCfg.sourcePort)) {
+      auto audioSender = std::make_unique<deckboy::platform::video::St2110AudioOutput>();
+      audioSender->setPtpClient(&ptpClient_);
+      if (audioSender->open(audioCfg)) {
+        outputRuntime.st2110AudioSender = std::move(audioSender);
+      } else {
+        // Audio failing must not take the video flow down with it.
+        triggerToast("st 2110 audio: " + audioSender->lastError());
+        outputRuntime.st2110AudioSender.reset();
+      }
+      outputRuntime.st2110AudioReadSamplesByDeck.clear();
+      outputRuntime.programAudioStates.erase(&outputRuntime.st2110AudioReadSamplesByDeck);
+      inputAudioRing_.primeEndPositions({0},
+        outputRuntime.inputAudioReadSamplesBySink[&outputRuntime.st2110AudioReadSamplesByDeck]);
+      outputRuntime.st2110AudioSampleRemainder = 0.0;
+      deckAudioRing_.primeEndPositions(streamAudioDecksForOutput(outputIndex),
+                                       outputRuntime.st2110AudioReadSamplesByDeck);
+    }
+
+    const int stride = frameCapture.width * 4;
+    if (outputRuntime.st2110AudioSender) {
+      const auto audio = collectOutputAudioFrameSamples(outputIndex,
+        outputRuntime.st2110AudioReadSamplesByDeck,
+        outputRuntime.st2110AudioSampleRemainder, fpsHint);
+      if (!audio.empty()) outputRuntime.st2110AudioSender->pushSamples(audio.data(), audio.size() / 2);
+    }
+    if (outputRuntime.st2110Sender && hdrWire) {
+      // Nothing new from the ring yet: send nothing this tick, as when the
+      // capture repeats -- the receiver holds the last frame.
+      if (readHdrWireFrame(outputIndex, outputRuntime, sendW, sendH)) {
+        outputRuntime.st2110Sender->sendFrame16(
+          reinterpret_cast<const std::uint16_t*>(outputRuntime.hdrWirePlanes.data()),
+          outputRuntime.hdrWirePlanes.size() / 2);
+      }
+    } else if (outputRuntime.st2110Sender && !outputRuntime.st2110Sender->sendFrame(frameCapture.pixels.data(), stride)) {
+      triggerToast("st 2110: " + outputRuntime.st2110Sender->lastError());
+      outputRuntime.st2110Sender.reset();
+    }
+  }
+
+  // ST 2110-20 IS A FIXED-RATE ESSENCE: the output's own rate (a set refresh,
+  // else its display's), not the programme's -- a clip's 25 fps must not
+  // reopen the flow, and the SDP must say what the sender paces at. The two
+  // disagreed: the SDP said 30 while the sender paced at the display's 60.
+  double st2110FrameRate(int outputIndex, double fpsHint) const {
+    if (std::isfinite(project_.outputRefreshRateHz) && project_.outputRefreshRateHz > 1.0) {
+      return std::clamp(project_.outputRefreshRateHz, 1.0, 120.0);
+    }
+    const double display = outputDisplayRefreshHz(outputIndex);
+    if (display > 1.0) return display;
+    return fpsHint > 1.0 ? fpsHint : 60000.0 / 1001.0;
+  }
+
+  // An HDR output can send HDR down a wire (ST 2110, SDI) when its compositor
+  // is up and the GPU conversion has not been found missing.
+  bool outputHdrWireAvailable(const OutputRuntime& runtime) const {
+    return runtime.hdr && runtime.compositorTexture && !runtime.hdrWireUnavailable;
+  }
+
+  // The HDR output's picture as 16-bit 4:2:2 planes (luma, then Cb,Cr pairs;
+  // P216's layout) in its signal, into runtime.hdrWirePlanes. False when the
+  // ring has nothing new; a second of nothing retires the path, and the wire
+  // goes back to SDR.
+  bool readHdrWireFrame(int outputIndex, OutputRuntime& runtime, int width, int height) {
+    if (runtime.hdrWireReadAtPresent == runtime.presentsCounted && !runtime.hdrWirePlanes.empty()) {
+      return runtime.hdrWireLastRead;
+    }
+    runtime.hdrWireReadAtPresent = runtime.presentsCounted;
+    runtime.hdrWireLastRead = readHdrWireFrameNow(outputIndex, runtime, width, height);
+    return runtime.hdrWireLastRead;
+  }
+  bool readHdrWireFrameNow(int outputIndex, OutputRuntime& runtime, int width, int height) {
+    if (!runtime.hdrWireReadback) {
+      runtime.hdrWireReadback = deckboy::gpu::createHdrP010Readback(runtime.outputRenderer, width, height, true);
+      if (!runtime.hdrWireReadback) {
+        runtime.hdrWireUnavailable = true;
+        std::cerr << "hdr-wire: no GPU conversion on this renderer; ST 2110 and SDI stay SDR" << std::endl;
+        return false;
+      }
+    }
+    const std::size_t bytes = static_cast<std::size_t>(width) * height * 4;
+    if (runtime.hdrWirePlanes.size() != bytes) runtime.hdrWirePlanes.resize(bytes);
+    if (deckboy::gpu::hdrP010ReadbackFrame(runtime.hdrWireReadback, runtime.compositorTexture,
+                                           static_cast<float>(project_.hdrSdrWhiteNits), hdrSignalHlg(outputIndex),
+                                           runtime.hdrWirePlanes.data(), bytes)) {
+      runtime.hdrWireMisses = 0;
+      return true;
+    }
+    if (++runtime.hdrWireMisses >= 30) {
+      deckboy::gpu::destroyHdrP010Readback(runtime.hdrWireReadback);
+      runtime.hdrWireReadback = nullptr;
+      runtime.hdrWireUnavailable = true;
+      std::cerr << "hdr-wire: GPU conversion produced nothing for 30 frames; ST 2110 and SDI go SDR" << std::endl;
+    }
+    return false;
+  }
+
+  // Lazy, once, and non-fatal on failure.
+  void ensurePtpClientStarted() {
+    if (ptpStartAttempted_ && ptpClient_.running()) {
+      return;
+    }
+    if (ptpStartAttempted_ && !ptpClient_.running()) {
+      return;  // already tried and failed; don't retry every frame
+    }
+    ptpStartAttempted_ = true;
+    deckboy::platform::video::PtpConfig cfg;
+    cfg.domain = std::clamp(project_.ptpDomain, 0, 127);
+    if (!ptpClient_.start(cfg)) {
+      triggerToast("ptp: " + ptpClient_.lastError() + " - using local clock");
+    }
+  }
+
+  // One line for the settings panel: whether the media clock is traceable.
+  std::string ptpStatusLabel() const {
+    if (!ptpClient_.running()) {
+      return "PTP: not running (local clock)";
+    }
+    if (!ptpClient_.locked()) {
+      return "PTP: listening on domain " + std::to_string(project_.ptpDomain) + " (local clock)";
+    }
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "PTP LOCKED  gm %s  domain %d  offset %+.3f ms  path %.0f us",
+                  ptpClient_.grandmasterIdentity().c_str(),
+                  project_.ptpDomain,
+                  static_cast<double>(ptpClient_.offsetNanos()) / 1e6,
+                  ptpClient_.meanPathDelayMicros());
+    return buf;
+  }
+
+  void shutdownOutputSt2110(OutputRuntime& outputRuntime) {
+    if (outputRuntime.st2110AudioSender) {
+      // Sender ownership and input now stay on the main thread. close joins
+      // the owned packet thread before the socket or buffers are destroyed.
+      outputRuntime.st2110AudioSender->close();
+      outputRuntime.st2110AudioSender.reset();
+    }
+    if (outputRuntime.st2110Sender) {
+      outputRuntime.st2110Sender->close();
+      outputRuntime.st2110Sender.reset();
+    }
+    outputRuntime.st2110AudioReadSamplesByDeck.clear();
+    outputRuntime.st2110AudioSampleRemainder = 0.0;
+  }
+
+  // The ST 2110-20 config for one output, exactly as the sender would open it.
+  // Single source of truth: both the SDP shown in settings and the SDP served
+  // as the NMOS IS-05 transportfile come from here, so a receiver can never be
+  // handed two different descriptions of the same flow.
+  deckboy::platform::video::St2110Config st2110ConfigForOutput(int outputIndex) const {
+    using deckboy::platform::video::St2110Config;
+    using deckboy::platform::video::St2110Sampling;
+    static const OutputTarget kFallback {};
+    const bool valid = outputIndex >= 0 &&
+                       outputIndex < static_cast<int>(project_.outputs.size());
+    const OutputTarget& output = valid ? project_.outputs[outputIndex] : kFallback;
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(outputIndex);
+    St2110Config cfg;
+    cfg.destinationAddress = trim(output.st2110Address).empty()
+      ? std::string("239.20.10.1") : trim(output.st2110Address);
+    cfg.interfaceAddress = trim(output.st2110Interface);
+    cfg.destinationPort = std::clamp(output.st2110Port, 1, 65535);
+    cfg.sourcePort = output.st2110VideoSourcePort;
+    cfg.width = std::max(2, rasterW & ~1);
+    cfg.height = std::max(1, rasterH);
+    cfg.frameRate = st2110FrameRate(outputIndex, 0.0);
+    cfg.sampling = output.st2110TenBit ? St2110Sampling::YCbCr422_10bit
+                                       : St2110Sampling::YCbCr422_8bit;
+    // What sendOutputSt2110Frame will actually send, so the SDP a receiver
+    // (or NMOS) is given matches the wire.
+    if (const OutputRuntime* rt = runtimeForOutput(outputIndex); rt && outputHdrWireAvailable(*rt)) {
+      cfg.hdrTransfer = hdrSignalHlg(outputIndex) ? 2 : 1;
+      cfg.width = std::max(2, rt->compositorWidth & ~1);
+      cfg.height = std::max(2, rt->compositorHeight & ~1);
+    }
+    return cfg;
+  }
+
+  deckboy::platform::video::St2110AudioConfig st2110AudioConfigForOutput(int outputIndex) const {
+    const OutputTarget& output = project_.outputs[outputIndex];
+    const auto video = st2110ConfigForOutput(outputIndex);
+    deckboy::platform::video::St2110AudioConfig cfg;
+    cfg.destinationAddress = output.st2110AudioAddress.empty()
+      ? video.destinationAddress : output.st2110AudioAddress;
+    cfg.destinationPort = output.st2110AudioPort > 0
+      ? output.st2110AudioPort : std::min(65535, video.destinationPort + 2);
+    cfg.interfaceAddress = output.st2110AudioInterface.empty()
+      ? video.interfaceAddress : output.st2110AudioInterface;
+    cfg.sourcePort = output.st2110AudioSourcePort;
+    return cfg;
+  }
+
+  std::string outputSt2110Sdp(int outputIndex) {
+    return deckboy::platform::video::st2110BuildSdp(
+      st2110ConfigForOutput(outputIndex), "Deckboy " + outputLabel(outputIndex),
+      ptpClient_.locked(), ptpClient_.grandmasterIdentity(), project_.ptpDomain);
+  }
+
+  // The SDP a receiver needs. Surfaced in settings so the operator can copy it
+  // to the receiving device by hand — still the fallback when no NMOS registry
+  // is configured, or when the receiving device predates IS-05.
+  std::string focusedOutputSt2110Sdp() {
+    return outputSt2110Sdp(project_.focusedOutputIndex);
+  }
+
+  // ── NMOS ──────────────────────────────────────────────────────────────────
+  // Build the sender list the node advertises: every output with ST 2110 armed
+  // contributes a video sender, and a paired audio sender on the +2 port that
+  // shutdownOutputSt2110/ensureOutputSt2110 use by convention.
+  std::vector<deckboy::platform::video::NmosSenderInfo> nmosSenderSnapshot() {
+    using deckboy::platform::video::NmosFormat;
+    using deckboy::platform::video::NmosSenderInfo;
+    std::vector<NmosSenderInfo> senders;
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      const OutputTarget& output = project_.outputs[i];
+      if (!output.st2110Enabled) {
+        continue;
+      }
+      const auto cfg = st2110ConfigForOutput(i);
+      const std::string label = outputLabel(i);
+      const OutputRuntime* runtime = runtimeForOutput(i);
+
+      NmosSenderInfo video;
+      // The key is the stable identity seed. It must depend ONLY on which
+      // output this is — fold in the address or the label and every retune
+      // would look like a brand new sender to every controller that has us
+      // saved.
+      video.key = "output-" + std::to_string(i) + "-video";
+      video.label = "Deckboy " + label;
+      video.description = "Deckboy programme output " + std::to_string(i + 1);
+      video.format = NmosFormat::Video;
+      video.destinationAddress = cfg.destinationAddress;
+      video.destinationPort = cfg.destinationPort;
+      video.sourceAddress = cfg.interfaceAddress;
+      video.sourcePort = runtime && runtime->st2110Sender
+        ? runtime->st2110Sender->boundSourcePort() : cfg.sourcePort;
+      video.masterEnabled = output.st2110Enabled && output.st2110VideoMasterEnabled;
+      video.rtpEnabled = output.st2110VideoRtpEnabled;
+      video.active = runtime && runtime->st2110Sender && runtime->st2110Sender->isOpen();
+      video.width = cfg.width;
+      video.height = cfg.height;
+      video.frameRate = cfg.frameRate;
+      video.bitDepth = output.st2110TenBit ? 10 : 8;
+      video.sdp = outputSt2110Sdp(i);
+      senders.push_back(std::move(video));
+
+      const auto audioCfg = st2110AudioConfigForOutput(i);
+
+      NmosSenderInfo audio;
+      audio.key = "output-" + std::to_string(i) + "-audio";
+      audio.label = "Deckboy " + label + " Audio";
+      audio.description = "Deckboy programme output " + std::to_string(i + 1) + " audio";
+      audio.format = NmosFormat::Audio;
+      audio.destinationAddress = audioCfg.destinationAddress;
+      audio.destinationPort = audioCfg.destinationPort;
+      audio.sourceAddress = audioCfg.interfaceAddress;
+      audio.sourcePort = runtime && runtime->st2110AudioSender
+        ? runtime->st2110AudioSender->boundSourcePort() : audioCfg.sourcePort;
+      audio.masterEnabled = output.st2110Enabled && output.st2110AudioMasterEnabled;
+      audio.rtpEnabled = output.st2110AudioRtpEnabled;
+      audio.active = runtime && runtime->st2110AudioSender && runtime->st2110AudioSender->isOpen();
+      audio.channels = 2;
+      audio.sampleRate = 48000;
+      audio.sdp = deckboy::platform::video::st2110BuildAudioSdp(
+        audioCfg, "Deckboy " + label + " Audio", ptpClient_.locked(),
+        ptpClient_.grandmasterIdentity(), project_.ptpDomain);
+      senders.push_back(std::move(audio));
+    }
+    return senders;
+  }
+
+  // Map a sender key back to the output it came from. Returns -1 if the key is
+  // not one we minted.
+  int nmosOutputIndexForKey(const std::string& key) const {
+    if (key.rfind("output-", 0) != 0) {
+      return -1;
+    }
+    const std::size_t dash = key.find('-', 7);
+    if (dash == std::string::npos) {
+      return -1;
+    }
+    const int index = std::atoi(key.substr(7, dash - 7).c_str());
+    if (index < 0 || index >= static_cast<int>(project_.outputs.size())) {
+      return -1;
+    }
+    return index;
+  }
+
+  // Main thread. Drains IS-05 patches queued by the node's HTTP thread and
+  // really applies them, then wakes whoever is blocked waiting on the result.
+  void applyPendingNmosPatches() {
+    std::vector<std::shared_ptr<PendingNmosPatch>> batch;
+    {
+      std::lock_guard<std::mutex> lock(nmosPatchMutex_);
+      if (nmosPendingPatches_.empty()) {
+        return;
+      }
+      batch.swap(nmosPendingPatches_);
+    }
+    for (auto& pending : batch) {
+      const auto& patch = pending->patch;
+      const int index = nmosOutputIndexForKey(patch.senderKey);
+      bool applied = false;
+      if (index >= 0) {
+        OutputTarget& output = project_.outputs[index];
+        const OutputTarget previous = output;
+        const auto previousAudio = st2110AudioConfigForOutput(index);
+        const bool isAudioLeg = patch.senderKey.find("-audio") != std::string::npos;
+        if (patch.destinationChanged) {
+          if (isAudioLeg) {
+            output.st2110AudioAddress = patch.destinationAddress;
+            output.st2110AudioPort = patch.destinationPort;
+          } else {
+            output.st2110AudioAddress = previousAudio.destinationAddress;
+            output.st2110AudioPort = previousAudio.destinationPort;
+            output.st2110Address = patch.destinationAddress;
+            output.st2110Port = patch.destinationPort;
+          }
+        }
+        if (patch.masterEnableChanged) {
+          (isAudioLeg ? output.st2110AudioMasterEnabled : output.st2110VideoMasterEnabled) = patch.masterEnable;
+          if (patch.masterEnable) {
+            output.st2110Enabled = true;
+            output.enabled = true;
+          }
+        }
+        if (patch.rtpEnabledChanged)
+          (isAudioLeg ? output.st2110AudioRtpEnabled : output.st2110VideoRtpEnabled) = patch.rtpEnabled;
+        if (patch.sourceChanged) {
+          if (!isAudioLeg && output.st2110AudioInterface.empty())
+            output.st2110AudioInterface = previousAudio.interfaceAddress.empty()
+              ? "0.0.0.0" : previousAudio.interfaceAddress;
+          (isAudioLeg ? output.st2110AudioInterface : output.st2110Interface) = patch.sourceAddress;
+          (isAudioLeg ? output.st2110AudioSourcePort : output.st2110VideoSourcePort) = patch.sourcePort;
+        }
+        if (patch.destinationChanged || patch.masterEnableChanged || patch.sourceChanged || patch.rtpEnabledChanged) {
+          // Bind the requested transport before acknowledging activation.
+          // Audio and video retain independent sockets and enable states.
+          applied = false;
+          if (OutputRuntime* runtime = runtimeForOutput(index)) {
+            if (isAudioLeg) {
+              runtime->st2110AudioSender.reset();
+              applied = true;
+              if (output.st2110Enabled && output.st2110AudioMasterEnabled && output.st2110AudioRtpEnabled) {
+                auto candidate = std::make_unique<deckboy::platform::video::St2110AudioOutput>();
+                candidate->setPtpClient(&ptpClient_);
+                applied = candidate->open(st2110AudioConfigForOutput(index));
+                if (applied) {
+                  runtime->st2110AudioSender = std::move(candidate);
+                  runtime->st2110AudioSampleRemainder = 0.0;
+                  deckAudioRing_.primeEndPositions(streamAudioDecksForOutput(index),
+                    runtime->st2110AudioReadSamplesByDeck);
+                }
+              }
+            } else {
+              runtime->st2110Sender.reset();
+              applied = true;
+              if (output.st2110Enabled && output.st2110VideoMasterEnabled && output.st2110VideoRtpEnabled) {
+                auto candidate = std::make_unique<deckboy::platform::video::St2110Output>();
+                candidate->setPtpClient(&ptpClient_);
+                applied = candidate->open(st2110ConfigForOutput(index));
+                if (applied) runtime->st2110Sender = std::move(candidate);
+              }
+            }
+          }
+          if (applied) {
+            if (previous.enabled != output.enabled) applyOutputDisplaySelection(index);
+            markProjectDirty();
+          } else output = previous;
+        } else {
+          applied = true;
+        }
+      }
+      {
+        std::lock_guard<std::mutex> lock(nmosPatchMutex_);
+        pending->applied = applied;
+        pending->done = true;
+      }
+    }
+    nmosPatchCv_.notify_all();
+  }
+
+  // Stopping the node JOINS its HTTP thread — and that thread may be parked in
+  // the patch handler waiting for this very thread to apply its change. Joining
+  // without releasing it first is a straight deadlock (it would eventually
+  // break on the handler's 2s timeout, but a 2s freeze on every settings change
+  // is not acceptable either). So: fail every waiter, wake them, then join.
+  void shutdownNmosNode() {
+    {
+      std::lock_guard<std::mutex> lock(nmosPatchMutex_);
+      for (auto& pending : nmosPendingPatches_) {
+        pending->applied = false;
+        pending->done = true;
+      }
+      nmosPendingPatches_.clear();
+    }
+    nmosPatchCv_.notify_all();
+    nmosNode_.stop();
+    nmosStarted_ = false;
+  }
+
+  // Called every update tick. Starts, stops and refreshes the node to match
+  // the project. Cheap when nothing changed — setSenders() early-outs on an
+  // unchanged list, so this does not spam the registry at frame rate.
+  void syncNmosNode() {
+    // Hard early-out for the overwhelmingly common case: NMOS off and never
+    // started. This runs on every update tick, and a show that never touches
+    // ST 2110 should not pay a mutex acquisition per frame for a subsystem it
+    // is not using. Two bool loads and out.
+    if (!project_.nmosEnabled && !nmosStarted_) {
+      return;
+    }
+    applyPendingNmosPatches();
+
+    const bool wantRunning = project_.nmosEnabled;
+    const int wantPort = std::clamp(project_.nmosPort, 1, 65535);
+    // NMOS only means anything if the node is reachable. With LOCAL ONLY the
+    // listener binds 127.0.0.1, so registering would publish an href to the
+    // machine's LAN address that nothing on the network can open — a
+    // controller would find the sender, try to fetch its transport file, and
+    // fail. Refusing to register is the honest behaviour; the operator sees
+    // why in the status line and flips REMOTE ON in the Network tab. A blank
+    // registry under LOCAL ONLY reaches the node as blank, and the node does
+    // not run discovery without the remote network either.
+    nmosLocalOnlyBlocked_ = wantRunning && !project_.allowRemoteNetwork &&
+                            !trim(project_.nmosRegistryUrl).empty();
+    const std::string wantRegistry =
+      nmosLocalOnlyBlocked_ ? std::string() : trim(project_.nmosRegistryUrl);
+
+    // A port or registry change needs a genuine restart — the listen socket is
+    // already bound and the registry client caches the parsed URL.
+    const bool settingsMoved =
+      nmosStarted_ && (wantPort != nmosLastPort_ || wantRegistry != nmosLastRegistry_ ||
+                      project_.allowRemoteNetwork != nmosLastAllowRemote_);
+
+    if ((!wantRunning && nmosStarted_) || settingsMoved) {
+      shutdownNmosNode();
+    }
+
+    if (wantRunning && !nmosStarted_) {
+      deckboy::platform::video::NmosConfig cfg;
+      cfg.enabled = true;
+      cfg.registryUrl = wantRegistry;
+      cfg.nodePort = wantPort;
+      cfg.label = "Deckboy";
+      cfg.interfaceName = trim(project_.nmosInterfaceName).empty()
+        ? std::string("eth0") : trim(project_.nmosInterfaceName);
+      cfg.allowRemote = project_.allowRemoteNetwork;
+      cfg.ptpLocked = ptpClient_.locked();
+      cfg.ptpGrandmaster = ptpClient_.grandmasterIdentity();
+      nmosNode_.setPatchHandler([this](const deckboy::platform::video::NmosSenderPatch& patch) {
+        auto pending = std::make_shared<PendingNmosPatch>();
+        pending->patch = patch;
+        {
+          std::lock_guard<std::mutex> lock(nmosPatchMutex_);
+          nmosPendingPatches_.push_back(pending);
+        }
+        // Block until the main thread has really done it. Two seconds is far
+        // longer than a frame; if we time out the app is wedged and reporting
+        // failure to the controller is the truthful answer.
+        std::unique_lock<std::mutex> lock(nmosPatchMutex_);
+        const bool settled = nmosPatchCv_.wait_for(
+          lock, std::chrono::seconds(2), [&pending]() { return pending->done; });
+        return settled && pending->applied;
+      });
+      if (!nmosNode_.start(cfg)) {
+        triggerToast("nmos: " + nmosNode_.lastError());
+        project_.nmosEnabled = false;   // don't retry every tick against a bound port
+        return;
+      }
+      nmosStarted_ = true;
+      nmosLastPort_ = wantPort;
+      nmosLastRegistry_ = wantRegistry;
+      nmosLastAllowRemote_ = project_.allowRemoteNetwork;
+    }
+
+    if (!nmosStarted_) {
+      return;
+    }
+    nmosNode_.setPtpState(ptpClient_.locked(), ptpClient_.grandmasterIdentity());
+    nmosNode_.setSenders(nmosSenderSnapshot());
+  }
+
+  // One line for the settings panel.
+  std::string nmosStatusLabel() const {
+    if (!project_.nmosEnabled) {
+      return "NMOS: off";
+    }
+    if (!nmosStarted_ || !nmosNode_.httpReady()) {
+      return "NMOS: not running";
+    }
+    if (nmosLocalOnlyBlocked_) {
+      return "NMOS: NOT registering - network is LOCAL ONLY (turn REMOTE ON to publish)";
+    }
+    if (!project_.allowRemoteNetwork && trim(project_.nmosRegistryUrl).empty()) {
+      return "NMOS: discovery needs the remote network allowed";
+    }
+    const int senders = nmosNode_.senderCount();
+    if (trim(project_.nmosRegistryUrl).empty() && nmosNode_.registryUrl().empty()) {
+      return nmosNode_.lastError().empty() ? "NMOS: searching for a registry (mDNS)" : nmosNode_.lastError();
+    }
+    if (!nmosNode_.registered()) {
+      return "NMOS: registering... " + nmosNode_.lastError();
+    }
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "NMOS REGISTERED  %d sender%s  %llu heartbeat%s",
+                  senders, senders == 1 ? "" : "s",
+                  static_cast<unsigned long long>(nmosNode_.heartbeatCount()),
+                  nmosNode_.heartbeatCount() == 1 ? "" : "s");
+    return buf;
+  }
+
+  int ndiConnectionCountForOutput(int outputIndex) const {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->ndiSender || !ndiApi_.sendConnectionsFn) {
+      return 0;
+    }
+    return std::max(0, ndiApi_.sendConnectionsFn(runtime->ndiSender, 0));
+#else
+    (void) outputIndex;
+    return 0;
+#endif
+  }
+
+  int ndiKeyConnectionCountForOutput(int outputIndex) const {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->ndiKeySender || !ndiApi_.sendConnectionsFn) {
+      return 0;
+    }
+    return std::max(0, ndiApi_.sendConnectionsFn(runtime->ndiKeySender, 0));
+#else
+    (void) outputIndex;
+    return 0;
+#endif
+  }
+
+  std::pair<int, int> fixedOutputRenderSize() const {
+    int w = std::clamp(project_.outputRenderWidth, 320, 7680);
+    int h = std::clamp(project_.outputRenderHeight, 180, 4320);
+    return {w, h};
+  }
+
+  std::pair<int, int> displayNativeRenderSize(int displayIndex) const {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) {
+      return fixedOutputRenderSize();
+    }
+    int normalizedIndex = std::clamp(displayIndex, 0, displayCount - 1);
+
+    SDL_DisplayMode desktopMode {};
+    if (deckboyGetDesktopDisplayMode(normalizedIndex, &desktopMode) &&
+        desktopMode.w > 0 && desktopMode.h > 0) {
+      return {desktopMode.w, desktopMode.h};
+    }
+
+    SDL_Rect bounds {};
+    if (deckboyGetDisplayBounds(normalizedIndex, &bounds) &&
+        bounds.w > 0 && bounds.h > 0) {
+      return {bounds.w, bounds.h};
+    }
+    return fixedOutputRenderSize();
+  }
+
+  int outputDisplayIndex(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return 0;
+    }
+    return std::max(0, project_.outputs[outputIndex].displayIndex);
+  }
+
+  // THE RASTER AN OUTPUT DRAWS AT. Following the display means following the
+  // screen the output is FULLSCREEN on, and that window's size is the screen's
+  // own -- whatever display the show remembers. Everything that converts to or
+  // from output pixels asks this one: the inspector's px, fit and fill, text,
+  // browser and PiP cues, the decoders, the egress. They asked the remembered
+  // display, so when that went stale -- still naming the 4K desk monitor while
+  // the output was fullscreen on a 1280x720 screen -- a cue had to be
+  // "3840x2160" to fill it, and every frame was decoded at 4K to be shrunk.
+  //
+  // ONLY then. A fixed raster (VIDEO 640x360) is delivered at that size
+  // whatever the window is, and an output escaped to a window keeps its
+  // screen's raster rather than changing resolution under its receivers.
+  std::pair<int, int> outputRenderSizeForOutput(int outputIndex) const {
+    if (project_.outputFollowDisplay && !project_.outputCanvasEnabled &&
+        outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+        normalizeOutputType(project_.outputs[outputIndex].outputType) != "stream") {
+      if (const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+          runtime && runtime->outputWindow &&
+          (SDL_GetWindowFlags(runtime->outputWindow) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_FULLSCREEN)) ==
+            SDL_WINDOW_FULLSCREEN) {
+        int w = 0;
+        int h = 0;
+        if (SDL_GetWindowSize(runtime->outputWindow, &w, &h) && w > 0 && h > 0) {
+          return {w, h};
+        }
+      }
+    }
+    return outputRequestedRenderSize(outputIndex);
+  }
+
+  // THE RASTER AN OUTPUT ASKS FOR: its display's native size, or the fixed
+  // raster. What a window is sized to when it is made or moved, and what a
+  // display mode is chosen against -- before the window can say what it is.
+  std::pair<int, int> outputRequestedRenderSize(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return fixedOutputRenderSize();
+    }
+    // A RECORDING composites at its DELIVERY raster, never the display's. It
+    // has no display, and "follow display" made it build the full programme
+    // raster only to scale that down again for readback -- so with a programme
+    // output also armed the app composited 4K TWICE per loop. MEASURED: that
+    // pinned the loop at 15-23fps and put every rate above 30 out of reach.
+    // Compositing straight to 1080 is a quarter of the pixels and skips the
+    // scale entirely.
+    const OutputTarget& recOut = project_.outputs[outputIndex];
+    if (project_.recordingWidth > 0 && project_.recordingHeight > 0 &&
+        normalizeOutputType(recOut.outputType) == "stream" &&
+        outputStreamProtocolIsFile(
+          normalizeOutputStreamProtocol(recOut.streamProtocol))) {
+      return {project_.recordingWidth, project_.recordingHeight};
+    }
+    if (project_.outputFollowDisplay) {
+      return displayNativeRenderSize(outputDisplayIndex(outputIndex));
+    }
+    return fixedOutputRenderSize();
+  }
+
+  std::pair<int, int> outputRenderSizeForDeck(int deckIndex) const {
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    if (!outputIndex) {
+      return fixedOutputRenderSize();
+    }
+    return outputRenderSizeForOutput(*outputIndex);
+  }
+
+  std::string outputResolutionLabelForOutput(int outputIndex) const {
+    auto [w, h] = outputRenderSizeForOutput(outputIndex);
+    return std::to_string(w) + "x" + std::to_string(h);
+  }
+
+  // For the toast that answers a display or raster pick. The window has not
+  // moved yet when it is raised, so its size is still the old screen's.
+  std::string outputRequestedResolutionLabel(int outputIndex) const {
+    auto [w, h] = outputRequestedRenderSize(outputIndex);
+    return std::to_string(w) + "x" + std::to_string(h);
+  }
+
+  std::string outputResolutionLabel(int deckIndex) const {
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    if (!outputIndex) {
+      return outputResolutionLabelForOutput(project_.focusedOutputIndex);
+    }
+    return outputResolutionLabelForOutput(*outputIndex);
+  }
+
+  std::string outputSizingModeLabel() const {
+    return project_.outputFollowDisplay ? "display native" : "fixed";
+  }
+
+  std::string formatRefreshRateLabel(double hz) const {
+    if (!std::isfinite(hz) || hz <= 0.0) {
+      return "auto";
+    }
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(hz < 100.0 ? 2 : 1) << hz;
+    std::string text = ss.str();
+    while (!text.empty() && text.back() == '0') text.pop_back();
+    if (!text.empty() && text.back() == '.') text.pop_back();
+    return text + " Hz";
+  }
+
+  // AUTO follows the display, so say what the display is actually running:
+  // "auto" alone left 59.94 and 60 indistinguishable from the control screen.
+  std::string outputRefreshRateLabel() const {
+    if (project_.outputRefreshRateHz <= 0.0) {
+      int displayCount = deckboyGetNumVideoDisplays();
+      if (displayCount > 0) {
+        int displayIndex = std::clamp(outputDisplayIndex(project_.focusedOutputIndex), 0, displayCount - 1);
+        if (const SDL_DisplayMode* mode =
+              SDL_GetCurrentDisplayMode(deckboyDisplayIdFromIndex(displayIndex))) {
+          if (mode->refresh_rate > 0.0f) {
+            return "auto (" + formatRefreshRateLabel(mode->refresh_rate) + ")";
+          }
+        }
+      }
+    }
+    return formatRefreshRateLabel(project_.outputRefreshRateHz);
+  }
+
+  static bool isTenBitFormat(Uint32 format) {
+    return format == SDL_PIXELFORMAT_ARGB2101010;
+  }
+
+  static int normalizeOutputBitDepthMode(int mode) {
+    if (mode == 8 || mode == 10) {
+      return mode;
+    }
+    return 0;
+  }
+
+  std::string outputBitDepthModeLabel() const {
+    int mode = normalizeOutputBitDepthMode(project_.outputBitDepth);
+    if (mode == 8) return "8-bit";
+    if (mode == 10) return "10-bit";
+    return "auto";
+  }
+
+  std::string outputBitDepthActiveLabelForOutput(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputRenderer) {
+      return "n/a";
+    }
+    return std::to_string(runtime->compositorBitDepth) + "-bit";
+  }
+
+  std::string outputBitDepthActiveLabel(int deckIndex) const {
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    return outputBitDepthActiveLabelForOutput(outputIndex ? *outputIndex : project_.focusedOutputIndex);
+  }
+
+  static bool rendererSupportsTextureFormat(SDL_Renderer* renderer, Uint32 format) {
+    if (!renderer || format == SDL_PIXELFORMAT_UNKNOWN) {
+      return false;
+    }
+    // SDL3: the supported-format list moved from SDL_RendererInfo to a
+    // renderer property — an UNKNOWN-terminated SDL_PixelFormat array.
+    const SDL_PixelFormat* formats = static_cast<const SDL_PixelFormat*>(
+      SDL_GetPointerProperty(SDL_GetRendererProperties(renderer),
+                             SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, nullptr));
+    if (!formats) {
+      return false;
+    }
+    for (int i = 0; formats[i] != SDL_PIXELFORMAT_UNKNOWN; ++i) {
+      if (static_cast<Uint32>(formats[i]) == format) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Uint32 preferredCompositorFormat(SDL_Renderer* renderer) const {
+    if (!renderer) {
+      return SDL_PIXELFORMAT_RGBA32;
+    }
+    int mode = normalizeOutputBitDepthMode(project_.outputBitDepth);
+    bool supportsArgb2101010 = rendererSupportsTextureFormat(renderer, SDL_PIXELFORMAT_ARGB2101010);
+    if (mode == 10) {
+      if (supportsArgb2101010) return SDL_PIXELFORMAT_ARGB2101010;
+      return SDL_PIXELFORMAT_RGBA32;
+    }
+    if (mode == 0) {
+      if (supportsArgb2101010) return SDL_PIXELFORMAT_ARGB2101010;
+    }
+    return SDL_PIXELFORMAT_RGBA32;
+  }
+
+  bool configureOutputCompositor(int outputIndex, int width = -1, int height = -1) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputRenderer) {
+      return false;
+    }
+    int targetW = width;
+    int targetH = height;
+    if (targetW <= 0 || targetH <= 0) {
+      int windowW = 0;
+      int windowH = 0;
+      if (runtime->outputWindow) {
+        SDL_GetWindowSize(runtime->outputWindow, &windowW, &windowH);
+      }
+      if (project_.outputCanvasEnabled) {
+        auto [canvasW, canvasH] = outputCanvasRenderSize();
+        targetW = canvasW;
+        targetH = canvasH;
+      } else {
+        if (windowW <= 0 || windowH <= 0) {
+          auto [rasterW, rasterH] = outputRenderSizeForOutput(outputIndex);
+          windowW = rasterW;
+          windowH = rasterH;
+        }
+        targetW = windowW;
+        targetH = windowH;
+      }
+    }
+    targetW = std::max(1, targetW);
+    targetH = std::max(1, targetH);
+
+    Uint32 format = runtime->hdr ? SDL_PIXELFORMAT_RGBA64_FLOAT
+                                 : preferredCompositorFormat(runtime->outputRenderer);
+    SDL_Texture* compositor = nullptr;
+    if (runtime->hdr) {
+      // Linear light, float: SDR content and HDR highlights in one picture.
+      const SDL_PropertiesID props = SDL_CreateProperties();
+      SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, format);
+      SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, SDL_TEXTUREACCESS_TARGET);
+      SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, targetW);
+      SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, targetH);
+      SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, SDL_COLORSPACE_SRGB_LINEAR);
+      // Headroom 1 tells SDL never to tonemap this texture. Otherwise every
+      // copy into an 8-bit target (NDI, SDI, recording, the desk preview) went
+      // through SDL's Chrome tonemap, which halves SDR white along with the
+      // highlights: measured, white at 203 of 255 and 75% bars at 161. Now the
+      // SDR copies are exact and highlights clip at SDR white; the HDR window
+      // gets the values unaltered and the display clips at its own peak.
+      SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_CREATE_SDR_WHITE_POINT_FLOAT, 1.0f);
+      SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_CREATE_HDR_HEADROOM_FLOAT, 1.0f);
+      compositor = SDL_CreateTextureWithProperties(runtime->outputRenderer, props);
+      SDL_DestroyProperties(props);
+      if (compositor) SDL_SetTextureScaleMode(compositor, SDL_SCALEMODE_NEAREST);
+    } else {
+      compositor = deckboyCreateTexture(
+        runtime->outputRenderer,
+        format,
+        SDL_TEXTUREACCESS_TARGET,
+        targetW,
+        targetH
+      );
+    }
+    if (!compositor && format != SDL_PIXELFORMAT_RGBA32) {
+      format = SDL_PIXELFORMAT_RGBA32;
+      compositor = deckboyCreateTexture(
+        runtime->outputRenderer,
+        format,
+        SDL_TEXTUREACCESS_TARGET,
+        targetW,
+        targetH
+      );
+    }
+    if (!compositor) {
+      return false;
+    }
+    SDL_SetTextureBlendMode(compositor, SDL_BLENDMODE_BLEND);
+
+    if (runtime->compositorTexture) {
+      SDL_DestroyTexture(runtime->compositorTexture);
+    }
+    releaseMaskTextures(*runtime);   // the scratch must match the new compositor
+    runtime->compositorTexture = compositor;
+    runtime->compositorWidth = targetW;
+    runtime->compositorHeight = targetH;
+    runtime->compositorFormat = format;
+    runtime->compositorBitDepth = runtime->hdr ? 16 : (isTenBitFormat(format) ? 10 : 8);
+    runtime->delayFrames.clear();
+    runtime->latestCapturedFrame = {};
+    return true;
+  }
+
+  void applyOutputBitDepthAllOutputs() {
+    for (int outputIndex = 0; outputIndex < static_cast<int>(outputRuntimes_.size()); ++outputIndex) {
+      configureOutputCompositor(outputIndex);
+    }
+  }
+
+  void setOutputBitDepthMode(int mode) {
+    int normalized = normalizeOutputBitDepthMode(mode);
+    bool changed = normalized != normalizeOutputBitDepthMode(project_.outputBitDepth);
+    project_.outputBitDepth = normalized;
+    applyOutputBitDepthAllOutputs();
+    triggerToast("video depth: " + outputBitDepthModeLabel() + " (" + outputBitDepthActiveLabelForOutput(project_.focusedOutputIndex) + ")");
+    playUiSound(UiSoundEffect::Toggle);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  std::pair<int, int> outputCanvasRenderSize() const {
+    int w = std::clamp(project_.outputCanvasWidth, 320, 16384);
+    int h = std::clamp(project_.outputCanvasHeight, 180, 16384);
+    return {w, h};
+  }
+
+  void clampDeckCanvasViewToWindow(int deckIndex, int windowW, int windowH) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (!project_.outputCanvasEnabled) {
+      deck.canvasViewX = 0;
+      deck.canvasViewY = 0;
+      return;
+    }
+    auto [canvasW, canvasH] = outputCanvasRenderSize();
+    int maxX = std::max(0, canvasW - std::max(1, windowW));
+    int maxY = std::max(0, canvasH - std::max(1, windowH));
+    deck.canvasViewX = std::clamp(deck.canvasViewX, 0, maxX);
+    deck.canvasViewY = std::clamp(deck.canvasViewY, 0, maxY);
+  }
+
+  void setOutputCanvasMode(bool enabled, int width = 0, int height = 0) {
+    bool changed = false;
+    if (enabled) {
+      int targetW = width;
+      int targetH = height;
+      if (targetW <= 0 || targetH <= 0) {
+        auto [nativeW, nativeH] = displayNativeRenderSize(outputDisplayIndex(project_.focusedOutputIndex));
+        targetW = std::max(nativeW * 2, nativeW);
+        targetH = nativeH;
+      }
+      targetW = std::clamp(targetW, 320, 16384);
+      targetH = std::clamp(targetH, 180, 16384);
+      changed = !project_.outputCanvasEnabled
+        || project_.outputCanvasWidth != targetW
+        || project_.outputCanvasHeight != targetH;
+      project_.outputCanvasEnabled = true;
+      project_.outputCanvasWidth = targetW;
+      project_.outputCanvasHeight = targetH;
+    } else {
+      changed = project_.outputCanvasEnabled;
+      project_.outputCanvasEnabled = false;
+      for (auto& deck : project_.decks) {
+        deck.canvasViewX = 0;
+        deck.canvasViewY = 0;
+      }
+    }
+
+    applyOutputBitDepthAllOutputs();
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime || !runtime->outputWindow) {
+        continue;
+      }
+      int hostDeckIndex = std::clamp(project_.outputs[outputIndex].hostDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+      int ww = 0;
+      int wh = 0;
+      SDL_GetWindowSize(runtime->outputWindow, &ww, &wh);
+      clampDeckCanvasViewToWindow(hostDeckIndex, ww, wh);
+    }
+
+    std::string label = project_.outputCanvasEnabled
+      ? ("canvas " + std::to_string(project_.outputCanvasWidth) + "x" + std::to_string(project_.outputCanvasHeight))
+      : "canvas off";
+    triggerToast("video: " + label);
+    playUiSound(UiSoundEffect::Toggle);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  void setFocusedDeckCanvasView(int x, int y) {
+    if (!project_.outputCanvasEnabled) {
+      triggerToast("canvas mode off");
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    deck.canvasViewX = std::max(0, x);
+    deck.canvasViewY = std::max(0, y);
+    int outputIndex = primaryOutputIndexForDeck(project_.focusedDeckIndex).value_or(project_.focusedOutputIndex);
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (runtime && runtime->outputWindow) {
+      int ww = 0;
+      int wh = 0;
+      SDL_GetWindowSize(runtime->outputWindow, &ww, &wh);
+      clampDeckCanvasViewToWindow(project_.focusedDeckIndex, ww, wh);
+    }
+    triggerToast("view: " + std::to_string(deck.canvasViewX) + "," + std::to_string(deck.canvasViewY));
+    markProjectDirty();
+  }
+
+  void nudgeFocusedDeckCanvasView(int dx, int dy) {
+    const Deck& deck = focusedDeck();
+    setFocusedDeckCanvasView(deck.canvasViewX + dx, deck.canvasViewY + dy);
+  }
+
+  void setFocusedDeckWarpEnabled(bool enabled) {
+    OutputTarget& deck = focusedOutputMutable();
+    if (deck.warpEnabled == enabled) {
+      return;
+    }
+    deck.warpEnabled = enabled;
+    if (deck.warpEnabled) {
+      triggerToast("warp on (" + toLower(warpModeLabel(deck.warpMode)) + ")");
+    } else {
+      triggerToast("warp off");
+    }
+    markProjectDirty();
+  }
+
+  void toggleFocusedDeckWarpEnabled() {
+    setFocusedDeckWarpEnabled(!focusedOutput().warpEnabled);
+  }
+
+  bool setFocusedDeckWarpMode(const std::string& modeToken) {
+    OutputTarget& deck = focusedOutputMutable();
+    std::string normalized = normalizeWarpMode(modeToken);
+    if (deck.warpMode == normalized) {
+      triggerToast("warp mode: " + toLower(warpModeLabel(normalized)));
+      return false;
+    }
+    deck.warpMode = normalized;
+    triggerToast("warp mode: " + toLower(warpModeLabel(deck.warpMode)));
+    markProjectDirty();
+    return true;
+  }
+
+  void cycleFocusedDeckWarpMode(int direction) {
+    static constexpr std::array<const char*, 2> kModes {"linear", "perspective"};
+    std::string current = normalizeWarpMode(focusedOutput().warpMode);
+    int index = current == "perspective" ? 1 : 0;
+    int step = direction < 0 ? -1 : 1;
+    int next = (index + step + static_cast<int>(kModes.size())) % static_cast<int>(kModes.size());
+    setFocusedDeckWarpMode(kModes[static_cast<size_t>(next)]);
+  }
+
+  void resetFocusedDeckWarp() {
+    OutputTarget& deck = focusedOutputMutable();
+    deck.warpTopLeftX = 0.0f;
+    deck.warpTopLeftY = 0.0f;
+    deck.warpTopRightX = 0.0f;
+    deck.warpTopRightY = 0.0f;
+    deck.warpBottomRightX = 0.0f;
+    deck.warpBottomRightY = 0.0f;
+    deck.warpBottomLeftX = 0.0f;
+    deck.warpBottomLeftY = 0.0f;
+    deck.edgeBlendLeft = 0.0f;
+    deck.edgeBlendRight = 0.0f;
+    deck.edgeBlendTop = 0.0f;
+    deck.edgeBlendBottom = 0.0f;
+    // The grid keeps its size -- the operator chose that -- and goes flat.
+    std::fill(deck.warpGridOffsets.begin(), deck.warpGridOffsets.end(), 0.0f);
+    triggerToast("warp/blend reset");
+    markProjectDirty();
+  }
+
+  void adjustFocusedDeckWarpCorner(const std::string& cornerToken, float dx, float dy) {
+    OutputTarget& deck = focusedOutputMutable();
+    std::string corner = toUpper(cornerToken);
+    if (corner == "TL" || corner == "TOPLEFT") {
+      deck.warpTopLeftX += dx;
+      deck.warpTopLeftY += dy;
+    } else if (corner == "TR" || corner == "TOPRIGHT") {
+      deck.warpTopRightX += dx;
+      deck.warpTopRightY += dy;
+    } else if (corner == "BR" || corner == "BOTTOMRIGHT") {
+      deck.warpBottomRightX += dx;
+      deck.warpBottomRightY += dy;
+    } else if (corner == "BL" || corner == "BOTTOMLEFT") {
+      deck.warpBottomLeftX += dx;
+      deck.warpBottomLeftY += dy;
+    } else {
+      return;
+    }
+    // The OUTPUT's geometry is clamped by normalizeProjectOutputsAndLayers,
+    // which is where every other per-output value is kept in range.
+    normalizeProject(project_);
+    triggerToast("warp " + corner + " " + std::to_string(static_cast<int>(std::lround(dx))) + "," + std::to_string(static_cast<int>(std::lround(dy))));
+    markProjectDirty();
+  }
+
+  // ── THE WARP EDITOR'S TARGET ──────────────────────────────────────────
+  //
+  // The editor draws four handles and moves four corners; this says WHICH
+  // four, and how a stored value turns into a place on the monitor. The
+  // output's warp is in output pixels from the raster's own corners. A
+  // layer's pin is in fractions of where that layer's picture lands, which
+  // is cuePlacementFor -- the function the compositor draws it with, so the
+  // handles sit on the picture, not on where it would be if it filled the frame.
+  OutputLayer* focusedLayerPin() {
+    if (project_.outputs.empty()) {
+      return nullptr;
+    }
+    for (OutputLayer& layer : focusedOutputMutable().layerDecks) {
+      if (layer.deckIndex == project_.focusedDeckIndex) {
+        return &layer;
+      }
+    }
+    return nullptr;
+  }
+
+  struct WarpEditTarget {
+    OutputLayer* pin = nullptr;       // null: the output's own warp
+    float* x[4] {};
+    float* y[4] {};
+    float baseX[4] {};                // monitor-space corners of the unwarped rect
+    float baseY[4] {};
+    float unitX = 1.0f;               // monitor pixels per stored unit
+    float unitY = 1.0f;
+    float snap = 10.0f;               // Shift-drag grid, in stored units
+    float originX = 0.0f;             // the output raster's 0,0 on the monitor
+    float originY = 0.0f;
+  };
+
+  // A grid point on the monitor: where the corner pin puts (s, t), plus its
+  // nudge. `withNudge = false` is the spot a drag measures from.
+  SDL_FPoint warpGridPointOnMonitor(const WarpEditTarget& wt, const OutputTarget& out,
+                                    int col, int row, bool withNudge = true) const {
+    SDL_FPoint c[4];
+    for (int i = 0; i < 4; ++i) {
+      c[i] = SDL_FPoint {wt.baseX[i] + *wt.x[i] * wt.unitX, wt.baseY[i] + *wt.y[i] * wt.unitY};
+    }
+    const float s = static_cast<float>(col) / static_cast<float>(std::max(1, out.warpGridCols - 1));
+    const float t = static_cast<float>(row) / static_cast<float>(std::max(1, out.warpGridRows - 1));
+    SDL_FPoint p = bilerpPoint(c[0], c[1], c[2], c[3], s, t);
+    if (withNudge) {
+      const SDL_FPoint n = warpGridPoint(out, col, row);
+      p.x += n.x * wt.unitX;
+      p.y += n.y * wt.unitY;
+    }
+    return p;
+  }
+
+  WarpEditTarget warpEditTarget(const SDL_Rect& mi) {
+    WarpEditTarget t;
+    const int focOutIdx = std::clamp(project_.focusedOutputIndex, 0,
+                                     std::max(0, static_cast<int>(project_.outputs.size()) - 1));
+    auto [outW, outH] = outputRenderSizeForOutput(focOutIdx);
+    // THE PICTURE'S RECT, not the panel's. The monitor letterboxes the output
+    // into whatever shape its panel is (renderTextureWithCueGeometry with no
+    // cue), and handles mapped to the panel's corners sat off the picture by
+    // the width of the bars -- plain to see once the monitor showed the warp.
+    const SDL_Rect pic = cuePlacementFor(nullptr, std::max(1, outW), std::max(1, outH), mi).destination;
+    const float sx = static_cast<float>(pic.w) / std::max(1.0f, static_cast<float>(outW));
+    const float sy = static_cast<float>(pic.h) / std::max(1.0f, static_cast<float>(outH));
+    t.originX = static_cast<float>(pic.x);
+    t.originY = static_cast<float>(pic.y);
+    OutputLayer* pin = warpEditLayer_ ? focusedLayerPin() : nullptr;
+    SDL_FRect rect {static_cast<float>(pic.x), static_cast<float>(pic.y),
+                    static_cast<float>(pic.w), static_cast<float>(pic.h)};
+    if (pin) {
+      t.pin = pin;
+      const Cue* cue = activeCuePtr(pin->deckIndex);
+      int frameW = outW, frameH = outH;
+      if (DeckRuntime* rt = runtimeForDeck(pin->deckIndex); rt && rt->mediaEngine) {
+        if (const DecodedFrame* f = rt->mediaEngine->currentFrame(); f && f->width > 0 && f->height > 0) {
+          frameW = f->width;
+          frameH = f->height;
+        }
+      }
+      const SDL_Rect dest = cuePlacementFor(cue, frameW, frameH, SDL_Rect {0, 0, outW, outH}).destination;
+      rect = SDL_FRect {pic.x + dest.x * sx, pic.y + dest.y * sy, dest.w * sx, dest.h * sy};
+      t.unitX = rect.w;
+      t.unitY = rect.h;
+      t.snap = 0.01f;
+      t.x[0] = &pin->warpTopLeftX;     t.y[0] = &pin->warpTopLeftY;
+      t.x[1] = &pin->warpTopRightX;    t.y[1] = &pin->warpTopRightY;
+      t.x[2] = &pin->warpBottomRightX; t.y[2] = &pin->warpBottomRightY;
+      t.x[3] = &pin->warpBottomLeftX;  t.y[3] = &pin->warpBottomLeftY;
+    } else {
+      OutputTarget& out = focusedOutputMutable();
+      t.unitX = sx;
+      t.unitY = sy;
+      t.x[0] = &out.warpTopLeftX;     t.y[0] = &out.warpTopLeftY;
+      t.x[1] = &out.warpTopRightX;    t.y[1] = &out.warpTopRightY;
+      t.x[2] = &out.warpBottomRightX; t.y[2] = &out.warpBottomRightY;
+      t.x[3] = &out.warpBottomLeftX;  t.y[3] = &out.warpBottomLeftY;
+    }
+    const float xs[4] = {rect.x, rect.x + rect.w, rect.x + rect.w, rect.x};
+    const float ys[4] = {rect.y, rect.y, rect.y + rect.h, rect.y + rect.h};
+    for (int i = 0; i < 4; ++i) {
+      t.baseX[i] = xs[i];
+      t.baseY[i] = ys[i];
+    }
+    return t;
+  }
+
+  // THE SELECTED POINT, IN THE UNITS AN OPERATOR TYPES. For the output's warp
+  // that is where the point sits on the raster, in output pixels -- a corner
+  // at 1907,4, not "an offset of -13,4" -- because that is the number a pixel
+  // map or a projector's test pattern gives you. A layer's pin is stored as a
+  // fraction of its picture, so it reads and types as a percent offset.
+  bool warpSelectedPointValue(float& vx, float& vy, std::string* name = nullptr,
+                              bool* percent = nullptr) {
+    if (warpSelPoint_ < 0 || !warpEditMode_ || warpMonitorInner_.w <= 0) {
+      return false;
+    }
+    const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+    if (percent) *percent = wt.pin != nullptr;
+    if (warpSelPoint_ < 4) {
+      const int c = warpSelPoint_;
+      static const char* kNames[] = {"TL", "TR", "BR", "BL"};
+      if (name) *name = kNames[c];
+      if (wt.pin) {
+        vx = *wt.x[c] * 100.0f;
+        vy = *wt.y[c] * 100.0f;
+      } else {
+        vx = (wt.baseX[c] - wt.originX) / std::max(1.0e-3f, wt.unitX) + *wt.x[c];
+        vy = (wt.baseY[c] - wt.originY) / std::max(1.0e-3f, wt.unitY) + *wt.y[c];
+      }
+      return true;
+    }
+    const OutputTarget& out = focusedOutput();
+    const int idx = warpSelPoint_ - 100;
+    if (wt.pin || !warpGridActive(out) || idx < 0 ||
+        idx >= out.warpGridCols * out.warpGridRows) {
+      return false;
+    }
+    const int col = idx % out.warpGridCols;
+    const int row = idx / out.warpGridCols;
+    if (name) *name = "point " + std::to_string(col + 1) + "," + std::to_string(row + 1);
+    const SDL_FPoint p = warpGridPointOnMonitor(wt, out, col, row);
+    vx = (p.x - wt.originX) / std::max(1.0e-3f, wt.unitX);
+    vy = (p.y - wt.originY) / std::max(1.0e-3f, wt.unitY);
+    return true;
+  }
+
+  // Put the selected point at (vx, vy) in those same units. Applied as a
+  // change from where it is, so one path serves corners, grid nudges and pins.
+  bool setWarpSelectedPointValue(float vx, float vy) {
+    float cx = 0.0f;
+    float cy = 0.0f;
+    if (!warpSelectedPointValue(cx, cy)) {
+      return false;
+    }
+    const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+    if (warpSelPoint_ < 4) {
+      const int c = warpSelPoint_;
+      if (wt.pin) {
+        *wt.x[c] = std::clamp(*wt.x[c] + (vx - cx) / 100.0f, -2.0f, 2.0f);
+        *wt.y[c] = std::clamp(*wt.y[c] + (vy - cy) / 100.0f, -2.0f, 2.0f);
+        wt.pin->warpEnabled = true;
+      } else {
+        *wt.x[c] += vx - cx;
+        *wt.y[c] += vy - cy;
+      }
+    } else {
+      OutputTarget& out = focusedOutputMutable();
+      const std::size_t i = static_cast<std::size_t>(warpSelPoint_ - 100) * 2;
+      if (i + 1 >= out.warpGridOffsets.size()) {
+        return false;
+      }
+      out.warpGridOffsets[i] += vx - cx;
+      out.warpGridOffsets[i + 1] += vy - cy;
+    }
+    markProjectDirty();
+    return true;
+  }
+
+  // THE MONITOR SHOWS THE WARP while the editor is open on this output's own
+  // warp (see captureOutputPreviewTap). Not for a layer's pin: its handles are
+  // in the flat composite's space, and the output's warp on top would move the
+  // picture out from under them.
+  bool previewTapShowsWarp(int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    const int focused = std::clamp(project_.focusedOutputIndex, 0,
+                                   static_cast<int>(project_.outputs.size()) - 1);
+    return outputIndex == focused && warpEditorVisible() &&
+           !(warpEditLayer_ && focusedLayerPin());
+  }
+
+  // Whether the editor has anything to show: an armed output warp, or a pin
+  // target that exists (a pin with no warp yet is still editable -- the first
+  // drag arms it).
+  bool warpEditorVisible() {
+    if (!warpEditMode_) {
+      return false;
+    }
+    if (warpEditLayer_ && focusedLayerPin()) {
+      return true;
+    }
+    return !project_.outputs.empty() && focusedOutput().warpEnabled;
+  }
+
+  void setFocusedDeckEdgeBlend(const std::string& edgeToken, float value) {
+    OutputTarget& deck = focusedOutputMutable();
+    float v = std::clamp(value, 0.0f, 0.49f);
+    std::string edge = toUpper(edgeToken);
+    if (edge == "L" || edge == "LEFT") {
+      deck.edgeBlendLeft = v;
+    } else if (edge == "R" || edge == "RIGHT") {
+      deck.edgeBlendRight = v;
+    } else if (edge == "T" || edge == "TOP") {
+      deck.edgeBlendTop = v;
+    } else if (edge == "B" || edge == "BOTTOM") {
+      deck.edgeBlendBottom = v;
+    } else {
+      return;
+    }
+    normalizeProject(project_);
+    triggerToast("blend " + edge + " " + std::to_string(static_cast<int>(std::lround(v * 100.0f))) + "%");
+    markProjectDirty();
+  }
+
+  // Refresh rates as the display reports them, to the hundredth. They used to
+  // be rounded to whole numbers, which folded 59.94 into 60 (and 29.97 into
+  // 30, 23.976 into 24): the broadcast rates could not be chosen at all, and
+  // which one "60" landed on was up to the mode list's order.
+  static double refreshChoiceKey(float hz) {
+    return std::round(static_cast<double>(hz) * 100.0) / 100.0;
+  }
+
+  std::vector<double> refreshChoicesForOutput(int outputIndex) const {
+    std::vector<double> refreshes;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return refreshes;
+    }
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) {
+      return refreshes;
+    }
+    int displayIndex = std::clamp(outputDisplayIndex(outputIndex), 0, displayCount - 1);
+    auto [targetW, targetH] = outputRequestedRenderSize(outputIndex);
+
+    int modeCount = 0;
+    if (SDL_DisplayMode** modes =
+          SDL_GetFullscreenDisplayModes(deckboyDisplayIdFromIndex(displayIndex), &modeCount)) {
+      for (int modeIndex = 0; modeIndex < modeCount; ++modeIndex) {
+        const SDL_DisplayMode& mode = *modes[modeIndex];
+        if (mode.w != targetW || mode.h != targetH) {
+          continue;
+        }
+        if (mode.refresh_rate > 0.0f) {
+          refreshes.push_back(refreshChoiceKey(mode.refresh_rate));
+        }
+      }
+      SDL_free(modes);
+    }
+    std::sort(refreshes.begin(), refreshes.end());
+    refreshes.erase(std::unique(refreshes.begin(), refreshes.end()), refreshes.end());
+    return refreshes;
+  }
+
+  // Outputs already told their asked-for refresh is not on their screen.
+  std::uint32_t refreshUnavailableWarned_ = 0;
+
+  bool selectDisplayModeForOutput(int outputIndex, SDL_DisplayMode& selectedMode,
+                                  bool* sizeAvailable = nullptr) const {
+    if (sizeAvailable) *sizeAvailable = false;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) {
+      return false;
+    }
+    int displayIndex = std::clamp(outputDisplayIndex(outputIndex), 0, displayCount - 1);
+    auto [targetW, targetH] = outputRenderSizeForOutput(outputIndex);
+    double targetHz = project_.outputRefreshRateHz;
+
+    SDL_DisplayMode desktopMode {};
+    bool hasDesktop = deckboyGetDesktopDisplayMode(displayIndex, &desktopMode);
+    if (targetHz <= 0.0 && hasDesktop && desktopMode.w == targetW && desktopMode.h == targetH) {
+      selectedMode = desktopMode;
+      return true;
+    }
+
+    bool found = false;
+    SDL_DisplayMode best {};
+    double bestScore = 1e9;
+
+    int modeCount = 0;
+    SDL_DisplayMode** modes =
+      SDL_GetFullscreenDisplayModes(deckboyDisplayIdFromIndex(displayIndex), &modeCount);
+    for (int modeIndex = 0; modes && modeIndex < modeCount; ++modeIndex) {
+      const SDL_DisplayMode& mode = *modes[modeIndex];
+      if (mode.w != targetW || mode.h != targetH) {
+        continue;
+      }
+      if (sizeAvailable) *sizeAvailable = true;
+
+      double hz = mode.refresh_rate > 0.0f ? static_cast<double>(mode.refresh_rate) : 60.0;
+      double score = 0.0;
+      if (targetHz > 0.0) {
+        // THE ASKED RATE, OR A WHOLE MULTIPLE OF IT -- never merely the
+        // nearest. Nearest put a show asking for 30 Hz on a screen's 50 Hz
+        // mode (|50-30| < |60-30|): every frame held for 1 or 2 refreshes in
+        // turn, the unsteady playback an example show gave on a 60 Hz 4K desk
+        // monitor (2026-10-22). A multiple holds every frame equally (30 on
+        // 60, 25 on 50, 24 on 48/72/120, 29.97 on 59.94); the smallest one
+        // wins, the exact rate first. No such mode: not a candidate at all,
+        // and the screen keeps its own mode (enableOutputFullscreen says so).
+        //
+        // AND THE SAME FAMILY: 30 is not 29.97. The two differ by 0.1%, less
+        // than the tolerance a panel's own rounding needs (one reports 59.951
+        // for 60), so a plain tolerance accepted 29.97 and 59.94 for a 30 Hz
+        // request -- a frame dropped every 33 s -- and suppressed the warning
+        // (Codex audit #4). A 1000/1001 rate is told apart by its rational
+        // (the exact rate where SDL gives one) landing on a whole number x
+        // 1000/1001 while missing every whole number.
+        if (mode.refresh_rate_numerator > 0 && mode.refresh_rate_denominator > 0) {
+          hz = static_cast<double>(mode.refresh_rate_numerator) / mode.refresh_rate_denominator;
+        }
+        auto ntsc = [](double rate) {
+          const double lifted = rate * 1001.0 / 1000.0;
+          return std::abs(lifted - std::round(lifted)) < 0.004 &&
+                 std::abs(rate - std::round(rate)) > 0.02;
+        };
+        if (ntsc(hz) != ntsc(targetHz)) {
+          continue;
+        }
+        const double multiple = hz / targetHz;
+        const double whole = std::round(multiple);
+        if (whole < 1.0 || whole > 8.0 || std::abs(hz - whole * targetHz) > 0.05 * whole) {
+          continue;
+        }
+        score = whole * 1000.0 + std::abs(hz - whole * targetHz);
+      } else {
+        // Auto: prefer desktop refresh if available, then highest refresh.
+        if (hasDesktop && desktopMode.w == targetW && desktopMode.h == targetH && desktopMode.refresh_rate > 0.0f) {
+          score = std::abs(hz - static_cast<double>(desktopMode.refresh_rate));
+        } else {
+          score = -hz;
+        }
+      }
+
+      if (!found || score < bestScore) {
+        found = true;
+        best = mode;
+        bestScore = score;
+      }
+    }
+    if (modes) {
+      SDL_free(modes);
+    }
+
+    if (!found) {
+      return false;
+    }
+    selectedMode = best;
+    return true;
+  }
+
+  bool enableOutputFullscreen(int outputIndex, bool withToast) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputWindow) {
+      if (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+          project_.outputs[outputIndex].enabled) {
+        setOutputHealthState(outputIndex, OutputHealthState::Error, "output window unavailable");
+      }
+      return false;
+    }
+    if (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+        project_.outputs[outputIndex].enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "entering fullscreen");
+    }
+    runtime->recoveryPausedByEscape = false;
+    runtime->fullscreenIntended = true;
+    runtime->lastFullscreenRequestMs = SDL_GetTicks();
+#ifdef __APPLE__
+    // LET macOS FINISH ANY FULLSCREEN SWITCH ALREADY UNDER WAY. It animates
+    // into and out of fullscreen, and until that ends SDL can report the window
+    // as not fullscreen -- so the display-move retry asked again mid-animation,
+    // SDL rewrote the style mask, and AppKit killed the app ("NSWindowStyleMask-
+    // FullScreen cleared on a window outside of a full screen transition"; seen
+    // in CI, 2026-10-09). Returns at once when nothing is in flight.
+    SDL_SyncWindow(runtime->outputWindow);
+#endif
+
+    // Exclusive fullscreen (real display-mode switch) only when the operator
+    // explicitly asked for it: a fixed raster or a specific refresh rate.
+    // In the default display-native case the "selected mode" is the desktop
+    // mode anyway, so exclusive buys nothing over borderless fullscreen but
+    // costs a mode switch — screen blanking, focus quirks, and unreliable
+    // placement on mixed-DPI multi-monitor setups ("output frozen" /
+    // "taking over the wrong screen" field reports).
+    bool wantsExclusiveMode = !project_.outputFollowDisplay || project_.outputRefreshRateHz > 0.0;
+    SDL_DisplayMode selectedMode {};
+    bool sizeAvailable = false;
+    if (wantsExclusiveMode && selectDisplayModeForOutput(outputIndex, selectedMode, &sizeAvailable)) {
+      // SDL3: exclusive fullscreen = set an explicit mode, then fullscreen.
+      SDL_SetWindowFullscreenMode(runtime->outputWindow, &selectedMode);
+      if (SDL_SetWindowFullscreen(runtime->outputWindow, true)) {
+        runtime->lastRecoveryAttemptMs = runtime->lastFullscreenRequestMs;
+        setOutputHealthState(outputIndex, OutputHealthState::Live);
+        if (withToast) {
+          triggerToast("big screen @" + formatRefreshRateLabel(selectedMode.refresh_rate));
+        }
+        return true;
+      }
+    } else if (wantsExclusiveMode && sizeAvailable && project_.outputRefreshRateHz > 0.0 && outputIndex >= 0 &&
+               outputIndex < 32 && !((refreshUnavailableWarned_ >> outputIndex) & 1u)) {
+      // Asked for a rate this screen has neither exactly nor as a whole
+      // multiple: the screen keeps its own mode, and the operator is told
+      // rather than finding out from the picture.
+      refreshUnavailableWarned_ |= 1u << outputIndex;
+      SDL_Log("output %d: no %.3f Hz mode (or a whole multiple) on its screen; left at the screen's own rate",
+              outputIndex + 1, project_.outputRefreshRateHz);
+      triggerToast(outputLabel(outputIndex) + ": this screen has no " +
+                   formatRefreshRateLabel(static_cast<float>(project_.outputRefreshRateHz)) +
+                   " mode (or a multiple of it) - left at its own rate",
+                   ToastKind::Warning, kToastReadableMs);
+    }
+
+    // SDL3: borderless fullscreen desktop = NULL mode, then fullscreen.
+    SDL_SetWindowFullscreenMode(runtime->outputWindow, nullptr);
+    if (SDL_SetWindowFullscreen(runtime->outputWindow, true)) {
+      runtime->lastRecoveryAttemptMs = runtime->lastFullscreenRequestMs;
+      setOutputHealthState(outputIndex, OutputHealthState::Live);
+      if (withToast) {
+        triggerToast("big screen");
+      }
+      return true;
+    }
+    if (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+        project_.outputs[outputIndex].enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "fullscreen unavailable");
+    }
+    return false;
+  }
+
+  bool createDeckRuntime(int deckIndex) {
+    Deck& deck = project_.decks[deckIndex];
+    DeckRuntime& runtime = deckRuntimes_[deckIndex];
+    destroyDeckRuntime(runtime);
+    runtime.deckKey = deck.runtimeKey;
+    runtime.slot->store(deckIndex, std::memory_order_relaxed);
+    auto [targetW, targetH] = outputRenderSizeForDeck(deckIndex);
+    targetW = std::max(1, targetW);
+    targetH = std::max(1, targetH);
+
+    // Hidden per-deck renderer used by the media engine decode/upload pipeline.
+    std::string title = std::string("Deckboy Deck Runtime - ") + (deck.name.empty() ? deckDefaultName(deckIndex) : deck.name);
+    runtime.outputWindow = SDL_CreateWindow(
+      title.c_str(),
+      targetW,
+      targetH,
+      SDL_WINDOW_HIDDEN
+    );
+    if (!runtime.outputWindow) {
+      return false;
+    }
+    applyDeckboyWindowIcon(runtime.outputWindow);
+
+    // NOT createOutputRenderer: this hidden renderer is the media engine's
+    // decode/upload target, never an egress surface, so it has nothing to gain
+    // from a backend chosen for asynchronous readback -- and on Windows it is
+    // where zero-copy D3D11 decode lives, which a different backend would cost.
+    // Same named order as an output renderer, and for the same reason: passing
+    // null lets SDL fall through to its Direct3D 9 backend, which crashes in
+    // the NVIDIA driver. This one still wants D3D11 FIRST regardless, because
+    // it is where zero-copy decode lives.
+    runtime.outputRenderer = deckboyCreateRenderer(runtime.outputWindow);
+    if (!runtime.outputRenderer) {
+      destroyDeckRuntime(runtime);
+      return false;
+    }
+
+    if (!reopenDeckAudioOutput(deckIndex, deck.audioOutputDeviceName)) {
+      // A MACHINE WITH NO SOUND CARD STILL HAS A SCREEN.
+      //
+      // This used to destroy the deck and fail the whole startup, so a box with
+      // no audio device could not show a PICTURE either -- and that describes a
+      // lot of the machines this application exists for: signage players, rack
+      // rigs, VMs, a Pi driving a foyer screen. Reported from the AppImage
+      // catalogue's test runner, which has no sound card: "Deck runtime
+      // creation failed: ALSA: Couldn't open audio device", and then nothing.
+      //
+      // Deckboy already survives a NAMED device that has gone missing -- it
+      // moves the deck to the default and says so. This is the same idea one
+      // step further out: no devices at all is no audio, said once, and the
+      // show carries on. Every audio path already tolerates a null stream,
+      // because that is how a deck behaves between devices.
+      runtime.audioDeviceInUse.clear();
+      std::cerr << "audio: deck " << (deckIndex + 1)
+                << " has no audio device (" << SDL_GetError()
+                << ") -- the picture carries on without sound\n";
+      triggerToast("no audio device — picture only on deck " +
+                   deckDefaultName(deckIndex));
+    }
+
+    return true;
+  }
+
+  // ── A SPARE FOR THE FIRST STREAM OUTPUT ─────────────────────────────────
+  // The first RECORD of a session built the recording's hidden window and
+  // its renderer there and then, on the render thread: MEASURED 23 ms (the
+  // window 4-5, the renderer 15-18) of an 84 ms first frame at 4K, with every
+  // output frozen for it. Later takes keep their runtime and never paid it.
+  // So one is built while Deckboy starts, exactly as createOutputRuntime
+  // builds a stream output's, and the first SDR stream output -- a recording,
+  // a stream, the Web Monitor -- adopts it. MEASURED with it: the first
+  // take's first frame 70 ms, from 94-99. Most of the rest is the readback's
+  // staging ring and its first synchronous read; building that ring off this
+  // thread was tried, and a SCALED take then started on a placeholder of the
+  // programme's raster and recorded garbage (record_avsync_check caught it).
+  void prepareSpareStreamRenderer() {
+    if (spareStreamWindow_) {
+      return;
+    }
+    SDL_Window* window = SDL_CreateWindow(std::string(kOutputTitle).c_str(), 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window) {
+      return;
+    }
+    SDL_Renderer* renderer = createOffscreenGpuRenderer(false);
+    if (!renderer) {
+      renderer = createOutputRenderer(window, false);
+    }
+    if (!renderer) {
+      SDL_DestroyWindow(window);
+      return;
+    }
+    spareStreamWindow_ = window;
+    spareStreamRenderer_ = renderer;
+  }
+
+  void releaseSpareStreamRenderer() {
+    if (spareStreamRenderer_) SDL_DestroyRenderer(spareStreamRenderer_);
+    if (spareStreamWindow_) SDL_DestroyWindow(spareStreamWindow_);
+    spareStreamRenderer_ = nullptr;
+    spareStreamWindow_ = nullptr;
+  }
+
+  bool createOutputRuntime(int outputIndex) {
+    OutputTarget& output = project_.outputs[outputIndex];
+    OutputRuntime& runtime = outputRuntimes_[outputIndex];
+    destroyOutputRuntime(runtime);
+    output.outputType = normalizeOutputType(output.outputType);
+    auto [targetW, targetH] = outputRequestedRenderSize(outputIndex);
+    targetW = std::max(1, targetW);
+    targetH = std::max(1, targetH);
+
+    std::string label = output.name.empty() ? outputDefaultName(outputIndex) : output.name;
+    bool streamType = output.outputType == "stream";
+    std::string title = std::string(kOutputTitle) + " - " + label + (streamType ? " [stream]" : "");
+    Uint32 windowFlags = streamType
+      ? SDL_WINDOW_HIDDEN
+      : (SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
+    // A recording is a hidden stream output, so HDR applies to those too:
+    // its float compositor is what an HDR recording is made from.
+    const bool wantHdr = outputWantsHdr(outputIndex);
+    if (streamType && !wantHdr && spareStreamWindow_) {
+      // The one built while Deckboy started (prepareSpareStreamRenderer).
+      runtime.outputWindow = spareStreamWindow_;
+      runtime.outputRenderer = spareStreamRenderer_;
+      spareStreamWindow_ = nullptr;
+      spareStreamRenderer_ = nullptr;
+      // Not resized: a stream output never presents its window, and its
+      // picture is the compositor's size, set below.
+      SDL_SetWindowTitle(runtime.outputWindow, title.c_str());
+    } else {
+      runtime.outputWindow = SDL_CreateWindow(
+        title.c_str(),
+        targetW,
+        targetH,
+        windowFlags
+      );
+    }
+    if (!runtime.outputWindow) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "window create failed");
+      return false;
+    }
+    // Initial position is applied by applyOutputDisplaySelection below, which
+    // uses real display bounds coordinates. The window starts hidden so no
+    // display assignment has been committed by the OS yet.
+    applyDeckboyWindowIcon(runtime.outputWindow);
+
+    if (!runtime.outputRenderer) {
+      runtime.outputRenderer = streamType ? createOffscreenGpuRenderer(wantHdr) : nullptr;
+    }
+    if (!runtime.outputRenderer) {
+      runtime.outputRenderer = createOutputRenderer(runtime.outputWindow, wantHdr);
+    }
+    runtime.hdr = wantHdr && runtime.outputRenderer &&
+      SDL_GetNumberProperty(SDL_GetRendererProperties(runtime.outputRenderer),
+                            SDL_PROP_RENDERER_OUTPUT_COLORSPACE_NUMBER, SDL_COLORSPACE_SRGB) ==
+        SDL_COLORSPACE_SRGB_LINEAR;
+    runtime.hdrUnavailable = wantHdr && !runtime.hdr;
+    if (wantHdr && !runtime.hdr) {
+      triggerToast(outputLabel(outputIndex) + ": HDR is not available on this renderer - running SDR",
+                   ToastKind::Warning, kToastReadableMs);
+    }
+    if (runtime.outputRenderer && !streamType) {
+      // Program output stays vsynced to its display; stream-only outputs run
+      // unthrottled (per-renderer vsync is an SDL3 runtime property).
+      SDL_SetRenderVSync(runtime.outputRenderer, 1);
+    }
+    if (!runtime.outputRenderer) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "renderer create failed");
+      destroyOutputRuntime(runtime);
+      return false;
+    }
+#if DECKBOY_INPROC_DECODE
+    // Cache the renderer's D3D11 device for zero-copy decode targeting and
+    // per-frame device-match checks (null for the software renderer).
+    runtime.rendererD3DDevice = deckboy::libav::rendererD3D11Device(runtime.outputRenderer);
+    // Output topology changed — decks decoding zero-copy against a previous
+    // output device must restart onto the new one (or CPU mode) next tick.
+    scheduleDecodeDeviceReconcile();
+#endif
+
+    if (!configureOutputCompositor(outputIndex)) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "compositor init failed");
+      destroyOutputRuntime(runtime);
+      return false;
+    }
+
+    applyOutputDisplaySelection(outputIndex);
+    applyOutputNdiSettings(outputIndex, false);
+    if (output.enabled && !streamType) {
+      // Defer fullscreen by one event loop tick. On macOS, SDL_SetWindowFullscreen
+      // goes fullscreen on NSWindow.screen, which is only committed after the run
+      // loop processes the preceding SDL_SetWindowPosition / SDL_ShowWindow calls.
+      // Calling fullscreen synchronously in the same tick therefore lands on the
+      // wrong display when the output window was just created or recreated.
+      runtime.fullscreenIntended = true;
+      runtime.pendingDisplayMoveFullscreen = true;
+      runtime.displayMoveRetryAtMs = SDL_GetTicks() + 100;
+      runtime.lastRecoveryAttemptMs = SDL_GetTicks();
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "entering fullscreen");
+    } else if (output.enabled) {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed);
+    } else {
+      setOutputHealthState(outputIndex, OutputHealthState::Off);
+    }
+    return true;
+  }
+
+  bool recreateOutputRuntime(int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    if (outputIndex >= static_cast<int>(outputRuntimes_.size())) {
+      return false;
+    }
+    return createOutputRuntime(outputIndex);
+  }
+
+  bool queueOutputDisplayRuntimeRebuild(int outputIndex, Uint64 now) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return false;
+    }
+    runtime->pendingDisplayRuntimeRebuild = true;
+    runtime->pendingDisplayMoveFullscreen = false;
+    runtime->displayMoveRetryAtMs = now + 60;
+    runtime->suppressRecoveryUntilMs = now + 1800;
+    runtime->lastRecoveryAttemptMs = now;
+    runtime->recoveryPausedByEscape = false;
+    setOutputHealthState(outputIndex, OutputHealthState::Recovering, "switching display");
+    return true;
+  }
+
+  bool rebuildDeckRuntimes() {
+    normalizeProject(project_);
+    for (auto& runtime : deckRuntimes_) {
+      destroyDeckRuntime(runtime);
+    }
+    clearDeckStreamAudioBuffers();
+    deckRuntimes_.clear();
+    deckRuntimes_.resize(project_.decks.size());
+    ensureTimecodeFollowerStateSize();
+
+    for (size_t index = 0; index < project_.decks.size(); ++index) {
+      if (!createDeckRuntime(static_cast<int>(index))) {
+        return false;
+      }
+    }
+    // THE ENGINES ARE NEW, SO THEY KNOW NOTHING. Every gate on them defaults
+    // to 'audible in the room, silent on the monitor', which is right for a
+    // fresh deck and wrong for one rebuilt from a show that had already said
+    // otherwise. Without this a show REOPENED with a monitor set and a
+    // playlist held out of the PA came back with neither in force -- the
+    // fields round-tripped perfectly and did nothing, which is why MONITOR
+    // reports the engines rather than the fields.
+    applyAudioMonitorSelection();
+    return true;
+  }
+
+  // GROWTH ONLY: a new playlist gets an engine of its own and every playlist
+  // already running keeps playing.
+  //
+  // Adding a playlist used to go through rebuildDeckRuntimes, which tears
+  // every engine down -- so putting a second playlist in to hold a LAYER took
+  // the base off air at the very moment the operator was building the
+  // composite, and the layer then sat over black. That reads as "layers do
+  // not composite" until the base is taken again, and then it "suddenly
+  // works". The toast said "(playback stopped)", which was honest and did not
+  // make it any less of a trap.
+  //
+  // Safe to grow in place: a DeckRuntime owns its engine through a unique_ptr
+  // and otherwise holds only SDL handles, so moving it when the vector grows
+  // moves nothing the engine or its threads can see, and nothing keeps a
+  // DeckRuntime's address across frames. The audio ring grows itself on push.
+  bool growDeckRuntimes() {
+    return reconcileDeckRuntimes();
+  }
+
+  // ── THE ENGINES FOLLOW THEIR PLAYLISTS ──────────────────────────────────
+  //
+  // Matched by key (Deck::runtimeKey), not by position. A playlist still in
+  // the show keeps its engine, PLAYING, and moves to wherever the playlist is
+  // now; only a playlist that is gone has its engine stopped; only a new one
+  // gets a new engine. Removing playlist 2 of 4 used to rebuild all of them --
+  // every playlist stopped, mid-show -- and undoing it, which only ever
+  // appended, gave playlist 2 the engine that had been playing 3.
+  //
+  // Safe to move: a DeckRuntime owns its engine through a unique_ptr and
+  // otherwise holds SDL handles, so moving it moves nothing the engine's
+  // threads can see, and nothing keeps a DeckRuntime's address across frames.
+  // What the engine's own callbacks know of its position is the slot, moved
+  // under the audio ring's lock (permuteDeckIndexedState).
+  bool reconcileDeckRuntimes() {
+    normalizeProject(project_);
+    const std::size_t had = deckRuntimes_.size();
+    const std::size_t want = project_.decks.size();
+    std::vector<int> oldToNew(had, -1);
+    std::vector<int> newFromOld(want, -1);
+    for (std::size_t o = 0; o < had; ++o) {
+      const std::uint64_t key = deckRuntimes_[o].deckKey;
+      if (key == 0) continue;
+      for (std::size_t d = 0; d < want; ++d) {
+        if (newFromOld[d] < 0 && project_.decks[d].runtimeKey == key) {
+          oldToNew[o] = static_cast<int>(d);
+          newFromOld[d] = static_cast<int>(o);
+          break;
+        }
+      }
+    }
+    bool unchanged = had == want;
+    for (std::size_t o = 0; o < had && unchanged; ++o) {
+      unchanged = oldToNew[o] == static_cast<int>(o);
+    }
+    if (unchanged) {
+      return true;
+    }
+    // GONE: only these stop.
+    for (std::size_t o = 0; o < had; ++o) {
+      if (oldToNew[o] < 0) {
+        destroyDeckRuntime(deckRuntimes_[o]);
+      }
+    }
+    // KEPT: still running, into their playlists' places.
+    std::vector<DeckRuntime> next(want);
+    for (std::size_t d = 0; d < want; ++d) {
+      if (newFromOld[d] >= 0) {
+        next[d] = std::move(deckRuntimes_[static_cast<std::size_t>(newFromOld[d])]);
+      }
+    }
+    deckRuntimes_ = std::move(next);
+    permuteDeckIndexedState(oldToNew, want);
+    // NEW: an engine for each playlist that had none.
+    for (std::size_t d = 0; d < want; ++d) {
+      if (newFromOld[d] < 0 && !createDeckRuntime(static_cast<int>(d))) {
+        return false;
+      }
+    }
+    applyAudioMonitorSelection();
+    return true;
+  }
+
+  template <typename T>
+  static void permuteByDeck(std::vector<T>& values, const std::vector<int>& oldToNew,
+                            std::size_t deckCount, const T& fill) {
+    std::vector<T> next(deckCount, fill);
+    for (std::size_t o = 0; o < values.size() && o < oldToNew.size(); ++o) {
+      const int d = oldToNew[o];
+      if (d >= 0 && static_cast<std::size_t>(d) < deckCount) {
+        next[static_cast<std::size_t>(d)] = values[o];
+      }
+    }
+    values.swap(next);
+  }
+
+  template <typename Map>
+  static void remapDeckKeys(Map& byDeck, const std::vector<int>& oldToNew) {
+    Map next;
+    for (auto& entry : byDeck) {
+      const int o = entry.first;
+      if (o >= 0 && o < static_cast<int>(oldToNew.size()) && oldToNew[static_cast<std::size_t>(o)] >= 0) {
+        next.emplace(oldToNew[static_cast<std::size_t>(o)], std::move(entry.second));
+      }
+    }
+    byDeck.swap(next);
+  }
+
+  // EVERYTHING ELSE THAT REMEMBERS A PLAYLIST BY ITS NUMBER moves with it,
+  // or a playlist that moved up would inherit its neighbour's fade, pending
+  // take, opacity, timecode lock, scroll and preview -- and the removed one's
+  // would pass to whichever moved into its place.
+  void permuteDeckIndexedState(const std::vector<int>& oldToNew, std::size_t deckCount) {
+    // The sound the recorders, streams and NDI mix: each playlist's buffer and
+    // every reader's place in it, with the engines' slots moved in the same
+    // lock so no block lands between the two.
+    deckAudioRing_.remap(oldToNew, deckCount, [&] {
+      for (std::size_t d = 0; d < deckRuntimes_.size(); ++d) {
+        deckRuntimes_[d].slot->store(static_cast<int>(d), std::memory_order_relaxed);
+      }
+    });
+    for (OutputRuntime& output : outputRuntimes_) {
+      remapDeckKeys(output.streamAudioReadSamplesByDeck, oldToNew);
+      remapDeckKeys(output.ndiAudioReadSamplesByDeck, oldToNew);
+      std::vector<int> decks;
+      for (const int o : output.streamAudioDecks) {
+        if (o >= 0 && o < static_cast<int>(oldToNew.size()) && oldToNew[static_cast<std::size_t>(o)] >= 0) {
+          decks.push_back(oldToNew[static_cast<std::size_t>(o)]);
+        }
+      }
+      output.streamAudioDecks.swap(decks);
+    }
+    remapDeckKeys(liveCaptionsRead_, oldToNew);
+    remapDeckKeys(deckAudioTraceBuffers_, oldToNew);
+    // A playlist's picture memory (feedback, motion puppet, the preview's own
+    // copy), its effect cost, its timecode triggers and its presenter notes
+    // are its own: left keyed by number, a playlist that moved up would read
+    // its neighbour's echo and its neighbour's place in the notes.
+    remapDeckKeys(motionDrivers_, oldToNew);
+    remapDeckKeys(effectStateBuffers_, oldToNew);
+    remapDeckKeys(previewEffectStateBuffers_, oldToNew);
+    remapDeckKeys(effectChainCostMs_, oldToNew);
+    remapDeckKeys(feedbackAdvancedFrame_, oldToNew);
+    remapDeckKeys(timecodeTriggeredCueIds_, oldToNew);
+    remapDeckKeys(presenterNoteStep_, oldToNew);
+    remapDeckKeys(presenterPreviousCue_, oldToNew);
+    remapDeckKeys(presenterNoteScroll_, oldToNew);
+    remapDeckKeys(presenterNoteScrollClock_, oldToNew);
+    remapDeckKeys(presenterNoteExtraRows_, oldToNew);
+    remapDeckKeys(presenterNoteMetrics_, oldToNew);
+
+    // A fade on a playlist that moved goes on, on it; one on a playlist that
+    // is gone goes with it. The master dimmer's (no playlist) is untouched.
+    fadeRuns_.erase(std::remove_if(fadeRuns_.begin(), fadeRuns_.end(), [&](FadeRun& run) {
+                      if (run.deckIndex < 0) return false;
+                      if (run.deckIndex >= static_cast<int>(oldToNew.size())) return true;
+                      run.deckIndex = oldToNew[static_cast<std::size_t>(run.deckIndex)];
+                      return run.deckIndex < 0;
+                    }),
+                    fadeRuns_.end());
+
+    permuteByDeck(deckPendingTakes_, oldToNew, deckCount, PendingTake {});
+    permuteByDeck(deckPlaylistOpacityTargets_, oldToNew, deckCount, 1.0f);
+    permuteByDeck(lastGoMsByDeck_, oldToNew, deckCount, Uint64 {0});
+    permuteByDeck(deckTimecodeLastExternalMs_, oldToNew, deckCount, Uint64 {0});
+    permuteByDeck(deckTimecodeLastExternalSeconds_, oldToNew, deckCount, 0.0);
+    {
+      // vector<bool> has no element to take a reference to; through a copy.
+      std::vector<char> has(deckTimecodeHasExternal_.begin(), deckTimecodeHasExternal_.end());
+      permuteByDeck(has, oldToNew, deckCount, char {0});
+      deckTimecodeHasExternal_.assign(has.begin(), has.end());
+    }
+    permuteByDeck(deckScrolls_, oldToNew, deckCount, 0);
+    permuteByDeck(deckScrollMax_, oldToNew, deckCount, 0);
+    permuteByDeck(deckFollowedActive_, oldToNew, deckCount, -1);
+    permuteByDeck(deckScrollSettleMs_, oldToNew, deckCount, Uint64 {0});
+    permuteByDeck(deckOverlayScrolls_, oldToNew, deckCount, 0);
+    // The previews: a texture for a playlist that is gone is freed, not lost.
+    for (std::size_t o = 0; o < deckPreviewTex_.size(); ++o) {
+      if ((o >= oldToNew.size() || oldToNew[o] < 0) && deckPreviewTex_[o].tex) {
+        SDL_DestroyTexture(deckPreviewTex_[o].tex);
+        deckPreviewTex_[o].tex = nullptr;
+      }
+    }
+    permuteByDeck(deckPreviewTex_, oldToNew, deckCount, DeckPreviewTex {});
+    statusDeckSnapshots_.clear();
+    // Mid-gesture on a playlist: let go rather than carry on with another one.
+    deckRemoveArmedIndex_ = -1;
+    deckOpacityDragIndex_ = -1;
+    deckListScrollDragDeck_ = -1;
+  }
+
+  bool ensureOutputRuntimesSynced() {
+    normalizeProject(project_);
+    if (outputRuntimes_.size() == project_.outputs.size()) {
+      return true;
+    }
+    
+    // Growth: only create what's missing
+    while (outputRuntimes_.size() < project_.outputs.size()) {
+      outputRuntimes_.emplace_back();
+      if (!createOutputRuntime(static_cast<int>(outputRuntimes_.size()) - 1)) {
+        return false;
+      }
+    }
+    
+    // Shrinking: only destroy from the end
+    while (outputRuntimes_.size() > project_.outputs.size()) {
+      destroyOutputRuntime(outputRuntimes_.back());
+      outputRuntimes_.pop_back();
+    }
+    
+    return true;
+  }
+
+  // Legacy alias for compatibility during refactor
+  bool rebuildOutputRuntimes() {
+    return ensureOutputRuntimesSynced();
+  }
+
+  std::vector<std::string> outputAudioDeviceChoices() const {
+    std::vector<std::string> names;
+    names.push_back("");
+    int deviceCount = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioPlaybackDevices(&deviceCount)) {
+      for (int index = 0; index < deviceCount; ++index) {
+        const char* name = SDL_GetAudioDeviceName(ids[index]);
+        if (name && *name) {
+          names.emplace_back(name);
+        }
+      }
+      SDL_free(ids);
+    }
+    return names;
+  }
+
+  void cycleAudioOutputDevice(int direction) {
+    auto choices = outputAudioDeviceChoices();
+    if (choices.empty()) {
+      return;
+    }
+
+    auto current = std::find(choices.begin(), choices.end(), focusedDeck().audioOutputDeviceName);
+    int currentIndex = current == choices.end() ? 0 : static_cast<int>(std::distance(choices.begin(), current));
+    int nextIndex = (currentIndex + direction + static_cast<int>(choices.size())) % static_cast<int>(choices.size());
+    if (!reopenDeckAudioOutput(project_.focusedDeckIndex, choices[nextIndex])) {
+      triggerToast("audio switch failed", ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    triggerToast("audio: " + currentAudioOutputLabel());
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void restartLiveBrowserCueIfNeeded(int deckIndex) {
+    const Cue* active = activeCuePtr(deckIndex);
+    if (!active || active->kind != CueKind::Browser) {
+      return;
+    }
+    DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime || !runtime->browserCueLive) {
+      return;
+    }
+    startBrowserCue(deckIndex, *active);
+  }
+
+  void tickPendingOutputDisplayTransitions(Uint64 now) {
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime) {
+        continue;
+      }
+      if (runtime->pendingDisplayRuntimeRebuild) {
+        if (!output.enabled || normalizeOutputType(output.outputType) != "window") {
+          runtime->pendingDisplayRuntimeRebuild = false;
+          runtime->displayMoveRetryAtMs = 0;
+          continue;
+        }
+        if (now < runtime->displayMoveRetryAtMs) {
+          continue;
+        }
+        runtime->pendingDisplayRuntimeRebuild = false;
+        runtime->displayMoveRetryAtMs = 0;
+        if (!recreateOutputRuntime(outputIndex)) {
+          OutputRuntime* failedRuntime = runtimeForOutput(outputIndex);
+          if (failedRuntime) {
+            failedRuntime->suppressRecoveryUntilMs = now + 1200;
+          }
+          setOutputHealthState(outputIndex, OutputHealthState::Error, "display switch failed");
+          triggerToast("display switch failed");
+          continue;
+        }
+        OutputRuntime* rebuiltRuntime = runtimeForOutput(outputIndex);
+        if (rebuiltRuntime) {
+          rebuiltRuntime->pendingDisplayRuntimeRebuild = false;
+          // Do NOT clear pendingDisplayMoveFullscreen or displayMoveRetryAtMs here.
+          // createOutputRuntime sets them to defer fullscreen entry by one tick so
+          // the macOS compositor has time to assign the window to the correct
+          // NSScreen before SDL_SetWindowFullscreen is called.
+          rebuiltRuntime->suppressRecoveryUntilMs = now + 900;
+          rebuiltRuntime->lastRecoveryAttemptMs = now;
+        }
+        continue;
+      }
+      if (!runtime->pendingDisplayMoveFullscreen) {
+        continue;
+      }
+      if (runtime->recoveryPausedByEscape) {
+        // Operator escaped to windowed while a display move was pending —
+        // never re-enter fullscreen behind their back. Explicit re-arm
+        // (F / VIDEO OUTPUT ON / a new display pick) clears the escape flag.
+        runtime->pendingDisplayMoveFullscreen = false;
+        continue;
+      }
+      if (!output.enabled || normalizeOutputType(output.outputType) != "window" ||
+          !runtime->outputWindow) {
+        runtime->pendingDisplayMoveFullscreen = false;
+        continue;
+      }
+      if (now < runtime->displayMoveRetryAtMs) {
+        continue;
+      }
+
+      SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+      bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+      if (fullscreen) {
+        runtime->displayMoveRetryAtMs = now + 120;
+        continue;
+      }
+
+      runtime->pendingDisplayMoveFullscreen = false;
+      bool controlHadFocus = controlWindow_ && SDL_GetKeyboardFocus() == controlWindow_;
+      applyOutputDisplaySelection(outputIndex, false, false);
+      if (enableOutputFullscreen(outputIndex, false)) {
+        runtime->suppressRecoveryUntilMs = now + 500;
+        setOutputHealthState(outputIndex, OutputHealthState::Live);
+      } else {
+        runtime->suppressRecoveryUntilMs = now + 1200;
+        setOutputHealthState(outputIndex, OutputHealthState::Error, "fullscreen unavailable");
+      }
+      if (controlHadFocus) {
+        SDL_RaiseWindow(controlWindow_);  // don't strand the operator's keyboard on the output
+      }
+    }
+  }
+
+  // --- Screen identify overlay ---------------------------------------------
+  // Shows a numbered badge window on every connected display for a couple of
+  // seconds so the operator can match settings indices to physical screens.
+
+  void closeDisplayIdentify() {
+    for (auto& iw : identifyWindows_) {
+      if (iw.renderer) SDL_DestroyRenderer(iw.renderer);
+      if (iw.window) SDL_DestroyWindow(iw.window);
+    }
+    identifyWindows_.clear();
+    identifyUntilMs_ = 0;
+  }
+
+  void showDisplayIdentify(Uint64 durationMs = 2500) {
+    closeDisplayIdentify();
+    bool controlHadFocus = controlWindow_ && SDL_GetKeyboardFocus() == controlWindow_;
+    int displayCount = deckboyGetNumVideoDisplays();
+    for (int di = 0; di < displayCount; ++di) {
+      SDL_Rect bounds;
+      if (!deckboyGetDisplayBounds(di, &bounds)) {
+        continue;
+      }
+      int w = std::min(360, std::max(220, bounds.w / 6));
+      int h = std::min(220, std::max(140, bounds.h / 6));
+      SDL_Window* win = SDL_CreateWindow("Deckboy Display Identify",
+        w, h,
+        SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_UTILITY);
+      if (!win) {
+        continue;
+      }
+      SDL_SetWindowPosition(win,
+        bounds.x + (bounds.w - w) / 2, bounds.y + (bounds.h - h) / 2);
+      SDL_Renderer* ren = deckboyCreateRenderer(win);
+      if (!ren) {
+        SDL_DestroyWindow(win);
+        continue;
+      }
+      SDL_SetRenderVSync(ren, 1);
+      identifyWindows_.push_back({win, ren, di});
+    }
+    identifyUntilMs_ = SDL_GetTicks() + durationMs;
+    if (controlHadFocus) {
+      SDL_RaiseWindow(controlWindow_);  // creating the badges must not strand typing
+    }
+  }
+
+  void renderDisplayIdentify() {
+    if (identifyWindows_.empty()) {
+      return;
+    }
+    if (SDL_GetTicks() > identifyUntilMs_) {
+      closeDisplayIdentify();
+      return;
+    }
+    // drawText helpers are bound to controlRenderer_ textures — render text
+    // for these per-display renderers straight from TTF surfaces instead.
+    auto blitText = [](SDL_Renderer* ren, TTF_Font* font, const std::string& text,
+                       SDL_Color color, int centerX, int centerY, double maxScale, int maxW) {
+      if (!font || text.empty()) return;
+      SDL_Surface* surf = deckboy::render::shaping::renderText(font, text.c_str(), 0, color);
+      if (!surf) return;
+      if (SDL_Texture* tex = deckboyCreateTextureFromSurface(ren, surf)) {
+        double scale = std::min(maxScale, static_cast<double>(maxW) / std::max(1, surf->w));
+        scale = std::max(0.5, scale);
+        int dw = static_cast<int>(surf->w * scale);
+        int dh = static_cast<int>(surf->h * scale);
+        SDL_Rect dst {centerX - dw / 2, centerY - dh / 2, dw, dh};
+        SDL_RenderTexture(ren, tex, nullptr, &dst);
+        SDL_DestroyTexture(tex);
+      }
+      SDL_DestroySurface(surf);
+    };
+    for (auto& iw : identifyWindows_) {
+      if (!iw.renderer || !iw.window) {
+        continue;
+      }
+      int winW = 0, winH = 0;
+      SDL_GetWindowSize(iw.window, &winW, &winH);
+      SDL_SetRenderDrawColor(iw.renderer, pal.deep.r, pal.deep.g, pal.deep.b, 255);
+      SDL_RenderClear(iw.renderer);
+      SDL_SetRenderDrawColor(iw.renderer, pal.light.r, pal.light.g, pal.light.b, 255);
+      for (int border = 0; border < 3; ++border) {
+        SDL_Rect frame {border, border, winW - border * 2, winH - border * 2};
+        SDL_RenderRect(iw.renderer, &frame);
+      }
+      blitText(iw.renderer, fontLarge_, std::to_string(iw.displayIndex + 1), pal.light,
+               winW / 2, winH / 2 - 16, 3.0, winW - 40);
+      const char* dName = deckboyGetDisplayName(iw.displayIndex);
+      std::string info = dName && *dName ? std::string(dName) : std::string();
+      SDL_Rect dispBounds;
+      if (deckboyGetDisplayBounds(iw.displayIndex, &dispBounds)) {
+        info += (info.empty() ? "" : "  ") + std::to_string(dispBounds.w)
+              + "x" + std::to_string(dispBounds.h);
+      }
+      blitText(iw.renderer, fontSmall_, info, pal.mid,
+               winW / 2, winH - 26, 1.0, winW - 24);
+      SDL_RenderPresent(iw.renderer);
+    }
+  }
+
+  // Record the SDL display name for the output's current displayIndex.
+  // Called on explicit operator display choices so topology changes can
+  // re-match the intended physical display by name later.
+  void recordOutputDisplayName(OutputTarget& output) {
+    const char* name = deckboyGetDisplayName(output.displayIndex);
+    output.displayName = (name && *name) ? name : std::string();
+  }
+
+  // Resolve which SDL display index an output should target right now.
+  // SDL display indices are enumeration-order-dependent and shuffle on
+  // hot-plug/reboot, so the persisted displayName is authoritative: keep the
+  // current index if its name still matches, otherwise find the display
+  // carrying that name. Falls back to a clamped index WITHOUT erasing
+  // displayName — if the intended display comes back later, the next
+  // resolve re-matches it.
+  // HDR ON, or AUTO on a screen that is in HDR. A recording (a stream
+  // output) has no screen of its own, so AUTO there stays SDR.
+  bool outputWantsHdr(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= 32 || outputIndex >= static_cast<int>(project_.outputs.size())) return false;
+    if ((project_.hdrOutputs >> outputIndex) & 1u) return true;
+    if (!((project_.hdrAutoOutputs >> outputIndex) & 1u)) return false;
+    const OutputTarget& output = project_.outputs[static_cast<std::size_t>(outputIndex)];
+    if (normalizeOutputType(output.outputType) == "stream") return false;
+    return outputScreenInHdr(outputIndex);
+  }
+
+  bool outputScreenInHdr(int outputIndex) const {
+    const int count = deckboyGetNumVideoDisplays();
+    if (count <= 0) return false;
+    const int index = resolveOutputDisplayIndex(project_.outputs[static_cast<std::size_t>(outputIndex)], count);
+    const SDL_DisplayID id = deckboyDisplayIdFromIndex(index);
+    return id && SDL_GetBooleanProperty(SDL_GetDisplayProperties(id), SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, false);
+  }
+
+  // AUTO follows the screen: every two seconds, an AUTO output whose screen
+  // has gone into or out of HDR (Windows' switch, or a move to another
+  // screen) is rebuilt to match. One that asked and could not stays SDR.
+  Uint64 hdrAutoCheckedMs_ = 0;
+  void serviceHdrAuto(Uint64 now) {
+    if (!project_.hdrAutoOutputs || now - hdrAutoCheckedMs_ < 2000) return;
+    hdrAutoCheckedMs_ = now;
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()) && i < 32; ++i) {
+      if (!((project_.hdrAutoOutputs >> i) & 1u)) continue;
+      OutputRuntime* rt = runtimeForOutput(i);
+      if (!rt || !rt->outputWindow) continue;
+      const bool want = outputWantsHdr(i);
+      if (want != rt->hdr && !(want && rt->hdrUnavailable)) {
+        triggerToast(outputLabel(i) + (want ? ": screen is in HDR - output now HDR" : ": screen is SDR - output now SDR"));
+        recreateOutputRuntime(i);
+      }
+    }
+  }
+
+  int resolveOutputDisplayIndex(const OutputTarget& output, int displayCount) const {
+    if (displayCount <= 0) {
+      return 0;
+    }
+    int clamped = std::clamp(output.displayIndex, 0, displayCount - 1);
+    if (output.displayName.empty()) {
+      return clamped;
+    }
+    const char* currentName = deckboyGetDisplayName(clamped);
+    if (currentName && output.displayName == currentName) {
+      return clamped;
+    }
+    for (int index = 0; index < displayCount; ++index) {
+      const char* name = deckboyGetDisplayName(index);
+      if (name && output.displayName == name) {
+        return index;
+      }
+    }
+    return clamped;
+  }
+
+  void applyOutputDisplaySelection(int outputIndex,
+                                   bool allowFullscreenTransition = false,
+                                   bool reenterFullscreenAfterMove = false) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    output.outputType = normalizeOutputType(output.outputType);
+    bool streamType = output.outputType == "stream";
+    bool windowOutputEnabled = output.enabled && !streamType;
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputWindow) {
+      return;
+    }
+    Uint64 now = SDL_GetTicks();
+
+    int displayCount = deckboyGetNumVideoDisplays();
+    bool haveDisplayBounds = false;
+    SDL_Rect bounds {};
+    if (displayCount > 0) {
+      output.displayIndex = resolveOutputDisplayIndex(output, displayCount);
+      haveDisplayBounds = (deckboyGetDisplayBounds(output.displayIndex, &bounds));
+    } else {
+      output.displayIndex = 0;
+    }
+
+    auto [targetW, targetH] = outputRequestedRenderSize(outputIndex);
+    targetW = std::max(1, targetW);
+    targetH = std::max(1, targetH);
+
+    SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+    bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    if (!streamType && fullscreen && allowFullscreenTransition) {
+      SDL_SetWindowFullscreen(runtime->outputWindow, false);
+      flags = SDL_GetWindowFlags(runtime->outputWindow);
+      fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    }
+
+    // Only move/resize once SDL confirms the window is no longer fullscreen.
+    // Trying to reposition a still-fullscreen output window is unstable on
+    // some window managers and especially noisy on Windows multi-monitor hops.
+    bool canApplyGeometry = !fullscreen;
+    if (windowOutputEnabled && reenterFullscreenAfterMove) {
+      runtime->pendingDisplayMoveFullscreen = true;
+      runtime->displayMoveRetryAtMs = now + (canApplyGeometry ? 0 : 180);
+      runtime->suppressRecoveryUntilMs = now + 1500;
+      runtime->lastRecoveryAttemptMs = now;
+      setOutputHealthState(outputIndex, OutputHealthState::Recovering, "switching display");
+    }
+    if (streamType || canApplyGeometry) {
+      SDL_SetWindowSize(runtime->outputWindow, targetW, targetH);
+    }
+    if (!streamType && haveDisplayBounds && canApplyGeometry) {
+      int x = bounds.x + std::max(0, (bounds.w - targetW) / 2) + outputIndex * 20;
+      int y = bounds.y + std::max(0, (bounds.h - targetH) / 2) + outputIndex * 20;
+      if (targetW > bounds.w) x = bounds.x + 20 + outputIndex * 20;
+      if (targetH > bounds.h) y = bounds.y + 20 + outputIndex * 20;
+      SDL_SetWindowPosition(runtime->outputWindow, x, y);
+    }
+
+    if (windowOutputEnabled) {
+      showOutputWindow(runtime->outputWindow);
+      SDL_RaiseWindow(runtime->outputWindow);
+    } else {
+      SDL_HideWindow(runtime->outputWindow);
+    }
+    configureOutputCompositor(outputIndex);
+
+    if (!project_.decks.empty()) {  // std::clamp(x, 0, -1) is UB when decks is empty
+      int hostDeckIndex = std::clamp(output.hostDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+      project_.decks[hostDeckIndex].outputDisplayIndex = output.displayIndex;
+    }
+    std::string titleLabel = output.name.empty() ? outputDefaultName(outputIndex) : output.name;
+    std::string title = std::string(kOutputTitle) + " - " + titleLabel;
+    SDL_SetWindowTitle(runtime->outputWindow, title.c_str());
+  }
+
+  void applyOutputDisplaySelectionAllOutputs(bool restartLiveBrowsers,
+                                             bool allowFullscreenTransition = false) {
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      applyOutputDisplaySelection(outputIndex,
+                                 allowFullscreenTransition,
+                                 allowFullscreenTransition);
+    }
+    if (restartLiveBrowsers) {
+      for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+        restartLiveBrowserCueIfNeeded(deckIndex);
+      }
+    }
+  }
+
+  void setOutputSizingModeDisplayNative() {
+    bool changed = !project_.outputFollowDisplay;
+    project_.outputFollowDisplay = true;
+    applyOutputDisplaySelectionAllOutputs(true, true);
+    triggerToast("video mode: native (" + currentDisplayLabel() + ")");
+    playUiSound(UiSoundEffect::Toggle);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  void setOutputSizingModeFixed(int width, int height) {
+    int w = std::clamp(width, 320, 7680);
+    int h = std::clamp(height, 180, 4320);
+    bool changed = project_.outputFollowDisplay
+      || project_.outputRenderWidth != w
+      || project_.outputRenderHeight != h;
+    project_.outputFollowDisplay = false;
+    project_.outputRenderWidth = w;
+    project_.outputRenderHeight = h;
+    applyOutputDisplaySelectionAllOutputs(true, true);
+    triggerToast("video mode: fixed " + std::to_string(w) + "x" + std::to_string(h));
+    playUiSound(UiSoundEffect::Toggle);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  void sizeFocusedOutputToSelectedDisplay() {
+    applyOutputDisplaySelection(project_.focusedOutputIndex, true, true);
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (primaryOutputIndexForDeck(deckIndex) && *primaryOutputIndexForDeck(deckIndex) == project_.focusedOutputIndex) {
+        restartLiveBrowserCueIfNeeded(deckIndex);
+      }
+    }
+    triggerToast("output sized: " + outputRequestedResolutionLabel(project_.focusedOutputIndex));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void setOutputRefreshRate(double hz) {
+    double normalized = (!std::isfinite(hz) || hz <= 0.0) ? 0.0 : std::clamp(hz, 1.0, 240.0);
+    bool changed = std::abs(project_.outputRefreshRateHz - normalized) > 0.0001;
+    project_.outputRefreshRateHz = normalized;
+    applyOutputDisplaySelectionAllOutputs(false, true);
+    triggerToast("video refresh: " + outputRefreshRateLabel());
+    playUiSound(UiSoundEffect::Toggle);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  void cycleOutputRefreshRate(int direction) {
+    auto choices = refreshChoicesForOutput(project_.focusedOutputIndex);
+    if (choices.empty()) {
+      triggerToast("no refresh choices for raster");
+      return;
+    }
+
+    double current = project_.outputRefreshRateHz > 0.0 ? project_.outputRefreshRateHz : 0.0;
+
+    int currentIndex = -1;
+    for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+      if (std::abs(choices[i] - current) < 0.005) {
+        currentIndex = i;
+        break;
+      }
+    }
+
+    int nextIndex = 0;
+    if (currentIndex >= 0) {
+      nextIndex = (currentIndex + direction + static_cast<int>(choices.size())) % static_cast<int>(choices.size());
+    } else if (current > 0.0) {
+      int nearest = 0;
+      double bestDelta = std::abs(choices[0] - current);
+      for (int i = 1; i < static_cast<int>(choices.size()); ++i) {
+        double delta = std::abs(choices[i] - current);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          nearest = i;
+        }
+      }
+      nextIndex = (nearest + direction + static_cast<int>(choices.size())) % static_cast<int>(choices.size());
+    } else {
+      nextIndex = direction >= 0 ? 0 : static_cast<int>(choices.size()) - 1;
+    }
+
+    setOutputRefreshRate(choices[nextIndex]);
+  }
+
+  void cycleOutputDisplay(int direction) {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) {
+      return;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    output.displayIndex = (output.displayIndex + direction + displayCount) % displayCount;
+    recordOutputDisplayName(output);
+    bool autoSwitchedToNative = false;
+    if (!project_.outputFollowDisplay) {
+      project_.outputFollowDisplay = true;
+      autoSwitchedToNative = true;
+    }
+    Uint64 now = SDL_GetTicks();
+    bool queuedRuntimeRebuild = false;
+    if (output.enabled && normalizeOutputType(output.outputType) == "window") {
+      queuedRuntimeRebuild = queueOutputDisplayRuntimeRebuild(project_.focusedOutputIndex, now);
+      if (!queuedRuntimeRebuild) {
+        setOutputHealthState(project_.focusedOutputIndex, OutputHealthState::Error, "display switch failed");
+        triggerToast("display switch failed");
+        return;
+      }
+    } else {
+      applyOutputDisplaySelection(project_.focusedOutputIndex, true, true);
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (primaryOutputIndexForDeck(deckIndex) && *primaryOutputIndexForDeck(deckIndex) == project_.focusedOutputIndex) {
+        restartLiveBrowserCueIfNeeded(deckIndex);
+      }
+    }
+    const char* labelPtr = deckboyGetDisplayName(output.displayIndex);
+    std::string label = (labelPtr && *labelPtr) ? labelPtr : "";
+    triggerToast("display: "
+      + (label.empty() ? std::to_string(output.displayIndex + 1) : label)
+      + "  " + outputRequestedResolutionLabel(project_.focusedOutputIndex)
+      + (autoSwitchedToNative ? "  auto native" : ""));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  bool setOutputDisplayIndex(int index) {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0 || index < 0 || index >= displayCount) {
+      return false;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    output.displayIndex = index;
+    recordOutputDisplayName(output);
+    bool autoSwitchedToNative = false;
+    if (!project_.outputFollowDisplay) {
+      project_.outputFollowDisplay = true;
+      autoSwitchedToNative = true;
+    }
+    Uint64 now = SDL_GetTicks();
+    bool queuedRuntimeRebuild = false;
+    if (output.enabled && normalizeOutputType(output.outputType) == "window") {
+      queuedRuntimeRebuild = queueOutputDisplayRuntimeRebuild(project_.focusedOutputIndex, now);
+      if (!queuedRuntimeRebuild) {
+        setOutputHealthState(project_.focusedOutputIndex, OutputHealthState::Error, "display switch failed");
+        triggerToast("display switch failed");
+        return false;
+      }
+    } else {
+      applyOutputDisplaySelection(project_.focusedOutputIndex, true, true);
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (primaryOutputIndexForDeck(deckIndex) && *primaryOutputIndexForDeck(deckIndex) == project_.focusedOutputIndex) {
+        restartLiveBrowserCueIfNeeded(deckIndex);
+      }
+    }
+    triggerToast("display: " + currentDisplayLabel() + "  "
+      + outputRequestedResolutionLabel(project_.focusedOutputIndex)
+      + (autoSwitchedToNative ? "  auto native" : ""));
+    warnIfOutputMirrorsControl(project_.focusedOutputIndex);
+    markProjectDirty();
+    return true;
+  }
+
+  // One fingerprint per display: identity plus desktop placement. A monitor
+  // that is unplugged and re-plugged, re-arranged, or switched to another
+  // resolution all change this string, which is what the topology scan
+  // compares against — SDL display indices alone are not stable enough.
+  std::vector<std::string> currentDisplaySignatureEntries() const {
+    int displayCount = deckboyGetNumVideoDisplays();
+    std::vector<std::string> entries;
+    entries.reserve(static_cast<std::size_t>(std::max(0, displayCount)));
+    for (int index = 0; index < displayCount; ++index) {
+      const char* name = deckboyGetDisplayName(index);
+      SDL_Rect bounds {};
+      std::string entry = name && *name ? name : ("display " + std::to_string(index + 1));
+      entry += '@';
+      if (deckboyGetDisplayBounds(index, &bounds)) {
+        entry += std::to_string(bounds.x) + ',' + std::to_string(bounds.y) + ','
+               + std::to_string(bounds.w) + ',' + std::to_string(bounds.h);
+      } else {
+        entry += "?";
+      }
+      entries.push_back(std::move(entry));
+    }
+    return entries;
+  }
+
+  // ── Mirrored vs extended ──────────────────────────────────────────────
+  // SDL sees desktops, not screens: two mirrored screens are ONE display, and
+  // the one SDL does not name simply vanishes from the list. These ask the OS
+  // what is really behind each display, so the operator is told "mirrored"
+  // instead of "disconnected", and is warned when the program feed lands on
+  // the screen they are working on.
+  const deckboy::platform::DisplayMirrorInfo* displayMirrorInfo(int displayIndex) const {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayIndex < 0 || displayIndex >= displayCount) {
+      return nullptr;
+    }
+    if (static_cast<int>(displayMirrorInfo_.size()) != displayCount) {
+      displayMirrorInfo_.assign(static_cast<std::size_t>(displayCount), {});
+      for (int index = 0; index < displayCount; ++index) {
+        SDL_Rect bounds {};
+        if (deckboyGetDisplayBounds(index, &bounds)) {
+          displayMirrorInfo_[static_cast<std::size_t>(index)] =
+            deckboy::platform::queryDisplayMirrorInfo(bounds.x, bounds.y, bounds.w, bounds.h,
+                                                      deckboyGetDisplayName(index));
+        }
+      }
+    }
+    return &displayMirrorInfo_[static_cast<std::size_t>(displayIndex)];
+  }
+
+  bool displayIsMirrored(int displayIndex) const {
+    const auto* info = displayMirrorInfo(displayIndex);
+    return info && info->known && info->panelCount > 1;
+  }
+
+  // "mirrored with DELL U2720Q", "extended", or "" when the OS cannot say
+  // (Wayland). Short enough for a picker row.
+  std::string displayArrangementLabel(int displayIndex) const {
+    const auto* info = displayMirrorInfo(displayIndex);
+    if (!info || !info->known) {
+      return {};
+    }
+    if (info->panelCount <= 1) {
+      return "extended";
+    }
+    std::string label = "mirrored with ";
+    for (std::size_t i = 0; i < info->otherPanels.size(); ++i) {
+      label += (i ? ", " : "") + info->otherPanels[i];
+    }
+    return label;
+  }
+
+  // The SDL display a vanished panel is now mirroring, or -1 if it really is
+  // gone. Matched by name, the same identity outputs are pinned by.
+  int displayHostingMirroredPanel(const std::string& panelName) const {
+    if (panelName.empty()) {
+      return -1;
+    }
+    int displayCount = deckboyGetNumVideoDisplays();
+    for (int index = 0; index < displayCount; ++index) {
+      const auto* info = displayMirrorInfo(index);
+      if (info && std::find(info->otherPanels.begin(), info->otherPanels.end(), panelName) !=
+                    info->otherPanels.end()) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  // A fullscreen output on a mirrored display that also carries the control
+  // window covers the operator's own screen. Allowed (a one-screen rig does it
+  // on purpose) but never silent.
+  void warnIfOutputMirrorsControl(int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+        !controlWindow_) {
+      return;
+    }
+    int displayIndex = outputDisplayIndex(outputIndex);
+    if (!displayIsMirrored(displayIndex) ||
+        deckboyGetWindowDisplayIndex(controlWindow_) != displayIndex) {
+      return;
+    }
+    triggerToast("output " + std::to_string(outputIndex + 1) + " is on a MIRRORED display ("
+                 + displayArrangementLabel(displayIndex)
+                 + ") - it covers the control screen. Set displays to Extend.",
+                 ToastKind::Warning, kToastReadableMs);
+  }
+
+  static std::string displayEntryName(const std::string& entry) {
+    std::size_t at = entry.rfind('@');
+    return at == std::string::npos ? entry : entry.substr(0, at);
+  }
+
+  void refreshDisplayTopology(bool withToast = false, bool forceRehome = false) {
+    int displayCount = deckboyGetNumVideoDisplays();
+    if (displayCount <= 0) {
+      // Zero displays is a transient state (RDP handoff, driver reset).
+      // Don't mutate persisted display targets over it — when displays
+      // return, name matching restores the intended routing. The old
+      // fingerprints are deliberately kept so the return scan still sees a
+      // difference and re-homes the outputs.
+      if (withToast) {
+        triggerToast("display scan: no displays reported");
+      }
+      return;
+    }
+
+    std::vector<std::string> previousEntries = displaySignatureEntries_;
+    std::vector<std::string> entries = currentDisplaySignatureEntries();
+    bool firstScan = previousEntries.empty();
+    displaySignatureEntries_ = entries;
+    displayMirrorInfo_.clear();
+    observedDisplayCount_ = displayCount;
+
+    // Re-home only the outputs whose target display actually changed: either
+    // name matching moved them to a different index, or the display sitting
+    // at their index is not the one that was there before. A topology event
+    // must never churn an unaffected output through a fullscreen
+    // exit/re-enter (v0.76.19 regression: focus-stealing recovery fight).
+    bool changed = false;
+    std::vector<int> affected;
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      int previousIndex = output.displayIndex;
+      int resolved = resolveOutputDisplayIndex(output, displayCount);
+      if (previousIndex != resolved) {
+        output.displayIndex = resolved;
+        changed = true;
+      }
+      if (firstScan && !forceRehome) {
+        continue;
+      }
+      if (forceRehome) {
+        affected.push_back(outputIndex);
+        continue;
+      }
+      bool displayMoved = previousIndex != resolved;
+      bool panelSwapped =
+        previousIndex < 0 || previousIndex >= static_cast<int>(previousEntries.size()) ||
+        resolved < 0 || resolved >= static_cast<int>(entries.size()) ||
+        previousEntries[static_cast<std::size_t>(previousIndex)] !=
+          entries[static_cast<std::size_t>(resolved)];
+      if (displayMoved || panelSwapped) {
+        affected.push_back(outputIndex);
+      }
+    }
+    if (changed) {
+      markProjectDirty();
+    }
+
+    // An explicit hot-plug is the one moment a stable fullscreen output SHOULD
+    // be moved: the per-tick recovery path deliberately ignores `wrongDisplay`
+    // while fullscreen (SDL's reported display disagrees on mixed-DPI setups),
+    // so without this a monitor connected mid-show never picks up its output.
+    // This is one-shot per real topology change, not a poll.
+    for (int outputIndex : affected) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      if (!output.enabled || normalizeOutputType(output.outputType) != "window") {
+        continue;
+      }
+      OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime || !runtime->outputWindow || runtime->recoveryPausedByEscape) {
+        continue;
+      }
+      bool fullscreen = (SDL_GetWindowFlags(runtime->outputWindow) & SDL_WINDOW_FULLSCREEN) != 0;
+      bool wantsFullscreen = fullscreen || runtime->fullscreenIntended;
+
+      // The panel this output is pinned to is gone. Park it windowed rather
+      // than re-homing the program feed onto a monitor the operator is
+      // working on. fullscreenIntended survives, so the return trip is
+      // automatic.
+      if (!output.displayName.empty() &&
+          std::none_of(entries.begin(), entries.end(), [&](const std::string& entry) {
+            return displayEntryName(entry) == output.displayName;
+          })) {
+        runtime->awaitingDisplayReturn = true;
+        if (fullscreen) {
+          SDL_SetWindowFullscreen(runtime->outputWindow, false);
+        }
+        SDL_HideWindow(runtime->outputWindow);
+        // Mirroring removes a screen from SDL's list exactly as unplugging
+        // does. Say which one happened: the fix is a display setting, not a
+        // cable.
+        int mirrorHost = displayHostingMirroredPanel(output.displayName);
+        if (mirrorHost >= 0) {
+          const char* hostName = deckboyGetDisplayName(mirrorHost);
+          std::string host = hostName && *hostName ? hostName : ("display " + std::to_string(mirrorHost + 1));
+          setOutputHealthState(outputIndex, OutputHealthState::Error,
+                               "display mirrored: " + output.displayName + " is mirroring " + host);
+          triggerToast("output " + std::to_string(outputIndex + 1) + " parked - "
+                       + output.displayName + " is MIRRORING " + host + ". Set displays to Extend.",
+                       ToastKind::Warning, kToastReadableMs);
+        } else {
+          setOutputHealthState(outputIndex, OutputHealthState::Error,
+                               "display missing: " + output.displayName);
+          triggerToast("output " + std::to_string(outputIndex + 1) + " parked - "
+                       + output.displayName + " disconnected");
+        }
+        continue;
+      }
+      if (runtime->awaitingDisplayReturn) {
+        runtime->awaitingDisplayReturn = false;
+        triggerToast("output " + std::to_string(outputIndex + 1) + " restored - "
+                     + output.displayName + " reconnected");
+      }
+
+      // Clear the strike backoff: those strikes were counted against the old
+      // topology, and a genuine hot-plug deserves a fresh attempt.
+      runtime->recoveryStrikeWindowStartMs = 0;
+      runtime->recoveryStrikeCount = 0;
+      runtime->suppressRecoveryUntilMs = 0;
+      bool controlHadFocus = controlWindow_ && SDL_GetKeyboardFocus() == controlWindow_;
+      applyOutputDisplaySelection(outputIndex, true, wantsFullscreen);
+      if (controlHadFocus) {
+        SDL_RaiseWindow(controlWindow_);
+      }
+      warnIfOutputMirrorsControl(outputIndex);
+    }
+
+    // Heal everything else via the recovery path, which honors
+    // recoveryPausedByEscape and fullscreenIntended.
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      if (std::find(affected.begin(), affected.end(), outputIndex) != affected.end()) {
+        continue;  // already re-homed above; a second pass would fight it
+      }
+      recoverWindowOutputIfNeeded(outputIndex, false);
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      restartLiveBrowserCueIfNeeded(deckIndex);
+    }
+    if (withToast) {
+      triggerToast(describeDisplayTopologyChange(previousEntries, entries, affected));
+      playUiSound(UiSoundEffect::Toggle);
+    }
+  }
+
+  // Operator-facing summary of what just happened to the desktop, so the
+  // toast says "display connected: DELL U2720Q" instead of a bare count.
+  std::string describeDisplayTopologyChange(const std::vector<std::string>& previousEntries,
+                                            const std::vector<std::string>& entries,
+                                            const std::vector<int>& affected) const {
+    std::vector<std::string> previousNames;
+    std::vector<std::string> currentNames;
+    for (const auto& entry : previousEntries) previousNames.push_back(displayEntryName(entry));
+    for (const auto& entry : entries) currentNames.push_back(displayEntryName(entry));
+
+    auto missingFrom = [](const std::vector<std::string>& from,
+                          const std::vector<std::string>& against) {
+      std::vector<std::string> names = against;
+      std::vector<std::string> result;
+      for (const auto& name : from) {
+        auto it = std::find(names.begin(), names.end(), name);
+        if (it == names.end()) {
+          result.push_back(name);
+        } else {
+          names.erase(it);  // consume, so duplicate panel names pair off
+        }
+      }
+      return result;
+    };
+    std::vector<std::string> added = missingFrom(currentNames, previousNames);
+    std::vector<std::string> removed = missingFrom(previousNames, currentNames);
+
+    std::string summary;
+    if (!added.empty()) {
+      summary = "display connected: " + added.front();
+      if (added.size() > 1) summary += " +" + std::to_string(added.size() - 1);
+    } else if (!removed.empty()) {
+      summary = "display disconnected: " + removed.front();
+      if (removed.size() > 1) summary += " +" + std::to_string(removed.size() - 1);
+    } else if (previousNames != currentNames || previousEntries != entries) {
+      summary = "displays rearranged";
+    } else {
+      summary = "display scan";
+    }
+    summary += " (" + std::to_string(static_cast<int>(entries.size())) + " total)";
+    if (!affected.empty()) {
+      summary += " - " + std::to_string(static_cast<int>(affected.size()))
+               + (affected.size() == 1 ? " output re-homed" : " outputs re-homed");
+    }
+    return summary;
+  }
+
+  bool setAudioOutputDevice(const std::string& deviceName) {
+    if (!reopenDeckAudioOutput(project_.focusedDeckIndex, deviceName)) {
+      triggerToast("audio switch failed", ToastKind::Warning, kToastReadableMs);
+      return false;
+    }
+    triggerToast("audio: " + currentAudioOutputLabel());
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool recoverWindowOutputIfNeeded(int outputIndex, bool withToast = false) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.enabled || normalizeOutputType(output.outputType) != "window") {
+      return false;
+    }
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || !runtime->outputWindow) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "output window unavailable");
+      return false;
+    }
+    if (runtime->recoveryPausedByEscape) {
+      setOutputHealthState(outputIndex, OutputHealthState::Armed, "escaped to windowed");
+      return false;
+    }
+    if (runtime->awaitingDisplayReturn) {
+      // Pinned display is unplugged. Don't re-assert fullscreen anywhere —
+      // the topology scan un-parks this output when the panel comes back.
+      setOutputHealthState(outputIndex, OutputHealthState::Error,
+                           "display missing: " + output.displayName);
+      return false;
+    }
+    Uint64 now = SDL_GetTicks();
+    if (runtime->pendingDisplayRuntimeRebuild ||
+        runtime->pendingDisplayMoveFullscreen ||
+        now < runtime->suppressRecoveryUntilMs) {
+      return false;
+    }
+
+    SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+    bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    bool hidden = (flags & SDL_WINDOW_HIDDEN) != 0;
+    bool minimized = (flags & SDL_WINDOW_MINIMIZED) != 0;
+
+    int displayCount = deckboyGetNumVideoDisplays();
+    int targetDisplay = displayCount > 0
+      ? std::clamp(output.displayIndex, 0, displayCount - 1)
+      : 0;
+    int windowDisplay = deckboyGetWindowDisplayIndex(runtime->outputWindow);
+    // SDL can report -1 transiently during fullscreen transitions.
+    // Treat unknown index as non-actionable to avoid recovery loops.
+    // Deliberately NOT checked while fullscreen: SDL's reported display for a
+    // fullscreen window can persistently disagree with the target on
+    // mixed-DPI multi-monitor setups, and acting on it here produced an
+    // exit/move/re-enter/raise fight every recovery tick (v0.76.19
+    // regression: focus-stealing churn, "trying to take over the wrong
+    // screen"). A stable fullscreen window is left alone; wrong placement is
+    // for the operator to correct via an explicit display pick.
+    bool wrongDisplay = false;
+    if (displayCount > 0 && !fullscreen && windowDisplay >= 0) {
+      wrongDisplay = windowDisplay != targetDisplay;
+    }
+
+    // Re-assert fullscreen whenever the user intended it and the WM dropped it.
+    // fullscreenIntended is set on explicit toggle-on and cleared on toggle-off/escape.
+    bool needsFullscreenRecovery = (!fullscreen) && runtime->fullscreenIntended;
+    bool needsRecovery = hidden || minimized || wrongDisplay || needsFullscreenRecovery;
+    if (!needsRecovery) {
+      return false;
+    }
+    if (runtime->lastRecoveryAttemptMs > 0 &&
+        (now - runtime->lastRecoveryAttemptMs) < 1200) {
+      return false;
+    }
+    // Strike backoff: a healthy output needs recovery rarely. If we're here
+    // repeatedly in a short window, recovery itself is the problem (each
+    // pass raises the output window, stealing keyboard focus from the
+    // control window) — stop fighting and tell the operator.
+    std::string recoverReason = hidden ? "window hidden"
+      : (minimized ? "window minimized"
+      : (wrongDisplay ? "wrong display"
+      : "fullscreen dropped"));
+    constexpr int kMaxRecoveryStrikes = 3;
+    constexpr Uint64 kRecoveryStrikeWindowMs = 15000;
+    if (runtime->recoveryStrikeWindowStartMs == 0 ||
+        now - runtime->recoveryStrikeWindowStartMs > kRecoveryStrikeWindowMs) {
+      runtime->recoveryStrikeWindowStartMs = now;
+      runtime->recoveryStrikeCount = 0;
+    }
+    if (++runtime->recoveryStrikeCount > kMaxRecoveryStrikes) {
+      runtime->suppressRecoveryUntilMs = now + 30000;
+      runtime->recoveryStrikeWindowStartMs = 0;
+      runtime->recoveryStrikeCount = 0;
+      // Name the trigger — "unstable" alone hides what keeps firing.
+      setOutputHealthState(outputIndex, OutputHealthState::Error,
+                           "output unstable (" + recoverReason + ") - recovery paused 30s");
+      triggerToast("output " + std::to_string(outputIndex + 1)
+                   + " unstable (" + recoverReason + "): recovery paused 30s");
+      return false;
+    }
+    runtime->lastRecoveryAttemptMs = now;
+    setOutputHealthState(outputIndex, OutputHealthState::Recovering, recoverReason);
+
+    // Raising the output window moves keyboard focus to it, where all keys
+    // except Esc are ignored by design — restore focus to the control window
+    // afterwards if the operator was working there ("typing becomes
+    // difficult" regression).
+    bool controlHadFocus = controlWindow_ && SDL_GetKeyboardFocus() == controlWindow_;
+    applyOutputDisplaySelection(outputIndex, wrongDisplay);
+    showOutputWindow(runtime->outputWindow);
+    SDL_RaiseWindow(runtime->outputWindow);
+    bool fullscreenOk = enableOutputFullscreen(outputIndex, false);
+    if (controlHadFocus) {
+      SDL_RaiseWindow(controlWindow_);
+    }
+    if (!fullscreenOk) {
+      setOutputHealthState(outputIndex, OutputHealthState::Error, "fullscreen unavailable");
+      if (withToast) {
+        triggerToast("output recover failed: fullscreen unavailable");
+      }
+      return false;
+    }
+    setOutputHealthState(outputIndex, OutputHealthState::Live);
+    if (withToast) {
+      std::string displayLabel = "display " + std::to_string(targetDisplay + 1);
+      if (displayCount > 0) {
+        const char* displayName = deckboyGetDisplayName(targetDisplay);
+        if (displayName && *displayName) {
+          displayLabel = displayName;
+        }
+      }
+      triggerToast("output recovered: " + outputLabel(outputIndex) + " -> " + displayLabel);
+    }
+    return true;
+  }
+
+  std::string currentDisplayLabel() const {
+    const char* name = deckboyGetDisplayName(outputDisplayIndex(project_.focusedOutputIndex));
+    if (name && *name) {
+      return name;
+    }
+    return "display " + std::to_string(outputDisplayIndex(project_.focusedOutputIndex) + 1);
+  }
+
+  bool cueIsOverlayOnly(const Cue& cue) const {
+    return cue.kind == CueKind::LowerThird || cue.kind == CueKind::Pip;
+  }
+
+  bool cueIndexMatchesOverlayRole(const Deck& deck, int cueIndex, bool overlayOnly) const {
+    return cueIndex >= 0 &&
+           cueIndex < static_cast<int>(deck.cues.size()) &&
+           cueIsOverlayOnly(deck.cues[cueIndex]) == overlayOnly;
+  }
+
+  std::vector<int> cueIndicesForOverlayRole(const Deck& deck, bool overlayOnly) const {
+    std::vector<int> indices;
+    indices.reserve(deck.cues.size());
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+        indices.push_back(cueIndex);
+      }
+    }
+    return indices;
+  }
+
+  int firstCueIndexForOverlayRole(const Deck& deck, bool overlayOnly) const {
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+        return cueIndex;
+      }
+    }
+    return -1;
+  }
+
+  int lastCueIndexForOverlayRole(const Deck& deck, bool overlayOnly) const {
+    for (int cueIndex = static_cast<int>(deck.cues.size()) - 1; cueIndex >= 0; --cueIndex) {
+      if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+        return cueIndex;
+      }
+    }
+    return -1;
+  }
+
+  int adjacentCueIndexForOverlayRole(const Deck& deck, int currentIndex, int direction,
+                                     bool overlayOnly, bool wrap = false) const {
+    if (deck.cues.empty() || direction == 0) {
+      return -1;
+    }
+    if (currentIndex < 0 || currentIndex >= static_cast<int>(deck.cues.size())) {
+      return direction > 0
+        ? firstCueIndexForOverlayRole(deck, overlayOnly)
+        : lastCueIndexForOverlayRole(deck, overlayOnly);
+    }
+
+    if (direction > 0) {
+      for (int cueIndex = currentIndex + 1; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+        if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+          return cueIndex;
+        }
+      }
+      if (wrap) {
+        for (int cueIndex = 0; cueIndex < currentIndex; ++cueIndex) {
+          if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+            return cueIndex;
+          }
+        }
+      }
+    } else {
+      for (int cueIndex = currentIndex - 1; cueIndex >= 0; --cueIndex) {
+        if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+          return cueIndex;
+        }
+      }
+      if (wrap) {
+        for (int cueIndex = static_cast<int>(deck.cues.size()) - 1; cueIndex > currentIndex; --cueIndex) {
+          if (cueIndexMatchesOverlayRole(deck, cueIndex, overlayOnly)) {
+            return cueIndex;
+          }
+        }
+      }
+    }
+    return -1;
+  }
+
+  int nextCueIndexForDeck(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return -1;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    int cueCount = static_cast<int>(deck.cues.size());
+    if (cueCount <= 0) {
+      return -1;
+    }
+    if (deck.selectedIndex >= 0 &&
+        deck.selectedIndex < cueCount &&
+        deck.selectedIndex != deck.activeIndex &&
+        !cueIsOverlayOnly(deck.cues[deck.selectedIndex])) {
+      return deck.selectedIndex;
+    }
+    if (deck.activeIndex >= 0 && deck.activeIndex < cueCount && !cueIsOverlayOnly(deck.cues[deck.activeIndex])) {
+      int nextPlayable = adjacentCueIndexForOverlayRole(deck, deck.activeIndex, 1, false, deck.playlistLoop);
+      if (nextPlayable >= 0) {
+        return nextPlayable;
+      }
+    }
+    if (deck.selectedIndex >= 0 &&
+        deck.selectedIndex < cueCount &&
+        !cueIsOverlayOnly(deck.cues[deck.selectedIndex])) {
+      return deck.selectedIndex;
+    }
+    return firstCueIndexForOverlayRole(deck, false);
+  }
+
+  void stopBrowserCue(int deckIndex) {
+    DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime) {
+      return;
+    }
+    // Stop x11grab capture in the media engine
+    if (runtime->mediaEngine && runtime->mediaEngine->isBrowserCapturing()) {
+      runtime->mediaEngine->stopBrowserCapture();
+    }
+    if (runtime->browserRenderer) {
+      runtime->browserRenderer->stop();
+      runtime->browserRenderer.reset();
+    }
+    runtime->browserCueLive = false;
+    runtime->browserScrollbarNextMs = 0;
+    runtime->browserScrollbarUntilMs = 0;
+  }
+
+  void stopBrowserCue() {
+    stopBrowserCue(project_.focusedDeckIndex);
+  }
+  bool startBrowserCue(int deckIndex, const Cue& cue) {
+    DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime) {
+      return false;
+    }
+    std::string browserUrl = normalizeBrowserUrl(cue.path);
+    stopBrowserCue(deckIndex);
+
+    auto [targetW, targetH] = outputRenderSizeForDeck(deckIndex);
+    int w = cue.width > 0 ? cue.width : targetW;
+    int h = cue.height > 0 ? cue.height : targetH;
+    bool legacyRaster = cue.width == kOutputWidth && cue.height == kOutputHeight;
+    if (legacyRaster && (targetW != kOutputWidth || targetH != kOutputHeight)) {
+      w = targetW;
+      h = targetH;
+    }
+    runtime->browserRenderer = std::make_unique<deckboy::platform::browser::BrowserRenderer>();
+    if (!runtime->browserRenderer->start(browserUrl, w, h)) {
+      std::string lastError = runtime->browserRenderer->lastError();
+      if (!lastError.empty()) {
+        triggerToast("browser: " + lastError,
+                     ToastKind::Warning, kToastReadableMs);
+      }
+      return false;
+    }
+    triggerToast("browser loading…");
+    return true;
+  }
+
+  bool startBrowserCue(const Cue& cue) {
+    return startBrowserCue(project_.focusedDeckIndex, cue);
+  }
+
+  // Called from App::update() to advance the phased browser startup.
+  void tickBrowserStartup(int deckIndex) {
+    DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime || !runtime->browserRenderer) {
+      return;
+    }
+
+    std::string prevError = runtime->browserRenderer->lastError();
+    runtime->browserRenderer->tick();
+
+    // SCROLLBARS OFF, REPEATEDLY, FOR THE FIRST FEW SECONDS.
+    //
+    // A page can restyle itself whenever it likes -- a framework mounting,
+    // fonts landing, a consent banner unlocking the body's overflow -- so one
+    // injection at load is not enough: the bar comes back a moment later,
+    // which is exactly how it was reported ("the raster opened with a scroll
+    // bar"). Re-applied on a slow cadence while the page settles, then left
+    // alone; the rule is !important and idempotent, so this is cheap.
+    if (!project_.browserScrollbars && runtime->browserRenderer->isRunning()) {
+      const Uint64 now = SDL_GetTicks();
+      if (runtime->browserScrollbarNextMs == 0) {
+        runtime->browserScrollbarNextMs = now;
+        runtime->browserScrollbarUntilMs = now + 8000;
+      }
+      if (now >= runtime->browserScrollbarNextMs && now <= runtime->browserScrollbarUntilMs) {
+        runtime->browserRenderer->setScrollbarsVisible(false);
+        runtime->browserScrollbarNextMs = now + 700;
+      }
+    }
+    std::string nowError = runtime->browserRenderer->lastError();
+    if (!nowError.empty()) {
+      if (prevError.empty()) {
+        triggerToast("browser: " + nowError,
+                     ToastKind::Warning, kToastReadableMs);
+      }
+      return;
+    }
+
+    MediaEngine* eng = runtime->mediaEngine.get();
+
+    std::string captureSourceRef;
+    int captureW = 0;
+    int captureH = 0;
+    if (!runtime->browserRenderer->consumeCaptureRequest(captureSourceRef, captureW, captureH)) {
+      // Direct frame path (WebView2 offscreen rendering)
+      deckboy::platform::browser::BrowserFrame frame;
+      if (runtime->browserRenderer->grabFrame(frame) && frame.width > 0 && eng) {
+        if (!runtime->browserCueLive) {
+          const Deck& deck = project_.decks[deckIndex];
+          double transSecs = deck.transitionSeconds;
+          TransitionStyle transStyle = parseTransitionStyleToken(deck.transitionStyle);
+          if (deck.activeIndex >= 0 && deck.activeIndex < (int)deck.cues.size()) {
+            const Cue& ac = deck.cues[deck.activeIndex];
+            if (ac.cueTransitionSeconds >= 0.0) transSecs = ac.cueTransitionSeconds;
+            if (!ac.cueTransitionStyle.empty()) transStyle = parseTransitionStyleToken(ac.cueTransitionStyle);
+          }
+          eng->startBrowserFrameMode(frame.width, frame.height, transSecs, transStyle);
+          runtime->browserCueLive = true;
+          runtime->browserRenderer->markCaptureStarted();
+          triggerToast("browser live");
+        }
+        eng->pushBrowserFrame(frame.rgba.data(), frame.width, frame.height);
+      }
+      runtime->browserCueLive = runtime->browserCueLive || runtime->browserRenderer->isLive();
+      return;
+    }
+
+    if (!eng) {
+      runtime->browserRenderer->markCaptureFailed("media engine unavailable");
+      return;
+    }
+
+    const Deck& deck = project_.decks[deckIndex];
+    double transSecs = deck.transitionSeconds;
+    TransitionStyle transStyle = parseTransitionStyleToken(deck.transitionStyle);
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size())) {
+      const Cue& ac = deck.cues[deck.activeIndex];
+      if (ac.cueTransitionSeconds >= 0.0) transSecs = ac.cueTransitionSeconds;
+      if (!ac.cueTransitionStyle.empty()) transStyle = parseTransitionStyleToken(ac.cueTransitionStyle);
+    }
+
+    bool captureStarted = eng->startBrowserCapture(
+      captureSourceRef,
+      captureW,
+      captureH,
+      deck.activeIndex >= 0 ? deck.cues[deck.activeIndex].fadeInSeconds : 0.0,
+      deck.activeIndex >= 0 ? deck.cues[deck.activeIndex].fadeOutSeconds : 0.0,
+      transSecs,
+      transStyle
+    );
+    if (!captureStarted) {
+      runtime->browserRenderer->markCaptureFailed("capture start failed");
+      triggerToast("browser capture failed");
+      return;
+    }
+    runtime->browserRenderer->markCaptureStarted();
+    runtime->browserCueLive = true;
+    triggerToast("browser live");
+  }

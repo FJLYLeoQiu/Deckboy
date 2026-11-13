@@ -1,0 +1,8554 @@
+// ============================================================================
+// app_cue_mgmt.ipp — Cue list management operations.
+//
+// Implements operations for managing the cue list:
+//
+//   Cue properties:
+//     toggleShuffle()          — toggle deck shuffle mode
+//     toggleSelectedLoop()     — toggle loop on selected cues
+//     setSelectedCueEndAction() — set what happens when a cue finishes
+//
+//   Cue list operations:
+//     addCue() / addCueAtIndex()   — add new cues (video, image, pattern, etc.)
+//     deleteCue()                   — remove cue from the list
+//     duplicateCue()                — clone the selected cue
+//     moveCueUp() / moveCueDown()   — reorder cues in the list
+//     renameCue()                   — rename via inline text editor
+//
+//   Import/export:
+//     importWithPicker()        — open file picker to import media
+//     addBrowserCueFromPrompt() — create a Browser cue from URL input
+//     addKawaiiPatternCue()     — create a Pattern cue, always Pocket Test
+//     openSourceTypeMenu()      — open the source type selection menu
+//
+//   Multi-selection:
+//     forEachFocusedSelectedCueMutable() — iterate over selected cues
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Toggle shuffle mode on the focused deck.
+  void toggleShuffle() {
+    Deck& deck = focusedDeckMutable();
+    deck.shuffle = !deck.shuffle;
+    triggerToast(deck.shuffle ? "shuffle on" : "shuffle off");
+    playUiSound(deck.shuffle ? UiSoundEffect::Shuffle : UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void selectAllCuesInFocusedDeck() {
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      return;
+    }
+    deck.selectedIndices.clear();
+    for (int i = 0; i < static_cast<int>(deck.cues.size()); ++i) {
+      deck.selectedIndices.push_back(i);
+    }
+    if (deck.selectedIndex < 0) {
+      deck.selectedIndex = 0;
+    }
+    onSelectionChanged();
+    triggerToast("selected all " + std::to_string(deck.cues.size()) + " cues");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  // Loop and Hold flip what the cue WILL do (cueLoopsAtEnd / cueHoldsAtEnd),
+  // and carry an explicit end action with them -- see setCueLoopsAtEnd.
+  void toggleSelectedLoop() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    bool next = !cueLoopsAtEnd(*cue);
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      setCueLoopsAtEnd(each, next);
+    });
+    triggerToast(next ? "loop on" : "loop off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedLoop(bool enabled) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cueLoopsAtEnd(*cue) == enabled) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      setCueLoopsAtEnd(each, enabled);
+    });
+    triggerToast(enabled ? "loop on" : "loop off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // LOCK TO THE SCREEN (Cue::lockToScreen) on every selected cue.
+  void setSelectedLockToScreen(bool enabled) {
+    if (!selectedCueMutable()) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.lockToScreen = enabled;
+    });
+    triggerToast(enabled ? "lock to screen on" : "lock to screen off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleSelectedPauseOnLastFrame() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    bool next = !cueHoldsAtEnd(*cue);
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      setCueHoldsAtEnd(each, next);
+    });
+    triggerToast(next ? "hold on" : "hold off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedPauseOnLastFrame(bool enabled) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cueHoldsAtEnd(*cue) == enabled) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      setCueHoldsAtEnd(each, enabled);
+    });
+    triggerToast(enabled ? "hold on" : "hold off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleSelectedPauseAtBeginning() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    bool next = !cue->pauseAtBeginning;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.pauseAtBeginning = next;
+    });
+    triggerToast(next ? "pause at begin: on" : "pause at begin: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedPauseAtBeginning(bool enabled) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->pauseAtBeginning == enabled) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.pauseAtBeginning = enabled;
+    });
+    triggerToast(enabled ? "pause at begin: on" : "pause at begin: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleSelectedAudioEnabled() {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return each.hasAudio;
+    });
+    if (!cue) {
+      return;
+    }
+    bool next = !cue->audioEnabled;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioEnabled = next;
+      }
+    });
+    triggerToast(next ? "cue audio: on" : "cue audio: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // Which of the file's sound tracks plays -- a second language, a commentary,
+  // a clean feed. On the cue that is live it changes now, from where it is:
+  // the decode restarts at the current position with the picture held.
+  void cycleSelectedAudioTrack() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->audioTrackCount < 2) {
+      triggerToast("this file has one sound track");
+      return;
+    }
+    pushUndoSnapshot();
+    cue->audioTrack = (cue->audioTrack + 1) % cue->audioTrackCount;
+    markProjectDirty();
+    const Deck& deck = focusedDeck();
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+        deck.cues[deck.activeIndex].id == cue->id) {
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        engine->refreshActiveCueRuntime(cue);
+      }
+    }
+    triggerToast("sound track " + std::to_string(cue->audioTrack + 1) + " of " +
+                 std::to_string(cue->audioTrackCount));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void setSelectedAudioEnabled(bool enabled) {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return each.hasAudio;
+    });
+    if (!cue || cue->audioEnabled == enabled) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioEnabled = enabled;
+      }
+    });
+    triggerToast(enabled ? "cue audio: on" : "cue audio: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // ── Per-cue audio trim/pan/mono (v0.78.9) ──────────────────────────────
+  // Single write path shared by the inspector quick rows (scrubbable) and
+  // the remote AUDIOGAIN/AUDIOPAN/AUDIOMONO commands. Edits apply LIVE:
+  // markProjectDirty → engine snapshot sync → the audio thread's atomic
+  // mirrors pick them up next tick — no decode restart.
+
+  // How many decks the last audio edit reached, so the toast can say so.
+  int lastAudioEditDeckCount_ = 0;
+
+  bool setSelectedAudioGainDb(double db) {
+    double clamped = std::clamp(db, static_cast<double>(kCueAudioGainMinDb),
+                                static_cast<double>(kCueAudioGainMaxDb));
+    lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioGainDb = static_cast<float>(clamped);
+      }
+    });
+    const bool any = lastAudioEditDeckCount_ > 0;
+    if (any) {
+      markProjectDirty();
+    }
+    return any;
+  }
+
+  // Appended to an audio toast when the edit reached past the deck the
+  // operator is looking at.
+  std::string audioEditScopeSuffix() const {
+    return lastAudioEditDeckCount_ > 1
+      ? ("  (" + std::to_string(lastAudioEditDeckCount_) + " decks)")
+      : std::string();
+  }
+
+  // RELATIVE, PER CUE. This took the primary cue's gain, added the step and
+  // wrote that one number to every selected cue -- so selecting forty cues
+  // with forty different trims and pressing - flattened them all to a single
+  // level. "Bring their gain down together" means each one moves by the same
+  // dB from where it was. A typed value is still an absolute set.
+  bool adjustSelectedAudioGain(double deltaDb) {
+    lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioGainDb = static_cast<float>(std::clamp(
+          static_cast<double>(each.audioGainDb) + deltaDb,
+          static_cast<double>(kCueAudioGainMinDb),
+          static_cast<double>(kCueAudioGainMaxDb)));
+      }
+    });
+    const bool any = lastAudioEditDeckCount_ > 0;
+    if (any) {
+      markProjectDirty();
+    }
+    return any;
+  }
+
+  // How many selected cues an AUDIO edit would reach, so the inspector can
+  // say so: it draws the primary cue, and a row reading one cue's value
+  // gave no hint that a press would change forty.
+  int selectedAudioCueCount() {
+    int count = 0;
+    forEachSelectedCueEverywhere([&](Cue& each, int) {
+      if (each.hasAudio) {
+        ++count;
+      }
+    });
+    return count;
+  }
+
+  bool setSelectedAudioPan(double pan) {
+    double clamped = std::clamp(pan, -1.0, 1.0);
+    if (std::abs(clamped) < 0.025) {
+      clamped = 0.0;  // snap to center
+    }
+    lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioPan = static_cast<float>(clamped);
+      }
+    });
+    const bool any = lastAudioEditDeckCount_ > 0;
+    if (any) {
+      markProjectDirty();
+    }
+    return any;
+  }
+
+  void adjustSelectedAudioPan(double delta) {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || !cue->hasAudio) {
+      return;
+    }
+    setSelectedAudioPan(cue->audioPan + delta);
+  }
+
+  bool setSelectedAudioMono(bool mono) {
+    lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioMono = mono;
+      }
+    });
+    const bool any = lastAudioEditDeckCount_ > 0;
+    if (any) {
+      markProjectDirty();
+    }
+    return any;
+  }
+
+  // Independent audio fade steps: below zero snaps to -1 "follow visual";
+  // stepping up from follow lands on 0 ("none"), then explicit seconds.
+  void adjustSelectedAudioFade(bool fadeIn, double delta) {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || !cue->hasAudio) {
+      return;
+    }
+    float current = fadeIn ? cue->audioFadeInSeconds : cue->audioFadeOutSeconds;
+    float next;
+    if (current < 0.0f) {
+      next = delta > 0.0 ? 0.0f : -1.0f;         // follow → none (or stay follow)
+    } else {
+      next = current + static_cast<float>(delta);
+      if (next < 0.0f) {
+        next = current > 0.0f ? 0.0f : -1.0f;     // explicit → none → follow
+      }
+    }
+    next = std::min(next, 60.0f);
+    bool any = forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.hasAudio) {
+        if (fadeIn) { each.audioFadeInSeconds = next; } else { each.audioFadeOutSeconds = next; }
+      }
+    });
+    if (any) {
+      markProjectDirty();
+    }
+  }
+
+  void adjustSelectedAudioOutPair(int delta) {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || !cue->hasAudio) {
+      return;
+    }
+    // Pairs available on the deck's device as opened (outs 1-2 .. N-1-N).
+    int maxPair = std::max(0, focusedDeck().audioOutputChannels / 2 - 1);
+    int next = std::clamp(cue->audioOutputPair + delta, 0, maxPair);
+    bool any = forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.hasAudio) {
+        each.audioOutputPair = next;
+      }
+    });
+    if (any) {
+      markProjectDirty();
+      triggerToast("audio outs " + std::to_string(next * 2 + 1) + "-" + std::to_string(next * 2 + 2));
+    }
+  }
+
+  // What the selected audio cue puts on the screen. WRAPS rather than clamps:
+  // there are six modes and no natural end to the list, so a clamp would just
+  // make the last one feel broken.
+  void cycleSelectedAudioVisual(int delta) {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || cue->kind != CueKind::Audio) {
+      return;
+    }
+    constexpr int count = static_cast<int>(AudioVisual::Cover) + 1;
+    const int next = ((static_cast<int>(cue->audioVisual) + delta) % count + count) % count;
+    const AudioVisual mode = static_cast<AudioVisual>(next);
+    bool any = forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.kind == CueKind::Audio) {
+        each.audioVisual = mode;
+      }
+    });
+    if (any) {
+      markProjectDirty();
+      triggerToast("audio visual: " + audioVisualLabel(mode));
+    }
+  }
+
+  // Edit one dashboard button.
+  //
+  // ONE LINE, three fields: "label | command | glyph". A dialog per field would
+  // be three modals to change a button, and this is a thing operators fiddle
+  // with between cues rather than configure once.
+  // ---- WHAT A DASHBOARD BUTTON CAN BE ------------------------------------
+  //
+  // A slot runs any line the network protocol understands, which is powerful
+  // and completely unguessable: the editor asked for "label | command | glyph"
+  // and left you to already know the verb. So the button did nothing, because
+  // nothing had been typed that would do anything.
+  //
+  // This is the menu. Everything here is a real command from HELP, already
+  // labelled and already carrying a glyph, and the last entry still drops you
+  // into the free-text editor for anything not on the list.
+  struct DashboardActionPreset {
+    const char* group;
+    const char* label;
+    const char* command;
+    const char* glyph;
+  };
+
+  static const std::vector<DashboardActionPreset>& dashboardActionPresets() {
+    static const std::vector<DashboardActionPreset> kPresets = {
+      {"transport", "Take",            "TAKE",             ">"},
+      {"transport", "Go",              "GO",               ">"},
+      {"transport", "Stop",            "STOP",             "#"},
+      {"transport", "Play / pause",    "TOGGLE",           "="},
+      {"transport", "Re-rack",         "RERACK",           "|"},
+      {"transport", "Next cue",        "NEXT",             "+"},
+      {"transport", "Previous cue",    "PREV",             "-"},
+      {"transport", "Clear output",    "CLEAR",            "o"},
+
+      {"show",      "PANIC",           "PANIC",            "!"},
+      {"show",      "All stop",        "ALLSTOP",          "#"},
+      {"show",      "All pause",       "ALLPAUSE",         "="},
+      {"show",      "Blackout",        "BLACKOUT toggle",  "B"},
+      {"show",      "Dim to 50%",      "DIMMER 50",        "d"},
+      {"show",      "Full brightness", "DIMMER 100",       "D"},
+      {"show",      "Shuffle on",      "SHUFFLE on",       "?"},
+      {"show",      "Shuffle off",     "SHUFFLE off",      "?"},
+
+      {"audio",     "Mute master",     "MASTERVOL 0",      "m"},
+      {"audio",     "Master to 100%",  "MASTERVOL 100",    "M"},
+      {"audio",     "Normalise cue",   "AUDIONORM",        "n"},
+      {"audio",     "Normalise ALL",   "AUDIONORM ALL",    "N"},
+
+      {"decks",     "Next deck",       "DECKNEXT",         "]"},
+      {"decks",     "Previous deck",   "DECKPREV",         "["},
+      {"decks",     "Go to cue 1",     "GOTO 1",           "1"},
+
+      {"vj",        "VJ mode",         "VJ TOGGLE",        "V"},
+      {"vj",        "Tap tempo",       "VJ TAP",           "t"},
+      {"vj",        "Fade to A",       "VJ MIX 0",         "A"},
+      {"vj",        "Fade to B",       "VJ MIX 1",         "B"},
+      {"vj",        "Next blend mode", "VJ BLEND",         "x"},
+
+      {"picture",   "Mesh warp",       "MESH toggle",      "~"},
+      {"picture",   "Clear effects",   "FX CLEAR",         "c"},
+
+      {"output",    "Output on/off",   "OUTPUT TOGGLE",    "O"},
+      {"output",    "Fullscreen",      "FULLSCREEN",       "F"},
+      {"output",    "Record",          "RECORD toggle",    "R"},
+      // The master sequence, so a row of tiles can be its transport.
+      {"tracker",   "Next step",       "TRACKER GO",       ">"},
+      {"tracker",   "Previous step",   "TRACKER BACK",     "<"},
+      {"tracker",   "Play sequence",   "TRACKER PLAY",     "|>"},
+      {"tracker",   "Stop sequence",   "TRACKER STOP",     "[]"},
+      // A lower third's exit, from a button that needs no selection.
+      {"graphics",  "Lower Third out", "TEXTCUE OUT",      "v"},
+    };
+    return kPresets;
+  }
+
+  // The tile the pencil belongs to, so the menu opens ON the button being
+  // changed rather than somewhere else on the screen.
+  SDL_Rect dashboardSlotAnchor(int at) const {
+    for (const auto& button : dashButtons_) {
+      if (button.param == at && button.action == QuickAction::DashSlotFire) {
+        return button.rect;
+      }
+    }
+    return lastInlineEditorAnchorRect_;
+  }
+
+  void editDashboardSlot(int at) {
+    if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+      return;
+    }
+    const auto& presets = dashboardActionPresets();
+    std::vector<std::pair<std::string, std::string>> choices;
+    choices.reserve(presets.size() + 1);
+    for (std::size_t i = 0; i < presets.size(); ++i) {
+      // The group rides in the visible label, so typing "vj" in the dropdown's
+      // filter narrows to the VJ actions -- the filter searches the label.
+      choices.push_back({std::to_string(i),
+                         std::string(presets[i].group) + " - " + presets[i].label});
+    }
+    // TAKE/STOP A SPECIFIC DECK, not just the focused one. "Take Deck 1" was
+    // reported as missing from this list -- it always had to be typed by
+    // hand as "DECK 1 TAKE" through the free-text editor below, which meant
+    // knowing the wire protocol rather than picking a button. The protocol
+    // side already existed (DECK <n> <verb> re-focuses then runs the verb --
+    // see the DECK command in app_remote_command.ipp); what was missing was
+    // a way to reach it without typing it. Not expanded into a static "Take
+    // Deck 1".."Take Deck 16" block (kMaxDecks) -- most shows use two or
+    // three, and sixteen rows of that in a list this size would bury
+    // everything else in it. A second picker, opened only when asked for,
+    // scales with the decks the show actually has.
+    choices.push_back({"deck-take", "decks - Take deck..."});
+    choices.push_back({"deck-stop", "decks - Stop deck..."});
+    // PRESETS, so a tile can be one: a new one captured from what is on now,
+    // or any that already exist.
+    choices.push_back({"preset:new", "preset - a new preset from what is on now"});
+    for (const ShowPreset& preset : project_.presets) {
+      choices.push_back({"preset:" + preset.id, "preset - recall " + preset.name});
+    }
+    choices.push_back({"custom", "type a command myself..."});
+
+    // A brand-new slot opens at the TOP of the list. Defaulting to "custom"
+    // scrolled the menu to its last entry, so the first thing a new button
+    // offered you was the free-text editor it is meant to save you from.
+    const std::string currentCommand = project_.dashboard[at].command;
+    std::string selectedId = currentCommand.empty() ? std::string("0")
+                                                    : std::string("custom");
+    for (std::size_t i = 0; i < presets.size(); ++i) {
+      if (currentCommand == presets[i].command) {
+        selectedId = std::to_string(i);
+        break;
+      }
+    }
+
+    openDropdown("dashboard.slot" + std::to_string(at), dashboardSlotAnchor(at),
+                 choices, selectedId, [this, at](const std::string& chosen) {
+      if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+        return;
+      }
+      if (chosen == "custom") {
+        editDashboardSlotAsText(at);
+        return;
+      }
+      if (chosen == "deck-take" || chosen == "deck-stop") {
+        const bool take = chosen == "deck-take";
+        std::vector<std::pair<std::string, std::string>> deckChoices;
+        for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+          deckChoices.emplace_back(std::to_string(d), deckLabel(d));
+        }
+        openDropdown("dashboard.slot" + std::to_string(at) + ".deck",
+                     dashboardSlotAnchor(at), deckChoices, "",
+                     [this, at, take](const std::string& deckChosen) {
+          if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+            return;
+          }
+          const int d = std::atoi(deckChosen.c_str());
+          if (d < 0 || d >= static_cast<int>(project_.decks.size())) {
+            return;
+          }
+          DashboardSlot& target = project_.dashboard[at];
+          target.label = (take ? "Take " : "Stop ") + deckLabel(d);
+          target.command = "DECK " + std::to_string(d + 1) + (take ? " TAKE" : " STOP");
+          target.glyph = take ? ">" : "#";
+          markProjectDirty();
+          triggerToast("button set to " + target.command);
+        });
+        return;
+      }
+      if (chosen.rfind("preset:", 0) == 0) {
+        const std::string wanted = chosen.substr(7);
+        const ShowPreset* preset = wanted == "new" ? &savePresetFromNow(std::string())
+                                                   : findPreset(wanted);
+        if (!preset) {
+          return;
+        }
+        DashboardSlot& target = project_.dashboard[at];
+        target.label = preset->name;
+        target.command = presetRecallCommand(*preset);
+        target.glyph = "P";
+        markProjectDirty();
+        triggerToast(wanted == "new" ? ("captured " + preset->name + " - right-click to "
+                                        "choose what it recalls")
+                                     : ("button recalls " + preset->name));
+        return;
+      }
+      const auto& list = dashboardActionPresets();
+      const std::size_t index = static_cast<std::size_t>(std::atoi(chosen.c_str()));
+      if (index >= list.size()) {
+        return;
+      }
+      DashboardSlot& target = project_.dashboard[at];
+      target.label = list[index].label;
+      target.command = list[index].command;
+      target.glyph = list[index].glyph;
+      markProjectDirty();
+      triggerToast(std::string("button set to ") + list[index].command);
+    });
+  }
+
+  // Right-click on the dashboard: everything that can be done to the thing
+  // under the pointer, in one list. A tile gets edit / rename / colour /
+  // delete; a tracker step gets rename / move / delete. Delete from here is a
+  // single choice -- opening a menu and picking the word is already the
+  // deliberate second step the x button asks for.
+  void openDashboardContextMenu(int x, int y) {
+    const QuickButton* hit = nullptr;
+    for (auto it = dashButtons_.rbegin(); it != dashButtons_.rend(); ++it) {
+      if (pointInRect(x, y, it->rect)) {
+        hit = &*it;
+        break;
+      }
+    }
+    if (!hit) {
+      return;
+    }
+    const SDL_Rect anchor = hit->rect;
+    lastInlineEditorAnchorRect_ = anchor;
+    if (hit->action == QuickAction::DashSlotFire ||
+        hit->action == QuickAction::DashSlotEdit ||
+        hit->action == QuickAction::DashSlotColor ||
+        hit->action == QuickAction::DashSlotDelete) {
+      const int at = hit->param;
+      if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+        return;
+      }
+      std::vector<std::pair<std::string, std::string>> tileMenu;
+      // A PRESET TILE gets the preset's own verbs first: they are why it is
+      // there.
+      const std::string& command = project_.dashboard[static_cast<std::size_t>(at)].command;
+      const std::string presetId = command.rfind("PRESET RECALL ", 0) == 0
+        ? trim(command.substr(14)) : std::string();
+      if (!presetId.empty() && findPreset(presetId)) {
+        tileMenu.push_back({"p.update", "capture again - what is on now"});
+        tileMenu.push_back({"p.scope", "what it recalls..."});
+      }
+      tileMenu.push_back({"edit",   "change what it does..."});
+      tileMenu.push_back({"text",   "label, command and glyph as text..."});
+      tileMenu.push_back({"colour", "next colour"});
+      tileMenu.push_back({"delete", "delete this button"});
+      openDropdown("dashboard.menu" + std::to_string(at), anchor, tileMenu,
+                   presetId.empty() ? "edit" : "p.scope",
+                   [this, at, presetId, anchor](const std::string& chosen) {
+        if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+          return;
+        }
+        if (chosen == "p.update") {
+          if (ShowPreset* preset = findPreset(presetId)) {
+            capturePresetState(*preset);
+            markProjectDirty();
+            triggerToast(preset->name + " captured again");
+          }
+          return;
+        }
+        if (chosen == "p.scope") {
+          openPresetScopeMenu(presetId, anchor);
+          return;
+        }
+        if (chosen == "edit") {
+          editDashboardSlot(at);
+        } else if (chosen == "text") {
+          editDashboardSlotAsText(at);
+        } else if (chosen == "colour") {
+          dispatchQuickAction(QuickAction::DashSlotColor, at);
+        } else if (chosen == "delete") {
+          dashDeleteArmedSlot_ = -1;
+          project_.dashboard.erase(project_.dashboard.begin() + at);
+          markProjectDirty();
+          playUiSound(UiSoundEffect::Delete);
+          triggerToast("button deleted");
+        }
+      });
+      return;
+    }
+    if (hit->action == QuickAction::TrackerFire ||
+        hit->action == QuickAction::TrackerCell) {
+      const int row = hit->action == QuickAction::TrackerFire
+        ? hit->param : hit->param / kMaxDecks;
+      openTrackerStepMenu(row, anchor);
+    }
+  }
+
+  // The master cue behind a tracker row, for editing. Null when the row has
+  // gone (the list is rebuilt every frame, a menu outlives it).
+  Cue* trackerStepCueMutable(int row, int* deckOut = nullptr, int* cueOut = nullptr) {
+    const auto rows = masterTrackerRows();
+    if (row < 0 || row >= static_cast<int>(rows.size())) {
+      return nullptr;
+    }
+    const int d = rows[row].first;
+    const int c = rows[row].second;
+    if (deckOut) *deckOut = d;
+    if (cueOut) *cueOut = c;
+    return masterTrackerCueMutable(d, c);
+  }
+
+  // A step's length IS its continue: see the tracker's transport.
+  void openTrackerLengthMenu(int row, const SDL_Rect& anchor) {
+    const Cue* step = trackerStepCueMutable(row);
+    if (!step) {
+      return;
+    }
+    static const std::vector<std::pair<std::string, std::string>> kLengths = {
+      {"go",  "wait for GO"},
+      {"end", "when its cues end"},
+      {"0.5", "0.5 s"}, {"1", "1 s"}, {"2", "2 s"}, {"4", "4 s"},
+      {"8", "8 s"}, {"15", "15 s"}, {"30", "30 s"}, {"60", "1 min"},
+      {"type", "type a length in seconds..."},
+    };
+    std::string current = "go";
+    if (step->continueMode == CueContinueMode::AutoFollow) {
+      current = "end";
+    } else if (step->continueMode == CueContinueMode::AutoContinue) {
+      current = "type";
+      for (const auto& option : kLengths) {
+        const double v = std::atof(option.first.c_str());
+        if (v > 0.0 && std::abs(v - step->postWaitSeconds) < 0.01) {
+          current = option.first;
+        }
+      }
+    }
+    // The row is re-resolved when the choice lands: the menu is open for as
+    // long as the operator likes, and steps can be added underneath it.
+    const std::string stepId = step->id;
+    auto apply = [this, stepId](CueContinueMode mode, double seconds) {
+      if (Cue* cue = masterStepById(stepId)) {
+        cue->continueMode = mode;
+        cue->postWaitSeconds = std::max(0.0, seconds);
+        markProjectDirty();
+      }
+    };
+    openDropdown("tracker.length" + stepId, anchor, kLengths, current,
+                 [this, row, apply](const std::string& chosen) {
+      if (chosen == "go") {
+        apply(CueContinueMode::DoNotContinue, 0.0);
+      } else if (chosen == "end") {
+        apply(CueContinueMode::AutoFollow, 0.0);
+      } else if (chosen == "type") {
+        const Cue* now = trackerStepCueMutable(row);
+        const double was = now ? now->postWaitSeconds : 4.0;
+        char text[32];
+        std::snprintf(text, sizeof(text), "%g", was > 0.0 ? was : 4.0);
+        openInlineTextEditor("tracker.length", "Step length",
+                             "seconds this step holds before PLAY moves on",
+                             text, [apply](const std::string& value) {
+          const double seconds = std::atof(value.c_str());
+          if (seconds > 0.0) {
+            apply(CueContinueMode::AutoContinue, std::min(seconds, 86400.0));
+          }
+        });
+        return;
+      } else {
+        apply(CueContinueMode::AutoContinue, std::atof(chosen.c_str()));
+      }
+      triggerToast("step " + std::to_string(row + 1) + ": " + trackerStepLengthLabel(row));
+    });
+  }
+
+  // EVERY POINTER INTO A PLAYLIST, MOVED BY ONE RULE.
+  //
+  // A deck points into its own list from six places: the selection, the
+  // multi-selection, the cue on air, the STANDBY (what GO fires next), the
+  // overlays on air, and a take waiting on a pre-wait or a continue. Each edit
+  // that moved cues used to carry its own subset of those, and standby and the
+  // waiting take were in none of them -- so dragging a cue above the armed one
+  // left GO firing a different cue from the one shown armed, and a reorder
+  // during a continue's countdown fired the wrong cue when it ran out.
+  //
+  // `map` takes an old index and gives the new one, or -1 for a cue that has
+  // gone. A pointer to a cue that has gone is cleared; a waiting take for one
+  // is cancelled rather than retargeted.
+  void remapDeckCueIndices(int deckIndex, const std::function<int(int)>& map) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    auto one = [&](int& index) {
+      if (index >= 0) index = map(index);
+    };
+    auto many = [&](std::vector<int>& list) {
+      std::vector<int> kept;
+      for (int index : list) {
+        const int moved = index >= 0 ? map(index) : -1;
+        if (moved >= 0) kept.push_back(moved);
+      }
+      list.swap(kept);
+    };
+    one(deck.selectedIndex);
+    one(deck.activeIndex);
+    one(deck.standbyIndex);
+    many(deck.selectedIndices);
+    many(deck.overlayActiveIndices);
+    if (deckIndex < static_cast<int>(deckPendingTakes_.size()) &&
+        deckPendingTakes_[deckIndex].armed) {
+      const int moved = map(deckPendingTakes_[deckIndex].cueIndex);
+      if (moved < 0) {
+        cancelPendingTake(deckIndex, "its cue was removed");
+      } else {
+        deckPendingTakes_[deckIndex].cueIndex = moved;
+      }
+    }
+  }
+
+  // One cue from `from` to `to`, everything between shuffled one place.
+  static int movedCueIndex(int index, int from, int to) {
+    if (index == from) return to;
+    if (from < to && index > from && index <= to) return index - 1;
+    if (from > to && index >= to && index < from) return index + 1;
+    return index;
+  }
+
+  // Swap two cues in one playlist, carrying the selection and the live
+  // pointer with them so nothing on air changes identity.
+  void swapCuesInDeck(int deckIndex, int a, int b) {
+    Deck& deck = project_.decks[deckIndex];
+    std::swap(deck.cues[a], deck.cues[b]);
+    remapDeckCueIndices(deckIndex, [a, b](int index) {
+      return index == a ? b : index == b ? a : index;
+    });
+    markProjectDirty();
+  }
+
+  // Right-click on a step: everything that changes the step rather than
+  // what it fires.
+  void openTrackerStepMenu(int row, const SDL_Rect& anchor) {
+    int deckIndex = -1;
+    int cueIndex = -1;
+    Cue* step = trackerStepCueMutable(row, &deckIndex, &cueIndex);
+    if (!step) {
+      return;
+    }
+    static const std::vector<std::pair<std::string, std::string>> kStepMenu = {
+      {"rename",    "rename..."},
+      {"length",    "length..."},
+      {"up",        "move up"},
+      {"down",      "move down"},
+      {"duplicate", "duplicate"},
+      {"delete",    "delete step"},
+    };
+    const std::string stepId = step->id;
+    openDropdown("tracker.step" + stepId, anchor, kStepMenu, "rename",
+                 [this, row, anchor, stepId](const std::string& chosen) {
+      int d = -1;
+      int c = -1;
+      Cue* live = trackerStepCueMutable(row, &d, &c);
+      if (!live || live->id != stepId) {
+        return;   // the steps moved while the menu was open
+      }
+      if (chosen == "rename") {
+        openInlineTextEditor("tracker.rename", "Step " + std::to_string(row + 1),
+                             "a name for this step", live->name,
+                             [this, stepId](const std::string& value) {
+          if (Cue* cue = masterStepById(stepId)) {
+            cue->name = trim(value);
+            markProjectDirty();
+          }
+        });
+      } else if (chosen == "length") {
+        openTrackerLengthMenu(row, anchor);
+      } else if (d == kTrackerStepsDeck) {
+        // A STEP THE TRACKER OWNS: its list is the sequence, so these are
+        // plain moves within it.
+        std::vector<Cue>& steps = project_.trackerSteps;
+        if (chosen == "up" || chosen == "down") {
+          const int other = c + (chosen == "up" ? -1 : 1);
+          if (other < 0 || other >= static_cast<int>(steps.size())) {
+            triggerToast(chosen == "up" ? "already the first tracker step"
+                                        : "already the last step");
+            return;
+          }
+          pushUndoSnapshot();
+          std::swap(steps[c], steps[other]);
+          markProjectDirty();
+        } else if (chosen == "duplicate") {
+          pushUndoSnapshot();
+          Cue copy = *live;
+          copy.id.clear();   // normalizeProject gives it its own
+          copy.name = live->name.empty() ? std::string("step") : live->name + " copy";
+          steps.insert(steps.begin() + c + 1, copy);
+          normalizeProject(project_);
+          markProjectDirty();
+        } else if (chosen == "delete") {
+          pushUndoSnapshot();
+          steps.erase(steps.begin() + c);
+          markProjectDirty();
+          triggerToast("step deleted - ctrl+z brings it back");
+        }
+      } else if (chosen == "up" || chosen == "down") {
+        // Within its own playlist, to the neighbouring MASTER: a master deck
+        // may hold other cues, and hopping over one of those would not move
+        // the step in the tracker at all.
+        const int direction = chosen == "up" ? -1 : 1;
+        const Deck& deck = project_.decks[d];
+        int other = c + direction;
+        while (other >= 0 && other < static_cast<int>(deck.cues.size()) &&
+               deck.cues[other].kind != CueKind::Master) {
+          other += direction;
+        }
+        if (other < 0 || other >= static_cast<int>(deck.cues.size())) {
+          triggerToast(direction < 0 ? "already the first step" : "already the last step");
+          return;
+        }
+        pushUndoSnapshot();
+        swapCuesInDeck(d, c, other);
+      } else if (chosen == "duplicate") {
+        pushUndoSnapshot();
+        Cue copy = *live;
+        copy.id.clear();   // normalizeProject gives it its own
+        copy.name = live->name.empty() ? std::string("step") : live->name + " copy";
+        Deck& deck = project_.decks[d];
+        deck.cues.insert(deck.cues.begin() + c + 1, copy);
+        if (deck.activeIndex > c) deck.activeIndex += 1;
+        if (deck.selectedIndex > c) deck.selectedIndex += 1;
+        deck.selectedIndices.clear();
+        normalizeProject(project_);
+        markProjectDirty();
+      } else if (chosen == "delete") {
+        requestDeleteCueIndices(d, {c});
+      }
+    });
+  }
+
+  // The old editor, kept for anything the menu does not cover -- and for
+  // removing a button, which is still "clear the label and the command".
+  void editDashboardSlotAsText(int at) {
+    if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+      return;
+    }
+    const DashboardSlot& slot = project_.dashboard[at];
+    std::string current = slot.label + " | " + slot.command;
+    if (!slot.glyph.empty()) {
+      current += " | " + slot.glyph;
+    }
+    openInlineTextEditor(
+      "dashboard.slot" + std::to_string(at),
+      "Dashboard button " + std::to_string(at + 1),
+      "label | command | glyph      (empty label|command removes it)",
+      current,
+      [this, at](const std::string& value) {
+        if (at < 0 || at >= static_cast<int>(project_.dashboard.size())) {
+          return;
+        }
+        std::vector<std::string> parts;
+        std::string cur;
+        for (char ch : value) {
+          if (ch == '|') { parts.push_back(trim(cur)); cur.clear(); }
+          else { cur += ch; }
+        }
+        parts.push_back(trim(cur));
+        DashboardSlot& target = project_.dashboard[at];
+        target.label = parts.size() > 0 ? parts[0] : std::string();
+        target.command = parts.size() > 1 ? parts[1] : std::string();
+        // One character. A glyph is decoration, and a whole word here would
+        // draw over the label underneath it.
+        target.glyph = parts.size() > 2 && !parts[2].empty()
+                     ? parts[2].substr(0, 1) : std::string();
+        if (target.label.empty() && target.command.empty()) {
+          project_.dashboard.erase(project_.dashboard.begin() + at);
+          triggerToast("button removed");
+        }
+        markProjectDirty();
+      });
+  }
+
+  void toggleSelectedCueMono() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || !cue->hasAudio) {
+      return;
+    }
+    bool next = !cue->audioMono;
+    if (setSelectedAudioMono(next)) {
+      triggerToast(next ? "cue audio: mono" : "cue audio: stereo");
+      playUiSound(UiSoundEffect::Toggle);
+    }
+  }
+
+  // ── Loudness normalize (v0.78.9) ────────────────────────────────────────
+  // One-shot: measure the file's EBU R128 integrated loudness on a worker
+  // thread (ffmpeg ebur128 — analysis stays on the CLI like waveforms) and
+  // set the cue's gain trim so playback lands at the target. The operator
+  // can still nudge the trim afterwards; normalize is a starting point,
+  // not a lock.
+  //
+  // v0.81.0 lifted the old fixed +12 dB ceiling and instead capped the boost by
+  // true-peak headroom. v0.81.5 removes that cap too, because it defeated the
+  // feature: TV/film material runs an 18-22 dB peak-to-loudness ratio, so the
+  // headroom cap bound on EVERY real clip — a -26.8 LUFS cartoon that wants
+  // +10.8 dB got +3.9 and stayed obviously quiet, and a clip already sitting on
+  // target got pulled DOWN because its inter-sample peak read above 0 dBFS.
+  //
+  // Normalize is now what its name says: gain = target - measured, bounded only
+  // by kCueAudioGainMinDb/Max. Peaks are the limiter's job now (see
+  // MediaEngine::applyPeakLimiter) rather than something to back the gain off
+  // for. True peak is still measured, and the toast reports where the boost
+  // lands so the operator knows when the limiter will be working.
+  void cycleNormalizeTarget() {
+    const double current = project_.normalizeTargetLufs;
+    project_.normalizeTargetLufs = current == -16.0 ? -23.0 : current == -23.0 ? -24.0 : -16.0;
+    markProjectDirty();
+    triggerToast("loudness target: " + fmtFloat(project_.normalizeTargetLufs, 0) + " LUFS");
+  }
+
+  // NORMALIZE IS QUEUED, like probing, and for the same reason: it used to
+  // launch one detached thread and one ffmpeg PER CUE the instant it was
+  // asked. On a selection of two that is fine. On "all cues" of a real show
+  // file it is thousands of both, which is the freeze this app has already
+  // been taught not to cause once.
+  bool enqueueNormalize(const Cue& cue) {
+    if (!cue.hasAudio || !cueUsesFilesystemMedia(cue)) {
+      return false;
+    }
+    const std::string path = resolvedCueFilesystemPathString(cue, currentProjectFile_);
+    if (path.empty()) {
+      return false;
+    }
+    normalizeQueue_.push_back(QueuedNormalize{cue.id, path, project_.normalizeTargetLufs});
+    normalizeBatchTotal_ += 1;
+    return true;
+  }
+
+  // Starts whatever the cap has room for. Same cap as probing -- these are the
+  // same kind of job competing for the same disk.
+  void pumpNormalizeQueue() {
+    const int cap = probeConcurrencyCap();
+    while (!normalizeQueue_.empty()
+           && normalizeRunning_.load(std::memory_order_acquire) < cap) {
+      QueuedNormalize job = std::move(normalizeQueue_.front());
+      normalizeQueue_.pop_front();
+      normalizeRunning_.fetch_add(1, std::memory_order_acq_rel);
+      {
+        // Which cue is under the needle, so the row can say so. The COUNT was
+        // tracked already and never reached a renderer, which is why normalise
+        // looked like it did nothing at all.
+        std::lock_guard<std::mutex> lock(normalizeResultsMutex_);
+        normalizeInFlight_.insert(job.cueId);
+      }
+      std::thread([this, path = job.path, cueId = job.cueId, targetLufs = job.targetLufs]() {
+        NormalizeResult result;
+        result.cueId = cueId;
+        // peak=true adds a "True peak: / Peak: -x.x dBFS" block to the summary,
+        // which is what lets the toast say where the boost lands.
+        auto out = readAllText({
+          "ffmpeg", "-hide_banner", "-nostats",
+          "-i", path, "-map", "a:0", "-af", "ebur128=peak=true", "-f", "null", "-"
+        });
+        if (out) {
+          // The ebur128 summary block ends with lines like "I: -21.3 LUFS".
+          // Both markers are matched with rfind so the per-frame progress
+          // lines above the summary can't win.
+          size_t pos = out->rfind("I:");
+          if (pos != std::string::npos) {
+            double lufs = std::strtod(out->c_str() + pos + 2, nullptr);
+            if (std::isfinite(lufs) && lufs < 0.0 && lufs > -70.0) {
+              result.measuredLufs = lufs;
+              double gain = std::clamp(targetLufs - lufs,
+                                       static_cast<double>(kCueAudioGainMinDb),
+                                       static_cast<double>(kCueAudioGainMaxDb));
+
+              // "Peak:" (capital P) is the summary value; the "True peak:"
+              // heading above it is lower-case, so rfind lands on the number.
+              // Measured for REPORTING only — it does not hold the gain back.
+              size_t peakPos = out->rfind("Peak:");
+              if (peakPos != std::string::npos) {
+                double peakDb = std::strtod(out->c_str() + peakPos + 5, nullptr);
+                // True peak legitimately exceeds 0 dBFS on hot masters
+                // (inter-sample peaks), so the window must not assume <= 0.
+                if (std::isfinite(peakDb) && peakDb < 24.0 && peakDb > -120.0) {
+                  result.measuredPeakDb = peakDb;
+                  result.hasPeak = true;
+                  // Where the peaks land once the trim is applied. Above the
+                  // ceiling just means the limiter has work to do.
+                  result.projectedPeakDb = peakDb + gain;
+                  result.peakLimited = result.projectedPeakDb > kNormalizeTruePeakCeilingDb;
+                }
+              }
+              result.gainDb = gain;
+              result.ok = true;
+            }
+          }
+        }
+        {
+          std::lock_guard<std::mutex> lock(normalizeResultsMutex_);
+          normalizeInFlight_.erase(cueId);
+          normalizeResults_.push_back(std::move(result));
+        }
+        normalizeRunning_.fetch_sub(1, std::memory_order_acq_rel);
+      }).detach();
+    }
+  }
+
+  // The set of cues under, or queued for, loudness measurement -- rebuilt ONCE
+  // a frame rather than asked per row.
+  //
+  // The first version answered this per cue row per frame, and each answer took
+  // the results mutex and walked the queue. "Normalise ALL" puts thousands of
+  // jobs in that queue, so a full playlist turned one cheap question into
+  // hundreds of locked scans of a long deque every single frame. Nothing about
+  // a decorative critter is worth that.
+  //
+  // Costs nothing when idle: with no outstanding work the set is cleared once
+  // and every later frame sees an empty set and a single branch.
+  void refreshNormalizingIds() {
+    if (normalizeOutstanding() <= 0) {
+      if (!normalizingIds_.empty()) {
+        normalizingIds_.clear();
+      }
+      return;
+    }
+    normalizingIds_.clear();
+    {
+      std::lock_guard<std::mutex> lock(normalizeResultsMutex_);
+      normalizingIds_ = normalizeInFlight_;
+    }
+    for (const auto& job : normalizeQueue_) {
+      normalizingIds_.insert(job.cueId);
+    }
+  }
+
+  bool cueIsNormalizing(const std::string& cueId) const {
+    return !normalizingIds_.empty() && normalizingIds_.count(cueId) != 0;
+  }
+
+  int normalizeOutstanding() const {
+    return static_cast<int>(normalizeQueue_.size())
+         + normalizeRunning_.load(std::memory_order_acquire);
+  }
+
+  void normalizeSelectedCueAudio() {
+    int launched = 0;
+    // Across every deck with a selection, like gain, pan and mono -- the AUDIO
+    // section should not have one control that means something different.
+    lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& cue, int) {
+      if (enqueueNormalize(cue)) {
+        ++launched;
+      }
+    });
+    pumpNormalizeQueue();
+    if (launched > 0) {
+      triggerToast(launched == 1
+        ? ("analyzing loudness..." + audioEditScopeSuffix())
+        : ("analyzing loudness (" + std::to_string(launched) + " cues)..."
+           + audioEditScopeSuffix()));
+    } else {
+      // Previously a silent no-op — the operator clicked NORMALIZE and
+      // nothing visibly happened.
+      triggerToast("normalize: selection has no file-backed audio");
+    }
+  }
+
+  // THE WHOLE PLAYLIST AT ONCE.
+  //
+  // "analyze the cue or ALL cues" was half the asked-for behaviour and the
+  // half that was missing: matching levels across a show is the entire point
+  // of normalising, and doing it a cue at a time is the work nobody wants.
+  void normalizeAllCuesInFocusedDeck() {
+    if (project_.decks.empty()) {
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    int launched = 0;
+    int skipped = 0;
+    for (Cue& cue : deck.cues) {
+      if (enqueueNormalize(cue)) {
+        ++launched;
+      } else if (cue.hasAudio) {
+        ++skipped;   // has audio but nothing on disk to measure
+      }
+    }
+    pumpNormalizeQueue();
+    if (launched == 0) {
+      triggerToast("normalize all: no file-backed audio in this deck");
+      return;
+    }
+    std::string message = "analyzing loudness on " + std::to_string(launched) + " cues";
+    if (skipped > 0) {
+      // Say what was left out rather than quietly reporting a smaller number
+      // than the operator can count in front of them.
+      message += " (" + std::to_string(skipped) + " skipped, no file)";
+    }
+    triggerToast(message, ToastKind::Help, kToastReadableMs);
+  }
+
+
+  // Drained once per tick on the main thread.
+  void drainNormalizeResults() {
+    std::vector<NormalizeResult> results;
+    {
+      std::lock_guard<std::mutex> lock(normalizeResultsMutex_);
+      if (normalizeResults_.empty()) {
+        return;
+      }
+      results.swap(normalizeResults_);
+    }
+    for (const NormalizeResult& result : results) {
+      if (!result.ok) {
+        triggerToast("normalize: no measurable audio");
+        continue;
+      }
+      bool applied = false;
+      for (Deck& deck : project_.decks) {
+        for (Cue& cue : deck.cues) {
+          if (cue.id == result.cueId) {
+            cue.audioGainDb = static_cast<float>(result.gainDb);
+            applied = true;
+          }
+        }
+      }
+      if (applied) {
+        char buf[128];
+        if (result.peakLimited) {
+          // Target IS hit; this just tells the operator the deck limiter will
+          // be catching transients on this clip. Held longer — it's the case
+          // most worth reading.
+          std::snprintf(buf, sizeof(buf),
+                        "normalized: %+.1f dB (was %.1f LUFS) - peaks %+.1f dBFS, limiter active",
+                        result.gainDb, result.measuredLufs, result.projectedPeakDb);
+          triggerToast(buf, ToastKind::Help, 3200);
+        } else {
+          std::snprintf(buf, sizeof(buf), "normalized: %+.1f dB (was %.1f LUFS)",
+                        result.gainDb, result.measuredLufs);
+          triggerToast(buf, ToastKind::Help, 2600);
+        }
+        markProjectDirty();
+      }
+    }
+  }
+
+  void toggleSelectedTransitionToNext() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    bool next = !cue->transitionToNext;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.transitionToNext = next;
+    });
+    triggerToast(next ? "next transition: on" : "next transition: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedTransitionToNext(bool enabled) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->transitionToNext == enabled) {
+      return;
+    }
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.transitionToNext = enabled;
+    });
+    triggerToast(enabled ? "next transition: on" : "next transition: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedGotoTarget(const std::string& token) {
+    std::string trimmed = trim(token);
+    if (!forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.gotoTarget = trimmed;
+    })) {
+      return;
+    }
+    triggerToast(trimmed.empty() ? "goto target: cleared" : ("goto target: " + trimmed));
+    markProjectDirty();
+  }
+
+  void adjustSelectedFade(bool fadeIn, double deltaSeconds) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    double sampleTarget = std::clamp((fadeIn ? cue->fadeInSeconds : cue->fadeOutSeconds) + deltaSeconds, 0.0, 10.0);
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      double& target = fadeIn ? each.fadeInSeconds : each.fadeOutSeconds;
+      target = std::clamp(target + deltaSeconds, 0.0, 10.0);
+    });
+    triggerToast(std::string(fadeIn ? "fade in " : "fade out ") + formatSeconds(sampleTarget));
+    markProjectDirty();
+  }
+
+  void adjustSelectedIn(double delta) {
+    double sample = 0.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsTrimPoints(cue.kind)) {
+        return;
+      }
+      cue.inPointSeconds = std::clamp(cue.inPointSeconds + delta, 0.0, cue.duration > 0.0 ? cue.duration : 3600.0);
+      if (!changed) {
+        sample = cue.inPointSeconds;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("in " + formatSeconds(sample));
+    markProjectDirty();
+  }
+
+  void adjustSelectedOut(double delta) {
+    double sample = 0.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsTrimPoints(cue.kind)) {
+        return;
+      }
+      double cur = cue.outPointSeconds > 0.0 ? cue.outPointSeconds : cue.duration;
+      cur = std::clamp(cur + delta, 0.0, cue.duration > 0.0 ? cue.duration : 3600.0);
+      cue.outPointSeconds = cur;
+      if (!changed) {
+        sample = cue.outPointSeconds;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("out " + formatSeconds(sample));
+    markProjectDirty();
+  }
+
+  void adjustSelectedCueTransition(double delta) {
+    double sample = 0.0;
+    bool changed = false;
+    double deckDefault = focusedDeck().transitionSeconds;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.cueTransitionSeconds < 0.0) {
+        cue.cueTransitionSeconds = deckDefault;
+      }
+      cue.cueTransitionSeconds = std::clamp(cue.cueTransitionSeconds + delta, 0.0, 10.0);
+      if (!changed) {
+        sample = cue.cueTransitionSeconds;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast(isMellowTransitionSeconds(sample)
+                   ? mellowTransitionToast(focusedDeck().transitionStyle)
+                   : "cue trans " + formatSeconds(sample));
+    markProjectDirty();
+  }
+
+
+  void adjustSelectedLowerAlpha(int delta) {
+    int sample = 0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::LowerThird) {
+        return;
+      }
+      cue.lowerThirdBgAlpha = std::clamp(cue.lowerThirdBgAlpha + delta, 0, 255);
+      if (!changed) {
+        sample = cue.lowerThirdBgAlpha;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("overlay alpha " + std::to_string(sample));
+    markProjectDirty();
+  }
+
+  void adjustSelectedStillDuration(double delta) {
+    double sample = 0.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind == CueKind::Video || cue.kind == CueKind::Audio) {
+        return;
+      }
+      cue.stillDurationSeconds = std::max(0.0, cue.stillDurationSeconds + delta);
+      if (cue.stillDurationSeconds < 0.5 && delta < 0) cue.stillDurationSeconds = 0.0;
+      if (!changed) {
+        sample = cue.stillDurationSeconds;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast(sample > 0.0
+      ? "still dur " + formatSeconds(sample)
+      : "still dur: hold");
+    markProjectDirty();
+  }
+
+  void adjustSelectedLoopCount(int delta) {
+    int sample = 0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Video && cue.kind != CueKind::Audio) {
+        return;
+      }
+      cue.loopCount = std::max(0, cue.loopCount + delta);
+      if (!changed) {
+        sample = cue.loopCount;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast(sample == 0 ? "repeats: inf" : "repeats: " + std::to_string(sample) + "x");
+    markProjectDirty();
+  }
+
+  void adjustSelectedSpeed(double delta) {
+    double sample = 1.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Video && cue.kind != CueKind::Audio) {
+        return;
+      }
+      cue.playbackSpeed = std::clamp(std::round((cue.playbackSpeed + delta) * 4.0) / 4.0, 0.25, 4.0);
+      if (!changed) {
+        sample = cue.playbackSpeed;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    refreshFocusedLiveCueRuntimeIfSelected();
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << sample;
+    triggerToast("speed: " + ss.str() + "x");
+    markProjectDirty();
+  }
+
+  void cycleSelectedColorTag() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) return;
+    std::string next = nextColorTag(cue->colorTag);
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      each.colorTag = next;
+    });
+    triggerToast("tag: " + (next.empty() ? "none" : next));
+    markProjectDirty();
+  }
+
+  // CLEARING STARTS THE EXIT, it does not perform it. An overlay removed from
+  // overlayActiveIndices cannot be drawn leaving, so it stays in the list,
+  // marked, until serviceLeavingOverlays has let its out-move run.
+  //
+  // A style of `none` or a time of 0 still goes instantly: the service sees a
+  // zero-length move and removes it on the next tick.
+  void clearOverlay() {
+    Deck& deck = focusedDeckMutable();
+    const int deckIndex = project_.focusedDeckIndex;
+    const Uint64 now = SDL_GetTicks();
+    for (int cueIndex : deck.overlayActiveIndices) {
+      overlayLeavingAtMs_.emplace(std::make_pair(deckIndex, cueIndex), now);
+    }
+    triggerToast("overlay cleared");
+    markProjectDirty();
+  }
+
+  // How long this overlay's move takes, each way. Anything that is not a
+  // lower third leaves instantly -- a PiP has its own geometry and no style.
+  double overlayMoveSeconds(const Deck& deck, int cueIndex) const {
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return 0.0;
+    }
+    const Cue& cue = deck.cues[cueIndex];
+    if (cue.kind != CueKind::LowerThird || cue.lowerThirdStyle == 0) {
+      return 0.0;
+    }
+    return std::clamp(cue.lowerThirdAnimSeconds, 0.0, 5.0);
+  }
+
+  // Called once a frame. Takes a departed overlay out of the list when its
+  // out-move has finished, and forgets both stamps.
+  void serviceLeavingOverlays() {
+    if (overlayLeavingAtMs_.empty()) {
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      Deck& deck = project_.decks[deckIndex];
+      auto& live = deck.overlayActiveIndices;
+      const std::size_t before = live.size();
+      live.erase(std::remove_if(live.begin(), live.end(), [&](int cueIndex) {
+                   auto it = overlayLeavingAtMs_.find(std::make_pair(deckIndex, cueIndex));
+                   if (it == overlayLeavingAtMs_.end()) {
+                     return false;
+                   }
+                   const double moved = static_cast<double>(now - it->second) / 1000.0;
+                   return moved >= overlayMoveSeconds(deck, cueIndex);
+                 }),
+                 live.end());
+      if (live.size() != before) {
+        syncPipOverlayRuntimesForDeck(deckIndex, now);
+      }
+    }
+    // Forget the stamps for anything no longer on screen.
+    for (auto it = overlayLeavingAtMs_.begin(); it != overlayLeavingAtMs_.end();) {
+      const int deckIndex = it->first.first;
+      bool stillUp = false;
+      if (deckIndex >= 0 && deckIndex < static_cast<int>(project_.decks.size())) {
+        const auto& live = project_.decks[deckIndex].overlayActiveIndices;
+        stillUp = std::find(live.begin(), live.end(), it->first.second) != live.end();
+      }
+      if (stillUp) {
+        ++it;
+      } else {
+        overlayShownAtMs_.erase(it->first);
+        it = overlayLeavingAtMs_.erase(it);
+      }
+    }
+  }
+
+  void popOverlay() {
+    Deck& deck = focusedDeckMutable();
+    // The topmost one that is not already on its way out, so pressing this
+    // twice quickly takes two of them off rather than the same one.
+    for (auto it = deck.overlayActiveIndices.rbegin();
+         it != deck.overlayActiveIndices.rend(); ++it) {
+      auto key = std::make_pair(project_.focusedDeckIndex, *it);
+      if (overlayLeavingAtMs_.count(key)) {
+        continue;
+      }
+      overlayLeavingAtMs_[key] = SDL_GetTicks();
+      triggerToast("overlay popped");
+      markProjectDirty();
+      return;
+    }
+  }
+
+  void setSelectedFade(bool fadeIn, double seconds) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    double next = std::clamp(seconds, 0.0, 10.0);
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      double& target = fadeIn ? each.fadeInSeconds : each.fadeOutSeconds;
+      target = next;
+    });
+    triggerToast(std::string(fadeIn ? "fade in " : "fade out ") + formatSeconds(next));
+    markProjectDirty();
+  }
+
+  void toggleSelectedFadeEnabled(bool fadeIn) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    double current = fadeIn ? cue->fadeInSeconds : cue->fadeOutSeconds;
+    double defaultFade = std::clamp(focusedDeck().playlistDefaultCueFadeSeconds, 0.25, 2.0);
+    double next = current > 0.001 ? 0.0 : defaultFade;
+    setSelectedFade(fadeIn, next);
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void clearPendingLiveDeleteConfirmation() {
+    pendingLiveDeleteConfirmDeckIndex_ = -1;
+    pendingLiveDeleteConfirmSignature_.clear();
+    pendingLiveDeleteConfirmMessage_.clear();
+    pendingLiveDeleteConfirmUntilMs_ = 0;
+  }
+
+  std::string cueDeleteSignatureForDeck(const Deck& deck, const std::vector<int>& indices) const {
+    std::ostringstream sig;
+    sig << indices.size();
+    for (int index : indices) {
+      sig << '|';
+      if (index >= 0 && index < static_cast<int>(deck.cues.size())) {
+        sig << deck.cues[index].id;
+      } else {
+        sig << index;
+      }
+    }
+    return sig.str();
+  }
+
+  bool cueIndicesIncludeLiveCue(const Deck& deck, const std::vector<int>& indices) const {
+    for (int index : indices) {
+      if (index == deck.activeIndex) {
+        return true;
+      }
+      if (std::find(deck.overlayActiveIndices.begin(), deck.overlayActiveIndices.end(), index) !=
+          deck.overlayActiveIndices.end()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int remapCueIndexAfterDeletion(int index, const std::vector<int>& deletedIndices) const {
+    if (index < 0) {
+      return -1;
+    }
+    auto it = std::lower_bound(deletedIndices.begin(), deletedIndices.end(), index);
+    if (it != deletedIndices.end() && *it == index) {
+      return -1;
+    }
+    return index - static_cast<int>(std::distance(deletedIndices.begin(), it));
+  }
+
+  // alreadyConfirmed: the caller has ITSELF obtained a deliberate confirmation,
+  // so skip the press-again guard. The guard exists to stop a stray Delete
+  // keystroke wiping what is on air, and "press delete again" only makes sense
+  // for a key you can press twice. From a right-click menu the menu has already
+  // closed by then, so the user would have to right-click and re-pick inside a
+  // 2.5 s window — impractical, and it read as the delete being broken.
+  // A context menu says which cue it will delete and requires an explicit pick;
+  // that IS the confirmation, so the label carries the warning instead.
+  bool requestDeleteCueIndices(int deckIndex, std::vector<int> indices,
+                               bool alreadyConfirmed = false) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    indices.erase(std::remove_if(indices.begin(), indices.end(), [&](int index) {
+      return index < 0 || index >= static_cast<int>(deck.cues.size());
+    }), indices.end());
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    if (indices.empty()) {
+      clearPendingLiveDeleteConfirmation();
+      return false;
+    }
+
+    if (cueIndicesIncludeLiveCue(deck, indices) && !alreadyConfirmed) {
+      Uint64 now = SDL_GetTicks();
+      std::string signature = cueDeleteSignatureForDeck(deck, indices);
+      bool confirmed = pendingLiveDeleteConfirmDeckIndex_ == deckIndex &&
+                       pendingLiveDeleteConfirmSignature_ == signature &&
+                       now <= pendingLiveDeleteConfirmUntilMs_;
+      if (!confirmed) {
+        pendingLiveDeleteConfirmDeckIndex_ = deckIndex;
+        pendingLiveDeleteConfirmSignature_ = signature;
+        pendingLiveDeleteConfirmMessage_ = indices.size() == 1
+          ? "DELETE LIVE CUE?  PRESS DELETE AGAIN"
+          : ("DELETE " + std::to_string(indices.size()) + " LIVE CUES?  PRESS DELETE AGAIN");
+        pendingLiveDeleteConfirmUntilMs_ = now + 2500;
+        triggerToast(indices.size() == 1
+          ? "delete live cue: press delete again"
+          : ("delete " + std::to_string(indices.size()) + " live cues: press delete again"));
+        return false;
+      }
+    }
+
+    clearPendingLiveDeleteConfirmation();
+    pushUndoSnapshot();
+
+    std::sort(indices.begin(), indices.end());
+    bool removedActive = std::find(indices.begin(), indices.end(), deck.activeIndex) != indices.end();
+    int firstDeleted = indices.front();
+    if (removedActive) {
+      stopBrowserCue(deckIndex);
+      if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+        engine->clear();
+      }
+    }
+
+    for (auto it = indices.rbegin(); it != indices.rend(); ++it) {
+      deck.cues.erase(deck.cues.begin() + *it);
+    }
+    // Standby, overlays and a waiting take, by the shared rule. The selection
+    // and the live cue get their own treatment just below, which wants the
+    // pre-delete values, so they are put back first.
+    {
+      const int keepSelected = deck.selectedIndex;
+      const int keepActive = deck.activeIndex;
+      const std::vector<int> keepSelection = deck.selectedIndices;
+      remapDeckCueIndices(deckIndex, [&](int index) {
+        return remapCueIndexAfterDeletion(index, indices);
+      });
+      deck.selectedIndex = keepSelected;
+      deck.activeIndex = keepActive;
+      deck.selectedIndices = keepSelection;
+    }
+
+    if (deck.cues.empty()) {
+      deck.selectedIndex = -1;
+      deck.activeIndex = -1;
+      deck.selectedIndices.clear();
+    } else {
+      deck.selectedIndex = std::min(firstDeleted, static_cast<int>(deck.cues.size()) - 1);
+      if (removedActive) {
+        deck.activeIndex = -1;
+      } else if (deck.activeIndex >= 0) {
+        deck.activeIndex = remapCueIndexAfterDeletion(deck.activeIndex, indices);
+      }
+      deck.selectedIndices.clear();
+      deck.selectedIndices.push_back(deck.selectedIndex);
+    }
+    if (deckIndex == project_.focusedDeckIndex) {
+      onSelectionChanged();
+    }
+    syncPipOverlayRuntimesForDeck(deckIndex, SDL_GetTicks());
+    if (indices.size() == 1) {
+      triggerToast("cue deleted");
+    } else {
+      triggerToast(std::to_string(indices.size()) + " cues deleted");
+    }
+    playUiSound(UiSoundEffect::Delete);
+    markProjectDirty();
+    return true;
+  }
+
+  void deleteSelected() {
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    requestDeleteCueIndices(project_.focusedDeckIndex, std::move(indices));
+  }
+
+  // At most this many ffprobes at once. Small deliberately: each is a process
+  // doing disk I/O, and past a handful they queue on the drive anyway while
+  // costing a thread apiece.
+  static int probeConcurrencyCap() {
+    const unsigned hw = std::thread::hardware_concurrency();
+    return static_cast<int>(std::clamp<unsigned>(hw ? hw : 4u, 2u, 8u));
+  }
+
+  void enqueueProbe(int deckIndex, const std::string& path) {
+    probeQueue_.push_back(QueuedProbe{deckIndex, path});
+    probeBatchTotal_ += 1;
+  }
+
+  // Called once a frame. Starts whatever the cap has room for and no more.
+  void pumpProbeQueue() {
+    const int cap = probeConcurrencyCap();
+    while (!probeQueue_.empty() && static_cast<int>(probeFutures_.size()) < cap) {
+      QueuedProbe next = std::move(probeQueue_.front());
+      probeQueue_.pop_front();
+      PendingProbe pp;
+      pp.deckIndex = next.deckIndex;
+      pp.path = next.path;
+      pp.future = std::async(std::launch::async, [path = next.path]() {
+        return probeCue(fs::path(path));
+      });
+      probeFutures_.push_back(std::move(pp));
+    }
+    if (probeQueue_.empty() && probeFutures_.empty()) {
+      if (probeBatchPoorCount_ > 0 || probeBatchUnreadableCount_ > 0) {
+        std::string say;
+        if (probeBatchPoorCount_ > 0) {
+          say = probeBatchPoorCount_ == 1
+            ? "\"" + probeBatchFirstPoor_ + "\" may play poorly"
+            : std::to_string(probeBatchPoorCount_) + " cues may play poorly";
+        }
+        if (probeBatchUnreadableCount_ > 0) {
+          say += (say.empty() ? "" : ", ") + std::to_string(probeBatchUnreadableCount_) +
+                 (probeBatchUnreadableCount_ == 1 ? " file can't be read" : " files can't be read");
+        }
+        triggerToast(say + " - CONVERT in inspector", ToastKind::Warning, kToastReadableMs);
+      }
+      probeBatchTotal_ = 0;   // nothing outstanding; the readout goes away
+      probeBatchPoorCount_ = 0;
+      probeBatchUnreadableCount_ = 0;
+      probeBatchFirstPoor_.clear();
+    }
+  }
+
+  // Dropped files not yet turned into cues.
+  int importPendingCount() const {
+    return static_cast<int>(dropBatch_.size());
+  }
+
+  // How many probes are still owed, for the progress readout.
+  int probesOutstanding() const {
+    return static_cast<int>(probeQueue_.size() + probeFutures_.size());
+  }
+
+  // Where a drop landed, in control-window coordinates. The drop event carries
+  // the position of the last SDL_EVENT_DROP_POSITION, and a backend that sends
+  // none leaves it at 0,0 -- which is a real place in the window, so it cannot
+  // be trusted. Then the pointer is asked instead: during an OS drag it is
+  // over the window, where the file is about to land.
+  std::optional<SDL_Point> dropPointInControlWindow(float dropX, float dropY) const {
+    if (dropPositionKnown_) {
+      return SDL_Point {static_cast<int>(dropX), static_cast<int>(dropY)};
+    }
+    float globalX = 0.0f, globalY = 0.0f;
+    SDL_GetGlobalMouseState(&globalX, &globalY);
+    int windowX = 0, windowY = 0;
+    if (!SDL_GetWindowPosition(controlWindow_, &windowX, &windowY)) {
+      return std::nullopt;
+    }
+    return SDL_Point {static_cast<int>(globalX) - windowX,
+                      static_cast<int>(globalY) - windowY};
+  }
+
+  // The playlist a point in the control window belongs to, or -1. A tab
+  // names its playlist even when that playlist is not the one drawn, so the
+  // tabs are asked first.
+  int deckIndexAtControlPoint(int x, int y) const {
+    for (int di = 0; di < static_cast<int>(deckTabRects_.size()); ++di) {
+      if (deckTabRects_[di].w > 0 && pointInRect(x, y, deckTabRects_[di])) {
+        return di;
+      }
+    }
+    for (int di = 0; di < static_cast<int>(deckColumnRects_.size()); ++di) {
+      if (deckColumnRects_[di].w > 0 && pointInRect(x, y, deckColumnRects_[di])) {
+        return di;
+      }
+    }
+    for (int di = 0; di < static_cast<int>(deckListClipRects_.size()); ++di) {
+      if (deckListClipRects_[di].w > 0 && pointInRect(x, y, deckListClipRects_[di])) {
+        return di;
+      }
+    }
+    return -1;
+  }
+
+  // Import everything one drop delivered, in the order it was dropped.
+  void flushDropBatch() {
+    if (dropBatch_.empty()) {
+      return;
+    }
+    std::vector<std::string> paths;
+    paths.swap(dropBatch_);
+    // Logged, so "the drop did nothing" can be told apart from "the drop
+    // never arrived": with no DROP line the window was never handed the files.
+    showLog("DROP", std::to_string(paths.size()) + " file(s), first \"" +
+            fs::path(paths.front()).filename().string() + "\"");
+    handleDroppedFiles(paths, dropBatchAt_);
+    dropBatchAt_.reset();
+  }
+
+  void handleDroppedFiles(const std::vector<std::string>& paths,
+                          std::optional<SDL_Point> at = std::nullopt) {
+    if (paths.empty()) {
+      return;
+    }
+    // Finder delivers document-open requests through SDL's drop events too.
+    // Use the same live-show guard and undo path as the OPEN picker.
+    if (paths.size() == 1) {
+      const fs::path dropped(paths.front());
+      std::string extension = dropped.extension().string();
+      std::transform(extension.begin(), extension.end(), extension.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (extension == ".deckboy") {
+        std::error_code error;
+        if (!fs::is_regular_file(dropped, error)) {
+          triggerToast("Show file not found", ToastKind::Warning, kToastReadableMs);
+          return;
+        }
+        if (!confirmLiveKey(SDLK_O, "OPEN replaces the live show - open the file again to confirm")) return;
+        pushUndoSnapshotForShowReplace();
+        openProjectFromPath(dropped);
+        return;
+      }
+    }
+    // Dropped onto a playlist: select it, and the import below follows the
+    // selection. Anywhere else (or over the settings, which cover the
+    // playlists) keeps the selected one, as before.
+    if (at && !settingsOpen_) {
+      const int target = deckIndexAtControlPoint(at->x, at->y);
+      if (target >= 0 && target != project_.focusedDeckIndex) {
+        setFocusedDeckIndex(target);
+      }
+    }
+    importPaths(paths);
+  }
+
+  // ── Native file dialogs (SDL3) ──────────────────────────────────────────
+  // SDL_ShowOpenFileDialog and friends deliver their result through a C
+  // callback. It fires on the main thread during event pumping, but we do NOT
+  // act on it inline — a picked file kicks off importing or project loading,
+  // and running that re-entrantly inside SDL's event pump is asking for
+  // trouble. Instead the callback marshals a closure into sdlDialogActions_,
+  // which drainSdlDialogActions() (update loop) runs at a safe point.
+  //
+  // filelist == nullptr means the dialog errored; a non-null list whose first
+  // entry is nullptr means the user cancelled. Both collapse to an empty vector
+  // here, and every result handler treats "no files" as "do nothing".
+  struct SdlDialogRequest {
+    App* app = nullptr;
+    std::function<void(std::vector<std::string>)> onResult;
+  };
+
+  static void sdlDialogTrampoline(void* userdata, const char* const* filelist, int /*filter*/) {
+    std::unique_ptr<SdlDialogRequest> req(static_cast<SdlDialogRequest*>(userdata));
+    std::vector<std::string> files;
+    if (filelist) {
+      for (int i = 0; filelist[i] != nullptr; ++i) {
+        if (filelist[i][0] != '\0') {
+          files.emplace_back(filelist[i]);
+        }
+      }
+    }
+    App* app = req->app;
+    auto cb = std::move(req->onResult);
+    {
+      std::lock_guard<std::mutex> lock(app->sdlDialogMutex_);
+      app->sdlDialogActions_.emplace_back(
+        [cb = std::move(cb), files = std::move(files)]() mutable { cb(files); });
+    }
+    // Released outside the queue lock; the flag has its own atomicity. Cleared
+    // LAST so a fresh dialog cannot be opened until this result is fully queued.
+    app->sdlDialogOpen_.store(false, std::memory_order_release);
+  }
+
+  // Run every queued dialog result. Main thread, called from the update loop.
+  void drainSdlDialogActions() {
+    std::vector<std::function<void()>> actions;
+    {
+      std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+      if (sdlDialogActions_.empty()) {
+        return;
+      }
+      actions.swap(sdlDialogActions_);
+    }
+    for (auto& action : actions) {
+      action();
+    }
+  }
+
+  // IMPORTANT for all three helpers: `filters` MUST outlive the async call —
+  // SDL's docs require the filter array stay valid "until the callback is
+  // invoked", which can be much later (the dialog is modal to the user, not to
+  // us). Every caller passes a `static const` filter list for exactly this
+  // reason; never pass a local/temporary. The dialog is main-thread-only to
+  // open; the result callback may land on another thread, which is why
+  // sdlDialogOpen_ is atomic and results are marshalled through a locked queue.
+  void showOpenFileDialog(const std::vector<SDL_DialogFileFilter>& filters, bool allowMany,
+                          std::function<void(std::vector<std::string>)> onResult) {
+    if (sdlDialogOpen_.load(std::memory_order_acquire)) {
+      return;  // one native dialog at a time; a second click is a no-op
+    }
+    sdlDialogOpen_.store(true, std::memory_order_release);
+    auto* req = new SdlDialogRequest{this, std::move(onResult)};
+    SDL_ShowOpenFileDialog(&App::sdlDialogTrampoline, req, controlWindow_,
+                           filters.empty() ? nullptr : filters.data(),
+                           static_cast<int>(filters.size()), nullptr, allowMany);
+  }
+
+  void showSaveFileDialog(const std::vector<SDL_DialogFileFilter>& filters,
+                          std::function<void(std::vector<std::string>)> onResult) {
+    if (sdlDialogOpen_.load(std::memory_order_acquire)) {
+      return;
+    }
+    sdlDialogOpen_.store(true, std::memory_order_release);
+    auto* req = new SdlDialogRequest{this, std::move(onResult)};
+    SDL_ShowSaveFileDialog(&App::sdlDialogTrampoline, req, controlWindow_,
+                           filters.empty() ? nullptr : filters.data(),
+                           static_cast<int>(filters.size()), nullptr);
+  }
+
+  void showFolderDialog(std::function<void(std::vector<std::string>)> onResult) {
+    if (sdlDialogOpen_.load(std::memory_order_acquire)) {
+      return;
+    }
+    sdlDialogOpen_.store(true, std::memory_order_release);
+    auto* req = new SdlDialogRequest{this, std::move(onResult)};
+    SDL_ShowOpenFolderDialog(&App::sdlDialogTrampoline, req, controlWindow_, nullptr, false);
+  }
+
+  void importWithPicker() {
+    pushUndoSnapshot();
+    // The media filter is a convenience, not a restriction — "All files" stays
+    // available in the native dialog, and the previous osascript picker had no
+    // filter at all, so nothing the operator could pick before is blocked now.
+    static const std::vector<SDL_DialogFileFilter> kMediaFilters = {
+      {"Media files", "mp4;mov;m4v;mkv;avi;webm;mpg;mpeg;m2v;ts;wmv;flv;"
+                      "png;jpg;jpeg;bmp;gif;tif;tiff;webp;avif;heic;heif;"
+                      "wav;mp3;aac;m4a;flac;ogg;aiff;"
+                      "pdf;pptx;ppt;pps;ppsx;key;odp"},
+      {"Slides", "pdf;pptx;ppt;pps;ppsx;key;odp"},
+      {"All files", "*"},
+    };
+    showOpenFileDialog(kMediaFilters, /*allowMany=*/true,
+                       [this](std::vector<std::string> files) {
+                         if (!files.empty()) {
+                           importPaths(files);
+                         }
+                       });
+  }
+
+
+  void openProjectFromPath(const fs::path& projectPath) {
+    showLog("SHOW-OPEN", projectPath.filename().string());
+    fs::path normalized = normalizeProjectPath(projectPath);
+    prepareProjectOpen(normalized);
+    resetTransientPreviewState();
+    currentProjectFile_ = normalized;
+    rememberLastOpenedProjectFile(currentProjectFile_);
+    // Big shows (1,500+ cues off a USB drive) parse and build runtimes with the
+    // render loop stopped. Drive a loading overlay from inside that work so the
+    // window shows progress instead of appearing hung. It self-hides for opens
+    // that finish inside 250 ms, which is most of them.
+    beginLoadingOverlay("OPENING SHOW", normalized.filename().string());
+    project_ = loadProject(normalized, [this](double frac) {
+      // Parsing is the bulk of the wait, so give it most of the bar.
+      loadingOverlayProgress(frac * 0.8);
+    });
+    loadingOverlayProgress(0.82, "checking the show");
+    settleIncomingShow(true);
+    loadingOverlayProgress(1.0, "ready");
+    endLoadingOverlay();
+    triggerToast("playlist: " + currentProjectLabel());
+    // Presence scan runs async (seconds of frozen UI on big USB playlists);
+    // the RELINK toast follows when it lands.
+    startMediaPresenceScanAsync(true);
+    queueAudioMetadataRepairProbes();
+    // A SHOW CARRIES ITS OWN NETWORK. NMC's direction and port, the switcher
+    // this show watches, whether it answers as a deck -- these arrived with
+    // the file, so the runtime has to be told. It never mattered while those
+    // settings came from environment variables, because opening a show could
+    // not change them; now it can, and a show opened on a running Deckboy
+    // would otherwise keep the previous show's rig.
+    applyProjectNetworkSettings();
+  }
+
+  // WHAT A SHOW NEEDS ONCE IT IS IN project_ -- read from a file, or brought
+  // back from the undo stack. One routine for both, so undoing an OPEN cannot
+  // settle a show differently from opening it.
+  void settleIncomingShow(bool withProgress = false) {
+    normalizeProject(project_);
+    // Apply the show's saved color theme. Empty = leave the current theme
+    // as-is (older theme-less shows don't stomp the operator's pick).
+    if (!project_.theme.empty()) {
+      loadTheme(project_.theme);
+    }
+    // LANGUAGE BEFORE FONTS. applyUiScale loads the faces, and which faces to
+    // load is a question only the language can answer -- a show in Japanese
+    // needs a face with Japanese in it. Loading first and asking second is how
+    // the whole interface came up as empty boxes.
+    applyProjectLanguage();
+    applyUiScale();
+    disarmAllOutputsForStartup();
+    // Open lands on a neutral "nothing live" state, same as a fresh launch:
+    // clear any saved active cue so the timeline and preview agree (the saved
+    // index otherwise leaves a ghost active cue in the timeline with a blank
+    // preview) and the operator explicitly takes the first cue. Also lets the
+    // startup mascot show. The selected cue is preserved for prepping/taking.
+    for (auto& deck : project_.decks) { deck.activeIndex = -1; }
+    timecodeTriggeredCueIds_.clear();
+    cueRowDisplayCache_.clear();
+    resetTimecodeFollowerState();
+    selectionChangedAt_ = SDL_GetTicks();
+    if (withProgress) {
+      loadingOverlayProgress(0.88, "building decks");
+    }
+    if (!rebuildDeckRuntimes()) {
+      std::cerr << "Deck runtime creation failed: " << SDL_GetError() << '\n';
+    }
+    if (withProgress) {
+      loadingOverlayProgress(0.95, "wiring outputs");
+    }
+    if (!rebuildOutputRuntimes()) {
+      std::cerr << "Output runtime creation failed: " << SDL_GetError() << '\n';
+    }
+  }
+
+  // Re-point every per-show network service at what the open show asks for.
+  // Safe to call repeatedly: each start() stops whatever was running first.
+  void applyProjectNetworkSettings() {
+    startNmcSyncBridge();
+    startAtemSwitcherClient();
+    stopHyperDeckServer();
+    startHyperDeckServer();
+  }
+
+  // Cues saved before audioChannels/audioSampleRate existed load with 0 in
+  // those fields, which quietly downgrades the stereo waveform lane to the
+  // mono view. Re-probe them in the background and backfill (the update()
+  // probe poll has a matching repair branch).
+  void queueAudioMetadataRepairProbes() {
+    constexpr int kMaxRepairProbes = 64;
+    int queued = 0;
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      for (const Cue& cue : project_.decks[deckIndex].cues) {
+        if (queued >= kMaxRepairProbes) {
+          return;
+        }
+        bool fileBacked = cue.kind == CueKind::Video || cue.kind == CueKind::Audio;
+        if (!fileBacked || !cue.hasAudio || cue.audioChannels > 0 || cue.path.empty()) {
+          continue;
+        }
+        fs::path mediaPath(resolvedCueFilesystemPathString(cue, currentProjectFile_));
+        std::error_code existsEc;
+        if (mediaPath.empty() || !fs::exists(mediaPath, existsEc)) {
+          continue;
+        }
+        PendingProbe pp;
+        pp.deckIndex = deckIndex;
+        pp.path = cue.path;
+        std::string probePathStr = mediaPath.string();
+        pp.future = std::async(std::launch::async, [probePathStr]() {
+          return probeCue(fs::path(probePathStr));
+        });
+        probeFutures_.push_back(std::move(pp));
+        ++queued;
+      }
+    }
+  }
+
+  // One shared filter for the .deckboy project/playlist pickers.
+  static const std::vector<SDL_DialogFileFilter>& deckboyProjectFilters() {
+    static const std::vector<SDL_DialogFileFilter> filters = {
+      {"Deckboy playlist", "deckboy"},
+      {"All files", "*"},
+    };
+    return filters;
+  }
+
+  // OPEN HAD NONE OF NEW'S GUARDS: one press and a file pick replaced a live
+  // show and disarmed every output, with nothing to undo. Now, while live, the
+  // first press says so and the second opens the picker; and the show being
+  // replaced goes on the undo stack, outputs disarmed, the way NEW's does.
+  void openProjectFromPicker() {
+    if (!confirmLiveKey(SDLK_O, "OPEN replaces the live show and outputs go dark - press OPEN again")) {
+      return;
+    }
+    showOpenFileDialog(deckboyProjectFilters(), /*allowMany=*/false,
+                       [this](std::vector<std::string> files) {
+                         if (!files.empty()) {
+                           pushUndoSnapshotForShowReplace();
+                           openProjectFromPath(normalizeProjectPath(fs::path(files[0])));
+                         }
+                       });
+  }
+
+  // SAVE WRITES BACK OVER THE SHOW THAT IS OPEN.
+  //
+  // Every save route -- the button, Ctrl+S, Ctrl+Shift+S -- used to go through
+  // the file picker, so keeping the show you had open meant picking it out of a
+  // dialog and confirming an overwrite EVERY time. Mid-show that is three
+  // interactions to do the one thing you meant.
+  //
+  // Now SAVE writes to the file that is open, and SAVE AS is the separate,
+  // deliberate act of making a new one. A show that has never been written
+  // anywhere has no file to write back to, so the first save still asks.
+  //
+  // "Never written anywhere" includes the scratch file. A new show is
+  // autosaved into default.deckboy in the state folder, so the path was never
+  // empty and this check never fired: SAVE wrote the scratch file, said
+  // "saved", and the next NEW overwrote it.
+  void saveProjectInPlace() {
+    if (projectIsInScratchFile()) {
+      saveProjectAsFromPicker();
+      return;
+    }
+    saveProjectNow(true);
+  }
+
+  void saveProjectAsFromPicker() {
+    showSaveFileDialog(deckboyProjectFilters(),
+                       [this](std::vector<std::string> files) {
+                         if (files.empty()) {
+                           return;
+                         }
+                         fs::path chosen = normalizeProjectPath(fs::path(files[0]));
+                         // The native save dialog does not force an extension;
+                         // add .deckboy if the operator did not type one, so a
+                         // saved show is always openable by the .deckboy filter.
+                         if (chosen.extension() != ".deckboy") {
+                           chosen += ".deckboy";
+                         }
+                         currentProjectFile_ = chosen;
+                         saveProjectNow(true);
+                       });
+  }
+
+
+  void applyDeckDefaultsToCue(Cue& cue, const Deck& deck) {
+    // A LOWER THIRD MADE TODAY MOVES. The struct default is `none` so a
+    // show written before the styles existed keeps popping exactly as it
+    // did; this is the other default, the one a NEW cue arrives with, and
+    // nobody making a lower third wants it to appear instantly.
+    if (cue.kind == CueKind::LowerThird && cue.lowerThirdStyle == 0) {
+      cue.lowerThirdStyle = 2;   // rise
+    }
+    cue.loop = deck.playlistDefaultLoop;
+    cue.pauseAtBeginning = deck.playlistDefaultPauseAtBeginning;
+    cue.pauseOnLastFrame = deck.playlistDefaultPauseAtEnd;
+    cue.transitionToNext = deck.playlistDefaultTransitionToNext;
+    cue.audioEnabled = cue.hasAudio ? deck.playlistDefaultAudioEnabled : false;
+
+    double fadeDefault = std::clamp(deck.playlistDefaultCueFadeSeconds, 0.0, 10.0);
+    cue.fadeInSeconds = deck.playlistDefaultFadeInEnabled ? fadeDefault : 0.0;
+    cue.fadeOutSeconds = deck.playlistDefaultFadeOutEnabled ? fadeDefault : 0.0;
+
+    if (isDefaultStillDurationCueKind(cue.kind)) {
+      cue.stillDurationSeconds = std::clamp(deck.playlistDefaultStillDurationSeconds, 0.0, 3600.0);
+      // Stills hold at the end of their duration by default, so a fade-out would
+      // dip the held frame to black — almost never what you want for a static
+      // graphic. Default still-type cues to NO fade-out; the operator can still
+      // turn fade-out on per cue (and it will then ramp as configured).
+      cue.fadeOutSeconds = 0.0;
+    }
+  }
+
+  void editFocusedDeckPlaylistPreferences() {
+    if (project_.decks.empty()) {
+      return;
+    }
+    struct PlaylistPrefsDraft {
+      int deckIndex = -1;
+      double playlistTimebaseFps = 30.0;
+      double playlistStartOffsetSeconds = 0.0;
+      double playlistDefaultCueFadeSeconds = 1.5;
+      double playlistDefaultStillDurationSeconds = 5.0;
+      bool changed = false;
+    };
+    Deck& deck = focusedDeckMutable();
+    auto draft = std::make_shared<PlaylistPrefsDraft>();
+    draft->deckIndex = std::clamp(project_.focusedDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    draft->playlistTimebaseFps = deck.playlistTimebaseFps;
+    draft->playlistStartOffsetSeconds = deck.playlistStartOffsetSeconds;
+    draft->playlistDefaultCueFadeSeconds = deck.playlistDefaultCueFadeSeconds;
+    draft->playlistDefaultStillDurationSeconds = deck.playlistDefaultStillDurationSeconds;
+
+    auto applyDraft = [this, draft]() {
+      if (draft->deckIndex < 0 || draft->deckIndex >= static_cast<int>(project_.decks.size())) {
+        return;
+      }
+      Deck& target = project_.decks[draft->deckIndex];
+      if (draft->changed) {
+        target.playlistTimebaseFps = draft->playlistTimebaseFps;
+        target.timecodeFps = draft->playlistTimebaseFps;
+        target.playlistStartOffsetSeconds = draft->playlistStartOffsetSeconds;
+        target.playlistDefaultCueFadeSeconds = draft->playlistDefaultCueFadeSeconds;
+        target.playlistDefaultStillDurationSeconds = draft->playlistDefaultStillDurationSeconds;
+        markProjectDirty();
+        triggerToast(
+          "playlist prefs: "
+          + playlistTimebaseLabel(target.playlistTimebaseFps)
+          + " start "
+          + formatTimecode(target.playlistStartOffsetSeconds, target.playlistTimebaseFps));
+      }
+    };
+
+    auto openStillStep = std::make_shared<std::function<void()>>();
+    auto openFadeStep = std::make_shared<std::function<void()>>();
+    auto openStartStep = std::make_shared<std::function<void()>>();
+    auto openFpsStep = std::make_shared<std::function<void()>>();
+
+    *openStillStep = [this, draft, applyDraft]() {
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(2) << draft->playlistDefaultStillDurationSeconds;
+      openInlineTextEditor("playlist.still_duration",
+                           "Default Non-Movie Duration",
+                           "Seconds for new image/pattern/browser/Lower Third cues (0 = hold)",
+                           ss.str(),
+                           [this, draft, applyDraft](const std::string& value) {
+                             try {
+                               double next = std::clamp(std::stod(trim(value)), 0.0, 3600.0);
+                               if (std::fabs(draft->playlistDefaultStillDurationSeconds - next) > 0.001) {
+                                 draft->playlistDefaultStillDurationSeconds = next;
+                                 draft->changed = true;
+                               }
+                             } catch (...) {
+                               triggerToast("still duration: invalid");
+                             }
+                             applyDraft();
+                           });
+    };
+
+    *openFadeStep = [this, draft, openStillStep]() {
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(2) << draft->playlistDefaultCueFadeSeconds;
+      openInlineTextEditor("playlist.fade_default",
+                           "Default Cue Fade",
+                           "Seconds for new-cue fade in/out defaults",
+                           ss.str(),
+                           [this, draft, openStillStep](const std::string& value) {
+                             try {
+                               double next = std::clamp(std::stod(trim(value)), 0.0, 10.0);
+                               if (std::fabs(draft->playlistDefaultCueFadeSeconds - next) > 0.001) {
+                                 draft->playlistDefaultCueFadeSeconds = next;
+                                 draft->changed = true;
+                               }
+                             } catch (...) {
+                               triggerToast("cue fade: invalid");
+                             }
+                             (*openStillStep)();
+                           });
+    };
+
+    *openStartStep = [this, draft, openFadeStep]() {
+      std::string startDefault = formatTimecode(draft->playlistStartOffsetSeconds, draft->playlistTimebaseFps);
+      openInlineTextEditor("playlist.start_tc",
+                           "Playlist Start TC",
+                           "SMPTE hh:mm:ss:ff or seconds (blank = 00:00:00:00)",
+                           startDefault,
+                           [this, draft, openFadeStep](const std::string& value) {
+                             std::string token = trim(value);
+                             double parsed = 0.0;
+                             bool valid = false;
+                             if (token.empty()) {
+                               valid = true;
+                             } else if (auto tc = parseTimecodeSeconds(token, draft->playlistTimebaseFps)) {
+                               parsed = *tc;
+                               valid = true;
+                             } else {
+                               try {
+                                 parsed = std::max(0.0, std::stod(token));
+                                 valid = true;
+                               } catch (...) {
+                                 triggerToast("playlist start: invalid");
+                               }
+                             }
+                             if (valid) {
+                               parsed = std::clamp(parsed, 0.0, 24.0 * 60.0 * 60.0);
+                               if (std::fabs(draft->playlistStartOffsetSeconds - parsed) > 0.001) {
+                                 draft->playlistStartOffsetSeconds = parsed;
+                                 draft->changed = true;
+                               }
+                             }
+                             (*openFadeStep)();
+                           });
+    };
+
+    *openFpsStep = [this, draft, openStartStep]() {
+      openInlineTextEditor("playlist.timebase",
+                           "Playlist Timebase",
+                           "Enter playlist SMPTE FPS: 24 / 25 / 29.97 / 30",
+                           playlistTimebaseLabel(draft->playlistTimebaseFps),
+                           [this, draft, openStartStep](const std::string& value) {
+                             try {
+                               double next = normalizePlaylistTimebaseFps(std::stod(trim(value)));
+                               if (std::fabs(draft->playlistTimebaseFps - next) > 0.001) {
+                                 draft->playlistTimebaseFps = next;
+                                 draft->changed = true;
+                               }
+                             } catch (...) {
+                               triggerToast("playlist fps: invalid");
+                             }
+                             (*openStartStep)();
+                           });
+    };
+
+    (*openFpsStep)();
+  }
+
+  void addBrowserCue(const std::string& rawUrl) {
+    std::string url = normalizeBrowserUrl(rawUrl);
+    if (url.empty()) {
+      return;
+    }
+#if defined(_WIN32) && defined(DECKBOY_HAS_WEBVIEW)
+    // Browser cues on Windows render through WebView2. Without the runtime,
+    // the cue would author OK but render as a black frame at TAKE — surface
+    // the requirement at creation instead so the operator can install once.
+    if (!webView2RuntimeAvailable()) {
+      promptForWebView2Runtime();
+      return;
+    }
+#endif
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+
+    Cue cue;
+    cue.kind = CueKind::Browser;
+    cue.path = url;
+    cue.name = browserCueNameForUrl(url);
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = SDL_Color {139, 172, 15, 255};
+    cue.formatName = "browser";
+    cue.videoCodec = "chromium";
+    cue.audioCodec = "system";
+    cue.hasAudio = true;
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("browser cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addBrowserCueFromPrompt() {
+    openInlineTextEditor("tool.add_browser",
+                         "Add Browser Cue",
+                         "URL or local page path",
+                         "https://duckduckgo.com",
+                         [this](const std::string& value) {
+                           std::string normalized = normalizeBrowserUrl(trim(value));
+                           // Submitting nothing is a request for the default
+                           // page, not a mistake: the operator wanted a browser
+                           // cue and has not decided where it points yet.
+                           if (normalized.empty()) {
+                             normalized = defaultBrowserPageUrl();
+                           }
+                           if (normalized.empty()) {
+                             triggerToast("browser url: invalid");
+                             return;
+                           }
+                           addBrowserCue(normalized);
+                         });
+  }
+
+  void addSrtStreamCue(const std::string& url) {
+    std::string trimmedUrl = trim(url);
+    if (trimmedUrl.empty()) {
+      return;
+    }
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::SrtStream;
+    cue.path = trimmedUrl;
+    cue.name = "Stream";
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.duration = 0.0;
+    cue.stillDurationSeconds = 0.0;
+    cue.hasAudio = true;
+    cue.formatName = "stream";
+    cue.videoCodec = "stream";
+    cue.audioCodec = "stream";
+    cue.color = SDL_Color {72, 130, 180, 255};
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("stream cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  // ── MEDIAMTX ──────────────────────────────────────────────────────────
+  std::string mediamtxHost() const {
+    const std::string h = trim(project_.mediamtxHost);
+    return h.empty() ? std::string("127.0.0.1") : h;
+  }
+
+  // What MediaMTX is carrying right now, by asking its API (curl, two-second
+  // cap -- a router that is not there must not stall the desk). Each entry is
+  // a path name and whether it has a live publisher.
+  std::vector<std::pair<std::string, bool>> mediamtxStreams(std::string* why = nullptr) {
+    std::vector<std::pair<std::string, bool>> out;
+    const auto got = ::runCaptured({"curl", "-s", "-m", "2", "--fail",
+                                    "http://" + mediamtxHost() + ":9997/v3/paths/list"});
+    if (!got.ok()) {
+      if (why) *why = "MediaMTX is not answering at " + mediamtxHost() + " (is its api on?)";
+      return out;
+    }
+    // A flat scan, not a JSON library: each item is {"name":"...", ... "ready":true|false, ...}.
+    const std::string& j = got.output;
+    std::size_t at = 0;
+    while ((at = j.find("\"name\":\"", at)) != std::string::npos) {
+      at += 8;
+      const std::size_t end = j.find('"', at);
+      if (end == std::string::npos) break;
+      const std::string name = j.substr(at, end - at);
+      const std::size_t next = j.find("\"name\":\"", end);
+      const std::size_t ready = j.find("\"ready\":true", end);
+      out.emplace_back(name, ready != std::string::npos && (next == std::string::npos || ready < next));
+      at = end;
+    }
+    if (out.empty() && why) *why = "MediaMTX at " + mediamtxHost() + " has no streams yet";
+    return out;
+  }
+
+  // Read one of its streams as a cue, over SRT (the lowest-latency of its
+  // outputs that Deckboy's stream cue already plays).
+  void addMediamtxStreamCue(const std::string& name) {
+    addSrtStreamCue("srt://" + mediamtxHost() + ":8890?streamid=read:" + name);
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      deck.cues.back().name = name + " (MediaMTX)";
+    }
+  }
+
+  void openMediamtxStreamMenu() {
+    std::string why;
+    const auto streams = mediamtxStreams(&why);
+    if (streams.empty()) {
+      triggerToast(why, ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    std::vector<std::pair<std::string, std::string>> choices;
+    for (const auto& [name, ready] : streams) {
+      choices.emplace_back(name, name + (ready ? "  (live)" : "  (waiting for a publisher)"));
+    }
+    SDL_Rect anchor {};
+    for (const auto& button : buttons_) {
+      if (button.label == "SOURCE") anchor = button.rect;
+    }
+    openDropdown("mediamtx.streams", anchor, choices, choices.front().first,
+                 [this](const std::string& name) { addMediamtxStreamCue(name); });
+  }
+
+  // The programme out through MediaMTX: the focused output streams to it over
+  // SRT, and it serves the room -- browsers (WebRTC, HLS), RTSP for vMix and
+  // recorders -- without Deckboy encoding once per viewer.
+  bool sendProgrammeToMediamtx(const std::string& path = "deckboy") {
+    OutputTarget& out = focusedOutputMutable();
+    out.streamProtocol = "srt";
+    out.streamUrl = "srt://" + mediamtxHost() + ":8890?streamid=publish:" + path + "&pkt_size=1316";
+    out.streamEnabled = false;   // so the setter below sees a change and starts it
+    markProjectDirty();
+    setFocusedOutputStreamEnabled(true);
+    triggerToast("programme to MediaMTX: watch at http://" + mediamtxHost() + ":8888/" + path,
+                 ToastKind::Help, kToastReadableMs);
+    return true;
+  }
+
+  void addSrtStreamCueFromPrompt() {
+    openInlineTextEditor("tool.add_stream",
+                         "Add Stream Cue",
+                         "Stream URL (srt://, rtmp://, rtsp://, udp://, "
+                         "or an http HLS .m3u8)",
+                         "srt://127.0.0.1:9000?mode=listener",
+                         [this](const std::string& value) {
+                           std::string url = trim(value);
+                           if (url.empty()) {
+                             triggerToast("stream url: required");
+                             return;
+                           }
+                           addSrtStreamCue(url);
+                         });
+  }
+  void addNdiSourceCue(const std::string& sourceName) {
+    std::string name = trim(sourceName);
+    // WHETHER NDI CAN RUN AT ALL, checked here and reported in the toast at
+    // the end of this function. Raising it now instead would be pointless:
+    // the "cue added" toast below replaces whatever is on screen, so the
+    // warning would appear and vanish inside the same call. Only the LAST
+    // toast a function raises is ever seen.
+    std::string ndiWhyNot;
+    const bool ndiUsable =
+      deckboy::platform::video::NdiInput::available(&ndiWhyNot);
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::NdiSource;
+    cue.path = "ndi://" + name;
+    cue.name = name.empty() ? "NDI Source" : name;
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.duration = 0.0;
+    cue.stillDurationSeconds = 0.0;
+    cue.hasAudio = true;
+    cue.formatName = "ndi";
+    cue.videoCodec = "ndi";
+    cue.audioCodec = "ndi";
+    cue.color = SDL_Color {180, 72, 72, 255};
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    // NDI input is received natively now -- through the SDK, the way a
+    // DeckLink input is captured. It used to go through ffmpeg's
+    // libndi_newtek device, which upstream removed in 2021, so the cue was
+    // created, named, and stayed blank for ever with nothing said. What can
+    // still stop it is the NDI RUNTIME being absent, and that says so.
+    if (ndiUsable) {
+      triggerToast("NDI source cue added");
+    } else {
+      triggerToast("NDI cue added, but " + ndiWhyNot,
+                   ToastKind::Warning, kToastReadableMs);
+    }
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addDeckLinkSourceCue(int deviceId, const std::string& deviceName) {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::DeckLinkSource;
+    cue.path = "decklink://" + std::to_string(deviceId);
+    cue.name = deviceName.empty() ? "DeckLink Input" : deviceName;
+    cue.width = rasterW;
+    cue.height = rasterH;
+    // A live input runs until it is taken off, like NDI and the streams.
+    cue.duration = 0.0;
+    cue.stillDurationSeconds = 0.0;
+    cue.hasAudio = true;
+    cue.formatName = "decklink";
+    cue.videoCodec = "decklink";
+    cue.audioCodec = "pcm_s16le";
+    cue.color = SDL_Color {72, 120, 190, 255};
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("DeckLink input cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addNdiSourceCueFromPrompt() {
+    openInlineTextEditor("tool.add_ndi",
+                         "Add NDI Source Cue",
+                         "NDI source name (e.g. LAPTOP (source 1))",
+                         "",
+                         [this](const std::string& value) {
+                           addNdiSourceCue(trim(value));
+                         });
+  }
+
+  void openInlineCueFindEditor(bool takeAfterFind, const std::string& initialValue = {}) {
+    std::string seed = initialValue.empty() ? lastCueFindToken_ : initialValue;
+    openInlineTextEditor(takeAfterFind ? "tool.find_take" : "tool.find",
+                         takeAfterFind ? "Find+Take Cue" : "Find Cue",
+                         "Cue number, cue id, or name contains:",
+                         seed,
+                         [this, takeAfterFind](const std::string& value) {
+                           std::string token = trim(value);
+                           if (token.empty()) {
+                             return;
+                           }
+                           findCueToken(token, 1, takeAfterFind);
+                         });
+  }
+
+  void applyRenumberCueInput(const std::string& rawInput, bool allowOptionalStart) {
+    std::string trimmedInput = trim(rawInput);
+    if (trimmedInput.empty()) {
+      renumberFocusedDeckCueNumbers("", 1);
+      return;
+    }
+    auto parts = splitWhitespace(trimmedInput);
+    std::string prefix = parts.empty() ? "" : parts[0];
+    int start = 1;
+    bool numericOnly = false;
+    if (allowOptionalStart && parts.size() == 1) {
+      try {
+        start = std::stoi(parts[0]);
+        prefix.clear();
+        numericOnly = true;
+      } catch (...) {
+      }
+    }
+    if (allowOptionalStart && !numericOnly && parts.size() > 1) {
+      try {
+        start = std::stoi(parts[1]);
+      } catch (...) {
+      }
+    }
+    renumberFocusedDeckCueNumbers(prefix, start);
+  }
+
+  void openInlineCueRenumberEditor(bool allowOptionalStart) {
+    openInlineTextEditor("tool.renumber_cues",
+                         "Renumber Cues",
+                         allowOptionalStart
+                           ? "Prefix and optional start (example: Q 100)"
+                           : "Prefix (optional). Example: Q",
+                         "",
+                         [this, allowOptionalStart](const std::string& value) {
+                           applyRenumberCueInput(value, allowOptionalStart);
+                         });
+  }
+
+  void openInlineMasterSceneRenameEditor() {
+    // Group preset functions removed — no-op
+    triggerToast("master scene rename: removed");
+  }
+
+  void openInlineGotoCueEditor() {
+    openInlineTextEditor("tool.goto_cue",
+                         "GOTO Cue",
+                         "Jump to cue number:",
+                         "",
+                         [this](const std::string& value) {
+                           std::string token = trim(value);
+                           if (!token.empty()) {
+                             handleRemoteCommand("GOTO " + token);
+                           }
+                         });
+  }
+
+  void openInlineMidiPortEditor() {
+    openInlineTextEditor("settings.midi_port",
+                         "ALSA MIDI Port",
+                         "e.g. 20:0 or client name",
+                         midiDeviceName_(),
+                         [this](const std::string& value) {
+                           midiDeviceName_() = trim(value);
+                           markProjectDirty();
+                           if (midiEnabled_) {
+                             stopMidiInput();
+                             startMidiInput();
+                           }
+                         });
+  }
+
+  void openInlineCompanionPortEditor() {
+    openInlineTextEditor("settings.companion_port",
+                         "Companion/OSC Port",
+                         "port number (default 5510)",
+                         std::to_string(companionPort_),
+                         [this](const std::string& value) {
+                           try {
+                             int p = std::stoi(trim(value));
+                             if (p > 0 && p < 65536 && p != companionPort_) {
+                               companionPort_ = p;
+                               stopCompanionControl();
+                               startCompanionControl();
+                               triggerToast("companion port: " + std::to_string(companionPort_));
+                             }
+                           } catch (...) {
+                             triggerToast("port: invalid");
+                           }
+                         });
+  }
+
+  void openInlineVmixPortEditor(bool httpSide) {
+    openInlineTextEditor(httpSide ? "settings.vmix_http_port"
+                                  : "settings.vmix_tcp_port",
+                         httpSide ? "vMix HTTP Port" : "vMix TCP Port",
+                         httpSide ? "port number (vMix uses 8088)"
+                                  : "port number (vMix uses 8099)",
+                         std::to_string(httpSide ? project_.vmixHttpPort
+                                                 : project_.vmixTcpPort),
+                         [this, httpSide](const std::string& value) {
+                           try {
+                             const int p = std::stoi(trim(value));
+                             if (p > 0 && p < 65536) {
+                               setVmixPorts(httpSide ? p : project_.vmixHttpPort,
+                                            httpSide ? project_.vmixTcpPort : p);
+                             } else {
+                               triggerToast("vmix port: invalid");
+                             }
+                           } catch (...) {
+                             triggerToast("vmix port: invalid");
+                           }
+                         });
+  }
+
+  void openInlineOscQueryPortEditor() {
+    openInlineTextEditor("settings.osc_query_port",
+                         "OSC Query HTTP Port",
+                         "port number (default 5511)",
+                         std::to_string(project_.oscQueryPort),
+                         [this](const std::string& value) {
+                           try {
+                             int p = std::stoi(trim(value));
+                             if (p > 0 && p < 65536) {
+                               setOscQueryPort(p);
+                             } else {
+                               triggerToast("osc query port: invalid");
+                             }
+                           } catch (...) {
+                             triggerToast("osc query port: invalid");
+                           }
+                         });
+  }
+
+  void openInlineOscFeedbackRateEditor() {
+    openInlineTextEditor("settings.osc_feedback_rate",
+                         "OSC Feedback Mirror Rate",
+                         "milliseconds (40..2000)",
+                         std::to_string(project_.oscFeedbackRateMs),
+                         [this](const std::string& value) {
+                           try {
+                             setOscFeedbackRateMs(std::stoi(trim(value)));
+                           } catch (...) {
+                             triggerToast("osc feedback rate: invalid");
+                           }
+                         });
+  }
+
+  void openInlineArtNetPortEditor() {
+    openInlineTextEditor("settings.artnet_port",
+                         "Art-Net Port",
+                         "port number (default 6454)",
+                         std::to_string(project_.artNetPort),
+                         [this](const std::string& value) {
+                           try {
+                             setArtNetPort(std::stoi(trim(value)));
+                           } catch (...) {
+                             triggerToast("art-net port: invalid");
+                           }
+                         });
+  }
+
+  void openInlineCanvasWidthEditor() {
+    openInlineTextEditor("settings.canvas_width",
+                         "Canvas Width",
+                         "pixels",
+                         std::to_string(project_.outputCanvasWidth),
+                         [this](const std::string& value) {
+                           try {
+                             project_.outputCanvasWidth = std::clamp(std::stoi(trim(value)), 320, 7680);
+                             markProjectDirty();
+                           } catch (...) {
+                             triggerToast("canvas width: invalid");
+                           }
+                         });
+  }
+
+  void openInlineCanvasHeightEditor() {
+    openInlineTextEditor("settings.canvas_height",
+                         "Canvas Height",
+                         "pixels",
+                         std::to_string(project_.outputCanvasHeight),
+                         [this](const std::string& value) {
+                           try {
+                             project_.outputCanvasHeight = std::clamp(std::stoi(trim(value)), 240, 4320);
+                             markProjectDirty();
+                           } catch (...) {
+                             triggerToast("canvas height: invalid");
+                           }
+                         });
+  }
+
+#ifdef _WIN32
+  // Enumerate visible top-level window titles for the window-source picker.
+  // Skips unowned invisible windows, empty titles, and Deckboy's own
+  // windows (capturing yourself is feedback, not a source).
+  // Enumerate DirectShow video devices (webcams, HDMI capture sticks,
+  // Blackmagic WDM, virtual cameras) by parsing ffmpeg's device listing.
+  // Lines look like: [dshow @ 0x...] "HD WebCam" (video)
+  std::vector<std::string> listDshowVideoDevices() {
+    std::vector<std::string> devices;
+    auto listingText = readAllText({
+      "ffmpeg", "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"});
+    std::string listing = listingText ? *listingText : std::string();
+    size_t pos = 0;
+    while ((pos = listing.find("\" (video)", pos)) != std::string::npos) {
+      size_t lineStart = listing.rfind('\n', pos);
+      size_t open = listing.find('"', lineStart == std::string::npos ? 0 : lineStart);
+      if (open != std::string::npos && open < pos) {
+        std::string name = listing.substr(open + 1, pos - open - 1);
+        if (!name.empty()) {
+          devices.push_back(std::move(name));
+        }
+      }
+      ++pos;
+    }
+    return devices;
+  }
+#endif
+
+  void addSourceCue(CueKind kind, const std::string& rawRef) {
+    if (!isSourceCueKind(kind)) {
+      return;
+    }
+    std::string sourceRef = trim(rawRef);
+    // ASK WHICH WINDOW, ON EVERY PLATFORM.
+    //
+    // This picker used to be inside #ifdef _WIN32, so a window cue added on
+    // macOS or Linux was given the "active-window" placeholder, which resolves
+    // to the whole desktop -- the operator picked "Window Source" and silently
+    // got a screen grab. listCaptureWindows() has been cross-platform since the
+    // inspector dropdown was written; this just uses it.
+    //
+    // The trigger is deliberately NOT "desktop": that is a real choice the
+    // picker itself offers, and treating it as "undecided" would reopen the
+    // picker forever.
+    if (kind == CueKind::WindowSource) {
+      const std::string refLower = toLower(sourceRef);
+      if (sourceRef.empty() || refLower == "active-window") {
+        auto windows = deckboy::platform::listCaptureWindows();
+        std::vector<std::pair<std::string, std::string>> choices;
+        for (const auto& window : windows) {
+          choices.push_back({window.id, window.displayName});
+        }
+        if (choices.empty()) {
+          addSourceCue(kind, "desktop");
+          return;
+        }
+        if (choices.size() == 1) {
+          addSourceCue(kind, choices.front().first);
+          return;
+        }
+        openDropdown("source.window_target", lastInlineEditorAnchorRect_, choices,
+                     choices.front().first,
+                     [this](const std::string& windowRef) {
+          addSourceCue(CueKind::WindowSource, windowRef);
+        });
+        return;
+      }
+    }
+#ifdef _WIN32
+    if (kind == CueKind::Camera) {
+      std::string refLower = toLower(sourceRef);
+      if (sourceRef.empty() || refLower == "default-camera" || refLower == "default") {
+        auto devices = listDshowVideoDevices();
+        if (devices.empty()) {
+          triggerToast("no capture devices found (dshow)");
+          return;
+        }
+        if (devices.size() == 1) {
+          addSourceCue(kind, devices.front());
+          return;
+        }
+        std::vector<std::pair<std::string, std::string>> choices;
+        for (const auto& name : devices) {
+          choices.push_back({name, name});
+        }
+        openDropdown("source.camera_device", lastInlineEditorAnchorRect_, choices,
+                     devices.front(),
+                     [this](const std::string& deviceName) {
+          addSourceCue(CueKind::Camera, deviceName);
+        });
+        return;
+      }
+    }
+#endif
+    if (sourceRef.empty()) {
+      if (kind == CueKind::WindowSource) {
+        sourceRef = "active-window";
+      } else if (kind == CueKind::Camera) {
+        sourceRef = "default-camera";
+      } else {
+        sourceRef = "default-bus";
+      }
+    }
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = kind;
+    cue.path = "source://" + sourceCueTokenForKind(kind) + "/" + sourceRef;
+    cue.name = cueKindLabel(kind) + " · " + sourceRef;
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.duration = 0.0;
+    cue.stillDurationSeconds = 0.0;
+    cue.hasAudio = (kind == CueKind::Camera);
+    cue.formatName = "source";
+    cue.videoCodec = sourceCueTokenForKind(kind);
+    cue.audioCodec = cue.hasAudio ? "source" : "";
+    cue.color = SDL_Color {139, 172, 15, 255};
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    // SAY WHEN THE PLATFORM CANNOT ACTUALLY CAPTURE THIS.
+    //
+    // Spout receive on Windows and Syphon receive on macOS are scaffolds:
+    // planSourceCapture answers supported=false with a reason, the engine
+    // falls back to a striped placeholder, and the operator is left looking
+    // at a pattern that could equally be a signal. The reason string has
+    // always existed and was never shown to anybody.
+    deckboy::platform::SourceCaptureRequest probe;
+    probe.kind = (kind == CueKind::Camera)
+      ? deckboy::platform::SourceCaptureKind::Camera
+      : (kind == CueKind::Syphon
+           ? deckboy::platform::SourceCaptureKind::AppTexture
+           : deckboy::platform::SourceCaptureKind::Window);
+    probe.sourceRef = sourceRef;
+    probe.width = cue.width;
+    probe.height = cue.height;
+    auto probePlan = deckboy::platform::planSourceCapture(probe);
+    // SPOUT NO LONGER GOES THROUGH THAT BACKEND. It is received natively now
+    // (see MediaEngine::startSpoutCapture), so the capture backend's
+    // "scaffold only" verdict is answering a question that is no longer asked
+    // -- and warning on it would be the mirror of the fault this check exists
+    // to catch: telling the operator something is broken when it works.
+    if (kind == CueKind::Syphon &&
+        deckboy::platform::video::SpoutInput::available(nullptr)) {
+      probePlan.supported = true;
+    }
+    if (!probePlan.supported) {
+      triggerToast(std::string("source cue added, but it will show a "
+                               "placeholder: ") +
+                     (probePlan.reasonUnavailable.empty()
+                        ? "this platform cannot capture that source"
+                        : probePlan.reasonUnavailable),
+                   ToastKind::Warning, kToastReadableMs);
+    } else {
+      triggerToast("source cue added");
+    }
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  // Konami-code easter egg: adds a secret NATIVE Terrarium pattern cue —
+  // the ecosystem sim runs in-process as a generator (pattern://terrarium,
+  // v0.78.4), no companion exe or window capture involved. The pattern is
+  // also available openly in the pattern picker; the egg keeps the ritual.
+  // ↑↑↓↓←→←→BA + Start on the control window.
+  void unlockTerrariumSource() {
+    project_.terrariumUnlocked = true;  // persists with the save; picker lists it now
+    addPatternCue("terrarium");
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      Cue& secret = deck.cues.back();
+      secret.name = "TERRARIUM (secret)";
+      secret.colorTag = "purple";
+    }
+    triggerToast("* KONAMI * terrarium unlocked");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  bool generatorAvailable(const deckboy::extras::Generator& extra) const {
+    if (extra.id == "tabletop") return project_.tabletopUnlocked;
+    return !extra.hidden || hiddenSourcesFound_;
+  }
+
+  void unlockTabletopSource() {
+    if (project_.tabletopUnlocked) {
+      triggerToast("Tabletop is in SOURCE > MADE BY DECKBOY");
+      return;
+    }
+    pushUndoSnapshot(true);
+    project_.tabletopUnlocked = true;
+    addGeneratorCue("tabletop");
+    settingsOpen_ = false;
+    triggerToast("Tabletop added - SOURCE > MADE BY DECKBOY");
+  }
+
+  void addSourceCueFromMenu() {
+    CueKind kind = sourceCueKindFromToken(sourceDefaultTypeId_);
+    addSourceCue(kind, defaultSourceRefForKind(kind));
+  }
+
+  void openSourceTypeMenu() {
+    contextMenuOpen_ = true;
+    contextMenuDeckIdx_ = project_.focusedDeckIndex;
+    contextMenuCueIdx_ = -1;
+    contextItems_.clear();
+
+    // Only the capture sources whose backend works on this platform (same
+    // catalog-driven list the inspector's type dropdown uses), so the menu can
+    // never offer a cue that would do nothing when taken.
+    // WHERE THE FOLLOW-UP PICKER OPENS. Choosing Window or Camera opens a second
+    // list -- which window, which device -- anchored to lastInlineEditorAnchorRect_.
+    // Nothing on this path ever set it, so it was an empty rect and the picker
+    // opened in the TOP-LEFT CORNER of the window, over the file buttons, while
+    // the operator was looking at the SOURCE button at the bottom. On a large
+    // desk that is across the screen; any click elsewhere closed it with no cue
+    // made, which from the desk reads exactly as "window cues are missing".
+    //
+    // Anchored to the SOURCE button instead. The dropdown opens below its anchor
+    // and flips above when there is no room, so from the bottom bar it lands
+    // where this menu was.
+    SDL_Rect sourceButtonRect {};
+    if (buttons_.size() > 1 && buttons_[1].label == "SOURCE") {
+      sourceButtonRect = buttons_[1].rect;
+    }
+    // ── GROUPED ────────────────────────────────────────────────────────
+    //
+    // The list ran twenty-odd entries with no structure at all, so a camera
+    // and a DMX cue sat in the same undifferentiated column -- which is most
+    // of what "too flat" is. They are three different kinds of thing and the
+    // menu now says so. A heading is an item with no action; renderContextMenu
+    // draws those as headings and the click handler ignores them.
+    contextItems_.push_back({"LIVE PICTURE", {0, 0, 0, 0}, nullptr});
+    for (const auto& [token, label] : sourceCueTypeChoices()) {
+      // No star beside the platform's default capture type: in a menu you
+      // choose from, a mark nobody explains reads as a typo.
+      contextItems_.push_back({
+        "  " + label,
+        {0, 0, 0, 0},
+        [this, token, sourceButtonRect]() {
+          sourceDefaultTypeId_ = token;
+          if (sourceButtonRect.w > 0) {
+            lastInlineEditorAnchorRect_ = sourceButtonRect;
+          }
+          CueKind kind = sourceCueKindFromToken(token);
+          addSourceCue(kind, defaultSourceRefForKind(kind));
+        }
+      });
+    }
+
+    // Browser cues run on all three: WebView2 on Windows, Xvfb+Chromium on
+    // Linux, and WKWebView through a helper on macOS. The macOS arm was a
+    // scaffold when this menu was written, so the entry was compiled out there
+    // -- and stayed compiled out after the backend was built, which is how you
+    // ship a working feature nobody can reach.
+    contextItems_.push_back({
+      "  Browser / URL",
+      {0, 0, 0, 0},
+      [this]() { addBrowserCueFromPrompt(); }
+    });
+    contextItems_.push_back({
+      "  Stream (SRT / RTMP / RTSP)",
+      {0, 0, 0, 0},
+      [this]() { addSrtStreamCueFromPrompt(); }
+    });
+    contextItems_.push_back({
+      "  MediaMTX Stream (from the router's list)",
+      {0, 0, 0, 0},
+      [this]() { openMediamtxStreamMenu(); }
+    });
+    contextItems_.push_back({
+      "  NDI",
+      {0, 0, 0, 0},
+      [this]() { addNdiSourceCueFromPrompt(); }
+    });
+    // ONE ENTRY PER CARD, rather than a chooser behind a chooser. NDI has to
+    // be typed because its sources are names on a network that come and go; a
+    // capture card is hardware in this machine and the SDK will say which ones
+    // are here, so asking for an index would be asking for something already
+    // known. Nothing is listed when nothing is installed.
+    for (const auto& device :
+         deckboy::platform::video::DeckLinkInput::listInputDevices()) {
+      const std::string label = device.displayName.empty() ? device.modelName
+                                                           : device.displayName;
+      const int deviceId = device.id;
+      contextItems_.push_back({
+        "  DeckLink: " + label,
+        {0, 0, 0, 0},
+        [this, deviceId, label]() { addDeckLinkSourceCue(deviceId, label); }
+      });
+    }
+    // Code source. It is built on the pattern machinery, so it was reachable
+    // only from the PATTERN picker -- and nobody looking for a SOURCE called
+    // "code source" thinks to open the pattern list. Where a thing lives in
+    // the code is not where an operator expects to find it.
+    //
+    // ONE RULE FOR THE TWO MENUS. Everything Deckboy makes for the show is
+    // here, named as itself with a few words on what it is; the test signals a
+    // rig is lined up with are under their own heading below, and the PATTERN
+    // button is the one-press shortcut to the first of them.
+    // LIVE SOUND: a microphone or a line in, as a cue on a deck.
+    contextItems_.push_back({"LIVE SOUND", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({
+      "  Mic / line input",
+      {0, 0, 0, 0},
+      [this]() { addMicCue(""); }
+    });
+    contextItems_.push_back({"MADE BY DECKBOY", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({
+      "  Fireside (a hearth that burns)",
+      {0, 0, 0, 0},
+      [this]() { addFiresideCue(); }
+    });
+    contextItems_.push_back({
+      "  Portal (deep-space blobs, for a layer)",
+      {0, 0, 0, 0},
+      [this]() { addPortalCue(); }
+    });
+    contextItems_.push_back({
+      "  Draw (draw on the picture, for a layer)",
+      {0, 0, 0, 0},
+      [this]() { addDrawCue(); }
+    });
+    contextItems_.push_back({
+      "  Swirl (melting pixel greens)",
+      {0, 0, 0, 0},
+      [this]() { addGeneratorCue("swirl"); }
+    });
+    contextItems_.push_back({
+      "  Moire (interference bands)",
+      {0, 0, 0, 0},
+      [this]() { addMoireCue(); }
+    });
+    // The Konami secret, once this save has unlocked it.
+    if (project_.terrariumUnlocked) {
+      contextItems_.push_back({
+        "  Terrarium (a living ecosystem)",
+        {0, 0, 0, 0},
+        [this]() { addGeneratorCue("terrarium"); }
+      });
+      contextItems_.push_back({
+        "  Terrarium Pico (one pixel per cell)",
+        {0, 0, 0, 0},
+        [this]() { addGeneratorCue("terrarium-pico"); }
+      });
+    }
+    // A build's own generators (core/private_extras.hpp).
+    for (const auto& extra : deckboy::extras::generators()) {
+      if (!generatorAvailable(extra)) continue;
+      const std::string id = extra.id;
+      contextItems_.push_back({"  " + extra.name, {0, 0, 0, 0}, [this, id]() { addGeneratorCue(id); }});
+    }
+    contextItems_.push_back({
+      "  Video Synth (oscillators, mirrors, feedback)",
+      {0, 0, 0, 0},
+      [this]() { addVideoSynthCue(); }
+    });
+    contextItems_.push_back({
+      "  Code (a live expression)",
+      {0, 0, 0, 0},
+      [this]() { addGeneratorCue("code"); }
+    });
+    contextItems_.push_back({
+      "  Text (a title card or a crawl)",
+      {0, 0, 0, 0},
+      [this]() { addTextCue(); }
+    });
+    contextItems_.push_back({
+      "  Lower Third (over another playlist)",
+      {0, 0, 0, 0},
+      [this]() { addLowerThirdTextCue(); }
+    });
+    // Stage timer. Without this the Timer cue was only reachable over the wire
+    // (TIMERCUE), i.e. not reachable at all from inside the app.
+    contextItems_.push_back({
+      "  Stage Timer (a countdown for the stage)",
+      {0, 0, 0, 0},
+      [this]() { addTimerCue(300); }
+    });
+    // Both chips get their own entry. One menu item that then needs a second
+    // control changed is the same discoverability problem one level down.
+    contextItems_.push_back({
+      "  2A03 Synth (the NES sound chip)",
+      {0, 0, 0, 0},
+      [this]() { addSynthCue(SynthChip::Nes); }
+    });
+    contextItems_.push_back({
+      "  FDS Synth (the Famicom Disk System chip)",
+      {0, 0, 0, 0},
+      [this]() { addSynthCue(SynthChip::Fds); }
+    });
+    // TEST SIGNALS: what a rig is lined up with, picture and sound together.
+    // The pattern arrives as Pocket Test, like the PATTERN button's; which
+    // card or chart it is, is chosen in its inspector. The tone is the audio
+    // counterpart: line-up tone, pink noise for ringing out a PA, and a
+    // channel walk for proving which output feeds which speaker.
+    contextItems_.push_back({"TEST SIGNALS", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({
+      "  Test Pattern (cards and charts)",
+      {0, 0, 0, 0},
+      [this]() { addKawaiiPatternCue(); }
+    });
+    contextItems_.push_back({
+      "  Test Tone (line-up, pink noise, channel walk)",
+      {0, 0, 0, 0},
+      [this]() { addToneCue(); }
+    });
+    // The two cues that carry no picture at all. They are here because this is
+    // the only ADD A CUE menu in the app -- a master cue was reachable solely
+    // over the socket, which for anyone driving Deckboy by hand meant it did
+    // not exist. Where a kind belongs in the taxonomy matters less than
+    // whether an operator can find it.
+    contextItems_.push_back({"CUES THAT DO THINGS", {0, 0, 0, 0}, nullptr});
+    // -- OVERLAYS, which go OVER the deck's picture rather than being it --
+    //
+    // Both of these were complete and unreachable: addLowerThirdCue and
+    // addPipCue had no callers at all, and the LOWERTHIRD and PIP verbs were
+    // parked on "not built yet". They rendered, composited, stacked and
+    // saved; there was simply no way to make one.
+    //
+    // THE LOWER THIRD IS NOT OFFERED HERE. The one an operator wants is fired
+    // from a playlist of its own and composited over another, which is the
+    // text-cue lower third under MADE BY DECKBOY. This overlay kind still
+    // loads, draws and animates for any show that has one; it is just not
+    // the one a new show is steered to, and two entries both called "lower
+    // third" was a question nobody should have to answer at the menu.
+    //
+    // PIP IS RETIRED THE SAME WAY, as of 2026-09-30: scaling a second deck
+    // over the first already does what this did, with a whole playlist
+    // behind it instead of one fixed box. addPipCue() stays defined
+    // (uncalled, same as addLowerThirdCue() above) so a show that already
+    // has a PIP cue keeps loading, rendering and saving it exactly as
+    // before -- there is just no menu item steering a new show toward
+    // making another one.
+    //
+    // Which leaves no OVERLAYS entry at all -- that header stood over PIP
+    // alone, so it went with it rather than being left standing over
+    // nothing.
+
+    contextItems_.push_back({
+      "  Tracker Step (fires decks together)",
+      {0, 0, 0, 0},
+      [this]() {
+        // A STEP IN THE TRACKER, not a cue in this playlist: master cues no
+        // longer live in decks at all (normalizeProject moves any it finds).
+        pushUndoSnapshot();
+        addTrackerStep();
+        // James: master cues should be "dash focused" -- the Tracker view is
+        // where a step's per-deck cells are edited, so it opens there. Only
+        // here, not in addTrackerStep(): MASTER NEW / TRACKER ADD call that
+        // too, and an overlay popping open on the operator's screen from a
+        // Companion button mid-show would be the opposite of welcome.
+        dashboardOverlayOpen_ = true;
+        project_.dashboardMode = 1;  // TRACKER, not TILES
+      }
+    });
+    contextItems_.push_back({
+      "  Memo Cue (a note in the running order)",
+      {0, 0, 0, 0},
+      [this]() { pushUndoSnapshot(); addMemoCue(); }
+    });
+    contextItems_.push_back({
+      "  Target Cue (acts on another cue)",
+      {0, 0, 0, 0},
+      [this]() { addTargetCue(); }
+    });
+    contextItems_.push_back({
+      "  Fade Cue (ramps a level over time)",
+      {0, 0, 0, 0},
+      [this]() { addFadeCue(); }
+    });
+    contextItems_.push_back({
+      "  MIDI Cue (sends a message on GO)",
+      {0, 0, 0, 0},
+      [this]() { addMidiCue(); }
+    });
+    contextItems_.push_back({
+      "  Network Cue (OSC / UDP / TCP on GO)",
+      {0, 0, 0, 0},
+      [this]() { addNetworkCue(); }
+    });
+    contextItems_.push_back({
+      "  Timecode Cue (start / stop / jam LTC)",
+      {0, 0, 0, 0},
+      [this]() { addTimecodeCue(); }
+    });
+    contextItems_.push_back({
+      "  Browse media... (add without the file dialog)",
+      {0, 0, 0, 0},
+      [this]() { openMediaBrowser(mediaBrowserStartFolder()); }
+    });
+    contextItems_.push_back({
+      "  Script Cue (runs Deckboy commands)",
+      {0, 0, 0, 0},
+      [this]() { addScriptCue(); }
+    });
+    contextItems_.push_back({
+      "  DMX Cue (lights by fixture or channel)",
+      {0, 0, 0, 0},
+      [this]() { addDmxCue(); }
+    });
+
+    // Anchor menu above the SOURCE button (index 1 in buttons_)
+    int winW = 0, winH = 0;
+    SDL_GetWindowSize(controlWindow_, &winW, &winH);
+    // ABOVE the SOURCE button, which is what it belongs to. The row height
+    // and the column width belong to layoutContextMenu now -- they were
+    // measured here and in two other places, and only one of the three
+    // scaled with the font.
+    if (buttons_.size() > 1 && buttons_[1].label == "SOURCE") {
+      layoutContextMenu(buttons_[1].rect.x, buttons_[1].rect.y, true);
+    } else {
+      layoutContextMenu(winW / 2 - uiScaled(123), winH / 3);
+    }
+  }
+
+  void addLowerThirdCue() {
+    Cue cue;
+    cue.kind = CueKind::LowerThird;
+    cue.path = "graphic://lower-third";
+    cue.name = "Lower Third";
+    cue.lowerThirdText = "Lower Third Title";
+    cue.lowerThirdSubtext = "";
+    cue.lowerThirdBgAlpha = 180;
+    cue.color = pal.deep;
+    cue.formatName = "graphic";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("Lower Third cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addPipCue() {
+    Cue cue;
+    cue.kind = CueKind::Pip;
+    cue.path = "graphic://pip";
+    cue.name = "PIP";
+    cue.formatName = "overlay";
+    cue.color = SDL_Color {155, 188, 15, 255};
+    cue.outputScaleX = 0.35f;
+    cue.outputScaleY = 0.35f;
+    cue.outputOffsetX = 360.0f;
+    cue.outputOffsetY = -200.0f;
+    cue.scaleMode = ScaleMode::Fit;
+    cue.audioEnabled = false;
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.pipSourceType = "media";
+
+    // Point the new PIP at whatever cue the operator is looking at: the
+    // selection first, the live cue if nothing is selected. Both arms did this
+    // identically, written out twice, and the second sourceCue shadowed the
+    // first -- so a change to one arm silently applied to half the cases.
+    auto adoptPipSource = [&](const Cue& src) {
+      if (src.kind == CueKind::Pip || src.kind == CueKind::LowerThird ||
+          src.kind == CueKind::Audio || !cueCanBePipSource(src)) {
+        return;
+      }
+      if (src.kind == CueKind::Browser) {
+        applyPipSourceToCue(cue, "browser", src.path);
+      } else if (isSourceCueKind(src.kind)) {
+        applyPipSourceToCue(cue, sourceCueTokenForKind(src.kind), sourceCueRefFromCue(src));
+      } else if (src.kind == CueKind::Video || src.kind == CueKind::Image) {
+        applyPipSourceToCue(cue, "media", resolvedCueFilesystemPathString(src, currentProjectFile_));
+      }
+    };
+    if (const Cue* selected = selectedCuePtr()) {
+      adoptPipSource(*selected);
+    } else if (const Cue* live = activeCuePtr()) {
+      adoptPipSource(*live);
+    }
+    if (cue.path != "graphic://pip") {
+      cue.name = "PIP · " + pipSourceTypeLabel(pipSourceTypeTokenFromCue(cue));
+    }
+
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    cue.outputScaleX = 0.35f;
+    cue.outputScaleY = 0.35f;
+    cue.outputOffsetX = 360.0f;
+    cue.outputOffsetY = -200.0f;
+    cue.audioEnabled = false;
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.formatName = "overlay";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("pip cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addCompositeCue() {
+    Cue cue;
+    cue.kind = CueKind::Composite;
+    cue.path = "graphic://composite";
+    cue.name = "Composite";
+    cue.formatName = "scene";
+    cue.color = SDL_Color {155, 188, 15, 255};
+    cue.audioEnabled = false;
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.compositeBackgroundColor = SDL_Color {18, 24, 18, 255};
+    applyCompositePresetToCue(cue, "2up");
+
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    cue.audioEnabled = false;
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.formatName = "scene";
+    cue.path = "graphic://composite";
+    cue.compositeBackgroundColor = SDL_Color {18, 24, 18, 255};
+    applyCompositePresetToCue(cue, cue.compositeLayoutPreset.empty() ? "2up" : cue.compositeLayoutPreset);
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("composite cue added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  // Named pattern types and their pretty labels.
+  static const std::vector<std::pair<std::string, std::string>>& patternBaseTypes() {
+    // Operator-facing picker list: TEST SIGNALS ONLY, the cards and charts a
+    // rig is lined up with. What Deckboy makes for the show -- Fireside,
+    // Portal, Swirl, Terrarium, Code -- is offered from SOURCE > MADE BY
+    // DECKBOY and is never in this list, so a Portal cannot be turned into
+    // colour bars from its own inspector. One pocket entry only -- it cycles
+    // day/sunset/night/storm itself; the forced-scene ids stay loadable as
+    // legacy (see patternTypes). Motion belongs to the toggle, not the list.
+    static const std::vector<std::pair<std::string, std::string>> types {
+      {"pocket-test",   "Pocket Test (test card + scene cycle)"},
+      {"test-bars",    "Test Bars (motion diagnostics)"},
+      {"test-clock",   "Test Clock (sync + latency)"},
+      {"frame-count",  "Frame Count (drops + latency)"},
+      {"frame-count-emoji", "Frame Count (emoji)"},
+      {"smpte-bars",   "SMPTE 75% Colour Bars"},
+      {"crosshatch",   "Crosshatch"},
+      {"checkerboard", "Checkerboard"},
+      {"full-white",   "Full White"},
+      {"full-black",   "Full Black"},
+      {"full-red",     "Full Red"},
+      {"full-green",   "Full Green"},
+      {"full-blue",    "Full Blue"},
+      // The engineering set, the same charts Deckboy's own LED page generates.
+      // Grouped after the broadcast basics because an operator reaching for
+      // bars is not reaching for a multiburst.
+      {"panel-map",    "Panel Map (LED tile numbers)"},
+      {"moire",        "Moire 1:1 (is anything scaling?)"},
+      {"critters",     "Critters (pixel-exact scaling, animated)"},
+      {"dark-detail",  "Dark Detail (0-12%)"},
+      {"uniformity",   "Uniformity (flat fields)"},
+      {"ramps",        "Banding Ramps (real bit depth)"},
+      {"safe-areas",   "Safe Areas (90% / 80% / thirds)"},
+      {"boresight",    "Boresight (alignment)"},
+      {"pluge",        "PLUGE (black level)"},
+      {"greyscale",    "Greyscale Steps (gamma)"},
+      {"convergence",  "Convergence (fine grid)"},
+      {"multiburst",   "Multiburst (bandwidth)"},
+      {"window-10",    "Window 10% (peak brightness)"},
+      {"window-50",    "Window 50% (peak at mid APL)"},
+    };
+    return types;
+  }
+
+  // What the operator actually sees in the inspector's pattern list: the test
+  // signals. The Terrarium secret, once unlocked, appears under SOURCE with
+  // the other things Deckboy makes, not here.
+  std::vector<std::pair<std::string, std::string>> patternPickerTypes() const {
+    return patternBaseTypes();
+  }
+
+  // Full validation list: base types + legacy ids ("-motion" variants and
+  // the forced-scene pocket types). Kept so old show files and remote
+  // PATTERN commands stay valid — but pickers list patternBaseTypes() only.
+  static const std::vector<std::pair<std::string, std::string>>& patternTypes() {
+    static const std::vector<std::pair<std::string, std::string>> types = [] {
+      std::vector<std::pair<std::string, std::string>> list = patternBaseTypes();
+      // Always VALID (old saves, remote commands) even while picker-hidden.
+      // A live-coded source: the picture is whatever expression the operator
+      // types, evaluated per pixel. Listed with the patterns because that is
+      // what it is -- a procedural source that rebuilds at the output raster.
+      // FIRESIDE IS A SOURCE, NOT A TEST CARD, so it is no longer offered in
+      // the pattern picker -- it has its own SOURCE entry with its own
+      // controls. Still VALID here, so every show that already has one opens
+      // exactly as it did.
+      list.emplace_back("fireside",       "Fireside (a hearth that burns)");
+      list.emplace_back("portal",         "Portal (blobs of deep space)");
+      list.emplace_back("draw",           "Draw (what you draw on the monitor)");
+      list.emplace_back("swirl",          "Swirl (melting pixel greens)");
+      list.emplace_back("moire-field",    "Moire (interference bands)");
+      list.emplace_back("code",           "Code (live expression)");
+      list.emplace_back("terrarium",      "Terrarium (living ecosystem)");
+      list.emplace_back("terrarium-pico", "Terrarium Pico (1px per cell)");
+      for (const auto& extra : deckboy::extras::generators()) list.emplace_back(extra.id, extra.name);
+      list.emplace_back("pocket-day",    "Pocket Test (day)");
+      list.emplace_back("pocket-sunset", "Pocket Test (sunset)");
+      list.emplace_back("pocket-night",  "Pocket Test (night)");
+      list.emplace_back("pocket-storm",  "Pocket Test (storm)");
+      list.emplace_back("smpte-bars-motion", "SMPTE 75% Colour Bars (motion)");
+      list.emplace_back("crosshatch-motion", "Crosshatch (motion)");
+      list.emplace_back("checkerboard-motion", "Checkerboard (motion)");
+      list.emplace_back("full-white-motion", "Full White (motion)");
+      list.emplace_back("full-black-motion", "Full Black (motion)");
+      list.emplace_back("full-red-motion", "Full Red (motion)");
+      list.emplace_back("full-green-motion", "Full Green (motion)");
+      list.emplace_back("full-blue-motion", "Full Blue (motion)");
+      list.emplace_back("panel-map-motion", "Panel Map (animated)");
+      return list;
+    }();
+    return types;
+  }
+
+  bool isKnownPatternType(const std::string& rawTypeId) const {
+    std::string typeId = normalizePatternTypeId(rawTypeId);
+    if (stripPatternMotionSuffix(typeId) == "tabletop" && !project_.tabletopUnlocked) return false;
+    if (typeId == "checker") {
+      typeId = "checkerboard";
+    }
+    const auto& types = patternTypes();
+    return std::any_of(types.begin(), types.end(), [&](const auto& item) {
+      return item.first == typeId;
+    });
+  }
+
+  std::string patternLabelForType(const std::string& rawTypeId) const {
+    std::string typeId = normalizePatternTypeId(rawTypeId);
+    if (typeId == "checker") {
+      typeId = "checkerboard";
+    }
+    const auto& types = patternTypes();
+    for (const auto& [id, lbl] : types) {
+      if (id == typeId) {
+        return lbl;
+      }
+    }
+    return typeId;
+  }
+
+  bool applyPatternTypeToSelectedCue(const std::string& rawTypeId, bool announce) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return false;
+    }
+    Cue& cue = deck.cues[deck.selectedIndex];
+    if (cue.kind != CueKind::Pattern) {
+      return false;
+    }
+
+    std::string typeId = normalizePatternTypeId(rawTypeId);
+    if (typeId == "checker") {
+      typeId = "checkerboard";
+    }
+    if (typeId.empty() || !isKnownPatternType(typeId)) {
+      // NAME THE THING THAT WAS WRONG. "pattern: invalid" on its own is a
+      // report nobody can act on -- reported from a show as "I keep seeing
+      // pattern: invalid", with no way to tell which id, from which control,
+      // was being refused. Every id the picker offers is valid (all 28 checked
+      // by hand), so whatever produces this is building an id rather than
+      // choosing one, and the id is the evidence.
+      triggerToast(typeId.empty()
+        ? std::string("pattern: no type given")
+        : "pattern: \"" + typeId + "\" is not a pattern type");
+      return false;
+    }
+
+    std::string previousType = normalizePatternTypeId(cue.path);
+    std::string previousLabel = patternLabelForType(previousType);
+    std::string nextLabel = patternLabelForType(typeId);
+    cue.path = "pattern://" + typeId;
+    if (cue.name.empty() || cue.name == previousLabel || cue.name == previousType) {
+      cue.name = nextLabel;
+    }
+    patternDefaultTypeId_ = typeId;
+    markProjectDirty();
+
+    if (deck.activeIndex == deck.selectedIndex) {
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        bool autoplay = engine->state() == TransportState::Playing;
+        engine->loadCue(&cue, autoplay);
+      }
+    }
+    if (announce) {
+      triggerToast("pattern: " + nextLabel);
+    }
+    return true;
+  }
+
+
+  void toggleSelectedPatternMotion() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || cue->kind != CueKind::Pattern) {
+      return;
+    }
+    std::string currentType = normalizePatternTypeId(cue->path);
+    std::string baseType = stripPatternMotionSuffix(currentType);
+    if (!patternTypeSupportsMotion(baseType)) {
+      triggerToast("pattern motion: n/a");
+      return;
+    }
+    bool motion = endsWith(currentType, "-motion");
+    applyPatternTypeToSelectedCue(motion ? baseType : (baseType + "-motion"), true);
+  }
+
+  // Stage/speaker timer. Held by default: a countdown that auto-advanced to the
+  // next cue the moment it hit zero would be actively dangerous on a show.
+  static const char* toneWaveformLabel(ToneWaveform w) {
+    switch (w) {
+      case ToneWaveform::Pink:     return "pink noise";
+      case ToneWaveform::White:    return "white noise";
+      case ToneWaveform::Sweep:    return "sweep";
+      case ToneWaveform::Identify: return "identify";
+      case ToneWaveform::Fds:      return "FDS synth";
+      case ToneWaveform::Sting:    return "sting";
+      default:                     return "sine";
+    }
+  }
+
+  Cue* selectedToneCueMutable() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Tone) ? cue : nullptr;
+  }
+
+  static const char* toneVisualLabel(ToneVisual v) {
+    switch (v) {
+      case ToneVisual::Scope:     return "scope";
+      case ToneVisual::Lissajous: return "lissajous";
+      case ToneVisual::Spectrum:  return "spectrum";
+      default:                    return "off";
+    }
+  }
+
+  static const char* fdsCarrierLabel(FdsCarrier c) {
+    switch (c) {
+      case FdsCarrier::Triangle: return "triangle";
+      case FdsCarrier::Pulse25:  return "pulse 25%";
+      case FdsCarrier::Saw:      return "saw";
+      case FdsCarrier::Additive: return "additive";
+      default:                   return "sine";
+    }
+  }
+
+  static const char* fdsModulatorLabel(FdsModulator m) {
+    switch (m) {
+      case FdsModulator::Ramp:    return "ramp";
+      case FdsModulator::Square:  return "square";
+      case FdsModulator::Vibrato: return "vibrato";
+      case FdsModulator::Growl:   return "growl";
+      default:                    return "off";
+    }
+  }
+
+  // Note names rather than raw Hz. A musician thinks in notes, and a synth
+  // whose pitch control reads "233 Hz" is a test generator wearing a hat.
+  static std::string fdsNoteName(double hz) {
+    if (hz <= 0.0) return "-";
+    const double semis = 12.0 * std::log2(hz / 440.0);
+    const int n = static_cast<int>(std::lround(semis)) + 57;   // A4 = index 57
+    static const char* kNames[12] = {"C", "C#", "D", "D#", "E", "F",
+                                     "F#", "G", "G#", "A", "A#", "B"};
+    const int octave = n / 12;
+    const int step = ((n % 12) + 12) % 12;
+    return std::string(kNames[step]) + std::to_string(octave);
+  }
+
+  static const char* synthTuningLabel(SynthTuning t) {
+    switch (t) {
+      case SynthTuning::Just:         return "just";
+      case SynthTuning::Pythagorean:  return "pythagorean";
+      case SynthTuning::Meantone:     return "meantone";
+      case SynthTuning::Equal19:      return "19-TET";
+      case SynthTuning::Equal24:      return "24-TET";
+      case SynthTuning::BohlenPierce: return "bohlen-pierce";
+      default:                        return "12-TET";
+    }
+  }
+
+  static const char* synthChipLabel(SynthChip c) {
+    return c == SynthChip::Nes ? "2A03 (NES)" : "FDS";
+  }
+  static const char* nesVoiceLabel(NesVoice v) {
+    switch (v) {
+      case NesVoice::Triangle: return "triangle";
+      case NesVoice::Noise:    return "noise";
+      default:                 return "pulse";
+    }
+  }
+  static const char* nesDutyLabel(NesDuty d) {
+    switch (d) {
+      case NesDuty::Eighth:       return "12.5%";
+      case NesDuty::Quarter:      return "25%";
+      case NesDuty::ThreeQuarter: return "75%";
+      default:                    return "50%";
+    }
+  }
+
+  void cycleSynthChip() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.chip = (cue->tone.synth.chip == SynthChip::Fds)
+      ? SynthChip::Nes : SynthChip::Fds;
+    markProjectDirty();
+    triggerToast(std::string("chip: ") + synthChipLabel(cue->tone.synth.chip));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleNesVoice() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.nesVoice = static_cast<NesVoice>(
+      (static_cast<int>(cue->tone.synth.nesVoice) + 1) % 3);
+    markProjectDirty();
+    triggerToast(std::string("voice: ") + nesVoiceLabel(cue->tone.synth.nesVoice));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleNesDuty() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.nesDuty = static_cast<NesDuty>(
+      (static_cast<int>(cue->tone.synth.nesDuty) + 1) % 4);
+    markProjectDirty();
+    triggerToast(std::string("duty: ") + nesDutyLabel(cue->tone.synth.nesDuty));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void adjustSynthEnv(bool attack, double delta) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    if (attack) {
+      cue->tone.synth.attackSeconds =
+        std::clamp(cue->tone.synth.attackSeconds + delta, 0.0, 2.0);
+      triggerToast("attack " + fmtFloat(cue->tone.synth.attackSeconds, 2) + "s");
+    } else {
+      cue->tone.synth.releaseSeconds =
+        std::clamp(cue->tone.synth.releaseSeconds + delta, 0.01, 4.0);
+      triggerToast("release " + fmtFloat(cue->tone.synth.releaseSeconds, 2) + "s");
+    }
+    markProjectDirty();
+  }
+
+  void cycleFdsCarrier() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.carrier = static_cast<FdsCarrier>(
+      (static_cast<int>(cue->tone.synth.carrier) + 1) % 5);
+    markProjectDirty();
+    triggerToast(std::string("carrier: ") + fdsCarrierLabel(cue->tone.synth.carrier));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleFdsModulator() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.modulator = static_cast<FdsModulator>(
+      (static_cast<int>(cue->tone.synth.modulator) + 1) % 5);
+    markProjectDirty();
+    triggerToast(std::string("modulator: ") + fdsModulatorLabel(cue->tone.synth.modulator));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void adjustFdsDepth(int delta) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.synth.modDepth = std::clamp(cue->tone.synth.modDepth + delta, 0, 63);
+    markProjectDirty();
+    triggerToast("depth " + std::to_string(cue->tone.synth.modDepth));
+  }
+
+  // Ratio steps through MUSICAL intervals, not linear increments: the
+  // interesting settings are the simple ratios, and a linear sweep walks past
+  // all of them.
+  void adjustFdsRatio(int direction) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    static const double kRatios[] = {0.0, 0.125, 0.25, 0.5, 0.75, 1.0,
+                                     1.5, 2.0, 3.0, 4.0};
+    const int n = static_cast<int>(sizeof(kRatios) / sizeof(kRatios[0]));
+    int i = 0;
+    for (; i < n; ++i) {
+      if (std::abs(kRatios[i] - cue->tone.synth.modRatio) < 0.001) break;
+    }
+    i = std::clamp((i >= n ? 3 : i) + direction, 0, n - 1);
+    cue->tone.synth.modRatio = kRatios[i];
+    markProjectDirty();
+    triggerToast("ratio " + fmtFloat(cue->tone.synth.modRatio, 3));
+  }
+
+  void adjustFdsNote(int semitones) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    const double hz = cue->tone.synth.noteHz * std::pow(2.0, semitones / 12.0);
+    cue->tone.synth.noteHz = std::clamp(hz, 20.0, 8000.0);
+    markProjectDirty();
+    triggerToast("note " + fdsNoteName(cue->tone.synth.noteHz));
+  }
+
+  void adjustFdsRetrigger(double delta) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    double v = cue->tone.synth.retriggerSeconds + delta;
+    if (v < 0.05) v = 0.0;   // below the smallest step means HOLD
+    cue->tone.synth.retriggerSeconds = std::clamp(v, 0.0, 4.0);
+    markProjectDirty();
+    triggerToast(cue->tone.synth.retriggerSeconds <= 0.0
+      ? "retrigger: hold"
+      : "retrigger " + fmtFloat(cue->tone.synth.retriggerSeconds, 2) + "s");
+  }
+
+  void cycleToneVisual() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    cue->tone.visual = static_cast<ToneVisual>(
+      (static_cast<int>(cue->tone.visual) + 1) % 4);
+    markProjectDirty();
+    triggerToast(std::string("display: ") + toneVisualLabel(cue->tone.visual));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleToneWaveform() {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    const int next = (static_cast<int>(cue->tone.waveform) + 1) % kToneWaveformCount;
+    cue->tone.waveform = static_cast<ToneWaveform>(next);
+    markProjectDirty();
+    triggerToast(std::string("tone: ") + toneWaveformLabel(cue->tone.waveform));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  // Frequency steps in THIRD-OCTAVES rather than a fixed number of Hz. 100Hz
+  // steps are uselessly fine at the bottom and uselessly coarse at the top;
+  // the ear works in ratios, so the control should too.
+  void adjustToneFrequency(int direction) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    const double factor = std::pow(2.0, 1.0 / 3.0);
+    double hz = cue->tone.frequencyHz * (direction > 0 ? factor : 1.0 / factor);
+    cue->tone.frequencyHz = std::clamp(hz, 20.0, 20000.0);
+    markProjectDirty();
+    triggerToast(std::to_string(static_cast<int>(cue->tone.frequencyHz)) + " Hz");
+  }
+
+  void adjustToneLevel(double deltaDb) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    // Never reaches 0 dBFS: this feeds a live PA and a generated signal has no
+    // reason to be at full scale.
+    cue->tone.levelDbfs = std::clamp(cue->tone.levelDbfs + deltaDb, -60.0, -1.0);
+    markProjectDirty();
+    triggerToast(fmtFloat(cue->tone.levelDbfs, 1) + " dBFS");
+  }
+
+  void adjustToneChannel(int direction) {
+    Cue* cue = selectedToneCueMutable();
+    if (!cue) return;
+    // -1 is a real value meaning ALL, so the range starts one below zero.
+    cue->tone.channel = std::clamp(cue->tone.channel + direction, -1, 15);
+    markProjectDirty();
+    triggerToast(cue->tone.channel < 0
+      ? "tone: all channels"
+      : "tone: channel " + std::to_string(cue->tone.channel + 1));
+  }
+
+  static const char* vsRotateLabel(int r) {
+    switch (r) {
+      case 1:  return "90";
+      case 2:  return "180";
+      case 3:  return "270";
+      case 4:  return "by brightness";
+      case 5:  return "spinning";
+      default: return "none";
+    }
+  }
+  static const char* vsFlipLabel(int f) {
+    switch (f) {
+      case 1:  return "horizontal";
+      case 2:  return "vertical";
+      case 3:  return "alternating";
+      default: return "none";
+    }
+  }
+
+  static const char* vsShapeLabel(VideoSynthShape s) {
+    switch (s) {
+      case VideoSynthShape::Diamond: return "diamond";
+      case VideoSynthShape::Rings:   return "rings";
+      case VideoSynthShape::Grid:    return "grid";
+      case VideoSynthShape::Moire:   return "moire";
+      default:                       return "plasma";
+    }
+  }
+  static const char* vsMirrorLabel(VideoSynthMirror m) {
+    switch (m) {
+      case VideoSynthMirror::Horizontal: return "horizontal";
+      case VideoSynthMirror::Quad:       return "quad";
+      case VideoSynthMirror::Kaleido:    return "kaleido";
+      default:                           return "none";
+    }
+  }
+  static const char* vsPaletteLabel(VideoSynthPalette p) {
+    switch (p) {
+      case VideoSynthPalette::Amber: return "amber";
+      case VideoSynthPalette::Ice:   return "ice";
+      case VideoSynthPalette::Fire:  return "fire";
+      case VideoSynthPalette::Mono:    return "mono";
+      case VideoSynthPalette::Ega:     return "EGA 16";
+      case VideoSynthPalette::C64:     return "C64";
+      case VideoSynthPalette::Gameboy: return "Game Boy";
+      case VideoSynthPalette::Cga:     return "CGA";
+      case VideoSynthPalette::Nes:     return "NES";
+      case VideoSynthPalette::Vapor:   return "vapor";
+      default:                       return "spectrum";
+    }
+  }
+
+  static const char* vsCharSetLabel(int s) {
+    switch (s) {
+      case 1:  return "ASCII 95 (density)";
+      case 2:  return "symbols";
+      case 3:  return "mixed";
+      case 4:  return "ASCII 95 (raw)";
+      case 5:  return "sprite sheet";
+      case 6:  return "music & sparkle";
+      case 7:  return "font (type anything)";
+      default: return "blocks";
+    }
+  }
+  static const char* vsWobbleModeLabel(int m) {
+    switch (m) {
+      case 1:  return "flow (follows the picture)";
+      case 2:  return "hue (follows the colour)";
+      default: return "drift";
+    }
+  }
+  static const char* vsInkLabel(int i) {
+    switch (i) {
+      case 1:  return "green";
+      case 2:  return "amber";
+      case 3:  return "cyan";
+      case 4:  return "white";
+      case 5:  return "palette";
+      default: return "picture";
+    }
+  }
+
+  Cue* selectedVideoSynthCueMutable() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::VideoSynth) ? cue : nullptr;
+  }
+
+  // THE CUE WHOSE TEXT MODE CONTROLS ARE ON SCREEN.
+  //
+  // A video synth cue, where the character grid is native -- OR any cue at all
+  // carrying the TEXT MODE effect, which is now the ordinary way to use it.
+  //
+  // Every control in the TEXT MODE section used to go through
+  // selectedVideoSynthCueMutable, which answers null for anything that is not a
+  // synth cue. So on a clip, a still, a camera -- every cue the effect exists
+  // for -- the whole section was inert: columns, glyph set, shuffle, ink, the
+  // glitch amounts, the custom glyphs and the phrases. The rows drew, the
+  // hitboxes registered, the handlers ran, and each one returned immediately.
+  Cue* selectedTextModeCueMutable() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return nullptr;
+    }
+    // ONE QUESTION NOW: does this cue carry the effect. A video synth cue used
+    // to answer yes on the strength of its kind, because it had a text-mode
+    // switch of its own -- which is exactly the second way in that this change
+    // removes.
+    return cueHasTextModeEffect(*cue) ? cue : nullptr;
+  }
+
+  // Sprite sets that ship with the install, or that the operator has dropped
+  // into data/sprites. Each subfolder is one set, named by its folder.
+  //
+  // Scanned rather than listed in code: whatever is in the folder is what is
+  // offered, so adding a set is a matter of copying files in rather than
+  // editing a table and rebuilding.
+  const std::vector<std::pair<std::string, std::string>>& builtinSpriteSets() {
+    static std::vector<std::pair<std::string, std::string>> sets;
+    static bool scanned = false;
+    if (!scanned) {
+      scanned = true;
+      std::error_code ec;
+      const fs::path root = Paths::dataDir() / "sprites";
+      if (fs::is_directory(root, ec)) {
+        for (const auto& entry : fs::directory_iterator(root, ec)) {
+          if (!entry.is_directory()) continue;
+          // A set is only offered if it actually contains images; an empty
+          // folder in the tree would otherwise appear as a set that draws
+          // nothing.
+          bool hasImage = false;
+          for (const auto& f : fs::directory_iterator(entry.path(), ec)) {
+            if (!f.is_regular_file()) continue;
+            std::string ext = f.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (ext == ".png" || ext == ".gif" || ext == ".bmp" ||
+                ext == ".jpg" || ext == ".jpeg" || ext == ".webp") {
+              hasImage = true;
+              break;
+            }
+          }
+          if (hasImage) {
+            sets.emplace_back(entry.path().string(),
+                              entry.path().filename().string());
+          }
+        }
+        std::sort(sets.begin(), sets.end(),
+                  [](const auto& a, const auto& b) { return a.second < b.second; });
+      }
+    }
+    return sets;
+  }
+
+  std::string currentSpriteSetLabel(const Cue& cue) const {
+    if (cue.videoSynth.spriteSheetPath.empty()) return "none";
+    for (const auto& [path, name] : const_cast<App*>(this)->builtinSpriteSets()) {
+      if (path == cue.videoSynth.spriteSheetPath) return name;
+    }
+    // A hand-picked path that is not one of the installed sets: show the
+    // filename so it is still identifiable.
+    return fs::path(cue.videoSynth.spriteSheetPath).filename().string();
+  }
+
+  // The two text-valued text-mode settings. Both go through the inline editor
+  // rather than a dropdown because the whole point of them is that the
+  // operator supplies characters nobody anticipated -- a band's initials, a
+  // set of box-drawing pieces, the name of the venue.
+  // Pick the typeface text mode draws with, or clear it back to automatic.
+  //
+  // The chosen face is tried FIRST and the platform chain still backs it up per
+  // character, so a decorative font picked for its stars does not cost you the
+  // letters it does not have.
+  void pickAsciiFont() {
+    Cue* c = selectedTextModeCueMutable();
+    if (!c) {
+      return;
+    }
+    if (!c->videoSynth.asciiFontPath.empty()) {
+      c->videoSynth.asciiFontPath.clear();
+      markProjectDirty();
+      triggerToast("font: automatic");
+      return;
+    }
+    // SDL requires the filter array to outlive the callback, so it is static --
+    // a temporary here is the bug the file-dialog notes warn about.
+    static const std::vector<SDL_DialogFileFilter> kFontFilters {
+      {"Fonts", "ttf;otf;ttc;otc"},
+      {"All files", "*"},
+    };
+    showOpenFileDialog(kFontFilters, /*allowMany=*/false,
+                       [this](std::vector<std::string> picked) {
+      if (picked.empty()) {
+        return;
+      }
+      Cue* target = selectedTextModeCueMutable();
+      if (!target) {
+        return;
+      }
+      target->videoSynth.asciiFontPath = picked.front();
+      markProjectDirty();
+      triggerToast("font: " + fs::path(picked.front()).filename().string());
+    });
+  }
+
+  // Turn text mode on or off for ANY cue, by adding or removing the effect.
+  // Returns what it is now.
+  //
+  // Removing takes the effect out rather than bypassing it, so the cue's own
+  // text-mode settings survive but the stack does not carry a dead entry an
+  // operator would have to find and delete later.
+  // Text mode on, whether or not it already was. Used where a control only
+  // makes sense with the grid showing.
+  void ensureTextModeEffect(Cue& cue) {
+    if (!cueHasTextModeEffect(cue)) {
+      toggleTextModeEffect(cue);
+    }
+  }
+
+  bool toggleTextModeEffect(Cue& cue) {
+    for (std::size_t i = 0; i < cue.effects.size(); ++i) {
+      if (cue.effects[i].kind == deckboy::effects::CueEffectKind::TextMode) {
+        // KEEP WHAT THE EFFECT WAS CARRYING. Four of the settings live in its
+        // parameters and nowhere else while it exists, so deleting it threw
+        // them away: switching text mode off and straight back on came back as
+        // blocks in green, whatever it had been. Decoding them into the cue
+        // first makes the round trip lossless, and makes the cue's own fields
+        // the durable store with the parameters as the live surface over them.
+        const deckboy::effects::CueEffect& fx = cue.effects[i];
+        cue.videoSynth.asciiCols = ::textModeColsForParam(fx.paramA);
+        cue.videoSynth.glitch = std::clamp(static_cast<double>(fx.paramB), 0.0, 1.0);
+        cue.videoSynth.asciiCharSet = ::textModeCharSetForParam(fx.paramC);
+        cue.videoSynth.asciiInk = ::textModeInkForParam(fx.paramD);
+        cue.effects.erase(cue.effects.begin() + static_cast<std::ptrdiff_t>(i));
+        return false;
+      }
+    }
+    deckboy::effects::CueEffect fx;
+    fx.kind = deckboy::effects::CueEffectKind::TextMode;
+    fx.amount = 1.0f;
+    // Carrying whatever the cue is already set to, so turning text mode on
+    // shows the settings in the inspector rather than snapping to defaults.
+    fx.paramA = ::textModeParamForCols(cue.videoSynth.asciiCols);
+    fx.paramB = static_cast<float>(std::clamp(cue.videoSynth.glitch, 0.0, 1.0));
+    fx.paramC = ::textModeParamForCharSet(cue.videoSynth.asciiCharSet);
+    fx.paramD = ::textModeParamForInk(cue.videoSynth.asciiInk);
+    cue.effects.push_back(fx);
+    return true;
+  }
+
+  void editAsciiGlyphs() {
+    Cue* c = selectedTextModeCueMutable();
+    if (!c) {
+      return;
+    }
+    openInlineTextEditor("vsynth.ascii_glyphs", "Custom Glyphs",
+                         "Characters to build the picture from, darkest first. "
+                         "Empty uses the chosen glyph set.",
+                         c->videoSynth.asciiGlyphs,
+                         // THE SAME CUE IT READ. This wrote through the video
+                         // synth accessor, so on a clip carrying the TEXT MODE
+                         // effect the row opened with the right value, took
+                         // what you typed, and dropped it -- which looks
+                         // exactly like a field that does not work.
+                         [this](const std::string& value) {
+                           if (Cue* cue = selectedTextModeCueMutable()) {
+                             cue->videoSynth.asciiGlyphs = value;
+                             markProjectDirty();
+                             refreshAllLiveCueRuntimes();
+                           }
+                         });
+  }
+
+  void editAsciiPhrases() {
+    Cue* c = selectedTextModeCueMutable();
+    if (!c) {
+      return;
+    }
+    openInlineTextEditor("vsynth.ascii_phrases", "Phrases",
+                         "Words to surface in the field, separated by | . One "
+                         "shows at a time, moving on the hold clock.",
+                         c->videoSynth.asciiPhrases,
+                         // Same fault as the glyphs row above.
+                         [this](const std::string& value) {
+                           if (Cue* cue = selectedTextModeCueMutable()) {
+                             cue->videoSynth.asciiPhrases = value;
+                             markProjectDirty();
+                             refreshAllLiveCueRuntimes();
+                           }
+                         });
+  }
+
+  // Step through the installed sets. Wraps back to none so a set can be turned
+  // off without opening a file dialog.
+  void cycleSpriteSet(int direction) {
+    Cue* cue = selectedVideoSynthCueMutable();
+    if (!cue) return;
+    const auto& sets = builtinSpriteSets();
+    if (sets.empty()) {
+      triggerToast("no sprite sets in data/sprites");
+      return;
+    }
+    const int count = static_cast<int>(sets.size()) + 1;   // +1 for "none"
+    int index = 0;
+    for (std::size_t i = 0; i < sets.size(); ++i) {
+      if (sets[i].first == cue->videoSynth.spriteSheetPath) {
+        index = static_cast<int>(i) + 1;
+        break;
+      }
+    }
+    index = ((index + direction) % count + count) % count;
+    if (index == 0) {
+      cue->videoSynth.spriteSheetPath.clear();
+      if (cue->videoSynth.asciiCharSet == 5) cue->videoSynth.asciiCharSet = 0;
+      triggerToast("sprites off");
+    } else {
+      cue->videoSynth.spriteSheetPath = sets[static_cast<std::size_t>(index - 1)].first;
+      cue->videoSynth.asciiCharSet = 5;
+      // Sheet mode only draws through the character grid, so picking a set
+      // turns text mode on -- which is the effect now, not a flag.
+      ensureTextModeEffect(*cue);
+      loadSpriteSetForCue(*cue);
+      triggerToast("sprites: " + sets[static_cast<std::size_t>(index - 1)].second);
+    }
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  // Decode a set into every engine that might draw it. Slow by nature -- a
+  // subprocess per sprite -- which is exactly why it happens HERE, on an
+  // operator action, rather than lazily on the first frame that needs it.
+  void loadSpriteSetForCue(const Cue& cue) {
+    if (cue.videoSynth.spriteSheetPath.empty()) return;
+    for (auto& runtime : deckRuntimes_) {
+      if (!runtime.mediaEngine) continue;
+      if (!runtime.mediaEngine->ensureSpriteSheet(cue.videoSynth.spriteSheetPath,
+                                                  cue.videoSynth.spriteTileW,
+                                                  cue.videoSynth.spriteTileH)) {
+        triggerToast("sprite set could not be read");
+        return;
+      }
+    }
+  }
+
+  void pickSpriteSheet() {
+    Cue* cue = selectedVideoSynthCueMutable();
+    if (!cue) {
+      failRemoteCommand("sprite sheet: select a video synth cue");
+      return;
+    }
+    // Static: SDL needs the filter list to outlive the call, since the
+    // callback fires later and on another thread.
+    static const std::vector<SDL_DialogFileFilter> kSheetFilters {
+      {"Images", "png;gif;bmp;jpg;jpeg;webp"},
+      {"All files", "*"},
+    };
+    showOpenFileDialog(kSheetFilters, /*allowMany=*/false,
+                       [this](std::vector<std::string> chosen) {
+      if (chosen.empty() || chosen.front().empty()) return;
+      Cue* c = selectedVideoSynthCueMutable();
+      if (!c) return;
+      c->videoSynth.spriteSheetPath = chosen.front();
+      // Switch to sheet mode on load. Picking a sheet and then having to find
+      // a second control to see it is the discoverability trap the chip synths
+      // already fell into.
+      c->videoSynth.asciiCharSet = 5;
+      ensureTextModeEffect(*c);
+      markProjectDirty();
+      triggerToast("sprite sheet loaded");
+    });
+  }
+
+  void cycleVsEnum(int which) {
+    Cue* cue = selectedVideoSynthCueMutable();
+    if (!cue) return;
+    VideoSynthSettings& v = cue->videoSynth;
+    if (which == 0) {
+      v.shape = static_cast<VideoSynthShape>((static_cast<int>(v.shape) + 1) % 5);
+      triggerToast(std::string("shape: ") + vsShapeLabel(v.shape));
+    } else if (which == 1) {
+      v.mirror = static_cast<VideoSynthMirror>((static_cast<int>(v.mirror) + 1) % 4);
+      triggerToast(std::string("mirror: ") + vsMirrorLabel(v.mirror));
+    } else {
+      v.palette = static_cast<VideoSynthPalette>(
+        (static_cast<int>(v.palette) + 1) % kVideoSynthPaletteCount);
+      triggerToast(std::string("palette: ") + vsPaletteLabel(v.palette));
+    }
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  // Speed steps MULTIPLICATIVELY. Adding a fixed amount makes the slow end
+  // unreachable: from 1.0, subtracting 0.1 nine times only gets to 0.1, and
+  // every step there is a huge proportional change. Scaling by a ratio gives
+  // fine control exactly where slow, smooth motion lives.
+  void scaleVsSpeed(double factor) {
+    Cue* cue = selectedVideoSynthCueMutable();
+    if (!cue) return;
+    cue->videoSynth.speed = std::clamp(cue->videoSynth.speed * factor, 0.01, 8.0);
+    markProjectDirty();
+    triggerToast("speed " + fmtFloat(cue->videoSynth.speed, 3));
+  }
+
+  void adjustVsInt(int VideoSynthSettings::*field, int delta,
+                   int lo, int hi, const char* label, bool textModeRow = false) {
+    Cue* cue = textModeRow ? selectedTextModeCueMutable()
+                           : selectedVideoSynthCueMutable();
+    if (!cue) return;
+    // EDIT WHAT RENDERS. On a cue carrying the text-mode EFFECT the picture
+    // comes from the effect's parameters and the cue's own synth fields are
+    // overwritten on the way to the renderer, so writing them here moved the
+    // number in the inspector and changed nothing on screen.
+    if (deckboy::effects::CueEffect* fx = textModeEffectMutable(*cue)) {
+      if (field == &VideoSynthSettings::asciiCols) {
+        VideoSynthSettings shown = cue->videoSynth;
+        applyTextModeParams(*fx, shown);
+        const int next = std::clamp(shown.asciiCols + delta, lo, hi);
+        fx->paramA = textModeParamForCols(next);
+        markProjectDirty();
+        triggerToast(std::string(label) + " " + std::to_string(next));
+        return;
+      }
+    }
+    int& v = cue->videoSynth.*field;
+    v = std::clamp(v + delta, lo, hi);
+    markProjectDirty();
+    triggerToast(std::string(label) + " " + std::to_string(v));
+  }
+
+  void adjustVs(double VideoSynthSettings::*field, double delta,
+                double lo, double hi, const char* label, bool textModeRow = false) {
+    Cue* cue = textModeRow ? selectedTextModeCueMutable()
+                           : selectedVideoSynthCueMutable();
+    if (!cue) return;
+    double& v = cue->videoSynth.*field;
+    v = std::clamp(v + delta, lo, hi);
+    markProjectDirty();
+    triggerToast(std::string(label) + " " + fmtFloat(v, 2));
+  }
+
+  // A master cue and a target cue are both "a cue that does something to other
+  // cues", so they arrive the same way: no path, no media, a colour that reads
+  // as control rather than content, and no end action to speak of.
+  // A Portal arrives named for what it is. It is drawn transparent outside its
+  // blobs, to sit on a layer over another playlist.
+  void addPortalCue() {
+    addPatternCue("portal");
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      Cue& cue = deck.cues.back();
+      cue.name = "Portal";
+      cue.color = {60, 40, 150, 255};
+      markProjectDirty();
+    }
+  }
+
+  // A Draw cue arrives empty and named, transparent everywhere until drawn
+  // on, with the draw editor open on the monitor so the next thing the
+  // operator does is draw.
+  void addDrawCue() {
+    addPatternCue("draw");
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      Cue& cue = deck.cues.back();
+      cue.name = "Draw";
+      cue.color = {200, 70, 90, 255};
+      markProjectDirty();
+    }
+  }
+
+  void addMoireCue() {
+    addPatternCue("moire-field");
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      Cue& cue = deck.cues.back();
+      cue.name = "Moire";
+      cue.color = {150, 60, 170, 255};
+      markProjectDirty();
+    }
+  }
+
+  void addFiresideCue() {
+    addPatternCue("fireside");
+    // Named for what it is rather than "Pattern 12": it arrives from the
+    // SOURCE menu now, and a hearth in a cue list should read as a hearth.
+    Deck& deck = focusedDeckMutable();
+    if (!deck.cues.empty()) {
+      Cue& cue = deck.cues.back();
+      cue.name = "Fireside";
+      cue.color = {120, 52, 28, 255};
+      markProjectDirty();
+    }
+  }
+
+  void addTextCue() {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::Text;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Text " + std::to_string(deck.cues.size() + 1);
+    cue.color = {40, 110, 100, 255};
+    cue.formatName = "generated";
+    cue.width = rasterW;
+    cue.height = rasterH;
+    applyDeckDefaultsToCue(cue, deck);
+    // Holds until it is taken off, like every other generated source: a title
+    // card that times out after eight seconds is a title card that will
+    // disappear in the middle of somebody's introduction.
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.endAction = CueEndAction::Stop;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("text added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // A text cue already laid out as a lower third: the first thing an operator
+  // wants from one is to change the words, so it arrives with some to change.
+  void addLowerThirdTextCue() {
+    addTextCue();
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      return;
+    }
+    Cue& cue = deck.cues.back();
+    cue.name = "Lower Third";
+    cue.color = {38, 110, 228, 255};
+    cue.textBody = "Name Surname\nTitle or role";
+    cue.lowerThird.on = true;
+    markProjectDirty();
+    triggerToast("Lower Third added - put its playlist on a layer");
+  }
+
+  void addDmxCue() {
+    Cue cue;
+    cue.kind = CueKind::Dmx;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "DMX " + std::to_string(deck.cues.size() + 1);
+    cue.color = {130, 110, 40, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("dmx cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addScriptCue() {
+    Cue cue;
+    cue.kind = CueKind::Script;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Script " + std::to_string(deck.cues.size() + 1);
+    cue.color = {100, 100, 60, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("script cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addTimecodeCue() {
+    Cue cue;
+    cue.kind = CueKind::Timecode;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Timecode " + std::to_string(deck.cues.size() + 1);
+    cue.color = {60, 120, 90, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("timecode cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addNetworkCue() {
+    Cue cue;
+    cue.kind = CueKind::Network;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Network " + std::to_string(deck.cues.size() + 1);
+    cue.color = {60, 90, 120, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("network cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addMidiCue() {
+    Cue cue;
+    cue.kind = CueKind::Midi;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "MIDI " + std::to_string(deck.cues.size() + 1);
+    cue.color = {120, 60, 90, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("midi cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addFadeCue() {
+    Cue cue;
+    cue.kind = CueKind::Fade;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Fade " + std::to_string(deck.cues.size() + 1);
+    cue.color = {90, 60, 120, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("fade cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // A memo arrives with its note open for typing: a memo with nothing in it
+  // is the one cue that is certainly useless.
+  void addMemoCue(const std::string& text = std::string()) {
+    Cue cue;
+    cue.kind = CueKind::Memo;
+    Deck& deck = focusedDeckMutable();
+    cue.name = text.empty() ? "Memo" : text.substr(0, 48);
+    cue.notes = text;
+    cue.color = {150, 130, 60, 255};
+    cue.formatName = "memo";
+    const int at = deck.selectedIndex >= 0 ? deck.selectedIndex + 1
+                                           : static_cast<int>(deck.cues.size());
+    deck.cues.insert(deck.cues.begin() + at, cue);
+    remapDeckCueIndices(project_.focusedDeckIndex, [at](int index) {
+      return index >= at ? index + 1 : index;
+    });
+    deck.selectedIndex = at;
+    deck.selectedIndices.clear();
+    normalizeProject(project_);
+    onSelectionChanged();
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Import);
+    if (text.empty()) {
+      editSelectedMemoText();
+    }
+  }
+
+  void editSelectedMemoText() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue || cue->kind != CueKind::Memo) {
+      return;
+    }
+    openInlineTextEditor("memo.text", "Memo", "what the operator should be told when GO reaches here",
+                         cue->notes, [this](const std::string& value) {
+      Cue* now = selectedCueMutable();
+      if (!now || now->kind != CueKind::Memo) return;
+      now->notes = trim(value);
+      if (!now->notes.empty()) {
+        now->name = now->notes.substr(0, 48);
+      }
+      markProjectDirty();
+    });
+  }
+
+  void addTargetCue() {
+    Cue cue;
+    cue.kind = CueKind::Target;
+    Deck& deck = focusedDeckMutable();
+    cue.name = "Target " + std::to_string(deck.cues.size() + 1);
+    cue.color = {30, 90, 120, 255};
+    cue.formatName = "control";
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    markProjectDirty();
+    triggerToast("target cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addVideoSynthCue() {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::VideoSynth;
+    cue.path = "vsynth://";
+    cue.name = "Video Synth";
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = {90, 50, 120, 255};
+    cue.formatName = "generated";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    // Runs until stopped, like the other generated sources.
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.endAction = CueEndAction::Stop;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("video synth added");
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // The chip voice was only reachable by adding a tone cue and cycling the
+  // signal control six times to land on it -- which nobody would ever guess,
+  // and the owner did not. Same cue kind, but it arrives already set up as an
+  // instrument, so the synth is one click from the SOURCE menu.
+  // The synth cue currently on air, if any. Notes go to what is LIVE rather
+  // than what is selected: an operator playing along with a show is watching
+  // the output, not the playlist.
+  // THE FOCUSED DECK FIRST, then whichever deck has one.
+  //
+  // This scanned from deck 0 and returned the first live synth it found, which
+  // is correct and unambiguous while one deck exists. With two -- and VJ mode
+  // exists precisely to give you two -- every note went to deck 1 no matter
+  // which deck was focused, so an arrangement with a bass on one and a lead on
+  // the other silently played both parts on the bass. Nothing reported it;
+  // it simply sounded wrong.
+  //
+  // The fallback keeps the old behaviour wherever the focused deck has no
+  // synth on air, so playing keys still works without having to focus first.
+  Cue* liveSynthCueOnDeck(int deckIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    Deck& deck = project_.decks[static_cast<std::size_t>(deckIndex)];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    Cue& cue = deck.cues[static_cast<std::size_t>(deck.activeIndex)];
+    if (cue.kind == CueKind::Tone && cue.tone.waveform == ToneWaveform::Fds) {
+      return &cue;
+    }
+    // OR THE CUE HAS SOMETHING ELSE TO PLAY. A hosted instrument is played the
+    // same way the built-in chip is -- computer keyboard, MIDI in, SYNTHNOTEON
+    // -- and all three ask this function whether there is a synth on air. With
+    // only the FDS check, an instrument plugin loaded, processed, and could
+    // never be reached by any of them: "no synth cue is live" while an
+    // instrument sat in the chain waiting.
+    if (const MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+      if (engine->hasInstrumentPlugin()) {
+        return &cue;
+      }
+    }
+    return nullptr;
+  }
+
+  Cue* liveSynthCue() {
+    if (Cue* focused = liveSynthCueOnDeck(project_.focusedDeckIndex)) {
+      return focused;
+    }
+    for (auto& deck : project_.decks) {
+      if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      Cue& cue = deck.cues[deck.activeIndex];
+      if (cue.kind == CueKind::Tone && cue.tone.waveform == ToneWaveform::Fds) {
+        return &cue;
+      }
+    }
+    return nullptr;
+  }
+
+  // Same rule as liveSynthCue, and it has to be the SAME rule: the two are
+  // called together to send one note, so a cue from one deck and an engine
+  // from another would play the focused deck's timbre out of the other deck's
+  // voice.
+  MediaEngine* liveSynthEngine() {
+    const int focused = project_.focusedDeckIndex;
+    if (liveSynthCueOnDeck(focused) && focused >= 0 &&
+        focused < static_cast<int>(deckRuntimes_.size()) &&
+        deckRuntimes_[static_cast<std::size_t>(focused)].mediaEngine) {
+      return deckRuntimes_[static_cast<std::size_t>(focused)].mediaEngine.get();
+    }
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      const Deck& deck = project_.decks[d];
+      if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      const Cue& cue = deck.cues[deck.activeIndex];
+      if (cue.kind != CueKind::Tone || cue.tone.waveform != ToneWaveform::Fds) continue;
+      if (d < deckRuntimes_.size() && deckRuntimes_[d].mediaEngine) {
+        return deckRuntimes_[d].mediaEngine.get();
+      }
+    }
+    return nullptr;
+  }
+
+  void addSynthCue(SynthChip chip) {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::Tone;
+    cue.path = "tone://";
+    cue.tone.waveform = ToneWaveform::Fds;
+    cue.tone.synth.chip = chip;
+    // Audible immediately. A synth cue that arrives silent looks broken, and
+    // the operator has no way to know whether it is the cue or the routing.
+    cue.tone.synth.retriggerSeconds = 0.0;   // hold the note
+    cue.tone.levelDbfs = -18.0;
+    cue.name = (chip == SynthChip::Nes) ? "2A03 Synth" : "FDS Synth";
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = {70, 90, 140, 255};
+    cue.formatName = "generated";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.endAction = CueEndAction::Stop;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast(cue.name + " added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // ── MIC CUE ───────────────────────────────────────────────────────────
+  //
+  // A live input played through a deck: the deck's fades, routing and
+  // speakers, the cue's audio effects. The engine reads the device itself
+  // (MediaEngine::startMicCapture). Here: making one, its inspector's
+  // answers, and the meters every mic cue's row shows before it is taken.
+  bool cueSectionMicOpen_ = true;
+  bool micFeedbackWarned_ = false;
+
+  void addMicCue(const std::string& device) {
+    Cue cue;
+    cue.kind = CueKind::Mic;
+    cue.path = "mic://" + device;
+    cue.name = device.empty() ? std::string("Mic")
+             : device == MediaEngine::kMicTestSignal ? std::string("Mic test signal") : device;
+    cue.formatName = "live input";
+    cue.color = {150, 70, 60, 255};
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    // Live until it is stopped, like every other live source.
+    cue.duration = 0.0;
+    cue.stillDurationSeconds = 0.0;
+    cue.pauseOnLastFrame = true;
+    cue.endAction = CueEndAction::Stop;
+    cue.hasAudio = true;
+    cue.micChannel = MicChannel::MonoLeft;
+    // A short fade in so GO does not thump, a longer one out so STOP does not
+    // cut a word in half.
+    cue.audioFadeInSeconds = 0.5f;
+    cue.audioFadeOutSeconds = 1.0f;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("mic cue added - " + micCueInputLabel(deck.cues.back()));
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  static std::string micCueDevice(const Cue& cue) {
+    return cue.path.rfind("mic://", 0) == 0 ? cue.path.substr(6) : std::string();
+  }
+
+  static const char* micChannelLabel(MicChannel channel) {
+    switch (channel) {
+      case MicChannel::MonoRight: return "MONO R";
+      case MicChannel::Stereo: return "STEREO";
+      case MicChannel::MonoLeft:
+      default: return "MONO L";
+    }
+  }
+
+  std::string micCueInputLabel(const Cue& cue) const {
+    const std::string device = micCueDevice(cue);
+    if (device == MediaEngine::kMicTestSignal) return "test signal";
+    if (!device.empty()) return device;
+    return project_.audioInputDeviceName.empty() ? std::string("Settings input (default)")
+                                                 : "Settings input: " + project_.audioInputDeviceName;
+  }
+
+  // The device a cue will actually open: its own, else Settings' input.
+  std::string micCueEffectiveDevice(const Cue& cue) const {
+    const std::string device = micCueDevice(cue);
+    return device.empty() ? project_.audioInputDeviceName : device;
+  }
+
+  static std::vector<std::string> micInputNames() {
+    std::vector<std::string> names;
+    int count = 0;
+    if (SDL_AudioDeviceID* ids = SDL_GetAudioRecordingDevices(&count)) {
+      for (int i = 0; i < count; ++i) {
+        if (const char* name = SDL_GetAudioDeviceName(ids[i])) names.emplace_back(name);
+      }
+      SDL_free(ids);
+    }
+    return names;
+  }
+
+  Cue* selectedMicCue() {
+    Cue* cue = selectedCueMutable();
+    return cue && cue->kind == CueKind::Mic ? cue : nullptr;
+  }
+
+  // The engine playing this cue, when one is.
+  MediaEngine* engineHoldingMicCue(const Cue& cue) {
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Cue* active = activeCuePtr(d);
+      if (active && !cue.id.empty() && active->id == cue.id && active->kind == CueKind::Mic) {
+        MediaEngine* engine = mediaEngineForDeck(d);
+        if (engine && engine->micRunning()) return engine;
+      }
+    }
+    return nullptr;
+  }
+
+  void cycleSelectedMicInput() {
+    Cue* cue = selectedMicCue();
+    if (!cue) return;
+    const std::vector<std::string> names = micInputNames();
+    const std::string current = micCueDevice(*cue);
+    std::string next;
+    if (current.empty()) {
+      next = names.empty() ? std::string() : names.front();
+    } else {
+      auto it = std::find(names.begin(), names.end(), current);
+      next = (it == names.end() || it + 1 == names.end()) ? std::string() : *(it + 1);
+    }
+    setMicCueDevice(*cue, next);
+  }
+
+  void setMicCueDevice(Cue& cue, const std::string& device) {
+    cue.path = "mic://" + device;
+    markProjectDirty();
+    triggerToast("mic input: " + micCueInputLabel(cue));
+    // A cue on air reopens on the new input straight away.
+    if (MediaEngine* engine = engineHoldingMicCue(cue)) {
+      for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+        if (mediaEngineForDeck(d) == engine) {
+          const bool playing = engine->state() == TransportState::Playing;
+          engine->loadCue(&cue, playing);
+          break;
+        }
+      }
+    }
+  }
+
+  void cycleSelectedMicChannel() {
+    Cue* cue = selectedMicCue();
+    if (!cue) return;
+    cue->micChannel = static_cast<MicChannel>((static_cast<int>(cue->micChannel) + 1) % 3);
+    markProjectDirty();
+    triggerToast(std::string("mic channel: ") + micChannelLabel(cue->micChannel));
+  }
+
+  // A STREAM cue's HDR input (Cue::liveHdrTransfer). The decode format is
+  // fixed when the feed is opened, so a live one is reopened -- the look
+  // alone cannot change a P010 pipe into an 8-bit one.
+  static const char* liveHdrLabel(int transfer) {
+    return transfer == 1 ? "PQ (HDR10)" : transfer == 2 ? "HLG" : "SDR";
+  }
+  bool setSelectedStreamHdr(int transfer) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::SrtStream) return false;
+    cue->liveHdrTransfer = std::clamp(transfer, 0, 2);
+    markProjectDirty();
+    syncEngineCueSnapshots();
+    const Deck& deck = focusedDeck();
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+        cueIndexSelected(deck, deck.activeIndex)) {
+      if (MediaEngine* engine = focusedMediaEngine()) engine->refreshActiveCueRuntime(&deck.cues[deck.activeIndex]);
+    }
+    triggerToast(std::string("stream HDR input: ") + liveHdrLabel(cue->liveHdrTransfer));
+    return true;
+  }
+
+  void adjustSelectedMicGain(float stepDb) {
+    Cue* cue = selectedMicCue();
+    if (!cue) return;
+    cue->audioGainDb = std::clamp(cue->audioGainDb + stepDb, kCueAudioGainMinDb, kCueAudioGainMaxDb);
+    markProjectDirty();
+  }
+
+  void resetSelectedMicClip() {
+    Cue* cue = selectedMicCue();
+    if (!cue) return;
+    if (MediaEngine* engine = engineHoldingMicCue(*cue)) engine->clearMicClip();
+    auto it = micMeters_.find(micCueEffectiveDevice(*cue));
+    if (it != micMeters_.end()) it->second.clipped.clear();
+  }
+
+  // ── Meters for mic cues that are not playing ─────────────────────────────
+  // One small recording stream per input that a mic cue names, opened while
+  // the show has such a cue, so every mic row shows its level before GO.
+  // Peaks are kept per channel so the cue's channel choice and gain apply.
+  struct MicMeter {
+    SDL_AudioStream* stream = nullptr;
+    float peakL = 0.0f, peakR = 0.0f;
+    std::unordered_map<std::string, bool> clipped;   // per cue id
+    bool missing = false;
+    std::vector<std::int16_t> scratch;
+  };
+  std::map<std::string, MicMeter> micMeters_;
+  Uint64 micMetersCheckedMs_ = 0;
+
+  void serviceMicMeters(Uint64 now) {
+    std::set<std::string> wanted;
+    for (const Deck& deck : project_.decks) {
+      for (const Cue& cue : deck.cues) {
+        if (cue.kind != CueKind::Mic) continue;
+        const std::string device = micCueEffectiveDevice(cue);
+        if (device != MediaEngine::kMicTestSignal) wanted.insert(device);
+      }
+    }
+    for (auto it = micMeters_.begin(); it != micMeters_.end();) {
+      if (!wanted.count(it->first)) {
+        if (it->second.stream) SDL_DestroyAudioStream(it->second.stream);
+        it = micMeters_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    const bool recheck = now - micMetersCheckedMs_ > 2000;
+    if (recheck) micMetersCheckedMs_ = now;
+    for (const std::string& device : wanted) {
+      MicMeter& meter = micMeters_[device];
+      if (!meter.stream && (recheck || !meter.missing)) {
+        SDL_AudioDeviceID target = SDL_AUDIO_DEVICE_DEFAULT_RECORDING;
+        if (!device.empty()) {
+          target = 0;
+          int count = 0;
+          if (SDL_AudioDeviceID* ids = SDL_GetAudioRecordingDevices(&count)) {
+            for (int i = 0; i < count && !target; ++i) {
+              const char* name = SDL_GetAudioDeviceName(ids[i]);
+              if (name && device == name) target = ids[i];
+            }
+            SDL_free(ids);
+          }
+        }
+        if (target) {
+          SDL_AudioSpec spec {};
+          spec.format = SDL_AUDIO_S16;
+          spec.channels = 2;
+          spec.freq = 48000;
+          meter.stream = SDL_OpenAudioDeviceStream(target, &spec, nullptr, nullptr);
+          if (meter.stream) SDL_ResumeAudioStreamDevice(meter.stream);
+        }
+        meter.missing = meter.stream == nullptr;
+      }
+      // Fall back about 20 dB a second between reads.
+      meter.peakL *= 0.85f;
+      meter.peakR *= 0.85f;
+      if (!meter.stream) continue;
+      const int avail = SDL_GetAudioStreamAvailable(meter.stream);
+      if (avail < 4) continue;
+      meter.scratch.resize(static_cast<std::size_t>(avail) / 2);
+      const int got = SDL_GetAudioStreamData(meter.stream, meter.scratch.data(), avail);
+      const std::size_t frames = got > 0 ? static_cast<std::size_t>(got) / 4 : 0;
+      float l = 0.0f, r = 0.0f;
+      for (std::size_t f = 0; f < frames; ++f) {
+        l = std::max(l, std::abs(static_cast<float>(meter.scratch[f * 2])) / 32768.0f);
+        r = std::max(r, std::abs(static_cast<float>(meter.scratch[f * 2 + 1])) / 32768.0f);
+      }
+      meter.peakL = std::max(meter.peakL, l);
+      meter.peakR = std::max(meter.peakR, r);
+    }
+  }
+
+  void closeMicMeters() {
+    for (auto& [device, meter] : micMeters_) {
+      if (meter.stream) SDL_DestroyAudioStream(meter.stream);
+    }
+    micMeters_.clear();
+  }
+
+  // 0..1 of full scale, with the cue's channel choice and gain applied.
+  float micCueLevel(const Cue& cue, bool* clipped) {
+    if (clipped) *clipped = false;
+    if (MediaEngine* engine = engineHoldingMicCue(cue)) {
+      if (clipped) *clipped = engine->micClipped();
+      return engine->micPeak();
+    }
+    auto it = micMeters_.find(micCueEffectiveDevice(cue));
+    if (it == micMeters_.end()) return 0.0f;
+    MicMeter& meter = it->second;
+    const float raw = cue.micChannel == MicChannel::MonoLeft ? meter.peakL
+                    : cue.micChannel == MicChannel::MonoRight ? meter.peakR
+                    : std::max(meter.peakL, meter.peakR);
+    const float level = raw * static_cast<float>(std::pow(10.0, std::clamp(cue.audioGainDb, -40.0f, 40.0f) / 20.0));
+    bool& latch = meter.clipped[cue.id];
+    if (level >= 0.999f) latch = true;
+    if (clipped) *clipped = latch;
+    return level;
+  }
+
+  std::string micCueStatusText(const Cue& cue) {
+    if (MediaEngine* engine = engineHoldingMicCue(cue)) {
+      const int ms = engine->micLatencyMs();
+      return engine->state() == TransportState::Playing
+        ? "live  " + engine->micDeviceInUse() + (ms > 0 ? "  ~" + std::to_string(ms) + " ms" : std::string())
+        : "racked, not heard  " + engine->micDeviceInUse();
+    }
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Cue* active = activeCuePtr(d);
+      MediaEngine* engine = mediaEngineForDeck(d);
+      if (active && !cue.id.empty() && active->id == cue.id && engine && !engine->micError().empty()) {
+        return engine->micError();
+      }
+    }
+    auto it = micMeters_.find(micCueEffectiveDevice(cue));
+    if (it != micMeters_.end() && it->second.missing) return "input not found - plug it in or pick another";
+    return "not taken - GO puts it on the deck";
+  }
+
+  // The level as a coloured bar on a dB scale: green to -18 dBFS (line-up),
+  // amber to -6, red above, with a tick at -18.
+  void drawMicMeter(const SDL_Rect& bar, float level) {
+    Primitives::fillRect(controlRenderer_, bar, pal.deep);
+    const double db = level > 0.0f ? 20.0 * std::log10(static_cast<double>(level)) : -90.0;
+    const double frac = std::clamp((db + 60.0) / 60.0, 0.0, 1.0);
+    const auto xAt = [&](double dbfs) { return bar.x + static_cast<int>(std::lround(bar.w * (dbfs + 60.0) / 60.0)); };
+    const int fillEnd = bar.x + static_cast<int>(std::lround(bar.w * frac));
+    const int greenEnd = std::min(fillEnd, xAt(-18.0)), amberEnd = std::min(fillEnd, xAt(-6.0));
+    if (greenEnd > bar.x)
+      Primitives::fillRect(controlRenderer_, SDL_Rect {bar.x, bar.y, greenEnd - bar.x, bar.h}, SDL_Color {150, 230, 40, 255});
+    if (amberEnd > greenEnd)
+      Primitives::fillRect(controlRenderer_, SDL_Rect {greenEnd, bar.y, amberEnd - greenEnd, bar.h}, SDL_Color {255, 180, 24, 255});
+    if (fillEnd > amberEnd)
+      Primitives::fillRect(controlRenderer_, SDL_Rect {amberEnd, bar.y, fillEnd - amberEnd, bar.h}, SDL_Color {225, 60, 35, 255});
+    Primitives::fillRect(controlRenderer_, SDL_Rect {xAt(-18.0), bar.y - 1, std::max(1, uiScaled(2)), bar.h + 2},
+                         SDL_Color {255, 255, 255, 200});
+  }
+
+  void addToneCue() {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::Tone;
+    cue.path = "tone://";
+    cue.name = "Test Tone 1kHz";
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = {60, 110, 120, 255};
+    cue.formatName = "generated";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    // A line-up tone runs until it is STOPPED. Auto-advancing off the end of
+    // the playlist part way through a sound check would be actively unhelpful.
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.endAction = CueEndAction::Stop;
+    // A CHIP SYNTH IS NOTHING BUT AUDIO, and it has to say so. `hasAudio` is
+    // what every audio edit gates on -- the per-cue effect rack, the gain, the
+    // pan -- so leaving it false on the one cue kind that is pure sound meant
+    // the rack refused to attach to it: "no cue with audio selected", on a cue
+    // that was audibly playing. Reported from the trailer, where the music was
+    // asked to run through Deckboy's own delay and reverb and came out dry.
+    cue.hasAudio = true;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast("tone cue added");
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  void addTimerCue(int durationSeconds = 300) {
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::Timer;
+    cue.path = "timer://";
+    cue.timer.durationSeconds = std::max(1, durationSeconds);
+    const int mins = cue.timer.durationSeconds / 60;
+    const int secs = cue.timer.durationSeconds % 60;
+    char label[64];
+    std::snprintf(label, sizeof(label), "Timer %d:%02d", mins, secs);
+    cue.name = label;
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = {120, 60, 50, 255};
+    cue.formatName = "generated";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    cue.endAction = CueEndAction::Stop;
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast(std::string("timer: ") + cue.name);
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  void addPatternCue(const std::string& rawTypeId) {
+    std::string typeId = normalizePatternTypeId(rawTypeId);
+    if (typeId.empty()) {
+      typeId = patternDefaultTypeId_;
+    }
+    if (typeId == "checker") {
+      typeId = "checkerboard";
+    }
+    if (!isKnownPatternType(typeId)) {
+      // Same as the type-change path: say WHICH id was refused.
+      //
+      // And say it to the CALLER, not just the room. This replied OK while
+      // adding nothing, so a controller or script asking for a pattern it had
+      // misspelled was told the cue existed. The operator got the toast; the
+      // machine that could have done something about it got a success.
+      failRemoteCommand("pattern: \"" + typeId + "\" is not a pattern type");
+      return;
+    }
+    patternDefaultTypeId_ = typeId;
+    std::string label = patternLabelForType(typeId);
+    // A generator is named as itself -- "Swirl", not the menu's description
+    // of it -- whether it came from SOURCE, a remote PATTERN ADD or a script.
+    const std::string generatorName = generatorPatternName(typeId);
+    if (!generatorName.empty()) {
+      label = generatorName;
+    }
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    Cue cue;
+    cue.kind = CueKind::Pattern;
+    cue.path = "pattern://" + typeId;
+    cue.name = label;
+    cue.width = rasterW;
+    cue.height = rasterH;
+    cue.color = {50, 50, 120, 255};
+    cue.formatName = "generated";
+    Deck& deck = focusedDeckMutable();
+    applyDeckDefaultsToCue(cue, deck);
+    // Engineering patterns should hold by default instead of inheriting
+    // still-duration auto-advance from playlist defaults.
+    cue.pauseOnLastFrame = true;
+    cue.stillDurationSeconds = 0.0;
+    // Pocket Test carries the A/V sync pop — it HAS audio (which also makes
+    // the inspector's audio controls appear) and defaults audible; mute via
+    // the cue's audio toggle.
+    cue.hasAudio = (typeId == "pocket-test");
+    cue.audioEnabled = (typeId == "pocket-test");
+    deck.cues.push_back(cue);
+    deck.selectedIndex = static_cast<int>(deck.cues.size()) - 1;
+    deck.selectedIndices.clear();   // the new cue alone
+    onSelectionChanged();
+    triggerToast(generatorName.empty() ? "pattern: " + label : label + " added");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  // One of the things Deckboy makes, from SOURCE > MADE BY DECKBOY.
+  void addGeneratorCue(const std::string& typeId) {
+    addPatternCue(typeId);
+  }
+
+  // What kind of thing a cue is, as the desk names it: a generator by its own
+  // name -- a Portal is not a "Pattern" -- and everything else by its kind.
+  static std::string cueTypeLabel(const Cue& cue) {
+    if (cue.kind == CueKind::Pattern) {
+      const std::string name = generatorPatternName(cue.path);
+      if (!name.empty()) return name;
+    }
+    return cueKindLabel(cue.kind);
+  }
+
+  void addPatternCueFromMenu() {
+    addPatternCue(patternDefaultTypeId_);
+  }
+
+  // The PATTERN button/key's quick-add: always Pocket Test, not whatever
+  // pattern type was last touched anywhere in the app. It used to pass
+  // patternDefaultTypeId_, which addPatternCue() and applyPatternTypeToSelectedCue()
+  // also write to every time ANY pattern cue's type changes -- so editing one
+  // cue into e.g. Fireside silently changed what this button inserts next,
+  // with no indication why. This is the one-key "give me a test pattern"
+  // action; it should be predictable every time, which is also what was asked.
+  void addKawaiiPatternCue() {
+    addPatternCue("pocket-test");
+  }
+
+  // ── Slide decks ─────────────────────────────────────────────────────────
+  //
+  // A PDF becomes one IMAGE CUE PER PAGE, rendered once at import. That is the
+  // whole design: after this a slide is an ordinary cue, so it fades, carries
+  // effects, crossfades to the next one, and walks under Page Down from the
+  // presenter's clicker. Nothing during the show depends on a document
+  // renderer, which is not a shortcut but the point -- a renderer that stalls
+  // mid-keynote is a black screen in front of an audience.
+  //
+  // Rendered on a worker thread. A hundred-page deck takes seconds, and doing
+  // it inline would freeze the app during load-in with no indication why.
+  // What the rendering card shows. The two counts are written by the render
+  // worker and read by the draw, so they are atomic; the flag and the title
+  // are only ever touched on the main thread.
+  // A COUNT, not a flag. Dropping two decks at once starts two renders, and a
+  // flag meant the first to finish cleared the card while the second was still
+  // going -- so the operator watched the progress vanish and the app fall
+  // silent for another half minute.
+  int slideRenderJobs_ = 0;
+  std::string slideRenderTitle_;
+  std::atomic<int> slideRenderPage_{0};
+  std::atomic<int> slideRenderTotal_{0};
+
+  // ── AN M3U CHANNEL LIST IS A PLAYLIST, NOT A CLIP ────────────────────────
+  //
+  // IPTV providers hand out a .m3u (or .m3u8) listing hundreds of channels:
+  //
+  //     #EXTM3U
+  //     #EXTINF:-1 tvg-id="bbc1" group-title="UK",BBC One HD
+  //     http://example.net/live/bbc1.m3u8
+  //
+  // Each entry becomes a stream cue, named from the text after the comma and
+  // colour-tagged nothing -- the group goes in the cue's notes, where it is
+  // searchable, rather than inventing a taxonomy the rest of the app does not
+  // have.
+  //
+  // THE HARD PART IS THAT .m3u8 MEANS TWO THINGS. An HLS MEDIA playlist has
+  // the same extension and is a single stream's segment list -- importing that
+  // as a hundred cues, one per segment, would be nonsense. They are told apart
+  // by the `#EXT-X-` tags HLS requires and a channel list never has; anything
+  // carrying one is handed to a single stream cue and played, which is what it
+  // is for.
+  bool importM3uPlaylist(const fs::path& path) {
+    std::ifstream in(path);
+    if (!in) {
+      triggerToast(path.filename().string() + ": could not be read",
+                   ToastKind::Warning, kToastReadableMs);
+      return true;   // handled: it WAS a playlist, it just could not be opened
+    }
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(in, line)) {
+      lines.push_back(trim(line));
+    }
+
+    for (const std::string& raw : lines) {
+      if (raw.rfind("#EXT-X-", 0) == 0) {
+        // An HLS media or master playlist: one stream, not a list of them.
+        addSrtStreamCue(path.string());
+        triggerToast("HLS playlist: added as one stream cue");
+        return true;
+      }
+    }
+
+    struct Channel {
+      std::string name;
+      std::string group;
+      std::string url;
+    };
+    std::vector<Channel> channels;
+    Channel pending;
+    bool havePending = false;
+    for (const std::string& entry : lines) {
+      if (entry.empty()) {
+        continue;
+      }
+      if (entry.rfind("#EXTINF", 0) == 0) {
+        pending = Channel{};
+        havePending = true;
+        // The channel's NAME is everything after the last comma; the
+        // attributes before it are key="value" pairs in no fixed order.
+        const std::size_t comma = entry.rfind(',');
+        if (comma != std::string::npos) {
+          pending.name = trim(entry.substr(comma + 1));
+        }
+        const std::size_t group = entry.find("group-title=\"");
+        if (group != std::string::npos) {
+          const std::size_t from = group + 13;
+          const std::size_t close = entry.find('"', from);
+          if (close != std::string::npos) {
+            pending.group = entry.substr(from, close - from);
+          }
+        }
+        continue;
+      }
+      if (entry[0] == '#') {
+        continue;                       // a comment or a tag we do not use
+      }
+      if (!havePending) {
+        // A bare URL with no #EXTINF above it is still a channel; it just has
+        // no name yet, and the URL is a better name than nothing.
+        pending = Channel{};
+      }
+      pending.url = entry;
+      if (pending.name.empty()) {
+        pending.name = entry;
+      }
+      channels.push_back(pending);
+      havePending = false;
+    }
+
+    if (channels.empty()) {
+      return false;    // not a channel list after all -- let the caller try it as media
+    }
+
+    pushUndoSnapshot();
+    Deck& deck = focusedDeckMutable();
+    auto [rasterW, rasterH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+    for (const Channel& channel : channels) {
+      Cue cue;
+      cue.kind = CueKind::SrtStream;
+      cue.path = channel.url;
+      cue.name = channel.name;
+      // The group is where the operator will look for "which package is this
+      // from", and notes are searchable. A new taxonomy would not be.
+      if (!channel.group.empty()) {
+        cue.notes = channel.group;
+      }
+      cue.width = rasterW;
+      cue.height = rasterH;
+      // A stream carries its sound unless it turns out not to -- the same as a
+      // stream cue made from the menu. Without this, normalisation read "no
+      // audio track" and switched the channel's sound off before it ever played.
+      cue.hasAudio = true;
+      cue.audioCodec = "stream";
+      applyDeckDefaultsToCue(cue, deck);
+      deck.cues.push_back(std::move(cue));
+    }
+    normalizeProject(project_);
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Import);
+    triggerToast(std::to_string(channels.size()) + " channels from " +
+                   path.filename().string());
+    return true;
+  }
+
+  void importSlideDeck(const fs::path& document) {
+    std::string whyNot;
+    if (!deckboy::platform::pdfRasterAvailable(whyNot)) {
+      triggerToast("slides: " + whyNot, ToastKind::Warning,
+                   kToastReadableMs);
+      return;
+    }
+    // A presentation is converted to PDF first, by whatever owns the format.
+    // Checked here rather than inside the worker so the operator is told the
+    // converter is missing straight away instead of after a spinner.
+    const bool needsConversion =
+      deckboy::platform::isPresentationDocumentPath(document);
+    if (needsConversion &&
+        !deckboy::platform::presentationConvertAvailable(whyNot)) {
+      triggerToast(document.filename().string() + ": " + whyNot,
+                   ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    // PAGES LIVE WITH THE SHOW. They are not a cache -- they ARE the cues
+    // media, and every cue points at one -- so they belong beside the file
+    // that references them: they travel with the show, a copy of the folder
+    // is a complete copy, and deleting the show takes its renders with it.
+    //
+    // They used to go under the state dir, on the reasoning that a document
+    // folder is read-only as often as not and a show should not scatter
+    // renders through someone's Dropbox. True of the SOURCE document's
+    // folder; not true of the show's own, which Deckboy already writes to
+    // every time it saves. And the state dir had no eviction of any kind, so
+    // it grew without limit -- a hundred-slide deck is a quarter of a
+    // gigabyte of stills that nothing would ever remove.
+    //
+    // An unsaved show has nowhere of its own yet, so that still uses the
+    // state dir; saving does not move what is already rendered, which would
+    // break the cue paths pointing at it.
+    const fs::path showFolder = currentProjectFile_.empty()
+      ? (Paths::stateDir() / "_converted")
+      : (currentProjectFile_.parent_path() /
+         (currentProjectFile_.stem().string() + "_media"));
+    const fs::path pagesDir = showFolder /
+                              (document.stem().string() + "_pages");
+    const std::string title = document.stem().string();
+    // STAYS UP FOR THE WHOLE JOB. A hundred-slide deck takes half a minute to
+    // convert and render, and the ordinary toast is gone in a second -- so the
+    // operator got one flash and then a window that looked like it had ignored
+    // them. The finish toast replaces this one, so the message on screen is
+    // always the current one.
+    // Every stage goes in the show log, so an import that fails on a machine
+    // nobody can reach says afterwards where it stopped.
+    showLog("SLIDES", "import \"" + document.string() + "\"" +
+                        (needsConversion ? " (converting to PDF first)" : ""));
+    ++slideRenderJobs_;
+    slideRenderTitle_ = title;
+    slideRenderPage_.store(0, std::memory_order_relaxed);
+    slideRenderTotal_.store(0, std::memory_order_relaxed);
+
+    std::thread([this, document, pagesDir, title, needsConversion]() {
+      // NOTHING MAY LEAVE THIS THREAD BY EXCEPTION.
+      //
+      // A std::thread whose function throws calls std::terminate: no crash
+      // handler, no message, no log, the app simply gone. Dropping a PDF did
+      // exactly that, because the rasteriser could throw before its own try
+      // block. That is fixed at the source, but the guarantee belongs here as
+      // well -- this thread runs a document converter and a system PDF engine,
+      // and neither is ours to promise for.
+      //
+      // The catch reports through the same queue the success path uses, so a
+      // failure reaches the operator as a message instead of as silence.
+      try {
+      // The conversion lands beside the pages, under the state dir. It is kept
+      // rather than deleted: re-importing the same deck is common, and the PDF
+      // is the expensive half.
+      fs::path source = document;
+      std::string converter;
+      if (needsConversion) {
+        auto converted =
+          deckboy::platform::convertPresentationToPdf(document, pagesDir);
+        if (!converted.ok()) {
+          std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+          sdlDialogActions_.emplace_back([this, converted, title]() {
+            slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+            showLog("SLIDES", title + ": conversion failed: " + converted.error);
+            triggerToast(title + ": " + converted.error, ToastKind::Warning, kToastReadableMs);
+          });
+          return;
+        }
+        source = converted.pdfPath;
+        converter = converted.converter;
+      }
+      // 3840 wide, whatever shape the page is. A slide is mostly type, type is
+      // the first thing to fall apart scaled up to a 4K output, and once the
+      // page is a PNG the detail cannot be recovered -- so it renders for the
+      // largest output this app supports rather than the one currently armed.
+      // Straight into the atomics the card reads. Called once per page from
+      // the render thread, which is why they are atomic and why nothing here
+      // touches the renderer.
+      auto onProgress = [this](int page, int total) {
+        slideRenderTotal_.store(total, std::memory_order_relaxed);
+        slideRenderPage_.store(page, std::memory_order_relaxed);
+      };
+      auto result = deckboy::platform::rasterisePdf(source, pagesDir, 3840, onProgress);
+      // Read on this thread, beside the render, so the main thread never
+      // touches the disk for it.
+      // Against the DOCUMENT THE OPERATOR CHOSE, not against `source` -- which
+      // by now may be a PDF LibreOffice wrote into the state dir, where no
+      // sidecar and no PowerPoint was ever going to be sitting. Importing a
+      // .pptx directly then found nothing, and the notes it carries in its own
+      // ZIP are the one case where they are certain to be there.
+      const std::vector<std::string> slideNotes =
+        loadSidecarSlideNotes(document, result.pagePaths.size());
+      // Read from the ORIGINAL document, for the same reason the notes are:
+      // by now `source` may be a PDF LibreOffice wrote, and a PDF has never
+      // carried a transition in its life.
+      const std::vector<deckboy::platform::SlideTransition> slideTransitions =
+        slideTransitionsForDocument(document, result.pagePaths.size());
+      std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+      sdlDialogActions_.emplace_back([this, result, title, converter, slideNotes,
+                                     slideTransitions]() {
+        slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+        showLog("SLIDES", title + ": " + (result.ok()
+                  ? std::to_string(result.pagePaths.size()) + " page(s) rendered" +
+                      (converter.empty() ? std::string() : ", converted by " + converter)
+                  : "render failed: " + (result.error.empty() ? std::string("no pages") : result.error)));
+        if (!result.ok()) {
+          triggerToast("slides: " + (result.error.empty() ? std::string("no pages")
+                                                          : result.error),
+                       ToastKind::Warning, kToastReadableMs);
+          return;
+        }
+        // Straight back through the ordinary import, so the pages get deck
+        // defaults, probing, thumbnails and undo exactly like any other still.
+        // Notes that came with the deck ride along -- see loadSidecarSlideNotes.
+        importPaths(result.pagePaths, title, slideNotes, slideTransitions);
+        // Naming the converter is not trivia: LibreOffice substitutes fonts it
+        // has not got, so an operator who sees it named knows to check the
+        // slides rather than discover a reflowed heading in front of a room.
+        const std::string via =
+          (converter.empty() || converter == "PowerPoint" ||
+           converter == "Keynote")
+            ? std::string()
+            : ("  (converted by " + converter + " -- check the fonts)");
+        triggerToast(title + ": " + std::to_string(result.pagePaths.size()) +
+                       " slides imported" + via,
+                     ToastKind::Help,
+                     via.empty() ? 1800u : kToastReadableMs);
+      });
+      } catch (const std::exception& e) {
+        const std::string what = e.what();
+        std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+        sdlDialogActions_.emplace_back([this, title, what]() {
+          slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+          showLog("SLIDES", title + ": failed: " + what);
+          triggerToast(title + ": " + what, ToastKind::Warning,
+                       kToastReadableMs);
+        });
+      } catch (...) {
+        std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+        sdlDialogActions_.emplace_back([this, title]() {
+          slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+          triggerToast(title + ": slide import failed", ToastKind::Warning, kToastReadableMs);
+        });
+      }
+    }).detach();
+  }
+
+  // ── SPLIT A CUE'S NOTES INTO CUES ────────────────────────────────────────
+  //
+  // The other way to read a long note at your own pace. The presenter view's
+  // note builds scroll WITHIN one cue; this turns one cue into several, each
+  // carrying one part of the notes, so the ordinary NEXT walks them.
+  //
+  // Both are worth having and they are not the same tool. The scroll keeps the
+  // playlist honest -- one slide is one cue -- and works with nothing but the
+  // presenter screen switched on. The split puts the parts where everything
+  // else in the show can see them: they take a cue number, they appear in the
+  // playlist, they can be jumped to, timecoded, triggered from Companion, and
+  // read by an operator who is not looking at a presenter screen at all.
+  //
+  // Nothing about the picture changes. The copies are the same media with the
+  // same geometry, grade, effects and audio; only the notes differ, and the
+  // fades between them are zeroed so the slide does not blink as the words
+  // advance.
+  bool splitCueNotesIntoCues(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    Deck& deck = project_.decks[static_cast<std::size_t>(deckIndex)];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return false;
+    }
+    const std::vector<std::string> parts =
+      noteBuildParts(deck.cues[static_cast<std::size_t>(cueIndex)].notes);
+    if (parts.size() < 2) {
+      triggerToast("split: this cue's notes have no parts -- separate them "
+                   "with a line of ---",
+                   ToastKind::Warning, kToastReadableMs);
+      return false;
+    }
+    pushUndoSnapshot();
+
+    const Cue original = deck.cues[static_cast<std::size_t>(cueIndex)];
+    const int count = static_cast<int>(parts.size());
+    std::vector<Cue> copies;
+    copies.reserve(parts.size());
+    for (int part = 0; part < count; ++part) {
+      Cue copy = original;
+      copy.notes = parts[static_cast<std::size_t>(part)];
+      // Cleared, so normalizeProject gives each one its own. Keeping the
+      // original's id on every copy would leave the show with N cues that
+      // every id-addressed command -- GOTO, TAKEID, a Companion button --
+      // resolves to whichever it found first.
+      copy.id.clear();
+      copy.name = original.name + "  [" + std::to_string(part + 1) + "/" +
+                  std::to_string(count) + "]";
+      // The picture must not blink between the parts: it is the same slide.
+      // Only the first fades in and only the last fades out.
+      if (part > 0) {
+        copy.fadeInSeconds = 0.0;
+      }
+      if (part < count - 1) {
+        copy.fadeOutSeconds = 0.0;
+      }
+      copies.push_back(std::move(copy));
+    }
+
+    deck.cues.erase(deck.cues.begin() + cueIndex);
+    deck.cues.insert(deck.cues.begin() + cueIndex, copies.begin(), copies.end());
+
+    // Anything pointing PAST the cue we replaced has to move with it, or the
+    // live cue silently becomes a different slide. The split cue itself keeps
+    // its index, which is the first part -- where the speaker was.
+    const int added = count - 1;
+    remapDeckCueIndices(deckIndex, [cueIndex, added](int index) {
+      return index > cueIndex ? index + added : index;
+    });
+
+    normalizeProject(project_);
+    markProjectDirty();
+    triggerToast("split into " + std::to_string(count) + " cues");
+    playUiSound(UiSoundEffect::Toggle);
+    return true;
+  }
+
+  // ── PER-SLIDE NOTES THAT CAME WITH THE DECK ─────────────────────────────
+  //
+  // A PDF can carry speaker notes three ways, and only one of them is worth
+  // reading without a PDF parser:
+  //
+  //   1. TEXT ANNOTATIONS (/Annots with /Subtype /Text). Real metadata, but
+  //      modern PDFs keep their object table in compressed object streams, so
+  //      reading them needs inflate and a cross-reference parser. Of the three
+  //      renderers Deckboy uses, only CoreGraphics exposes annotations at all,
+  //      so this would be a macOS-only feature pretending to be a general one.
+  //   2. A SIDECAR FILE. pdfpc -- the presenter tool the LaTeX and Beamer
+  //      world uses -- keeps notes in a plain text file beside the PDF, keyed
+  //      by slide number. It is an open convention, it is trivially readable,
+  //      and it works identically on all three platforms.
+  //   3. NOTES RENDERED ONTO THE PAGE (PowerPoint and Keynote's "export with
+  //      notes"). That is a picture of the notes, not the notes, and telling
+  //      them apart from the slide's own text is guesswork.
+  //
+  // So this reads (2), and accepts the same shape from a plainly-named text
+  // file so somebody who has never heard of pdfpc can still write notes for a
+  // deck in Notepad.
+  //
+  // FORMAT, in any of `<deck>.pdfpc`, `<deck>.notes.txt`, `<deck>.notes.md`:
+  //
+  //     ### 1
+  //     Welcome. Fire exits are behind you.
+  //     ---
+  //     The bar opens at six.
+  //     ### 2
+  //     Hand over to Dr Ellis here.
+  //
+  // `### <n>` starts the notes for slide n. Inside one slide's notes, a line
+  // of `---` splits them into BUILDS, which the presenter advances through
+  // without changing the slide -- the same separator the notes field uses
+  // everywhere else, so one convention covers both.
+  //
+  // A `[file]` or `[notes]` section header (pdfpc writes them) is skipped, so
+  // a real pdfpc file works unedited.
+  // The transitions the deck was authored with, if the .pptx is reachable.
+  //
+  // Only PowerPoint can answer this. There is no sidecar convention for
+  // transitions the way .pdfpc carries notes, and a PDF cannot hold one -- so
+  // either the original file is beside the PDF (which is what a Google Slides
+  // or Keynote export leaves you with) or the deck imports with the operator's
+  // own defaults, exactly as it always has.
+  std::vector<deckboy::platform::SlideTransition> slideTransitionsForDocument(
+      const fs::path& deckPath, std::size_t pageCount) {
+    std::vector<deckboy::platform::SlideTransition> none(pageCount);
+    if (pageCount == 0) return none;
+    std::error_code ec;
+    // The document itself, when a .pptx was imported directly.
+    const std::string ext = toLower(deckPath.extension().string());
+    if (ext == ".pptx" && fs::is_regular_file(deckPath, ec)) {
+      return deckboy::platform::slideTransitionsFromPptx(deckPath, pageCount);
+    }
+    // Or a .pptx sitting beside the PDF under the same name.
+    const fs::path stem = deckPath.parent_path() / deckPath.stem();
+    for (const char* candidate : {".pptx", ".PPTX"}) {
+      const fs::path office(stem.string() + candidate);
+      if (!fs::is_regular_file(office, ec)) continue;
+      return deckboy::platform::slideTransitionsFromPptx(office, pageCount);
+    }
+    return none;
+  }
+
+  std::vector<std::string> loadSidecarSlideNotes(const fs::path& deckPath,
+                                                 std::size_t pageCount) const {
+    std::vector<std::string> notes(pageCount);
+    if (pageCount == 0) {
+      return notes;
+    }
+    const fs::path stem = deckPath.parent_path() / deckPath.stem();
+    const std::vector<fs::path> candidates {
+      fs::path(stem.string() + ".pdfpc"),
+      fs::path(stem.string() + ".notes.txt"),
+      fs::path(stem.string() + ".notes.md"),
+      fs::path(stem.string() + ".notes"),
+    };
+    // (see slideTransitionsForDocument below, which looks in the same places)
+    // THE DECK'S OWN POWERPOINT, FIRST. A .pptx is a ZIP with the notes as
+    // XML inside, so if the team exported a PDF to keep their fonts and left
+    // the PowerPoint beside it -- which is what a Google Slides workflow
+    // produces, since Slides exports both -- the notes come across with no
+    // sidecar to write and nothing for anybody to remember.
+    for (const char* ext : {".pptx", ".PPTX"}) {
+      const fs::path office(stem.string() + ext);
+      std::error_code ec;
+      if (!fs::exists(office, ec) || !fs::is_regular_file(office, ec)) continue;
+      std::vector<std::string> fromOffice =
+        deckboy::platform::slideNotesFromPptx(office, pageCount);
+      bool any = false;
+      for (const std::string& note : fromOffice) {
+        if (!note.empty()) { any = true; break; }
+      }
+      if (any) return fromOffice;
+    }
+
+    fs::path found;
+    for (const fs::path& candidate : candidates) {
+      std::error_code ec;
+      if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec)) {
+        found = candidate;
+        break;
+      }
+    }
+    if (found.empty()) {
+      return notes;
+    }
+    std::ifstream in(found);
+    if (!in) {
+      return notes;
+    }
+
+    int page = -1;                       // -1 until a "### n" has been seen
+    std::vector<std::string> current;
+    auto commit = [&]() {
+      if (page >= 1 && static_cast<std::size_t>(page) <= pageCount) {
+        std::string joined;
+        for (std::size_t i = 0; i < current.size(); ++i) {
+          if (i) joined += "\n";
+          joined += current[i];
+        }
+        // Trailing blank lines are an artefact of the file, not the note.
+        while (!joined.empty() && (joined.back() == '\n' || joined.back() == ' ')) {
+          joined.pop_back();
+        }
+        notes[static_cast<std::size_t>(page) - 1] = joined;
+      }
+      current.clear();
+    };
+
+    std::string line;
+    while (std::getline(in, line)) {
+      const std::string trimmed = trim(line);
+      // pdfpc's own section headers carry no notes.
+      if (trimmed == "[file]" || trimmed == "[notes]" || trimmed == "[font_size]") {
+        continue;
+      }
+      if (trimmed.rfind("###", 0) == 0) {
+        commit();
+        const std::string number = trim(trimmed.substr(3));
+        page = number.empty() ? -1 : std::atoi(number.c_str());
+        continue;
+      }
+      if (page >= 1) {
+        current.push_back(line);
+      }
+    }
+    commit();
+    return notes;
+  }
+
+  // `slideDeckName`, when set, says these files are the PAGES OF ONE DOCUMENT
+  // and changes two things that matter on a show day: the cues are named after
+  // the deck rather than after the render's filenames, and each one HOLDS
+  // instead of auto-advancing. A slide that changes itself after eight seconds
+  // while the presenter is still talking is the single worst thing this could
+  // do, and it is what the deck defaults would have done.
+
+  // ── WATCH FOLDERS ─────────────────────────────────────────────────────────
+  //
+  // A playlist that fills itself from a folder. See Deck::watchFolder for the
+  // design; the scanning, and the rule that a file must hold still before it
+  // is taken, are core/watch_folder.hpp, shared with Deckboy Mini's --watch.
+  // One per playlist, by index, following Deck::watchFolder every tick.
+  std::vector<deckboy::core::WatchFolder> watchFolders_;
+
+  // The WATCH verb's counters, summed over the playlists: an operator whose
+  // files are not arriving has to be able to tell a folder nobody is looking
+  // at from a folder that is being looked at and is empty.
+  std::string watchFolderCounters() const {
+    int scans = 0, seen = 0, taken = 0;
+    for (const auto& folder : watchFolders_) {
+      scans += folder.scans();
+      seen += folder.lastSeen();
+      taken += folder.taken();
+    }
+    return "scans=" + std::to_string(scans) + " seen=" + std::to_string(seen) +
+           " taken=" + std::to_string(taken);
+  }
+
+
+  // ── MEDIA BROWSER ─────────────────────────────────────────────────────────
+  //
+  // Browse the disk and add cues without going out to the operating system's
+  // file dialog. Built on the dropdown because the dropdown already is a
+  // scrollable, type-to-filter, keyboard-navigable list with a callback --
+  // see the note above openMediaBrowser for why that beats a new panel.
+
+  // Parked here and acted on in the update tick rather than reopened inside
+  // the dropdown's own callback: the click that chose the row is still being
+  // handled, and the next mouse-up would land on the new list.
+  std::string pendingBrowseFolder_;
+
+  void serviceMediaBrowser() {
+    if (pendingBrowseFolder_.empty()) return;
+    const std::string folder = pendingBrowseFolder_;
+    pendingBrowseFolder_.clear();
+    openMediaBrowser(folder);
+  }
+
+  // Where browsing starts. The last folder used, remembered with the show, so
+  // a desk set up for one job opens where that job's media lives.
+  std::string mediaBrowserStartFolder() const {
+    std::error_code ec;
+    if (!project_.browseFolder.empty() &&
+        fs::is_directory(fs::path(project_.browseFolder), ec)) {
+      return project_.browseFolder;
+    }
+    // Then the folder the focused playlist's own media came from: browsing
+    // almost always means "more of what is already here".
+    const Deck& deck = focusedDeck();
+    for (auto it = deck.cues.rbegin(); it != deck.cues.rend(); ++it) {
+      if (it->path.empty()) continue;
+      fs::path parent = fs::path(it->path).parent_path();
+      if (!parent.empty() && fs::is_directory(parent, ec)) {
+        return parent.string();
+      }
+    }
+    return fs::current_path(ec).string();
+  }
+
+  void openMediaBrowser(const std::string& folderIn) {
+    std::error_code ec;
+    fs::path folder = fs::absolute(fs::path(folderIn), ec);
+    if (ec || !fs::is_directory(folder, ec)) {
+      triggerToast("browse: not a folder: " + folderIn,
+                   ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+
+    std::vector<std::pair<std::string, std::string>> options;
+    const fs::path parent = folder.parent_path();
+    if (!parent.empty() && parent != folder) {
+      options.push_back({"dir:" + parent.string(), ".. up to " +
+                         (parent.filename().empty() ? parent.string()
+                                                    : parent.filename().string())});
+    }
+
+    std::vector<std::pair<std::string, std::string>> dirs;
+    std::vector<std::pair<std::string, std::string>> files;
+    std::error_code walkEc;
+    fs::directory_iterator it(folder, walkEc), end;
+    if (walkEc) {
+      // A folder that cannot be read says so. Listing it as empty is the
+      // difference between "there is nothing here" and "I could not look".
+      triggerToast("browse: cannot read " + folder.filename().string() +
+                     " (" + walkEc.message() + ")",
+                   ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    for (; it != end; it.increment(walkEc)) {
+      if (walkEc) break;
+      const fs::path entry = it->path();
+      const std::string name = entry.filename().string();
+      if (name.empty() || name[0] == '.') continue;   // hidden, and "." / ".."
+      std::error_code kindEc;
+      if (it->is_directory(kindEc)) {
+        dirs.push_back({"dir:" + entry.string(), "[ " + name + " ]"});
+      } else if (it->is_regular_file(kindEc) && isAcceptableMediaPath(entry)) {
+        files.push_back({"file:" + entry.string(), name});
+      }
+    }
+    // Case-insensitive, so a folder of episodes reads the way it does
+    // everywhere else rather than putting every capital letter first.
+    const auto byName = [](const std::pair<std::string, std::string>& a,
+                           const std::pair<std::string, std::string>& b) {
+      return toLower(a.second) < toLower(b.second);
+    };
+    std::sort(dirs.begin(), dirs.end(), byName);
+    std::sort(files.begin(), files.end(), byName);
+    options.insert(options.end(), dirs.begin(), dirs.end());
+    options.insert(options.end(), files.begin(), files.end());
+
+    if (options.empty()) {
+      triggerToast(folder.filename().string() + ": nothing playable here");
+      return;
+    }
+    // Remembered before the list is shown, not after a choice: an operator
+    // who browses somewhere and closes the list still meant to go there.
+    project_.browseFolder = folder.string();
+    markProjectDirty();
+
+    // Anchored on the IMPORT button, which is the thing this is an
+    // alternative to. The owner carries the path so two openings of different
+    // folders are never mistaken for a toggle of the same dropdown.
+    SDL_Rect anchor {0, 0, 0, 0};
+    for (const auto& button : buttons_) {
+      if (button.label == "IMPORT") { anchor = button.rect; break; }
+    }
+    if (anchor.w <= 0) {
+      int winW = 0, winH = 0;
+      SDL_GetWindowSize(controlWindow_, &winW, &winH);
+      anchor = SDL_Rect{winW / 2 - uiScaled(160), winH / 2, uiScaled(320), uiScaled(28)};
+    }
+    openDropdown("media_browser:" + folder.string(), anchor, options, std::string(),
+      [this, folder](const std::string& chosen) {
+        if (chosen.rfind("dir:", 0) == 0) {
+          pendingBrowseFolder_ = chosen.substr(4);
+          return;
+        }
+        if (chosen.rfind("file:", 0) == 0) {
+          importPaths({chosen.substr(5)});
+          // Straight back to the same folder, so adding six clips is six
+          // clicks rather than six trips through the menu.
+          pendingBrowseFolder_ = folder.string();
+        }
+      });
+  }
+
+  void pickWatchFolder() {
+    // The FOCUSED playlist, captured at the moment the dialog CLOSES rather
+    // than when it opens. The dialog is not modal to the application -- the
+    // callback can arrive after the operator has clicked a different playlist
+    // tab -- and pointing the wrong playlist at a folder is a fault nobody
+    // would think to look for.
+    const int deckIndex = project_.focusedDeckIndex;
+    showFolderDialog([this, deckIndex](std::vector<std::string> chosen) {
+      if (chosen.empty() || chosen.front().empty()) return;
+      if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+        return;   // the playlist was deleted while the dialog was open
+      }
+      Deck& deck = project_.decks[static_cast<std::size_t>(deckIndex)];
+      // The playlist's WatchFolder sees the new path on the next tick and
+      // forgets what it took from the last one.
+      deck.watchFolder = chosen.front();
+      markProjectDirty();
+      triggerToast(deck.name + " is watching " +
+                   fs::path(deck.watchFolder).filename().string());
+    });
+  }
+
+  void serviceWatchFolders() {
+    if (watchFolders_.size() != project_.decks.size()) {
+      watchFolders_.resize(project_.decks.size());
+    }
+    const double now = nowSeconds();
+    // importPaths works on the FOCUSED playlist, so the focus moves once per
+    // playlist that has something, and goes back where it was.
+    const int wasFocused = project_.focusedDeckIndex;
+    int imported = 0;
+    for (std::size_t i = 0; i < project_.decks.size(); ++i) {
+      deckboy::core::WatchFolder& watch = watchFolders_[i];
+      watch.setFolder(project_.decks[i].watchFolder);
+      if (watch.needsSeed()) {
+        // What the playlist already holds is not new: without this, opening a
+        // show whose watch folder still has yesterday's files imports every
+        // one of them a second time.
+        std::vector<std::string> held;
+        for (const auto& cue : project_.decks[i].cues) held.push_back(cue.path);
+        watch.seed(held);
+      }
+      const std::vector<std::string> arrived = watch.poll(now);
+      if (arrived.empty()) continue;
+      setFocusedDeckIndex(static_cast<int>(i));
+      importPaths(arrived);
+      imported += static_cast<int>(arrived.size());
+    }
+    if (imported == 0) return;
+    setFocusedDeckIndex(wasFocused);
+    triggerToast(std::to_string(imported) +
+                 (imported == 1 ? " file arrived in a watched playlist"
+                                : " files arrived in watched playlists"));
+  }
+
+  void importPaths(const std::vector<std::string>& rawPaths,
+                   const std::string& slideDeckName = std::string(),
+                   const std::vector<std::string>& slideNotes = {},
+                   const std::vector<deckboy::platform::SlideTransition>&
+                     slideTransitions = {}) {
+    int deckIndex = project_.focusedDeckIndex;
+    Deck& deck = focusedDeckMutable();
+
+    // Expand any dropped/imported folders into the acceptable media they
+    // contain, recursively and in name order. Individual files are taken as-is.
+    std::vector<fs::path> files;
+    for (const auto& raw : rawPaths) {
+      std::error_code ec;
+      fs::path path = fs::absolute(trim(raw), ec);
+      if (ec || !fs::exists(path, ec)) {
+        // SAY SO. This skipped silently, so importing something that is not
+        // there -- media on a drive that has been unplugged, a file whose
+        // folder has been renamed, a path that arrived with its quoting
+        // mangled -- looked exactly like an app that had ignored the drop.
+        // It cost an hour to diagnose here; on a show day it is worse.
+        triggerToast(fs::path(trim(raw)).filename().string() +
+                       ": not found (has the drive gone away?)",
+                     ToastKind::Warning, kToastReadableMs);
+        continue;
+      }
+      if (fs::is_directory(path, ec)) {
+        // WALKED ON A WORKER, NOT HERE.
+        //
+        // A deep folder is thousands of stat() calls, and doing them inline
+        // meant the app drew no frame and answered no click until the whole
+        // tree had been read -- which is indistinguishable from a hang, and is
+        // what it looked like. The walk goes to a thread; the import restarts
+        // on the main thread once it has the list, through the same queue the
+        // file dialogs use.
+        if (importScanBusy_.load(std::memory_order_acquire)) {
+          triggerToast("still reading the last folder -- one at a time",
+                       ToastKind::Warning, kToastReadableMs);
+          continue;
+        }
+        importScanBusy_.store(true, std::memory_order_release);
+        importScanFound_.store(0, std::memory_order_relaxed);
+        importScanLabel_ = path.filename().string();
+        const std::string deckName = slideDeckName;
+        std::thread([this, path, deckName]() {
+          std::vector<fs::path> found;
+          std::error_code itEc;
+          for (fs::recursive_directory_iterator it(path, fs::directory_options::skip_permission_denied, itEc), end;
+               !itEc && it != end; it.increment(itEc)) {
+            std::error_code fileEc;
+            if (it->is_regular_file(fileEc) && isAcceptableMediaPath(it->path())) {
+              found.push_back(it->path());
+              importScanFound_.store(static_cast<int>(found.size()),
+                                     std::memory_order_relaxed);
+            }
+          }
+          std::sort(found.begin(), found.end());
+          std::vector<std::string> asStrings;
+          asStrings.reserve(found.size());
+          for (const fs::path& f : found) {
+            asStrings.push_back(f.string());
+          }
+          std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+          sdlDialogActions_.emplace_back(
+            [this, asStrings = std::move(asStrings), deckName]() {
+              importScanBusy_.store(false, std::memory_order_release);
+              if (asStrings.empty()) {
+                triggerToast(importScanLabel_ + ": no media in that folder",
+                             ToastKind::Warning, kToastReadableMs);
+                return;
+              }
+              // Plain files now, so this cannot recurse back into the walk.
+              importPaths(asStrings, deckName);
+            });
+        }).detach();
+        continue;
+      } else {
+        files.push_back(path);
+      }
+    }
+
+    // A document is not a cue. Pull them out here rather than letting the
+    // loop below make a video cue out of a PDF, which is what it would do.
+    std::vector<fs::path> media;
+    for (const fs::path& path : files) {
+      if (deckboy::platform::isPdfDocumentPath(path)) {
+        importSlideDeck(path);
+        continue;
+      }
+      // A CHANNEL LIST IS NOT A CLIP either, and ffmpeg would happily open one
+      // and play whatever the first entry happened to be.
+      {
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+          return static_cast<char>(std::tolower(c));
+        });
+        if ((ext == ".m3u" || ext == ".m3u8") && importM3uPlaylist(path)) {
+          continue;
+        }
+      }
+      if (deckboy::platform::isPresentationDocumentPath(path)) {
+        // Converted to PDF by whatever owns the format, then rasterised like
+        // any other document. This used to tell the operator to go and export
+        // a PDF by hand -- which is exactly the work the machine can do, and
+        // the message went by too fast to read besides.
+        importSlideDeck(path);
+        continue;
+      }
+      media.push_back(path);
+    }
+    files.swap(media);
+
+    bool changed = false;
+    int addedCount = 0;
+    for (const auto& path : files) {
+      std::string pathStr = path.string();
+
+      // Create placeholder cue (metadata filled in async)
+      Cue placeholder;
+      placeholder.path = pathStr;
+      placeholder.name = path.stem().string();
+      placeholder.kind = isImagePath(path) ? CueKind::Image
+                       : isMidiFilePath(path) ? CueKind::MidiFile
+                       : isAudioPath(path) ? CueKind::Audio
+                       : CueKind::Video;
+      if (placeholder.kind == CueKind::MidiFile) {
+        // Parsed AT IMPORT, for two reasons: the cue needs its length before
+        // it can sit in a playlist at all, and a file that is not really a
+        // MIDI file should be refused here rather than racked as a cue that
+        // does nothing when it is taken.
+        const auto parsed = deckboy::platform::midi::readMidiFile(pathStr);
+        if (!parsed.ok || parsed.events.empty()) {
+          triggerToast(path.filename().string() + ": " +
+                       (parsed.error.empty() ? "not a playable MIDI file" : parsed.error));
+          continue;
+        }
+        placeholder.duration = parsed.durationSeconds;
+        placeholder.stillDurationSeconds = parsed.durationSeconds;
+        placeholder.hasAudio = false;
+        placeholder.formatName = "midi";
+        placeholder.color = {90, 60, 130, 255};
+      }
+      applyDeckDefaultsToCue(placeholder, deck);
+      if (!slideDeckName.empty()) {
+        placeholder.name = slideDeckName + " " + std::to_string(addedCount + 1);
+        placeholder.transitionToNext = false;   // wait for the click
+        placeholder.pauseOnLastFrame = true;
+        // Notes that shipped with the deck, if any -- straight into the cue,
+        // where the presenter view reads them.
+        if (static_cast<std::size_t>(addedCount) < slideNotes.size() &&
+            !slideNotes[static_cast<std::size_t>(addedCount)].empty()) {
+          placeholder.notes = slideNotes[static_cast<std::size_t>(addedCount)];
+        }
+        // AND WHAT THE DECK DOES BETWEEN SLIDES, when the .pptx is there to
+        // read it from. A PDF cannot carry a transition, so an imported deck
+        // has always cut between every slide no matter how it was authored --
+        // the operator then rebuilt by hand what the file already knew.
+        //
+        // An unset style is left alone deliberately: a deck with no
+        // transitions authored keeps the operator's own deck defaults rather
+        // than being flattened to cuts by an importer's opinion.
+        if (static_cast<std::size_t>(addedCount) < slideTransitions.size()) {
+          const auto& from = slideTransitions[static_cast<std::size_t>(addedCount)];
+          if (!from.style.empty()) {
+            placeholder.cueTransitionStyle = from.style;
+          }
+          if (from.seconds >= 0.0) {
+            placeholder.cueTransitionSeconds = from.seconds;
+          }
+          // A deck built to run itself keeps running: PowerPoint's "advance
+          // after N seconds" becomes the still's own duration and lets the
+          // deck move on, instead of waiting for a click nobody is there to
+          // give it.
+          if (from.advanceAfterSeconds > 0.0) {
+            placeholder.stillDurationSeconds = from.advanceAfterSeconds;
+            placeholder.transitionToNext = true;
+            placeholder.pauseOnLastFrame = false;
+          }
+        }
+      }
+      deck.cues.push_back(std::move(placeholder));
+      changed = true;
+      addedCount += 1;
+
+      // Queue the probe. pumpProbeQueue starts them a few at a time.
+      enqueueProbe(deckIndex, pathStr);
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    if (deck.selectedIndex < 0 && !deck.cues.empty()) {
+      deck.selectedIndex = 0;
+      onSelectionChanged();
+    }
+    triggerToast(addedCount == 1 ? "1 cue imported (probing...)" : std::to_string(addedCount) + " cues imported (probing...)");
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+  }
+
+  // ── Built-in media converter ─────────────────────────────────────────────
+  // Reason a video cue should be offered conversion (unplayable or heavy), or
+  // nullopt if it's fine as-is.
+  std::optional<std::string> cueConvertReason(const Cue& cue) const {
+    if (cue.kind != CueKind::Video) {
+      return std::nullopt;  // only file-backed video is a transcode candidate
+    }
+    if (unreadablePaths_.count(cue.path)) {
+      return std::string("unreadable");
+    }
+    std::string c = cue.videoCodec;
+    std::transform(c.begin(), c.end(), c.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (c.find("hevc") != std::string::npos || c.find("h265") != std::string::npos ||
+        c.find("av1") != std::string::npos || c.find("prores") != std::string::npos ||
+        c.find("dnxhd") != std::string::npos) {
+      return std::string("heavy codec (" + cue.videoCodec + ")");
+    }
+    if (cue.width > 1920 || cue.height > 1080) {
+      return std::string("large frame (" + std::to_string(cue.width) + "x" +
+                         std::to_string(cue.height) + ")");
+    }
+    return std::nullopt;
+  }
+
+  fs::path convertedMediaDir() const {
+    // An explicit destination wins. Without one the output stays beside the
+    // show so it travels with it, falling back to stateDir() when no show is
+    // open -- never inside a macOS bundle, which the signature seals.
+    if (!encoderOverrides_.outputDir.empty()) {
+      return fs::path(encoderOverrides_.outputDir);
+    }
+    fs::path base = (!currentProjectFile_.empty() && currentProjectFile_.has_parent_path())
+      ? currentProjectFile_.parent_path()
+      : Paths::stateDir();
+    return base / "_converted";
+  }
+
+  bool isCueConverting(const std::string& path) const {
+    for (const auto& job : conversionJobs_) {
+      if (job.sourcePath == path) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Cancel one job. A running job is asked to stop (the worker kills ffmpeg
+  // and removes the half-written file); a queued one is simply dropped, since
+  // nothing has been started for it yet.
+  // Move a QUEUED job earlier or later. A running job cannot be reordered --
+  // it is already the one encoding -- so it acts as a floor.
+  void moveConversionJob(std::size_t index, int delta) {
+    if (index >= conversionJobs_.size()) {
+      return;
+    }
+    const std::ptrdiff_t target = static_cast<std::ptrdiff_t>(index) + delta;
+    if (target < 0 || target >= static_cast<std::ptrdiff_t>(conversionJobs_.size())) {
+      return;
+    }
+    if (conversionJobs_[index].state == ConversionState::Running ||
+        conversionJobs_[static_cast<std::size_t>(target)].state == ConversionState::Running) {
+      triggerToast("cannot reorder a running job");
+      return;
+    }
+    std::swap(conversionJobs_[index], conversionJobs_[static_cast<std::size_t>(target)]);
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  // Park or release a single job. A running job is cancelled back to Queued so
+  // it can be resumed later; the partial output is removed by the worker.
+  void toggleConversionHold(std::size_t index) {
+    if (index >= conversionJobs_.size()) {
+      return;
+    }
+    ConversionJob& job = conversionJobs_[index];
+    if (job.state == ConversionState::Running) {
+      if (job.cancel) job.cancel->store(true);
+      job.held = true;
+      triggerToast("holding " + job.label + " (restarts from the top)");
+      return;
+    }
+    job.held = !job.held;
+    triggerToast(job.held ? ("held " + job.label) : ("released " + job.label));
+    playUiSound(UiSoundEffect::Toggle);
+    pumpConversionQueue();
+  }
+
+  void cancelConversionAt(std::size_t index) {
+    if (index >= conversionJobs_.size()) {
+      return;
+    }
+    ConversionJob& job = conversionJobs_[index];
+    if (job.state == ConversionState::Running) {
+      if (job.cancel) job.cancel->store(true);
+      triggerToast("cancelling " + job.label);
+      return;   // the update poll retires it once the worker returns
+    }
+    triggerToast("removed " + job.label);
+    conversionJobs_.erase(conversionJobs_.begin() + static_cast<std::ptrdiff_t>(index));
+  }
+
+  void cancelAllConversions() {
+    int running = 0;
+    for (auto& job : conversionJobs_) {
+      if (job.state == ConversionState::Running) {
+        if (job.cancel) job.cancel->store(true);
+        ++running;
+      }
+    }
+    // Drop everything not yet started; running jobs retire themselves.
+    conversionJobs_.erase(
+      std::remove_if(conversionJobs_.begin(), conversionJobs_.end(),
+                     [](const ConversionJob& j) {
+                       return j.state != ConversionState::Running;
+                     }),
+      conversionJobs_.end());
+    triggerToast(running > 0 ? "encoder: cancelling, queue cleared"
+                             : "encoder: queue cleared");
+    playUiSound(UiSoundEffect::Clear);
+  }
+
+  void toggleEncoderQueuePaused() {
+    encoderQueuePaused_ = !encoderQueuePaused_;
+    triggerToast(encoderQueuePaused_ ? "encoder queue paused"
+                                     : "encoder queue running");
+    playUiSound(UiSoundEffect::Toggle);
+    pumpConversionQueue();
+  }
+
+  // Build the ffmpeg args for a catalog format. Quality and stream handling are
+  // per-codec because there is no universal knob: x264/x265 take -crf, NVENC
+  // takes -cq, ProRes and DNxHD take profiles, VP9/AV1 want -b:v 0 alongside
+  // -crf, and the still/audio formats have to explicitly drop the stream they
+  // do not carry or ffmpeg errors out.
+  // Which rate-control knob a codec actually accepts. nullptr means the codec
+  // is PROFILE-driven (ProRes, DNxHR, HAP, FFV1, QT RLE, PNG) and has no
+  // continuous quality axis, so a quality/bitrate override cannot be honoured
+  // and must be reported rather than silently dropped.
+  static const char* rateFlagForFormat(const std::string& id) {
+    if (id == "h264" || id == "h265" || id == "proxy" || id == "datamosh" ||
+        id == "vp9" || id == "av1") return "-crf";
+    if (id == "h264_gpu" || id == "h265_gpu") return "-cq";
+    if (id == "mpeg4" || id == "mjpeg" || id == "datamosh_classic" ||
+        id == "datamosh_extreme") return "-qscale:v";
+    return nullptr;
+  }
+
+  // Map the operator's 0..100 intent onto the codec's own scale. Every one of
+  // these is inverted (lower number = better) and they do not share a range,
+  // which is exactly why the UI shows an intent rather than a raw number.
+  static int mapQualityForFlag(const std::string& id, const char* flag, int q) {
+    q = std::clamp(q, 0, 100);
+    auto lerp = [q](int worst, int best) {
+      return worst + (best - worst) * q / 100;
+    };
+    if (std::string(flag) == "-qscale:v") return lerp(31, 2);   // MPEG-4 / MJPEG
+    if (id == "vp9" || id == "av1")       return lerp(50, 10);  // wider CRF scale
+    return lerp(34, 10);                                        // x264/x265/NVENC
+  }
+
+  // Drop a flag and its value wherever it appears, so an override replaces the
+  // format default instead of sitting next to it. Two rate knobs on one command
+  // line is undefined at best and an ffmpeg error at worst.
+  static void stripArg(std::vector<std::string>& a, const std::string& flag) {
+    for (std::size_t i = 0; i + 1 < a.size();) {
+      if (a[i] == flag) a.erase(a.begin() + i, a.begin() + i + 2);
+      else ++i;
+    }
+  }
+
+  static std::vector<std::string> encodeArgsForFormat(const EncoderFormat& fmt,
+                                                      const std::string& src,
+                                                      const std::string& dst,
+                                                      const EncoderOverrides& ov) {
+    std::vector<std::string> a {"ffmpeg", "-y", "-i", src};
+    const std::string id = fmt.id;
+    auto add = [&](std::initializer_list<const char*> more) {
+      for (const char* s : more) a.push_back(s);
+    };
+
+    if (!fmt.encoder || !*fmt.encoder) {
+      add({"-vn"});                       // audio-only target
+    } else {
+      a.push_back("-c:v");
+      a.push_back(fmt.encoder);
+      if (id == "h264" || id == "h265")            add({"-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p"});
+      else if (id == "proxy")                      add({"-preset", "veryfast", "-crf", "26", "-vf", "scale=-2:720", "-pix_fmt", "yuv420p"});
+      else if (id == "h264_gpu" || id == "h265_gpu") add({"-preset", "p4", "-cq", "21", "-pix_fmt", "yuv420p"});
+      else if (id == "prores")                     add({"-profile:v", "3", "-pix_fmt", "yuv422p10le"});
+      else if (id == "prores4444")                 add({"-profile:v", "4444", "-pix_fmt", "yuva444p10le"});
+      else if (id == "dnxhr")                      add({"-profile:v", "dnxhr_hq", "-pix_fmt", "yuv422p"});
+      else if (id == "qtrle")                      add({"-pix_fmt", "argb"});
+      else if (id == "vp9")                        add({"-crf", "30", "-b:v", "0", "-pix_fmt", "yuv420p"});
+      else if (id == "av1")                        add({"-crf", "30", "-b:v", "0", "-cpu-used", "6", "-pix_fmt", "yuv420p"});
+      else if (id == "ffv1")                       add({"-level", "3", "-pix_fmt", "yuv422p"});
+      else if (id == "mpeg4")                      add({"-qscale:v", "3", "-bf", "0", "-g", "120", "-pix_fmt", "yuv420p"});
+      else if (id == "mjpeg")                      add({"-qscale:v", "3", "-pix_fmt", "yuvj420p"});
+      else if (id == "gif")                        add({"-vf", "fps=12,scale=480:-1:flags=lanczos", "-loop", "0"});
+      else if (id == "datamosh")
+        // Regular keyframes stay in the FILE for seeking; the decoder drops
+        // them at playback. -vsync cfr keeps this frame-for-frame swappable
+        // with the original.
+        add({"-preset", "medium", "-crf", "18", "-bf", "0", "-sc_threshold", "0",
+             "-refs", "1", "-g", "120", "-pix_fmt", "yuv420p", "-vsync", "cfr"});
+      else if (id == "datamosh_classic")
+        // MPEG-4 ASP has no deblocking to soften the blocks, which is the
+        // whole point of this variant.
+        add({"-qscale:v", "3", "-bf", "0", "-sc_threshold", "0", "-g", "120",
+             "-pix_fmt", "yuv420p", "-vsync", "cfr"});
+      else if (id == "datamosh_extreme")
+        // Two knobs over CLASSIC, both of which the operator can SEE:
+        //   -g 24    one keyframe per ~second instead of per five, so a fresh
+        //            smear starts constantly rather than occasionally. This is
+        //            the setting that makes the effect feel continuous; a long
+        //            GOP is why the gentler recipes look like nothing is
+        //            happening for seconds at a time.
+        //   qscale 8 a coarse quantiser, so residuals are large and blocky and
+        //            the drag reads as hard 16x16 chunks.
+        // Do NOT push -g higher for "more" effect: the decoder keeps the first
+        // keyframe and drops the rest, so a file with only one keyframe has
+        // nothing to drop and does not mosh at all.
+        add({"-qscale:v", "8", "-bf", "0", "-sc_threshold", "0", "-g", "24",
+             "-pix_fmt", "yuv420p", "-vsync", "cfr"});
+      else if (id == "hap")                        add({"-format", "hap", "-chunks", "4"});
+      else if (id == "hap_alpha")                  add({"-format", "hap_alpha", "-chunks", "4"});
+      else if (id == "hap_q")                      add({"-format", "hap_q", "-chunks", "4"});
+      else if (id == "png_seq")                    add({"-pix_fmt", "rgba"});
+
+      // ---- operator overrides --------------------------------------------
+      // Applied AFTER the defaults so an untouched encoder produces byte-for-
+      // byte the same command line it always did.
+      if (const char* rateFlag = rateFlagForFormat(id)) {
+        if (ov.rate == EncoderOverrides::Rate::Quality) {
+          for (const char* f : {"-crf", "-cq", "-qscale:v", "-b:v"}) stripArg(a, f);
+          a.push_back(rateFlag);
+          a.push_back(std::to_string(mapQualityForFlag(id, rateFlag, ov.quality0to100)));
+          // VP9/AV1 read -crf as a CAP unless the bitrate is explicitly zeroed,
+          // so constant quality needs both.
+          if (id == "vp9" || id == "av1") add({"-b:v", "0"});
+        } else if (ov.rate == EncoderOverrides::Rate::Bitrate) {
+          for (const char* f : {"-crf", "-cq", "-qscale:v", "-b:v"}) stripArg(a, f);
+          a.push_back("-b:v");
+          a.push_back(std::to_string(std::max(1, ov.videoBitrateKbps)) + "k");
+        }
+      }
+      if (ov.fps > 0.0) {
+        a.push_back("-r");
+        a.push_back(fmtFloat(ov.fps, 3));
+      }
+      if (ov.width > 0 && ov.height > 0) {
+        // Merge with any filter the format already set (proxy scales, gif builds
+        // a palette) rather than replacing it -- a second -vf silently wins and
+        // would drop the format's own filtering.
+        std::string scale = "scale=" + std::to_string(ov.width) + ":" +
+                            std::to_string(ov.height) + ":flags=lanczos";
+        std::string existing;
+        for (std::size_t i = 0; i + 1 < a.size(); ++i) {
+          if (a[i] == "-vf") { existing = a[i + 1]; break; }
+        }
+        stripArg(a, "-vf");
+        a.push_back("-vf");
+        a.push_back(existing.empty() ? scale : (scale + "," + existing));
+      }
+    }
+
+    if (!fmt.audioEncoder || !*fmt.audioEncoder) {
+      add({"-an"});                       // GIF / image sequence carry no audio
+    } else {
+      a.push_back("-c:a");
+      a.push_back(fmt.audioEncoder);
+      const std::string ac = fmt.audioEncoder;
+      if (ac == "aac" || ac == "libmp3lame" || ac == "libopus") {
+        const int kbps = ov.audioBitrateKbps > 0 ? ov.audioBitrateKbps : 192;
+        a.push_back("-b:a");
+        a.push_back(std::to_string(kbps) + "k");
+      }
+    }
+
+    if (id == "png_seq") {
+      // image2 needs a numbered pattern, not a single filename.
+      fs::path stem = fs::path(dst).parent_path() / fs::path(dst).stem();
+      a.push_back(stem.string() + "_%05d.png");
+      return a;
+    }
+    if (std::string(fmt.container) == "mp4" || std::string(fmt.container) == "mov") {
+      add({"-movflags", "+faststart"});
+    }
+    a.push_back(dst);
+    return a;
+  }
+
+  // Which encoders this ffmpeg actually has. Probed once, lazily, off the
+  // Encoder tab rather than at boot - it costs an ffmpeg spawn and most
+  // sessions never open the tab.
+  const std::set<std::string>& availableEncoders() {
+    if (!encoderProbeDone_) {
+      encoderProbeDone_ = true;
+      if (auto out = readAllText({"ffmpeg", "-hide_banner", "-encoders"})) {
+        for (const std::string& raw : splitLines(*out)) {
+          // Rows look like " V....D libx264   H.264 ..." - the flags column,
+          // then the encoder name. Anything without at least two tokens is a
+          // header line.
+          auto parts = splitWhitespace(raw);
+          if (parts.size() < 2) continue;
+          const std::string& flags = parts[0];
+          if (flags.empty() || (flags[0] != 'V' && flags[0] != 'A')) continue;
+          encoderProbeResult_.insert(parts[1]);
+        }
+      }
+    }
+    return encoderProbeResult_;
+  }
+
+  // A format is usable when every encoder it names is present. An empty name
+  // means "no stream of that kind" (audio-only, or GIF/PNG which carry none).
+  bool encoderFormatAvailable(const EncoderFormat& fmt) {
+    const auto& have = availableEncoders();
+    auto ok = [&](const char* name) {
+      return !name || !*name || have.count(name) > 0;
+    };
+    return ok(fmt.encoder) && ok(fmt.audioEncoder);
+  }
+
+  // The format matrix. Order is roughly "most likely to least".
+  static const std::vector<EncoderFormat>& encoderFormatCatalog() {
+    static const std::vector<EncoderFormat> kFormats {
+      {"h264", "H.264 / MP4", "libx264", "aac", "mp4", "universal delivery", false},
+      {"proxy", "Proxy 720p", "libx264", "aac", "mp4", "fast, for scrubbing", false},
+      {"h265", "H.265 / MP4", "libx265", "aac", "mp4", "half the size, fussier playback", false},
+      {"h264_gpu", "H.264 (NVENC)", "h264_nvenc", "aac", "mp4", "fast GPU encode", false},
+      {"h265_gpu", "H.265 (NVENC)", "hevc_nvenc", "aac", "mp4", "fast GPU encode", false},
+      {"prores", "ProRes 422 / MOV", "prores_ks", "pcm_s16le", "mov", "edit + interchange master", false},
+      {"prores4444", "ProRes 4444 / MOV", "prores_ks", "pcm_s16le", "mov", "master WITH alpha", true},
+      {"dnxhr", "DNxHR / MXF", "dnxhd", "pcm_s16le", "mxf", "Avid + broadcast delivery", false},
+      {"qtrle", "QuickTime RLE / MOV", "qtrle", "pcm_s16le", "mov", "lossless alpha, big files", true},
+      {"vp9", "VP9 / WebM", "libvpx-vp9", "libopus", "webm", "web delivery", false},
+      {"av1", "AV1 / MKV", "libaom-av1", "libopus", "matroska", "smallest, slow to encode", false},
+      {"ffv1", "FFV1 / MKV", "ffv1", "flac", "matroska", "lossless archival", false},
+      // Three datamosh flavours, weakest to strongest. All are prepared for
+      // I-frame dropping at decode; see kDatamoshLook* in types.hpp for why
+      // they differ, which is measured rather than stylistic.
+      {"datamosh", "Datamosh - subtle (H.264)", "libx264", "aac", "mp4", "gentler; self-heals fast", false},
+      {"datamosh_classic", "Datamosh - classic (MPEG-4)", "mpeg4", "libmp3lame", "avi", "the full smeary effect", false},
+      {"datamosh_extreme", "Datamosh - extreme (MPEG-4)", "mpeg4", "libmp3lame", "avi", "chunkiest, smears constantly", false},
+      {"mpeg4", "MPEG-4 Part 2 / AVI", "mpeg4", "libmp3lame", "avi", "the classic datamosh look", false},
+      {"mjpeg", "Motion JPEG / AVI", "mjpeg", "pcm_s16le", "avi", "every frame a keyframe", false},
+      {"gif", "Animated GIF", "gif", "", "gif", "no audio, palette limited", false},
+      {"png_seq", "PNG sequence", "png", "", "image2", "frames as stills, alpha", true},
+      // HAP: GPU-native DXT/BC texture video, the live/VJ standard. ffmpeg
+      // DECODES it in most builds but only ENCODES with --enable-libsnappy, so
+      // these usually probe as unavailable - which is exactly why availability
+      // is probed rather than assumed.
+      // WARNING: playing HAP through the ordinary decode path decompresses DXT
+      // to RGB on the CPU and is SLOWER than H.264, for much larger files. Do
+      // not advertise HAP as fast until the GPU path in
+      // docs/HAP_PLAYBACK_PLAN.md exists.
+      {"hap", "HAP / MOV", "hap", "pcm_s16le", "mov", "GPU-native, many layers", false},
+      {"hap_alpha", "HAP Alpha / MOV", "hap", "pcm_s16le", "mov", "GPU-native WITH alpha", true},
+      {"hap_q", "HAP Q / MOV", "hap", "pcm_s16le", "mov", "GPU-native, higher quality", false},
+      {"wav", "WAV (audio only)", "", "pcm_s24le", "wav", "audio stem, 24-bit", false},
+      {"mp3", "MP3 (audio only)", "", "libmp3lame", "mp3", "audio stem, compressed", false},
+    };
+    return kFormats;
+  }
+
+  // Format id for a per-cue look. Clamps, because the value is serialized and
+  // an older or newer show file may carry something outside the range.
+  static const char* moshFormatIdForLook(int look) {
+    switch (look) {
+      case kDatamoshLookSubtle:  return "datamosh";
+      case kDatamoshLookExtreme: return "datamosh_extreme";
+      default:                   return "datamosh_classic";
+    }
+  }
+
+  // ---- Encoder override controls -------------------------------------------
+  // Does this ffmpeg have the HAP encoder? Probed, not assumed -- suggesting a
+  // conversion the machine cannot perform is worse than staying quiet.
+  bool encoderHasHapSupport() {
+    for (const EncoderFormat& fmt : encoderFormatCatalog()) {
+      if (std::string(fmt.id) == "hap") return encoderFormatAvailable(fmt);
+    }
+    return false;
+  }
+
+  // Queue every listed cue for HAP conversion. Uses the datamosh-style prep so
+  // the ORIGINAL survives: a show mid-run must not lose its media because a
+  // conversion was accepted, and HAP files are large enough that an operator
+  // may well want to undo the decision.
+  void convertCuesToHap(const std::vector<std::pair<int, int>>& targets) {
+    const EncoderPreset savedPreset = encoderPreset_;
+    const std::string savedFormat = encoderFormatId_;
+    encoderFormatId_ = "hap";
+    int queued = 0;
+    for (const auto& [deckIndex, cueIndex] : targets) {
+      convertCueMedia(deckIndex, cueIndex);
+      ++queued;
+    }
+    encoderPreset_ = savedPreset;
+    encoderFormatId_ = savedFormat;
+    triggerToast("queued " + std::to_string(queued) + " HAP conversion(s)");
+    showLog("HAP CONVERT", std::to_string(queued) + " cue(s) queued");
+  }
+
+  // ---- ASIO playback -------------------------------------------------------
+  // Arming replaces the SDL sink on every deck. Disarming restores it. Both
+  // are safe mid-show: MediaEngine takes its audio lock, so a swap cannot race
+  // a write already in flight.
+  bool asioArmed() const { return asioOutput_ && asioOutput_->running(); }
+
+  // A sink for ONE engine, with a source of its own in the ASIO mix (see
+  // AsioOutput::openSource). Every deck used to share one sink, and so one
+  // ring: two decks playing at once interleaved their audio. The sink's
+  // functions hold the source; when the engine lets go of its sink, the
+  // source leaves the mix. Empty when ASIO is not armed.
+  MediaEngine::ExternalAudioSink makeAsioSink() {
+    MediaEngine::ExternalAudioSink sink;
+    if (!asioArmed()) return sink;
+    std::shared_ptr<deckboy::platform::audio::AsioOutput::Source> source = asioOutput_->openSource();
+    if (!source) return sink;
+    deckboy::platform::audio::AsioOutput* raw = asioOutput_.get();
+    sink.channels = raw->channels();
+    sink.write = [raw, source](const std::int16_t* data, std::size_t frames) {
+      return raw->write(*source, data, frames);
+    };
+    sink.queued = [raw, source]() { return raw->queuedFrames(*source); };
+    sink.clear = [raw, source]() { raw->clear(*source); };
+    sink.pause = [raw, source](bool paused) { raw->setPaused(*source, paused); };
+    sink.ratio = [raw, source](double ratio) { raw->setRatio(*source, ratio); };
+    return sink;
+  }
+
+  void disarmAsioOutput(const char* reason = nullptr) {
+    if (!asioOutput_) return;
+    for (auto& runtime : deckRuntimes_) {
+      // An outgoing tail holds a sink too; it ends with the device.
+      finishOutgoingTail(runtime);
+      if (runtime.mediaEngine) {
+        runtime.mediaEngine->setExternalAudioSink(MediaEngine::ExternalAudioSink{});
+      }
+    }
+    asioOutput_->close();
+    asioOutput_.reset();
+    if (reason) {
+      triggerToast(std::string("ASIO off: ") + reason);
+      showLog("ASIO STOP", reason);
+    }
+  }
+
+  bool armAsioOutput(const std::string& driverName, int channels) {
+    disarmAsioOutput();
+    if (driverName.empty()) return false;
+    auto out = std::make_unique<deckboy::platform::audio::AsioOutput>();
+    std::string err;
+    if (!out->open(driverName, std::max(2, channels), static_cast<double>(kAudioRate), err)) {
+      failRemoteCommand("ASIO: " + err);
+      showLog("ASIO FAIL", driverName + ": " + err);
+      return false;
+    }
+    // A driver clocked to external word clock will refuse 48k, and an
+    // interface running the rest of a rig at 44.1 or 96 is a normal setup
+    // rather than an error. AsioOutput converts between the rates, so this
+    // reports the situation instead of refusing to open.
+    asioOutput_ = std::move(out);
+
+    // A source per deck, summed by the driver callback -- not one shared ring.
+    for (auto& runtime : deckRuntimes_) {
+      if (runtime.mediaEngine) runtime.mediaEngine->setExternalAudioSink(makeAsioSink());
+    }
+    const int latMs = static_cast<int>(asioOutput_->outputLatencySeconds() * 1000.0);
+    triggerToast("ASIO: " + driverName + "  " +
+                 std::to_string(asioOutput_->channels()) + "ch  " +
+                 std::to_string(asioOutput_->bufferFrames()) + " frames  " +
+                 std::to_string(latMs) + "ms");
+    // Logged because it is the number that decides A/V sync: video slaves to
+    // the audio clock, so swapping SDL for ASIO shifts lip sync by the
+    // DIFFERENCE in output latency. An operator chasing a sync problem needs
+    // this written down, not guessed at.
+    showLog("ASIO START", driverName + "  latency=" + std::to_string(latMs) + "ms" +
+            (asioOutput_->resampling()
+               ? "  resampled to " + std::to_string(static_cast<int>(asioOutput_->sampleRate())) + "Hz"
+               : ""));
+    if (asioOutput_->resampling()) {
+      // Worth saying: conversion costs a little quality and adds a little
+      // latency, and an operator who chose the device rate deliberately should
+      // know Deckboy is not fighting them about it.
+      triggerToast("ASIO running at " +
+                   std::to_string(static_cast<int>(asioOutput_->sampleRate())) +
+                   " Hz - audio resampled");
+    }
+    return true;
+  }
+
+  // Surfaced so the operator learns about glitching from the app rather than
+  // from the room.
+  std::uint64_t asioUnderruns() const {
+    return asioOutput_ ? asioOutput_->underruns() : 0;
+  }
+
+  void cycleEncoderRateMode() {
+    using Rate = EncoderOverrides::Rate;
+    switch (encoderOverrides_.rate) {
+      case Rate::Auto:    encoderOverrides_.rate = Rate::Quality; break;
+      case Rate::Quality: encoderOverrides_.rate = Rate::Bitrate; break;
+      default:            encoderOverrides_.rate = Rate::Auto;    break;
+    }
+    // Say plainly when the choice cannot reach the selected format, rather than
+    // letting the operator set a number that will be discarded.
+    const EncoderFormat& fmt = selectedEncoderFormat();
+    if (encoderOverrides_.rate != Rate::Auto && !rateFlagForFormat(fmt.id)) {
+      triggerToast(std::string(fmt.label) + " is profile-based - rate ignored");
+    } else {
+      triggerToast(std::string("encoder rate: ") + encoderRateModeLabel());
+    }
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void nudgeEncoderRate(int direction) {
+    using Rate = EncoderOverrides::Rate;
+    if (encoderOverrides_.rate == Rate::Quality) {
+      encoderOverrides_.quality0to100 =
+        std::clamp(encoderOverrides_.quality0to100 + direction * 5, 0, 100);
+      triggerToast("quality " + std::to_string(encoderOverrides_.quality0to100));
+    } else if (encoderOverrides_.rate == Rate::Bitrate) {
+      // Step proportionally: 500k steps are meaningless at 50Mbps and far too
+      // coarse at 1Mbps.
+      const int step = encoderOverrides_.videoBitrateKbps >= 20000 ? 5000
+                     : encoderOverrides_.videoBitrateKbps >= 5000  ? 1000
+                                                                   : 250;
+      encoderOverrides_.videoBitrateKbps =
+        std::clamp(encoderOverrides_.videoBitrateKbps + direction * step, 250, 200000);
+      triggerToast(std::to_string(encoderOverrides_.videoBitrateKbps) + "k");
+    }
+  }
+
+  void cycleEncoderFps() {
+    // 0 means "keep the source". The rest are the rates a show actually runs
+    // at, including the film rates, so nobody has to type 23.976.
+    static const double kRates[] = {0.0, 23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 60.0};
+    const int n = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
+    int i = 0;
+    for (; i < n; ++i) {
+      if (std::abs(kRates[i] - encoderOverrides_.fps) < 0.001) break;
+    }
+    encoderOverrides_.fps = kRates[(i + 1) % n];
+    triggerToast("encoder fps: " + encoderFpsLabel());
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleEncoderSize() {
+    static const int kSizes[][2] = {
+      {0, 0}, {3840, 2160}, {2560, 1440}, {1920, 1080}, {1280, 720}, {854, 480},
+    };
+    const int n = static_cast<int>(sizeof(kSizes) / sizeof(kSizes[0]));
+    int i = 0;
+    for (; i < n; ++i) {
+      if (kSizes[i][0] == encoderOverrides_.width &&
+          kSizes[i][1] == encoderOverrides_.height) break;
+    }
+    const int next = (i >= n ? 0 : (i + 1) % n);
+    encoderOverrides_.width  = kSizes[next][0];
+    encoderOverrides_.height = kSizes[next][1];
+    triggerToast("encoder size: " + encoderSizeLabel());
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleEncoderAudioRate() {
+    static const int kRates[] = {0, 96, 128, 192, 256, 320};
+    const int n = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
+    int i = 0;
+    for (; i < n; ++i) {
+      if (kRates[i] == encoderOverrides_.audioBitrateKbps) break;
+    }
+    encoderOverrides_.audioBitrateKbps = kRates[(i >= n ? 0 : (i + 1) % n)];
+    triggerToast("audio: " + encoderAudioRateLabel());
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void pickEncoderOutputDir() {
+    showFolderDialog([this](std::vector<std::string> chosen) {
+      if (chosen.empty() || chosen.front().empty()) return;   // cancelled
+      encoderOverrides_.outputDir = chosen.front();
+      triggerToast("encoder destination set");
+    });
+  }
+
+  // ---- Encoder override labels ---------------------------------------------
+  // Each returns what is CURRENTLY in force, so a chip reading AUTO or SOURCE
+  // is stating a fact rather than offering a choice.
+  const char* encoderRateModeLabel() const {
+    switch (encoderOverrides_.rate) {
+      case EncoderOverrides::Rate::Quality: return "QUALITY";
+      case EncoderOverrides::Rate::Bitrate: return "BITRATE";
+      default:                              return "AUTO";
+    }
+  }
+
+  std::string encoderFpsLabel() const {
+    if (encoderOverrides_.fps <= 0.0) return "SOURCE";
+    return fmtFloat(encoderOverrides_.fps, 3);
+  }
+
+  std::string encoderSizeLabel() const {
+    if (encoderOverrides_.width <= 0 || encoderOverrides_.height <= 0) return "SOURCE";
+    return std::to_string(encoderOverrides_.width) + "x" +
+           std::to_string(encoderOverrides_.height);
+  }
+
+  std::string encoderAudioRateLabel() const {
+    if (encoderOverrides_.audioBitrateKbps <= 0) return "DEFAULT";
+    return std::to_string(encoderOverrides_.audioBitrateKbps) + "k";
+  }
+
+  static const char* moshLookLabelFor(int look) {
+    switch (look) {
+      case kDatamoshLookSubtle:  return "SUBTLE";
+      case kDatamoshLookExtreme: return "EXTREME";
+      default:                   return "CLASSIC";
+    }
+  }
+
+  // The datamosh recipe the ENCODER TAB will use for a manual convert. Cue
+  // datamosh does not read this -- it reads the cue's own look, so that a show
+  // reopened tomorrow moshes exactly as it did today.
+  const char* activeMoshFormatId() const {
+    return moshClassicLook_ ? "datamosh_classic" : "datamosh";
+  }
+
+  const char* moshLookLabel() const {
+    return moshClassicLook_ ? "CLASSIC" : "SUBTLE";
+  }
+
+  void toggleMoshLook() {
+    moshClassicLook_ = !moshClassicLook_;
+    // If datamosh is the active format, follow the toggle immediately so the
+    // next queued job uses the flavour actually shown.
+    if (encoderFormatId_ == "datamosh" || encoderFormatId_ == "datamosh_classic") {
+      encoderFormatId_ = activeMoshFormatId();
+    }
+    triggerToast(moshClassicLook_ ? "datamosh: classic, full effect (MPEG-4)"
+                                  : "datamosh: subtle, self-heals (H.264)");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  // Attempts for a queued job. The datamosh preset resolves through the
+  // SMOOTH/CHUNKY toggle rather than a fixed recipe, so the chip and the encode
+  // can never disagree.
+  // What the queue actually runs. Resolves the FORMAT, always -- there is no
+  // second path that can quietly ignore it.
+  std::vector<std::vector<std::string>> attemptsForJob(const std::string& formatId,
+                                                       const std::string& src,
+                                                       const std::string& dst) {
+    const EncoderFormat* fmt = encoderFormatById(formatId);
+    if (!fmt) {
+      fmt = encoderFormatById("h264");
+    }
+    if (!fmt) {
+      return {};
+    }
+    if (std::string(fmt->id) == "h264_gpu") {
+      // The one format with a fallback: NVENC first for speed, libx264 if the
+      // machine has no NVIDIA encoder.
+      const EncoderFormat* cpu = encoderFormatById("h264");
+      std::vector<std::vector<std::string>> attempts {
+        encodeArgsForFormat(*fmt, src, dst, encoderOverrides_)};
+      if (cpu) {
+        attempts.push_back(encodeArgsForFormat(*cpu, src, dst, encoderOverrides_));
+      }
+      return attempts;
+    }
+    return { encodeArgsForFormat(*fmt, src, dst, encoderOverrides_) };
+  }
+
+  // Mastering codecs are enormous - ProRes 422 measured ~167 MB for 3 seconds,
+  // QuickTime RLE ~424 MB. Queueing one across a big playlist fills a drive,
+  // and the operator finds out when the disk dies mid-show rather than now.
+  static bool formatIsMastering(const std::string& id) {
+    return id == "prores" || id == "prores4444" || id == "dnxhr" ||
+           id == "qtrle"  || id == "ffv1"       || id == "png_seq";
+  }
+
+  void warnIfBulkMasteringEncode(int queuedCount) {
+    if (queuedCount < 5 || !formatIsMastering(encoderFormatId_)) {
+      return;
+    }
+    triggerToast(std::to_string(queuedCount) + " cues to " +
+                 selectedEncoderFormat().label + " - check free disk space");
+    playUiSound(UiSoundEffect::Error);
+  }
+
+  const EncoderFormat* encoderFormatById(const std::string& id) {
+    for (const EncoderFormat& f : encoderFormatCatalog()) {
+      if (id == f.id) return &f;
+    }
+    return nullptr;
+  }
+
+  const EncoderFormat& selectedEncoderFormat() {
+    if (const EncoderFormat* f = encoderFormatById(encoderFormatId_)) return *f;
+    return encoderFormatCatalog().front();
+  }
+
+  bool setEncoderFormat(const std::string& id) {
+    const EncoderFormat* f = encoderFormatById(id);
+    if (!f) {
+      return false;
+    }
+    if (!encoderFormatAvailable(*f)) {
+      // Say why rather than letting the encode fail later with nothing useful.
+      triggerToast(std::string("format unavailable in this ffmpeg: ") + f->label);
+      playUiSound(UiSoundEffect::Error);
+      return false;
+    }
+    encoderFormatId_ = f->id;
+    triggerToast(std::string("format: ") + f->label);
+    playUiSound(UiSoundEffect::Toggle);
+    return true;
+  }
+
+  // Presets are named entry points into the format matrix, not a parallel
+  // system. Selecting one selects a format, so there is exactly ONE thing that
+  // decides what the encoder runs. They used to be independent, which made the
+  // whole format picker a dead control: ENCODEFORMAT set a value nothing read,
+  // and every job silently encoded H.264 regardless.
+  const char* formatIdForPreset(EncoderPreset preset) const {
+    switch (preset) {
+      case EncoderPreset::Proxy:            return "proxy";
+      case EncoderPreset::MatchSource:      return "h264";
+      case EncoderPreset::DatamoshFriendly: return activeMoshFormatId();
+      case EncoderPreset::DeliveryH264:
+      default:                              return "h264_gpu";
+    }
+  }
+
+  void setEncoderPreset(EncoderPreset preset) {
+    encoderPreset_ = preset;
+    encoderFormatId_ = formatIdForPreset(preset);
+    triggerToast(std::string("encode preset: ") + encoderPresetLabel(preset));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  static const char* encoderPresetLabel(EncoderPreset preset) {
+    switch (preset) {
+      case EncoderPreset::Proxy:            return "PROXY 720p";
+      case EncoderPreset::MatchSource:      return "MATCH SOURCE";
+      case EncoderPreset::DatamoshFriendly: return "DATAMOSH";
+      case EncoderPreset::DeliveryH264:
+      default:                              return "DELIVERY H.264";
+    }
+  }
+
+  // Datamosh output sits BESIDE the original: the effect toggles between the
+  // two, so both have to survive.
+  static bool formatKeepsOriginal(const EncoderFormat& fmt) {
+    const std::string id = fmt.id;
+    return id.rfind("datamosh", 0) == 0;
+  }
+
+  static bool presetKeepsOriginal(EncoderPreset preset) {
+    return preset == EncoderPreset::DatamoshFriendly;
+  }
+
+  // Attempts in order; the queue keeps the first that produces a file.
+  static std::vector<std::vector<std::string>> encodeAttemptsFor(
+      EncoderPreset preset, const std::string& src, const std::string& dst) {
+    const std::vector<std::string> head {"ffmpeg", "-y", "-i", src};
+    auto build = [&](std::vector<std::string> mid) {
+      std::vector<std::string> args = head;
+      args.insert(args.end(), mid.begin(), mid.end());
+      args.push_back("-movflags");
+      args.push_back("+faststart");
+      args.push_back(dst);
+      return args;
+    };
+    switch (preset) {
+      case EncoderPreset::DatamoshFriendly:
+        // Deliberately hostile to normal encoding practice, because the point
+        // is a stream that smears when its keyframes are dropped at decode:
+        //   -bf 0          B-frames reference both directions and break worst
+        //   -sc_threshold 0 no keyframe at every scene change - those cuts are
+        //                  exactly the moments the effect should carry through
+        //   -refs 1        motion vectors read only the previous frame
+        //   -g 120         regular keyframes for SEEKING only; the decoder
+        //                  drops them at playback, so this is seek granularity,
+        //                  not an effect parameter
+        //   -vsync cfr     the moshed copy must stay frame-for-frame
+        //                  interchangeable with the original, or swapping
+        //                  between them shifts sync
+        // libx264 ONLY: NVENC ignores or constrains refs/scenecut and injects
+        // its own IDR frames, which would quietly undo all of this.
+        return { build({"-c:v", "libx264", "-preset", "medium", "-crf", "18",
+                        "-bf", "0", "-sc_threshold", "0", "-refs", "1", "-g", "120",
+                        "-pix_fmt", "yuv420p", "-vsync", "cfr",
+                        "-c:a", "aac", "-b:a", "192k"}) };
+      case EncoderPreset::Proxy:
+        return { build({"-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                        "-vf", "scale=-2:720", "-pix_fmt", "yuv420p",
+                        "-c:a", "aac", "-b:a", "128k"}) };
+      case EncoderPreset::MatchSource:
+        return { build({"-c:v", "libx264", "-preset", "slow", "-crf", "18",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"}) };
+      case EncoderPreset::DeliveryH264:
+      default:
+        // GPU first with a CPU decode (robust on odd inputs); libx264 if NVENC
+        // is unavailable or produced nothing.
+        return { build({"-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"}),
+                 build({"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"}) };
+    }
+  }
+
+  // "" when this cue has no job, otherwise whether it is actually encoding or
+  // still waiting behind the concurrency cap. The list used to call every job
+  // "[converting...]", which was a lie for 30 of 31 of them.
+  const char* cueQueueStateLabel(const std::string& path) const {
+    for (const auto& job : conversionJobs_) {
+      if (job.sourcePath != path) continue;
+      return job.state == ConversionState::Running ? "   [converting...]" : "   [queued]";
+    }
+    return "";
+  }
+
+  // Queue a datamosh prep for one cue WITHOUT disturbing the operator's
+  // selected encoder format. The toggle drives this, so it must not silently
+  // repoint the Encoder tab at DATAMOSH for the next manual convert.
+  void queueDatamoshPrepForCue(int deckIndex, int cueIndex) {
+    // The recipe comes from the CUE, not the Encoder tab's chip: this prep is
+    // for this clip's look and must survive a save/reload.
+    int look = kDatamoshLookClassic;
+    if (deckIndex >= 0 && deckIndex < static_cast<int>(project_.decks.size())) {
+      const Deck& deck = project_.decks[deckIndex];
+      if (cueIndex >= 0 && cueIndex < static_cast<int>(deck.cues.size())) {
+        look = deck.cues[cueIndex].datamoshLook;
+      }
+    }
+    const EncoderPreset savedPreset = encoderPreset_;
+    const std::string savedFormat = encoderFormatId_;
+    encoderPreset_ = EncoderPreset::DatamoshFriendly;
+    encoderFormatId_ = moshFormatIdForLook(look);
+    convertCueMedia(deckIndex, cueIndex);
+    encoderPreset_ = savedPreset;
+    encoderFormatId_ = savedFormat;
+  }
+
+  // Is a prep already running or queued for this cue?
+  bool datamoshPrepInFlight(const std::string& sourcePath) const {
+    for (const auto& job : conversionJobs_) {
+      if (job.sourcePath == sourcePath && job.keepsOriginal) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void convertCueMedia(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    Cue& cue = deck.cues[cueIndex];
+    if (cue.path.empty() || cue.kind != CueKind::Video || isCueConverting(cue.path)) {
+      return;
+    }
+    std::error_code ec;
+    fs::path src(cue.path);
+    fs::path outDir = convertedMediaDir();
+    fs::create_directories(outDir, ec);
+    // Extension comes from the SELECTED FORMAT, not a hardcoded ".mp4" -- HAP
+    // and ProRes need .mov, VP9 .webm, FFV1 .mkv, and writing them all as .mp4
+    // produced files ffmpeg would refuse or mislabel.
+    const EncoderFormat& chosen = selectedEncoderFormat();
+    std::string container = chosen.container;
+    if (container == "matroska") container = "mkv";
+    if (container == "image2")   container = "png";
+    const std::string suffix = presetKeepsOriginal(encoderPreset_)
+                                 ? ("_mosh." + container)
+                                 : ("." + container);
+    fs::path dst = outDir / (src.stem().string() + suffix);
+    if (fs::exists(dst, ec) && fs::equivalent(dst, src, ec)) {
+      dst = outDir / (src.stem().string() + "_conv.mp4");
+    }
+    std::string srcStr = src.string();
+    std::string dstStr = dst.string();
+    ConversionJob job;
+    job.deckIndex = deckIndex;
+    job.sourcePath = cue.path;
+    job.destPath = dstStr;
+    job.label = cue.name.empty() ? src.filename().string() : cue.name;
+    job.progress = std::make_shared<std::atomic<double>>(-1.0);
+    job.cancel = std::make_shared<std::atomic<bool>>(false);
+    job.sourceSeconds = cue.duration > 0.0 ? cue.duration : 0.0;
+    job.state = ConversionState::Queued;
+    job.preset = encoderPreset_;
+    job.keepsOriginal = presetKeepsOriginal(encoderPreset_);
+    job.formatId = encoderFormatId_;
+    conversionJobs_.push_back(std::move(job));
+    triggerToast("queued " + src.filename().string());
+    playUiSound(UiSoundEffect::Import);
+    pumpConversionQueue();
+  }
+
+  // Start queued jobs up to the concurrency cap. Called on enqueue and once per
+  // update tick, so a finishing job immediately pulls the next one in.
+  void pumpConversionQueue() {
+    if (encoderQueuePaused_) {
+      return;
+    }
+    int running = 0;
+    for (const auto& job : conversionJobs_) {
+      if (job.state == ConversionState::Running) ++running;
+    }
+    for (std::size_t i = 0; i < conversionJobs_.size(); ++i) {
+      if (running >= std::max(1, encoderConcurrency_)) {
+        break;
+      }
+      if (conversionJobs_[i].state != ConversionState::Queued ||
+          conversionJobs_[i].held) {
+        continue;
+      }
+      startConversionJob(i);
+      ++running;
+    }
+  }
+
+  // Takes an index rather than a reference: ConversionJob is declared further
+  // down the class body than this include, so it cannot name the type in a
+  // parameter list (function bodies are fine - they are a complete-class
+  // context, parameter types are not).
+  void startConversionJob(std::size_t index) {
+    auto& job = conversionJobs_[index];
+    const std::string srcStr = job.sourcePath;
+    const std::string dstStr = job.destPath;
+    auto progress = job.progress;
+    auto cancel = job.cancel;
+    const double totalSeconds = job.sourceSeconds;
+    const auto attempts = attemptsForJob(job.formatId, srcStr, dstStr);
+    job.state = ConversionState::Running;
+    job.future = std::async(std::launch::async, [dstStr, progress, cancel, totalSeconds, attempts]() -> bool {
+      auto produced = [&]() {
+        std::error_code e;
+        return fs::exists(dstStr, e) && fs::file_size(dstStr, e) > 1024;
+      };
+      // Run one encode, streaming ffmpeg's own progress report back into the
+      // shared counter. `-progress pipe:1` emits key=value lines on stdout; the
+      // one that matters is out_time_us, which divided by the probed duration
+      // is the fraction encoded. Without a duration there is nothing to divide
+      // by, so the job stays indeterminate and the UI spins instead.
+      auto runEncode = [&](std::vector<std::string> args) {
+        args.insert(args.begin() + 1, "-nostdin");
+        args.insert(args.end() - 1, "-progress");
+        args.insert(args.end() - 1, "pipe:1");
+        ChildProcess proc;
+        if (!spawnPipeProcess(proc, args)) {
+          return;
+        }
+        std::string pending;
+        std::array<char, 4096> chunk {};
+        while (true) {
+          if (cancel->load()) {
+            proc.stop();
+            std::error_code ce;
+            fs::remove(dstStr, ce);  // a half-written file is not a usable cue
+            return;
+          }
+          int n = readSome(proc.readFd, chunk.data(), chunk.size());
+          if (n <= 0) {
+            break;  // ffmpeg closed stdout — it has exited or is about to
+          }
+          pending.append(chunk.data(), static_cast<size_t>(n));
+          size_t nl;
+          while ((nl = pending.find('\n')) != std::string::npos) {
+            std::string line = trim(pending.substr(0, nl));
+            pending.erase(0, nl + 1);
+            if (totalSeconds <= 0.0 || line.rfind("out_time_us=", 0) != 0) {
+              continue;
+            }
+            double us = std::atof(line.c_str() + 12);
+            if (us >= 0.0) {
+              progress->store(std::clamp((us / 1000000.0) / totalSeconds, 0.0, 1.0));
+            }
+          }
+        }
+        proc.stop();
+      };
+
+      // Try each attempt for this preset in turn; keep the first that lands.
+      for (std::size_t a = 0; a < attempts.size(); ++a) {
+        if (a > 0) {
+          progress->store(-1.0);   // a fallback restarts from zero
+        }
+        runEncode(attempts[a]);
+        if (cancel->load()) {
+          return false;
+        }
+        if (produced()) {
+          progress->store(1.0);
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  // Convert every flagged cue across all decks (used by the Encoder tab).
+  int convertAllFlaggedCues() {
+    int started = 0;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        if (cueConvertReason(deck.cues[c]) && !isCueConverting(deck.cues[c].path)) {
+          convertCueMedia(d, c);
+          ++started;
+        }
+      }
+    }
+    if (started == 0) {
+      triggerToast("encoder: nothing to convert");
+    } else {
+      warnIfBulkMasteringEncode(started);
+    }
+    return started;
+  }
+
+  void convertSelectedCueMedia() {
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    int started = 0;
+    for (int idx : indices) {
+      if (idx >= 0 && idx < static_cast<int>(deck.cues.size()) &&
+          deck.cues[idx].kind == CueKind::Video && !deck.cues[idx].path.empty() &&
+          !isCueConverting(deck.cues[idx].path)) {
+        convertCueMedia(project_.focusedDeckIndex, idx);
+        ++started;
+      }
+    }
+    if (started == 0) {
+      triggerToast("convert: select a file cue");
+    }
+  }
+
+  void toggleOutputFullscreen() {
+    if (project_.focusedOutputIndex >= 0 &&
+        project_.focusedOutputIndex < static_cast<int>(project_.outputs.size())) {
+      const OutputTarget& output = project_.outputs[project_.focusedOutputIndex];
+      if (normalizeOutputType(output.outputType) == "stream") {
+        triggerToast("fullscreen: stream output");
+        return;
+      }
+      if (!output.enabled) {
+        setFocusedOutputEnabled(true);
+        playUiSound(UiSoundEffect::Toggle);
+        return;  // setFocusedOutputEnabled already handles fullscreen
+      }
+    }
+    OutputRuntime* runtime = runtimeForOutput(project_.focusedOutputIndex);
+    if (!runtime || !runtime->outputWindow) {
+      return;
+    }
+    SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+    bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    if (fullscreen) {
+      SDL_SetWindowFullscreen(runtime->outputWindow, false);
+      runtime->recoveryPausedByEscape = true;
+      runtime->fullscreenIntended = false;
+    } else {
+      runtime->recoveryPausedByEscape = false;
+      runtime->fullscreenIntended = true;
+      if (enableOutputFullscreen(project_.focusedOutputIndex, true)) {
+        showOutputWindow(runtime->outputWindow);
+        SDL_RaiseWindow(runtime->outputWindow);
+      } else {
+        runtime->fullscreenIntended = false;
+        triggerToast("fullscreen failed");
+      }
+    }
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  std::optional<int> outputIndexForWindowId(Uint32 windowId) const {
+    if (windowId == 0) {
+      return std::nullopt;
+    }
+    for (int outputIndex = 0; outputIndex < static_cast<int>(outputRuntimes_.size()); ++outputIndex) {
+      const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime || !runtime->outputWindow) {
+        continue;
+      }
+      if (SDL_GetWindowID(runtime->outputWindow) == windowId) {
+        return outputIndex;
+      }
+    }
+    return std::nullopt;
+  }
+
+  bool escapeOutputFullscreen(Uint32 sourceWindowId) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return false;
+    }
+
+    int targetOutputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    std::optional<int> sourceOutputIndex = outputIndexForWindowId(sourceWindowId);
+    if (sourceOutputIndex) {
+      targetOutputIndex = *sourceOutputIndex;
+    }
+
+    auto tryExitFullscreen = [&](int outputIndex) -> bool {
+      if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+        return false;
+      }
+      OutputTarget& output = project_.outputs[outputIndex];
+      if (!output.enabled || normalizeOutputType(output.outputType) != "window") {
+        return false;
+      }
+      OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime || !runtime->outputWindow) {
+        return false;
+      }
+      SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+      bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+      if (!fullscreen) {
+        return false;
+      }
+      // ONLY AN OUTPUT THAT IS IN THE OPERATOR'S WAY. Esc from the desk is
+      // "give me my screen back"; an output fullscreen on ANOTHER display is not
+      // in the way, it is the room's picture. Un-fullscreening it put window
+      // chrome on the projector -- and Esc is what everyone presses to close a
+      // menu, so the second press of a dismissal did it. Esc pressed IN an
+      // output window still means that output.
+      if (!sourceOutputIndex && controlWindow_ &&
+          SDL_GetDisplayForWindow(runtime->outputWindow) != SDL_GetDisplayForWindow(controlWindow_)) {
+        return false;
+      }
+      SDL_SetWindowFullscreen(runtime->outputWindow, false);
+      setOutputRecoveryPausedByEscape(outputIndex, true);
+      runtime->fullscreenIntended = false;
+      showOutputWindow(runtime->outputWindow);
+      SDL_RaiseWindow(controlWindow_);
+      triggerToast("escape: " + outputLabel(outputIndex) + " windowed");
+      playUiSound(UiSoundEffect::Toggle);
+      project_.focusedOutputIndex = outputIndex;
+      return true;
+    };
+
+    if (tryExitFullscreen(targetOutputIndex)) {
+      return true;
+    }
+
+    if (sourceOutputIndex &&
+        *sourceOutputIndex >= 0 &&
+        *sourceOutputIndex < static_cast<int>(project_.outputs.size())) {
+      OutputTarget& sourceOutput = project_.outputs[*sourceOutputIndex];
+      if (sourceOutput.enabled && normalizeOutputType(sourceOutput.outputType) == "window") {
+        if (OutputRuntime* runtime = runtimeForOutput(*sourceOutputIndex); runtime && runtime->outputWindow) {
+          // Esc from an output window should remain an output-safety action,
+          // not fall through to app quit confirmation.
+          setOutputRecoveryPausedByEscape(*sourceOutputIndex, true);
+          showOutputWindow(runtime->outputWindow);
+          SDL_RaiseWindow(controlWindow_);
+          project_.focusedOutputIndex = *sourceOutputIndex;
+          return true;
+        }
+      }
+    }
+
+    int controlDisplay = deckboyGetWindowDisplayIndex(controlWindow_);
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      if (!project_.outputs[outputIndex].enabled ||
+          normalizeOutputType(project_.outputs[outputIndex].outputType) != "window") {
+        continue;
+      }
+      OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      if (!runtime || !runtime->outputWindow) {
+        continue;
+      }
+      SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+      bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+      if (!fullscreen) {
+        continue;
+      }
+      int outputDisplay = deckboyGetWindowDisplayIndex(runtime->outputWindow);
+      if (controlDisplay >= 0 && outputDisplay >= 0 && outputDisplay != controlDisplay) {
+        continue;
+      }
+      if (tryExitFullscreen(outputIndex)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  void layoutButtons(int windowWidth, int windowHeight) {
+    buttons_.clear();
+    bottomBarRect_ = SDL_Rect {};
+    mediaGroupRect_ = SDL_Rect {};
+    transportGroupRect_ = SDL_Rect {};
+    outputGroupRect_ = SDL_Rect {};
+    deskGroupRect_ = SDL_Rect {};
+    sourceDefaultDropdownRect_ = SDL_Rect {};
+    patternDefaultDropdownRect_ = SDL_Rect {};
+
+    int barX = snapDownToGrid(kLayoutPanelPadding);
+    int barW = snapDownToGrid(std::max(540, windowWidth - kLayoutPanelPadding * 2));
+    int barH = kLayoutBottomBarHeight;
+    int barY = snapDownToGrid(std::max(kLayoutSpacingUnit, windowHeight - barH - kLayoutPanelPadding));
+    bottomBarRect_ = {barX, barY, barW, barH};
+
+    SDL_Rect groupBounds {barX + kLayoutSpacingUnit, barY + 8, barW - kLayoutSpacingUnit * 2, barH - 16};
+
+    int buttonH = kLayoutButtonHeight;
+    // Set once the buttons are known: every button on the bar is this wide.
+    int buttonW = 1;
+
+    auto push = [&](std::string label, SDL_Color fill, std::string tip = "") {
+      Button button;
+      button.label = std::move(label);
+      button.tip   = std::move(tip);
+      button.fill = fill;
+      button.outline = pal.deep;
+      button.text = pal.deep;
+      buttons_.push_back(button);
+    };
+    push("IMPORT",     pal.mid, "I — import media files");
+    push("SOURCE",     pal.mid, "Add a source cue and refine it in the cue inspector");
+    push("PATTERN",    pal.mid, "Add a pattern cue and refine it in the cue inspector");
+    push("TAKE",       pal.light, "Enter — take selected cue live");
+    // TAKE ALL, once there is more than one playlist: the selected cue on
+    // every playlist at once. It was only ever Ctrl+Enter and the ALLTAKE
+    // command, so nobody running a multi-deck show could see that it existed.
+    const bool takeAllButton = project_.decks.size() > 1;
+    if (takeAllButton) {
+      push("TAKE ALL", pal.light, "Ctrl+Enter — take the selected cue on every playlist at once");
+    }
+    const int transportButtons = takeAllButton ? 4 : 3;
+    push("STOP",       pal.mid, "S — stop active cue");
+    push("RERACK",     pal.mid, "Ctrl+R — back to the start, held ready");
+    // BLACKOUT sits with CLEAR because they are the two "kill the picture"
+    // actions and an operator is choosing between them under pressure. It had
+    // no button at all before — reachable only from Companion — which is
+    // backwards: it is the FASTEST and most REVERSIBLE of the family (picture
+    // gone, playback untouched, one press to restore), so it should be the
+    // easiest to hit, not the hardest.
+    //
+    // The tips spell out what each one leaves behind, because that is the
+    // whole decision and the labels hide it.
+    // "BLACK", not "BLACKOUT". Four buttons share this strip and at any UI
+    // scale above 1.0 the longest label wins the wrap test for all of them --
+    // so BLACKOUT ellipsized to "BLAC..." and SETTINGS to "SETT...", which
+    // tells an operator nothing at the moment they most need to read it.
+    // Every desk in the trade says BLACK on that button anyway.
+    push("BLACK",      pal.mid, "B — picture off instantly, playback keeps running (reversible)");
+    push("CLEAR",      pal.mid, "C — stop all decks and queued takes, disarm output (twice while live)");
+    // RECORD belongs on the bar, not buried in Settings → Streaming. Arming a
+    // capture is a SHOW action taken at the top of a take: an operator should
+    // not have to open a modal to start one, and — worse — could not tell from
+    // the desk whether one was already rolling. The toolbar badge only appears
+    // once recording is live, so before this there was no way to START from the
+    // main UI at all. Red while rolling, same language as the badge.
+    {
+      const bool rec = recordingActive();
+      push("RECORD", rec ? SDL_Color{160, 18, 18, 255} : pal.mid,
+           rec ? "Stop recording — file lands in " + recordingDirLabel()
+               : "Record the program to disk (" + recordingDirLabel() + ")");
+      if (rec) {
+        buttons_.back().text = SDL_Color{255, 210, 210, 255};
+      }
+    }
+    // "MENU", James's word for it. SETUP and SETTINGS are still accepted by
+    // triggerButton, so anything that names the old labels keeps working.
+    push("DASH",       pal.mid, "Ctrl+D - the dashboard: your own buttons, running any command");
+    push("MENU",       pal.mid, "Open settings");   // short enough not to ellipsize
+
+    // WRAP RATHER THAN SHRINK THE WORDS.
+    //
+    // At Pocket/touch scale ten buttons in a row cannot hold a doubled font at
+    // this width -- IMPORT came out "IM...", BLACKOUT as "B...", which is
+    // exactly the information a bottom bar exists to carry. But these group
+    // boxes are mostly EMPTY below the buttons: one row of controls in a box
+    // deep enough for two.
+    //
+    // So when a row will not fit, take the second row that is already there.
+    // Two rows of wide buttons say what they do; one row of narrow ones does
+    // not, and shrinking the label on a touch target is the wrong trade twice
+    // over.
+    // ── EVERY BUTTON THE SAME SIZE ────────────────────────────────────────
+    //
+    // The three groups were a third of the bar each, whatever they held. So
+    // MEDIA and TRANSPORT spread three buttons across a third while OUTPUT
+    // crammed five into the same width: its buttons came out half as wide,
+    // dropped to the smaller font, and RECORD read "REC..." at 1280 -- the
+    // bar looked like two sizes of button that had wandered in from
+    // different apps. The groups are now as wide as what they hold, so a
+    // button is one width everywhere on the bar and the words match.
+    //
+    // Still capped: on a very wide window eleven 400px buttons are banners,
+    // not buttons. The width the cap leaves over is shared out between the
+    // groups in proportion, and each group centres its row.
+    // DASH AND MENU ARE THE DESK'S, NOT THE OUTPUT'S. They sat at the end of
+    // OUTPUT, so the group that means "what goes to air" also held the
+    // dashboard and the settings. They are the trailing buttons, so a button
+    // added in front of them still lands in OUTPUT.
+    int deskCount = 0;
+    for (auto it = buttons_.rbegin();
+         it != buttons_.rend() && (it->label == "DASH" || it->label == "MENU"); ++it) {
+      ++deskCount;
+    }
+    deskCount = std::min(deskCount, std::max(0, static_cast<int>(buttons_.size()) - 3 - transportButtons));
+    {
+      const int total = static_cast<int>(buttons_.size());
+      const int counts[4] = {
+        std::min(3, total),
+        std::min(transportButtons, std::max(0, total - 3)),
+        std::max(0, total - 3 - transportButtons - deskCount),
+        deskCount,
+      };
+      const int groups = deskCount > 0 ? 4 : 3;
+      const int pad = kLayoutSpacingUnit;
+      int fixed = (groups - 1) * kLayoutPanelGap;
+      int buttonsCounted = 0;
+      for (int g = 0; g < groups; ++g) {
+        fixed += 2 * pad + std::max(0, counts[g] - 1) * kLayoutButtonGap;
+        buttonsCounted += counts[g];
+      }
+      // A MINIMUM THAT DOES NOT FIT IS NOT A MINIMUM, IT IS AN OVERLAP: the
+      // available width is the hard limit and the preferred size is only a
+      // preference. (At Pocket scale a clamped-up floor ran PATTERN across
+      // TRANSPORT once.)
+      buttonW = std::clamp((groupBounds.w - fixed) / std::max(1, buttonsCounted),
+                           1, uiScaled(240));
+      const int spare = std::max(0, groupBounds.w - fixed - buttonW * buttonsCounted);
+      SDL_Rect* rects[4] = {&mediaGroupRect_, &transportGroupRect_, &outputGroupRect_,
+                            &deskGroupRect_};
+      int x = groupBounds.x;
+      for (int g = 0; g < groups; ++g) {
+        int w = 2 * pad + counts[g] * buttonW + std::max(0, counts[g] - 1) * kLayoutButtonGap
+              + spare * counts[g] / std::max(1, buttonsCounted);
+        if (g == groups - 1) {
+          w = groupBounds.x + groupBounds.w - x;   // rounding lands on the edge
+        }
+        *rects[g] = SDL_Rect {x, groupBounds.y, w, groupBounds.h};
+        x += w + kLayoutPanelGap;
+      }
+    }
+
+    auto placeGroupButtons = [&](int startIndex, int count, const SDL_Rect& groupRect, int overrideW = 0) {
+      const int titleH = 36;
+      const int avail = groupRect.w - kLayoutSpacingUnit * 2;
+
+      // THE TRIGGER IS THE LABEL, NOT THE ROW.
+      //
+      // First version asked whether the buttons fitted the row -- which they
+      // always do, because their width is computed from the row in the first
+      // place. The question that matters is whether the WORD fits the BUTTON,
+      // so measure it with the font that will draw it.
+      TTF_Font* labelFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+      int widestLabel = 0;
+      for (int i = 0; i < count; ++i) {
+        const int tw = measuredTextWidth(labelFont, buttons_[startIndex + i].label);
+        widestLabel = std::max(widestLabel, tw);
+      }
+      // Icon+text buttons keep an icon to the left of the word.
+      const int needW = widestLabel + uiScaled(34);
+
+      int perRow = count;
+      int bw = overrideW > 0 ? overrideW : buttonW;
+      if (bw < needW) {
+        // Split as evenly as possible: 3 becomes 2+1, 4 becomes 2+2.
+        perRow = (count + 1) / 2;
+        const int wider = (avail - (perRow - 1) * kLayoutButtonGap) / std::max(1, perRow);
+        // Only worth it if the second row actually buys width AND there is
+        // room below for it.
+        const int rowsH = buttonH * 2 + kLayoutButtonGap;
+        if (wider > bw && groupRect.h - titleH >= rowsH) {   // the second row buys width
+          bw = std::min(wider, uiScaled(144) * 2);
+        } else {
+          perRow = count;   // no better; stay on one row and let it ellipsize
+        }
+      }
+
+      // ── THE BUTTONS TAKE THE BOX ──────────────────────────────────────
+      //
+      // They were kLayoutButtonHeight tall in a box more than twice that
+      // deep, so the bottom bar read as three big empty panels with a thin
+      // strip of controls in the middle of each -- James, twice: "are the
+      // bottom buttons a bit small?" and then "still a bit smol, M8?".
+      //
+      // DECIDED HERE, because here is the only place that knows whether this
+      // group wrapped: one row takes the whole inner height, two rows take
+      // half each. Deciding it outside meant either small buttons or a
+      // second row that could never fit, which is the wrap fix undone.
+      const int rows = (count + perRow - 1) / perRow;
+      const int innerH = std::max(0, groupRect.h - titleH - kLayoutSpacingUnit);
+      if (rows == 1) {
+        buttonH = std::max(kLayoutButtonHeight, innerH);
+      } else {
+        buttonH = std::max(kLayoutButtonHeight,
+                           (innerH - kLayoutButtonGap) / rows);
+      }
+      const int rowsH = rows * buttonH + (rows - 1) * kLayoutButtonGap;
+      int y = groupRect.y + titleH;
+      // Centre the block vertically in whatever is left, so a two-row group
+      // does not sit jammed under its title with a gap beneath it.
+      y += std::max(0, (groupRect.h - titleH - rowsH) / 2);
+
+      for (int i = 0; i < count; ++i) {
+        const int row = i / perRow;
+        const int col = i % perRow;
+        const int inRow = std::min(perRow, count - row * perRow);
+        // A SHORT ROW GETS THE WIDTH IT IS OWED. PATTERN ended up alone on
+        // the second row and still drawn at the two-up width, so it was the
+        // one button left saying "PAT...". Capped so a lone button does not
+        // become a banner twice the size of its neighbours.
+        const int rowBw = (inRow < perRow)
+          ? std::min((avail - (inRow - 1) * kLayoutButtonGap) / std::max(1, inRow),
+                     uiScaled(144) * 2)
+          : bw;
+        const int rowW = inRow * rowBw + (inRow - 1) * kLayoutButtonGap;
+        const int x = groupRect.x + std::max(kLayoutSpacingUnit, (groupRect.w - rowW) / 2)
+                    + col * (rowBw + kLayoutButtonGap);
+        buttons_[startIndex + i].rect = {x, y + row * (buttonH + kLayoutButtonGap),
+                                         rowBw, buttonH};
+      }
+    };
+    // ── PLACING THEM, WITHOUT COUNTING THEM ───────────────────────────────
+    //
+    // This was guarded by `if (buttons_.size() == 10)`. Adding an eleventh
+    // button did not add an eleventh button: it made the guard false, so
+    // NOTHING was placed, every rect stayed {0,0,0,0}, and the whole bottom
+    // bar drew as three empty boxes -- IMPORT, SOURCE, PATTERN, TAKE, STOP,
+    // RERACK, BLACK, CLEAR, RECORD and MENU all gone at once, from one line.
+    //
+    // An exact count is a tripwire, not a guard. The groups are fixed sizes
+    // from the front and the REST goes in OUTPUT, so a new button lands
+    // somewhere sensible instead of deleting the bar. (DASH and MENU, at the
+    // very end, go in DESK.)
+    {
+      const int total = static_cast<int>(buttons_.size());
+      const int mediaCount = std::min(3, total);                 // IMPORT SOURCE PATTERN
+      const int transportCount = std::min(transportButtons, total - mediaCount); // TAKE (TAKE ALL) STOP RERACK
+      const int outputCount = total - mediaCount - transportCount - deskCount;
+      if (mediaCount > 0) {
+        placeGroupButtons(0, mediaCount, mediaGroupRect_);
+      }
+      if (transportCount > 0) {
+        placeGroupButtons(mediaCount, transportCount, transportGroupRect_);
+      }
+      if (outputCount > 0) {
+        placeGroupButtons(mediaCount + transportCount, outputCount, outputGroupRect_);
+      }
+      if (deskCount > 0) {
+        placeGroupButtons(mediaCount + transportCount + outputCount, deskCount, deskGroupRect_);
+      }
+      // AND SAY SO IF ONE WAS MISSED. A button with no rect cannot be drawn
+      // and cannot be pressed; silently having none is exactly the failure
+      // this replaced.
+      for (const Button& button : buttons_) {
+        if (button.rect.w <= 0 || button.rect.h <= 0) {
+          std::cerr << "bottom bar: '" << button.label
+                    << "' was given no place to sit" << std::endl;
+        }
+      }
+    }
+  }
+
+  const Cue* selectedCuePtr(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.selectedIndex];
+  }
+
+  const Cue* selectedCuePtr() const {
+    const Deck& deck = focusedDeck();
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.selectedIndex];
+  }
+
+  const Cue* activeCuePtr(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.activeIndex];
+  }
+
+  const Cue* activeCuePtr() const {
+    const Deck& deck = focusedDeck();
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.activeIndex];
+  }
+
+  const Cue* previewCuePtr(int deckIndex, int* cueIndexOut = nullptr) const {
+    if (cueIndexOut) {
+      *cueIndexOut = -1;
+    }
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    const Cue* selectedCue = selectedCuePtr(deckIndex);
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    if (selectedCue && selectedCue != activeCue &&
+        deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+      if (cueIndexOut) {
+        *cueIndexOut = deck.selectedIndex;
+      }
+      return selectedCue;
+    }
+    int nextIndex = nextCueIndexForDeck(deckIndex);
+    if (nextIndex >= 0 && nextIndex < static_cast<int>(deck.cues.size())) {
+      if (cueIndexOut) {
+        *cueIndexOut = nextIndex;
+      }
+      return &deck.cues[nextIndex];
+    }
+    return nullptr;
+  }
+
+  bool cueSupportsMonitorPreview(const Cue& cue) const {
+    return cue.kind == CueKind::Video ||
+           cue.kind == CueKind::Image ||
+           cue.kind == CueKind::Pattern;
+  }
+
+  double cueTimelineDurationSeconds(const Cue& cue, const MediaEngine* engine = nullptr) const {
+    if (cue.kind == CueKind::Video || cue.kind == CueKind::Audio) {
+      return std::max(0.0, cue.duration);
+    }
+    if (cue.stillDurationSeconds > 0.0) {
+      return cue.stillDurationSeconds;
+    }
+    return engine ? std::max(0.0, engine->duration()) : 0.0;
+  }
+
+  double cueAbsolutePlayheadSeconds(const Cue& cue, const MediaEngine& engine) const {
+    double cueDuration = cueTimelineDurationSeconds(cue, &engine);
+    if (cue.kind == CueKind::Video || cue.kind == CueKind::Audio) {
+      double cueIn = std::clamp(cue.inPointSeconds, 0.0, cueDuration);
+      double cueOut = cue.outPointSeconds > 0.0
+        ? std::clamp(cue.outPointSeconds, cueIn, cueDuration)
+        : cueDuration;
+      return std::clamp(cueIn + engine.position(), cueIn, cueOut);
+    }
+    return std::clamp(engine.position(), 0.0, cueDuration);
+  }
+
+  // Re-take the live cue on EVERY deck. The focused-deck version above is for
+  // an edit to the selected cue; this is for a change that alters how every
+  // deck must decode -- VJ mode asking for CPU-side pixels, for instance,
+  // which is decided when a cue is taken and not per frame.
+  void refreshAllLiveCueRuntimes() {
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      const Deck& deck = project_.decks[deckIndex];
+      if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      DeckRuntime* runtime = runtimeForDeck(deckIndex);
+      if (runtime && runtime->mediaEngine) {
+        runtime->mediaEngine->refreshActiveCueRuntime(&deck.cues[deck.activeIndex]);
+      }
+    }
+  }
+
+  void refreshFocusedLiveCueRuntimeIfSelected() {
+    if (project_.focusedDeckIndex < 0 || project_.focusedDeckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = focusedDeck();
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    if (!cueIndexSelected(deck, deck.activeIndex)) {
+      return;
+    }
+    if (MediaEngine* engine = focusedMediaEngine()) {
+      engine->refreshActiveCueRuntime(&deck.cues[deck.activeIndex]);
+    }
+  }
+
+  // A look edit on the cue on air that changed whether it needs CPU pixels.
+  // Taken without reopening the decoder when the engine can (it converts
+  // frames until the next take), because a reopen froze the picture on every
+  // such edit; the reopen stays as the fallback for what only it can change.
+  void adoptFocusedLiveCueLook() {
+    if (project_.focusedDeckIndex < 0 || project_.focusedDeckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = focusedDeck();
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    if (!cueIndexSelected(deck, deck.activeIndex)) {
+      return;
+    }
+    if (MediaEngine* engine = focusedMediaEngine()) {
+      const Cue& cue = deck.cues[deck.activeIndex];
+      if (!engine->adoptLookWithoutRestart(cue)) {
+        engine->refreshActiveCueRuntime(&cue);
+      }
+    }
+  }
+
+  // Push the app's current active cue into each deck engine's owned snapshot.
+  // The engine never keeps pointers into Deck::cues (import reallocates,
+  // delete shifts), so after any project edit the snapshot must be refreshed
+  // for live-editable fields (fades, still duration) to stay current.
+  // Triggered from markProjectDirty via engineCueSyncPending_ and drained
+  // once per update() tick.
+  void syncEngineCueSnapshots() {
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      Deck& deck = project_.decks[deckIndex];
+      if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+        engine->syncActiveCueSnapshot(deck.cues[deck.activeIndex]);
+        // Trim is not just data on the cue -- the transport runs on its own
+        // copy. Done here rather than in the trim setters so that EVERY way of
+        // moving a point (inspector, keyboard, timeline, remote) reaches the
+        // engine, instead of the three that happened to remember to ask.
+        engine->applyActiveCueTrimEdit(deck.cues[deck.activeIndex]);
+      }
+    }
+  }
+
+  bool isAnyOutputFullscreen() const {
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      // A disabled output can still be sitting on a stale fullscreen window
+      // (New Show / relaunch disarms outputs without exiting the window). Don't
+      // let that latch the fullscreen button — reflect only live outputs, so a
+      // single click re-arms fullscreen instead of needing an off/on toggle.
+      if (!project_.outputs[i].enabled) {
+        continue;
+      }
+      const OutputRuntime* runtime = runtimeForOutput(i);
+      if (runtime && runtime->outputWindow) {
+        SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+        if (flags & SDL_WINDOW_FULLSCREEN) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  Cue* activeCueMutable() {
+    Deck& deck = focusedDeckMutable();
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.activeIndex];
+  }
+
+  // TRANSLATE EXACTLY ONCE.
+  //
+  // drawTextSafe and drawCenteredTextSafe translate, measure, fit a font and
+  // ellipsize -- and then hand the finished string here to be rasterised. If
+  // this translated as well, every label would go through the catalogue twice.
+  //
+  // For a catalogue that is harmless (the German is not itself a key), which is
+  // exactly why it was not noticed: German looked perfect. For a cypher it is
+  // fatal, and each one lies differently. ROT13 and Atbash are their own
+  // inverse, so the interface came out in ENGLISH while the setting said ROT13.
+  // Morse re-encoded its own dots and dashes into nothing and its spaces into
+  // slashes, so the toolbar read "/ /". 1337 is not an involution and so looked
+  // fine, which is how this survived being looked at.
+  //
+  // Hence two entry points: drawText for callers with a source string,
+  // drawTextRaw for callers holding a string that has already been through.
+  // ── THE LABEL CACHE'S TYPES ─────────────────────────────────────────────
+  // Defined here rather than beside the cache itself because the functions
+  // below name them in their return types, and a nested type must already be
+  // declared for that. The map and the counters live next to textMeasureCache_
+  // in main.cpp, which is where anyone looking for them will look.
+  //
+  // The key carries the RENDERER because a texture belongs to the one that
+  // made it, and the colour because the same string is drawn in several inks.
+  struct TextTextureKey {
+    SDL_Renderer* renderer = nullptr;
+    TTF_Font* font = nullptr;
+    std::string text;
+    std::uint32_t rgba = 0;
+    bool operator==(const TextTextureKey& o) const {
+      return renderer == o.renderer && font == o.font && rgba == o.rgba &&
+             text == o.text;
+    }
+  };
+  struct TextTextureKeyHash {
+    std::size_t operator()(const TextTextureKey& k) const {
+      std::size_t h = std::hash<const void*>{}(static_cast<const void*>(k.renderer));
+      h = h * 1000003u ^ std::hash<const void*>{}(static_cast<const void*>(k.font));
+      h = h * 1000003u ^ std::hash<std::uint32_t>{}(k.rgba);
+      return h * 1000003u ^ std::hash<std::string>{}(k.text);
+    }
+  };
+  struct TextTextureEntry {
+    SDL_Texture* texture = nullptr;
+    int w = 0;
+    int h = 0;
+    // Rows the shaper added ABOVE the font's line box, for a glyph from a
+    // taller fallback face. Drawn that much higher so the baseline stays where
+    // every other label's is.
+    int top = 0;
+    // The font's own line height when it was made. Anything that SCALES a
+    // label (lower thirds, text cues, captions) scales by this, not by the
+    // texture's height: a label that borrowed a taller fallback face would
+    // otherwise be drawn smaller than its Latin neighbours, and off their
+    // baseline.
+    int lineH = 0;
+    std::size_t bytes = 0;
+    std::uint64_t lastUsed = 0;
+  };
+
+  // Drop everything the cache holds for one renderer, or for all of them when
+  // given nullptr. MUST run before the renderer is destroyed and before any
+  // TTF_CloseFont: the allocator hands the same addresses back, and a stale
+  // entry keyed on a recycled pointer draws the previous font's glyphs.
+  void purgeTextTextureCache(SDL_Renderer* renderer) {
+    for (auto it = textTextureCache_.begin(); it != textTextureCache_.end();) {
+      if (renderer && it->first.renderer != renderer) {
+        ++it;
+        continue;
+      }
+      if (it->second.texture) SDL_DestroyTexture(it->second.texture);
+      textTextureBytes_ -= std::min(textTextureBytes_, it->second.bytes);
+      it = textTextureCache_.erase(it);
+    }
+    if (!renderer) {
+      textTextureBytes_ = 0;
+    }
+  }
+
+  // Evict the least recently used quarter. Called only when a ceiling is hit,
+  // so the steady state — a screenful of labels that are all drawn every
+  // frame — never evicts anything at all.
+  void trimTextTextureCache() {
+    if (textTextureCache_.size() <= kTextTextureMaxEntries &&
+        textTextureBytes_ <= kTextTextureMaxBytes) {
+      return;
+    }
+    std::vector<std::uint64_t> ages;
+    ages.reserve(textTextureCache_.size());
+    for (const auto& entry : textTextureCache_) {
+      ages.push_back(entry.second.lastUsed);
+    }
+    const std::size_t drop = std::max<std::size_t>(1, ages.size() / 4);
+    std::nth_element(ages.begin(), ages.begin() + (drop - 1), ages.end());
+    const std::uint64_t cutoff = ages[drop - 1];
+    for (auto it = textTextureCache_.begin(); it != textTextureCache_.end();) {
+      if (it->second.lastUsed <= cutoff) {
+        if (it->second.texture) SDL_DestroyTexture(it->second.texture);
+        textTextureBytes_ -= std::min(textTextureBytes_, it->second.bytes);
+        it = textTextureCache_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  // The rasterised label, made once and kept. Returns nullptr only when the
+  // text genuinely cannot be drawn, which is the case issue #6 was made of.
+  const TextTextureEntry* cachedTextTexture(SDL_Renderer* renderer, TTF_Font* font,
+                                            const std::string& text, SDL_Color color) {
+    const std::uint32_t rgba = (static_cast<std::uint32_t>(color.r) << 24) |
+                               (static_cast<std::uint32_t>(color.g) << 16) |
+                               (static_cast<std::uint32_t>(color.b) << 8) |
+                               static_cast<std::uint32_t>(color.a);
+    TextTextureKey key{renderer, font, text, rgba};
+    const std::uint64_t tick = ++textTextureTick_;
+    auto found = textTextureCache_.find(key);
+    if (found != textTextureCache_.end()) {
+      found->second.lastUsed = tick;
+      ++textTextureHits_;
+      return &found->second;
+    }
+    ++textTextureMisses_;
+    // Through the shaper: bidi order, fallback faces, one baseline. A plain
+    // left-to-right label the font covers is still one SDL_ttf call.
+    int baseline = TTF_GetFontAscent(font);
+    SDL_Surface* surface = deckboy::render::shaping::renderText(font, text.c_str(), text.size(),
+                                                                color, &baseline);
+    if (!surface) {
+      ++textTextureFailures_;
+      return nullptr;
+    }
+    SDL_Texture* texture = deckboyCreateTextureFromSurface(renderer, surface);
+    const int w = surface->w;
+    const int h = surface->h;
+    SDL_DestroySurface(surface);
+    if (!texture) {
+      // deckboyCreateTextureFromSurface has already retried in RGBA32 and
+      // recorded the failure. Count it here too so --font-check can report a
+      // number rather than an impression.
+      ++textTextureFailures_;
+      return nullptr;
+    }
+    TextTextureEntry entry;
+    entry.texture = texture;
+    entry.w = w;
+    entry.h = h;
+    entry.top = std::max(0, baseline - TTF_GetFontAscent(font));
+    entry.lineH = std::max(1, TTF_GetFontHeight(font));
+    entry.bytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+    entry.lastUsed = tick;
+    textTextureBytes_ += entry.bytes;
+    textTextureCache_.emplace(key, entry);
+    // Trim AFTER inserting, and never the entry just made — its lastUsed is
+    // the newest tick, so it cannot be at or below the cutoff. Erasing from an
+    // unordered_map invalidates only the references it erased, but the lookup
+    // is repeated rather than reasoned about.
+    trimTextTextureCache();
+    found = textTextureCache_.find(key);
+    return found == textTextureCache_.end() ? nullptr : &found->second;
+  }
+
+  // Where a cached label lands when its font's line is drawn `lineH` tall with
+  // its top at (x, y): taller than lineH, and nudged up, by whatever a taller
+  // fallback face added -- so a Persian title and a Latin one at the same size
+  // are the same size, on the same baseline.
+  static SDL_FRect scaledLabelRect(const TextTextureEntry& t, double x, double y, double lineH) {
+    const double ref = t.lineH > 0 ? t.lineH : std::max(1, t.h);
+    const double k = lineH / ref;
+    return SDL_FRect {static_cast<float>(x), static_cast<float>(y - t.top * k),
+                      static_cast<float>(t.w * k), static_cast<float>(t.h * k)};
+  }
+  static double scaledLabelWidth(const TextTextureEntry& t, double lineH) {
+    const double ref = t.lineH > 0 ? t.lineH : std::max(1, t.h);
+    return t.w * lineH / ref;
+  }
+
+  // Every cached label texture, destroyed. MUST run before the renderer that
+  // made them is destroyed: SDL frees a renderer's textures with it, so
+  // destroying them afterwards would free them twice.
+  void clearTextTextureCache() {
+    for (auto& entry : textTextureCache_) {
+      if (entry.second.texture) SDL_DestroyTexture(entry.second.texture);
+    }
+    textTextureCache_.clear();
+    textTextureBytes_ = 0;
+  }
+
+  void drawTextRaw(SDL_Renderer* renderer, TTF_Font* font, const std::string& text, SDL_Color color, int x, int y) {
+    if (!font || text.empty()) {
+      return;
+    }
+    // Held to the floor against what is ACTUALLY behind it -- see
+    // paletteReadableInk. Every label in the control window comes through
+    // here, so this is the one place a theme's contrast is enforced.
+    SDL_Color surface {};
+    const bool haveSurface = Primitives::surfaceUnder(
+      renderer, SDL_Rect {x, y, measuredWidthIn(font, text), TTF_GetFontHeight(font)}, &surface);
+    if (haveSurface) {
+      const SDL_Color readable = paletteReadableInk(color, surface);
+      if (readable.r != color.r || readable.g != color.g || readable.b != color.b) {
+        ++textInkCorrections_;
+        if (contrastCheckActive_ && contrastCheckLabels_.size() < 64) {
+          contrastCheckLabels_.insert(text);
+        }
+        color = readable;
+      }
+    }
+    const TextTextureEntry* entry = cachedTextTexture(renderer, font, text, color);
+    if (!entry) {
+      return;
+    }
+    SDL_Rect dst {x, y - entry->top, entry->w, entry->h};
+    SDL_RenderTexture(renderer, entry->texture, nullptr, &dst);
+    noteLiveTextLabel(renderer, dst, text, color, haveSurface ? &surface : nullptr);
+  }
+
+  // The translating entry point, for the ~45 sites that draw a source string
+  // at a point rather than into a rect.
+  void drawText(SDL_Renderer* renderer, TTF_Font* font, const std::string& textIn,
+                SDL_Color color, int x, int y) {
+    if (!font || textIn.empty()) {
+      return;
+    }
+    if (deckboy::core::i18n::passthrough()) {
+      drawTextRaw(renderer, font, textIn, color, x, y);
+      return;
+    }
+    drawTextRaw(renderer, font, shownText(textIn), color, x, y);
+  }
+
+
+  // A SMALLER WORD BEATS HALF A WORD.
+  //
+  // Every label in the app is centred through here, and when one did not fit it
+  // was cut: BLACKOUT became "BLA...", SETTINGS "SET...", a cue named "Browser
+  // Cue" became "BRO...". Those are the labels a bottom bar exists to carry, and
+  // an ellipsis hides exactly the part that distinguishes one button from its
+  // neighbour.
+  //
+  // The bottom bar already tries a second row first (see placeGroupButtons),
+  // which is the better answer when there is height for it. This is what
+  // happens when there is not: step the type down until the whole word fits,
+  // and only ellipsize if even the floor is too wide. The floor keeps it
+  // legible -- past that, a word rendered too small to read is no better than a
+  // truncated one.
+  //
+  // Sizing is restored before returning, because these fonts are shared by
+  // every other caller.
+  // How wide this string is in this font -- asked once, then remembered.
+  //
+  // A measurement is a full shape of the string, which is the expensive half
+  // of drawing it, and the layout asks for the same widths every frame.
+  int measuredWidthIn(TTF_Font* font, const std::string& text) const {
+    if (!font || text.empty()) {
+      return 0;
+    }
+    TextMeasureKey key{font, text};
+    const auto at = textMeasureCache_.find(key);
+    if (at != textMeasureCache_.end()) {
+      return at->second;
+    }
+    int w = 0;
+    if (!deckboy::render::shaping::textSize(font, text.c_str(), text.size(), &w, nullptr)) {
+      w = 0;
+    }
+    // Bounded. Timecodes and counters mint a new string every frame, so an
+    // unbounded cache here is a leak with extra steps.
+    if (textMeasureCache_.size() > 8192) {
+      textMeasureCache_.clear();
+    }
+    textMeasureCache_.emplace(std::move(key), w);
+    return w;
+  }
+
+  // The same face, smaller. Opened once and kept; a failed open is cached as
+  // null so it is not retried every frame.
+  TTF_Font* fontAtSize(TTF_Font* base, int size) const {
+    const auto at = fontLadders_.find(base);
+    if (at == fontLadders_.end()) {
+      return nullptr;
+    }
+    FontLadder& ladder = at->second;
+    const auto have = ladder.bySize.find(size);
+    if (have != ladder.bySize.end()) {
+      return have->second;
+    }
+    TTF_Font* alt = TTF_OpenFont(ladder.path.c_str(), static_cast<float>(size));
+    if (alt) {
+      // A smaller label must draw like its full-size sibling: same kerning
+      // off, same fallback faces for what the face cannot draw.
+      TTF_SetFontKerning(alt, false);
+      deckboy::render::shaping::registerFace(alt, ladder.path, static_cast<float>(size));
+    }
+    ladder.bySize.emplace(size, alt);
+    return alt;
+  }
+
+  // ── A LABEL THAT WILL NOT FIT MUST NOT COST THE WHOLE FRAME ─────────────
+  //
+  // This shrank the SHARED font with TTF_SetFontSize and put it back
+  // afterwards. Both calls flush that face's glyph cache, so a single
+  // overflowing label made every other label in the frame rasterise again
+  // from its outlines -- and the labels are mostly in the playlist, so the
+  // cost grew with the number of cues. Measured on a 16-cue show at a 1.5x
+  // desktop: 225 resizes a frame, 24fps against 60 with one cue.
+  //
+  // A shrunken label now picks a DIFFERENT font object at that size. Same
+  // pixels on screen; nothing anybody else is drawing with is touched.
+  TTF_Font* fontThatFits(TTF_Font* font, const std::string& text, int maxWidth) const {
+    if (!font || text.empty() || maxWidth <= 0) {
+      return font;
+    }
+    if (measuredWidthIn(font, text) <= maxWidth) {
+      return font;   // already fits: the common case, and it costs one lookup
+    }
+    const auto at = fontLadders_.find(font);
+    if (at == fontLadders_.end()) {
+      return font;
+    }
+    // Not below 78% of the intended size, and never below 9px: a label nobody
+    // can read is not a label that fits.
+    const int original = at->second.baseSize;
+    if (original <= 0) {
+      return font;
+    }
+    const int floorSize = std::max(9, (original * 78) / 100);
+    for (int size = original - 1; size >= floorSize; --size) {
+      TTF_Font* alt = fontAtSize(font, size);
+      if (!alt) {
+        break;
+      }
+      if (measuredWidthIn(alt, text) <= maxWidth) {
+        return alt;
+      }
+    }
+    return font;
+  }
+
+  // ---------------------------------------------------------------------------
+  // DECKBOY'S OWN POINTER.
+  //
+  // Miami, as asked for: hot pink at the tip running to cyan at the tail. But a
+  // VJ pointer has two jobs beyond looking right, and they set every choice
+  // here:
+  //
+  // VISIBILITY. The desk is dark most of the time and blinding white in the
+  // dialogs, and a cue list can be any colour a theme likes. So the arrow is
+  // drawn with a hard near-black outline AND a light inner edge: the outline
+  // carries it on the light backgrounds, the inner edge on the dark ones, and
+  // the saturated body reads against both. A single-colour cursor always loses
+  // one of those cases.
+  //
+  // PERFORMANCE. Built once and handed to SDL, which composites it in the
+  // window server -- not drawn by us, not touched per frame. It is rebuilt only
+  // when the UI scale changes, because the cursor has to grow with the rest of
+  // the furniture or it becomes a speck on a 4K desk.
+  // ---------------------------------------------------------------------------
+
+  // ── THE POINTER OVER THE PICTURE ──────────────────────────────────────────
+  //
+  // See the members in main.cpp for why this is tracked rather than left to
+  // SDL: cursor visibility is per-process, so it must be restored reliably.
+
+  void notePointerActivity(Uint32 windowId) {
+    lastPointerMoveMs_ = SDL_GetTicks();
+    lastPointerWindowId_ = windowId;
+    if (pointerHiddenForIdle_) {
+      SDL_ShowCursor();
+      pointerHiddenForIdle_ = false;
+    }
+  }
+
+  // Is the pointer somewhere a cursor would be ON the picture? An output
+  // window is entirely picture; in the control window it is the program
+  // monitor only, so the playlist and the buttons keep their pointer.
+  bool pointerIsOverPicture() const {
+    if (lastPointerWindowId_ == 0) return false;
+    if (outputIndexForWindowId(lastPointerWindowId_).has_value()) {
+      return true;
+    }
+    if (!controlWindow_ || lastPointerWindowId_ != SDL_GetWindowID(controlWindow_)) {
+      return false;
+    }
+    return programAreaRect_.w > 0 && programAreaRect_.h > 0 &&
+           pointInRect(mouseX_, mouseY_, programAreaRect_);
+  }
+
+  void servicePointerIdle() {
+    // Three seconds. A pointer that vanishes the instant you stop moving
+    // feels broken, and holding still ON the picture is exactly what an
+    // operator does while looking at it.
+    constexpr Uint64 kHideAfterMs = 3000;
+    if (lastPointerMoveMs_ == 0) return;
+
+    if (!pointerIsOverPicture()) {
+      // Moved off the picture without a motion event reaching us -- a window
+      // change, a drag that ended elsewhere. Bring it back rather than
+      // leaving it hidden over the chrome.
+      if (pointerHiddenForIdle_) {
+        SDL_ShowCursor();
+        pointerHiddenForIdle_ = false;
+      }
+      return;
+    }
+    if (pointerHiddenForIdle_) return;
+    // Never over a modal, a menu or a dropdown: those are things being
+    // pointed AT, and the picture behind them is not what the operator is
+    // looking at.
+    if (settingsOpen_ || contextMenuOpen_ || dropdown_.open || codeEditorOpen()) {
+      return;
+    }
+    if (SDL_GetTicks() - lastPointerMoveMs_ >= kHideAfterMs) {
+      SDL_HideCursor();
+      pointerHiddenForIdle_ = true;
+    }
+  }
+
+  void refreshMiamiCursor() {
+    if (!project_.miamiCursorEnabled) {
+      if (miamiCursor_) {
+        SDL_SetCursor(SDL_GetDefaultCursor());
+        SDL_DestroyCursor(miamiCursor_);
+        miamiCursor_ = nullptr;
+        miamiCursorScale_ = 0;
+      }
+      return;
+    }
+
+    // 12x19 cells. The classic arrow, because a cue deck is not the place to
+    // make someone hunt for the hotspot.
+    static const char* kArrow[] = {
+      "o...........",
+      "oo..........",
+      "oho.........",
+      "ohfo........",
+      "ohffo.......",
+      "ohfffo......",
+      "ohffffo.....",
+      "ohfffffo....",
+      "ohffffffo...",
+      "ohfffffffo..",
+      "ohffffffffo.",
+      "ohfffffffffo",
+      "ohffffffooooo",
+      "ohfffoffo...",
+      "ohffo.offo..",
+      "ohfo..offo..",
+      "oho....offo.",
+      "oo.....offo.",
+      "o.......ooo.",
+    };
+    const int rows = static_cast<int>(sizeof(kArrow) / sizeof(kArrow[0]));
+    int cols = 0;
+    for (int r = 0; r < rows; ++r) {
+      cols = std::max(cols, static_cast<int>(std::strlen(kArrow[r])));
+    }
+
+    // Whole-pixel scaling only: a fractionally scaled arrow has soft edges, and
+    // a soft edge is the thing that makes a pointer hard to find.
+    const int scale = std::max(1, uiScaled(20) / rows);
+    if (miamiCursor_ && miamiCursorScale_ == scale) {
+      return;   // nothing changed; do not churn the window server
+    }
+
+    SDL_Surface* surface =
+      SDL_CreateSurface(cols * scale, rows * scale, SDL_PIXELFORMAT_RGBA32);
+    if (!surface) {
+      return;
+    }
+    SDL_ClearSurface(surface, 0.0f, 0.0f, 0.0f, 0.0f);
+
+    const SDL_Color outline {14, 10, 24, 255};      // near-black, for light backdrops
+    const SDL_Color highlight {255, 255, 255, 235}; // inner edge, for dark ones
+    auto bodyAt = [&](int row) {
+      // Tip to tail: #FF2E88 -> #22E3E8. The gradient runs down the arrow so
+      // the tip -- the part that matters -- is the most saturated.
+      const double t = rows > 1 ? static_cast<double>(row) / (rows - 1) : 0.0;
+      auto mix = [t](int a, int b) {
+        return static_cast<Uint8>(std::lround(a + (b - a) * t));
+      };
+      return SDL_Color {mix(255, 34), mix(46, 227), mix(136, 232), 255};
+    };
+
+    for (int r = 0; r < rows; ++r) {
+      const SDL_Color body = bodyAt(r);
+      const int len = static_cast<int>(std::strlen(kArrow[r]));
+      for (int c = 0; c < len; ++c) {
+        SDL_Color ink;
+        switch (kArrow[r][c]) {
+          case 'o': ink = outline;   break;
+          case 'h': ink = highlight; break;
+          case 'f': ink = body;      break;
+          default:  continue;
+        }
+        SDL_Rect cell {c * scale, r * scale, scale, scale};
+        SDL_FillSurfaceRect(
+          surface, &cell,
+          SDL_MapSurfaceRGBA(surface, ink.r, ink.g, ink.b, ink.a));
+      }
+    }
+
+    // Hotspot at the tip, which is cell (0,0) whatever the scale.
+    SDL_Cursor* built = SDL_CreateColorCursor(surface, 0, 0);
+    SDL_DestroySurface(surface);
+    if (!built) {
+      return;
+    }
+    SDL_SetCursor(built);
+    if (miamiCursor_) {
+      SDL_DestroyCursor(miamiCursor_);   // only after the new one is in use
+    }
+    miamiCursor_ = built;
+    miamiCursorScale_ = scale;
+  }
+
+  // WHAT THE FACE SAYS WHEN YOU SWITCH TO A LANGUAGE. A catalogue carries its
+  // own line under the key "@hello" -- a local saying, not a translation, so a
+  // translator can change it without touching code. A cypher has no catalogue:
+  // its line is English and the cypher scrambles it like everything else. A
+  // language with neither says its usual greeting.
+  static std::string languageGreeting(const std::string& code) {
+    static const std::pair<const char*, const char*> kCypherLines[] = {
+      {"cy-leet", "w00t! all ur cues r belong 2 us"},
+      {"cy-alienese2", "Greetings, primitive. Your \"slideshow\" amuses us."},
+      {"cy-rot13", "Nothing to see here. Probably."},
+      {"cy-atbash", "Ancient cypher, modern video desk. Respect."},
+      {"cy-morse", "SOS. Kidding. The show is fine."},
+      {"cy-mirror", "Read everything right to left. Yes, everything."},
+    };
+    for (const auto& [cypher, line] : kCypherLines) {
+      if (code == cypher) return line;
+    }
+    if (code == "en" || code.empty()) return "English again. Training wheels on.";
+    const std::string own = deckboy::core::i18n::translate("@hello");
+    if (!own.empty() && own != "@hello") return own;
+    return deckboy::core::i18n::translate("Hi! I am Deckboy.");
+  }
+
+  // THE INTERFACE LANGUAGE, set the one way: from the settings list and from
+  // LANGUAGE on the control port alike, so the two cannot drift apart.
+  bool applyInterfaceLanguage(const std::string& code, std::string& error) {
+    if (!deckboy::core::i18n::setLanguage(code, Paths::dataDir(), error)) {
+      return false;
+    }
+    project_.language = (code == "en") ? std::string() : code;
+    // The new language may need a face the old one did not, and orders the
+    // CJK fallback faces differently, so the fonts are reloaded rather than
+    // left pointing at the old ones.
+    applyUiScale();
+    markProjectDirty();
+    mascotGreeting_ = languageGreeting(code);
+    mascotGreetUntilMs_ = SDL_GetTicks() + 6000;
+    if (deckboy::core::i18n::activeFontMissing()) {
+      triggerToast(deckboy::core::i18n::activeName() + ": no font on this machine can draw it",
+                   ToastKind::Warning, kToastReadableMs);
+    } else {
+      triggerToast("language: " + deckboy::core::i18n::activeName());
+    }
+    return true;
+  }
+
+  // HOW WIDE THAT LABEL WILL ACTUALLY BE.
+  //
+  // Anything that sizes a box to its own text has to measure the string that
+  // will be DRAWN, and since the interface learned other languages that is no
+  // longer the literal in the source. A menu measured in English and drawn in
+  // German is a menu with its own items cut off -- which reads as a layout
+  // bug and is really a measurement taken in the wrong language.
+  // TTF_GetStringSize's contract for a string AS THE DESK WILL SHOW IT: the
+  // drawing calls translate what they are given, so a box sized to the
+  // English word overflows in every other language -- OFF fitted, its Arabic
+  // did not. Measures through the shaper, so fallback faces and direction
+  // are counted too.
+  // WHAT THE DESK SHOWS FOR `source`: its translation, and in a right-to-left
+  // interface, a right-to-left paragraph.
+  //
+  // The bidi algorithm takes a paragraph's direction from its first letter.
+  // That is right for text that arrives on its own -- a cue name, a lower
+  // third -- and wrong for a label of a right-to-left interface that happens
+  // to begin with a Latin word: "DECKLINK: <on>" came out in English order,
+  // so an Arabic reader met the value before the name. A RIGHT-TO-LEFT MARK in
+  // front gives the paragraph its direction the way plain text does (UAX #9,
+  // P2 and P3); it has no width and draws nothing. Only a label with
+  // right-to-left letters in it gets one -- an English fallback keeps its own
+  // order, brackets and all -- and only one that would have read wrong.
+  std::string shownText(const std::string& source) const {
+    if (deckboy::core::i18n::passthrough()) return source;
+    std::string shown = deckboy::core::i18n::translate(source);
+    if (deckboy::core::i18n::activeIsRtl() && deckboy::core::bidi::needsBidi(shown) &&
+        !deckboy::core::bidi::firstStrongIsRightToLeft(shown)) {
+      shown.insert(0, "\xE2\x80\x8F");  // U+200F RIGHT-TO-LEFT MARK
+    }
+    return shown;
+  }
+
+  bool textSizeShown(TTF_Font* font, const char* text, std::size_t length, int* w,
+                     int* h) const {
+    if (!font || !text) {
+      if (w) *w = 0;
+      if (h) *h = 0;
+      return false;
+    }
+    const std::string shown = shownText(length ? std::string(text, length) : std::string(text));
+    return deckboy::render::shaping::textSize(font, shown.c_str(), shown.size(), w, h);
+  }
+
+  int measuredTextWidth(TTF_Font* font, const std::string& text) const {
+    if (!font || text.empty()) return 0;
+    return measuredWidthIn(font, shownText(text));
+  }
+
+  // `localise` false draws the text as it is: for what is the SHOW's rather
+  // than the desk's -- a presenter's notes, the prompter's script -- which no
+  // catalogue may reword and no cypher may scramble on the screen somebody
+  // is reading from.
+  void drawTextSafe(SDL_Renderer* renderer, TTF_Font* font, const SDL_Rect& rect,
+                    const std::string& textIn, SDL_Color color, bool localise = true) {
+    if (!font || textIn.empty() || rect.w <= 0 || rect.h <= 0) {
+      return;
+    }
+    // THE LANGUAGE DOOR. Every drawn string in the program comes through
+    // here or through drawCenteredTextSafe below, so the interface is
+    // localised in two places instead of thirteen hundred. English is a
+    // pass-through with an early-out, so the default costs one bool test.
+    const std::string& text =
+      (!localise || deckboy::core::i18n::passthrough()) ? textIn
+                                                        : (localisedScratch_ = shownText(textIn));
+    SDL_Rect safe = safeTextRect(rect);
+    if (safe.w <= 0 || safe.h <= 0) {
+      return;
+    }
+    // Panels now paint the caller's rect verbatim, so the label's usable width
+    // is simply the inset rect — no grid-snapped right edge to compensate for.
+    font = fontThatFits(font, text, safe.w);
+    // fontThatFits has just measured this string in this font, so asking again
+    // is a cache hit -- and when it fits there is nothing for the ellipsizer to
+    // do. That was a full shape of every label in the interface, every frame,
+    // to be told each time that it was already short enough.
+    std::string clipped = (measuredWidthIn(font, text) <= safe.w)
+                            ? text
+                            : ellipsizeToPixelWidth(font, text, safe.w);
+    // NEVER NOTHING. An empty ellipsis means the measuring went wrong, not that
+    // the label has no room: draw it whole and let the clip trim it. Issue #7
+    // is a machine where every label vanished while every image drew.
+    if (clipped.empty()) {
+      clipped = text;
+    }
+    int textH = TTF_GetFontHeight(font);
+    if (textH <= 0) {
+      textH = std::max(1, rect.h);   // a font with no height still has letters
+    }
+    // Always vertically center on the rect's midline. When the text is
+    // taller than the rect (tight h<=18 rects drawn with fontBase_, or
+    // retina-scaled fonts), this yields symmetric overflow above and
+    // below instead of top-aligning inside a clip that chops descenders.
+    int textY = rect.y + (rect.h - textH) / 2;
+    bool hadClip = SDL_RenderClipEnabled(renderer) == true;
+    SDL_Rect previousClip {};
+    if (hadClip) {
+      SDL_GetRenderClipRect(renderer, &previousClip);
+    }
+    int clipTop = std::min(rect.y, textY);
+    int clipBottom = std::max(rect.y + rect.h, textY + textH);
+    SDL_Rect textClip { rect.x, clipTop, rect.w, std::max(0, clipBottom - clipTop) };
+    if (hadClip) {
+      SDL_Rect intersect {};
+      if (!SDL_GetRectIntersection(&previousClip, &textClip, &intersect)) {
+        return;
+      }
+      textClip = intersect;
+    }
+    if (!textClipDisabled_) SDL_SetRenderClipRect(renderer, &textClip);
+    // ALIGNMENT FOLLOWS THE LAYOUT. Right-aligning every label in a
+    // right-to-left language sounds right and is not, while the layout itself
+    // is still left to right: a row with a name at its left and a value at its
+    // right put both against the right edge, one on top of the other (the
+    // timeline's OUTPUT and OFF on the first Arabic desk). The ORDER inside each
+    // label is the bidi algorithm's, and that is what makes it read correctly.
+    const int startX = safe.x;
+    drawTextRaw(renderer, font, clipped, color, startX, textY);
+    if (!textClipDisabled_) SDL_SetRenderClipRect(renderer, hadClip ? &previousClip : nullptr);
+  }
+
+  void drawCenteredTextSafe(SDL_Renderer* renderer, TTF_Font* font, const SDL_Rect& rect,
+                            const std::string& textIn, SDL_Color color,
+                            bool localise = true) {
+    if (!font || textIn.empty() || rect.w <= 0 || rect.h <= 0) {
+      return;
+    }
+    // See drawTextSafe: the other half of the language door.
+    //
+    // localise=false is the escape hatch, and it exists for exactly one thing:
+    // the button that gets you back to English. A label that the language
+    // system is allowed to touch cannot be the thing you reach for when the
+    // language system is why you are lost.
+    const std::string& text =
+      (!localise || deckboy::core::i18n::passthrough())
+        ? textIn
+        : (localisedScratch_ = shownText(textIn));
+    SDL_Rect safe = safeTextRect(rect);
+    if (safe.w <= 0 || safe.h <= 0) {
+      return;
+    }
+    font = fontThatFits(font, text, safe.w);
+    // fontThatFits has just measured this string in this font, so asking again
+    // is a cache hit -- and when it fits there is nothing for the ellipsizer to
+    // do. That was a full shape of every label in the interface, every frame,
+    // to be told each time that it was already short enough.
+    std::string clipped = (measuredWidthIn(font, text) <= safe.w)
+                            ? text
+                            : ellipsizeToPixelWidth(font, text, safe.w);
+    // NEVER NOTHING. An empty ellipsis means the measuring went wrong, not that
+    // the label has no room: draw it whole and let the clip trim it. Issue #7
+    // is a machine where every label vanished while every image drew.
+    if (clipped.empty()) {
+      clipped = text;
+    }
+    const int textW = measuredWidthIn(font, clipped);
+    int textH = TTF_GetFontHeight(font);
+    if (textH <= 0) {
+      textH = std::max(1, rect.h);   // a font with no height still has letters
+    }
+    // Center X within the safe (inset) width; center Y on the original
+    // rect's midline (not the snapped rect) so text with textH > rect.h
+    // overflows symmetrically rather than top-aligning into a clip.
+    int textX = safe.x + (safe.w - textW) / 2;
+    int textY = rect.y + (rect.h - textH) / 2;
+    bool hadClip = SDL_RenderClipEnabled(renderer) == true;
+    SDL_Rect previousClip {};
+    if (hadClip) {
+      SDL_GetRenderClipRect(renderer, &previousClip);
+    }
+    int clipTop = std::min(rect.y, textY);
+    int clipBottom = std::max(rect.y + rect.h, textY + textH);
+    SDL_Rect textClip { rect.x, clipTop, rect.w, std::max(0, clipBottom - clipTop) };
+    if (hadClip) {
+      SDL_Rect intersect {};
+      if (!SDL_GetRectIntersection(&previousClip, &textClip, &intersect)) {
+        return;
+      }
+      textClip = intersect;
+    }
+    if (!textClipDisabled_) SDL_SetRenderClipRect(renderer, &textClip);
+    drawTextRaw(renderer, font, clipped, color, textX, textY);
+    if (!textClipDisabled_) SDL_SetRenderClipRect(renderer, hadClip ? &previousClip : nullptr);
+  }
+
+  // Centre a label in its container. Kept as a distinct name because ~60 call
+  // sites read better with the argument order, but it is no longer a separate
+  // behaviour: it used to centre on snapRectToGrid(rect) with no ellipsizing
+  // and no clip, so a button labelled with this sat up to a grid unit away from
+  // an identical neighbour labelled with drawCenteredTextSafe, and long labels
+  // spilled out of their pill instead of truncating. Both are now impossible.
+  void drawCenteredText(SDL_Renderer* renderer, TTF_Font* font, const std::string& text, SDL_Color color, const SDL_Rect& rect) {
+    drawCenteredTextSafe(renderer, font, rect, text, color);
+  }
+
+  void drawCenteredTextUnclipped(SDL_Renderer* renderer, TTF_Font* font, const std::string& textIn, SDL_Color color, const SDL_Rect& rect) {
+    // Nothing calls this today, but it is a text renderer and the next thing
+    // that uses it must not be the one string left in English.
+    const std::string& text =
+      deckboy::core::i18n::passthrough() ? textIn : (localisedScratch_ = shownText(textIn));
+    if (!font || text.empty()) {
+      return;
+    }
+    const TextTextureEntry* entry = cachedTextTexture(renderer, font, text, color);
+    if (!entry) {
+      return;
+    }
+    const int lineH = entry->lineH > 0 ? entry->lineH : entry->h;
+    SDL_Rect dst {
+      rect.x + (rect.w - entry->w) / 2,
+      rect.y + (rect.h - lineH) / 2 - entry->top,
+      entry->w,
+      entry->h
+    };
+    SDL_RenderTexture(renderer, entry->texture, nullptr, &dst);
+  }
+
+  // -----------------------------------------------------------------------
+  // Shared inspector draw helpers (used by both docked and floating paths)
+  // -----------------------------------------------------------------------

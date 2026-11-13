@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deckboy | Free Video Cue Software for Theatre, Events and Broadcast</title>
+    <meta name="description" content="Free, open-source video cue software for Windows, macOS and Linux. Clips, slides and live sources in one running order, with multiple outputs and recording.">
+    <link rel="canonical" href="https://utopian-academy.github.io/Deckboy/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Deckboy">
+    <meta property="og:title" content="Deckboy - Open-Source Live Video Playback">
+    <meta property="og:description" content="Everything is a cue — a clip, a slide, a camera, a window, a web page, an NDI source, an SRT feed, a test card, all on one list with one transport. Out over NDI, SRT, SDI and ST 2110, recorded as it plays. Free, and nothing phones home.">
+    <meta property="og:url" content="https://utopian-academy.github.io/Deckboy/">
+    <meta property="og:image" content="https://utopian-academy.github.io/Deckboy/images/social-card.png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="The Deckboy desk with built-in patterns on the cue list and Swirl on the programme output">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Deckboy - Open-Source Live Video Playback">
+    <meta name="twitter:description" content="Everything is a cue — clips, slides, a live camera, a window, a web page, NDI, SRT, a test card, all on one list with one transport. Out over NDI, SRT, SDI and ST 2110, recorded as it plays. Free, and nothing phones home.">
+    <meta name="twitter:image" content="https://utopian-academy.github.io/Deckboy/images/social-card.png">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Deckboy",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Video cue playback and show control for theatre, live events and broadcast",
+      "operatingSystem": "Windows 10, Windows 11, macOS 12, Linux",
+      "description": "Open-source cue-based media playback and show control for live video. Clips, stills, slide decks, cameras, captured windows, web pages, NDI sources, SRT and SDI inputs, test patterns and generated sources are all cues on one list, sharing one transport, one set of transitions and one effect rack. SRT, RTMP, NDI, DeckLink and SMPTE ST 2110 output, driven from Stream Deck, Bitfocus Companion, OSC, MIDI or LTC timecode.",
+      "url": "https://utopian-academy.github.io/Deckboy/",
+      "sameAs": ["https://github.com/Utopian-Academy/Deckboy"],
+      "softwareVersion": "0.99.427",
+      "downloadUrl": "https://github.com/Utopian-Academy/Deckboy/releases/latest",
+      "softwareHelp": "https://utopian-academy.github.io/Deckboy/manual.html",
+      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "screenshot": "https://utopian-academy.github.io/Deckboy/images/readme/release-419/example-02-gameboy.png",
+      "video": {
+        "@type": "VideoObject",
+        "name": "Deckboy 419: video playback",
+        "description": "Play video and select the next cue in Deckboy 0.99.419. Footage from Tears of Steel, with music by YMCK.",
+        "thumbnailUrl": "https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.png",
+        "contentUrl": "https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.mp4",
+        "uploadDate": "2026-10-23",
+        "duration": "PT6S"
+      },
+      "featureList": [
+        "One cue list for every kind of source: video, stills, slides, browser pages, captured windows and screens, cameras, NDI, SRT/RTMP/RTSP/UDP, DeckLink SDI, Spout, test patterns, tone, timers, lower thirds, composites and a video synth",
+        "Cue-based video playlist playback with trim, fades, loops and hold-last-frame",
+        "Seventeen cue-to-cue transition styles preserving each cue's geometry and processed look",
+        "SRT, RTMP, DeckLink SDI and SMPTE ST 2110 output, with the programme recorded as it plays",
+        "Live keying, grading and per-cue pixel effects on playing or paused cues, with oscillator-driven parameters",
+        "Swirl with palettes, colour bands, reverse speed, twist, flow, zoom and a movable centre; code sources with their own render raster",
+        "Web Monitor: programme, multiview or any output with sound in a browser, screens kept in step, a low-latency mode and a QR code for phones",
+        "Phone and tablet control: QR pairing, TAKE, transport, fader, cues, editable DASH and tracker on one page",
+        "A test card for every screen, drawn 1:1 at the output's raster, exported as movie files per output",
+        "Windows PQ/HLG feed composition, HDR window outputs, ST 2110 and SRT/enhanced RTMP delivery, and PQ/HLG recording",
+        "Live captions made on this computer, on the outputs about two seconds behind",
+        "Programme LUFS and true-peak metering; selectable -16, -23 and -24 LUFS normalization targets",
+        "VST3 effect and instrument hosting inside a cue's audio chain",
+        "NDI send and receive in every download",
+        "Window and browser cues: any window or web page as a cue, at full resolution",
+        "Cross-domain effects: the picture played through an audio chain, and the played audio drawn through the picture",
+        "Warp, keystone, edge blend and area-of-interest per output",
+        "PDF, PowerPoint and Keynote slide decks imported as one cue per slide, with speaker notes",
+        "Presenter view and mirrored prompter as output types of their own",
+        "Stream Deck plugin and Bitfocus Companion module",
+        "OSC, MIDI, MIDI Show Control, Art-Net, sACN and LTC timecode control",
+        "A fixture patch: lights set by name and colour, with LFOs, dipped automatically while a video rolls",
+        "Master tracker with pattern and classic views, cue/stop/fade/volume/opacity cells, mute/solo, jumps and sections",
+        "Dashboard sequences with timed waits and manual GO; TAKE ALL across playlists",
+        "Gamma-correct edge blending, paired overlap and black lift; save your own new-show defaults",
+        "Mic cues: a live microphone or line input as a cue, with fades, routing and effects",
+        "No account, no licence server and no telemetry"
+      ]
+    }
+    </script>
+
+    <style>img,video{max-width:100%;height:auto}</style>
+    <link rel="stylesheet" href="style.css?v=20261025">
+    <script src="site.js?v=20261025" defer></script>
+
+</head>
+<body class="home">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="background-glow"></div>
+    <div class="background-glow secondary"></div>
+
+    <nav class="navbar">
+        <div class="logo">Deckboy</div>
+        <div class="nav-links">
+            <a href="for-theatre.html">Theatre</a>
+            <a href="for-events.html">Events</a>
+            <a href="for-broadcast.html">Broadcast</a>
+            <a href="manual.html">Manual</a>
+            <a href="community.html">Community</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-primary">Download Free</a>
+        </div>
+    </nav>
+
+    <main id="main">
+    <header class="hero hero-split">
+        <div class="hero-content">
+            <h1 class="animate-up">Deckboy</h1>
+            <p class="hero-motto">Seize the means of playback ♡</p>
+            <p class="hero-subtitle animate-up delay-1">Run videos, slides and live sources from one cue list. Choose the next cue and take it to the audience. Stream or record the show as it runs.</p>
+            <p class="platform-line">Free and open source. Windows, macOS, Linux. No account.</p>
+            <figure class="hero-media">
+                <video data-loop-demo src="images/readme/release-423/press-and-see.mp4" poster="images/readme/release-423/press-and-see-poster.jpg" controls loop muted playsinline preload="metadata" width="1440" height="824" aria-label="What you press and what the audience sees: on the Deckboy desk, TAKE a clip, a Lower Third from a second playlist, the next clip mirrored and crossfading in with the Lower Third still up, then BLACK; beside it, the clean output doing exactly that"></video>
+                <figcaption>What you press, and what the audience sees, from one run of v0.99.423. Footage: <a href="https://mango.blender.org/"><i>Tears of Steel</i></a>, Blender Foundation, CC BY 3.0.</figcaption>
+            </figure>
+            <div class="cta-group animate-up delay-2">
+                <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-large">Download v0.99.427</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy" class="btn-large btn-outline">&#9733; Star on GitHub</a>
+            </div>
+        </div>
+    </header>
+
+    
+
+    
+
+    <section class="site-section made-for" aria-labelledby="made-for-title">
+        <p class="eyebrow" id="made-for-title">Made for</p>
+        <div class="made-for-grid">
+            <a href="for-theatre.html"><b>Theatre</b><span>Standby and GO, pre-waits and continues, fired from the lighting desk.</span></a>
+            <a href="for-events.html"><b>Events &amp; worship</b><span>Slides, video, web pages and a stage timer from one screen.</span></a>
+            <a href="for-broadcast.html"><b>Broadcast</b><span>NDI in and out, Blackmagic SDI with key and fill, SMPTE ST&nbsp;2110.</span></a>
+        </div>
+    </section>
+
+    <section class="site-section idea" aria-labelledby="idea-title">
+        <div class="idea-text">
+            <h2 id="idea-title">Everything is a cue</h2>
+            <p>A clip, a slide deck, a camera, a web page, an NDI feed, a test card. Same transport, same transitions, same effects, same button. One operator, one list, no alt-tab.</p>
+            <p class="idea-chain"><b>VIDEO &rarr; SLIDE &rarr; CAMERA &rarr; WEB PAGE &rarr; SRT FEED &rarr; VIDEO</b></p>
+            <p><a href="features.html#everything-is-a-cue">Why that matters &rarr;</a> &middot; <a href="manual.html#cue-types">Every kind of cue &rarr;</a></p>
+        </div>
+        <section class="desk-gallery idea-shot" aria-label="Deckboy screenshots">
+        <div class="media-heading"><span>The desk / v0.99.419</span>
+            <div class="theme-choices" aria-label="Screenshot theme">
+                <button type="button" data-theme="gameboy" aria-pressed="true">Gameboy</button>
+                <button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+                <button type="button" data-theme="virtual-boy" aria-pressed="false">Virtual Boy</button>
+            </div>
+        </div>
+        <a id="desk-full" href="images/readme/release-419/example-02-gameboy.png"><img id="desk-image" src="images/readme/release-419/example-02-gameboy.png" width="1600" height="900" fetchpriority="high" alt="Deckboy 0.99.419 in the Gameboy theme, running the layers and titles example with three playlists feeding one programme."></a>
+        <p class="shot-caption">Three playlists, one layered picture. Captured from the published v0.99.419 build with the bundled layers and titles example. <a href="trailer.html">Watch the trailer &rarr;</a></p>
+    </section>
+    </section>
+
+    <section class="site-section" id="in-action" aria-labelledby="action-title">
+        <div class="section-heading"><p class="eyebrow">Real captures from Deckboy</p><h2 id="action-title">See it work</h2><p>Short demos from Deckboy itself. The opening clip has music by YMCK, so it waits for you to press play; the silent demos play as you scroll.</p></div>
+        <div class="demo-grid">
+            <figure><video controls loop playsinline preload="none" poster="images/readme/release-419/deckboy-video-playback-ymck.png" width="1000" height="730" aria-label="Deckboy playing Tears of Steel with the next video cue selected, accompanied by YMCK"><source src="images/readme/release-419/deckboy-video-playback-ymck.mp4" type="video/mp4"><a href="images/readme/release-419/deckboy-video-playback.gif">View the playback GIF</a></video><figcaption><h3>Play video. Keep the next cue ready.</h3><p>The programme keeps playing while you choose what comes next. <a href="images/readme/release-419/deckboy-video-playback.gif">View the GIF</a>.</p><p>Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. Music: YMCK &mdash; <i>Family Music</i> (2004), used with permission.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-419/live-effects.png" width="1000" height="710" aria-label="Effects switched on live while a clip plays in Deckboy 0.99.419"><source src="images/readme/release-419/live-effects.mp4" type="video/mp4"><a href="images/readme/release-419/live-effects.gif">View the effects GIF</a></video><figcaption><h3>Give the picture a new look, live.</h3><p>Kaleidoscope, posterise, ripple and crystallise switched on while the clip plays. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-419/crossfade-live.png" width="1000" height="710" aria-label="A two-second crossfade in Deckboy 0.99.419, the outgoing clip still playing"><source src="images/readme/release-419/crossfade-live.mp4" type="video/mp4"><a href="images/readme/release-419/crossfade-live.gif">View the crossfade GIF</a></video><figcaption><h3>Crossfades that keep moving.</h3><p>TAKE the next clip; the one on screen keeps playing until it has faded. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-419/picture-scopes.png" width="900" height="418" aria-label="Deckboy 419 scopes measuring its built-in moving test card"><source src="images/readme/release-419/picture-scopes.mp4" type="video/mp4"><a href="images/readme/release-419/picture-scopes.gif">View the scopes GIF</a></video><figcaption><h3>Measure each new picture.</h3><p>The built-in moving test card, measured by the live scopes. Output and analysis counters stay visible.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-419/warp-monitor.png" width="900" height="418" aria-label="Warp corners moving the output in Deckboy 419's programme monitor"><source src="images/readme/release-419/warp-monitor.mp4" type="video/mp4"><a href="images/readme/release-419/warp-monitor.gif">View the warp GIF</a></video><figcaption><h3>Put the corners where they belong.</h3><p>The warp editor shows the output being adjusted, right in the programme monitor.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/dmx-by-fixture.png" width="640" height="598" aria-label="Named fixtures changing level and colour in a DMX cue"><source src="images/readme/dmx-by-fixture.mp4" type="video/mp4"><a href="images/readme/dmx-by-fixture.mp4">Download fixture demo</a></video><figcaption><h3>Cue the lights by name.</h3><p>Set a fixture&rsquo;s level and colour in the cue inspector. Send it over Art-Net or sACN.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/mic-inspector.png" width="640" height="546" aria-label="Mic cue inspector with gain changes and a moving test-signal meter"><source src="images/readme/mic-inspector.mp4" type="video/mp4"><a href="images/readme/mic-inspector.mp4">Download Mic cue demo</a></video><figcaption><h3>Live input becomes a cue.</h3><p>A Mic cue&rsquo;s gain and meter, shown with the built-in test signal. Add routing, fades and audio effects.</p></figcaption></figure>
+            <figure id="phone-demo" class="phone-demo"><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/phone-controller-poster.png" width="780" height="1688" aria-label="Deckboy 0.99.417 phone controller selecting and taking cues"><source src="images/readme/phone-controller.mp4" type="video/mp4"><a href="images/readme/phone-controller.mp4">Download phone demo</a></video><figcaption><h3>Pair. Stand by. TAKE.</h3><p>The current phone interface, connected to the desk. <a href="images/readme/phone-controller.png">View the complete controller.</a></p></figcaption></figure>
+        </div>
+        <p class="section-note">Desk, video playback, effects, scopes and warp captured from published v0.99.419 on 23 October 2026. GIFs and desk clips are sampled demonstrations; their playback rate is separate from the live counters. <a href="images/readme/README.md">Capture versions and notes.</a></p>
+    </section>
+
+    
+
+    <section class="site-section what-it-does" id="features" aria-labelledby="what-title">
+        <div class="section-heading"><h2 id="what-title">What it does</h2></div>
+        <div class="what-grid">
+            <article><h3>Video, cued</h3><p>Trim, fade, loop, and hold the last frame rather than reveal a desktop. Seventeen transitions.</p><a href="features.html#video">More &rarr;</a></article>
+            <article><h3>Out to the whole rig</h3><p>Screens, NDI, SRT, RTMP, Blackmagic SDI and SMPTE ST&nbsp;2110, several at once, each with its own warp.</p><a href="features.html#outputs">More &rarr;</a></article>
+            <article><h3>Run it like a theatre desk</h3><p>A standby kept apart from what you are looking at. Pre-waits, continues and triggers.</p><a href="features.html#show-control">More &rarr;</a></article>
+            <article><h3>Slides, as cues</h3><p>A PDF, PowerPoint or Keynote deck imports as one cue per slide, speaker notes and all.</p><a href="features.html#slides">More &rarr;</a></article>
+            <article><h3>A window, or a web page</h3><p>Any window on the machine at its full resolution, or a URL rendered into the programme.</p><a href="features.html#windows">More &rarr;</a></article>
+            <article><h3>52 video effects, 23 audio</h3><p>A per-cue rack on the live picture and sound, every control on an oscillator.</p><a href="features.html#effects">More &rarr;</a></article>
+            <article><h3>Your plugins and instruments</h3><p>VST3 effects and instruments in a cue&rsquo;s audio chain, beside Deckboy&rsquo;s own.</p><a href="features.html#plugins">More &rarr;</a></article>
+            <article><h3>Nothing phones home</h3><p>No account, no dongle, no licence server, no trial. Free under the GPL-3.0.</p><a href="features.html#free">More &rarr;</a></article>
+        </div>
+        <p class="section-note"><a href="features.html">Everything Deckboy does, in full &rarr;</a></p>
+    </section>
+
+    <section class="site-section latest-short" id="latest" aria-labelledby="latest-title">
+        <p class="eyebrow" id="latest-title">New in 0.99.427</p>
+        <p>Forty new themes, from Amber CRT and Teletext to Risograph and Synthwave. Lessons point at every control they name, and Esc closes whatever is open first. A second playlist appears beside the first as soon as you add it. In 0.99.426: forty layer blend modes for each layer on an output, and Deckboy in Cherokee and Hawaiian.
+        <a href="https://github.com/Utopian-Academy/Deckboy/releases/tag/v0.99.427">What&rsquo;s new &rarr;</a></p>
+    </section>
+
+    <section class="site-section" id="video-synth" aria-labelledby="video-synth-title">
+        <h2 id="video-synth-title">A video synth, on your cue list</h2>
+        <p>Deckboy can make its own picture, with no clip and no camera. The video synth is a cue, so it plays, fades and takes like any other cue.</p>
+        <ul>
+            <li>Oscillators and feedback make the picture.</li>
+            <li>A glitch stack breaks it, and text mode redraws it as characters.</li>
+            <li>Play it from a MIDI keyboard: pitch sets the size of the pattern, and velocity sets the amount of feedback.</li>
+            <li>Any control can follow the sound, a MIDI knob, or a camera.</li>
+        </ul>
+    
+        <div class="demo-grid">
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/molten-tv.png" width="720" height="540" aria-label="A warped ring on an old TV that breaks up into planets, rockets and UFOs"><source src="images/readme/release-425/molten-tv.mp4" type="video/mp4"><a href="images/readme/release-425/molten-tv.gif">View the GIF</a></video><figcaption><h3>A ring on an old TV</h3><p>Scanlines, colour fringe and block glitch on a warped ring that breaks up into emoji.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/chladni-garden.png" width="720" height="540" aria-label="Glowing Chladni-style figures that flow into each other"><source src="images/readme/release-425/chladni-garden.mp4" type="video/mp4"><a href="images/readme/release-425/chladni-garden.gif">View the GIF</a></video><figcaption><h3>Figures that melt</h3><p>Glowing figures, like sand on a vibrating plate, flow into each other.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/copper-topology.png" width="720" height="540" aria-label="Copper and violet contour lines that flow"><source src="images/readme/release-425/copper-topology.mp4" type="video/mp4"><a href="images/readme/release-425/copper-topology.gif">View the GIF</a></video><figcaption><h3>Lines that flow</h3><p>Contour lines bend and reconnect, in copper and violet.</p></figcaption></figure>
+        </div>
+        <p>Made in Deckboy: a Code cue over a video synth, with effects. No footage, and no editing after the fact.</p>
+    </section>
+
+    <section class="site-section" id="new-425" aria-labelledby="new-425-title">
+        <p class="eyebrow" id="new-425-title">See the new features</p>
+        <div class="demo-grid">
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/feathered-mask.png" width="800" height="550" aria-label="A feathered heart mask cutting a playing clip while two oscillators move it"><source src="images/readme/release-425/feathered-mask.mp4" type="video/mp4"><a href="images/readme/release-425/feathered-mask.gif">View the GIF</a></video><figcaption><h3>Masks</h3><p>Two oscillators move a feathered heart mask on a playing clip. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/draw-replay.png" width="800" height="550" aria-label="A drawing redrawing itself as a transparent layer over a playing clip"><source src="images/readme/release-425/draw-replay.mp4" type="video/mp4"><a href="images/readme/release-425/draw-replay.gif">View the GIF</a></video><figcaption><h3>Draw</h3><p>The drawing replays one stroke at a time on a layer above the clip. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/midi-map.png" width="1100" height="758" aria-label="The MIDI map page with a ready-made controller map and a value moving live"><source src="images/readme/release-425/midi-map.mp4" type="video/mp4"><a href="images/readme/release-425/midi-map.gif">View the GIF</a></video><figcaption><h3>MIDI map</h3><p>The ready-made map for the AKAI APC mini mk2. A fader value changes live.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/chladni-pitch.png" width="800" height="550" aria-label="The Chladni effect changing its figure with each MIDI note"><source src="images/readme/release-425/chladni-pitch.mp4" type="video/mp4"><a href="images/readme/release-425/chladni-pitch.gif">View the GIF</a></video><figcaption><h3>Chladni follows MIDI notes</h3><p>Each note that you play changes the Chladni pattern. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/multiview-layouts.png" width="960" height="640" aria-label="A multiview output moving through three layouts with red and green tally borders"><source src="images/readme/release-425/multiview-layouts.mp4" type="video/mp4"><a href="images/readme/release-425/multiview-layouts.gif">View the GIF</a></video><figcaption><h3>Multiview layouts</h3><p>Two playlists, the next cue and a clock in three layouts. A red border shows the picture on air. A green border shows the next cue. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+            <figure><video data-loop-demo controls loop muted playsinline preload="none" poster="images/readme/release-425/motion-trails.png" width="800" height="550" aria-label="A clip without, then with, then without the motion trails effect"><source src="images/readme/release-425/motion-trails.mp4" type="video/mp4"><a href="images/readme/release-425/motion-trails.gif">View the GIF</a></video><figcaption><h3>Motion trails</h3><p>The clip without the effect, then with the effect, then without the effect. Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p></figcaption></figure>
+        </div>
+    </section>
+
+    <details class="site-section more-demos">
+        <summary>More to explore: projection, titles, text mode, slides and Mini</summary>
+        <div class="older-demos">
+    <section class="shot">
+        <video data-loop-demo src="video/databend-demo.mp4" poster="video/databend-demo.jpg" controls loop muted playsinline preload="none" aria-label="A generated night-time beach test card, then the databend effect tearing it into rainbow bands, recorded from Deckboy's own output."><a href="video/databend-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>Databend</b> reads the frame out as a signal and plays it through an audio chain &mdash; a delay with feedback, a filter, a wavefolder &mdash; then paints what comes back. The look people chase by opening a picture in an audio editor, on a live cue and on a knob. Its opposite number, <b>audioprint</b>, draws the sound the deck has just played through the picture; put one of each on a cue and they bend each other.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/perspective-pin-demo.mp4" poster="video/perspective-pin-demo.jpg" controls loop muted playsinline preload="none" aria-label="A test grid pinned onto a steep board over a film scene: drawn linear it folds along the diagonal, then switched to perspective it becomes a flat board with its far end properly smaller."><a href="video/perspective-pin-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>Projection mapping, in perspective.</b> A layer pinned onto a steep board folds along the diagonal when it is drawn linear; switch it to perspective and the board is flat, its far end properly smaller. Drag the four corners on the programme monitor, and the programme, the recording and the stream all carry it.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/arcade-lower-third-demo.mp4" poster="video/arcade-lower-third-demo.jpg" controls loop muted playsinline preload="none" aria-label="A lower third reading Lower Third, Arcade look pops onto a generated pixel beach scene in a pixel font with a hard drop shadow, keeps a slow bob and tilt, then goes."><a href="video/arcade-lower-third-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>The arcade lower third</b>, one of 52 looks: the name in Deckboy's pixel face, a hard shadow, and a slow wobble for as long as it is up. Its colours and size can be set from a Companion button.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/slides-and-web-demo.mp4" poster="video/slides-and-web-demo.jpg" controls loop muted playsinline preload="none" aria-label="Deckboy's own website as a web page cue, then a three-slide PDF pushing through, one cue per page."><a href="video/slides-and-web-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>A web page and a slide deck, on the same list as a clip.</b> The page is rendered into the programme and keeps updating; the deck is a PDF, PowerPoint or Keynote file, imported as one cue per slide with its notes.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/text-mode-demo.mp4" poster="video/text-mode-demo.jpg" controls loop muted playsinline preload="none" aria-label="A face drawn in green ASCII characters that get finer until the face resolves, then turns to its own colours."><a href="video/text-mode-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>Text mode</b> redraws any picture in real characters, darkest to brightest. Turn the columns up and the face resolves out of the letters; every mark is still a character.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/live-effects-demo.mp4" poster="video/live-effects-demo.jpg" controls loop muted playsinline preload="none" aria-label="A film scene running through a new effect on every beat: kaleidoscope, posterise, polar warp, threshold and more."><a href="video/live-effects-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>Effects on a live cue, switched on the beat</b> without interrupting the picture. Fifty-two of them, every parameter on an oscillator, and the recording keeps every frame.</p>
+        <a href="img/0422/nine-effects.png"><img src="img/0422/nine-effects.png" width="1600" height="778" loading="lazy" alt="Nine Deckboy effects on one film frame: colour replace, blur, sharpen, glow, mirror, mosaic, edges, luma key and strobe at frame zero."></a>
+        <p class="shot-caption"><b>Nine more looks, one frame.</b> Rendered by Deckboy; the checkerboard shows the luma key&rsquo;s transparency, and strobe is held at frame 0. <a href="features.html#effects">See the effect rack &rarr;</a> Footage: <a href="https://mango.blender.org/">Tears of Steel</a>, Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</p>
+    </section>
+
+    <section class="shot">
+        <img src="images/presenter.png" alt="Deckboy presenter view mid-build: the live slide holds while the speaker notes advance a step at a time, with spent builds greyed out, a build counter, and the previous and next slides beside them." loading="lazy">
+        <p class="shot-caption">Presenter view is an output type of its own, so it takes its own display. Here it is part-way through a <b>build</b>: the live slide holds still while the notes advance a step at a time, the part already spoken greys out, and the footer counts what is left before the next cue.</p>
+    </section>
+
+    <section class="shot">
+        <video data-loop-demo src="video/mini-terminal-demo.mp4" poster="video/mini-terminal-demo.jpg" controls loop muted playsinline preload="none" aria-label="Deckboy Mini run from the keyboard in its terminal: a boot sequence, then an LCD-green status panel with five cues and the NEXT line; cue 3 is queued to play next, a search for logo takes cue 5, the clock switches to time left, shuffle, crossfade and stop-after-this-cue switch on, and the help pages end on the running order."><a href="video/mini-terminal-demo.mp4">Download this demo</a></video>
+        <p class="shot-caption"><b>Deckboy Mini</b> is the one-deck player that ships beside the desk: point <code>deckboy-mini</code> at clips or a folder and it plays them fullscreen through the same engine, takes the same remote commands on the same port, and the whole show runs from the keyboard in its terminal, over SSH too: find a cue by name, queue the next one, stop after this one, shuffle, crossfade. It comes inside every download, and on its own as a small download for Windows, macOS, Linux and the Raspberry Pi. <a href="manual.html#deckboy-mini">Read its miniature manual &rarr;</a></p>
+    </section>
+
+        </div>
+    </details>
+
+    <section class="code-preview glass" id="install" style="overflow-wrap: anywhere;">
+        <div class="window-header">
+            <div class="dot red"></div>
+            <div class="dot yellow"></div>
+            <div class="dot green"></div>
+        </div>
+        <div class="terminal">
+            <p><span class="prompt">#</span> Or install it from a package manager, and a new release is one <code>scoop update</code> or <code>brew upgrade</code> away.</p>
+            <p><span class="prompt">windows&gt;</span> scoop bucket add deckboy https://github.com/Utopian-Academy/scoop-deckboy</p>
+            <p><span class="prompt">windows&gt;</span> scoop install deckboy/deckboy</p>
+            <p><span class="prompt">macos&gt;</span> brew install --cask utopian-academy/deckboy/deckboy</p>
+            <p><span class="prompt">linux&gt;</span> flatpak install --user Deckboy-*-x86_64.flatpak <span class="prompt">&nbsp;# the .flatpak from the <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">latest release</a></span></p>
+            <p><span class="prompt">pi&gt;</span> tar xzf Deckboy-Mini-*-linux-arm64.tar.gz <span class="prompt">&nbsp;# Deckboy Mini on its own, for a Raspberry Pi</span></p>
+        </div>
+    </section>
+
+    <p class="site-section recognition">Mentioned in
+        <a href="https://github.com/florisporro/awesome-ndi">Awesome NDI</a> &middot;
+        <a href="https://github.com/RobLoach/awesome-sdl">Awesome SDL</a> &middot;
+        <a href="https://github.com/juancarlospaco/awesome-streaming-tools">Awesome Streaming Tools</a>.
+        Built with SDL3.</p>
+    </main>
+    <footer>
+        <div class="footer-cols">
+            <div>
+                <h4>Deckboy</h4>
+                <a href="./">What it does</a>
+                <a href="trailer.html">The trailer</a>
+                <a href="compare.html">How it compares</a>
+                <a href="qlab-alternative.html">Coming from QLab</a>
+                <a href="for-theatre.html">For theatre</a>
+                <a href="for-events.html">For live events</a>
+                <a href="for-broadcast.html">For broadcast &amp; IP video</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">Download</a>
+            </div>
+            <div>
+                <h4>Using it</h4>
+                <a href="manual.html">Manual</a>
+                <a href="faq.html">FAQ</a>
+                <a href="specs.html">Specifications</a>
+                <a href="slides.html">Slides &amp; presenting</a>
+                <a href="window-cues.html">Window &amp; browser cues</a>
+                <a href="ndi.html">NDI in and out</a>
+                <a href="stream-deck.html">Stream Deck &amp; Companion</a>
+                <a href="latency.html">Where latency hides</a>
+            </div>
+            <div>
+                <h4>Tools</h4>
+                <a href="test-patterns.html">Test patterns</a>
+                <a href="led-wall.html">LED pattern generator</a>
+                <a href="led-calculator.html">LED calculator</a>
+                <a href="screen-check.html">Screen check</a>
+                <a href="databend.html">Databend</a>
+            </div>
+            <div>
+                <h4>Guides</h4>
+                <a href="shooting-led.html">Shooting an LED wall</a>
+                <a href="press.html">Press kit</a>
+                <a href="community.html">Community &amp; help</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy">Source on GitHub</a>
+            </div>
+        </div>
+        <p class="footer-note">Built as an open-source project by Utopian-Academy.
+        Free under the GPL-3.0.<button class="release-mote" type="button" aria-label="0.99.420" hidden>
+            <span aria-hidden="true">&middot;</span>
+            <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                <g fill="currentColor">
+                    <path id="release-leaflet" d="M32 48 L28 39 L29 36 L26 31 L28 28 L26 23 L29 20 L28 15 L31 10 L32 2 L33 10 L36 15 L35 20 L38 23 L36 28 L38 31 L35 36 L36 39 Z"/>
+                    <use href="#release-leaflet" transform="rotate(-36 32 48) translate(3.2 4.8) scale(.9)"/>
+                    <use href="#release-leaflet" transform="rotate(36 32 48) translate(3.2 4.8) scale(.9)"/>
+                    <use href="#release-leaflet" transform="rotate(-68 32 48) translate(8 12) scale(.75)"/>
+                    <use href="#release-leaflet" transform="rotate(68 32 48) translate(8 12) scale(.75)"/>
+                    <use href="#release-leaflet" transform="rotate(-108 32 48) translate(16 24) scale(.5)"/>
+                    <use href="#release-leaflet" transform="rotate(108 32 48) translate(16 24) scale(.5)"/>
+                </g>
+                <path d="M32 46 V62" fill="none" stroke="currentColor" stroke-width="2.5"/>
+            </svg>
+        </button></p>
+    </footer>
+
+    <script>
+        // Simple micro-interaction for cards
+        document.querySelectorAll('.feature-card').forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--x', `${x}px`);
+                card.style.setProperty('--y', `${y}px`);
+            });
+        });
+    </script>
+</body>
+</html>

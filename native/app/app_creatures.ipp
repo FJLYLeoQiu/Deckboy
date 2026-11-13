@@ -1,0 +1,810 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// app_creatures.ipp — drawing the theme's creatures, and knowing when not to.
+//
+// The simulation is in core/creatures.hpp and knows nothing about SDL. This is
+// the half that puts pixels down, and the half that decides whether any should
+// be put down at all.
+//
+// They are drawn from rectangles rather than from sprite assets. That is not a
+// shortcut: it means every creature takes its colour from the palette, so one
+// implementation reads correctly on the LCD themes, the plastic ones and all 25
+// of the OLED terminals without a single per-theme image — the same reason the
+// mascot is drawn rather than loaded.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+  // Whether anything should be alive right now.
+  //
+  // OUTPUTS LIVE MEANS NOTHING MOVES. During a show the only thing moving on
+  // this machine should be the show: an operator watching a programme monitor
+  // does not need something crawling across the chrome in their peripheral
+  // vision, and a director standing behind them needs it even less. This is the
+  // rule that makes the feature safe to ship rather than a thing people switch
+  // off after the first gig.
+  bool creaturesShouldBeAwake() const {
+    if (!project_.creaturesEnabled) {
+      return false;
+    }
+    if (themeCreatures_.empty()) {
+      return false;   // the theme did not ask for any
+    }
+    if (colonies_.empty()) {
+      return false;   // a full playlist and a full inspector leave nowhere to be
+    }
+    if (!project_.creaturesWhileLive) {
+      for (const auto& output : project_.outputs) {
+        if (output.enabled) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // Fade rather than vanish. An animal that blinks out of existence the instant
+  // an output is armed looks like a glitch; one that wanders off over half a
+  // second looks like it noticed the show starting.
+  void updateCreatures(double nowSeconds) {
+    const double target = creaturesShouldBeAwake() ? 1.0 : 0.0;
+    const double dt = std::clamp(nowSeconds - creatureLastTime_, 0.0, 0.1);
+    creatureLastTime_ = nowSeconds;
+    creatureFade_ += (target - creatureFade_) * std::min(1.0, dt * 4.0);
+    if (creatureFade_ < 0.01 && target == 0.0) {
+      return;   // nothing on screen: do not pay to simulate
+    }
+    // Each colony is stepped against ITS OWN habitat. step() bounds a
+    // creature to the band it was given, so sharing one habitat across two
+    // panels would let an animal walk out of one and hover over the other.
+    // What they can sense: the moths' light, and the pointer -- the
+    // starlings scatter from it, the owl watches it, the bat flees it.
+    deckboy::creatures::World world;
+    world.lureX = creatureLureX_;
+    world.lureY = creatureLureY_;
+    if (mouseInControlWindow_) {
+      world.pointerX = mouseX_;
+      world.pointerY = mouseY_;
+    }
+    for (auto& colony : colonies_) {
+      if (colony.home.w > 8 && colony.home.h > 8) {
+        deckboy::creatures::step(colony.creatures, colony.home, dt, nowSeconds, world);
+      }
+    }
+  }
+
+  // Rebuild the population from whatever the current theme asked for.
+  // Every gap in the shell the layout has told us about. A creature may only
+  // ever live in one of these, which is what keeps the rule that they are
+  // never drawn over a control -- the app finds the gaps, the creatures know
+  // nothing about panels.
+  std::vector<deckboy::creatures::Habitat> creatureHabitats() const {
+    std::vector<deckboy::creatures::Habitat> out;
+    auto consider = [&out](const SDL_Rect& r, bool ledge, bool darkGround = false) {
+      if (r.w >= 80 && r.h >= 70) {
+        out.push_back(deckboy::creatures::Habitat {r.x, r.y, r.w, r.h, ledge, darkGround});
+      }
+    };
+    // The empty part of the playlist, under the last cue. A ledge: the row
+    // above it is a surface things can walk along.
+    // EVERY playlist's empty space, not only the focused one's. A ledge:
+    // the row above is a surface things can walk along.
+    for (const SDL_Rect& freeRect : playlistFreeRects_) {
+      consider(freeRect, true);
+    }
+    // The floor of the idle program monitor. A ledge, like the playlist: the
+    // bottom of the monitor is a surface. Cleared the moment a cue goes live
+    // (see below), so nothing is ever drawn over a picture.
+    consider(idleMonitorRect_, true, /*darkGround=*/true);
+    // The empty part of the inspector, under its last open section. No ledge --
+    // it is a wall of panel, so this is where the fliers go.
+    if (inspectorBodyRect_.w > 0 && inspectorSectionBottomMax_ > 0) {
+      const int top = inspectorSectionBottomMax_ + 10;
+      const int bottom = inspectorBodyRect_.y + inspectorBodyRect_.h - 6;
+      consider(SDL_Rect {inspectorBodyRect_.x + 6, top,
+                         inspectorBodyRect_.w - 12, std::max(0, bottom - top)}, false);
+    }
+    return out;
+  }
+
+  // How many animals are actually placed, across every colony. The rebuild
+  // trigger asks this; it used to ask `creatures_.size()`, a vector that is
+  // cleared here and filled NOWHERE -- so the answer was always 0, never
+  // matched the theme's request, and rebuildCreatures() ran on every single
+  // frame. Every animal was re-placed at its seed position sixty times a
+  // second, which is a colony that can never take a step.
+  std::size_t placedCreatureCount() const {
+    std::size_t total = 0;
+    for (const Colony& colony : colonies_) {
+      total += colony.creatures.size();
+    }
+    return total;
+  }
+
+  // WHETHER THE ANIMALS ARE STILL SOMEWHERE THAT EXISTS.
+  //
+  // Called every frame. A habitat appearing or disappearing means the colonies
+  // are wrong and have to be rebuilt -- that is what takes fireflies off the
+  // program monitor the moment a cue goes live. A habitat that has merely
+  // MOVED is re-bounded in place instead, because re-placing on a one-pixel
+  // layout shift would pin every animal to its seed position forever.
+  bool reconcileCreatureHabitats() {
+    const std::vector<deckboy::creatures::Habitat> homes = creatureHabitats();
+    if (homes.size() != colonies_.size()) {
+      return true;   // the set changed: rebuild
+    }
+    for (std::size_t i = 0; i < homes.size(); ++i) {
+      colonies_[i].home = homes[i];
+    }
+    return false;
+  }
+
+  void rebuildCreatures() {
+    colonies_.clear();
+    // Nowhere to put them yet. Placing against an empty habitat pinned every
+    // animal to 0,0 and left it clamped against an edge for the rest of the
+    // session -- the cat was there the whole time, drawn half outside the
+    // panel and clipped away.
+    const std::vector<deckboy::creatures::Habitat> homes = creatureHabitats();
+    if (homes.empty()) {
+      return;
+    }
+    // The theme's cast is DEALT ROUND the habitats rather than duplicated into
+    // each: a theme that asks for two moths gets two moths in the window, not
+    // two per gap. With one habitat this is exactly what it always did.
+    std::uint32_t seed = 1u;
+    colonies_.resize(homes.size());
+    for (std::size_t i = 0; i < homes.size(); ++i) {
+      colonies_[i].home = homes[i];
+    }
+    std::size_t next = 0;
+    // A FLOCK STAYS TOGETHER. Starlings, koi and ants only make sense as a
+    // group -- dealt round the gaps, twelve starlings became four lone birds
+    // in each -- so each of those requests goes whole into the biggest gap
+    // (a ledge for the ants, which walk).
+    using deckboy::creatures::Species;
+    auto biggest = [this](bool needLedge) {
+      std::size_t best = 0;
+      long bestArea = -1;
+      for (std::size_t i = 0; i < colonies_.size(); ++i) {
+        const auto& h = colonies_[i].home;
+        if (needLedge && !h.ledge) continue;
+        const long area = static_cast<long>(h.w) * h.h;
+        if (area > bestArea) { bestArea = area; best = i; }
+      }
+      return best;
+    };
+    for (const auto& request : themeCreatures_) {
+      bool together = request.species == Species::Starling ||
+                            request.species == Species::Koi || request.species == Species::Ant;
+      std::size_t home = together ? biggest(request.species == Species::Ant) : 0;
+      // A mouse goes where the cat is: the cat stalks only within its own gap,
+      // and a mouse two panels away is a cat asleep for ever.
+      if (request.species == Species::Mouse) {
+        for (std::size_t ci = 0; ci < colonies_.size(); ++ci) {
+          for (const auto& other : colonies_[ci].creatures) {
+            if (other.species == Species::Cat) { home = ci; together = true; }
+          }
+        }
+      }
+      for (int i = 0; i < request.count; ++i) {
+        Colony& colony = together ? colonies_[home] : colonies_[next % colonies_.size()];
+        if (!together) ++next;
+        deckboy::creatures::Creature c;
+        c.species = request.species;
+        deckboy::creatures::place(c, colony.home, seed++);
+        colony.creatures.push_back(c);
+      }
+    }
+  }
+
+  void drawOneCreature(const deckboy::creatures::Creature& c, Uint8 alpha,
+                       const deckboy::creatures::Habitat& home) {
+    using deckboy::creatures::Species;
+    const int x = static_cast<int>(std::lround(c.x));
+    const int y = static_cast<int>(std::lround(c.y));
+    const double t = static_cast<double>(animationNow_) / 1000.0;
+    // BOTH colours are inks ON TILE, which is the fill this space actually
+    // has. The first version used pal.light for the accent -- that is a bright
+    // FILL role, not an ink, so on a theme whose tile is already bright the
+    // wings were the same colour as the background and a moth was one dark
+    // pixel. The chrome contract says tile is filled with tile and inked with
+    // fg/fgSoft, and creatures are no exception to it.
+    // ON A DARK GROUND THEY ARE INKED BRIGHT. pal.fg is an ink for a
+    // tile-filled panel; on the near-black floor of an idle monitor it is a
+    // creature nobody can see -- which, with the habitat bug that kept them
+    // out of the playlist gap, is the whole of why James had never seen one.
+    SDL_Color ink = home.darkGround ? pal.light : pal.fg;
+    ink.a = alpha;
+    SDL_Color accent = pal.fgSoft;
+    accent.a = alpha;
+    // Twice the size they started at. At one pixel per limb these read as
+    // dust on the screen rather than as animals, which is not the point of
+    // having them.
+    constexpr int S = 2;
+    auto dot = [&](int dx, int dy, int w, int h, SDL_Color colour) {
+      Primitives::fillRect(controlRenderer_,
+                           SDL_Rect {x + dx * S, y + dy * S, w * S, h * S}, colour);
+    };
+    const int face = static_cast<int>(c.facing);
+    switch (c.species) {
+      case Species::Starling: {
+        // A dark dash with two wings that flap: at this size a flock of them
+        // reads as a murmuration, which is the point.
+        const int up = std::sin(t * 22.0 + c.phase) > 0.0 ? -1 : 0;
+        dot(-1, 0, 3, 1, ink);
+        dot(-2, up, 1, 1, ink);
+        dot(2, up, 1, 1, ink);
+        break;
+      }
+      case Species::Koi: {
+        // A long body, a tail that sways, and a spot of the accent colour.
+        const int tail = static_cast<int>(std::lround(std::sin(t * 4.0 + c.phase) * 1.0));
+        dot(-3, 0, 6, 2, ink);
+        dot(face > 0 ? 1 : -3, 0, 2, 1, accent);          // the spot
+        dot(face > 0 ? -5 : 3, tail, 2, 2, accent);       // the tail
+        dot(face > 0 ? 3 : -4, 0, 1, 1, accent);          // the head
+        break;
+      }
+      case Species::Snake: {
+        // The body is the trail: each point the head passed, thinning toward
+        // the tail, with a gentle side-to-side wave travelling down it.
+        for (int k = c.trailCount - 1; k >= 0; --k) {
+          const int bx = static_cast<int>(std::lround(c.trail[static_cast<std::size_t>(k * 2)]));
+          const int by = static_cast<int>(std::lround(c.trail[static_cast<std::size_t>(k * 2 + 1)] +
+                                                      std::sin(t * 3.0 - k * 0.7 + c.phase) * 1.5));
+          const int w = k < 3 ? 3 * S : (k < 9 ? 2 * S + 1 : 2 * S);
+          Primitives::fillRect(controlRenderer_, SDL_Rect {bx - w / 2, by - w / 2, w, w},
+                               k % 3 == 1 ? accent : ink);
+        }
+        dot(-1, -1, 3, 3, ink);                               // the head
+        dot(face > 0 ? 1 : -1, -1, 1, 1, accent);              // the eye
+        if (std::fmod(t + c.phase, 2.4) < 0.25) {
+          dot(face > 0 ? 2 : -4, 0, 2, 1, accent);              // the tongue
+        }
+        break;
+      }
+      case Species::Octopus: {
+        // A round head and six arms, each a short chain of dots that waves,
+        // trailing further when it has just jetted.
+        dot(-2, -3, 5, 4, ink);
+        dot(-1, -2, 1, 1, accent);
+        dot(1, -2, 1, 1, accent);
+        const double trailing = c.state == 1 ? 1.6 : 1.0;
+        for (int a = 0; a < 6; ++a) {
+          const int ax = -2 + a;
+          for (int j = 1; j <= 3; ++j) {
+            const int wave = static_cast<int>(std::lround(std::sin(t * 3.0 + a * 1.1 + j * 0.8) * 0.8 * j / 2.0));
+            dot(ax + wave, static_cast<int>(1 + j * trailing), 1, 1, j == 3 ? accent : ink);
+          }
+        }
+        break;
+      }
+      case Species::Owl: {
+        // Round body, ear tufts, two big eyes whose pupils follow the pointer
+        // (c.look), and a blink that shuts them for a moment.
+        dot(-3, -6, 7, 8, ink);
+        dot(-3, -7, 1, 1, ink);
+        dot(3, -7, 1, 1, ink);
+        if (c.blink > 0.5) {
+          dot(-2, -5, 2, 2, accent);
+          dot(1, -5, 2, 2, accent);
+          const int look = static_cast<int>(std::lround(c.look));
+          dot(-2 + (look > 0 ? 1 : 0), -4, 1, 1, ink);
+          dot(1 + (look > 0 ? 1 : 0), -4, 1, 1, ink);
+        } else {
+          dot(-2, -4, 2, 1, accent);
+          dot(1, -4, 2, 1, accent);
+        }
+        dot(0, -3, 1, 1, accent);                              // beak
+        break;
+      }
+      case Species::Bat: {
+        if (c.state == 0) {
+          // Hanging upside down, wings folded.
+          dot(0, -1, 1, 1, ink);                                 // feet on the ceiling
+          dot(-1, 0, 3, 3, ink);
+          dot(-1, 3, 1, 1, accent);
+          dot(1, 3, 1, 1, accent);                               // ears, pointing down
+        } else {
+          const int up = std::sin(t * 26.0 + c.phase) > 0.0 ? -1 : 1;
+          dot(-1, 0, 2, 2, ink);
+          dot(-4, up, 3, 1, ink);
+          dot(1, up, 3, 1, ink);
+          dot(-1, -1, 1, 1, accent);
+          dot(0, -1, 1, 1, accent);
+        }
+        break;
+      }
+      case Species::Ant: {
+        // Head, waist, abdomen, and legs that tick as it walks.
+        const int step = std::sin(t * 14.0 + c.phase) > 0.0 ? 1 : 0;
+        dot(face > 0 ? 2 : -2, -1, 1, 1, ink);
+        dot(0, -1, 1, 1, ink);
+        dot(face > 0 ? -2 : 1, -1, 2, 1, ink);
+        dot(-1 + step, 0, 1, 1, accent);
+        dot(1 - step, 0, 1, 1, accent);
+        break;
+      }
+      case Species::Moth: {
+        // Wings that beat. Two rectangles whose height is the wingbeat, which
+        // at this size reads as fluttering and costs four fills.
+        const int beat = 1 + static_cast<int>(std::lround(
+          2.0 * std::fabs(std::sin(t * 18.0 + c.phase))));
+        dot(-1, 0, 2, 3, ink);                       // body
+        dot(-4, -beat / 2, 3, beat + 1, accent);     // left wing
+        dot(2, -beat / 2, 3, beat + 1, accent);      // right wing
+        break;
+      }
+      case Species::Fish: {
+        dot(0, 0, 5, 3, ink);                        // body
+        // The tail sweeps the opposite way to the body's drift, which is what
+        // makes it look like swimming rather than sliding.
+        const int sweep = static_cast<int>(std::lround(std::sin(t * 5.0 + c.phase) * 1.5));
+        dot(face > 0 ? -2 : 5, sweep, 2, 3, ink);
+        dot(face > 0 ? 3 : 1, 1, 1, 1, accent);      // eye
+        break;
+      }
+      case Species::Wisp: {
+        // A curl of smoke: a short trail of soft dots, each a little further
+        // along the sway and a little fainter than the one before.
+        for (int i = 0; i < 6; ++i) {
+          SDL_Color puff = accent;
+          puff.a = static_cast<Uint8>(alpha * 0.55 * (1.0 - i / 6.0));
+          const int ox = static_cast<int>(std::lround(std::sin(t * 1.3 + c.phase + i * 0.7) * 3.0));
+          dot(ox - 1, i * 3, 2 + (i > 2 ? 1 : 0), 2, puff);
+        }
+        break;
+      }
+      case Species::Lava: {
+        // Round when it rests, drawn out along its travel when it moves.
+        const int stretch = static_cast<int>(std::lround(std::min(4.0, std::fabs(c.vy) * 0.35)));
+        dot(-4, -3 - stretch, 8, 6 + stretch * 2, accent);
+        dot(-3, -4 - stretch, 6, 8 + stretch * 2, accent);
+        SDL_Color shine = ink;
+        shine.a = static_cast<Uint8>(alpha / 3);
+        dot(-2, -2 - stretch, 2, 2, shine);
+        break;
+      }
+      case Species::Firefly: {
+        SDL_Color glow = accent;
+        glow.a = static_cast<Uint8>(alpha * std::clamp(c.blink, 0.0, 1.0));
+        dot(0, 0, 2, 2, glow);
+        // A one-pixel halo at low alpha: the difference between a lit insect
+        // and a stuck pixel.
+        SDL_Color halo = glow;
+        halo.a = static_cast<Uint8>(halo.a / 3);
+        dot(-1, -1, 4, 4, halo);
+        break;
+      }
+      case Species::Crab: {
+        const bool moving = std::fabs(c.vx) > 0.5;
+        const int step = moving ? static_cast<int>(std::lround(
+          std::fabs(std::sin(t * 12.0 + c.phase)))) : 0;
+        dot(-3, -3, 7, 3, ink);                      // shell
+        dot(-4, -1 + step, 1, 2, ink);               // legs, left
+        dot(4, -1 + (1 - step), 1, 2, ink);          // legs, right
+        dot(-2, -5, 1, 2, accent);                   // eyestalks
+        dot(2, -5, 1, 2, accent);
+        break;
+      }
+      case Species::Cat: {
+        // Asleep: a curl, two ears, and a tail that flicks now and then.
+        const double breathe = std::sin(t * 1.2 + c.phase);
+        const int rise = static_cast<int>(std::lround(breathe));
+        dot(-6, -4 + rise, 12, 5, ink);              // curled body
+        dot(face > 0 ? 4 : -6, -6 + rise, 2, 2, ink);   // ear
+        dot(face > 0 ? 1 : -3, -6 + rise, 2, 2, ink);   // ear
+        const int flick = static_cast<int>(std::lround(
+          std::sin(t * 0.8 + c.phase) * 2.0));
+        dot(face > 0 ? -8 : 6, -2 + flick, 3, 1, ink);  // tail
+        break;
+      }
+      case Species::Snail: {
+        // A shell with a spiral suggested by one darker pixel, and feelers.
+        dot(-4, -1, 7, 2, ink);                      // foot
+        dot(-2, -5, 5, 4, accent);                   // shell
+        dot(-1, -4, 2, 2, ink);                      // the whorl
+        dot(face > 0 ? 3 : -5, -3, 2, 1, ink);       // feelers
+        break;
+      }
+      case Species::Spider: {
+        // The THREAD is what makes it a spider rather than a bug: a line back
+        // up to wherever it started.
+        // From the top of ITS OWN gap. With one habitat this was the same
+        // number; with a spider in the inspector it was a thread anchored to
+        // the playlist, drawn across everything in between.
+        const int drop = std::max(0, y - home.y - 6);
+        Primitives::fillRect(controlRenderer_,
+          SDL_Rect {x, home.y + 6, 1, drop}, accent);
+        dot(-2, 0, 5, 4, ink);                       // body
+        const int leg = static_cast<int>(std::lround(
+          std::sin(t * 6.0 + c.phase)));
+        dot(-4, 1 + leg, 2, 1, ink);                 // legs
+        dot(3, 1 - leg, 2, 1, ink);
+        break;
+      }
+      case Species::Mouse: {
+        const bool running = std::fabs(c.vx) > 0.5;
+        dot(-4, -3, 8, 3, ink);                      // body
+        dot(face > 0 ? 3 : -5, -5, 2, 2, ink);       // head
+        dot(face > 0 ? 4 : -5, -6, 1, 1, accent);    // ear
+        // The tail trails behind and only whips while it is moving.
+        const int whip = running ? static_cast<int>(std::lround(
+          std::sin(t * 16.0 + c.phase) * 2.0)) : 1;
+        dot(face > 0 ? -7 : 4, -2 + whip, 3, 1, ink);
+        break;
+      }
+      case Species::Frog: {
+        const bool airborne = std::fabs(c.vy) > 1.0;
+        // Legs tuck in the air and splay on the ground, which is the whole
+        // difference between a hop and a slide.
+        dot(-3, -4, 7, 4, ink);                      // body
+        dot(face > 0 ? 2 : -3, -6, 2, 2, ink);       // head
+        dot(face > 0 ? 3 : -3, -6, 1, 1, accent);    // eye
+        if (airborne) {
+          dot(-4, -2, 2, 2, ink);
+          dot(3, -2, 2, 2, ink);
+        } else {
+          dot(-5, -1, 3, 1, ink);
+          dot(3, -1, 3, 1, ink);
+        }
+        break;
+      }
+      case Species::Jellyfish: {
+        // The bell squashes on the push and relaxes on the sink.
+        const int squash = static_cast<int>(std::lround(c.blink * 2.0));
+        dot(-3, -2 - squash, 7, 3 + squash, accent);   // bell
+        for (int leg = 0; leg < 3; ++leg) {
+          const int sway = static_cast<int>(std::lround(
+            std::sin(t * 2.4 + c.phase + leg) * 1.5));
+          dot(-2 + leg * 2 + sway, 1, 1, 3 - squash, ink);   // tentacles
+        }
+        break;
+      }
+      case Species::Bird: {
+        const bool hopping = std::fabs(c.vx) > 0.5;
+        const int hop = hopping ? static_cast<int>(std::lround(
+          std::fabs(std::sin(t * 7.0 + c.phase)) * 2.0)) : 0;
+        dot(-3, -5 - hop, 6, 4, ink);                // body
+        dot(face > 0 ? 2 : -4, -8 - hop, 3, 3, ink); // head
+        dot(face > 0 ? 5 : -5, -7 - hop, 1, 1, accent);  // beak
+        dot(face > 0 ? -4 : 3, -4 - hop, 2, 2, accent); // tail
+        dot(-2, -1, 1, 1 + hop, ink);                // legs
+        dot(1, -1, 1, 1 + hop, ink);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  void renderCreatures() {
+    if (creatureFade_ < 0.01 || colonies_.empty()) {
+      return;
+    }
+    const Uint8 alpha = static_cast<Uint8>(std::clamp(creatureFade_, 0.0, 1.0) * 205.0);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    for (const auto& colony : colonies_) {
+      for (const auto& c : colony.creatures) {
+        drawOneCreature(c, alpha, colony.home);
+      }
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+  }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUSY CRITTERS — a critter that means "this is working"
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// An operation that takes time and says nothing is indistinguishable from one
+// that is broken. Normalise measured loudness on worker threads and kept its own
+// batch counters, and not one of them was ever read by a renderer -- so it ran in
+// complete silence and was reported as doing nothing. The update download had a
+// status line that existed only inside the settings panel, so it was invisible
+// unless you were already looking at the one place that had it.
+//
+// So a critter appears ON the thing that is working, scurries while it works and
+// leaves when it is done. Local rather than one global spinner, because the point
+// is to say WHICH thing is busy -- a status bar cannot.
+//
+// THESE ARE NOT THE THEME'S CREATURES above, and the difference is deliberate.
+// creaturesShouldBeAwake() silences the ambient animals while an output is live
+// and whenever the operator has switched them off. A busy critter obeys neither
+// rule: it is information, not decoration, and silence during work is the entire
+// complaint it exists to answer. What it does keep is the spirit of that rule --
+// it never leaves the rect it was given, so nothing wanders the chrome mid-show.
+
+  static constexpr int kBusyCritterFrames = 4;
+
+  // Art lives in data/sprites/critters/<species>-<1..4>.png and is loaded through
+  // the ordinary UI image path, so it goes through the same decoder and the same
+  // nearest-neighbour texture rule as every other picture in the chrome.
+  SDL_Texture* busyCritterFrame(const std::string& species, int frame) {
+    const std::string key = species + "-" +
+      std::to_string((frame % kBusyCritterFrames) + 1);
+    auto it = busyCritterArt_.find(key);
+    if (it == busyCritterArt_.end()) {
+      UiImageAsset asset;
+      asset.path = Paths::dataDir() / "sprites" / "critters" / (key + ".png");
+      it = busyCritterArt_.emplace(key, std::move(asset)).first;
+    }
+    // A failed load latches through attemptedLoad, so a missing file is not
+    // re-read every frame.
+    return ensureUiImageLoaded(it->second) ? it->second.texture : nullptr;
+  }
+
+  static double busyCritterHash(const std::string& s) {
+    std::uint32_t h = 2166136261u;
+    for (unsigned char c : s) {
+      h = (h ^ c) * 16777619u;
+    }
+    return static_cast<double>(h % 10000u) / 10000.0;
+  }
+
+  // ── EACH ANIMAL MOVES LIKE ITSELF ─────────────────────────────────────────
+  //
+  // James, 2026-10-29: "each animal needs individual behavior". They all
+  // used to walk the same walk at the same speed. Now each has a gait: how it
+  // moves, how fast, how often it stops and for how long. The theme creatures
+  // (core/creatures.hpp) had personalities already; these borrow the ideas --
+  // the mouse's dart-and-freeze, the frog's arc, the crab's sidle -- for a
+  // strip a few cells high.
+  enum class BusyGait : std::uint8_t {
+    Stroll,   // walks, stops a while, walks on
+    Dart,     // a quick run, a freeze, maybe the other way
+    Sidle,    // scuttles sideways in bursts, never turns its body
+    Hop,      // sits, then one hop at a time (the frog's frames ARE a hop)
+    Swim,     // drifts up and down as it goes, with little surges
+    Leap,     // swims low, and every so often arcs up out of the water
+    Slither,  // slow and sinuous, never stops
+    Flutter,  // flaps all the time, all over the place
+    Waddle,   // slow, rocking at every step, stops to sniff
+    Glide,    // barely moving, perfectly smooth
+  };
+  struct BusyStyle {
+    BusyGait gait = BusyGait::Stroll;
+    double speed = 0.3;       // fractions of the rect a second while moving
+    double steps = 8.0;       // walk-cycle frames a second while moving
+    double runFor = 0.0;      // seconds a run lasts on average; 0 never stops
+    double restFor = 0.0;     // seconds a stop lasts on average
+    bool turnsBody = true;    // false: faces the viewer, so it never flips
+  };
+  static BusyStyle busyGaitFor(const std::string& species) {
+    if (species == "cat")       return {BusyGait::Stroll,  0.22, 6.0,  2.5, 1.6, true};
+    if (species == "clownfish") return {BusyGait::Swim,    0.32, 8.0,  0.0, 0.0, true};
+    if (species == "crab")      return {BusyGait::Sidle,   0.45, 12.0, 0.6, 0.8, false};
+    if (species == "dolphin")   return {BusyGait::Leap,    0.40, 7.0,  0.0, 0.0, true};
+    if (species == "eel")       return {BusyGait::Slither, 0.16, 5.0,  0.0, 0.0, true};
+    if (species == "frog")      return {BusyGait::Hop,     0.55, 0.0,  0.42, 1.0, true};
+    if (species == "hedgehog")  return {BusyGait::Waddle,  0.12, 6.0,  2.0, 1.1, true};
+    if (species == "lizard")    return {BusyGait::Dart,    0.95, 14.0, 0.3, 1.1, true};
+    if (species == "moth")      return {BusyGait::Flutter, 0.28, 16.0, 0.0, 0.0, false};
+    if (species == "mouse")     return {BusyGait::Dart,    0.70, 12.0, 0.5, 0.8, true};
+    if (species == "rat")       return {BusyGait::Stroll,  0.36, 10.0, 3.0, 0.6, true};
+    if (species == "snail")     return {BusyGait::Glide,   0.05, 2.5,  0.0, 0.0, true};
+    return {};
+  }
+  // The gaits that move up and down the rect rather than along its floor.
+  static bool busyGaitUsesHeight(BusyGait gait) {
+    return gait == BusyGait::Hop || gait == BusyGait::Swim || gait == BusyGait::Leap ||
+           gait == BusyGait::Slither || gait == BusyGait::Flutter;
+  }
+  // 0..1 from the critter's own dice (xorshift).
+  static double busyRoll(std::uint32_t& dice) {
+    dice ^= dice << 13;
+    dice ^= dice >> 17;
+    dice ^= dice << 5;
+    return static_cast<double>(dice % 10000u) / 10000.0;
+  }
+
+  static const char* busyCritterSpecies(const std::string& seed) {
+    static constexpr const char* species[] = {
+      "cat", "clownfish", "crab", "dolphin", "eel", "frog",
+      "hedgehog", "lizard", "moth", "mouse", "rat", "snail"
+    };
+    constexpr std::size_t count = sizeof(species) / sizeof(species[0]);
+    return species[static_cast<std::size_t>(busyCritterHash(seed) * count)];
+  }
+
+  // Called EVERY FRAME by whatever is working, with the rect it is working in.
+  // Anything that stops calling fades and is dropped, so no operation has to
+  // remember to announce that it finished -- forgetting exactly that is the
+  // class of bug this whole feature is about.
+  //
+  // Pass no species and the job draws one of the twelve when it starts. Each
+  // job used to have its own, and the eel only ever turned up on the update
+  // (James, 2026-10-29: "it feels weird being the only place the eel appears").
+  void markBusy(const std::string& id, const char* species, const SDL_Rect& where,
+                bool foreground = true) {
+    if (where.w <= 0 || where.h <= 0) {
+      return;
+    }
+    BusyCritter& b = busyCritters_[id];
+    if (b.species.empty()) {
+      // Pick once per job, so the cast varies without changing mid-animation.
+      b.species = species ? species : busyCritterSpecies(
+        id + ":" + std::to_string(SDL_GetTicks()));
+      // Started somewhere arbitrary along the rect, so two rows busy at once are
+      // not in lockstep -- that reads as one animation rather than two animals.
+      b.x = 0.15 + 0.7 * busyCritterHash(id);
+      b.dir = (busyCritterHash(id + "d") < 0.5) ? -1.0 : 1.0;
+      b.dice = 1u + static_cast<std::uint32_t>(busyCritterHash(id + b.species) * 4000000.0);
+      const BusyStyle style = busyGaitFor(b.species);
+      b.runLeft = style.runFor * (0.5 + busyRoll(b.dice));
+      // A frog arrives sitting, for a moment, before its first hop.
+      b.restLeft = style.gait == BusyGait::Hop ? style.restFor * busyRoll(b.dice) : 0.0;
+    }
+    b.home = where;
+    b.foreground = foreground;
+    b.seenAtMs = SDL_GetTicks();
+  }
+
+  void serviceBusyCritters(double dt) {
+    const Uint64 now = SDL_GetTicks();
+    for (auto it = busyCritters_.begin(); it != busyCritters_.end(); ) {
+      BusyCritter& b = it->second;
+      const bool alive = (now - b.seenAtMs) < 120;
+      b.fade += ((alive ? 1.0 : 0.0) - b.fade) * std::min(1.0, dt * 6.0);
+      if (!alive && b.fade < 0.02) {
+        it = busyCritters_.erase(it);
+        continue;
+      }
+      stepBusyCritter(b, dt);
+      ++it;
+    }
+  }
+
+  // One step of the animal's own gait.
+  static void stepBusyCritter(BusyCritter& b, double dt) {
+    const BusyStyle style = busyGaitFor(b.species);
+    constexpr double kPi = 3.14159265358979;
+    b.clock += dt;
+    b.pose = -1;
+    const auto keepInside = [&b] {
+      if (b.x < 0.06) { b.x = 0.06; b.dir = 1.0; }
+      if (b.x > 0.94) { b.x = 0.94; b.dir = -1.0; }
+    };
+
+    // THE FROG keeps its own time: it sits, then makes one whole hop. runFor
+    // is the hop's length, and the four frames are sit, crouch, leap and land,
+    // so the pose follows the hop rather than a clock.
+    if (style.gait == BusyGait::Hop) {
+      if (b.hop < 0.0) {
+        b.lift = 0.0;
+        b.pose = 0;
+        b.restLeft -= dt;
+        if (b.restLeft <= 0.0) b.hop = 0.0;
+        return;
+      }
+      b.hop += dt / std::max(0.1, style.runFor);
+      const double along = std::min(1.0, b.hop);
+      b.lift = std::sin(along * kPi);
+      b.pose = along < 0.18 ? 1 : along < 0.78 ? 2 : 3;
+      b.x += b.dir * dt * style.speed;
+      keepInside();
+      if (b.hop >= 1.0) {
+        b.hop = -1.0;
+        b.lift = 0.0;
+        b.restLeft = style.restFor * (0.5 + busyRoll(b.dice));
+        if (busyRoll(b.dice) < 0.25) b.dir = -b.dir;
+      }
+      return;
+    }
+
+    // RUN, THEN REST, for the ones that stop (runFor 0 never does).
+    bool moving = true;
+    if (b.restLeft > 0.0) {
+      b.restLeft -= dt;
+      moving = false;
+      if (b.restLeft <= 0.0) {
+        b.runLeft = style.runFor * (0.5 + busyRoll(b.dice));
+        // A darting animal or a crab may set off the other way.
+        if ((style.gait == BusyGait::Dart || style.gait == BusyGait::Sidle) && busyRoll(b.dice) < 0.4) {
+          b.dir = -b.dir;
+        }
+      }
+    } else if (style.runFor > 0.0) {
+      b.runLeft -= dt;
+      if (b.runLeft <= 0.0) {
+        b.restLeft = style.restFor * (0.5 + busyRoll(b.dice));
+        moving = false;
+      }
+    }
+
+    double speed = style.speed;
+    switch (style.gait) {
+      case BusyGait::Swim:
+        // Up and down as it goes, with a little surge now and then.
+        b.lift = 0.5 + 0.38 * std::sin(b.clock * 2.4 + b.dice % 7);
+        speed *= 1.0 + 0.6 * std::max(0.0, std::sin(b.clock * 1.7 + b.dice % 5));
+        break;
+      case BusyGait::Leap: {
+        // Low in the water, then an arc for the first third of every cycle.
+        const double cycle = std::fmod(b.clock + (b.dice % 11) * 0.2, 2.6) / 2.6;
+        b.lift = cycle < 0.34 ? std::sin(cycle / 0.34 * kPi) : 0.08;
+        break;
+      }
+      case BusyGait::Slither:
+        b.lift = 0.45 + 0.25 * std::sin(b.clock * 1.3 + b.dice % 9);
+        break;
+      case BusyGait::Flutter:
+        // All over the place, and changing its mind about which way.
+        b.lift = std::clamp(0.5 + 0.35 * std::sin(b.clock * 5.3 + b.dice % 13) +
+                            0.15 * std::sin(b.clock * 11.7), 0.0, 1.0);
+        speed *= 0.6 + 0.8 * std::fabs(std::sin(b.clock * 3.1));
+        if (busyRoll(b.dice) < dt * 0.4) b.dir = -b.dir;   // about every two and a half seconds
+        break;
+      default:
+        break;
+    }
+    if (moving) {
+      b.phase += dt * style.steps;
+      b.x += b.dir * dt * speed;
+      keepInside();
+    } else {
+      b.pose = 0;   // standing still on its first frame
+    }
+  }
+
+  void drawBusyCritter(const BusyCritter& b) {
+    if (b.home.w <= 0 || b.home.h <= 0) {
+      return;
+    }
+    SDL_Texture* tex = busyCritterFrame(b.species, b.pose >= 0 ? b.pose : static_cast<int>(b.phase));
+    if (!tex) {
+      return;
+    }
+    const BusyStyle style = busyGaitFor(b.species);
+    // An animal that moves up and down is drawn a little smaller, standing on
+    // the bottom of its rect, so there is height left to move in.
+    const bool high = busyGaitUsesHeight(style.gait);
+    const int full = high
+      ? std::min({b.home.w, b.home.h, std::clamp(b.home.h * 5 / 8, uiScaled(12), uiScaled(24))})
+      : std::min({b.home.w, b.home.h,
+          std::clamp(b.home.h - uiScaled(6), uiScaled(12), uiScaled(28))});
+    // GROWN FROM A SINGLE CELL, and shrunk back into one when the job is
+    // done, rather than faded (James's original critter reference). The
+    // nearest-neighbour texture makes the small sizes read as a few cells.
+    const double grow = std::clamp(b.fade, 0.0, 1.0);
+    const double eased = 1.0 - (1.0 - grow) * (1.0 - grow) * (1.0 - grow);
+    const int size = std::max(std::max(2, uiScaled(2)), static_cast<int>(std::lround(full * eased)));
+    const int x = b.home.x + static_cast<int>(
+      std::clamp(b.x, 0.0, 1.0) * (b.home.w - full)) + (full - size) / 2;
+    // Walkers bob a cell at each step (a waddle rocks two); the snail and
+    // anything standing still do not bob at all.
+    int bob = 0;
+    if (!high && b.pose < 0 && style.gait != BusyGait::Glide) {
+      bob = static_cast<int>(std::lround(std::sin(b.phase * 1.6) *
+                                         (style.gait == BusyGait::Waddle ? 2.0 : 1.0)));
+    }
+    const int floorY = high ? b.home.y + b.home.h - size
+                            : b.home.y + (b.home.h - full) / 2 + (full - size);
+    const int y = std::clamp(floorY - static_cast<int>(std::lround(b.lift * (floorY - b.home.y))) + bob,
+                             b.home.y, b.home.y + b.home.h - size);
+    const bool hadClip = SDL_RenderClipEnabled(controlRenderer_);
+    SDL_Rect previousClip {};
+    SDL_GetRenderClipRect(controlRenderer_, &previousClip);
+    SDL_Rect clip = b.home;
+    if (hadClip && !SDL_GetRectIntersection(&previousClip, &b.home, &clip)) {
+      return;
+    }
+    SDL_BlendMode previousBlend = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(controlRenderer_, &previousBlend);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderClipRect(controlRenderer_, &clip);
+    SDL_SetTextureAlphaMod(tex, 255);
+    SDL_FRect dst {static_cast<float>(x), static_cast<float>(y),
+                   static_cast<float>(size), static_cast<float>(size)};
+    // Sprites face right; one drawn facing the viewer (crab, moth) never turns.
+    SDL_RenderTextureRotated(controlRenderer_, tex, nullptr, &dst, 0.0, nullptr,
+                             style.turnsBody && b.dir < 0.0 ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+    SDL_SetTextureAlphaMod(tex, 255);
+    SDL_SetRenderClipRect(controlRenderer_, hadClip ? &previousClip : nullptr);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, previousBlend);
+  }
+
+  void renderBusyCritters(bool foreground = true) {
+    for (const auto& entry : busyCritters_) {
+      if (entry.second.foreground == foreground) {
+        drawBusyCritter(entry.second);
+      }
+    }
+  }

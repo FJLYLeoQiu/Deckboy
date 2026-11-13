@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Deckboy Contributors
+// This file is part of Deckboy, a cue deck for live events.
+// See LICENSE for details.
+
+// ============================================================================
+// libav_decoder.hpp — In-process libav* decode pipelines (GPU decode rewrite).
+//
+// Replaces the per-deck ffmpeg video+audio subprocess pipes for file-backed
+// Video/Audio cues (docs/GPU_DECODE_PLAN.md §7–§11). Live streams (SRT/NDI),
+// stills, source capture, waveform, ffprobe and stream encode-out stay on the
+// ffmpeg CLI — decode was only half its jobs.
+//
+//   VideoPipeline — demux + decode one video stream.
+//
+//     HARDWARE DECODE ON ALL THREE PLATFORMS: d3d11va on Windows,
+//     VideoToolbox on macOS, VAAPI on Linux. The device type is chosen by
+//     preferredHwDeviceType() and CREATING it is what asks the machine — a
+//     failure there is a fall back to software, not a broken cue.
+//
+//     Two separate questions, and they have different answers per platform:
+//
+//     * Did the DECODE run on hardware? Yes wherever the platform has a
+//       decoder and the codec is one it knows.
+//     * Did the FRAME avoid a copy? Only on Windows, where the decoder can be
+//       put on the renderer's own D3D11 device, so frames stay GPU-resident as
+//       NV12/P010 texture-array slices in DecodedFrame's gpu fields and the
+//       compositor GPU-copies the slice into an SDL_Texture wrapped once via
+//       SDL_CreateTextureWithProperties — zero CPU touch.
+//
+//     Everywhere else — and on Windows with no device supplied (preview/PiP
+//     engines) or RGBA wanted (CPU effects path) — the frame comes down via
+//     av_hwframe_transfer_data and goes through swscale into the classic
+//     `pixels` layout. That still moves the expensive half off the CPU.
+//     hardwareDecodeName() reports which decoder ran, because "cpu path" and
+//     "software decode" are different facts.
+//     * open() primes the first frame; if hardware decode fails it retries
+//       in software internally, and if the file can't produce one good frame
+//       open() fails — the caller falls back to the CLI pipe path (also the
+//       break-glass path for rotated-metadata files, which libav does not
+//       autorotate).
+//
+//   AudioPipeline — demux + decode one audio stream to interleaved s16
+//     stereo 48 kHz, matching the old `ffmpeg -f s16le -ac 2 -ar 48000`
+//     pipe byte-for-byte so MediaEngine's gain/tap/queue logic and the
+//     audio-master A/V clock are untouched. Playback speed uses an
+//     avfilter atempo chain (same semantics as the CLI args).
+//
+// Both pipelines install an AVIO interrupt callback wired to requestStop()
+// so a decode thread blocked on I/O (dead network share) can be unblocked
+// during stopDecoderThreads() — the in-process replacement for killing the
+// child process to break a pipe read.
+//
+// Compiled only when DECKBOY_INPROC_DECODE=1 (CMake option, default ON).
+// This header is libav-free (pimpl) so it is safe to include anywhere.
+// ============================================================================
+
+#pragma once
+
+#if DECKBOY_INPROC_DECODE
+
+#include "core/sdl_compat.hpp"
+#include "core/types.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace deckboy::libav {
+
+// ONE PIPE, PICTURE AND SOUND. A live feed (SRT) can be opened only once --
+// an SRT sender in listener mode takes a single caller -- so an ffmpeg CLI
+// process takes the one connection and muxes the decoded picture (rawvideo)
+// and sound (pcm_s16le) into NUT on its stdout, and this splits them again.
+// Sound is optional: a feed without it simply yields no Audio packets.
+class PipeDemuxer {
+ public:
+  PipeDemuxer();
+  ~PipeDemuxer();
+  PipeDemuxer(const PipeDemuxer&) = delete;
+  PipeDemuxer& operator=(const PipeDemuxer&) = delete;
+
+  // Read the NUT header from `fd`. Blocks until ffmpeg has connected and
+  // written it; false if the pipe closes first.
+  bool open(int fd);
+  enum class Kind { Video, Audio, End };
+  // The next packet's payload: one raw video frame, or a run of interleaved
+  // s16 stereo samples. End when the pipe closes.
+  Kind next(std::vector<std::uint8_t>& data);
+  bool hasAudio() const;
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// Parameters for VideoPipeline::open(). targetWidth/Height and format apply
+// to CPU-output mode only (mirrors the old scale filter + -pix_fmt choice);
+// zero-copy frames are always source-sized NV12 — the compositor scales on
+// the GPU at blit time.
+struct VideoOpenParams {
+  std::string path;
+  double startSeconds = 0.0;           // in-point seek (replaces -ss)
+  int targetWidth = 0;                 // CPU mode scale target (0 = source)
+  int targetHeight = 0;
+  FramePixelFormat format = FramePixelFormat::NV12;
+  void* d3dDevice = nullptr;           // ID3D11Device* → zero-copy; null → CPU output
+  // Linux: let a V4L2 hardware decoder (a Raspberry Pi's) hand over its frames
+  // as DRM-PRIME buffers for the renderer to import, instead of being read out
+  // -- reading them is slower than the frame lasts on a Pi 3. Set only when
+  // the renderer has said it can import them (DrmPrimeImporter).
+  bool drmPrime = false;
+  // Datamosh: drop every keyframe after the first so P-frames apply their
+  // motion onto a stale reference and the picture smears. Forces SOFTWARE
+  // decode regardless of d3dDevice - hardware decoders fed P-frames with no
+  // valid reference are driver-dependent (may smear, may error, may reset),
+  // and the error run would trip kMaxConsecutiveErrors and kill the decode.
+  bool datamosh = false;
+};
+
+class VideoPipeline {
+ public:
+  VideoPipeline();
+  ~VideoPipeline();
+  VideoPipeline(const VideoPipeline&) = delete;
+  VideoPipeline& operator=(const VideoPipeline&) = delete;
+
+  // Open, seek, and prime the first frame. Returns false when this file
+  // should go to the CLI fallback (no video stream, rotation metadata,
+  // no decodable frame). Safe to call once per instance.
+  bool open(const VideoOpenParams& params);
+
+  // Produce the next decoded frame (display order). Returns false on EOF or
+  // after a run of unrecoverable decode errors. Frame `index` is left for
+  // the caller to assign.
+  bool nextFrame(DecodedFrame& out);
+
+  // Back to the in-point on the same open pipeline (a loop): nextFrame then
+  // starts the clip again. False when the stream cannot seek; the caller
+  // reopens instead.
+  bool rewind();
+
+  bool zeroCopyActive() const;         // frames carry GPU payloads
+  void* device() const;                // ID3D11Device* in use (null in CPU/sw mode)
+  // Whether the DECODE ran on hardware, which is a different question from
+  // whether the frames avoided a copy. Everywhere but Windows the answer is
+  // "hardware decode, then a download" -- the expensive half is still off the
+  // CPU, and a report that only said "cpu" could not tell that from software
+  // decode, which is the whole thing this distinguishes.
+  bool hardwareDecodeActive() const;
+  const char* hardwareDecodeName() const;   // "d3d11va" / "videotoolbox" / "vaapi" / "software"
+
+  // Unblock any av_read_frame stuck in I/O; nextFrame() then returns false.
+  // Callable from another thread, as is setDatamosh below; everything else on
+  // this class belongs to the decode thread.
+  void requestStop();
+
+  // Toggle keyframe dropping on a already-open pipeline. Turning it OFF does
+  // not clean the picture until the next keyframe arrives, which is why the
+  // app swaps clips instead of relying on this mid-cue.
+  void setDatamosh(bool enabled);
+
+  void close();
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// ---------------------------------------------------------------------------
+// HAP: demux only, never decode.
+//
+// HAP frames are already GPU-ready block data, so the whole point is to pull
+// the packets out of the container and hand them to hap::decodeFrame -- NOT to
+// run them through ffmpeg's hap decoder, which unpacks DXT to RGB on the CPU
+// and is slower than H.264 for several times the file size.
+// ---------------------------------------------------------------------------
+struct HapProbeResult {
+  bool isHap = false;
+  int width = 0;
+  int height = 0;
+  double fps = 0.0;
+  int frames = 0;              // packets successfully decoded to blocks
+  std::string textureFormat;   // e.g. RGB_DXT1
+  std::size_t blockBytes = 0;  // size of the last decoded frame
+  // First frame expanded to RGBA, for verifying the CPU expansion against a
+  // reference decoder. Empty unless the caller asked for it.
+  std::vector<std::uint8_t> rgbaFirstFrame;
+};
+
+// Open `path`, confirm the video stream is HAP, and decode every frame to
+// blocks via the vendored decoder. Used by --hap-probe and the smoke suite to
+// prove the demux+decode path without needing a window.
+bool probeHapFile(const std::string& path, HapProbeResult& out, std::string& error);
+
+// One still image (PNG, JPEG, ...) decoded IN THIS PROCESS to RGBA, for the
+// desk's own artwork. It used to go through the ffprobe and ffmpeg programs,
+// and on a Mac where those cannot start (bundled for a newer macOS than the
+// machine) every icon on the desk came up blank while the text drew. False
+// when the file cannot be read; the caller then tries the old way.
+bool decodeImageRgba(const std::string& path, int& width, int& height,
+                     std::vector<std::uint8_t>& rgba, int maxBytes = 64 * 1024 * 1024);
+
+struct AudioOpenParams {
+  std::string path;
+  double startSeconds = 0.0;
+  double speed = 1.0;                  // atempo chain when != 1
+  // WHAT TO RESAMPLE TO. Was hardcoded 48000 in three places inside the
+  // pipeline; a deck running at another rate got audio at the wrong speed,
+  // which is the one fault in this file that would be obvious instantly.
+  int sampleRate = 48000;
+  int audioTrack = 0;                  // the Nth sound track in the file (0 = first)
+};
+
+class AudioPipeline {
+ public:
+  AudioPipeline();
+  ~AudioPipeline();
+  AudioPipeline(const AudioPipeline&) = delete;
+  AudioPipeline& operator=(const AudioPipeline&) = delete;
+
+  // Returns false when the file has no decodable audio stream — the caller
+  // simply runs without audio (same as a failed CLI spawn today).
+  bool open(const AudioOpenParams& params);
+
+  // Fill up to maxSamples int16 values, interleaved stereo at the rate the
+  // caller asked for in AudioOpenParams::sampleRate.
+  // Returns the count written, 0 on EOF, <0 on unrecoverable error.
+  int read(std::int16_t* out, int maxSamples);
+
+  // Back to the in-point on the same open pipeline (a loop), discarding
+  // anything decoded past where the caller cut the pass. False when the
+  // stream cannot seek.
+  bool rewind();
+
+  void requestStop();                  // see VideoPipeline::requestStop
+  void close();
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// -- D3D11 interop helpers for the zero-copy composite path ------------------
+// All return null/false on non-Windows builds or software renderers.
+
+// The ID3D11Device* backing an SDL renderer (SDL_PROP_RENDERER_D3D11_DEVICE_POINTER).
+void* rendererD3D11Device(SDL_Renderer* renderer);
+
+// Create a persistent NV12 or P010 ID3D11Texture2D on the renderer's device
+// and wrap it as an SDL_Texture (SDL_CreateTextureWithProperties). The format
+// must MATCH the decoded surface being copied in — a P010 surface copied into
+// an NV12 wrap renders a wrong picture rather than failing. *outTexture2D
+// receives the raw texture, released with releaseD3D11Texture AFTER the
+// SDL_Texture is destroyed. Dimensions are rounded down to even.
+SDL_Texture* createWrappedVideoTexture(SDL_Renderer* renderer, int w, int h,
+                                       FramePixelFormat format,
+                                       void** outTexture2D, SDL_Colorspace colorspace);
+void releaseD3D11Texture(void* texture2D);
+
+// GPU→GPU copy of a zero-copy frame's texture-array slice into a texture
+// created by createWrappedVideoTexture on the SAME device.
+bool copyGpuFrameToTexture(const DecodedFrame& frame, void* dstTexture2D);
+
+// macOS: wrap a frame's CVPixelBuffer AS an SDL_Texture, no copy at all.
+//
+// The counterpart to the two calls above rather than a third variant of them,
+// because the shape genuinely differs: on Windows a persistent texture is
+// created once and each frame's slice is copied into it; here every frame is
+// its own IOSurface and the texture is a wrapper around THAT buffer. So this
+// returns a new texture per frame and the caller destroys the previous one.
+// Creating it is cheap -- no pixel memory is allocated, only a Metal view of
+// an existing surface.
+//
+// Returns null on any other platform, on a non-CVPixelBuffer frame, or if the
+// renderer is not Metal, so a caller can always fall through to the CPU path.
+SDL_Texture* wrapPixelBufferTexture(SDL_Renderer* renderer,
+                                    const DecodedFrame& frame);
+
+// CPU download of a zero-copy frame (av_hwframe_transfer_data) into a packed
+// NV12 DecodedFrame — the fallback for consumers on a different device
+// (secondary outputs) and the throttled control-window preview. A 10-bit P010
+// surface is narrowed to 8-bit NV12 here, because that is what those CPU
+// consumers can read; the full-depth picture stays on the zero-copy path.
+bool downloadGpuFrameNV12(const DecodedFrame& frame, DecodedFrame& out);
+
+} // namespace deckboy::libav
+
+#endif // DECKBOY_INPROC_DECODE

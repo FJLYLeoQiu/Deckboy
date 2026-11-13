@@ -1,0 +1,22 @@
+# Deckboy Theme: n64
+# Family: moulded case -- muted plastic shell with a saturated LCD, the same
+# structure as the default Game Boy theme. The case is deliberately low-chroma:
+# the character's hue belongs to the screen.
+# All color values are RRGGBBAA hex.
+
+shell_outer	AEBAB2FF
+shell_inner	9AA69EFF
+shell_shadow	3E4A44FF
+screen_light	33D9C0FF
+screen_mid	199B8AFF
+screen_dark	0E5248FF
+screen_deep	041A16FF
+screen_ink_soft	127A6DFF
+button_bezel	4E625CFF
+delete_bezel	8B3A3AFF
+scanline_alpha	18
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	bird	1
+creature	mouse	1

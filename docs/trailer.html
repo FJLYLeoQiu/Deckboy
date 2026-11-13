@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deckboy 419 in action | Video playback, scopes and warp</title>
+    <meta name="description" content="Watch Deckboy 0.99.419 play video while the next cue is selected, with music by YMCK. Explore effects, scopes and warp in captures from the published release.">
+    <link rel="canonical" href="https://utopian-academy.github.io/Deckboy/trailer.html">
+
+    <meta property="og:type" content="video.other">
+    <meta property="og:site_name" content="Deckboy">
+    <meta property="og:title" content="Deckboy 419: keep the picture moving">
+    <meta property="og:description" content="Play video. Keep the next cue ready. Deckboy 0.99.419 with music by YMCK, plus effects, scopes and warp demos.">
+    <meta property="og:url" content="https://utopian-academy.github.io/Deckboy/trailer.html">
+    <meta property="og:image" content="https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.png">
+    <meta property="og:video" content="https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.mp4">
+    <meta property="og:video:type" content="video/mp4">
+    <meta property="og:video:width" content="1000">
+    <meta property="og:video:height" content="730">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Deckboy 419: keep the picture moving">
+    <meta name="twitter:image" content="https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.png">
+
+    <link rel="stylesheet" href="style.css?v=20261024b">
+
+    <style>
+        .stage { max-width: 1100px; margin: 0 auto 2rem; padding: 0 1.5rem; }
+        .stage video { width: 100%; height: auto; display: block;
+                       border: 2px solid var(--rule); background: #000; }
+        .under { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+                 margin-top: 1rem; }
+        .under .btn-large { font-size: .62rem; padding: .7rem 1.1rem; }
+        .under .note { font-size: .82rem; color: var(--ink-soft); }
+
+        .prose { max-width: 900px; margin: 0 auto 4rem; padding: 0 1.5rem; }
+        .prose h2 { margin: 2.6rem 0 .6rem; font-size: 1.2rem; color: var(--ink); }
+        .prose p, .prose li { color: var(--ink-soft); max-width: 62ch; margin-bottom: 1rem; }
+        .prose ul { margin-left: 1.3rem; }
+        .prose code { background: var(--rule); padding: .12em .4em; font-size: .9em; }
+        .pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                margin: 1.6rem 0 2rem; }
+        .pair figure { margin: 0; }
+        .pair img { width: 100%; height: auto; display: block; border: 2px solid var(--rule);
+                    image-rendering: pixelated; }
+        .pair figcaption { font-size: .8rem; color: var(--ink-soft); margin-top: .5rem; }
+        audio { width: 100%; margin: .6rem 0 1.4rem; }
+    </style>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "VideoObject",
+      "name": "Deckboy 419: video playback",
+      "description": "Play video and select the next cue in Deckboy 0.99.419. Footage from Tears of Steel, with music by YMCK.",
+      "thumbnailUrl": "https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.png",
+      "contentUrl": "https://utopian-academy.github.io/Deckboy/images/readme/release-419/deckboy-video-playback-ymck.mp4",
+      "embedUrl": "https://utopian-academy.github.io/Deckboy/trailer.html",
+      "uploadDate": "2026-10-23",
+      "duration": "PT6S",
+      "isFamilyFriendly": true,
+      "publisher": { "@type": "Organization", "name": "Utopian Academy" }
+    }
+    </script>
+</head>
+<body>
+    <div class="background-glow"></div>
+
+    <nav class="navbar">
+        <div class="logo"><a href="./" style="color:inherit;text-decoration:none">Deckboy</a></div>
+        <div class="nav-links">
+            <a href="trailer.html">Trailer</a>
+            <a href="compare.html">Compare</a>
+            <a href="manual.html">Manual</a>
+            <a href="faq.html">FAQ</a>
+            <a href="specs.html">Specs</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy">GitHub</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-primary">Download Free</a>
+        </div>
+    </nav>
+
+    <header class="hero" style="padding-bottom:1rem">
+        <div class="hero-content">
+            <h1>One list.<br><span class="gradient-text">Every show.</span></h1>
+            <p class="hero-subtitle">Play video. Keep the next cue ready. Deckboy v0.99.419, with music by YMCK.</p>
+        </div>
+    </header>
+
+    <div class="stage">
+        <video src="images/readme/release-419/deckboy-video-playback-ymck.mp4" poster="images/readme/release-419/deckboy-video-playback-ymck.png"
+               controls preload="metadata" playsinline width="1000" height="730" aria-label="Deckboy video playback with music by YMCK">
+            <a href="images/readme/release-419/deckboy-video-playback-ymck.mp4">Download the playback demo</a>.
+        </video>
+        <div class="under">
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-large">Download Deckboy</a>
+            <a href="images/readme/release-419/deckboy-video-playback-ymck.mp4" class="btn-large btn-outline" download>Download the video</a>
+            <a href="images/readme/release-419/deckboy-video-playback.gif">GIF version</a>
+            <span class="note">6 seconds &middot; music by YMCK &middot; v0.99.419</span>
+        </div>
+    </div>
+
+    <div class="prose">
+        <p>Footage: <a href="https://mango.blender.org/"><i>Tears of Steel</i></a> &copy; Blender Foundation,
+        <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>, trimmed and shown inside Deckboy with the original audio removed.
+        Music: <b>YMCK</b> &mdash; <i>Family Music</i> (2004), used with permission. The music has its own permission; it is not covered by Deckboy's software licence.</p>
+        <h2 id="current-demos">The current desk, in action</h2>
+        <p>Explore <a href="./#in-action">video playback, effects, scopes and warp</a> from v0.99.419.
+        The effects, scopes and warp demos use Deckboy's generated material and bundled examples.</p>
+        <video data-loop-demo src="images/readme/release-419/picture-scopes.mp4" poster="images/readme/release-419/picture-scopes.png"
+               controls loop muted playsinline preload="none" width="900" height="418" style="width:100%;height:auto;"
+               aria-label="Deckboy 419 scopes analysing its built-in moving test card"></video>
+        <p class="note">Moving test card &middot; real analysis and output counters &middot; v0.99.419</p>
+        <h2>Earlier trailer / v0.99.397</h2>
+        <p>A minute of clips, slides, lower thirds, projection mapping and effects from the earlier release.</p>
+        <video src="video/deckboy-trailer-397.mp4" poster="video/trailer-poster-397.jpg" controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <h2>What is in it</h2>
+        <ul>
+            <li><b>One list</b> &mdash; clips taken to air with a push, an iris, a wipe and a dip.</li>
+            <li><b>Anything is a cue</b> &mdash; a live web page, then a slide deck: a PDF,
+                PowerPoint or Keynote file becomes one cue per slide, notes included.</li>
+            <li><b>Lower thirds</b> &mdash; the new <b>arcade</b> look, with its slow wobble.</li>
+            <li><b>Projection mapping</b> &mdash; a layer pinned onto a steep board in
+                <b>linear</b>, which folds along the diagonal, then switched to
+                <b>perspective</b>, which keeps a flat board flat. New in 0.99.397.</li>
+            <li><b>Text mode</b> &mdash; a face redrawn in ASCII density characters, getting finer
+                on every beat until it resolves.</li>
+            <li><b>Schlieren</b> and <b>Chladni plates</b> &mdash; two of the effects no other
+                playback application has.</li>
+            <li><b>Sixteen effects</b> switched live on the beat, with the recorder counting
+                frames: none dropped.</li>
+        </ul>
+
+        <div class="pair">
+            <figure>
+                <img src="video/chladni.gif" alt="The Chladni effect: a stormy test card gathering into glowing plate lines.">
+                <figcaption><b>Chladni</b> &mdash; the pattern sand makes on a vibrating plate,
+                solved per pixel. Your picture is the sand.</figcaption>
+            </figure>
+            <figure>
+                <img src="video/databend-loop.gif" alt="The databend effect tearing a night-time test card into rainbow bands.">
+                <figcaption><b>Databend</b> &mdash; a delay with feedback, a filter and a
+                wavefolder, run on the frame instead of a sound.</figcaption>
+            </figure>
+        </div>
+
+        <h2>Nobody touched the mouse</h2>
+        <p>Every shot was driven down the same TCP control port a Stream Deck or a Bitfocus
+        Companion button would use &mdash; <code>TAKE</code>, <code>FX ADD schlieren</code>,
+        <code>VIDEO OUTPUT LAYERWARP MODE perspective</code> &mdash; and recorded by Deckboy's own
+        programme recorder from the released 0.99.397 build. The frame count in the effects run
+        is that recording's own: every frame the recorder owed, with no dropped-frame alarm.
+        The titles, captions and the swirl were added afterwards.</p>
+
+        <h2>Credits</h2>
+        <p>Music: <b>YMCK</b> &mdash; 「ジョン・コルトレーンは回転木馬の夢を見るか」 (<i>Does John
+        Coltrane Dream of a Merry-Go-Round</i>), from <i>FAMILY MUSIC</i>, used with permission.
+        <a href="https://www.ymck.net">ymck.net</a></p>
+        <p>Footage: <i>Sintel</i> and <i>Tears of Steel</i> &copy; Blender Foundation,
+        <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>,
+        <a href="https://studio.blender.org">studio.blender.org</a>. Hurricane Ian from the
+        International Space Station: NASA.</p>
+
+        <h2>The first trailer</h2>
+        <p>The 0.99.374 trailer shows Deckboy's control window at work &mdash; transitions, a
+        window cue, a web page cue, slides with presenter view &mdash; and its music is Deckboy
+        playing itself: the <b>2A03 chip voice</b>, a Tone cue fired down the control port and
+        run through the application's own audio rack.</p>
+        <video src="video/deckboy-trailer-374.mp4" poster="video/trailer-poster-374.png"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <audio controls preload="none" src="video/deckboy-theme.mp3"></audio>
+
+        <h2 id="clips">Feature clips</h2>
+        <p>Short ones, one feature each, recorded from the released 0.99.397 and cut with
+        captions that name what is on screen. Each comes in a vertical version for phones. Music:
+        YMCK, used with permission; film footage: <i>Tears of Steel</i> &copy; Blender Foundation,
+        CC BY 3.0.</p>
+
+        <h3>Projection mapping, in perspective</h3>
+        <video src="video/clip-perspective-397b.mp4" poster="video/clip-perspective-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">10 seconds &middot; linear folds the board, perspective keeps it flat &middot;
+        <a href="video/clip-perspective-397b-vertical.mp4" download>vertical version</a></p>
+
+        <h3>The arcade lower third</h3>
+        <video src="video/clip-arcade-397b.mp4" poster="video/clip-arcade-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">11 seconds &middot; in, a wobble, and out &middot;
+        <a href="video/clip-arcade-397b-vertical.mp4" download>vertical version</a></p>
+
+        <h3>Anything is a cue</h3>
+        <video src="video/clip-cues-397b.mp4" poster="video/clip-cues-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">12 seconds &middot; a live web page, then a PDF slide deck &middot;
+        <a href="video/clip-cues-397b-vertical.mp4" download>vertical version</a></p>
+
+        <h3>Text mode</h3>
+        <video src="video/clip-textmode-397b.mp4" poster="video/clip-textmode-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">9 seconds &middot; a face resolving out of ASCII characters &middot;
+        <a href="video/clip-textmode-397b-vertical.mp4" download>vertical version</a></p>
+
+        <h3>Levels and curves</h3>
+        <video src="video/clip-levels-397b.mp4" poster="video/clip-levels-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">12 seconds &middot; a grade built live, first in the effect list &middot;
+        <a href="video/clip-levels-397b-vertical.mp4" download>vertical version</a></p>
+
+        <h3>Databend</h3>
+        <video src="video/clip-databend-397b.mp4" poster="video/clip-databend-397b.jpg"
+               controls preload="none" playsinline style="width:100%;height:auto;"></video>
+        <p class="note">12 seconds &middot; the picture played through an audio chain, turned up until it tears &middot;
+        <a href="databend.html">try it in your browser</a> &middot;
+        <a href="video/clip-databend-397b-vertical.mp4" download>vertical version</a></p>
+
+
+        <h2>Reuse it</h2>
+        <p>Deckboy-generated silent captures and the first trailer with its original music are GPL-3.0
+        like the rest of the project; take them for an article or a talk. The music-backed v0.99.397 trailer is
+        yours to share and embed as it is, but its music belongs to YMCK and its footage
+        carries the credits above, so please don't cut it into anything else.</p>
+
+        <div class="cta-group" style="justify-content:flex-start;margin-top:2rem">
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-large">Download Deckboy</a>
+            <a href="compare.html" class="btn-large btn-outline">How it compares</a>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-cols">
+            <div>
+                <h4>Deckboy</h4>
+                <a href="./">What it does</a>
+                <a href="trailer.html">The trailer</a>
+                <a href="compare.html">How it compares</a>
+                <a href="qlab-alternative.html">Coming from QLab</a>
+                <a href="for-theatre.html">For theatre</a>
+                <a href="for-events.html">For live events</a>
+                <a href="for-broadcast.html">For broadcast &amp; IP video</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">Download</a>
+            </div>
+            <div>
+                <h4>Using it</h4>
+                <a href="manual.html">Manual</a>
+                <a href="faq.html">FAQ</a>
+                <a href="specs.html">Specifications</a>
+                <a href="slides.html">Slides &amp; presenting</a>
+                <a href="window-cues.html">Window &amp; browser cues</a>
+                <a href="ndi.html">NDI in and out</a>
+                <a href="stream-deck.html">Stream Deck &amp; Companion</a>
+                <a href="latency.html">Where latency hides</a>
+            </div>
+            <div>
+                <h4>Tools</h4>
+                <a href="test-patterns.html">Test patterns</a>
+                <a href="led-wall.html">LED pattern generator</a>
+                <a href="led-calculator.html">LED calculator</a>
+                <a href="screen-check.html">Screen check</a>
+                <a href="databend.html">Databend</a>
+            </div>
+            <div>
+                <h4>Guides</h4>
+                <a href="shooting-led.html">Shooting an LED wall</a>
+                <a href="press.html">Press kit</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy">Source on GitHub</a>
+            </div>
+        </div>
+        <p class="footer-note">Built as an open-source project by Utopian-Academy.
+        Free under the GPL-3.0.</p>
+    </footer>
+</body>
+</html>

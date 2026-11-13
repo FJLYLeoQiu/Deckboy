@@ -1,0 +1,664 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Deckboy Contributors
+#
+# package_macos.sh — build a portable Deckboy.app, the macOS counterpart to
+# tools/package_windows.ps1.
+#
+# Output: dist/Deckboy-<VERSION>-macos-<arch>.zip
+#
+# WHAT "PORTABLE" MEANS HERE
+# --------------------------
+# Everything the app needs travels with it. Homebrew installs SDL3, FFmpeg and
+# friends under /opt/homebrew (Apple Silicon) or /usr/local (Intel); a bundle
+# that merely links against those paths runs on the BUILD machine and nowhere
+# else. So every non-system dylib is copied into Contents/Frameworks and every
+# reference to it is rewritten to @rpath, recursively — dependencies have
+# dependencies.
+#
+# THE TRAP THAT BREAKS NAIVE BUNDLES
+# ----------------------------------
+# install_name_tool INVALIDATES A CODE SIGNATURE. On Apple Silicon every binary
+# must carry at least an ad-hoc signature or the kernel refuses to execute it —
+# so a bundle that is rewritten and not re-signed dies instantly with "killed:
+# 9", which looks nothing like a linking problem. Everything is therefore
+# re-signed AFTER rewriting, inside-out: dylibs, then executables, then the
+# bundle itself.
+#
+# WHAT THIS DOES NOT DO
+# ---------------------
+#   * No Developer ID signing and no notarisation. Gatekeeper will quarantine a
+#     zip downloaded from the internet; see README-macOS.txt in the output for
+#     the one-line fix. Building locally, or transferring by USB/AirDrop, avoids
+#     it entirely.
+#   * No universal binary. The bundle is whatever architecture it was built on.
+#   * Spout and d3d11va zero-copy decode are Windows features and are absent
+#     by construction, not broken. Browser cues USED to be on that list; they
+#     are not any more -- deckboy-webview (WKWebView) is bundled below and
+#     captured through deckboy-sckcapture.
+#
+# Usage:
+#   ./tools/package_macos.sh                     # expects an existing build/
+#   ./tools/package_macos.sh --build-dir build   # explicit
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="$REPO_ROOT/build"
+OUTPUT_DIR="$REPO_ROOT/dist"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --build-dir) BUILD_DIR="$2"; shift 2 ;;
+    --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "error: this packager only runs on macOS (uname is $(uname -s))" >&2
+  exit 1
+fi
+
+VERSION="$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")"
+[ -n "$VERSION" ] || { echo "error: VERSION file is empty" >&2; exit 1; }
+
+ARCH="$(uname -m)"          # arm64 on Apple Silicon, x86_64 on Intel
+STAGE_NAME="Deckboy-${VERSION}-macos-${ARCH}"
+STAGE_DIR="$OUTPUT_DIR/staging/$STAGE_NAME"
+APP="$STAGE_DIR/Deckboy.app"
+MACOS_DIR="$APP/Contents/MacOS"
+FRAMEWORKS_DIR="$APP/Contents/Frameworks"
+RESOURCES_DIR="$APP/Contents/Resources"
+
+BINARY="$BUILD_DIR/Deckboy"
+[ -f "$BINARY" ] || { echo "error: $BINARY not found - build first" >&2; exit 1; }
+
+echo "Staging Deckboy $VERSION ($ARCH) -> $STAGE_DIR"
+rm -rf "$STAGE_DIR"
+mkdir -p "$MACOS_DIR" "$FRAMEWORKS_DIR" "$RESOURCES_DIR" "$OUTPUT_DIR"
+
+# --- App binary -------------------------------------------------------------
+cp "$BINARY" "$MACOS_DIR/Deckboy"
+chmod +x "$MACOS_DIR/Deckboy"
+
+# --- ffmpeg / ffprobe -------------------------------------------------------
+# Deckboy shells out to these for probing and for the fallback decode path, so a
+# bundle without them plays nothing on a machine that has no Homebrew.
+# DECKBOY_DEPS_PREFIX: the libraries tools/macos_build_deps.sh built for the
+# macOS this bundle claims. When it is set, its ffmpeg is the one bundled --
+# Homebrew's is built for the build machine's macOS and cannot start on older
+# ones (v0.99.405 on Ventura: no icons, no imports).
+DEPS_PREFIX="${DECKBOY_DEPS_PREFIX:-}"
+FFMPEG_SRC=""
+for tool in ffmpeg ffprobe; do
+  if [ -n "$DEPS_PREFIX" ] && [ -x "$DEPS_PREFIX/bin/$tool" ]; then
+    src="$DEPS_PREFIX/bin/$tool"
+  else
+    src="$(command -v "$tool" 2>/dev/null || true)"
+  fi
+  if [ -n "$src" ]; then
+    cp "$src" "$MACOS_DIR/$tool"
+    chmod +x "$MACOS_DIR/$tool"
+    echo "  + $tool"
+    [ "$tool" = ffmpeg ] && FFMPEG_SRC="$src"
+  else
+    echo "  ! $tool not found on PATH - the bundle will not decode media" >&2
+  fi
+done
+
+# FFMPEG'S NOTICE TRAVELS WITH IT. The same rule as stage_ffmpeg_notice in
+# tools/package_linux.sh: look beside the ffmpeg being bundled --
+# <prefix>/share/doc/ffmpeg, where tools/macos_build_deps.sh puts it -- then
+# where a Homebrew keeps it, and put everything found there into one
+# LICENSE-ffmpeg.txt. Inside the app (Contents/Resources), so it goes wherever
+# the app is dragged, and here BEFORE signing, which seals Resources. A bundle
+# that carries FFmpeg without its notice is refused, not warned about.
+stage_ffmpeg_notice() {  # $1 = the bundled ffmpeg (may be empty), $2 = destination
+  local bin="$1" dest="$2" dir f found="" real
+  local dirs=()
+  if [ -n "$bin" ] && [ -e "$bin" ]; then
+    real="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$bin" 2>/dev/null || echo "$bin")"
+    dirs+=("$(dirname "$real")/../share/doc/ffmpeg")
+  fi
+  dirs+=(/usr/local/share/doc/ffmpeg /opt/homebrew/share/doc/ffmpeg)
+  rm -f "$dest.tmp"
+  for dir in "${dirs[@]}"; do
+    for f in "$dir"/LICENSE* "$dir"/COPYING*; do
+      [ -f "$f" ] || continue
+      { echo "==== $(basename "$f") ===="; cat "$f"; echo; } >> "$dest.tmp"
+      found="$dir"
+    done
+    [ -n "$found" ] && break
+  done
+  if [ -n "$found" ]; then
+    mv "$dest.tmp" "$dest"
+    echo "  + $(basename "$dest") from $found"
+    return 0
+  fi
+  rm -f "$dest.tmp"
+  return 1
+}
+if [ -f "$MACOS_DIR/ffmpeg" ]; then
+  mkdir -p "$RESOURCES_DIR"
+  stage_ffmpeg_notice "$FFMPEG_SRC" "$RESOURCES_DIR/LICENSE-ffmpeg.txt" || {
+    echo "error: FFmpeg is bundled but its licence notice was not found (see stage_ffmpeg_notice)" >&2
+    exit 1
+  }
+fi
+
+# --- deckboy-mini (single-deck command-line player) ------------------------
+# REQUIRED, not optional: a bundle that quietly lacked it would look exactly
+# like one where it was left out on purpose. Run it as
+#   Deckboy.app/Contents/MacOS/deckboy-mini <files>
+if [ ! -f "$BUILD_DIR/deckboy-mini" ]; then
+  echo "error: $BUILD_DIR/deckboy-mini not found - it builds with Deckboy unless DECKBOY_BUILD_MINI is OFF" >&2
+  exit 1
+fi
+cp "$BUILD_DIR/deckboy-mini" "$MACOS_DIR/deckboy-mini"
+chmod +x "$MACOS_DIR/deckboy-mini"
+echo "  + deckboy-mini"
+
+# --- whisper-cli (captions made on this computer) ---------------------------
+# A static build of whisper.cpp: one executable, no libraries of its own. The
+# speech model is NOT bundled -- it is fetched once, on first use, into the
+# state folder. DECKBOY_WHISPER_CLI names the binary; CI sets
+# DECKBOY_REQUIRE_WHISPER=1 so a package without it fails instead of shipping a
+# captions button that cannot run.
+WHISPER_SRC="${DECKBOY_WHISPER_CLI:-$BUILD_DIR/whisper-cli}"
+if [ -f "$WHISPER_SRC" ]; then
+  cp "$WHISPER_SRC" "$MACOS_DIR/whisper-cli"
+  chmod +x "$MACOS_DIR/whisper-cli"
+  echo "  + whisper-cli"
+elif [ "${DECKBOY_REQUIRE_WHISPER:-0}" = "1" ]; then
+  echo "  ! whisper-cli not found at $WHISPER_SRC and DECKBOY_REQUIRE_WHISPER=1" >&2
+  exit 1
+else
+  echo "  ! whisper-cli not found - captions made on this computer will be unavailable" >&2
+fi
+
+# deckboy-listen: LIVE CAPTIONS' speech engine, built from the same whisper.cpp
+# (tools/listen). Required whenever whisper-cli is, for the same reason.
+LISTEN_SRC="${DECKBOY_LISTEN_BIN:-$BUILD_DIR/deckboy-listen}"
+if [ -f "$LISTEN_SRC" ]; then
+  cp "$LISTEN_SRC" "$MACOS_DIR/deckboy-listen"
+  chmod +x "$MACOS_DIR/deckboy-listen"
+  echo "  + deckboy-listen"
+elif [ "${DECKBOY_REQUIRE_WHISPER:-0}" = "1" ]; then
+  echo "  ! deckboy-listen not found at $LISTEN_SRC and DECKBOY_REQUIRE_WHISPER=1" >&2
+  exit 1
+else
+  echo "  ! deckboy-listen not found - live captions will be unavailable" >&2
+fi
+
+# --- deckboy-sckcapture (ScreenCaptureKit screen-capture helper) ------------
+# Window/screen cues spawn this next to the app. Built by the same cmake build.
+if [ -f "$BUILD_DIR/deckboy-sckcapture" ]; then
+  cp "$BUILD_DIR/deckboy-sckcapture" "$MACOS_DIR/deckboy-sckcapture"
+  chmod +x "$MACOS_DIR/deckboy-sckcapture"
+  echo "  + deckboy-sckcapture"
+else
+  echo "  ! deckboy-sckcapture not found in $BUILD_DIR - screen capture will be unavailable" >&2
+fi
+
+# --- deckboy-webview (WKWebView browser cue backend) ------------------------
+# Browser cues spawn this next to the app and capture its window through
+# deckboy-sckcapture above. Caught by testing a real bundle on a real Mac: the
+# backend compiled, the app ran, and every browser cue would have failed with
+# "deckboy-webview helper missing" because the packager did not know about it.
+if [ -f "$BUILD_DIR/deckboy-webview" ]; then
+  cp "$BUILD_DIR/deckboy-webview" "$MACOS_DIR/deckboy-webview"
+  chmod +x "$MACOS_DIR/deckboy-webview"
+  echo "  + deckboy-webview"
+else
+  echo "  ! deckboy-webview not found in $BUILD_DIR - browser cues will be unavailable" >&2
+fi
+
+# --- libltc (LTC timecode) --------------------------------------------------
+# Deckboy dlopen()s libltc at runtime; it is never linked, so the dependency
+# walk below cannot find it. Copy it in explicitly (ltc_api.hpp looks in
+# Frameworks relative to the executable). Without this the bundle advertised LTC
+# in/out but it only worked on a Mac that already had `brew install libltc`.
+for ltccand in ${DEPS_PREFIX:+"$DEPS_PREFIX/lib/libltc.dylib"} /opt/homebrew/lib/libltc.dylib /usr/local/lib/libltc.dylib; do
+  if [ -f "$ltccand" ]; then
+    cp -L "$ltccand" "$FRAMEWORKS_DIR/libltc.dylib"
+    chmod u+w "$FRAMEWORKS_DIR/libltc.dylib"
+    echo "  + Frameworks/libltc.dylib"
+    break
+  fi
+done
+[ -f "$FRAMEWORKS_DIR/libltc.dylib" ] || echo "  ! libltc not found - LTC timecode will be unavailable in this bundle" >&2
+
+# --- data/ ------------------------------------------------------------------
+# Contents/Resources, per Apple's layout. codesign treats Contents/MacOS as a
+# code-only directory, so a data/ tree next to the executable risks failing
+# signature validation — which on Apple Silicon means the app will not launch at
+# all. Paths::resolveProjectRoot() has a matching __APPLE__ branch that detects
+# the …/Contents/MacOS/<exe> structure and resolves the root to Contents/Resources.
+if [ -d "$REPO_ROOT/data" ]; then
+  cp -R "$REPO_ROOT/data" "$RESOURCES_DIR/data"
+  # Same per-machine state the Windows packager strips: last_project.txt holds
+  # the packager's own absolute paths, and default.deckboy is gitignored scratch
+  # state (a release once shipped the packager's webcam cue). Neither ships.
+  # recent_projects.txt (v0.99.331) is the same class again: the splash's
+  # recent-shows list, one absolute path per show opened on this machine. Kept
+  # identical to the Windows and Linux lists, which had drifted apart.
+  for stale in last_project.txt recent_projects.txt default.deckboy defaults.deckboy \
+               deckboy-first-run found-sources tabletop deckboy-crash.log deckboy-soak.log \
+               deckboy-render.log deckboy-show.log deckboy-live-frame.bmp paired-phones.txt \
+               tutorial-practice.deckboy tutorial-progress.txt lessons.txt midi_map.tsv \
+               lesson-road lesson-road-bundle bugswat-highscore.txt bugswat-practice.deckboy; do
+    if [ -e "$RESOURCES_DIR/data/$stale" ]; then
+      rm -rf "$RESOURCES_DIR/data/$stale"   # some are folders (tabletop, lesson-road)
+      echo "  - stripped data/$stale (build-machine state)"
+    fi
+  done
+  # Captions made on THIS machine: the downloaded speech model (~140 MB), the
+  # captions written for media it had no folder for, the scratch audio, and a
+  # whisper-cli someone placed by hand. None of it is the package's. And the
+  # colour tables an operator added for the effect colour picker: theirs,
+  # possibly licensed (a Pantone table), never the package's.
+  for stale_dir in models captions captions-work whisper colours; do
+    if [ -d "$RESOURCES_DIR/data/$stale_dir" ]; then
+      rm -rf "$RESOURCES_DIR/data/$stale_dir"
+      echo "  - stripped data/$stale_dir/ (build-machine state)"
+    fi
+  done
+
+  # Two directories of the OPERATOR'S OWN media, both gitignored -- which does
+  # not help, because .gitignore does not apply to a file copy. _converted holds
+  # transcodes, proxies and datamosh preps; recordings holds captured programme
+  # output. Only the Windows packager had learned _converted, and none of the
+  # three had ever heard of recordings, so this is the same drift the list above
+  # documents being fixed twice. Keep all three in step.
+  for stale_dir in _converted recordings updates test-cards; do
+    if [ -d "$RESOURCES_DIR/data/$stale_dir" ]; then
+      stale_mb=$(du -sm "$RESOURCES_DIR/data/$stale_dir" 2>/dev/null | cut -f1)
+      rm -rf "$RESOURCES_DIR/data/$stale_dir"
+      echo "  - stripped data/$stale_dir (operator media, ${stale_mb:-?} MB)"
+    fi
+  done
+fi
+
+# The English speech model for live captions, bundled: there is no installer
+# here to offer it as a tick, as the Windows one does (tools/fetch_caption_model.sh).
+bash "$REPO_ROOT/tools/fetch_caption_model.sh" "$RESOURCES_DIR/data"
+
+[ -f "$REPO_ROOT/LICENSE" ] && cp "$REPO_ROOT/LICENSE" "$STAGE_DIR/LICENSE"
+
+# --- App and show-file icons -------------------------------------------------
+bash "$REPO_ROOT/tools/build_macos_icons.sh" "$RESOURCES_DIR"
+ICON_PLIST_ENTRY='  <key>CFBundleIconFile</key><string>Deckboy</string>'
+if [ -s "$RESOURCES_DIR/Assets.car" ]; then
+  ICON_PLIST_ENTRY="$ICON_PLIST_ENTRY
+  <key>CFBundleIconName</key><string>Deckboy</string>"
+fi
+
+# --- Info.plist -------------------------------------------------------------
+# The usage descriptions are load-bearing, not boilerplate: macOS TERMINATES a
+# process that touches the camera or microphone without a matching
+# NS*UsageDescription. Deckboy has Camera cues (avfoundation) and audio input,
+# so omitting these turns "add a camera cue" into an unexplained crash.
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Deckboy</string>
+  <key>CFBundleDisplayName</key><string>Deckboy</string>
+  <key>CFBundleExecutable</key><string>Deckboy</string>
+  <key>CFBundleIdentifier</key><string>org.utopianacademy.deckboy</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>LSMinimumSystemVersion</key><string>${DECKBOY_MACOS_MIN:-12.0}</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- App Nap MUST be off. macOS throttles a backgrounded app's timers and
+       drawing, and a cue deck spends most of a show not being the frontmost
+       window - the operator is in a browser, a spreadsheet, anything. Napped,
+       the update loop stops: the network port still answers queries from its
+       own thread while every queued command is silently never executed, which
+       is exactly what it looked like in testing before this key was added. -->
+  <key>LSAppNapIsDisabled</key><true/>
+${ICON_PLIST_ENTRY}
+  <key>CFBundleDocumentTypes</key>
+  <array><dict>
+    <key>CFBundleTypeName</key><string>Deckboy Show</string>
+    <key>CFBundleTypeRole</key><string>Editor</string>
+    <key>LSHandlerRank</key><string>Owner</string>
+    <key>CFBundleTypeIconFile</key><string>DeckboyShow</string>
+    <key>LSItemContentTypes</key><array><string>org.utopianacademy.deckboy.show</string></array>
+  </dict></array>
+  <key>UTExportedTypeDeclarations</key>
+  <array><dict>
+    <key>UTTypeIdentifier</key><string>org.utopianacademy.deckboy.show</string>
+    <key>UTTypeDescription</key><string>Deckboy Show</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+    <key>UTTypeTagSpecification</key><dict>
+      <key>public.filename-extension</key><array><string>deckboy</string></array>
+      <key>public.mime-type</key><string>application/x-deckboy-show</string>
+    </dict>
+  </dict></array>
+  <key>NSCameraUsageDescription</key>
+  <string>Deckboy uses the camera for live Camera cues.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Deckboy uses audio input for live capture cues.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Deckboy uses the local network for NDI, NMOS, OSC and remote control.</string>
+</dict>
+</plist>
+PLIST
+
+# --- Dependency bundling ----------------------------------------------------
+# Recursively pull in every non-system dylib. A worklist, not recursion in the
+# shell: SDL3 depends on things that depend on things, and FFmpeg's libavfilter
+# alone drags in a long tail.
+is_system_lib() {
+  case "$1" in
+    /usr/lib/*|/System/Library/*|@rpath/*|@loader_path/*|@executable_path/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+WORKLIST=()
+for f in "$MACOS_DIR/Deckboy" "$MACOS_DIR/deckboy-mini" "$MACOS_DIR/ffmpeg" "$MACOS_DIR/ffprobe" "$MACOS_DIR/deckboy-sckcapture" "$MACOS_DIR/deckboy-webview" "$MACOS_DIR/whisper-cli"; do
+  [ -f "$f" ] && WORKLIST+=("$f")
+done
+
+# Walk the list with an index instead of shifting off the front. macOS ships
+# bash 3.2, where expanding an EMPTY array as "${arr[@]}" under `set -u` is an
+# unbound-variable error — so the obvious `WORKLIST=("${WORKLIST[@]:1}")` blows
+# up on the last element rather than terminating cleanly.
+idx=0
+while [ "$idx" -lt "${#WORKLIST[@]}" ]; do
+  current="${WORKLIST[$idx]}"
+  idx=$((idx + 1))
+  # Skip the Mach-O header line (ends with ':') and the library's own id line.
+  # `|| true`: otool exits non-zero on anything that is not Mach-O, and under
+  # `set -e` a failing command substitution in an assignment aborts the whole
+  # packaging run halfway through a bundle.
+  deps="$(otool -L "$current" 2>/dev/null | tail -n +2 | awk '{print $1}' || true)"
+  for dep in $deps; do
+    is_system_lib "$dep" && continue
+    base="$(basename "$dep")"
+    if [ ! -f "$FRAMEWORKS_DIR/$base" ]; then
+      # A library that names itself without a path (libvpx does) is looked
+      # up where the bundle's libraries were built.
+      src="$dep"
+      if [ ! -f "$src" ] && [ -n "$DEPS_PREFIX" ] && [ -f "$DEPS_PREFIX/lib/$base" ]; then
+        src="$DEPS_PREFIX/lib/$base"
+      fi
+      if [ -f "$src" ]; then
+        cp "$src" "$FRAMEWORKS_DIR/$base"
+        chmod u+w "$FRAMEWORKS_DIR/$base"
+        WORKLIST+=("$FRAMEWORKS_DIR/$base")
+        echo "  + Frameworks/$base"
+      else
+        echo "  ! missing dependency: $dep (referenced by $(basename "$current"))" >&2
+        MISSING_DEPS="${MISSING_DEPS:-} $base"
+      fi
+    fi
+  done
+done
+# FATAL. This was a warning, and a bundle whose ffmpeg could not load libvpx
+# got all the way to the end of packaging; dyld would abort it on every Mac.
+if [ -n "${MISSING_DEPS:-}" ]; then
+  echo "error: libraries the bundle needs but could not find:$MISSING_DEPS" >&2
+  exit 1
+fi
+
+# --- Rewrite install names --------------------------------------------------
+# Every bundled dylib gets an @rpath id, every reference to it is repointed, and
+# the executables gain an rpath that resolves @rpath to Contents/Frameworks.
+for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+  [ -e "$lib" ] || continue
+  install_name_tool -id "@rpath/$(basename "$lib")" "$lib" 2>/dev/null || true
+done
+
+retarget() {
+  local target="$1"
+  local deps
+  deps="$(otool -L "$target" 2>/dev/null | tail -n +2 | awk '{print $1}' || true)"
+  for dep in $deps; do
+    is_system_lib "$dep" && continue
+    local base
+    base="$(basename "$dep")"
+    if [ -f "$FRAMEWORKS_DIR/$base" ]; then
+      install_name_tool -change "$dep" "@rpath/$base" "$target" 2>/dev/null || true
+    fi
+  done
+}
+
+for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+  [ -e "$lib" ] || continue
+  retarget "$lib"
+  # A dylib in Frameworks/ resolves @rpath relative to itself.
+  install_name_tool -add_rpath "@loader_path" "$lib" 2>/dev/null || true
+done
+
+for exe in "$MACOS_DIR/Deckboy" "$MACOS_DIR/deckboy-mini" "$MACOS_DIR/ffmpeg" "$MACOS_DIR/ffprobe" "$MACOS_DIR/deckboy-sckcapture" "$MACOS_DIR/deckboy-webview" "$MACOS_DIR/whisper-cli"; do
+  [ -f "$exe" ] || continue
+  retarget "$exe"
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$exe" 2>/dev/null || true
+done
+
+# --- Re-sign ----------------------------------------------------------------
+# MUST come after install_name_tool. Ad-hoc ("-") is enough to execute locally;
+# it is not Developer ID and does not survive Gatekeeper on a downloaded zip.
+# Inside-out: dependencies before the things that load them.
+#
+# SIGNING IDENTITY is DORMANT SCAFFOLDING. By default (no env set) everything is
+# ad-hoc signed and the free "clear the quarantine flag" path applies — which is
+# the deliberate, zero-cost default. If DECKBOY_MACOS_SIGN_IDENTITY is set to a
+# "Developer ID Application: ..." identity (from a paid Apple Developer Program
+# membership), the SAME structure signs for real with the hardened runtime + a
+# secure timestamp, which is the half notarisation needs. Nothing here forces
+# anyone to pay Apple; it just means the day you decide to, one env var flips it.
+SIGN_ID="${DECKBOY_MACOS_SIGN_IDENTITY:-}"
+if [ -n "$SIGN_ID" ]; then
+  echo "Re-signing (Developer ID: $SIGN_ID)"
+  SIGN_ARGS=(--force --options runtime --timestamp --sign "$SIGN_ID")
+else
+  echo "Re-signing (ad-hoc — unsigned distribution; see README for the xattr step)"
+  SIGN_ARGS=(--force --timestamp=none --sign -)
+fi
+for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+  [ -e "$lib" ] || continue
+  codesign "${SIGN_ARGS[@]}" "$lib" >/dev/null 2>&1 || true
+done
+for exe in "$MACOS_DIR/ffmpeg" "$MACOS_DIR/ffprobe" "$MACOS_DIR/Deckboy"; do
+  [ -f "$exe" ] && codesign "${SIGN_ARGS[@]}" "$exe" >/dev/null 2>&1 || true
+done
+# The screen-capture helper has no Info.plist, so codesign otherwise mints its
+# identifier from the binary's content hash (deckboy-sckcapture-<hash>) — a value
+# that CHANGES every build. macOS keys the Screen Recording TCC grant to that
+# identifier, so a per-build id makes the grant impossible to persist: every
+# rebuild (and sometimes every capture) re-shows the permission prompt, looping
+# even after the user clicks Allow. Pin a STABLE identifier so the grant sticks.
+if [ -f "$MACOS_DIR/deckboy-sckcapture" ]; then
+  codesign "${SIGN_ARGS[@]}" --identifier org.utopianacademy.deckboy.sckcapture \
+    "$MACOS_DIR/deckboy-sckcapture" >/dev/null 2>&1 || true
+fi
+# Same reasoning for the browser helper: its window is what the capture helper
+# records, so it is part of the same permission story and wants a stable
+# identifier rather than one minted from the build's content hash.
+if [ -f "$MACOS_DIR/deckboy-webview" ]; then
+  codesign "${SIGN_ARGS[@]}" --identifier org.utopianacademy.deckboy.webview \
+    "$MACOS_DIR/deckboy-webview" >/dev/null 2>&1 || true
+fi
+if [ -f "$MACOS_DIR/whisper-cli" ]; then
+  codesign "${SIGN_ARGS[@]}" --identifier org.utopianacademy.deckboy.whisper     "$MACOS_DIR/whisper-cli" >/dev/null 2>&1 || true
+fi
+# Live captions' engine. Unsigned nested code makes the bundle seal below fail
+# -- silently, behind the || true -- so the Intel package (whose linker does
+# not sign as Apple Silicon's does) shipped "not signed at all" (CI, e3aad97).
+if [ -f "$MACOS_DIR/deckboy-listen" ]; then
+  codesign "${SIGN_ARGS[@]}" --identifier org.utopianacademy.deckboy.listen "$MACOS_DIR/deckboy-listen" >/dev/null 2>&1 || true
+fi
+# Mini too: a stable identifier rather than one minted from the content hash.
+codesign "${SIGN_ARGS[@]}" --identifier org.utopianacademy.deckboy.mini   "$MACOS_DIR/deckboy-mini" >/dev/null 2>&1 || true
+# Seal the bundle over the already-signed nested code, inside-out. NOT --deep:
+# that would re-sign the helper and re-mint the identifier we just pinned.
+codesign "${SIGN_ARGS[@]}" "$APP" >/dev/null 2>&1 || true
+
+# --- Operator notes ---------------------------------------------------------
+cat > "$STAGE_DIR/README-macOS.txt" <<NOTE
+Deckboy ${VERSION} (macOS ${ARCH})
+
+Run it
+------
+Double-click Deckboy.app.
+
+macOS says the app "is damaged" or "cannot be opened"
+-----------------------------------------------------
+This build is ad-hoc signed, not notarised, so Gatekeeper quarantines it when it
+arrives via a browser download. Clear the quarantine flag:
+
+    xattr -dr com.apple.quarantine /path/to/Deckboy.app
+
+Transferring by USB or AirDrop, or building on the machine itself, avoids this.
+
+What is not in this build
+-------------------------
+  * Browser cues        - the embedded browser is Windows-only (WebView2).
+  * Spout output        - Windows-only; the macOS equivalent (Syphon) is scaffold only.
+  * GPU zero-copy decode - the d3d11va fast path is Windows/D3D11. Decoding falls
+                          back to CPU, which Apple Silicon handles comfortably.
+
+Everything else - playback, audio, themes, NDI, ST 2110, PTP, NMOS, LTC, OSC and
+the Companion control surface - is present.
+NOTE
+
+# --- Zip --------------------------------------------------------------------
+# ditto, not zip: it preserves the bundle structure and the signatures. A plain
+# `zip` can mangle symlinks inside frameworks.
+ZIP_PATH="$OUTPUT_DIR/$STAGE_NAME.zip"
+rm -f "$ZIP_PATH"
+( cd "$OUTPUT_DIR/staging" && ditto -c -k --sequesterRsrc --keepParent "$STAGE_NAME" "$ZIP_PATH" )
+
+echo
+echo "Wrote $ZIP_PATH"
+du -h "$ZIP_PATH" | awk '{print "  size: " $1}'
+
+# --- Deckboy Mini on its own ----------------------------------------------
+# For a screen that only needs to play: Mini, ffmpeg and ffprobe, the bundle's
+# libraries, its one font. Laid out as bin/ and Frameworks/ side by side, so
+# the rpath every executable already carries (@executable_path/../Frameworks)
+# finds the libraries exactly as it does inside the app, and the files are the
+# signed copies from the bundle, unchanged.
+MINI_NAME="Deckboy-Mini-${VERSION}-macos-${ARCH}"
+MINI_STAGE="$OUTPUT_DIR/staging/$MINI_NAME"
+rm -rf "$MINI_STAGE"
+mkdir -p "$MINI_STAGE/bin" "$MINI_STAGE/Frameworks" "$MINI_STAGE/data/fonts"
+cp -R "$REPO_ROOT/data/icons" "$MINI_STAGE/data/icons"
+ditto "$MACOS_DIR/deckboy-mini" "$MINI_STAGE/bin/deckboy-mini"
+ditto "$MACOS_DIR/ffmpeg" "$MINI_STAGE/bin/ffmpeg"
+ditto "$MACOS_DIR/ffprobe" "$MINI_STAGE/bin/ffprobe"
+ditto "$FRAMEWORKS_DIR" "$MINI_STAGE/Frameworks"
+# The subtitle face, and the faces that draw Arabic, Persian, Tamazight and Lao
+# on a machine without them, each with the licence that has to travel with it.
+for f in LiberationSans-Regular.ttf LICENSE-Liberation.txt NotoSansArabic-Regular.ttf \
+         NotoSansTifinagh-Regular.ttf NotoSansLao-Regular.ttf NotoSansCherokee-Regular.ttf LICENSE-Noto.txt; do
+  cp "$REPO_ROOT/data/fonts/$f" "$MINI_STAGE/data/fonts/"
+done
+cp "$REPO_ROOT/LICENSE" "$MINI_STAGE/"
+# Mini carries the same FFmpeg, so it carries the same notice (staged into the
+# app above; that step refuses to go on without it).
+cp "$RESOURCES_DIR/LICENSE-ffmpeg.txt" "$MINI_STAGE/"
+cat > "$MINI_STAGE/deckboy-mini" <<'LAUNCH'
+#!/bin/sh
+here="$(cd "$(dirname "$0")" && pwd)"
+PATH="$here/bin:$PATH" exec "$here/bin/deckboy-mini" "$@"
+LAUNCH
+chmod +x "$MINI_STAGE/deckboy-mini"
+cat > "$MINI_STAGE/README.txt" <<README
+Deckboy Mini ${VERSION} for macOS (${ARCH})
+
+One deck, one output, run from the keyboard. Unzip anywhere. The first time,
+clear the download quarantine so macOS lets it run (one time only):
+
+  xattr -dr com.apple.quarantine "$MINI_NAME"
+
+Then double-click deckboy-mini (it opens in Terminal) and drop videos,
+pictures or a folder on its window. Or name them, in Terminal, in this folder:
+
+  ./deckboy-mini ~/Movies            a folder plays in name order
+  ./deckboy-mini clip.mp4 logo.png   files in the order given
+  ./deckboy-mini --help              every option
+
+Press ? in the terminal for the keys. The manual has a miniature one:
+https://utopian-academy.github.io/Deckboy/manual.html#deckboy-mini
+README
+mini_got="$("$MINI_STAGE/deckboy-mini" --version 2>/dev/null | head -1 | sed 's/^deckboy-mini[[:space:]]*v\{0,1\}//')"
+if [ "$mini_got" != "$VERSION" ]; then
+  echo "error: Deckboy Mini on its own reports '$mini_got', not $VERSION" >&2
+  exit 1
+fi
+MINI_ZIP="$OUTPUT_DIR/$MINI_NAME.zip"
+rm -f "$MINI_ZIP"
+( cd "$OUTPUT_DIR/staging" && ditto -c -k --sequesterRsrc --keepParent "$MINI_NAME" "$MINI_ZIP" )
+echo "Wrote $MINI_ZIP (runs on its own as v$mini_got)"
+
+# --- Disk image --------------------------------------------------------------
+# dmgbuild writes Finder's layout records directly; CI needs no GUI session.
+# A multi-resolution TIFF keeps the 640x480-point background crisp on Retina.
+DMGBUILD="${DECKBOY_DMGBUILD:-dmgbuild}"
+command -v "$DMGBUILD" >/dev/null || {
+  echo "dmgbuild is required (python3 -m pip install dmgbuild==1.6.7)" >&2; exit 1;
+}
+DMG_ART="$(mktemp -d)"
+tiffutil -cathidpicheck "$REPO_ROOT/art/macos/dmg-background.png" \
+  "$REPO_ROOT/art/macos/dmg-background@2x.png" -out "$DMG_ART/dmg-background.tiff"
+DMG_PATH="$OUTPUT_DIR/$STAGE_NAME.dmg"
+DMG_OK=0
+for attempt in 1 2 3; do
+  if "$DMGBUILD" -s "$REPO_ROOT/tools/dmg_settings.py" \
+      -D "app=$APP" -D "art=$DMG_ART" -D "readme=$STAGE_DIR/README-macOS.txt" \
+      "Deckboy $VERSION" "$DMG_PATH"; then
+    DMG_OK=1
+    break
+  fi
+  echo "Disk image attempt $attempt failed" >&2
+  rm -f "$DMG_PATH"
+  sleep $((attempt * 5))
+done
+rm -rf "$DMG_ART"
+[ "$DMG_OK" = 1 ] || { echo "Disk image was not produced" >&2; exit 1; }
+hdiutil verify "$DMG_PATH"
+echo "Wrote $DMG_PATH"
+
+# --- Notarisation (DORMANT — only runs when credentials are provided) --------
+# The free default skips this entirely: an un-notarised download needs the
+# one-time `xattr -dr com.apple.quarantine` documented in the README, and that
+# is a perfectly legitimate way to ship. Notarisation removes that step, but it
+# requires a paid Apple Developer Program membership, so it is opt-in by
+# environment and nothing here nags for it.
+#
+# Provide an App Store Connect API key (the clean CI path):
+#   DECKBOY_NOTARY_KEY_ID, DECKBOY_NOTARY_ISSUER_ID, DECKBOY_NOTARY_KEY_P8 (path)
+# Notarisation only makes sense on a Developer-ID-signed build, so it also needs
+# DECKBOY_MACOS_SIGN_IDENTITY to have been set above.
+if [ -n "${DECKBOY_NOTARY_KEY_ID:-}" ] && [ -n "${DECKBOY_NOTARY_ISSUER_ID:-}" ] \
+   && [ -n "${DECKBOY_NOTARY_KEY_P8:-}" ] && [ -n "$SIGN_ID" ] \
+   && command -v xcrun >/dev/null; then
+  echo "Notarising (App Store Connect API key)"
+  for artifact in "$ZIP_PATH" "${DMG_PATH:-}"; do
+    [ -f "$artifact" ] || continue
+    if xcrun notarytool submit "$artifact" \
+         --key "$DECKBOY_NOTARY_KEY_P8" \
+         --key-id "$DECKBOY_NOTARY_KEY_ID" \
+         --issuer "$DECKBOY_NOTARY_ISSUER_ID" \
+         --wait >/dev/null 2>&1; then
+      # Staple only the .dmg/.app — a .zip cannot hold a stapled ticket, but the
+      # notarisation is recorded against its contents' hash regardless.
+      case "$artifact" in
+        *.dmg) xcrun stapler staple "$artifact" >/dev/null 2>&1 || true ;;
+      esac
+      echo "  notarised: $(basename "$artifact")"
+    else
+      echo "  ! notarisation failed for $(basename "$artifact") (shipping as-is)" >&2
+    fi
+  done
+  # Staple the app inside the tree too, so a fresh zip/dmg from it carries it.
+  xcrun stapler staple "$APP" >/dev/null 2>&1 || true
+fi

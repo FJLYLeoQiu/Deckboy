@@ -1,0 +1,76 @@
+{
+	"Name": "Deckboy",
+	"Version": "1.0.0",
+	"Author": "Utopian Academy",
+	"URL": "https://github.com/Utopian-Academy/Deckboy",
+	"Description": "Drive Deckboy from a Stream Deck. Transport, cues, outputs and looks, with keys that read Deckboy's state back so a button knows whether the cue it fired is live.",
+	"Category": "Deckboy",
+	"CategoryIcon": "imgs/category",
+	"Icon": "imgs/plugin",
+	"CodePath": "bin/plugin.js",
+	"Nodejs": {
+		"Version": "20"
+	},
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.4"
+	},
+	"OS": [
+		{ "Platform": "windows", "MinimumVersion": "10" },
+		{ "Platform": "mac", "MinimumVersion": "12" }
+	],
+	"Actions": [
+		{
+			"Name": "Take",
+			"UUID": "com.utopian-academy.deckboy.take",
+			"Icon": "imgs/actions/take-list",
+			"Tooltip": "Take the selected cue, or a cue by number.",
+			"PropertyInspectorPath": "ui/take.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{ "Image": "imgs/actions/take", "TitleAlignment": "bottom" }
+			]
+		},
+		{
+			"Name": "Stop",
+			"UUID": "com.utopian-academy.deckboy.stop",
+			"Icon": "imgs/actions/stop-list",
+			"Tooltip": "Stop the focused deck.",
+			"Controllers": ["Keypad"],
+			"States": [{ "Image": "imgs/actions/stop", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Pause",
+			"UUID": "com.utopian-academy.deckboy.pause",
+			"Icon": "imgs/actions/pause-list",
+			"Tooltip": "Pause or resume the focused deck.",
+			"Controllers": ["Keypad"],
+			"States": [{ "Image": "imgs/actions/pause", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Panic",
+			"UUID": "com.utopian-academy.deckboy.panic",
+			"Icon": "imgs/actions/panic-list",
+			"Tooltip": "Outputs off and engines stopped. Held for a moment so it cannot be hit by accident.",
+			"Controllers": ["Keypad"],
+			"States": [{ "Image": "imgs/actions/panic", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Blackout",
+			"UUID": "com.utopian-academy.deckboy.blackout",
+			"Icon": "imgs/actions/blackout-list",
+			"Tooltip": "Toggle blackout on the outputs.",
+			"Controllers": ["Keypad"],
+			"States": [{ "Image": "imgs/actions/blackout", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Command",
+			"UUID": "com.utopian-academy.deckboy.command",
+			"Icon": "imgs/actions/command-list",
+			"Tooltip": "Any Deckboy command, sent verbatim. The whole vocabulary is in MANUAL.md.",
+			"PropertyInspectorPath": "ui/command.html",
+			"Controllers": ["Keypad"],
+			"States": [{ "Image": "imgs/actions/command", "TitleAlignment": "bottom" }]
+		}
+	]
+}

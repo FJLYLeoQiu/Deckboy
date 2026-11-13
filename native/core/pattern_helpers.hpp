@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Deckboy Contributors
+// This file is part of Deckboy, a cue deck for live events.
+// See LICENSE for details.
+
+// ============================================================================
+// pattern_helpers.hpp — Utility functions for procedural pattern cues.
+//
+// Pattern cues (CueKind::Pattern) are procedurally generated test patterns
+// and animated backgrounds. They don't use ffmpeg — the pixels are generated
+// directly in the render loop. Each pattern type is identified by a string
+// ID stored in the cue's path field as "pattern://<type-id>".
+//
+// Available pattern types:
+//   Static:    smpte-bars, crosshatch, checkerboard, gradient,
+//              full-white, full-black, full-red, full-green, full-blue
+//   Animated:  pocket-test, pocket-day, pocket-sunset, pocket-night, pocket-storm,
+//              terrarium (native living-ecosystem sim, v0.78.4)
+//              (plus "-motion" variants of the static patterns)
+//
+// This file handles:
+//   - Normalizing type IDs (aliases, old names, underscore→hyphen)
+//   - Querying whether a pattern supports motion animation
+//   - Detecting whether a pattern is inherently animated
+//
+// Used by: MediaEngine (to decide decode vs. generate), inspector UI
+// (to show motion toggle), cue import (to normalize the path).
+// ============================================================================
+
+#pragma once
+
+#include <algorithm>
+#include <string>
+#include "utils.hpp"
+#include "private_extras.hpp"
+
+// Check if a string ends with the given suffix. Used to detect "-motion"
+// suffixes on pattern type IDs.
+inline bool endsWith(const std::string& value, const std::string& suffix) {
+  return value.size() >= suffix.size() &&
+         value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// Normalize a pattern type ID to its canonical form.
+// Handles:
+//   - Stripping the "pattern://" URL prefix
+//   - Lowercasing and trimming whitespace
+//   - Replacing underscores with hyphens (legacy format)
+//   - Mapping aliases to canonical names (e.g. "colorbars" → "smpte-bars")
+//   - Normalizing "-animated" suffix to "-motion" (standardized naming)
+inline std::string normalizePatternTypeId(std::string value) {
+  value = deckboy::core::utils::toLower(deckboy::core::utils::trim(std::move(value)));
+  // Strip URL prefix if present (cue path stores "pattern://smpte-bars")
+  if (value.rfind("pattern://", 0) == 0) {
+    value = value.substr(10);
+  }
+  // Normalize separators: underscores → hyphens
+  std::replace(value.begin(), value.end(), '_', '-');
+  // Alias mapping: multiple names for the same pattern
+  if (value == "colourbars" || value == "colorbars" || value == "smpte75") {
+    value = "smpte-bars";            // standard SMPTE color bars
+  } else if (value == "testsrc" || value == "testsrc2" || value == "testbars") {
+    value = "test-bars";             // broadcast motion-diagnostics bars
+                                     // ("testsrc" kept here for save compat —
+                                     //  testsrc v1's look is "test-clock")
+  } else if (value == "testsrc1" || value == "sync-card" || value == "syncclock" ||
+             value == "sync-clock" || value == "latency-clock" || value == "testclock") {
+    value = "test-clock";            // sync/latency card
+  } else if (value == "framecount" || value == "frame-counter" ||
+             value == "counter" || value == "drop-test") {
+    value = "frame-count";           // drop/duplicate + latency counter
+  } else if (value == "kawaii" || value == "kawaii-pocket") {
+    value = "pocket-test";           // retro pixel art test pattern
+  } else if (value == "pocket-daytime" || value == "pocket-sunny") {
+    value = "pocket-day";            // daytime sky scene
+  } else if (value == "pocket-dusk" || value == "pocket-golden") {
+    value = "pocket-sunset";         // sunset scene
+  } else if (value == "pocket-moon" || value == "pocket-evening") {
+    value = "pocket-night";          // night scene
+  } else if (value == "pocket-rain" || value == "pocket-tempest") {
+    value = "pocket-storm";          // storm/rain scene
+  } else if (value == "smpte-bars-animated") {
+    value = "smpte-bars-motion";     // standardize "-animated" → "-motion"
+  } else if (value == "crosshatch-animated") {
+    value = "crosshatch-motion";
+  } else if (value == "checkerboard-animated") {
+    value = "checkerboard-motion";
+  }
+  // Solid colors no longer have motion variants (v0.78.7): legacy saves with
+  // pulsing solids degrade gracefully to the static color.
+  if (value.rfind("full-", 0) == 0) {
+    if (endsWith(value, "-motion")) {
+      value = value.substr(0, value.size() - 7);
+    } else if (endsWith(value, "-animated")) {
+      value = value.substr(0, value.size() - 9);
+    }
+  }
+  return value;
+}
+
+// Strip the "-motion" suffix from a pattern type ID to get the base pattern name.
+// e.g. "smpte-bars-motion" → "smpte-bars"
+// Normalizes the ID first (handles aliases and formatting).
+inline std::string stripPatternMotionSuffix(std::string typeId) {
+  typeId = normalizePatternTypeId(std::move(typeId));
+  if (endsWith(typeId, "-motion")) {
+    typeId = typeId.substr(0, typeId.size() - 7);
+  }
+  return typeId;
+}
+
+// Check if a pattern type can have a "-motion" animated variant.
+// Only certain technical test patterns support the motion toggle.
+// Pocket scenes are always animated and don't use the motion suffix.
+inline bool patternTypeSupportsMotion(const std::string& typeId) {
+  std::string base = stripPatternMotionSuffix(typeId);
+  return base == "smpte-bars" || base == "crosshatch" || base == "checkerboard";
+}
+
+// Check if a pattern type is inherently animated (changes over time).
+// WHAT DECKBOY MAKES, as against what it tests with. These draw something for
+// the show -- a hearth, a swarm, a swirl, an ecosystem, a live expression --
+// and live under SOURCE > MADE BY DECKBOY with names of their own. Every other
+// pattern type is a TEST SIGNAL: a card or a chart for lining up a rig. Portal
+// sat in one menu and Swirl in the other, each labelled "Pattern" once picked,
+// which made the desk look like nobody had decided what either one was.
+inline bool patternTypeIsGenerator(const std::string& typeId) {
+  const std::string t = normalizePatternTypeId(typeId);
+  return t == "fireside" || t == "portal" || t == "swirl" || t == "code" || t == "moire-field" || t == "draw" ||
+         t == "terrarium" || t == "terrarium-pico" || deckboy::extras::findGenerator(t) != nullptr;
+}
+
+// A generator's own name, for its cue and wherever the desk says what kind of
+// thing it is. Empty for a test signal.
+inline std::string generatorPatternName(const std::string& typeId) {
+  const std::string t = normalizePatternTypeId(typeId);
+  if (t == "fireside") return "Fireside";
+  if (t == "portal") return "Portal";
+  if (t == "draw") return "Draw";
+  if (t == "swirl") return "Swirl";
+  if (t == "moire-field") return "Moire";
+  if (t == "code") return "Code";
+  if (t == "terrarium") return "Terrarium";
+  if (t == "terrarium-pico") return "Terrarium Pico";
+  if (const auto* extra = deckboy::extras::findGenerator(t)) return extra->name;
+  return {};
+}
+
+// Returns true for:
+//   - All pocket-* scenes (always animated pixel art)
+//   - Any pattern with the "-motion" suffix
+// Used by MediaEngine to decide whether to start a frame timer for the pattern.
+inline bool patternTypeIsAnimated(const std::string& typeId) {
+  std::string normalized = normalizePatternTypeId(typeId);
+  return normalized.rfind("pocket-", 0) == 0 ||       // pocket scenes: always animated
+         normalized == "terrarium" ||                  // living ecosystem: always animated
+         deckboy::extras::findGenerator(normalized) != nullptr ||  // a build's own generators
+         normalized == "terrarium-pico" ||             // same world, 1px per cell
+         normalized == "test-bars" ||                  // motion diagnostics: the point IS motion
+         normalized == "test-clock" ||                 // sync card: a frozen clock proves nothing
+         normalized == "critters" ||                   // the critters bloom and shrink
+         normalized == "frame-count" ||                // a counter that does not count is no counter
+         normalized == "frame-count-emoji" ||
+         // A CODE SOURCE IS ALWAYS ANIMATED. Its expression has `t` in it and
+         // the whole point of it is that you edit it while it runs -- but it
+         // was not on this list, so it was drawn once at take and never again.
+         // Two symptoms from one omission: nothing you typed changed the
+         // picture, and any expression using `t` sat frozen on its first
+         // frame. Both were reported as "editing the code doesn't do
+         // anything", which is exactly what it looked like.
+         normalized == "code" ||
+         normalized == "swirl" ||                      // turning, melting greens
+         normalized == "moire-field" ||                // scrolling interference bands
+         normalized == "portal" ||                     // born, drifting, melting
+         // A DRAWING is rebuilt as it is drawn on and as it replays; the
+         // engine skips the rebuild when nothing has changed (see
+         // rebuildPatternFrame), so a still drawing costs nothing.
+         normalized == "draw" ||
+         // FIRESIDE WAS NOT HERE, the same omission as `code` above: the
+         // builder animates from the clock, every comment about it calls it
+         // animated, and it was drawn once at take and held -- a photograph of
+         // a fire, which its own builder says is the one thing it must not be.
+         normalized == "fireside" ||
+         normalized.find("kawaii") != std::string::npos || // legacy alias for pocket
+         endsWith(normalized, "-motion");               // motion variant of static pattern
+}

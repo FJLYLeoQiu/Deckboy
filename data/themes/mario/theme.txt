@@ -1,0 +1,24 @@
+# Deckboy Theme: Mario
+# Family: moulded case. Warm grey-taupe shell plastic with a vermilion LCD --
+# the case is desaturated on purpose: shell_inner is the dominant panel fill
+# across the whole UI, so a vivid case floods the interface. The character's
+# hue belongs to the screen, exactly as the default Game Boy theme does it.
+# All color values are RRGGBBAA hex.
+
+shell_outer	BFB0A6FF
+shell_inner	AA9A90FF
+shell_shadow	4E443EFF
+screen_light	FF6A4AFF
+screen_mid	C43A22FF
+screen_dark	6E1E12FF
+screen_deep	23100AFF
+screen_ink_soft	9C4A34FF
+button_bezel	7A5E52FF
+delete_bezel	8B3A3AFF
+scanline_alpha	18
+# hide themselves the moment an output goes live.
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	crab	2
+creature	frog	1

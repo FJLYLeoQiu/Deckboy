@@ -1,0 +1,6209 @@
+// ============================================================================
+// app_network.ipp — Network integration methods for the App class.
+//
+// Implements the network protocols used for remote control and integration:
+//
+//   OSC server:
+//     - UDP listener for Open Sound Control messages
+//     - Subscriber tracking (auto-discovers Companion instances)
+//     - OSC message encoding/sending for feedback and tally
+//     - OSC Query server for endpoint discovery
+//
+//   Bitfocus Companion integration:
+//     - Button state feedback (play/stop/cue colors)
+//     - Tally reporting for active sources
+//     - Two-way communication via OSC over UDP
+//
+//   ATEM tally bridge:
+//     - Receives ATEM tally packets on the bridge port
+//     - Maps tally sources to deck transport triggers
+//
+//   NMC (Network Master Clock) sync:
+//     - Input mode: receives transport commands (play/stop/seek)
+//     - Output mode: broadcasts transport state to followers
+//
+//   NDI trigger bridge:
+//     - Receives NDI metadata frames as cue triggers
+//
+//   Art-Net DMX bridge:
+//     - Receives Art-Net DMX packets for lighting trigger integration
+//
+//   LTC (Linear Time Code) ingest:
+//     - Audio capture → LTC decode → timecode chase
+//
+// Cross-platform: uses Winsock2 on Windows, BSD sockets on POSIX.
+// ALSA MIDI and LTC ingest remain platform-gated (DECKBOY_HAS_ALSA / libltc).
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Format a socket address as "host:port" for use as a map key.
+  std::string oscSenderKey(const sockaddr_in& sender) const {
+    char host[INET_ADDRSTRLEN] {};
+    const char* text = inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host));
+    if (!text) {
+      return "unknown:" + std::to_string(ntohs(sender.sin_port));
+    }
+    return std::string(text) + ":" + std::to_string(ntohs(sender.sin_port));
+  }
+
+  void rememberOscSubscriber(const sockaddr_in& sender) {
+    oscSubscribers_[oscSenderKey(sender)] = {sender, SDL_GetTicks()};
+  }
+
+  void sendOscStringTo(const sockaddr_in& target, const std::string& address, const std::string& payload) {
+    if (companionUdpSocket_ == kInvalidSocket) {
+      return;
+    }
+    std::vector<std::uint8_t> message = buildOscStringMessage(address, payload);
+    sendto(
+      companionUdpSocket_,
+      reinterpret_cast<const char*>(message.data()),
+      static_cast<int>(message.size()),
+      0,
+      reinterpret_cast<const sockaddr*>(&target),
+      static_cast<socklen_t>(sizeof(target))
+    );
+  }
+
+  std::string snapshotJsonForFeedback() {
+    std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+    if (!statusSnapshotJson_.empty()) {
+      return statusSnapshotJson_;
+    }
+    return "{\"app\":\"DECKBOY_0.01\",\"deckCount\":0,\"decks\":[]}\n";
+  }
+
+  std::vector<std::pair<std::string, std::string>> buildOscMirrorFeedbackValues() const {
+    std::vector<std::pair<std::string, std::string>> values;
+    values.reserve(16 + project_.decks.size() * 7 + project_.outputs.size() * 8);
+    values.emplace_back("/deckboy/focus/deck", std::to_string(project_.focusedDeckIndex + 1));
+    values.emplace_back("/deckboy/focus/output", std::to_string(project_.focusedOutputIndex + 1));
+    values.emplace_back("/deckboy/decks/count", std::to_string(project_.decks.size()));
+    values.emplace_back("/deckboy/outputs/count", std::to_string(project_.outputs.size()));
+    values.emplace_back("/deckboy/jump_mode", normalizeJumpModeToken(project_.jumpMode));
+    values.emplace_back("/deckboy/panic_profile", normalizePanicProfileToken(project_.panicProfile));
+    values.emplace_back("/deckboy/integration/route", integrationBackendRouteSummary());
+    values.emplace_back("/deckboy/integration/atem", project_.atemTriggerEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/ndi_trigger", project_.ndiTriggerEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/nmc", project_.nmcSyncEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/mtc", project_.mtcIngestEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/ltc", project_.ltcIngestEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/dmx_artnet", project_.dmxArtNetEnabled ? "1" : "0");
+    values.emplace_back("/deckboy/integration/artnet_port", std::to_string(project_.artNetPort));
+
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      const Deck& deck = project_.decks[deckIndex];
+      std::string prefix = "/deckboy/deck/" + std::to_string(deckIndex + 1);
+      values.emplace_back(prefix + "/status", transportStatusLabel(deckIndex));
+      values.emplace_back(prefix + "/selected", std::to_string(deck.selectedIndex >= 0 ? deck.selectedIndex + 1 : 0));
+      values.emplace_back(prefix + "/active", std::to_string(deck.activeIndex >= 0 ? deck.activeIndex + 1 : 0));
+      values.emplace_back(prefix + "/opacity", std::to_string(static_cast<int>(std::lround(std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * 100.0f))));
+      auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+      values.emplace_back(prefix + "/route_output", std::to_string(outputIndex ? *outputIndex + 1 : 0));
+      values.emplace_back(prefix + "/layer", std::to_string(primaryLayerIndexForDeck(deckIndex)));
+      // The output this deck feeds, for the same reason the STATUS
+      // snapshot does: warp is the screen's, not the playlist's.
+      values.emplace_back(prefix + "/warp_mode",
+                          normalizeWarpMode(warpSourceForDeck(deckIndex).warpMode));
+    }
+
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      const OutputTarget& output = project_.outputs[outputIndex];
+      std::string prefix = "/deckboy/output/" + std::to_string(outputIndex + 1);
+      values.emplace_back(prefix + "/enabled", output.enabled ? "1" : "0");
+      values.emplace_back(prefix + "/type", normalizeOutputType(output.outputType));
+      values.emplace_back(prefix + "/ndi", output.ndiEnabled ? "1" : "0");
+      values.emplace_back(prefix + "/stream", output.streamEnabled ? "1" : "0");
+      values.emplace_back(prefix + "/alpha", std::to_string(static_cast<int>(std::lround(std::clamp(output.outputAlpha, 0.0f, 1.0f) * 100.0f))));
+      values.emplace_back(prefix + "/layout", normalizeOutputLayoutMode(output.outputLayoutMode));
+      values.emplace_back(prefix + "/orientation", std::to_string(normalizeOutputOrientationDegrees(output.outputOrientationDegrees)));
+      values.emplace_back(prefix + "/testcard", output.outputTestCardEnabled ? "1" : "0");
+    }
+    return values;
+  }
+
+  std::string buildOscQueryDocumentJson() {
+    std::string stateJson = trim(snapshotJsonForFeedback());
+    if (stateJson.empty()) {
+      stateJson = "{\"app\":\"DECKBOY_0.01\",\"deckCount\":0,\"decks\":[]}";
+    }
+
+    std::ostringstream output;
+    output << "{"
+           << "\"name\":\"Deckboy OSC Query\","
+           << "\"app\":\"DECKBOY_0.01\","
+           << "\"oscUdpPort\":" << companionPort_ << ","
+           << "\"httpPort\":" << project_.oscQueryPort << ","
+           << "\"feedbackMirror\":" << (project_.oscFeedbackMirrorEnabled ? "true" : "false") << ","
+           << "\"feedbackRateMs\":" << project_.oscFeedbackRateMs << ","
+           << "\"integrationRoute\":\"" << escapeJson(integrationBackendRouteSummary()) << "\","
+           << "\"endpoints\":[";
+    for (size_t i = 0; i < kOscQueryEndpoints.size(); ++i) {
+      if (i > 0) {
+        output << ",";
+      }
+      const auto& endpoint = kOscQueryEndpoints[i];
+      output << "{"
+             << "\"path\":\"" << escapeJson(endpoint.path) << "\","
+             << "\"command\":\"" << escapeJson(endpoint.command) << "\","
+             << "\"args\":\"" << escapeJson(endpoint.args) << "\","
+             << "\"notes\":\"" << escapeJson(endpoint.notes) << "\""
+             << "}";
+    }
+    output << "],"
+           << "\"state\":" << stateJson
+           << "}\n";
+    return output.str();
+  }
+
+  std::string buildOscQueryHtmlPage() {
+    std::ostringstream html;
+    html << "<!doctype html><html><head><meta charset='utf-8'>"
+         << "<title>Deckboy OSC Query</title>"
+         << "<style>"
+         << "body{font-family:monospace;background:#0f380f;color:#9bbc0f;margin:0;padding:18px;}"
+         << "h1{margin:0 0 6px 0;font-size:22px;}"
+         << "p{margin:4px 0;}"
+         << "a{color:#c9d7a3;text-decoration:none;}"
+         << "table{border-collapse:collapse;width:100%;margin-top:10px;}"
+         << "th,td{border:1px solid #306230;padding:6px;text-align:left;font-size:12px;}"
+         << "th{background:#306230;color:#9bbc0f;}"
+         << "pre{background:#101410;border:1px solid #306230;padding:8px;overflow:auto;}"
+         << "</style></head><body>";
+    html << "<h1>DECKBOY OSC QUERY</h1>";
+    html << "<p>OSC UDP Port: " << companionPort_ << " | HTTP Port: " << project_.oscQueryPort << "</p>";
+    html << "<p>Feedback Mirror: " << (project_.oscFeedbackMirrorEnabled ? "ON" : "OFF")
+         << " @ " << project_.oscFeedbackRateMs << " ms</p>";
+    html << "<p><a href='/oscquery.json'>/oscquery.json</a> | <a href='/state.json'>/state.json</a></p>";
+    html << "<table><tr><th>Path</th><th>Command</th><th>Args</th><th>Notes</th></tr>";
+    for (const auto& endpoint : kOscQueryEndpoints) {
+      html << "<tr><td>" << escapeHtml(endpoint.path) << "</td>"
+           << "<td>" << escapeHtml(endpoint.command) << "</td>"
+           << "<td>" << escapeHtml(endpoint.args) << "</td>"
+           << "<td>" << escapeHtml(endpoint.notes) << "</td></tr>";
+    }
+    html << "</table>";
+    html << "<h2>State</h2><pre>" << escapeHtml(trim(snapshotJsonForFeedback())) << "</pre>";
+    html << "</body></html>";
+    return html.str();
+  }
+
+  void sendHttpResponse(SocketHandle client,
+                        const std::string& statusLine,
+                        const std::string& contentType,
+                        const std::string& body) {
+    std::ostringstream header;
+    header << "HTTP/1.1 " << statusLine << "\r\n"
+           << "Content-Type: " << contentType << "\r\n"
+           << "Content-Length: " << body.size() << "\r\n"
+           << "Connection: close\r\n"
+           << "Cache-Control: no-cache\r\n"
+           << "\r\n";
+    std::string response = header.str();
+    response += body;
+    send(client, response.c_str(), static_cast<int>(response.size()), kSocketSendFlags);
+  }
+
+  void handleOscQueryHttpClient(SocketHandle client) {
+    std::string request;
+    std::array<char, 2048> buffer {};
+    // 5-second total deadline prevents slow-loris attacks from blocking the server thread
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (request.find("\r\n\r\n") == std::string::npos && request.size() < 16384) {
+      auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(
+        deadline - std::chrono::steady_clock::now());
+      if (remaining.count() <= 0) break;  // deadline expired
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(client, &readFds);
+      timeval tv {};
+      tv.tv_sec = static_cast<long>(remaining.count() / 1000000);
+      tv.tv_usec = static_cast<long>(remaining.count() % 1000000);
+      if (select(selectNfds(client), &readFds, nullptr, nullptr, &tv) <= 0) break;
+      int bytes = recv(client, buffer.data(), static_cast<int>(buffer.size()), 0);
+      if (bytes <= 0) {
+        break;
+      }
+      request.append(buffer.data(), static_cast<size_t>(bytes));
+    }
+    if (request.empty()) {
+      return;
+    }
+
+    size_t lineEnd = request.find("\r\n");
+    if (lineEnd == std::string::npos) {
+      lineEnd = request.find('\n');
+    }
+    std::string requestLine = lineEnd == std::string::npos ? request : request.substr(0, lineEnd);
+    auto parts = splitWhitespace(requestLine);
+    if (parts.size() < 2 || toUpper(parts[0]) != "GET") {
+      sendHttpResponse(client, "405 Method Not Allowed", "text/plain; charset=utf-8",
+                       "Only GET is supported.\n");
+      return;
+    }
+
+    std::string path = parts[1];
+    size_t queryPos = path.find('?');
+    if (queryPos != std::string::npos) {
+      path = path.substr(0, queryPos);
+    }
+    if (path.empty()) {
+      path = "/";
+    }
+
+    if (path == "/") {
+      sendHttpResponse(client, "200 OK", "text/html; charset=utf-8", buildOscQueryHtmlPage());
+      return;
+    }
+    if (path == "/oscquery" || path == "/oscquery.json") {
+      sendHttpResponse(client, "200 OK", "application/json; charset=utf-8", buildOscQueryDocumentJson());
+      return;
+    }
+    if (path == "/state" || path == "/state.json") {
+      sendHttpResponse(client, "200 OK", "application/json; charset=utf-8", snapshotJsonForFeedback());
+      return;
+    }
+
+    sendHttpResponse(client, "404 Not Found", "text/plain; charset=utf-8",
+                     "Deckboy OSC Query endpoint not found.\n");
+  }
+
+
+  // ══ vMix-COMPATIBLE CONTROL SURFACE ═══════════════════════════════════════
+  //
+  // Deckboy speaks one protocol that nothing else speaks, so every controller
+  // needs a module written for it. The vMix TCP and HTTP APIs are the most
+  // widely implemented desk protocol there is, and answering them means every
+  // Stream Deck plugin, Companion module and touch panel already built for a
+  // vMix rig drives Deckboy with nothing further written by anybody.
+  //
+  // THE MAPPING:
+  //   vMix INPUT   = a Deckboy CUE, flattened across playlists in order. Not
+  //                  a playlist -- a panel's tally wants to say "this clip is
+  //                  on air", and every vMix surface is built around that.
+  //   ACTIVE       = the live cue of the focused playlist.
+  //   PREVIEW      = the selected cue of the focused playlist.
+  //   MIX n        = playlist n. vMix has four; Deckboy reports all of its
+  //                  own, and a panel that only knows mix1-4 sees the first
+  //                  four, which is the right way to degrade.
+  //
+  // A Function vMix has and Deckboy has no equivalent for answers 404 and
+  // "Function not supported". vMix answers 200 even when a Function failed;
+  // we do not, because a surface that reports success for something that did
+  // not happen is how a show goes dark with every light green.
+
+  struct VmixInput {
+    int number = 0;          // 1-based, flat across playlists
+    int deckIndex = 0;
+    int cueIndex = 0;
+    std::string title;
+    std::string shortTitle;
+    std::string state;       // Running / Paused / Stopped
+    double durationMs = 0.0;
+    double positionMs = 0.0;
+  };
+
+  // The flat input list, built from the project. Order is playlist order then
+  // cue order, and it must stay stable within a snapshot: the TALLY string,
+  // the XML and any Function that takes an Input number all index into it, and
+  // a list that renumbered between two of those would move the cue under a
+  // panel's finger.
+  std::vector<VmixInput> vmixInputs() const {
+    std::vector<VmixInput> out;
+    int number = 1;
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      const Deck& deck = project_.decks[d];
+      for (std::size_t c = 0; c < deck.cues.size(); ++c) {
+        const Cue& cue = deck.cues[c];
+        VmixInput in;
+        in.number = number++;
+        in.deckIndex = static_cast<int>(d);
+        in.cueIndex = static_cast<int>(c);
+        in.title = cue.name.empty() ? std::string("Cue ") + std::to_string(c + 1)
+                                    : cue.name;
+        in.shortTitle = in.title;
+        // vMix has three input states and Deckboy's engine has more, so the
+        // mapping is deliberate rather than a string copy: anything producing
+        // picture reads Running, because that is what a tally is for. A source
+        // that is warm but not capturing is Stopped, not Paused -- Paused on a
+        // vMix panel means "there is a clip here and it is held", and a camera
+        // that has not come up is not that.
+        const bool live = static_cast<int>(c) == deck.activeIndex;
+        const MediaEngine* engine = live ? mediaEngineForDeck(static_cast<int>(d))
+                                         : nullptr;
+        if (!live || !engine) {
+          in.state = "Stopped";
+        } else if (engine->state() == TransportState::Paused) {
+          in.state = "Paused";
+        } else if (engine->state() == TransportState::Playing) {
+          in.state = "Running";
+        } else {
+          in.state = "Stopped";
+        }
+        in.durationMs = cue.duration * 1000.0;
+        in.positionMs = (live && engine) ? engine->position() * 1000.0 : 0.0;
+        out.push_back(std::move(in));
+      }
+    }
+    return out;
+  }
+
+  // The flat number of a playlist's live or selected cue, or 0 for none --
+  // which is what vMix uses when there is nothing there.
+  int vmixFlatNumber(int deckIndex, int cueIndex) const {
+    if (deckIndex < 0 || cueIndex < 0) return 0;
+    int number = 1;
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      for (std::size_t c = 0; c < project_.decks[d].cues.size(); ++c) {
+        if (static_cast<int>(d) == deckIndex && static_cast<int>(c) == cueIndex) {
+          return number;
+        }
+        ++number;
+      }
+    }
+    return 0;
+  }
+
+  static std::string vmixXmlEscape(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (char c : raw) {
+      switch (c) {
+        case '&':  out += "&amp;"; break;
+        case '<':  out += "&lt;"; break;
+        case '>':  out += "&gt;"; break;
+        case '"':  out += "&quot;"; break;
+        case '\'': out += "&apos;"; break;
+        default:
+          // Control characters are not legal in XML 1.0 at all, and a cue
+          // named from a filename can carry them. Dropped rather than
+          // escaped, because there is no escape that makes them legal.
+          if (static_cast<unsigned char>(c) >= 0x20 || c == '\t') out += c;
+          break;
+      }
+    }
+    return out;
+  }
+
+  static std::string vmixTimeString(double ms) {
+    if (!(ms > 0.0)) return "00:00:00.000";
+    const long long total = static_cast<long long>(ms);
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%02lld:%02lld:%02lld.%03lld",
+                  total / 3600000, (total / 60000) % 60,
+                  (total / 1000) % 60, total % 1000);
+    return buffer;
+  }
+
+  // The state document. Both transports serve this one string, so the HTTP
+  // and TCP surfaces can never disagree about what the desk is doing.
+  std::string vmixStatusXml() const {
+    const std::vector<VmixInput> inputs = vmixInputs();
+    const Deck& focused = focusedDeck();
+    const int focusedIndex = project_.focusedDeckIndex;
+    std::ostringstream xml;
+    xml << "<vmix>\r\n";
+    xml << "<version>" << deckboy::core::version::kVersionTag << "</version>\r\n";
+    xml << "<edition>Deckboy</edition>\r\n";
+    xml << "<preset></preset>\r\n";
+    xml << "<inputs>\r\n";
+    for (const VmixInput& in : inputs) {
+      xml << "<input key=\"" << in.number
+          << "\" number=\"" << in.number
+          << "\" type=\"Video\""
+          << " title=\"" << vmixXmlEscape(in.title) << "\""
+          << " shortTitle=\"" << vmixXmlEscape(in.shortTitle) << "\""
+          << " state=\"" << in.state << "\""
+          << " position=\"" << static_cast<long long>(in.positionMs) << "\""
+          << " duration=\"" << static_cast<long long>(in.durationMs) << "\""
+          << " loop=\"False\">"
+          << vmixXmlEscape(in.title) << "</input>\r\n";
+    }
+    xml << "</inputs>\r\n";
+    xml << "<overlays>\r\n";
+    for (int i = 1; i <= 4; ++i) xml << "<overlay number=\"" << i << "\"/>\r\n";
+    xml << "</overlays>\r\n";
+    xml << "<preview>" << vmixFlatNumber(focusedIndex, focused.selectedIndex)
+        << "</preview>\r\n";
+    xml << "<active>" << vmixFlatNumber(focusedIndex, focused.activeIndex)
+        << "</active>\r\n";
+    // The same test the status snapshot uses for blackout, so the two
+    // surfaces cannot disagree about the same desk.
+    xml << "<fadeToBlack>" << (masterDimmerTarget_ <= 0.001 ? "True" : "False")
+        << "</fadeToBlack>\r\n";
+    xml << "<recording>" << (recordingActive() ? "True" : "False") << "</recording>\r\n";
+    xml << "<external>False</external>\r\n";
+    xml << "<streaming>False</streaming>\r\n";
+    xml << "<playList>False</playList>\r\n";
+    xml << "<multiCorder>False</multiCorder>\r\n";
+    xml << "<fullscreen>False</fullscreen>\r\n";
+    // EVERY playlist as a mix, not only the four vMix has. A panel that knows
+    // about mix1-mix4 reads the first four and ignores the rest.
+    xml << "<mix>\r\n";
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      const Deck& deck = project_.decks[d];
+      xml << "<mix number=\"" << (d + 1) << "\">"
+          << "<preview>" << vmixFlatNumber(static_cast<int>(d), deck.selectedIndex)
+          << "</preview>"
+          << "<active>" << vmixFlatNumber(static_cast<int>(d), deck.activeIndex)
+          << "</active>"
+          << "</mix>\r\n";
+    }
+    xml << "</mix>\r\n";
+    xml << "</vmix>\r\n";
+    return xml.str();
+  }
+
+  // One digit per input: 0 off, 1 program, 2 preview. Program wins, which is
+  // vMix's own rule and the one every panel draws from.
+  std::string vmixTallyString() const {
+    const std::vector<VmixInput> inputs = vmixInputs();
+    std::string tally(inputs.size(), '0');
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      const Deck& deck = project_.decks[static_cast<std::size_t>(inputs[i].deckIndex)];
+      if (inputs[i].cueIndex == deck.activeIndex) {
+        tally[i] = '1';
+      } else if (inputs[i].cueIndex == deck.selectedIndex) {
+        tally[i] = '2';
+      }
+    }
+    return tally;
+  }
+
+  // ── Functions ─────────────────────────────────────────────────────────────
+  //
+  // Translated into Deckboy's own verbs and queued on the main thread like any
+  // other remote command, so a vMix Function and the equivalent typed command
+  // take exactly the same path and cannot drift apart.
+  //
+  // Returns false for a Function this desk has no equivalent for. The caller
+  // turns that into a 404 and "Function not supported" rather than a cheerful
+  // 200 -- see the header.
+  bool vmixFunctionToCommand(const std::string& function,
+                             const std::map<std::string, std::string>& args,
+                             std::string& commandOut) const {
+    const std::string fn = toLower(trim(function));
+    const auto arg = [&args](const char* name) -> std::string {
+      auto it = args.find(toLower(name));
+      return it == args.end() ? std::string() : it->second;
+    };
+    // An Input argument is a FLAT number; it has to become a playlist and a
+    // cue before any Deckboy verb can use it.
+    const auto inputTarget = [&](int& deckOut, int& cueOut) -> bool {
+      const std::string raw = arg("input");
+      if (raw.empty()) return false;
+      int wanted = std::atoi(raw.c_str());
+      if (wanted < 1) return false;
+      int number = 1;
+      for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+        for (std::size_t c = 0; c < project_.decks[d].cues.size(); ++c) {
+          if (number == wanted) {
+            deckOut = static_cast<int>(d);
+            cueOut = static_cast<int>(c);
+            return true;
+          }
+          ++number;
+        }
+      }
+      return false;
+    };
+
+    int deckIndex = 0, cueIndex = 0;
+    if (fn == "cut") { commandOut = "TAKE"; return true; }
+    if (fn == "fade" || fn == "transition1") {
+      const std::string duration = arg("duration");
+      commandOut = duration.empty() ? "TAKE" : ("CROSSFADE " + duration);
+      return true;
+    }
+    if (fn == "play")  { commandOut = "PLAY";  return true; }
+    if (fn == "pause") { commandOut = "PAUSE"; return true; }
+    if (fn == "stop")  { commandOut = "STOP";  return true; }
+    if (fn == "playpause") { commandOut = "PLAY"; return true; }
+    if (fn == "previewinput" || fn == "preview") {
+      if (!inputTarget(deckIndex, cueIndex)) return false;
+      commandOut = "DECK " + std::to_string(deckIndex + 1) +
+                   " SELECT " + std::to_string(cueIndex + 1);
+      return true;
+    }
+    if (fn == "activeinput" || fn == "cutdirect") {
+      if (!inputTarget(deckIndex, cueIndex)) return false;
+      commandOut = "DECK " + std::to_string(deckIndex + 1) +
+                   " TAKE " + std::to_string(cueIndex + 1);
+      return true;
+    }
+    if (fn == "fadetoblack" || fn == "ftb") { commandOut = "BLACKOUT"; return true; }
+    if (fn == "startrecording") { commandOut = "RECORD ON"; return true; }
+    if (fn == "stoprecording")  { commandOut = "RECORD OFF"; return true; }
+    if (fn == "setmastervolume") {
+      const std::string value = arg("value");
+      if (value.empty()) return false;
+      commandOut = "MASTERVOL " + value;
+      return true;
+    }
+    if (fn == "setvolume") {
+      const std::string value = arg("value");
+      if (value.empty() || !inputTarget(deckIndex, cueIndex)) return false;
+      commandOut = "DECK " + std::to_string(deckIndex + 1) + " VOLUME " + value;
+      return true;
+    }
+    if (fn == "nextitem" || fn == "next")     { commandOut = "NEXT"; return true; }
+    if (fn == "previousitem" || fn == "previous") { commandOut = "PREVIOUS"; return true; }
+    if (fn == "restart") { commandOut = "RERACK"; return true; }
+    return false;
+  }
+
+  // Percent-decoding, for the HTTP query string. A cue name with a space in
+  // it arrives as %20 and a panel that sends a '+' means a space too.
+  static std::string vmixUrlDecode(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+      if (raw[i] == '+') { out += ' '; continue; }
+      if (raw[i] == '%' && i + 2 < raw.size()) {
+        const auto hex = [](char c) -> int {
+          if (c >= '0' && c <= '9') return c - '0';
+          if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+          if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+          return -1;
+        };
+        const int hi = hex(raw[i + 1]), lo = hex(raw[i + 2]);
+        if (hi >= 0 && lo >= 0) {
+          out += static_cast<char>(hi * 16 + lo);
+          i += 2;
+          continue;
+        }
+      }
+      out += raw[i];
+    }
+    return out;
+  }
+
+  // Keys are lowercased: vMix panels are inconsistent about Function= vs
+  // function= and Input= vs input=, and a surface that only answered one
+  // spelling would work with some panels and not others.
+  static std::map<std::string, std::string> vmixParseQuery(const std::string& query) {
+    std::map<std::string, std::string> out;
+    std::size_t at = 0;
+    while (at < query.size()) {
+      std::size_t amp = query.find('&', at);
+      if (amp == std::string::npos) amp = query.size();
+      const std::string pair = query.substr(at, amp - at);
+      const std::size_t eq = pair.find('=');
+      if (eq != std::string::npos) {
+        out[toLower(vmixUrlDecode(pair.substr(0, eq)))] =
+          vmixUrlDecode(pair.substr(eq + 1));
+      } else if (!pair.empty()) {
+        out[toLower(vmixUrlDecode(pair))] = "";
+      }
+      at = amp + 1;
+    }
+    return out;
+  }
+
+
+  // ── The listeners ─────────────────────────────────────────────────────────
+
+  bool startVmixServer() {
+    if (!project_.vmixApiEnabled) {
+      vmixReady_ = false;
+      return false;
+    }
+    if (vmixHttpListen_ != kInvalidSocket || vmixTcpListen_ != kInvalidSocket) {
+      return true;
+    }
+    // LOOPBACK UNLESS TOLD OTHERWISE, the same rule the 5510 port follows.
+    // This is a second door into a live show and it must not be a wider one.
+    const bool loopbackOnly = !project_.allowRemoteNetwork;
+    vmixHttpListen_ = createBoundSocket(SOCK_STREAM, project_.vmixHttpPort, true,
+                                        loopbackOnly);
+    vmixTcpListen_ = createBoundSocket(SOCK_STREAM, project_.vmixTcpPort, true,
+                                       loopbackOnly);
+    // A TCP bind failure is not fatal to the HTTP side and the reverse is also
+    // true: a machine that already runs vMix itself has 8088 taken, and half a
+    // surface is worth more than none. It is reported either way, because a
+    // port that quietly did not open is the thing an operator spends an
+    // evening on.
+    if (vmixHttpListen_ == kInvalidSocket && vmixTcpListen_ == kInvalidSocket) {
+      triggerToast("vMix API: neither port could be opened (" +
+                     std::to_string(project_.vmixHttpPort) + ", " +
+                     std::to_string(project_.vmixTcpPort) + ")",
+                   ToastKind::Warning, kToastReadableMs);
+      vmixReady_ = false;
+      return false;
+    }
+    if (vmixHttpListen_ == kInvalidSocket) {
+      triggerToast("vMix API: port " + std::to_string(project_.vmixHttpPort) +
+                     " is taken; the TCP surface is up",
+                   ToastKind::Warning, kToastReadableMs);
+    }
+    if (vmixTcpListen_ == kInvalidSocket) {
+      triggerToast("vMix API: port " + std::to_string(project_.vmixTcpPort) +
+                     " is taken; the HTTP surface is up",
+                   ToastKind::Warning, kToastReadableMs);
+    }
+    vmixStop_.store(false);
+    vmixThread_ = std::thread([this]() { vmixLoop(); });
+    vmixReady_ = true;
+    return true;
+  }
+
+  void stopVmixServer() {
+    vmixStop_.store(true);
+    if (vmixHttpListen_ != kInvalidSocket) {
+      closeSocket(vmixHttpListen_);
+      vmixHttpListen_ = kInvalidSocket;
+    }
+    if (vmixTcpListen_ != kInvalidSocket) {
+      closeSocket(vmixTcpListen_);
+      vmixTcpListen_ = kInvalidSocket;
+    }
+    if (vmixThread_.joinable()) {
+      vmixThread_.join();
+    }
+    {
+      std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+      for (SocketHandle client : vmixClients_) closeSocket(client);
+      vmixClients_.clear();
+      vmixSubscribers_.clear();
+    }
+    vmixReady_ = false;
+  }
+
+  void vmixSendLine(SocketHandle client, const std::string& line) {
+    const std::string wire = line + "\r\n";
+    send(client, wire.data(), static_cast<int>(wire.size()), kSocketSendFlags);
+  }
+
+  // One TCP command. Replies follow vMix's shape: "<COMMAND> OK ..." or
+  // "<COMMAND> ER <reason>", which is what the panels parse.
+  void vmixHandleTcpCommand(SocketHandle client, const std::string& raw,
+                            bool& disconnect) {
+    const std::string line = trim(raw);
+    if (line.empty()) return;
+    std::string verb = line;
+    std::string rest;
+    const std::size_t space = line.find(' ');
+    if (space != std::string::npos) {
+      verb = line.substr(0, space);
+      rest = trim(line.substr(space + 1));
+    }
+    verb = toUpper(verb);
+
+    if (verb == "QUIT") {
+      vmixSendLine(client, "QUIT OK");
+      disconnect = true;
+      return;
+    }
+    if (verb == "VERSION") {
+      vmixSendLine(client, std::string("VERSION OK ") +
+                             deckboy::core::version::kVersionTag);
+      return;
+    }
+    if (verb == "TALLY") {
+      std::string tally;
+      {
+        std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+        tally = vmixTallySnapshot_;
+      }
+      vmixSendLine(client, "TALLY OK " + tally);
+      return;
+    }
+    if (verb == "SUBSCRIBE") {
+      const std::string what = toUpper(rest);
+      if (what.empty() || what == "TALLY" || what == "ACTS") {
+        std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+        vmixSubscribers_.insert(client);
+        vmixSendLine(client, "SUBSCRIBE OK " + (what.empty() ? std::string("TALLY") : what));
+      } else {
+        vmixSendLine(client, "SUBSCRIBE ER Unknown subscription");
+      }
+      return;
+    }
+    if (verb == "UNSUBSCRIBE") {
+      std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+      vmixSubscribers_.erase(client);
+      vmixSendLine(client, "UNSUBSCRIBE OK");
+      return;
+    }
+    if (verb == "XML" || verb == "XMLTEXT") {
+      std::string xml;
+      {
+        std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+        xml = vmixXmlSnapshot_;
+      }
+      // LENGTH FIRST, THEN EXACTLY THAT MANY BYTES. The panels read the
+      // number and then read that many; a mismatch wedges the client until it
+      // times out, which is why the body is sent raw rather than line-wise.
+      vmixSendLine(client, "XML " + std::to_string(xml.size()));
+      send(client, xml.data(), static_cast<int>(xml.size()), kSocketSendFlags);
+      return;
+    }
+    if (verb == "FUNCTION") {
+      // FUNCTION Cut
+      // FUNCTION PreviewInput Input=3
+      std::string function = rest;
+      std::map<std::string, std::string> args;
+      const std::size_t argsAt = rest.find(' ');
+      if (argsAt != std::string::npos) {
+        function = rest.substr(0, argsAt);
+        std::istringstream pairs(rest.substr(argsAt + 1));
+        std::string pair;
+        while (pairs >> pair) {
+          const std::size_t eq = pair.find('=');
+          if (eq != std::string::npos) {
+            args[toLower(pair.substr(0, eq))] = pair.substr(eq + 1);
+          }
+        }
+      }
+      if (function.empty()) {
+        vmixSendLine(client, "FUNCTION ER Function name required");
+        return;
+      }
+      std::string command;
+      if (!vmixFunctionToCommand(function, args, command)) {
+        // NOT "OK". vMix answers success to a Function it could not carry
+        // out; a desk that says a cue was taken when it was not is worse than
+        // one that says it cannot.
+        vmixSendLine(client, "FUNCTION ER Function not supported: " + function);
+        return;
+      }
+      enqueueRemoteCommand(command);
+      vmixSendLine(client, "FUNCTION OK Completed");
+      return;
+    }
+    if (verb == "ACTS") {
+      // A single activator's state. Enough of it to answer what panels ask
+      // for; anything else answers 0, which is what vMix does for an
+      // activator it does not know.
+      std::string tally;
+      {
+        std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+        tally = vmixTallySnapshot_;
+      }
+      std::istringstream parts(rest);
+      std::string what;
+      int which = 0;
+      parts >> what >> which;
+      const std::string kind = toUpper(what);
+      int value = 0;
+      if (which >= 1 && which <= static_cast<int>(tally.size())) {
+        const char digit = tally[static_cast<std::size_t>(which - 1)];
+        if (kind == "INPUT") value = digit == '1' ? 1 : 0;
+        else if (kind == "INPUTPREVIEW") value = digit == '2' ? 1 : 0;
+      }
+      vmixSendLine(client, "ACTS OK " + (kind.empty() ? std::string("Input") : what) +
+                             " " + std::to_string(which) + " " + std::to_string(value));
+      return;
+    }
+    vmixSendLine(client, "ER Unknown command: " + verb);
+  }
+
+  void vmixHandleHttpClient(SocketHandle client) {
+    std::string request;
+    std::array<char, 2048> buffer {};
+    // The same five-second deadline the OSC query server uses, for the same
+    // reason: a client that opens a connection and never finishes its request
+    // must not hold this thread.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (request.find("\r\n\r\n") == std::string::npos && request.size() < 16384) {
+      auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(
+        deadline - std::chrono::steady_clock::now());
+      if (remaining.count() <= 0) break;
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(client, &readFds);
+      timeval tv {};
+      tv.tv_sec = static_cast<long>(remaining.count() / 1000000);
+      tv.tv_usec = static_cast<long>(remaining.count() % 1000000);
+      if (select(selectNfds(client), &readFds, nullptr, nullptr, &tv) <= 0) break;
+      const int bytes = recv(client, buffer.data(),
+                             static_cast<int>(buffer.size()), 0);
+      if (bytes <= 0) break;
+      request.append(buffer.data(), static_cast<std::size_t>(bytes));
+    }
+    if (request.empty()) return;
+
+    std::istringstream head(request);
+    std::string method, target, protocol;
+    head >> method >> target >> protocol;
+    if (toUpper(method) != "GET") {
+      sendHttpResponse(client, "405 Method Not Allowed", "text/plain; charset=utf-8",
+                       "Only GET is supported.\n");
+      return;
+    }
+    std::string path = target;
+    std::string query;
+    const std::size_t queryAt = target.find('?');
+    if (queryAt != std::string::npos) {
+      path = target.substr(0, queryAt);
+      query = target.substr(queryAt + 1);
+    }
+    // vMix accepts /api and /API; a panel configured by hand uses either.
+    const std::string lowered = toLower(path);
+    if (lowered != "/api" && lowered != "/api/") {
+      sendHttpResponse(client, "404 Not Found", "text/plain; charset=utf-8",
+                       "Deckboy answers the vMix API at /api\n");
+      return;
+    }
+    const std::map<std::string, std::string> args = vmixParseQuery(query);
+    const auto functionArg = args.find("function");
+    if (functionArg == args.end() || functionArg->second.empty()) {
+      std::string xml;
+      {
+        std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+        xml = vmixXmlSnapshot_;
+      }
+      sendHttpResponse(client, "200 OK", "application/xml", xml);
+      return;
+    }
+    std::string command;
+    if (!vmixFunctionToCommand(functionArg->second, args, command)) {
+      // 404, which is what an unknown Function gets. A panel can tell the
+      // difference between "I do not have that" and "that went wrong".
+      sendHttpResponse(client, "404 Not Found", "text/plain; charset=utf-8",
+                       "Function not supported: " + functionArg->second + "\n");
+      return;
+    }
+    enqueueRemoteCommand(command);
+    std::string xml;
+    {
+      std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+      xml = vmixXmlSnapshot_;
+    }
+    sendHttpResponse(client, "200 OK", "application/xml", xml);
+  }
+
+  void vmixLoop() {
+    std::map<SocketHandle, std::string> buffers;
+    while (!vmixStop_.load()) {
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      SocketHandle maxFd = kInvalidSocket;
+      if (vmixHttpListen_ != kInvalidSocket) watchFd(vmixHttpListen_, &readFds, maxFd);
+      if (vmixTcpListen_ != kInvalidSocket) watchFd(vmixTcpListen_, &readFds, maxFd);
+      {
+        std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+        for (SocketHandle client : vmixClients_) watchFd(client, &readFds, maxFd);
+      }
+      timeval timeout {};
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 100000;
+      const int ready = select(selectNfds(maxFd), &readFds, nullptr, nullptr, &timeout);
+      if (ready < 0) {
+#ifndef _WIN32
+        if (errno == EINTR) continue;
+#endif
+        break;
+      }
+      // PUSH TALLY ON CHANGE, every pass including the idle one. A subscriber
+      // is waiting to be told; polling it back would defeat the point of
+      // SUBSCRIBE existing.
+      vmixPushTallyIfChanged();
+      if (ready == 0) continue;
+
+      if (vmixHttpListen_ != kInvalidSocket && readyFd(vmixHttpListen_, &readFds)) {
+        sockaddr_in address {};
+        socklen_t length = sizeof(address);
+        SocketHandle client = accept(vmixHttpListen_,
+                                     reinterpret_cast<sockaddr*>(&address), &length);
+        if (client != kInvalidSocket && !controlPeerAllowed(address, "vMix HTTP")) {
+          closeSocket(client);
+          client = kInvalidSocket;
+        }
+        if (client != kInvalidSocket) {
+          setCloseOnExec(client);
+          // HTTP here is one request per connection, answered inline, exactly
+          // like the OSC query server. The TCP surface is the one that holds
+          // connections open.
+          vmixHandleHttpClient(client);
+          closeSocket(client);
+        }
+      }
+
+      if (vmixTcpListen_ != kInvalidSocket && readyFd(vmixTcpListen_, &readFds)) {
+        sockaddr_in address {};
+        socklen_t length = sizeof(address);
+        SocketHandle client = accept(vmixTcpListen_,
+                                     reinterpret_cast<sockaddr*>(&address), &length);
+        if (client != kInvalidSocket && !controlPeerAllowed(address, "vMix TCP")) {
+          closeSocket(client);
+          client = kInvalidSocket;
+        }
+        if (client != kInvalidSocket) {
+          setCloseOnExec(client);
+          std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+          constexpr std::size_t kMaxVmixClients = 16;
+          if (vmixClients_.size() >= kMaxVmixClients) {
+            closeSocket(client);
+          } else {
+            vmixClients_.push_back(client);
+            buffers[client] = "";
+          }
+        }
+      }
+
+      std::vector<SocketHandle> live;
+      {
+        std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+        live = vmixClients_;
+      }
+      std::vector<SocketHandle> dead;
+      for (SocketHandle client : live) {
+        if (!readyFd(client, &readFds)) continue;
+        std::array<char, 2048> buffer {};
+        const int bytes = recv(client, buffer.data(),
+                               static_cast<int>(buffer.size()), 0);
+        if (bytes <= 0) {
+          dead.push_back(client);
+          continue;
+        }
+        std::string& pending = buffers[client];
+        pending.append(buffer.data(), static_cast<std::size_t>(bytes));
+        // A client that never sends a newline must not be able to grow this
+        // without bound.
+        if (pending.size() > 65536) {
+          dead.push_back(client);
+          continue;
+        }
+        bool disconnect = false;
+        std::size_t at = 0;
+        while (true) {
+          const std::size_t nl = pending.find('\n', at);
+          if (nl == std::string::npos) break;
+          const std::string line = pending.substr(at, nl - at);
+          at = nl + 1;
+          vmixHandleTcpCommand(client, line, disconnect);
+          if (disconnect) break;
+        }
+        pending.erase(0, at);
+        if (disconnect) dead.push_back(client);
+      }
+      if (!dead.empty()) {
+        std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+        for (SocketHandle client : dead) {
+          vmixClients_.erase(std::remove(vmixClients_.begin(), vmixClients_.end(), client),
+                             vmixClients_.end());
+          vmixSubscribers_.erase(client);
+          buffers.erase(client);
+          closeSocket(client);
+        }
+      }
+    }
+  }
+
+  void vmixPushTallyIfChanged() {
+    std::string tally;
+    {
+      std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+      tally = vmixTallySnapshot_;
+    }
+    if (tally == vmixLastPushedTally_) return;
+    vmixLastPushedTally_ = tally;
+    std::vector<SocketHandle> subscribers;
+    {
+      std::lock_guard<std::mutex> lock(vmixClientsMutex_);
+      subscribers.assign(vmixSubscribers_.begin(), vmixSubscribers_.end());
+    }
+    for (SocketHandle client : subscribers) {
+      vmixSendLine(client, "TALLY OK " + tally);
+    }
+  }
+
+  // Refreshed on the MAIN THREAD, beside the status snapshot, for the reason
+  // that snapshot exists: the project belongs to the main thread and a server
+  // thread walking the decks while a cue is being imported is a data race.
+  // Both transports read these two strings under a mutex and nothing else.
+  void refreshVmixSnapshots() {
+    if (!project_.vmixApiEnabled) return;
+    std::string xml = vmixStatusXml();
+    std::string tally = vmixTallyString();
+    std::lock_guard<std::mutex> lock(vmixSnapshotMutex_);
+    vmixXmlSnapshot_ = std::move(xml);
+    vmixTallySnapshot_ = std::move(tally);
+  }
+
+  bool startOscQueryServer() {
+    if (!project_.oscQueryEnabled) {
+      oscQueryReady_ = false;
+      return false;
+    }
+    if (oscQueryTcpListen_ != kInvalidSocket) {
+      return true;
+    }
+
+    oscQueryTcpListen_ = createBoundSocket(SOCK_STREAM, project_.oscQueryPort, true, !project_.allowRemoteNetwork);
+    if (oscQueryTcpListen_ == kInvalidSocket) {
+      oscQueryReady_ = false;
+      return false;
+    }
+
+    oscQueryStop_.store(false);
+    oscQueryThread_ = std::thread([this]() {
+      oscQueryLoop();
+    });
+    oscQueryReady_ = true;
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // WEB MONITOR -- programme H.264/AAC with a shared audio/video timeline.
+  //
+  // / and /view/N host the player; /hls/N/index.m3u8 exposes the same encoder
+  // fragments to native HLS and HLS.js. /av/N is the raw fragmented MP4 tap.
+  // Legacy /out/N MJPEG and /snap/N.jpg remain picture-only diagnostics.
+  // Browser threads never touch project_: they read a main-thread snapshot.
+  // ---------------------------------------------------------------------------
+  bool webMonitorWatching(int outputIndex) const {
+    return outputIndex >= 0 && outputIndex < kWebMonitorMaxOutputs &&
+           webMonitorSlots_[static_cast<std::size_t>(outputIndex)].viewers.load() > 0;
+  }
+
+  // The address on an active private Ethernet/Wi-Fi interface. In particular,
+  // do not derive this from the default route, which may belong to a VPN.
+  std::string webMonitorLanAddress() const {
+    return privateLanIPv4Address();
+  }
+
+  // Where a phone opens the controller: on the network whenever phone control
+  // is on, whatever the Web Monitor's own sharing says.
+  std::string webRemoteUrl() const {
+    const std::string host = webMonitorLanAddress();
+    if (host.empty()) return "LAN unavailable (no active private Ethernet/Wi-Fi address)";
+    return "http://" + host + ":" + std::to_string(project_.webMonitorPort) + "/remote";
+  }
+
+  // Where a phone on the same Tailscale network opens the controller, or
+  // empty when this computer is not on one (or phone control is off).
+  std::string webRemoteTailnetUrl() const {
+    if (webRemoteTailnetAddress_.empty() || !webMonitorReady_) return {};
+    return "http://" + webRemoteTailnetAddress_ + ":" + std::to_string(project_.webMonitorPort) + "/remote";
+  }
+
+  std::string webMonitorUrl() const {
+    const std::string host = webServerOnNetwork() ? webMonitorLanAddress() : std::string("localhost");
+    if (host.empty()) return "LAN unavailable (no active private Ethernet/Wi-Fi address)";
+    return "http://" + host +
+           ":" + std::to_string(project_.webMonitorPort) + "/";
+  }
+
+  // Refreshed from the main thread about once a second: the names of the
+  // outputs and the PIN, which is all the browser threads ever need to know.
+  void syncWebMonitorDirectory() {
+    if (webMonitorStop_.load()) {
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (webMonitorDirSyncedMs_ != 0 && now - webMonitorDirSyncedMs_ < 1000) {
+      return;
+    }
+    webMonitorDirSyncedMs_ = now;
+    std::vector<std::string> names;
+    std::vector<bool> sound;
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()) && i < kWebMonitorMaxOutputs; ++i) {
+      const OutputTarget& out = project_.outputs[static_cast<std::size_t>(i)];
+      names.push_back(outputLabel(i));
+      sound.push_back(out.enabled && out.streamEnabled &&
+                      outputStreamProtocolIsWeb(normalizeOutputStreamProtocol(out.streamProtocol)));
+    }
+    std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+    webMonitorOutputNames_ = std::move(names);
+    webMonitorOutputSound_ = std::move(sound);
+    webMonitorProgrammeOutput_ = findStreamOutputForProtocol("web");
+    webMonitorLowLatencySnapshot_ = project_.webMonitorLowLatency;
+    webMonitorSourceSnapshot_ = webMonitorProgrammeOutput_ < 0 ? -1
+      : project_.outputs[static_cast<std::size_t>(webMonitorProgrammeOutput_)].mirrorSourceOutputIndex;
+    webMonitorSourceLabel_ = webMonitorProgrammeOutput_ < 0 ? std::string("Programme")
+      : outputSourceLabel(project_.outputs[static_cast<std::size_t>(webMonitorProgrammeOutput_)]
+                            .mirrorSourceOutputIndex);
+    webMonitorPinSnapshot_ = project_.webMonitorPin;
+    webRemoteEnabledSnapshot_ = project_.webRemoteEnabled;
+    webTabletopUnlockedSnapshot_ = project_.tabletopUnlocked;
+    webMonitorEnabledSnapshot_ = project_.webMonitorEnabled;
+    webMonitorShareSnapshot_ = project_.webMonitorShareLan;
+    if (project_.webRemoteEnabled) {
+      webRemoteStateSnapshot_ = buildWebRemoteState();
+    } else {
+      webRemoteStateSnapshot_.clear();
+    }
+    const auto cssColor = [](SDL_Color color) {
+      return "rgb(" + std::to_string(color.r) + "," + std::to_string(color.g) + "," +
+             std::to_string(color.b) + ")";
+    };
+    webRemoteStyleSnapshot_ = ":root{--surface:" + cssColor(pal.tile) +
+      ";--ink:" + cssColor(paletteInkOnFill(pal.tile)) +
+      ";--button:" + cssColor(paletteToggleFill(false)) +
+      ";--button-ink:" + cssColor(paletteToggleInk(false)) +
+      ";--active:" + cssColor(paletteToggleFill(true)) +
+      ";--active-ink:" + cssColor(paletteToggleInk(true)) +
+      ";--deep:" + cssColor(pal.deep) + ";--light:" + cssColor(pal.light) +
+      ";--mid:" + cssColor(pal.mid) + ";--dark:" + cssColor(pal.dark) + "}";
+    webMonitorHeightSnapshot_ = project_.webMonitorMaxHeight;
+    webMonitorMaxClients_.store(std::clamp(project_.webMonitorMaxClients, 1, 64));
+  }
+
+  // Main thread, from the output's render pass, only while someone watches.
+  void feedWebMonitor(int outputIndex, OutputRuntime& runtime) {
+    if (outputIndex < 0 || outputIndex >= kWebMonitorMaxOutputs) {
+      return;
+    }
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    const Uint64 now = SDL_GetTicks();
+    if (now - slot.lastFedMs < 50) {
+      return;   // 20 pictures a second is plenty for a monitor
+    }
+    const OutputRuntime::CapturedFrame* frame = outputFrameForEgress(outputIndex, runtime);
+    if (!frame || frame->width <= 0 || frame->height <= 0 ||
+        frame->bytes() < static_cast<std::size_t>(frame->width) * frame->height * 4u) {
+      return;
+    }
+    slot.lastFedMs = now;
+    const int step = std::max(1, (frame->width + 959) / 960);
+    const int w = frame->width / step;
+    const int h = frame->height / step;
+    std::vector<std::uint8_t> rgb(static_cast<std::size_t>(w) * h * 3u);
+    for (int y = 0; y < h; ++y) {
+      const std::uint8_t* src = frame->data() +
+        static_cast<std::size_t>(y * step) * frame->width * 4u;
+      std::uint8_t* dst = rgb.data() + static_cast<std::size_t>(y) * w * 3u;
+      // The egress capture is BGRA (SDL_PIXELFORMAT_BGRA32, the order the
+      // stream encoder is told too); a JPEG wants RGB.
+      for (int x = 0; x < w; ++x, src += step * 4, dst += 3) {
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(webMonitorEncodeMutex_);
+      slot.pendingRgb = std::move(rgb);
+      slot.pendingW = w;
+      slot.pendingH = h;
+      slot.pending = true;
+    }
+    webMonitorEncodeCv_.notify_one();
+  }
+
+  static void webMonitorJpegSink(void* context, void* data, int size) {
+    static_cast<std::string*>(context)->append(static_cast<const char*>(data),
+                                               static_cast<std::size_t>(size));
+  }
+
+  void publishWebMonitorJpeg(int outputIndex, std::string jpeg) {
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    {
+      std::lock_guard<std::mutex> lock(slot.mutex);
+      slot.jpeg = std::make_shared<const std::string>(std::move(jpeg));
+      ++slot.serial;
+    }
+    slot.cv.notify_all();
+  }
+
+  void webMonitorEncodeLoop() {
+    while (!webMonitorStop_.load()) {
+      int index = -1;
+      std::vector<std::uint8_t> rgb;
+      int w = 0, h = 0;
+      {
+        std::unique_lock<std::mutex> lock(webMonitorEncodeMutex_);
+        webMonitorEncodeCv_.wait_for(lock, std::chrono::milliseconds(250), [&]() {
+          if (webMonitorStop_.load()) return true;
+          for (const auto& slot : webMonitorSlots_) {
+            if (slot.pending) return true;
+          }
+          return false;
+        });
+        for (int i = 0; i < kWebMonitorMaxOutputs; ++i) {
+          WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(i)];
+          if (slot.pending) {
+            index = i;
+            rgb = std::move(slot.pendingRgb);
+            w = slot.pendingW;
+            h = slot.pendingH;
+            slot.pending = false;
+            break;
+          }
+        }
+      }
+      if (index < 0 || w <= 0 || h <= 0) {
+        continue;
+      }
+      std::string jpeg;
+      jpeg.reserve(rgb.size() / 8);
+      if (stbi_write_jpg_to_func(&App::webMonitorJpegSink, &jpeg, w, h, 3, rgb.data(), 75) && !jpeg.empty()) {
+        publishWebMonitorJpeg(index, std::move(jpeg));
+      }
+    }
+  }
+
+  // A still for an output that is not drawing anything yet: the house green,
+  // so a viewer sees "connected, nothing on" rather than a broken image.
+  std::shared_ptr<const std::string> webMonitorPlaceholder() {
+    static std::shared_ptr<const std::string> cached;
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!cached) {
+      constexpr int w = 160, h = 90;
+      std::vector<std::uint8_t> rgb(static_cast<std::size_t>(w) * h * 3u);
+      for (std::size_t i = 0; i < rgb.size(); i += 3) {
+        rgb[i] = 15; rgb[i + 1] = 56; rgb[i + 2] = 15;
+      }
+      std::string jpeg;
+      stbi_write_jpg_to_func(&App::webMonitorJpegSink, &jpeg, w, h, 3, rgb.data(), 80);
+      cached = std::make_shared<const std::string>(std::move(jpeg));
+    }
+    return cached;
+  }
+
+  static bool webMonitorSendAll(SocketHandle client, const char* data, std::size_t size) {
+    while (size > 0) {
+      const int chunk = static_cast<int>(std::min<std::size_t>(size, 1 << 20));
+      const int sent = send(client, data, chunk, kSocketSendFlags);
+      if (sent <= 0) {
+        return false;
+      }
+      data += sent;
+      size -= static_cast<std::size_t>(sent);
+    }
+    return true;
+  }
+
+  void webMonitorSendPage(SocketHandle client, const std::string& status,
+                          const std::string& type, const std::string& body) {
+    std::ostringstream header;
+    header << "HTTP/1.1 " << status << "\r\n"
+           << "Content-Type: " << type << "\r\n"
+           << "Content-Length: " << body.size() << "\r\n"
+           << "Cache-Control: no-store\r\n"
+           << "X-Content-Type-Options: nosniff\r\n"
+           << "Referrer-Policy: no-referrer\r\n"
+           << "Content-Security-Policy: default-src 'self'; img-src 'self'; media-src 'self' blob:; "
+              "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+              "base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'\r\n"
+           << "Connection: close\r\n\r\n";
+    const std::string head = header.str();
+    webMonitorSendAll(client, head.data(), head.size()) &&
+      webMonitorSendAll(client, body.data(), body.size());
+  }
+
+  static std::string webMonitorPageShell(const std::string& title, const std::string& body) {
+    return "<!doctype html><html><head><meta charset='utf-8'>"
+           "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+           "<title>" + escapeHtml(title) + "</title><style>"
+           "body{margin:0;background:#0f380f;color:#9bbc0f;font-family:system-ui,sans-serif}"
+           "header{padding:12px 16px;font-weight:700;letter-spacing:.06em}"
+           ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));"
+           "gap:12px;padding:0 16px 16px}"
+           ".card{background:#071a07;border:1px solid #306230;border-radius:6px;overflow:hidden}"
+           ".card img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#000}"
+           ".card a{display:block;color:#c9d7a3;text-decoration:none;padding:8px 10px}"
+           ".full{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center}"
+           ".full img{max-width:100%;max-height:100%}"
+           "form{padding:16px}input,button{font:inherit;padding:6px 10px}"
+           "</style></head><body>" + body + "</body></html>";
+  }
+
+  static std::string webMonitorEncodeQuery(const std::string& value) {
+    static constexpr char hex[] = "0123456789ABCDEF";
+    std::string encoded;
+    for (unsigned char c : value) {
+      if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+        encoded += static_cast<char>(c);
+      } else {
+        encoded += '%';
+        encoded += hex[c >> 4];
+        encoded += hex[c & 15];
+      }
+    }
+    return encoded;
+  }
+
+  static std::string webMonitorDecodeQuery(const std::string& value) {
+    const auto hex = [](char c) {
+      if (c >= '0' && c <= '9') return c - '0';
+      if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+      if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+      return -1;
+    };
+    std::string decoded;
+    for (std::size_t i = 0; i < value.size(); ++i) {
+      if (value[i] == '%') {
+        if (i + 2 >= value.size()) return {};
+        const int high = hex(value[i + 1]), low = hex(value[i + 2]);
+        if (high < 0 || low < 0) return {};
+        decoded += static_cast<char>((high << 4) | low);
+        i += 2;
+      } else {
+        decoded += value[i] == '+' ? ' ' : value[i];
+      }
+    }
+    return decoded;
+  }
+
+  // Companion TCP, under companionClientsMutex_. AUTH is answered here; with a
+  // passphrase set, a client on another machine gets nothing else -- not even
+  // STATUS -- until it has sent the right one. Five wrong ones end the session.
+  bool companionClientMayProceedLocked(SocketHandle client, const std::string& line,
+                                       std::vector<SocketHandle>& closedClients) {
+    std::string passphrase;
+    {
+      std::lock_guard<std::mutex> lock(controlTrustMutex_);
+      passphrase = controlPassphrase_;
+    }
+    const bool remote = companionClientRemote_.count(client) != 0;
+    const bool isAuth = line.size() >= 4 && toUpper(line.substr(0, 4)) == "AUTH" &&
+                        (line.size() == 4 || line[4] == ' ');
+    if (isAuth) {
+      const std::string given = line.size() > 5 ? line.substr(5) : std::string();
+      if (!remote || passphrase.empty() || given == passphrase) {
+        companionClientAuthed_.insert(client);
+        queueCompanionReplyLocked(client, "OK AUTH\n");
+      } else {
+        queueCompanionReplyLocked(client, "ERR AUTH: wrong passphrase\n");
+        if (++companionClientAuthFailures_[client] >= 5) closedClients.push_back(client);
+      }
+      return false;
+    }
+    if (!remote || passphrase.empty() || companionClientAuthed_.count(client)) return true;
+    queueCompanionReplyLocked(client, "ERR AUTH: send AUTH <passphrase> first\n");
+    return false;
+  }
+
+  // -- WHO MAY CONTROL THIS MACHINE --------------------------------------------
+  //
+  // "Listen on all interfaces" used to mean exactly that: Companion, OSC, the
+  // HyperDeck and vMix emulations all took commands from ANY machine on the
+  // network, with no question asked, and the command set can import files,
+  // open web pages and fire every cue. Now, with remote listening on, only
+  // this computer and the addresses in Settings > Network > Trusted
+  // controllers get through. Everyone else is refused and NAMED, so a desk
+  // that stops answering a new tablet says why, with the address to allow.
+  //
+  // HyperDeck and vMix clients cannot send a password, which is why the gate
+  // is an address list. Companion TCP may also require a passphrase.
+  static bool parseTrustEntry(std::string text, std::uint32_t& address, std::uint32_t& mask) {
+    text = trim(text);
+    int bits = 32;
+    if (const auto slash = text.find('/'); slash != std::string::npos) {
+      try {
+        bits = std::stoi(text.substr(slash + 1));
+      } catch (...) {
+        return false;
+      }
+      if (bits < 8 || bits > 32) return false;  // never "the whole internet"
+      text = text.substr(0, slash);
+    }
+    in_addr parsed {};
+    if (inet_pton(AF_INET, text.c_str(), &parsed) != 1) return false;
+    mask = bits == 32 ? 0xFFFFFFFFu : ~((1u << (32 - bits)) - 1u);
+    address = ntohl(parsed.s_addr) & mask;
+    return true;
+  }
+
+  // The entries that do not parse, for the operator to fix (empty = all fine).
+  static std::string invalidTrustEntries(const std::string& list) {
+    std::string bad;
+    for (const auto& entry : splitByChar(list, ',')) {
+      std::uint32_t a = 0, m = 0;
+      if (!trim(entry).empty() && !parseTrustEntry(entry, a, m)) {
+        bad += (bad.empty() ? "" : ", ") + trim(entry);
+      }
+    }
+    return bad;
+  }
+
+  // Main thread. Copies the project's rules into what the network threads read.
+  void refreshControlTrust() {
+    std::lock_guard<std::mutex> lock(controlTrustMutex_);
+    if (controlTrustPrimed_ && controlTrustSource_ == project_.trustedControllers &&
+        controlPassphrase_ == project_.companionPassphrase &&
+        controlTrustRemote_ == project_.allowRemoteNetwork) {
+      return;
+    }
+    controlTrustPrimed_ = true;
+    controlTrustSource_ = project_.trustedControllers;
+    controlPassphrase_ = project_.companionPassphrase;
+    controlTrustRemote_ = project_.allowRemoteNetwork;
+    controlTrustNets_.clear();
+    for (const auto& entry : splitByChar(project_.trustedControllers, ',')) {
+      std::uint32_t address = 0, mask = 0;
+      if (parseTrustEntry(entry, address, mask)) controlTrustNets_.push_back({address, mask});
+    }
+  }
+
+  static bool peerIsLoopback(const sockaddr_in& peer) {
+    return (ntohl(peer.sin_addr.s_addr) >> 24) == 127;
+  }
+
+  // Any network thread. False means refuse; the refusal is reported later on
+  // the main thread, which owns the toasts and the log.
+  // `remoteSwitch` false is for a listener that reaches the LAN by its own
+  // switch (the phone remote rides the Web Monitor's sharing): the trusted
+  // list still decides, whatever Allow remote network says.
+  bool controlPeerAllowed(const sockaddr_in& peer, const char* portName, bool remoteSwitch = true) {
+    if (peer.sin_family == AF_INET && peerIsLoopback(peer)) return true;
+    std::lock_guard<std::mutex> lock(controlTrustMutex_);
+    if ((controlTrustRemote_ || !remoteSwitch) && peer.sin_family == AF_INET) {
+      const std::uint32_t ip = ntohl(peer.sin_addr.s_addr);
+      for (const auto& [address, mask] : controlTrustNets_) {
+        if ((ip & mask) == address) return true;
+      }
+    }
+    if (controlRefused_.size() < 64) controlRefused_.push_back({socketAddressToString(peer), portName});
+    return false;
+  }
+
+  // Main thread, every tick: keep the rules current and say who was turned away.
+  void reportRefusedControllers() {
+    refreshControlTrust();
+    std::vector<std::pair<std::string, std::string>> refused;
+    {
+      std::lock_guard<std::mutex> lock(controlTrustMutex_);
+      refused.swap(controlRefused_);
+    }
+    const Uint64 now = SDL_GetTicks();
+    for (const auto& [address, port] : refused) {
+      controlLastRefused_ = address;
+      // Into the monitor at most once a second per address: the toast below
+      // is once in 30 s, right for a person and too sparse for someone
+      // watching a controller fail.
+      Uint64& listed = inputMonitorRefusedMs_[address + " " + port];
+      if (listed == 0 || now - listed >= 1000) {
+        listed = now;
+        InputMonitorEntry entry;
+        entry.kind = "REMOTE";
+        entry.from = address;
+        entry.message = "connection on " + port;
+        entry.outcome = 'R';
+        entry.what = address + " is not a trusted controller (TRUST " + address + ")";
+        recordInputMonitor(std::move(entry));
+      }
+      Uint64& told = controlRefusedToldMs_[address + " " + port];
+      if (told != 0 && now - told < 30000) continue;  // once in 30 s, not per packet
+      told = now;
+      showLog("CONTROL-REFUSED", address + " on " + port);
+      triggerToast("refused " + port + " control from " + address +
+                     " - trust it in Settings > Network (TRUST " + address + ")",
+                   ToastKind::Warning, kToastReadableMs);
+    }
+  }
+
+  // Adds one address or range to the trusted list; false (and why) if invalid.
+  bool trustController(const std::string& entry) {
+    std::uint32_t a = 0, m = 0;
+    if (!parseTrustEntry(entry, a, m)) {
+      failRemoteCommand("TRUST: expected an IPv4 address or a.b.c.d/bits (8-32), got " + trim(entry));
+      return false;
+    }
+    for (const auto& existing : splitByChar(project_.trustedControllers, ',')) {
+      if (trim(existing) == trim(entry)) return true;
+    }
+    project_.trustedControllers +=
+      (trim(project_.trustedControllers).empty() ? "" : ", ") + trim(entry);
+    markProjectDirty();
+    refreshControlTrust();
+    triggerToast("trusted controller: " + trim(entry));
+    return true;
+  }
+
+  // WEBMONITOR SHARE, PIN and CONTROL decide who on the network may watch or
+  // drive the show, so they are TRUST's kind of verb, not a controller's.
+  static bool webMonitorSubWidensAccess(const std::string& sub) {
+    const std::string s = toUpper(sub);
+    return s == "SHARE" || s == "PIN" || s == "CONTROL";
+  }
+
+  // Verbs another machine may never use: they write files at a path it names,
+  // fake the operator's own mouse, or change who is trusted.
+  static bool remoteVerbIsLocalOnly(const std::string& text, int depth = 0) {
+    if (depth > 8) return true;  // nobody nests wrappers this deep honestly
+    const auto parts = splitWhitespace(text);
+    if (parts.empty()) return false;
+    const std::string verb = toUpper(parts[0]);
+    static const std::set<std::string> kLocalOnly {
+      "CLICK", "HOVER", "PRESS", "KEY", "TYPE", "SCROLL", "SCROLLBAR", "DROPTEST", "TESTTHROW",
+      "UISNAP", "OUTSNAP", "OUTPROBE", "TRUST", "COMPANIONPASS", "MIDIIN",
+      // Pairing a phone or raising what phones may do widens access.
+      "PHONE"};
+    if (kLocalOnly.count(verb)) return true;
+    if (verb == "SUBTITLE" && parts.size() > 1 && toUpper(parts[1]) == "CONVERT") return true;
+    // Writes a file at a path the caller names.
+    if (verb == "MASK" && parts.size() > 1 && toUpper(parts[1]) == "EXPORT") return true;
+    // Reads a file at a path the caller names.
+    if (verb == "MASK" && parts.size() > 1 && toUpper(parts[1]) == "IMPORT") return true;
+    if (verb == "DRAW" && parts.size() > 1 && toUpper(parts[1]) == "SAVE") return true;
+    // Test input into the Screens window, like CLICK into the desk.
+    if (verb == "SCREENS" && parts.size() > 1 &&
+        (toUpper(parts[1]) == "CLICK" || toUpper(parts[1]) == "HOVER" || toUpper(parts[1]) == "UP" ||
+         toUpper(parts[1]) == "SNAP")) return true;
+    if (verb == "TUTORIAL" && parts.size() > 1 && toUpper(parts[1]) == "SCREENS") return true;
+    if (verb == "BROWSER" && toLower(text).find("file:") != std::string::npos) return true;
+    if (verb == "WEBMONITOR" && parts.size() > 1 && webMonitorSubWidensAccess(parts[1])) return true;
+    // A WRAPPER RUNS THE REST AS ITS OWN COMMAND, so judge that command.
+    if (verb == "DECK" && parts.size() > 2) return remoteVerbIsLocalOnly(joinParts(parts, 2), depth + 1);
+    // A verb that STORES a command must be judged on the command it stores,
+    // split exactly as DASH SET splits it: "Label|UISNAP x" with no spaces
+    // round the bar was one word to the old scan and got through.
+    if (verb == "DASH" && parts.size() > 3 && toUpper(parts[1]) == "SET") {
+      const std::string rest = joinParts(parts, 3);
+      const std::size_t bar = rest.find('|');
+      if (bar != std::string::npos) {
+        const std::size_t end = rest.find('|', bar + 1);
+        const std::string stored = rest.substr(bar + 1, end == std::string::npos ? std::string::npos : end - bar - 1);
+        if (remoteVerbIsLocalOnly(stored, depth + 1)) return true;
+      }
+    }
+    if (verb == "SCRIPTCUE" && parts.size() > 2 && toUpper(parts[1]) == "ADD" &&
+        remoteVerbIsLocalOnly(joinParts(parts, 2), depth + 1)) {
+      return true;
+    }
+    // Belt and braces: any local-only word anywhere in what is stored.
+    if (verb == "DASH" || verb == "SCRIPTCUE") {
+      bool afterWebMonitor = false;
+      for (const auto& word : parts) {
+        std::string w = toUpper(word);
+        while (!w.empty() && (w.front() == '|' || w.front() == ';' || w.front() == '"')) w.erase(w.begin());
+        if (kLocalOnly.count(w)) return true;
+        if (w == "SUBTITLE" || w.find("FILE:") != std::string::npos) return true;
+        if (afterWebMonitor && webMonitorSubWidensAccess(w)) return true;
+        afterWebMonitor = w == "WEBMONITOR";
+      }
+    }
+    return false;
+  }
+
+  // WHAT A PHONE MAY SEE OF A DASHBOARD SLOT (audit 2026-10-19, F3). The
+  // phone's editor offers a fixed list of actions (remote.js dashChoices) and
+  // only needs a slot's command to preselect one of them. Anything else -- a
+  // desk macro that may carry a path, a URL or a passphrase -- goes out as
+  // "custom": the phone knows the slot is set and can fire or replace it, and
+  // never sees what it says. Keep this list in step with dashChoices.
+  static std::string phoneDashCommand(const std::string& command) {
+    if (command.empty()) return std::string();
+    const auto w = splitWhitespace(command);
+    auto upper = [&](std::size_t i) { return i < w.size() ? toUpper(w[i]) : std::string(); };
+    auto number = [&](std::size_t i) {
+      return i < w.size() && !w[i].empty() && w[i].size() <= 4 &&
+             std::all_of(w[i].begin(), w[i].end(), [](unsigned char c) { return std::isdigit(c) != 0; });
+    };
+    const std::string verb = upper(0);
+    bool known = false;
+    if (verb == "DECK" && number(1)) {
+      const std::string act = upper(2);
+      known = (w.size() == 3 && (act == "GO" || act == "STOP" || act == "PAUSE" || act == "PLAY")) ||
+              (w.size() == 4 && act == "TAKE" && number(3));
+    } else if (verb == "TRACKER") {
+      known = w.size() == 2 && (upper(1) == "GO" || upper(1) == "BACK" || upper(1) == "PLAY" || upper(1) == "STOP");
+    } else if (verb == "BLACKOUT" || verb == "RECORD") {
+      known = w.size() == 2 && (upper(1) == "ON" || upper(1) == "OFF");
+    } else if (verb == "OUTPUT") {
+      known = w.size() == 4 && upper(1) == "TESTCARD" && upper(2) == "ALL" && (upper(3) == "ON" || upper(3) == "OFF");
+    }
+    return known ? command : std::string("custom");
+  }
+
+  // Built on the main thread only. No paths, PIN or output credentials, and no
+  // dashboard command beyond the phone's own menu actions (phoneDashCommand),
+  // are exposed to the phone; the HTTP threads read this immutable snapshot.
+  std::string buildWebRemoteState() const {
+    std::ostringstream out;
+    out << "{\"focus\":" << project_.focusedDeckIndex + 1 << ",\"decks\":[";
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      const Deck& deck = project_.decks[d];
+      if (d) out << ',';
+      out << "{\"index\":" << d + 1 << ",\"name\":\"" << escapeJson(deck.name)
+          << "\",\"status\":\"" << escapeJson(transportStatusLabel(static_cast<int>(d)))
+          << "\",\"selected\":" << deck.selectedIndex + 1 << ",\"active\":" << deck.activeIndex + 1
+          << ",\"standby\":" << deck.standbyIndex + 1;
+      // Where the live cue is, for the now-playing panel.
+      double elapsed = 0.0, length = 0.0;
+      if (const MediaEngine* engine = mediaEngineForDeck(static_cast<int>(d)); engine && deck.activeIndex >= 0) {
+        elapsed = std::max(0.0, engine->position());
+        length = std::max(0.0, engine->duration());
+      }
+      double volume = 1.0;
+      if (const MediaEngine* engine = mediaEngineForDeck(static_cast<int>(d))) volume = engine->volume();
+      out << ",\"volume\":" << static_cast<int>(std::lround(volume * 100.0));
+      out << ",\"elapsed\":" << static_cast<long long>(elapsed * 10.0) / 10.0
+          << ",\"length\":" << static_cast<long long>(length * 10.0) / 10.0 << ",\"cues\":[";
+      for (std::size_t c = 0; c < deck.cues.size(); ++c) {
+        if (c) out << ',';
+        const Cue& cue = deck.cues[c];
+        const double len = cue.duration > 0.0 ? cue.duration : cue.stillDurationSeconds;
+        out << "{\"index\":" << c + 1 << ",\"name\":\"" << escapeJson(cue.name)
+            << "\",\"len\":" << static_cast<long long>(std::max(0.0, len) * 10.0) / 10.0 << '}';
+      }
+      out << "]}";
+    }
+    out << "],\"dash\":[";
+    bool first = true;
+    for (std::size_t n = 0; n < project_.dashboard.size(); ++n) {
+      const DashboardSlot& slot = project_.dashboard[n];
+      if (!first) out << ',';
+      first = false;
+      out << "{\"index\":" << n + 1 << ",\"label\":\"" << escapeJson(slot.label)
+          << "\",\"command\":\"" << escapeJson(phoneDashCommand(slot.command)) << "\"}";
+    }
+    // THE TRACKER, if the show has one: it can be the primary way a show is
+    // run, so the phone carries it as well as the decks.
+    const auto rows = masterTrackerRows();
+    const int head = trackerPlayheadRow();
+    out << "],\"tracker\":{\"steps\":" << rows.size() << ",\"step\":" << head + 1
+        << ",\"playing\":" << (trackerPlaying_ ? "true" : "false") << ",\"names\":[";
+    for (std::size_t r = 0; r < rows.size() && r < 200; ++r) {
+      const Cue* step = masterTrackerCue(rows[r].first, rows[r].second);
+      if (r) out << ',';
+      out << '"' << escapeJson(step ? step->name : std::string()) << '"';
+    }
+    out << "]},\"outputs\":[";
+    bool firstOut = true;
+    for (std::size_t o = 0; o < project_.outputs.size(); ++o) {
+      const OutputTarget& target = project_.outputs[o];
+      if (normalizeOutputType(target.outputType) == "stream") continue;   // screens, not encoders
+      if (!firstOut) out << ',';
+      firstOut = false;
+      out << "{\"index\":" << o + 1 << ",\"name\":\"" << escapeJson(outputLabel(static_cast<int>(o)))
+          << "\",\"on\":" << (target.enabled ? "true" : "false") << '}';
+    }
+    bool cardUp = false;
+    for (const auto& target : project_.outputs) cardUp = cardUp || target.outputTestCardEnabled;
+    // A private extra's source live on a deck, with a remote page of its own:
+    // the phone offers a button to it.
+    out << "],\"extras\":[";
+    bool firstExtra = true;
+    std::vector<std::string> offered;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Cue* live = activeCuePtr(d);
+      if (!live || live->kind != CueKind::Pattern) continue;
+      const auto* extra = deckboy::extras::findGenerator(stripPatternMotionSuffix(normalizePatternTypeId(live->path)));
+      if (!extra || !generatorAvailable(*extra) || extra->page.empty() || std::find(offered.begin(), offered.end(), extra->page) != offered.end()) continue;
+      offered.push_back(extra->page);
+      if (!firstExtra) out << ',';
+      firstExtra = false;
+      out << "{\"name\":\"" << escapeJson(extra->name) << "\",\"page\":\"" << escapeJson(extra->page) << "\"}";
+    }
+    out << "],\"anywhere\":\"" << escapeJson(webRemoteTailnetUrl()) << '"'
+        << ",\"haptics\":" << (project_.webRemoteHaptics ? "true" : "false")
+        << ",\"blackout\":" << (masterDimmerTarget_ < 0.5 ? "true" : "false")
+        << ",\"testcard\":" << (cardUp ? "true" : "false")
+        << ",\"recording\":" << (recordingActive() ? "true" : "false") << '}';
+    return out.str();
+  }
+
+  // ── PAIRING ──────────────────────────────────────────────────────────────
+  //
+  // One step: the desk shows a QR code holding the controller's address and a
+  // pairing code that works ONCE and only for two minutes. The phone trades it
+  // for a key of its own, keeps that, and opens connected from then on. A
+  // photo of the code is useless after that; a lost phone is removed on the
+  // desk without changing the passphrase. The passphrase still works.
+  static std::string webRemoteRandomHex(int bytes) {
+    std::random_device device;
+    static const char* digits = "0123456789abcdef";
+    std::string out;
+    for (int i = 0; i < bytes; ++i) {
+      const unsigned v = device() & 0xffu;
+      out += digits[v >> 4];
+      out += digits[v & 15u];
+    }
+    return out;
+  }
+
+  dbfs::path webRemoteKeysPath() const { return Paths::stateDir() / "paired-phones.txt"; }
+
+  // Caller holds webMonitorDirMutex_.
+  void loadWebRemoteKeysLocked() {
+    if (webRemoteDeviceKeysLoaded_) return;
+    webRemoteDeviceKeysLoaded_ = true;
+    std::ifstream in(webRemoteKeysPath());
+    std::string line;
+    while (std::getline(in, line)) {
+      const auto tab = line.find('\t');
+      if (tab == 32) webRemoteDeviceKeys_.emplace_back(line.substr(0, tab), line.substr(tab + 1));
+    }
+  }
+
+  // Caller holds webMonitorDirMutex_.
+  void saveWebRemoteKeysLocked() {
+    std::error_code ec;
+    dbfs::create_directories(webRemoteKeysPath().parent_path(), ec);
+    std::ofstream out(webRemoteKeysPath(), std::ios::trunc);
+    for (const auto& entry : webRemoteDeviceKeys_) out << entry.first << '\t' << entry.second << '\n';
+  }
+
+  int pairedPhoneCount() {
+    std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+    loadWebRemoteKeysLocked();
+    return static_cast<int>(webRemoteDeviceKeys_.size());
+  }
+
+  void forgetPairedPhones() {
+    {
+      std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+      loadWebRemoteKeysLocked();
+      webRemoteDeviceKeys_.clear();
+      saveWebRemoteKeysLocked();
+    }
+    triggerToast("paired phones removed: they need the QR code or the passphrase again");
+  }
+
+  // SCAN TO PAIR: a fresh one-time code, and the QR that carries it.
+  void openPhonePairQr(bool tailnet = false) {
+    if (!project_.webRemoteEnabled || !webMonitorReady_) {
+      triggerToast("phone control: turn it on first", ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    const std::string base = tailnet ? webRemoteTailnetUrl() : webRemoteUrl();
+    if (base.rfind("http://", 0) != 0) {
+      triggerToast("phone control: " + base, ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    const std::string token = webRemoteRandomHex(16);
+    {
+      std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+      webRemotePairToken_ = token;
+      webRemotePairExpiry_ = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+    }
+    showQrOverlay(base + "#pair=" + token, base,
+                  "Point a phone camera at the code: it connects, no typing. Works once, for 2 minutes");
+  }
+
+  // Tailscale coming up or going down after phone control started: rebuild
+  // the server so its tailnet listener follows. Checked every five seconds.
+  Uint64 webRemoteTailnetCheckedMs_ = 0;
+  void serviceTailnetWatch(Uint64 now) {
+    if (!project_.webRemoteEnabled || !webMonitorReady_ || now - webRemoteTailnetCheckedMs_ < 5000) return;
+    webRemoteTailnetCheckedMs_ = now;
+    if (deckboy::platform::tailnetIPv4Address() != webRemoteTailnetAddress_) restartWebMonitorIfRunning();
+  }
+
+  void setPhoneHaptics(bool on) {
+    project_.webRemoteHaptics = on;
+    webMonitorDirSyncedMs_ = 0;
+    syncWebMonitorDirectory();
+    triggerToast(on ? "phone haptics on" : "phone haptics off");
+    markProjectDirty();
+  }
+
+  // What a phone may send: an exact list, the same for every paired phone
+  // (the "Can do" levels were removed 2026-10-16: James wanted one controller
+  // with everything). BLACKOUT and RECORD are hold-to-fire on the page.
+  //   DASH n | DASH CLEAR n | DASH SET n <label> | <command>   (the command must itself be
+  //       on this list, so editing a button cannot reach past it)
+  //   TRACKER GO|BACK|PLAY|STOP
+  //   DECK n GO|STOP|NEXT|PREV|PLAY|PAUSE|RERACK|SKIP|SKIPBACK|TAKE
+  //   DECK n TAKE|SELECT|STANDBY m | DECK n SEEK <seconds> | DECK n VOLUME <0-100>
+  //   BLACKOUT ON|OFF | OUTPUT TESTCARD ALL ON|OFF | RECORD ON|OFF | OUTPUT n ON|OFF
+  static bool webRemoteCommandAllowed(const std::string& command, bool insideDash = false) {
+    if (command.find_first_of("\r\n\0", 0, 3) != std::string::npos) return false;
+    const auto words = splitWhitespace(command);
+    const auto number = [](const std::string& word) {
+      return !word.empty() && word.size() <= 6 && word[0] != '0' &&
+        std::all_of(word.begin(), word.end(), [](unsigned char c) { return c >= '0' && c <= '9'; });
+    };
+    const auto decimal = [](const std::string& word) {
+      return !word.empty() && word.size() <= 9 &&
+        std::all_of(word.begin(), word.end(), [](unsigned char c) { return (c >= '0' && c <= '9') || c == '.'; });
+    };
+    const auto onOff = [](const std::string& word) { return word == "ON" || word == "OFF"; };
+    if (words.size() == 2 && words[0] == "DASH") return number(words[1]);
+    if (!insideDash && words.size() == 3 && words[0] == "DASH" && words[1] == "CLEAR") return number(words[2]);
+    if (!insideDash && words.size() >= 4 && words[0] == "DASH" && words[1] == "SET" && number(words[2])) {
+      const auto bar = command.find('|');
+      if (bar == std::string::npos) return false;
+      std::string action = command.substr(bar + 1);
+      if (const auto glyph = action.find('|'); glyph != std::string::npos) action = action.substr(0, glyph);
+      return webRemoteCommandAllowed(trim(action), true);
+    }
+    if (words.size() == 2 && words[0] == "TRACKER") {
+      return words[1] == "GO" || words[1] == "BACK" || words[1] == "PLAY" || words[1] == "STOP";
+    }
+    if (words.size() >= 3 && words[0] == "DECK" && number(words[1])) {
+      static const char* kBare[] = {"GO", "STOP", "NEXT", "PREV", "PLAY", "PAUSE", "RERACK", "SKIP", "SKIPBACK", "TAKE"};
+      if (words.size() == 3) {
+        return std::any_of(std::begin(kBare), std::end(kBare), [&](const char* v) { return words[2] == v; });
+      }
+      if (words.size() != 4) return false;
+      if (words[2] == "TAKE" || words[2] == "SELECT" || words[2] == "STANDBY") return number(words[3]);
+      if (words[2] == "SEEK") return decimal(words[3]);
+      if (words[2] == "VOLUME") return decimal(words[3]) && std::atof(words[3].c_str()) <= 100.0;
+      return false;
+    }
+    if (words.size() == 2 && words[0] == "BLACKOUT") return onOff(words[1]);
+    if (words.size() == 4 && words[0] == "OUTPUT" && words[1] == "TESTCARD" && words[2] == "ALL") return onOff(words[3]);
+    if (words.size() == 2 && words[0] == "RECORD") return onOff(words[1]);
+    if (words.size() == 3 && words[0] == "OUTPUT" && number(words[1])) return onOff(words[2]);
+    // A private extra's verb, when it says a phone may send it.
+    if (const auto* extra = deckboy::extras::findCommand(words.empty() ? std::string() : words[0])) {
+      return extra->phoneAllowed;
+    }
+    return false;
+  }
+
+  // Control is a separate opt-in on the existing listener. The header PIN is
+  // never accepted in a URL or cookie. Browsers cannot send this custom header
+  // across origins without a preflight, which this server refuses.
+  void handleWebRemoteClient(SocketHandle client, const std::string& method,
+                             const std::string& path, std::string request) {
+    auto reply = [&](const std::string& status, const std::string& body) {
+      webMonitorSendPage(client, status, "text/plain; charset=utf-8", body + "\n");
+    };
+    sockaddr_in peer {};
+    socklen_t peerSize = sizeof(peer);
+    if (getpeername(client, reinterpret_cast<sockaddr*>(&peer), &peerSize) != 0) return;
+    const std::uint32_t peerIp = ntohl(peer.sin_addr.s_addr);
+    if ((peerIp >> 24) != 127 && (peerIp >> 24) != 10 &&
+        (peerIp >> 20) != 0xAC1 && (peerIp >> 16) != 0xC0A8 &&
+        !deckboy::platform::isTailnetIPv4(peerIp)) {
+      reply("403 Forbidden", "ERR remote: private LAN or Tailscale clients only"); return;
+    }
+    // NO TRUSTED-CONTROLLER LIST FOR A PHONE: the passphrase, or the key a
+    // paired phone holds, is the credential, checked below for every request
+    // (and private LAN addresses only, above). Requiring the phone's address
+    // on the list as well meant the passphrase alone never worked -- James:
+    // "unable to connect without the QR code".
+    // The page's own face and logo: Deckboy's pixel font and its mark, so the
+    // controller looks like the desk it controls.
+    if (method == "GET" && (path == "/remote/font.ttf" || path == "/remote/logo.png")) {
+      const fs::path asset = path == "/remote/font.ttf"
+        ? Paths::dataDir() / "PressStart2P.ttf"
+        : Paths::dataDir() / "web" / "remote-icon.png";
+      std::ifstream file(asset, std::ios::binary);
+      if (!file) { reply("404 Not Found", "Remote asset unavailable"); return; }
+      std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+      webMonitorSendPage(client, "200 OK", path == "/remote/font.ttf" ? "font/ttf" : "image/png", body);
+      return;
+    }
+    // A private extra's page: static, and its commands go through
+    // /remote/command, so they need the phone's key or passphrase like any.
+    if (method == "GET" && path.rfind("/remote/x/", 0) == 0) {
+      if (path == "/remote/x/table" || path == "/remote/x/table.js") {
+        bool unlocked = false;
+        {
+          std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+          unlocked = webTabletopUnlockedSnapshot_;
+        }
+        if (!unlocked) {
+          webMonitorSendPage(client, "404 Not Found", "text/plain; charset=utf-8", "not found\n");
+          return;
+        }
+      }
+      if (const auto* page = deckboy::extras::findWebPage(path.substr(10))) {
+        webMonitorSendPage(client, "200 OK", page->contentType, page->body());
+      } else {
+        webMonitorSendPage(client, "404 Not Found", "text/plain; charset=utf-8", "not found\n");
+      }
+      return;
+    }
+    if (method == "GET" && (path == "/remote" || path == "/remote/" ||
+                            path == "/remote.js" || path == "/remote.css")) {
+      const char* fileName = path == "/remote.js" ? "remote.js" : path == "/remote.css" ? "remote.css" : "remote.html";
+      std::ifstream file(Paths::dataDir() / "web" / fileName, std::ios::binary);
+      if (!file) { reply("404 Not Found", "Remote asset unavailable"); return; }
+      std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+      if (path == "/remote.css") {
+        std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+        body = webRemoteStyleSnapshot_ + body;
+      }
+      webMonitorSendPage(client, "200 OK", path == "/remote.js" ? "application/javascript; charset=utf-8"
+        : path == "/remote.css" ? "text/css; charset=utf-8" : "text/html; charset=utf-8", body);
+      return;
+    }
+    if (method != "POST") { reply("405 Method Not Allowed", "ERR remote: POST required"); return; }
+    if (path == "/remote/pair") {
+      const std::size_t pairHeadEnd = request.find("\r\n\r\n");
+      std::string token;
+      std::string agent;
+      for (std::size_t at = request.find("\r\n") + 2; pairHeadEnd != std::string::npos && at < pairHeadEnd;) {
+        const std::size_t end = request.find("\r\n", at);
+        const std::size_t colon = request.find(':', at);
+        if (colon < end) {
+          const std::string key = toLower(request.substr(at, colon - at));
+          if (key == "x-deckboy-pair") token = trim(request.substr(colon + 1, end - colon - 1));
+          if (key == "user-agent") agent = request.substr(colon + 1, end - colon - 1);
+        }
+        at = end + 2;
+      }
+      std::string deviceKey;
+      {
+        std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+        const bool good = webRemoteEnabledSnapshot_ && token.size() == 32 && token == webRemotePairToken_ &&
+                          std::chrono::steady_clock::now() < webRemotePairExpiry_;
+        webRemotePairToken_.clear();   // one try per code, right or wrong
+        if (good) {
+          loadWebRemoteKeysLocked();
+          const std::string kind = agent.find("iPhone") != std::string::npos ? "iPhone"
+            : agent.find("iPad") != std::string::npos ? "iPad"
+            : agent.find("Android") != std::string::npos ? "Android" : "Phone";
+          deviceKey = webRemoteRandomHex(16);
+          webRemoteDeviceKeys_.emplace_back(deviceKey, kind + " " + std::to_string(webRemoteDeviceKeys_.size() + 1));
+          saveWebRemoteKeysLocked();
+        }
+      }
+      if (deviceKey.empty()) {
+        reply("403 Forbidden", "ERR remote: that pairing code has expired or was used; show a new one on the desk");
+        return;
+      }
+      webMonitorSendPage(client, "200 OK", "text/plain; charset=utf-8", deviceKey);
+      return;
+    }
+    if (path != "/remote/state" && path != "/remote/command" && path != "/remote/pair") {
+      // (assets are GETs above; anything else under /remote is unknown)
+      reply("404 Not Found", "ERR remote: unknown endpoint"); return;
+    }
+    const std::size_t headEnd = request.find("\r\n\r\n");
+    if (headEnd == std::string::npos || headEnd > 8192) {
+      reply("400 Bad Request", "ERR remote: incomplete headers"); return;
+    }
+    std::map<std::string, std::string> headers;
+    for (std::size_t at = request.find("\r\n") + 2; at < headEnd;) {
+      const std::size_t end = request.find("\r\n", at);
+      const std::size_t colon = request.find(':', at);
+      if (colon >= end || request[at] == ' ' || request[at] == '\t') {
+        reply("400 Bad Request", "ERR remote: invalid header"); return;
+      }
+      const std::string key = toLower(request.substr(at, colon - at));
+      if (!headers.emplace(key, trim(request.substr(colon + 1, end - colon - 1))).second) {
+        reply("400 Bad Request", "ERR remote: duplicate header"); return;
+      }
+      at = end + 2;
+    }
+    // Literal host addresses prevent DNS rebinding. Compare the browser Origin
+    // with the actual listener address, not with a caller-supplied Host alone.
+    sockaddr_in local {};
+    socklen_t localSize = sizeof(local);
+    if (getsockname(client, reinterpret_cast<sockaddr*>(&local), &localSize) != 0) return;
+    const std::string address = socketAddressToString(local);
+    const std::string port = ":" + std::to_string(ntohs(local.sin_port));
+    const std::string host = toLower(headers["host"]);
+    const bool localHost = address == "127.0.0.1" && (host == "localhost" + port || (port == ":80" && host == "localhost"));
+    if (!(host == address + port || (port == ":80" && host == address) || localHost) ||
+        (headers.count("origin") && toLower(headers["origin"]) != "http://" + host) ||
+        (headers.count("sec-fetch-site") && headers["sec-fetch-site"] != "same-origin")) {
+      reply("403 Forbidden", "ERR remote: same-origin LAN access required"); return;
+    }
+    std::string snapshot;
+    bool enabled = false;
+    bool authenticated = false;
+    bool throttled = false;
+    const std::string givenPin = webMonitorDecodeQuery(headers["x-deckboy-pin"]);
+    const std::string givenKey = headers["x-deckboy-key"];
+    bool paired = false;
+    {
+      std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+      enabled = webRemoteEnabledSnapshot_ && webMonitorPinSnapshot_.size() >= 8;
+      const auto now = std::chrono::steady_clock::now();
+      throttled = now < webRemoteRetryAt_;
+      if (!throttled && enabled) {
+        loadWebRemoteKeysLocked();
+        if (givenKey.size() == 32) {
+          for (const auto& entry : webRemoteDeviceKeys_) paired = paired || entry.first == givenKey;
+        }
+        authenticated = paired || givenPin == webMonitorPinSnapshot_;
+        // Two seconds after five misses, doubling to a minute. A flat two
+        // seconds still let a script try 150 passphrases a minute.
+        if (authenticated) webRemoteFailedPins_ = webRemoteLockouts_ = 0;
+        else if (++webRemoteFailedPins_ >= 5) {
+          webRemoteFailedPins_ = 0;
+          const int lockout = std::min(60, 2 << std::min(webRemoteLockouts_++, 5));
+          webRemoteRetryAt_ = now + std::chrono::seconds(lockout);
+        }
+      }
+      snapshot = webRemoteStateSnapshot_;
+    }
+    if (throttled) { reply("429 Too Many Requests", "ERR remote: too many wrong passphrases; wait before retrying"); return; }
+    if (!enabled) {
+      reply("403 Forbidden", "ERR remote: turn on Phone control (8+ character passphrase) in Settings > Network > PHONE & TABLET"); return;
+    }
+    if (!authenticated) {
+      reply("401 Unauthorized", givenKey.empty() ? "ERR remote: incorrect passphrase"
+                                                 : "ERR remote: this phone is no longer paired; scan the desk's code again");
+      return;
+    }
+    const std::string length = headers["content-length"];
+    if (headers.count("transfer-encoding") || length.empty() || length.size() > 3 ||
+        !std::all_of(length.begin(), length.end(), [](unsigned char c) { return c >= '0' && c <= '9'; })) {
+      reply("400 Bad Request", "ERR remote: Content-Length required (maximum 128)"); return;
+    }
+    const std::size_t bodySize = static_cast<std::size_t>(std::stoi(length));
+    if (bodySize > 128) { reply("413 Payload Too Large", "ERR remote: command too long"); return; }
+    const std::size_t totalSize = headEnd + 4 + bodySize;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (request.size() < totalSize && !webMonitorStop_.load()) {
+      if (std::chrono::steady_clock::now() >= deadline) break;
+      fd_set fds;
+      FD_ZERO(&fds);
+      watchFd(client, &fds);
+      timeval timeout {0, 100000};
+      if (select(selectNfds(client), &fds, nullptr, nullptr, &timeout) <= 0) continue;
+      char buffer[128];
+      const int got = recv(client, buffer, static_cast<int>(std::min(sizeof(buffer), totalSize - request.size())), 0);
+      if (got <= 0) break;
+      request.append(buffer, static_cast<std::size_t>(got));
+    }
+    if (request.size() != totalSize) { reply("400 Bad Request", "ERR remote: invalid body length"); return; }
+    if (path == "/remote/state") {
+      if (bodySize) { reply("400 Bad Request", "ERR remote: state takes no body"); return; }
+      webMonitorSendPage(client, "200 OK", "application/json; charset=utf-8", snapshot);
+      return;
+    }
+    const std::string command = request.substr(headEnd + 4);
+    if (!webRemoteCommandAllowed(command)) {
+      reply("400 Bad Request", "ERR remote: command not allowed");
+      return;
+    }
+    auto pending = std::make_shared<WebRemoteReply>();
+    pending->pin = givenPin;
+    pending->paired = paired;
+    if (!enqueueMonitoredCommand(command, "PHONE", socketAddressToString(peer), {},
+                                 kInvalidSocket, 0, false, -1, {}, pending)) {
+      reply("503 Service Unavailable", "ERR remote: command queue full"); return;
+    }
+    std::unique_lock<std::mutex> lock(pending->mutex);
+    while (pending->text.empty() && !webMonitorStop_.load() &&
+           std::chrono::steady_clock::now() < pending->deadline) {
+      pending->cv.wait_for(lock, std::chrono::milliseconds(25));
+    }
+    if (pending->text.empty()) {
+      pending->cancelled = true;
+      reply("503 Service Unavailable", "ERR remote: reply unavailable; check the desk before retrying");
+    } else {
+      reply(pending->text.rfind("OK ", 0) == 0 ? "200 OK" : "409 Conflict", pending->text);
+    }
+  }
+
+  // How far back the Web Monitor's own player can go: PAUSE, BACK 10 S, LIVE.
+  static constexpr double kWebMonitorRewindSeconds = 120.0;
+  static std::size_t webMonitorKeptFragments(double fragmentSeconds) {
+    const double each = fragmentSeconds > 0.01 ? fragmentSeconds : 0.5;
+    return std::max<std::size_t>(40, static_cast<std::size_t>(std::ceil(kWebMonitorRewindSeconds / each)) + 8);
+  }
+
+  void serveWebHls(SocketHandle client, int outputIndex, const std::string& resource,
+                   const std::string& pinQuery) {
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    std::string body;
+    std::string type = "video/mp4";
+    {
+      std::lock_guard<std::mutex> lock(slot.mutex);
+      const std::string generation = std::to_string(slot.avGeneration);
+      const bool dvr = resource == "dvr.m3u8";
+      if ((resource == "index.m3u8" || dvr) && !slot.avInit.empty() && !slot.avFragments.empty()) {
+        // Keep a sliding window for native HLS players and HLS.js. Every
+        // fragment starts on a keyframe and carries both audio and video.
+        // index.m3u8 stays the short live window an outside player expects;
+        // dvr.m3u8 lists the whole two minutes, for the monitor page's own
+        // player to pause and go back in. Both end at the same live edge.
+        const std::size_t window = dvr ? webMonitorKeptFragments(slot.avFragmentSeconds) - 8 : 12;
+        const std::size_t first = slot.avFragments.size() > window ? slot.avFragments.size() - window : 0;
+        std::ostringstream playlist;
+        playlist.imbue(std::locale::classic());
+        playlist << "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:1\n"
+                 << "#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MEDIA-SEQUENCE:"
+                 << slot.avFragments[first].first << "\n#EXT-X-DISCONTINUITY-SEQUENCE:"
+                 << slot.avGeneration << "\n#EXT-X-MAP:URI=\"init-" << generation
+                 << ".mp4" << pinQuery << "\"\n";
+        for (std::size_t i = first; i < slot.avFragments.size(); ++i) {
+          if (i == first && slot.avPdtBaseMs > 0) {
+            // One stamp at the head of the window; players count forward by
+            // EXTINF, which is exact here because every fragment is one GOP.
+            const std::int64_t pdtMs = slot.avPdtBaseMs + static_cast<std::int64_t>(std::llround(
+              static_cast<double>(slot.avFragments[i].first - slot.avPdtBaseSeq) *
+              slot.avFragmentSeconds * 1000.0));
+            const std::time_t seconds = static_cast<std::time_t>(pdtMs / 1000);
+            std::tm utc {};
+#ifdef _WIN32
+            gmtime_s(&utc, &seconds);
+#else
+            gmtime_r(&seconds, &utc);
+#endif
+            char stamp[40];
+            std::strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%S", &utc);
+            playlist << "#EXT-X-PROGRAM-DATE-TIME:" << stamp << "." << std::setw(3)
+                     << std::setfill('0') << (pdtMs % 1000) << std::setfill(' ') << "Z\n";
+          }
+          playlist << "#EXTINF:" << std::fixed << std::setprecision(6)
+                   << slot.avFragmentSeconds << ",\n" << generation << "-"
+                   << slot.avFragments[i].first << ".m4s" << pinQuery << "\n";
+        }
+        body = playlist.str();
+        type = "application/vnd.apple.mpegurl";
+      } else if (resource == "init-" + generation + ".mp4" && !slot.avFragments.empty()) {
+        body = slot.avInit;
+      } else {
+        for (const auto& fragment : slot.avFragments) {
+          if (resource == generation + "-" + std::to_string(fragment.first) + ".m4s") {
+            body = *fragment.second;
+            break;
+          }
+        }
+      }
+    }
+    if (body.empty()) {
+      webMonitorSendPage(client, resource == "index.m3u8" || resource == "dvr.m3u8"
+                                   ? "503 Service Unavailable" : "404 Not Found",
+                         "text/plain; charset=utf-8", "Programme fragment unavailable\n");
+      return;
+    }
+    webMonitorSendPage(client, "200 OK", type, body);
+  }
+
+  void handleWebMonitorClient(SocketHandle client) {
+    std::string request;
+    std::array<char, 2048> buffer {};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (request.find("\r\n\r\n") == std::string::npos && request.size() < 16384) {
+      const auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(
+        deadline - std::chrono::steady_clock::now());
+      if (remaining.count() <= 0) break;
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(client, &readFds);
+      timeval tv {};
+      tv.tv_sec = static_cast<long>(remaining.count() / 1000000);
+      tv.tv_usec = static_cast<long>(remaining.count() % 1000000);
+      if (select(selectNfds(client), &readFds, nullptr, nullptr, &tv) <= 0) break;
+      const int bytes = recv(client, buffer.data(), static_cast<int>(buffer.size()), 0);
+      if (bytes <= 0) break;
+      request.append(buffer.data(), static_cast<std::size_t>(bytes));
+    }
+    const std::size_t lineEnd = request.find("\r\n");
+    const auto parts = splitWhitespace(lineEnd == std::string::npos ? request : request.substr(0, lineEnd));
+    if (parts.size() == 3 && parts[1].rfind("/remote", 0) == 0) {
+      handleWebRemoteClient(client, parts[0], parts[1], std::move(request));
+      // An early rejection can leave a POST body in the receive buffer. Send
+      // FIN and drain briefly before close, otherwise Windows may reset the
+      // connection and discard the error reply the phone needs to read.
+#ifdef _WIN32
+      ::shutdown(client, SD_SEND);
+#else
+      ::shutdown(client, SHUT_WR);
+#endif
+      const auto drainUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+      std::size_t drained = 0;
+      while (!webMonitorStop_.load() && drained < 16384 &&
+             std::chrono::steady_clock::now() < drainUntil) {
+        fd_set readFds;
+        FD_ZERO(&readFds);
+        watchFd(client, &readFds);
+        timeval timeout {0, 25000};
+        if (select(selectNfds(client), &readFds, nullptr, nullptr, &timeout) <= 0) continue;
+        const int bytes = recv(client, buffer.data(), static_cast<int>(buffer.size()), 0);
+        if (bytes <= 0) break;
+        drained += static_cast<std::size_t>(bytes);
+      }
+      return;
+    }
+    if (parts.size() < 2 || parts[0] != "GET") {
+      webMonitorSendPage(client, "405 Method Not Allowed", "text/plain; charset=utf-8", "GET only\n");
+      return;
+    }
+    // THE SERVER CAN BE UP FOR THE PHONE ALONE, and bound to the network for
+    // it. The Web Monitor's own pages then answer only when the monitor is on,
+    // and only this computer unless the monitor is shared -- which binding to
+    // localhost used to enforce by itself.
+    {
+      bool monitorOn = false, shared = false;
+      {
+        std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+        monitorOn = webMonitorEnabledSnapshot_;
+        shared = webMonitorShareSnapshot_;
+      }
+      // This computer: loopback, or its own address (the server is bound to
+      // the LAN address alone while phone control is on).
+      sockaddr_in viewer {}, self {};
+      socklen_t viewerSize = sizeof(viewer), selfSize = sizeof(self);
+      const bool loopback = getpeername(client, reinterpret_cast<sockaddr*>(&viewer), &viewerSize) == 0 &&
+        ((ntohl(viewer.sin_addr.s_addr) >> 24) == 127 ||
+         (getsockname(client, reinterpret_cast<sockaddr*>(&self), &selfSize) == 0 &&
+          self.sin_addr.s_addr == viewer.sin_addr.s_addr));
+      if (!monitorOn) {
+        webMonitorSendPage(client, "404 Not Found", "text/plain; charset=utf-8",
+                           "The Web Monitor is off. Phone control is at /remote\n");
+        return;
+      }
+      if (!shared && !loopback) {
+        webMonitorSendPage(client, "403 Forbidden", "text/plain; charset=utf-8",
+                           "The Web Monitor is shared with this computer only\n");
+        return;
+      }
+    }
+    std::string path = parts[1];
+    std::string query;
+    if (const auto q = path.find('?'); q != std::string::npos) {
+      query = path.substr(q + 1);
+      path = path.substr(0, q);
+    }
+    std::vector<std::string> names;
+    std::vector<bool> sound;
+    std::string pin;
+    int maxHeight = 1080;
+    int programmeOutput = -1;
+    std::string sourceLabel;
+    bool lowLatency = false;
+    int sourceOutput = -1;
+    {
+      std::lock_guard<std::mutex> lock(webMonitorDirMutex_);
+      names = webMonitorOutputNames_;
+      sound = webMonitorOutputSound_;
+      programmeOutput = webMonitorProgrammeOutput_;
+      sourceLabel = webMonitorSourceLabel_;
+      lowLatency = webMonitorLowLatencySnapshot_;
+      sourceOutput = webMonitorSourceSnapshot_;
+      pin = webMonitorPinSnapshot_;
+      maxHeight = webMonitorHeightSnapshot_;
+    }
+    auto hasSound = [&](int out) {
+      return out >= 0 && out < static_cast<int>(sound.size()) && sound[static_cast<std::size_t>(out)];
+    };
+    const std::string h264Codec = maxHeight >= 2160 ? "avc1.4D4034"
+                                  : maxHeight >= 1440 ? "avc1.4D4033" : "avc1.4D402A";
+    // THE PIN, when there is one, gates every page and every stream.
+    std::string given;
+    for (std::size_t at = 0; at <= query.size();) {
+      const std::size_t end = std::min(query.find('&', at), query.size());
+      const std::string pair = query.substr(at, end - at);
+      if (pair.rfind("pin=", 0) == 0) given = webMonitorDecodeQuery(pair.substr(4));
+      at = end + 1;
+    }
+    if (!pin.empty() && given != pin) {
+      webMonitorSendPage(client, "401 Unauthorized", "text/html; charset=utf-8",
+        webMonitorPageShell("Deckboy", "<header>DECKBOY WEB MONITOR</header>"
+          "<form method='get'><p>Enter the Web Monitor passphrase.</p>"
+          "<input aria-label='Passphrase' name='pin' type='password' autocomplete='current-password' autofocus>"
+          " <button>Open</button></form>"));
+      return;
+    }
+    const std::string pinQuery = pin.empty() ? std::string() : "?pin=" + webMonitorEncodeQuery(pin);
+    auto outputFromPath = [&](const std::string& prefix) {
+      if (path.rfind(prefix, 0) != 0) return -1;
+      try {
+        const int n = std::stoi(path.substr(prefix.size())) - 1;
+        return (n >= 0 && n < kWebMonitorMaxOutputs) ? n : -1;
+      } catch (...) {
+        return -1;
+      }
+    };
+    if (path == "/web/hls.light.min.js" || path == "/web/player.js") {
+      const fs::path asset = Paths::dataDir() / "web" /
+        (path == "/web/player.js" ? "player.js" : "hls.light.min.js");
+      std::ifstream file(asset, std::ios::binary);
+      if (!file) {
+        webMonitorSendPage(client, "404 Not Found", "text/plain", "Player asset unavailable\n");
+      } else {
+        const std::string script((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        webMonitorSendPage(client, "200 OK", "application/javascript; charset=utf-8", script);
+      }
+      return;
+    }
+    if (int out = outputFromPath("/hls/"); out >= 0) {
+      const std::string prefix = "/hls/" + std::to_string(out + 1) + "/";
+      if (path.rfind(prefix, 0) == 0) {
+        serveWebHls(client, out, path.substr(prefix.size()), pinQuery);
+        return;
+      }
+    }
+    if (path == "/" || path == "/index.html") {
+      // LOW LATENCY: the source's own live frames, no buffer and no sound, so
+      // every screen shows the same moment to within a frame or two.
+      if (lowLatency && sourceOutput >= 0 && sourceOutput < static_cast<int>(names.size())) {
+        webMonitorSendPage(client, "200 OK", "text/html; charset=utf-8",
+          webMonitorPageShell("Deckboy - " + sourceLabel + " (low latency)",
+            "<div class='full'><img src='/out/" + std::to_string(sourceOutput + 1) + pinQuery +
+            "' alt='" + escapeHtml(sourceLabel) + "'></div>"));
+        return;
+      }
+      if (programmeOutput >= 0) {
+        webMonitorSendPage(client, "200 OK", "text/html; charset=utf-8",
+          webMonitorPlayerPage("Deckboy - " + sourceLabel,
+            "/av/" + std::to_string(programmeOutput + 1) + pinQuery,
+            h264Codec));
+      } else {
+        webMonitorSendPage(client, "503 Service Unavailable", "text/plain; charset=utf-8",
+                           "Programme monitor unavailable\n");
+      }
+      return;
+    }
+    if (path == "/outputs") {
+      std::ostringstream body;
+      body << "<header>DECKBOY WEB MONITOR &middot; <a href='/remote'>REMOTE</a></header><div class='grid'>";
+      for (std::size_t i = 0; i < names.size(); ++i) {
+        const std::string n = std::to_string(i + 1);
+        body << "<div class='card'><img src='/out/" << n << pinQuery << "' alt=''>"
+             << "<a href='/view/" << n << pinQuery << "'>" << escapeHtml(names[i])
+             << (hasSound(static_cast<int>(i)) ? " &middot; with sound" : "") << "</a></div>";
+      }
+      if (names.empty()) body << "<p style='padding:16px'>No outputs.</p>";
+      body << "</div>";
+      webMonitorSendPage(client, "200 OK", "text/html; charset=utf-8",
+                         webMonitorPageShell("Deckboy monitor", body.str()));
+      return;
+    }
+    if (int out = outputFromPath("/view/"); out >= 0) {
+      const std::string n = std::to_string(out + 1);
+      const std::string title = out < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(out)] : "Output " + n;
+      webMonitorSendPage(client, "200 OK", "text/html; charset=utf-8",
+        hasSound(out)
+          ? webMonitorPlayerPage(title, "/av/" + n + pinQuery, h264Codec)
+          : webMonitorPageShell(title, "<div class='full'><img src='/out/" + n + pinQuery + "' alt=''></div>"));
+      return;
+    }
+    if (int out = outputFromPath("/av/"); out >= 0) {
+      streamWebAv(client, out);
+      return;
+    }
+    if (int out = outputFromPath("/snap/"); out >= 0) {
+      WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(out)];
+      std::shared_ptr<const std::string> jpeg;
+      {
+        std::lock_guard<std::mutex> lock(slot.mutex);
+        jpeg = slot.jpeg;
+      }
+      if (!jpeg) jpeg = webMonitorPlaceholder();
+      webMonitorSendPage(client, "200 OK", "image/jpeg", *jpeg);
+      return;
+    }
+    if (int out = outputFromPath("/out/"); out >= 0) {
+      streamWebMonitor(client, out);
+      return;
+    }
+    webMonitorSendPage(client, "404 Not Found", "text/plain; charset=utf-8", "not found\n");
+  }
+
+  // One MJPEG stream: a part per new picture, for as long as the browser
+  // keeps the connection. Counting the viewer is what switches the output's
+  // capture on; the count drops when the browser goes.
+  void streamWebMonitor(SocketHandle client, int outputIndex) {
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    slot.viewers.fetch_add(1);
+    struct Leave {
+      std::atomic<int>& viewers;
+      ~Leave() { viewers.fetch_sub(1); }
+    } leave {slot.viewers};
+    static const std::string kHead =
+      "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=deckboyframe\r\n"
+      "Cache-Control: no-cache\r\nConnection: close\r\n\r\n";
+    if (!webMonitorSendAll(client, kHead.data(), kHead.size())) {
+      return;
+    }
+    std::uint64_t seen = 0;
+    while (!webMonitorStop_.load()) {
+      std::shared_ptr<const std::string> jpeg;
+      {
+        std::unique_lock<std::mutex> lock(slot.mutex);
+        slot.cv.wait_for(lock, std::chrono::seconds(1), [&]() {
+          return webMonitorStop_.load() || slot.serial != seen;
+        });
+        if (webMonitorStop_.load()) break;
+        if (slot.serial != seen) {
+          seen = slot.serial;
+          jpeg = slot.jpeg;
+        }
+      }
+      // Nothing new for a second: say so with the placeholder until the
+      // output draws, and otherwise repeat the last picture so the browser
+      // can tell a held frame from a dead connection.
+      if (!jpeg) {
+        std::lock_guard<std::mutex> lock(slot.mutex);
+        jpeg = slot.jpeg;
+      }
+      // An output that is not drawing still gets the placeholder once a
+      // second: a stream that goes silent reads as a dead connection.
+      if (!jpeg) jpeg = webMonitorPlaceholder();
+      std::ostringstream part;
+      part << "--deckboyframe\r\nContent-Type: image/jpeg\r\nContent-Length: "
+           << jpeg->size() << "\r\n\r\n";
+      const std::string head = part.str();
+      if (!webMonitorSendAll(client, head.data(), head.size()) ||
+          !webMonitorSendAll(client, jpeg->data(), jpeg->size()) ||
+          !webMonitorSendAll(client, "\r\n", 2)) {
+        break;
+      }
+    }
+  }
+
+  void webMonitorLoop() {
+    while (!webMonitorStop_.load()) {
+      // Finished viewers are joined as they go, so a long show with phones
+      // dropping in and out does not pile up threads.
+      for (auto it = webMonitorClients_.begin(); it != webMonitorClients_.end();) {
+        if (it->done->load()) {
+          if (it->thread.joinable()) it->thread.join();
+          it = webMonitorClients_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      if (webMonitorListen_ == kInvalidSocket) break;
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(webMonitorListen_, &readFds);
+      const SocketHandle tailnet = webMonitorTailnetListen_;
+      if (tailnet != kInvalidSocket) watchFd(tailnet, &readFds);
+      timeval tv {};
+      tv.tv_usec = 250000;
+      const int nfds = std::max(selectNfds(webMonitorListen_),
+                                tailnet != kInvalidSocket ? selectNfds(tailnet) : 0);
+      if (select(nfds, &readFds, nullptr, nullptr, &tv) <= 0) {
+        continue;
+      }
+      const SocketHandle ready = (tailnet != kInvalidSocket && FD_ISSET(tailnet, &readFds)) ? tailnet
+                               : webMonitorListen_;
+      sockaddr_in clientAddress {};
+      socklen_t clientLength = sizeof(clientAddress);
+      SocketHandle client = accept(ready, reinterpret_cast<sockaddr*>(&clientAddress), &clientLength);
+      if (client == kInvalidSocket) continue;
+      // The operator's limit (Settings > Network > Web Monitor). Each viewer
+      // holds a connection only for a playlist poll or a fragment, so this
+      // is concurrent REQUESTS, and it serves several times as many phones.
+      if (webMonitorClients_.size() >= static_cast<std::size_t>(std::max(1, webMonitorMaxClients_.load()))) {
+        static constexpr char kBusy[] =
+          "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+        webMonitorSendAll(client, kBusy, sizeof(kBusy) - 1);
+        closeSocket(client);
+        continue;
+      }
+      setCloseOnExec(client);
+      // A viewer that stops reading must not hold its thread forever.
+#ifdef _WIN32
+      DWORD sendTimeoutMs = 5000;
+      setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeoutMs), sizeof(sendTimeoutMs));
+#else
+      timeval sendTimeout {5, 0};
+      setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, sizeof(sendTimeout));
+#ifdef SO_NOSIGPIPE
+      int noSigPipe = 1;
+      setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, sizeof(noSigPipe));
+#endif
+#endif
+      auto done = std::make_shared<std::atomic<bool>>(false);
+      webMonitorClients_.push_back({std::thread([this, client, done]() {
+        handleWebMonitorClient(client);
+        closeSocket(client);
+        done->store(true);
+      }), done});
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // WEB INGEST -- an output routed to WEB, with its sound.
+  //
+  // The output's encoder (the same ffmpeg every stream output runs, told
+  // -f mp4 +frag_keyframe) connects to a socket here that only this machine
+  // can reach. Its fragmented MP4 is cut into boxes: ftyp + moov are the init
+  // segment every new viewer needs first; each moof + mdat is a fragment that
+  // starts on a keyframe, so a viewer can join at any of them. The last few
+  // are kept, and every viewer is sent every fragment in order -- a video
+  // player cannot skip one the way an MJPEG viewer skips a picture.
+  // ---------------------------------------------------------------------------
+  void ensureWebIngest(int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= kWebMonitorMaxOutputs) return;
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    if (slot.ingestListen != kInvalidSocket) return;
+    SocketHandle listenSocket = createBoundSocket(SOCK_STREAM, 0, true, true);
+    if (listenSocket == kInvalidSocket) return;
+    sockaddr_in bound {};
+    socklen_t length = sizeof(bound);
+    if (getsockname(listenSocket, reinterpret_cast<sockaddr*>(&bound), &length) != 0) {
+      closeSocket(listenSocket);
+      return;
+    }
+    slot.ingestListen = listenSocket;
+    slot.ingestPort = ntohs(bound.sin_port);
+    slot.ingestStop.store(false);
+    slot.ingestThread = std::thread([this, outputIndex]() { webIngestLoop(outputIndex); });
+  }
+
+  void stopWebIngests() {
+    for (auto& slot : webMonitorSlots_) {
+      slot.ingestStop.store(true);
+      if (slot.ingestListen != kInvalidSocket) {
+        closeSocket(slot.ingestListen);
+        slot.ingestListen = kInvalidSocket;
+      }
+      slot.cv.notify_all();
+      if (slot.ingestThread.joinable()) slot.ingestThread.join();
+      slot.ingestPort = 0;
+    }
+  }
+
+  static std::uint64_t webBoxSize(const std::string& b) {
+    auto be32 = [&](std::size_t at) {
+      return (static_cast<std::uint64_t>(static_cast<unsigned char>(b[at])) << 24) |
+             (static_cast<std::uint64_t>(static_cast<unsigned char>(b[at + 1])) << 16) |
+             (static_cast<std::uint64_t>(static_cast<unsigned char>(b[at + 2])) << 8) |
+             static_cast<std::uint64_t>(static_cast<unsigned char>(b[at + 3]));
+    };
+    const std::uint64_t size = be32(0);
+    if (size == 1 && b.size() >= 16) {
+      return (be32(8) << 32) | be32(12);
+    }
+    return size;
+  }
+
+  void webIngestLoop(int outputIndex) {
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    while (!slot.ingestStop.load()) {
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      if (slot.ingestListen == kInvalidSocket) break;
+      watchFd(slot.ingestListen, &readFds);
+      timeval tv {};
+      tv.tv_usec = 250000;
+      if (select(selectNfds(slot.ingestListen), &readFds, nullptr, nullptr, &tv) <= 0) continue;
+      SocketHandle encoder = accept(slot.ingestListen, nullptr, nullptr);
+      if (encoder == kInvalidSocket) continue;
+      setCloseOnExec(encoder);
+      std::string buffer;
+      std::string pending;   // a moof waiting for its mdat
+      std::array<char, 65536> chunk {};
+      while (!slot.ingestStop.load()) {
+        fd_set encFds;
+        FD_ZERO(&encFds);
+        watchFd(encoder, &encFds);
+        timeval wait {};
+        wait.tv_usec = 250000;
+        const int ready = select(selectNfds(encoder), &encFds, nullptr, nullptr, &wait);
+        if (ready < 0) break;
+        if (ready == 0) continue;
+        const int got = recv(encoder, chunk.data(), static_cast<int>(chunk.size()), 0);
+        if (got <= 0) break;
+        buffer.append(chunk.data(), static_cast<std::size_t>(got));
+        while (buffer.size() >= 8) {
+          const std::uint64_t size = webBoxSize(buffer);
+          if (size < 8 || size > (256u << 20)) {   // not a box we can follow: resync on the next encoder
+            buffer.clear();
+            break;
+          }
+          if (buffer.size() < size) break;
+          const std::string type = buffer.substr(4, 4);
+          std::string box = buffer.substr(0, static_cast<std::size_t>(size));
+          buffer.erase(0, static_cast<std::size_t>(size));
+          if (type == "ftyp" || type == "moov") {
+            std::lock_guard<std::mutex> lock(slot.mutex);
+            if (type == "ftyp") {
+              slot.avInit.clear();
+              slot.avFragments.clear();
+              ++slot.avGeneration;   // a new encoder: viewers start again
+            }
+            slot.avInit += box;
+          } else if (type == "moof") {
+            pending = std::move(box);
+          } else if (type == "mdat" && !pending.empty()) {
+            pending += box;
+            {
+              std::lock_guard<std::mutex> lock(slot.mutex);
+              ++slot.avFragmentSeq;
+              if (slot.avFragments.empty()) {
+                // The first of this encoder run: it began one fragment ago.
+                slot.avPdtBaseMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count() -
+                  static_cast<std::int64_t>(std::lround(slot.avFragmentSeconds * 1000.0));
+                slot.avPdtBaseSeq = slot.avFragmentSeq;
+              }
+              slot.avFragments.emplace_back(slot.avFragmentSeq,
+                                            std::make_shared<const std::string>(std::move(pending)));
+              // TWO MINUTES, for the player's PAUSE and BACK 10 S (dvr.m3u8),
+              // and a few fragments over so the oldest one a viewer was shown
+              // is still here when it asks. James, 2026-10-29: as much memory
+              // as that needs -- about 60 MB a minute at 1080p, 225 at 2160p.
+              while (slot.avFragments.size() > webMonitorKeptFragments(slot.avFragmentSeconds)) {
+                slot.avFragments.pop_front();
+              }
+            }
+            pending.clear();
+            slot.cv.notify_all();
+          } else if (!pending.empty()) {
+            pending += box;
+          }
+        }
+      }
+      closeSocket(encoder);
+    }
+  }
+
+  // /av/N: the init segment, then every fragment as it arrives, from the
+  // newest one (a keyframe) on. Ends when the encoder restarts; the page
+  // reconnects by itself.
+  void streamWebAv(SocketHandle client, int outputIndex) {
+    WebMonitorSlot& slot = webMonitorSlots_[static_cast<std::size_t>(outputIndex)];
+    std::string init;
+    std::uint64_t generation = 0;
+    std::uint64_t next = 0;
+    {
+      std::lock_guard<std::mutex> lock(slot.mutex);
+      init = slot.avInit;
+      generation = slot.avGeneration;
+      next = slot.avFragments.empty() ? slot.avFragmentSeq + 1 : slot.avFragments.back().first;
+    }
+    if (init.empty()) {
+      webMonitorSendPage(client, "503 Service Unavailable", "text/plain; charset=utf-8",
+                         "this output is not routed to WEB, or its encoder has not started\n");
+      return;
+    }
+    static const std::string kHead =
+      "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
+    if (!webMonitorSendAll(client, kHead.data(), kHead.size()) ||
+        !webMonitorSendAll(client, init.data(), init.size())) {
+      return;
+    }
+    while (!webMonitorStop_.load()) {
+      std::vector<std::shared_ptr<const std::string>> due;
+      {
+        std::unique_lock<std::mutex> lock(slot.mutex);
+        slot.cv.wait_for(lock, std::chrono::seconds(1), [&]() {
+          return webMonitorStop_.load() || slot.avGeneration != generation ||
+                 (!slot.avFragments.empty() && slot.avFragments.back().first >= next);
+        });
+        if (webMonitorStop_.load() || slot.avGeneration != generation) break;
+        if (!slot.avFragments.empty() && next < slot.avFragments.front().first) {
+          next = slot.avFragments.back().first;   // fell behind: rejoin at the newest
+        }
+        for (const auto& fragment : slot.avFragments) {
+          if (fragment.first >= next) {
+            due.push_back(fragment.second);
+            next = fragment.first + 1;
+          }
+        }
+      }
+      for (const auto& fragment : due) {
+        if (!webMonitorSendAll(client, fragment->data(), fragment->size())) return;
+      }
+    }
+  }
+
+  // The programme HLS player starts muted until the browser permits sound.
+  // Its bundled controller maintains a playback buffer and reconnects.
+  static std::string webMonitorPlayerPage(const std::string& title, const std::string& avUrl,
+                                          const std::string& h264Codec) {
+    const auto queryAt = avUrl.find('?');
+    const std::string suffix = queryAt == std::string::npos ? std::string() : avUrl.substr(queryAt);
+    const std::string output = avUrl.substr(4, queryAt == std::string::npos ? queryAt : queryAt - 4);
+    const std::string playlist = "/hls/" + output + "/index.m3u8" + suffix;   // OPEN STREAM: live only
+    const std::string rewindable = "/hls/" + output + "/dvr.m3u8" + suffix;   // this page's player
+    return webMonitorPageShell(title, std::string(R"DBPLAYER(
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+#monitor{position:fixed;inset:0;display:flex;flex-direction:column;background:#000;
+ width:100%;height:100%;height:100dvh;color:#f1f6e5}
+.picture{position:relative;flex:1;min-width:0;min-height:0;overflow:hidden}
+#v{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#status{position:absolute;left:12px;right:12px;top:12px;margin:0;text-align:center;
+ padding:10px;background:rgba(0,0,0,.8);font-size:16px}
+.monitor-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;
+ padding:8px 12px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:#122312}
+.monitor-controls button,.monitor-controls a{font:600 14px system-ui,sans-serif;
+ display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:10px 16px;
+ color:#f1f6e5;background:#213d21;border:1px solid #78934e;border-radius:6px;text-decoration:none}
+.monitor-controls :focus{outline:3px solid #d7f26b;outline-offset:2px}
+@media(min-width:1400px){.monitor-controls button,.monitor-controls a{font-size:20px;min-height:60px}}
+</style>
+)DBPLAYER") + "<div id='monitor' data-source='" + escapeHtml(rewindable) +
+      "' data-codec='" + escapeHtml(h264Codec) + "'><div class='picture'>"
+      "<video id='v' autoplay muted playsinline aria-label='Programme monitor'></video>"
+      "<p id='status' role='status'>Connecting to programme…</p></div>"
+      "<nav class='monitor-controls' aria-label='Monitor controls'>"
+      "<button id='sound' aria-pressed='false'>SOUND ON</button>"
+      "<button id='pause'>PAUSE</button><button id='back'>BACK 10 S</button>"
+      "<button id='live' aria-pressed='true'>LIVE</button>"
+      "<button id='fullscreen'>FULL SCREEN</button><button id='reconnect'>RECONNECT</button>"
+      "<a id='stream-link' href='" + escapeHtml(playlist) + "'>OPEN STREAM</a>"
+      "<a href='/remote'>REMOTE</a></nav></div>"
+      "<script src='/web/hls.light.min.js" + escapeHtml(suffix) + "'></script>"
+      "<script src='/web/player.js" + escapeHtml(suffix) + "'></script>");
+  }
+
+  // PHONE ACCESS: the monitor's address as a QR code, big enough to scan from
+  // across a booth.
+  //
+  // Only the address is encoded, never the passphrase: a QR code on a screen
+  // is readable by every camera in the room, so it may take a phone to the
+  // door but not through it. A "this computer" monitor has no address a phone
+  // can reach, so that case explains itself instead of drawing a useless code.
+  void openWebMonitorQr() {
+    if (!project_.webMonitorEnabled || !webMonitorReady_) {
+      triggerToast("web monitor: turn it on first", ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    if (!project_.webMonitorShareLan) {
+      triggerToast("phones need THE NETWORK: set 'Who can see it' first",
+                   ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    const std::string url = webMonitorUrl();
+    if (url.rfind("http://", 0) != 0) {
+      triggerToast("web monitor: " + url, ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    showQrOverlay(url, url, project_.webMonitorPin.empty()
+                              ? "Point a phone camera at the code"
+                              : "Point a phone camera at the code; it will ask for the passphrase");
+  }
+
+  // The QR panel: `encoded` is what the code carries, `shown` the line printed
+  // under it (a pairing code is never printed), `hint` the instruction.
+  void showQrOverlay(const std::string& encoded, const std::string& shown, const std::string& hint) {
+    const std::string& url = encoded;
+    webMonitorQrShown_ = shown;
+    webMonitorQrHint_ = hint;
+    if (url != webMonitorQrText_) {
+      const qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(url.c_str(), qrcodegen::QrCode::Ecc::MEDIUM);
+      webMonitorQrSize_ = qr.getSize();
+      webMonitorQrModules_.assign(static_cast<std::size_t>(webMonitorQrSize_ * webMonitorQrSize_), false);
+      for (int y = 0; y < webMonitorQrSize_; ++y) {
+        for (int x = 0; x < webMonitorQrSize_; ++x) {
+          webMonitorQrModules_[static_cast<std::size_t>(y * webMonitorQrSize_ + x)] = qr.getModule(x, y);
+        }
+      }
+      webMonitorQrText_ = url;
+    }
+    webMonitorQrOpen_ = true;
+  }
+
+  void renderWebMonitorQr(int width, int height) {
+    if (!webMonitorQrOpen_ || webMonitorQrSize_ <= 0) {
+      return;
+    }
+    SDL_Color scrim = pal.shellShadow;
+    scrim.a = 215;
+    Primitives::fillRect(controlRenderer_, SDL_Rect {0, 0, width, height}, scrim);
+
+    // Dark modules on a light ground, in the theme's own extremes when they
+    // are far enough apart for a camera, plain black on white when not.
+    // Scanners are less forgiving than eyes, and some refuse inverted codes.
+    SDL_Color ground = pal.light, ink = pal.deep;
+    for (SDL_Color c : {pal.tile, pal.fg, pal.fgSoft, pal.light}) {
+      if (paletteRelativeLuminance(c) > paletteRelativeLuminance(ground)) ground = c;
+    }
+    for (SDL_Color c : {pal.deep, pal.dark, pal.shellShadow}) {
+      if (paletteRelativeLuminance(c) < paletteRelativeLuminance(ink)) ink = c;
+    }
+    if (paletteContrastRatio(ground, ink) < 7.0) {
+      ground = {255, 255, 255, 255};
+      ink = {0, 0, 0, 255};
+    }
+    ground.a = 255;
+    ink.a = 255;
+
+    const int lineH = textLineHeight(fontBase_);
+    const int pad = uiScaled(20);
+    const int captionH = lineH * 3 + uiScaled(12);
+    // A four-module quiet zone on every side, as the standard asks.
+    const int modulesAcross = webMonitorQrSize_ + 8;
+    const int room = std::min(width - pad * 4, height - pad * 4 - captionH);
+    const int modulePx = std::max(2, room / modulesAcross);
+    const int codeSide = modulesAcross * modulePx;
+    const int panelW = std::max(codeSide, std::min(width - pad * 2, uiScaled(520))) + pad * 2;
+    const int panelH = codeSide + captionH + pad * 3;
+    const SDL_Rect panel {(width - panelW) / 2, (height - panelH) / 2, panelW, panelH};
+    Primitives::drawFramedPanel(controlRenderer_, panel, pal.shellInner, pal.deep, pal.light);
+
+    const SDL_Rect code {panel.x + (panel.w - codeSide) / 2, panel.y + pad, codeSide, codeSide};
+    Primitives::fillRect(controlRenderer_, code, ground);
+    for (int y = 0; y < webMonitorQrSize_; ++y) {
+      for (int x = 0; x < webMonitorQrSize_; ++x) {
+        if (webMonitorQrModules_[static_cast<std::size_t>(y * webMonitorQrSize_ + x)]) {
+          Primitives::fillRect(controlRenderer_,
+                               SDL_Rect {code.x + (x + 4) * modulePx, code.y + (y + 4) * modulePx,
+                                         modulePx, modulePx}, ink);
+        }
+      }
+    }
+
+    int textY = code.y + code.h + pad;
+    const int textW = panel.w - pad * 2;
+    drawCenteredTextSafe(controlRenderer_, fontBase_, SDL_Rect {panel.x + pad, textY, textW, lineH},
+                         webMonitorQrShown_, pal.fg);
+    textY += lineH + uiScaled(6);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, SDL_Rect {panel.x + pad, textY, textW, lineH},
+                         webMonitorQrHint_, pal.fgSoft);
+    textY += lineH;
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, SDL_Rect {panel.x + pad, textY, textW, lineH},
+                         "click or Esc to close", pal.inkSoft);
+  }
+
+  bool ensureWebMonitorProgrammeOutput() {
+    const int idx = ensureStreamOutputForProtocol("web");
+    if (idx < 0 || idx >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    OutputTarget& out = project_.outputs[static_cast<std::size_t>(idx)];
+    out.enabled = true;
+    // The encoder runs only when the page plays it: low latency is the
+    // picture straight from the source, and an HLS encode nobody is
+    // watching would cost a core for nothing.
+    out.streamEnabled = !project_.webMonitorLowLatency;
+    // WHAT IT CARRIES IS THE OPERATOR'S CHOICE (its Source, in Video Outputs):
+    // programme, the multiview, a presenter view. Only a source that cannot
+    // give a picture -- none, itself, a missing output, another stream -- is
+    // replaced, and then by programme, never by whichever deck had focus when
+    // the monitor was switched on.
+    const int source = out.mirrorSourceOutputIndex;
+    const bool usable = source >= 0 && source != idx &&
+      source < static_cast<int>(project_.outputs.size()) &&
+      normalizeOutputType(project_.outputs[static_cast<std::size_t>(source)].outputType) != "stream";
+    if (!usable) {
+      out.mirrorSourceOutputIndex = primaryProgrammeOutputIndex(idx);
+    }
+    webMonitorDirSyncedMs_ = 0;
+    return true;
+  }
+
+  // The one web server serves the Web Monitor and the phone controller. It
+  // runs when either is on, and listens on the network when the monitor is
+  // shared or phone control is on (a phone is on the network by definition);
+  // each request is then held to its own feature's rules.
+  bool webServerOnNetwork() const {
+    return (project_.webMonitorEnabled && project_.webMonitorShareLan) || project_.webRemoteEnabled;
+  }
+
+  bool startWebMonitor() {
+    if (!project_.webMonitorEnabled && !project_.webRemoteEnabled) {
+      webMonitorReady_ = false;
+      return false;
+    }
+    const bool lan = webServerOnNetwork();
+    if (lan && project_.webMonitorPin.size() < 8) {
+      webMonitorReady_ = false;
+      return false;
+    }
+    if (webMonitorListen_ != kInvalidSocket) {
+      return !project_.webMonitorEnabled || ensureWebMonitorProgrammeOutput();
+    }
+    const std::string lanAddress = lan ? webMonitorLanAddress() : std::string();
+    if (lan && lanAddress.empty()) {
+      webMonitorReady_ = false;
+      return false;
+    }
+    webMonitorListen_ = createBoundSocket(SOCK_STREAM, project_.webMonitorPort, true, !lan, lanAddress);
+    if (webMonitorListen_ == kInvalidSocket) {
+      webMonitorReady_ = false;
+      return false;
+    }
+    // FROM ANYWHERE: the same server on this computer's Tailscale address,
+    // while phone control is on. Only the tailnet can reach that address.
+    webRemoteTailnetAddress_ = project_.webRemoteEnabled ? deckboy::platform::tailnetIPv4Address() : std::string();
+    if (!webRemoteTailnetAddress_.empty()) {
+      webMonitorTailnetListen_ = createBoundSocket(SOCK_STREAM, project_.webMonitorPort, true, false,
+                                                   webRemoteTailnetAddress_);
+      if (webMonitorTailnetListen_ == kInvalidSocket) webRemoteTailnetAddress_.clear();
+    }
+    if (project_.webMonitorEnabled && !ensureWebMonitorProgrammeOutput()) {
+      closeSocket(webMonitorListen_);
+      webMonitorListen_ = kInvalidSocket;
+      webMonitorReady_ = false;
+      return false;
+    }
+    webMonitorStop_.store(false);
+    webMonitorDirSyncedMs_ = 0;
+    syncWebMonitorDirectory();
+    webMonitorEncoder_ = std::thread([this]() { webMonitorEncodeLoop(); });
+    webMonitorThread_ = std::thread([this]() { webMonitorLoop(); });
+    webMonitorReady_ = true;
+    return true;
+  }
+
+  void stopWebMonitor() {
+    webMonitorStop_.store(true);
+    if (webMonitorListen_ != kInvalidSocket) {
+      closeSocket(webMonitorListen_);
+      webMonitorListen_ = kInvalidSocket;
+    }
+    if (webMonitorTailnetListen_ != kInvalidSocket) {
+      closeSocket(webMonitorTailnetListen_);
+      webMonitorTailnetListen_ = kInvalidSocket;
+    }
+    for (auto& slot : webMonitorSlots_) {
+      slot.cv.notify_all();
+    }
+    webMonitorEncodeCv_.notify_all();
+    if (webMonitorThread_.joinable()) webMonitorThread_.join();
+    for (auto& viewer : webMonitorClients_) {
+      if (viewer.thread.joinable()) viewer.thread.join();
+    }
+    webMonitorClients_.clear();
+    if (webMonitorEncoder_.joinable()) webMonitorEncoder_.join();
+    webMonitorReady_ = false;
+  }
+
+  void restartWebMonitorIfRunning() {
+    if (webMonitorListen_ != kInvalidSocket) {
+      stopWebMonitor();
+      startWebMonitor();
+    }
+  }
+
+  void setWebMonitorEnabled(bool enabled) {
+    project_.webMonitorEnabled = enabled;
+    if (enabled) {
+      webEncodeEase_ = 0;
+      if (!startWebMonitor()) {
+        triggerToast(project_.webMonitorShareLan && project_.webMonitorPin.size() < 8
+          ? "web monitor: network sharing requires an 8+ character passphrase"
+          : project_.webMonitorShareLan && webMonitorLanAddress().empty()
+              ? "web monitor: no active private Ethernet/Wi-Fi address"
+              : "web monitor: could not bind port " + std::to_string(project_.webMonitorPort));
+      } else {
+        triggerToast("web monitor: " + webMonitorUrl());
+      }
+    } else {
+      const int webOutput = findStreamOutputForProtocol("web");
+      if (webOutput >= 0) {
+        auto& out = project_.outputs[static_cast<std::size_t>(webOutput)];
+        out.enabled = false;
+        out.streamEnabled = false;
+      }
+      stopWebMonitor();
+      if (project_.webRemoteEnabled) startWebMonitor();   // the phone keeps its server
+      webMonitorDirSyncedMs_ = 0;
+      syncWebMonitorDirectory();
+      triggerToast("web monitor: off");
+    }
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setWebMonitorShare(bool share) {
+    if (share && project_.webMonitorPin.size() < 8) {
+      triggerToast("set an 8+ character Web Monitor passphrase first");
+      return;
+    }
+    project_.webMonitorShareLan = share;
+    restartWebMonitorIfRunning();
+    triggerToast(share ? "web monitor: shared on the network" : "web monitor: this computer only");
+    markProjectDirty();
+  }
+
+  void setWebMonitorPort(int port) {
+    project_.webMonitorPort = std::clamp(port, 1, 65535);
+    restartWebMonitorIfRunning();
+    triggerToast("web monitor port: " + std::to_string(project_.webMonitorPort));
+    markProjectDirty();
+  }
+
+  void setWebMonitorLowLatency(bool low) {
+    if (project_.webMonitorLowLatency == low) return;
+    project_.webMonitorLowLatency = low;
+    const int webOutput = findStreamOutputForProtocol("web");
+    if (webOutput >= 0) {
+      project_.outputs[static_cast<std::size_t>(webOutput)].streamEnabled =
+        project_.webMonitorEnabled && !low;
+      if (low) stopOutputStream(webOutput);
+    }
+    webMonitorDirSyncedMs_ = 0;
+    syncWebMonitorDirectory();
+    triggerToast(low ? "web monitor: low latency (picture only, screens in step)"
+                     : "web monitor: programme with sound");
+    markProjectDirty();
+  }
+
+  void setWebMonitorMaxClients(int clients) {
+    project_.webMonitorMaxClients = std::clamp(clients, 1, 64);
+    webMonitorMaxClients_.store(project_.webMonitorMaxClients);
+    triggerToast("web monitor: up to " + std::to_string(project_.webMonitorMaxClients) +
+                 " connections at once");
+    markProjectDirty();
+  }
+
+  void setWebMonitorMaxHeight(int height) {
+    if (height != 720 && height != 1080 && height != 1440 && height != 2160) return;
+    if (project_.webMonitorMaxHeight == height) return;
+    project_.webMonitorMaxHeight = height;
+    webEncodeEase_ = 0;   // the operator's choice gets a fresh chance
+    const int webOutput = findStreamOutputForProtocol("web");
+    if (webOutput >= 0) stopOutputStream(webOutput);
+    triggerToast("web monitor quality: " + std::to_string(height) + "p");
+    markProjectDirty();
+  }
+
+  void setWebMonitorPin(const std::string& pin) {
+    const std::string cleaned = trim(pin);
+    if ((project_.webMonitorShareLan || project_.webRemoteEnabled) && cleaned.size() < 8) {
+      triggerToast("network sharing and phone control require an 8+ character passphrase");
+      return;
+    }
+    project_.webMonitorPin = cleaned;
+    webMonitorDirSyncedMs_ = 0;
+    syncWebMonitorDirectory();
+    triggerToast(project_.webMonitorPin.empty() ? "web monitor: no PIN" : "web monitor: PIN set");
+    markProjectDirty();
+  }
+
+  bool setWebRemoteEnabled(bool enabled) {
+    if (enabled && project_.webMonitorPin.size() < 8) {
+      failRemoteCommand("phone control requires an 8+ character passphrase");
+      return false;
+    }
+    project_.webRemoteEnabled = enabled;
+    // Its own switch: start, stop or rebind the server as the two features
+    // between them now need it.
+    stopWebMonitor();
+    const bool up = startWebMonitor();
+    webMonitorDirSyncedMs_ = 0;
+    syncWebMonitorDirectory();
+    markProjectDirty();
+    if (enabled && !up) {
+      triggerToast(webMonitorLanAddress().empty() ? "phone control: no active private Ethernet/Wi-Fi address"
+                                                  : "phone control: could not open port " +
+                                                      std::to_string(project_.webMonitorPort),
+                   ToastKind::Warning, kToastReadableMs);
+    } else {
+      triggerToast(enabled ? "phone control: open " + webRemoteUrl() : "phone control: off");
+    }
+    return true;
+  }
+
+  void stopOscQueryServer() {
+    oscQueryStop_.store(true);
+    if (oscQueryTcpListen_ != kInvalidSocket) {
+      closeSocket(oscQueryTcpListen_);
+      oscQueryTcpListen_ = kInvalidSocket;
+    }
+    if (oscQueryThread_.joinable()) {
+      oscQueryThread_.join();
+    }
+    oscQueryReady_ = false;
+  }
+
+  void oscQueryLoop() {
+    while (!oscQueryStop_.load()) {
+      if (oscQueryTcpListen_ == kInvalidSocket) {
+        break;
+      }
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(oscQueryTcpListen_, &readFds);
+      timeval timeout {};
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 200000;
+      int ready = select(selectNfds(oscQueryTcpListen_), &readFds, nullptr, nullptr, &timeout);
+      if (ready < 0) {
+#ifndef _WIN32
+        if (errno == EINTR) {
+          continue;
+        }
+#endif
+        break;
+      }
+      if (ready == 0) {
+        continue;
+      }
+      if (!readyFd(oscQueryTcpListen_, &readFds)) {
+        continue;
+      }
+
+      sockaddr_in clientAddress {};
+      socklen_t clientLength = sizeof(clientAddress);
+      SocketHandle client = accept(oscQueryTcpListen_, reinterpret_cast<sockaddr*>(&clientAddress), &clientLength);
+      if (client == kInvalidSocket) {
+        continue;
+      }
+      if (!controlPeerAllowed(clientAddress, "OSC query")) {
+        closeSocket(client);
+        continue;
+      }
+      setCloseOnExec(client);
+      handleOscQueryHttpClient(client);
+      closeSocket(client);
+    }
+  }
+
+  void maybeBroadcastOscState() {
+    Uint64 now = SDL_GetTicks();
+    if (oscSubscribers_.empty()) {
+      return;
+    }
+
+    std::string snapshot = snapshotJsonForFeedback();
+    bool stateChanged = snapshot != lastOscFeedbackPayload_;
+    bool shouldBroadcastState = stateChanged || now - lastOscFeedbackBroadcastMs_ >= 2000;
+
+    std::vector<std::pair<std::string, std::string>> mirrorValues;
+    std::string mirrorDigest;
+    bool mirrorChanged = false;
+    Uint64 mirrorInterval = static_cast<Uint64>(normalizeOscFeedbackRateMs(project_.oscFeedbackRateMs));
+    bool shouldBroadcastMirror = false;
+    if (project_.oscFeedbackMirrorEnabled) {
+      mirrorValues = buildOscMirrorFeedbackValues();
+      std::ostringstream mirrorDigestStream;
+      for (const auto& value : mirrorValues) {
+        mirrorDigestStream << value.first << '=' << value.second << '\n';
+      }
+      mirrorDigest = mirrorDigestStream.str();
+      mirrorChanged = mirrorDigest != lastOscMirrorFeedbackPayload_;
+      shouldBroadcastMirror =
+        (mirrorChanged && now - lastOscMirrorFeedbackBroadcastMs_ >= mirrorInterval) ||
+        (!mirrorChanged && now - lastOscMirrorFeedbackBroadcastMs_ >= 2000);
+    }
+
+    if (!shouldBroadcastState && !shouldBroadcastMirror) {
+      return;
+    }
+
+    std::vector<std::string> stale;
+    for (const auto& [key, entry] : oscSubscribers_) {
+      if (now > entry.second + 30000) {
+        stale.push_back(key);
+        continue;
+      }
+      if (shouldBroadcastState) {
+        sendOscStringTo(entry.first, "/deckboy/state", snapshot);
+      }
+      if (shouldBroadcastMirror) {
+        for (const auto& value : mirrorValues) {
+          sendOscStringTo(entry.first, value.first, value.second);
+        }
+      }
+    }
+    for (const auto& key : stale) {
+      oscSubscribers_.erase(key);
+    }
+
+    if (shouldBroadcastState) {
+      lastOscFeedbackPayload_ = snapshot;
+      lastOscFeedbackBroadcastMs_ = now;
+    }
+    if (shouldBroadcastMirror) {
+      lastOscMirrorFeedbackPayload_ = mirrorDigest;
+      lastOscMirrorFeedbackBroadcastMs_ = now;
+    }
+  }
+
+  bool maybeRespondToCompanionQuery(SocketHandle client, const std::string& line) {
+    std::string query = trim(line);
+    std::string upper = toUpper(query);
+
+    auto sendSnapshot = [&](const std::string& payload) {
+      if (!payload.empty()) {
+        // Winsock's send takes an int length; a reply is never near that, but
+        // saying so beats a silent narrowing.
+        queueCompanionReplyLocked(client, payload);
+      }
+    };
+
+    if (upper == "STATUS ENCODER" || upper == "STATE ENCODER") {
+      // Built on the main thread (updateStatusSnapshot); this thread only
+      // copies the finished text out under the lock.
+      std::string reply;
+      {
+        std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+        reply = statusEncoderSnapshot_;
+      }
+      sendSnapshot(reply);
+      return true;
+    }
+    return maybeRespondToCompanionQueryPart2(query, upper, sendSnapshot);
+  }
+
+  // The encode queue, readable from a script or Companion. Progress is a
+  // percentage, or "--" before ffmpeg has reported anything. MAIN THREAD ONLY:
+  // it walks conversionJobs_.
+  std::string buildEncoderStatusSnapshot() const {
+    {
+      std::string reply = "DECKBOY_0.01 encoder jobs=" +
+                          std::to_string(static_cast<int>(conversionJobs_.size())) +
+                          " concurrency=" + std::to_string(encoderConcurrency_) +
+                          (encoderQueuePaused_ ? " paused=on" : " paused=off") + "\n";
+      for (const auto& job : conversionJobs_) {
+        double pct = job.progress ? job.progress->load() : -1.0;
+        const char* st = job.state == ConversionState::Running ? "running"
+                       : job.state == ConversionState::Queued  ? "queued" : "done";
+        reply += std::string("JOB state=") + st + " progress=" +
+                 (pct < 0.0 ? std::string("--")
+                            : std::to_string(static_cast<int>(pct * 100.0 + 0.5))) +
+                 " name=\"" + job.label + "\"\n";
+      }
+      return reply;
+    }
+  }
+
+  // The rest of the direct answers, split off only so the encoder snapshot's
+  // builder could sit on its own outside the network thread's function.
+  template <typename SendFn>
+  bool maybeRespondToCompanionQueryPart2(const std::string& query,
+                                         const std::string& upper, SendFn& sendSnapshot) {
+    // EVERY verb, for anyone building a surface. The summary below is what
+    // fits on a screen and covers a quarter of the protocol; a Companion or
+    // Stream Deck author reading only that would never learn that PIP,
+    // LOWERTHIRD, TIMER, SUBTITLE, ENCODE, SCHEDULE or MULTIVIEW exist.
+    //
+    // Kept honest by tools/audit_remote_help.py, which fails the build when a
+    // verb the dispatcher handles is missing from this list. That is the only
+    // reason a hand-maintained list is defensible: nothing here can drift
+    // without something saying so.
+    if (upper == "HELP ALL" || upper == "HELP FULL" || upper == "?? ") {
+      sendSnapshot(
+        "DECKBOY_0.01 every verb (396)\n"
+        "ADDTIMER ALLGO ALLPAUSE ALLPLAY ALLSTOP ALLTAKE ANIM ANIMATION ARM AUDITION\n"
+        "ARTNET ARTNETEVENT ARTNETPORT ART_NET_PORT ASCII ATEM ATEMEVENT\n"
+        "ATEMTRIGGER AUDIO AUDIOCUE AUDIOENABLED AUDIOFX AUDIOGAIN AUDIOMONO\n"
+        "AUDIONORM AUDIOOUTS AUDIOPAN AUDIOVIS AUDIOVISUAL AUTOADVANCE\n"
+        "MASK MOTION BUGSWAT LESSONS DRAW SLICE SLICES SCREENS CLICK HOVER PRESS KEY TYPE TESTTHROW TRUST COMPANIONPASS SCOPES MIDICLOCK OUTSNAP OUTPROBE UISNAP UIASSETS QUICK QUICKLIST DROPTEST\n"
+        "MESH MESH3D SEQ\n"
+        "OFFSET OFFSETX OFFSETY ROTATION CROP CROPLEFT CROPRIGHT CROPTOP CROPBOTTOM\n"
+        "AUTOID AUTONEXT AVJUMP BLACKOUT DEFAULTS NEWSHOW LIMITER OUTPUTFX OUTPUTS PATCH\n"
+        "BACKDROP BLEND BROKEN BROWSE BROWSER CAMERACUE CANVAS CC CHECK CHIP CLEAR CLEAROVERLAY CODE COLOR\n"
+        "CROSSFADE COLORTAG COMPOSITE CONTINUE CONVERT CUEAUDIO CUEAUTOID CUEFIND CUEFINDCLEAR\n"
+        "DISARM DMXCUE FADE FADECUE MATRIX AUDIOALSO MIDICUE MIDIFILE MULTI MULTIVIEW NETCUE PFL PRELOAD SCRIPTCUE TARGET TARGETCUE TCCUE TEXTCUE TIMECODECUE\n"
+        "CUEFINDNEXT CUEFINDPREV CUEFINDSTATUS CUEFINDTAKE CUEGOTO CUEID\n"
+        "CUEIDSHORT CUENOTES CUESHORTID CUEXNEXT DATAMOSH DECK DECKADD DECKDEL\n"
+        "DECKAUTOFADE DECKDIM DECKFADE DECKLINK DECKNEXT DECKOPACITY DECKREMOVE\n"
+        "DECKPREV DECKPREVIOUS DELETE DIMMER DISPLAY DMX DMXARTNET DMXPORT\n"
+        "DMX_ARTNET DURATION ENCODE ENCODEALL ENCODEFORMAT ENCODEPAUSE\n"
+        "ENCODEPRESET ENDACTION FADEIN FADEOUT FIND FINDCLEAR FINDNEXT\n"
+        "FINDPREV FINDPREVIOUS FINDRESET FINDSTATUS FINDTAKE FULLSCREEN FX\n"
+        "GO GOEND GOGUARD GOTO GOTOTARGET GRAPHIC GROUP GROUPPRESET HEIGHT HOLD\n"
+        "HOLDLAST IN INPUTMONITOR INTEGRATION INTEGRATIONS JUMPMODE JUMPTRANS\n"
+        "JUMPTRANSITION JUMP_MODE JUMP_XFADE LANG LANGUAGE LAYER LAYERNAME LOCKSCREEN LOOP LOOPCOUNT\n"
+        "LOWERALPHA LOWERANIM LOWERSTYLE LOWERSUB LOWERTEXT LOWERTHIRD LTC LTCEXT LTCINGEST\n"
+        "LTCOUT LTC_INGEST MARK MARKER MASTER MASTERCUE MASTERVOL\n"
+        "MASTERVOLUME MIDI MIDIIN MIDIINPUT MIDI_INPUT MOSH MOSHLOOK MTC MTCEXT\n"
+        "MONITOR MTCINGEST MTC_INGEST MULTIVIEW NDI NDICUE NDIEVENT NDIKEY NDIKEYER\n"
+        "NDIKEYNAME NDINAME NDITRIGGER NDI_TRIGGER NEWDECK NEXT NEXTTRANS\n"
+        "NMC NMCEVENT NMCSYNC NMC_SYNC NMOS OSCFEEDBACK OSCFEEDBACKRATE\n"
+        "OSCQUERY OSCQUERYPORT SAMPLERATE AUDIORATE OSC_FEEDBACK OSC_FEEDBACK_RATE OSC_QUERY\n"
+        "DASH DASHBOARD GET OUTPUT SET\n"
+        "OSC_QUERY_PORT OUT OUTPUTMODE OVERLAY PANIC PANICAUTORESTORE\n"
+        "PANICFADE PANICPROFILE PANIC_FADE PANIC_PROFILE PANIC_RESTORE\n"
+        "PATTERN PAUSE PAUSEATBEGIN PAUSEATEND PAUSEBEGIN PAUSEEND PHONE POSTWAIT PREWAIT\n"
+        "PAUSEALL PAUSESTART PENDING PING PIP PLAY PLAYLISTAUTOFADE PLAYLISTFADE PLAYLISTLOOP\n"
+        "PLAYLISTOPACITY PRESET PREV PREVIOUS REC RECCODEC RESUMEALL RECFORMAT RECORD\n"
+        "RECSEGMENT RECTC RENAME RENUMBER RERACK ROUTE SCALE SCALEMODE SCALEX SCALEY SCENE\n"
+        "SCHEDULE SECTION SEEK SEEKPOS SELECT SELECTALL SELECTID SFX SHORTID SHUFFLE\n"
+        "SHORTCUTS SKIP SKIPBACK SKIPEND SOURCE SPEED SPOUTCUE SRC ST2110\n"
+        "STANDBY STARTUP STILLDUR STOPALL STING STREAM SYNTH KEYS NOTESTEP PRESENTER SPLITNOTES PROMPTER\n"
+        "STOP SUB SUBTITLE SUBTITLES SWIRL MOIRE SYNCGO SYNCTAKE SYNTHNOTEOFF\n"
+        "SYNTHNOTEON SYPHONCUE TAKE TAKEID TALLYEVENT TC TCMARK TIMECODE TONECUE\n"
+        "TIMECODEEXT\n"
+        "TIMECODELTC TIMECODEMARK TIMEOVERLAY TIMER TIMERCUE TOGGLE\n"
+        "TRANSITION TRANSITIONSTYLE TRANSITIONTONEXT TRIM TRIMIN TRIMOUT\n"
+        "TUTORIAL TRACKER SEQUENCE GEOLFO UNDO REDO TRIGGER MIDINOTE MIDIMAP MIDIIN OSCTRIGGER MEMOCUE MEMO DEVAMP CAPTIONS MEDIAMTX AUDIOTRACK MIC FIXTURE VIDEODIP\n"
+        "UPDATE VIDEO VIEW VJ VMIX VOLUME WARP WATCH WEBMONITOR WIDTH WINDOWSOURCE XFADE\n"
+        "cue indices are 1-based; every command answers OK or ERR.\n"
+      );
+      return true;
+    }
+    if (upper == "HELP" || upper == "?") {
+      // Discoverability over the wire. The only way to learn the protocol used
+      // to be reading the source or guessing, and a guess that missed looked
+      // exactly like a broken command.
+      sendSnapshot(
+        "DECKBOY_0.01 help\n"
+        "queries (answered immediately): STATUS | STATUS JSON | STATUS CUES | STATUS <deck> | FINDSTATUS | HELP\n"
+        "transport: TAKE GO PLAY PAUSE STOP TOGGLE RERACK CLEAR SKIP SKIPBACK GOEND NEXT PREV SEEK <s> LOOP <on|off>\n"
+        "standby:   STANDBY [<cue>|NEXT|PREV|CLEAR] - the cue GO will fire, kept apart from the selection\n"
+        "spine:     PREWAIT <s> POSTWAIT <s> CONTINUE OFF|AUTO|FOLLOW - AUTO counts from the cue STARTING, FOLLOW from it ENDING\n"
+        "           PENDING - what each deck is about to take, and in how long\n"
+        "check:     CHECK [<n>] - everything wrong with the show, before doors rather than at take; <n> jumps to one\n"
+        "target:    TARGET NEW|CUE <deck> <cue>|VERB start/stop/pause/resume/load/arm/disarm|CLEAR|FIRE - a cue that acts on another cue\n"
+        "arm:       ARM|DISARM [<n>|ALL] - a disarmed cue stays in the list and does nothing; GO steps over it\n"
+        "audition:  AUDITION [OFF|END|STATUS] (PFL) - play the selected cue to the preview only; outputs keep what they have\n"
+        "preload:   PRELOAD [<seconds>|OFF|STATUS] - rack the selected cue paused and off air; taking it then starts instantly\n"
+        "midi out:  MIDICUE NEW|PORTS|PORT <name>|KIND <token>|CH <1-16>|D1 <0-127>|D2 <0-127>|DEVICE <0-127>|CUENUM <n>|LIST <n>|RAW <hex>|SEND\n"
+        "net out:   NETCUE NEW|PROTO osc/udp/tcp|HOST <ipv4>|PORT <n>|ADDRESS </path>|PAYLOAD <text>|SEND\n"
+        "timecode:  TCCUE NEW|ACTION start/stop/jam|JAM <hh:mm:ss:ff or seconds>|FIRE - drives the LTC generator from the cue list\n"
+        "script:    SCRIPTCUE NEW|ADD <line>|CLEAR|RUN - a cue that runs Deckboy protocol lines; # is a comment\n"
+        "masks:     MASK LIST|SHAPES|INFO <id>|NEW [shape] [name]|SHAPE <id> <shape> [SUB]|PATH <id> [SUB] x,y ...|CLEAR|DELETE|RENAME <id>\n"
+        "           MASK SET <id> INVERT on/off|FEATHER %|GROW %|OPACITY %|X %|Y %|SCALE %|ROTATION deg; MASK LFO <id> <param> ON|OFF [Hz] [%]\n"
+        "           MASK ASSIGN <id|NONE> CUE|LAYER <out> <playlist>|OUTPUT <n>|MATTE <n>; MASK EXPORT <id> <file.png|.svg> [WxH] (local)\n"
+        "motion:    MOTION [ON|OFF] | SOURCE CAMERA [name]|DECK <n> | CAMERAS | SENSITIVITY % | RISE s | FALL s | MIRROR ON|OFF | LEVEL\n"
+        "           MOTION ZONE ADD x y w h (%)|REMOVE n|CLEAR; an oscillator follows it with SHAPE motion|motion-x|motion-y and ZONE 0-8\n"
+        "draw:      DRAW [EDITOR ON|OFF] | TOOL brush|erase|line|box|oval|fill | COLOUR #rrggbb|name|1-8 | SIZE % | OPACITY %\n"
+        "           DRAW STROKE x,y[,p] ... (%) | UNDO | CLEAR | FRAME ADD|DELETE|NEXT|PREV|n | ONION ON|OFF\n"
+        "           DRAW PLAYBACK still|flipbook|replay | FPS n | HOLD s | SAVE STILL|ANIMATION [file] (local)\n"
+        "slices:    SLICE [ADD [name] | REMOVE n | CLEAR] on the focused output; SLICE n CROP x y w h | PLACE x y w h (%)\n"
+        "           SLICE n CORNER TL|TR|BR|BL dx dy | EDGE L|R|T|B % | MASK id|NONE | ON|OFF | LINEAR|PERSPECTIVE | NAME text\n"
+        "           SLICE n SOURCE PROGRAMME|DECK n | ROTATE IN|OUT deg | FLIP H|V ON|OFF | OPACITY % | LFO X|Y|ROTATION|OPACITY ...\n"
+        "           SLICE n GRID cols rows|OFF|SMOOTH ON|OFF|POINT col row dx dy; SCREENS [ON|OFF] the Screens window\n"
+        "           BUGSWAT [START|SHOWME [PAW]|SKIP|PLAY|EXIT|STATUS] the Motion lesson's game\n"
+        "           LESSONS [OPEN|CLOSE|START id|TRACK PIXEL|VIDEO|LIST] part two of learning; TUTORIAL drives the running one\n"
+        "dmx out:   DMXCUE NEW|SET <1=255,10-14=64>|FADE <s>|UNIVERSE <n>|HOST <ipv4>|PORT <n>|FIRE|BLACKOUT - Art-Net levels on GO\n"
+        "matrix:    MATRIX [SET <src 1-2> <dest 1-128> <0-100>|SEED|CLEAR] - per-cue audio crosspoints; empty means the plain stereo pair\n"
+        "           MATRIX SET <src 1-2> <output> [L|R] <0-100> - by name, on a playlist in the PATCH\n"
+        "outputs:   OUTPUTS [ADD <name> CH <n>|<n>-<n+1> [DEVICE <device>] | SET <name> ... | RENAME <name> TO <new> | REMOVE <name> | CLEAR]\n"
+        "patch:     PATCH [<deck> <output> <dB -48..6>|OFF | <deck> CLEAR | ROUTE <deck>] - playlists into named outputs\n"
+        "midi file: MIDIFILE [PORT <name>] - drop a .mid in the playlist and it plays out\n"
+        "text:      TEXTCUE NEW|BODY <words>|ANIM none/fade/typewriter/scroll/crawl/pulse/wobble|SIZE <1-100>|SPEED <n>|ALIGN <side>|CARD <0-255>\n"
+        "lower 3rd: TEXTCUE LOWERNEW | LOWER on/off | TITLE <words> | SUB <words> | LOOK <look> (LOOK ? lists names)\n"
+        "           TEXTCUE BAR|ACCENT <colour> | TEXTCUE SCALE <0.5-2> - a Lower Third's colours and size\n"
+        "           TEXTCUE WIGGLE ON|OFF|TOGGLE - slow bob and tilt (Arcade always wiggles)\n"
+        "           TEXTCUE IN|OUTMOVE cut/fade/left/right/rise/wipe/grow/typewriter/pop | TEXTCUE OUT (plays the out, then off)\n"
+        "fade:      FADE NEW|WHAT opacity/volume/dimmer|TO <0-100>|OVER <s>|CURVE <shape>|DECK <n>|STOP <on/off>|RESTORE <on/off>|FIRE|RUNNING|CANCEL\n"
+        "           FADE WHAT brightness/contrast/saturation/hue - the playing cue's own colour\n"
+        "           FADE WHAT effect/audiofx | EFFECT <n> | KNOB amount/A-D - a knob of the playing cue's effect n\n"
+        "           FADE WHAT speed | TO <0.25-4>x - the deck's speed, the pitch following, like tape\n"
+        "master:    MASTER NEW | DECK <n> <cue> | BYPASS <n> [ON|OFF] | CLEAR | FIRE - one cue, several decks\n"
+        "preset:    PRESET [LIST] | SAVE [name] | RECALL <n|name> | <n> | UPDATE <n> | RENAME <n> <name> | DELETE <n>\n"
+        "           PRESET SCOPE <n> [ALL | ONLY <groups> | <group> on|off ...] - what a recall puts back:\n"
+        "           cues position look effects levels routing master (a preset always captures all of it)\n"
+        "tracker:   TRACKER [GO|BACK|PLAY|STOP|STEP <n>|LOOP [on|off]|CLICKER [on|off]] - the master cues as a sequence\n"
+        "           TRACKER ADD | TRACKER SET <step> <deck> <cue|none> - make a step, choose what it fires on a playlist\n"
+        "presenter: NOTESTEP [NEXT|PREV|FIRST|LAST|SCROLL <rows>|<n>|STATUS]   (a cue's note builds, split on a line of ---)\n"
+        "           PRESENTER LAYOUT wide|filmstrip|notes|custom | LIVE|PREV|NEXT|NOTES|CLOCK|TIMERS|BUILDS [on|off]\n"
+        "           PRESENTER PANEL <live|prev|next|notes> <x> <y> <w> <h>   (percent; CAPTURE makes the current layout editable)\n"
+        "           PRESENTER SCALE <0.5-4> | PRESENTER COLOUR BG|INK|ACCENT #rrggbb | PRESENTER RESET\n"
+        "           SPLITNOTES [<cue>]   (one cue per part of its notes -- the other way to pace a long note)\n"
+        "prompter: PROMPTER RUN|STOP|TOGGLE|TOP | SPEED <10-600 lines/min> | SCROLL <lines>\n"
+        "          PROMPTER SIZE <0.5-8> | LINE <0.05-0.95> | MIRROR off|h|v|both | SCRIPT [text]\n"
+        "navigation: SELECT <n> SELECTALL GOTO <n> FIND <text> FINDNEXT FINDTAKE DECK <n> [command] DECKNEXT DECKPREV\n"
+        "show: PANIC ALLSTOP ALLPAUSE BLACKOUT [on|off|toggle] DIMMER <0-100> SHUFFLE <on|off>\n"
+        "audio: MASTERVOL <0-200 percent> VOLUME <0-100> AUDIOGAIN [dB | BY <dB>] AUDIONORM [ALL] SPEED <0.25-4>\n"
+        "       AUDIO [<device> | DEFAULT | NEXT | PREV]  (bare: what the playlist asks for, where its sound is going, the system output)\n"
+        "input monitor: INPUTMONITOR [n | OPEN | CLOSE | CLEAR | PAUSE | RESUME]  (the last n MIDI, OSC, remote and phone messages and what each did, as JSON)\n"
+        "audio fx: AUDIOFX | AUDIOFX ADD <effect> [amount%]  (hpf lpf tilt comp gate delay reverb width binaural\n"
+        "                                               picture placement seam framelock suspend\n"
+        "                                               crush word skip rail resolution scrub short ouroboros plugin)\n"
+        "          AUDIOFX <slot> <amount%> [a% b% c% d%] | AUDIOFX <slot> BYPASS ON|OFF | AUDIOFX <slot> OFF | AUDIOFX CLEAR\n"
+        "          AUDIOFX <slot> PLUGIN <name>  (fills a plugin slot from your own installed plugins)\n"
+        "       AUDIOVIS [waveform|scope|lissajous|spectrum|level|cover]  (what an audio cue shows)\n"
+        "picture: MESH [on|off|toggle|height <0-1>|tilt <-1..1>|yaw|spin|grid <8-160>]\n"
+        "geometry: SCALE [0.25..4] (sets both factors) | SCALEX [0.25..4] | SCALEY [0.25..4]\n"
+        "          WIDTH [px] | HEIGHT [px] (rendered size) | SCALEMODE [fit|fill|stretch|unscaled]\n"
+        "          SCALEX/SCALEY and WIDTH/HEIGHT honor the inspector aspect link (SET geometry_aspect_link 0|1)\n"
+        "          OFFSET [x y] | OFFSETX [x] | OFFSETY [y] (pixels -1000000..1000000) | ROTATION [-180..180 degrees]\n"
+        "          CROP [left right top bottom] | CROPLEFT [n] | CROPRIGHT [n] | CROPTOP [n] | CROPBOTTOM [n]\n"
+        "          crop is percent 0..90 per edge, opposing edges total at most 95\n"
+        "          no value queries the selected cue; setters edit eligible selected cues and report skipped cues\n"
+        "          invalid values or linked scales outside 0.25..4 answer ERR without changing the selection\n"
+        "video synth: SYNTH ADD (adds and selects a Video Synth cue) | SYNTH [shape|mirror|palette <name>]\n"
+        "geometry lfo: GEOLFO [x|y|width|height|rotation|cropleft|cropright|croptop|cropbottom\n"
+        "              on|off|shape <s>|rate <hz>|depth <0-1>|phase <0-1>|sync <on|off>|beats <n>]\n"
+        "browser: BROWSER <url>  (makes a cue)   -- on the LIVE browser cue:\n"
+        "         BROWSER SCROLL <px> | TOP | BOTTOM | CLICK <x0-1> <y0-1>\n"
+        "         BROWSER BACK | FORWARD | RELOAD | URL <addr> | SCROLLBAR on|off\n"
+        "         BROWSER INTERACT [on|off]  (hands-on mode: a window, or keys)\n"
+        "         BROWSER TYPE <text> | BROWSER KEY <Enter|Tab|Backspace|Escape>\n"
+        "output: OUTPUT [STATUS|LIST|ON|OFF|TOGGLE|SPOUT ...|<n>]\n"
+        "        OUTPUT ADD [<deck>] | SELECT <n> | DECK [<n>] - a second screen, and which deck it shows\n"
+        "        OUTPUT AOI [<WxH>|FULL [<x> <y>]] | OUTPUT AOI MODE PIXEL|FILL - send just this region, e.g. one 256x256 LED tile\n"
+        "        OUTPUT HDR ON|OFF|AUTO|STATUS | WHITE <nits> | SIGNAL PQ|HLG - HDR on this output, and how it leaves as a signal\n"
+        "        STREAM HDR SDR|PQ|HLG - what the selected stream cue's feed carries (a stream is never probed)\n"
+        "super deckboy: DECKADD - another playlist | DECKREMOVE [<n>] - take one away (UNDO brings it back)\n"
+        "edit: UNDO | REDO - the same as ctrl+z / ctrl+y on the desk\n"
+        "interface: LANGUAGE [<code>] - the desk's language (en, ar, fa, ja, zh-Hans ...); no code answers the current one\n"
+        "mediamtx: MEDIAMTX [HOST <host> | ADD <stream> | PUBLISH [name]] - the media router: its streams as cues, the programme out through it\n"
+        "captions: CAPTIONS [STATUS|ON|OFF|GENERATE [model]] - make captions on this computer (first time: a one-off model download)\n"
+        "devamp: DEVAMP [<deck>] - the looping cue plays out this pass, then ends as if it had not looped\n"
+        "audio track: AUDIOTRACK [NEXT|<n>] - which of the selected cue's sound tracks plays (a second language, a commentary)\n"
+        "memo: MEMOCUE <text> - a note in the running order; GO shows it and changes nothing\n"
+        "triggers: TRIGGER [KEY F1-F10|F12|NUM0-9 | MIDI <note> | OSC /addr | AT HH:MM[:SS]] [OFF] - what fires the selected cue\n"
+        "        MULTIVIEW [ON|OFF] - the programme and every playlist, in a grid\n"
+        "        MULTIVIEW WINDOW <n> PROGRAMME|DECK<n>|OUTPUT<n>|NEXT|CLOCK|EMPTY - what one window shows\n"
+        "        MULTIVIEW LAYOUT GRID|BIG|BIGTOP|TWOTOP - an even grid, or the first windows big\n"
+        "audio fan-out: AUDIOALSO [ADD <device>|REMOVE <device>|CLEAR] - the same sound to more devices at once\n"
+        "monitor: MONITOR - what you hear, and who is in the room\n"
+        "        MONITOR DEVICE [<name>] - listen here; no name turns it off\n"
+        "        MONITOR DECK <n>|FOLLOW - which playlist you hear\n"
+        "        MONITOR ROOM <n> ON|OFF - whether that playlist reaches its own device\n"
+        "Lower Thirds: LOWERTHIRD - make one | LOWERTEXT / LOWERSUB - its two lines\n"
+        "        BACKDROP [transparent|#rrggbb|name] - a solid colour behind the selected text, Lower Third,\n"
+        "        image or timer\n"
+        "        LOWERSTYLE [none|fade|rise|slide|wipe|NEXT] - how it comes on and goes off\n"
+        "        LOWERANIM [<seconds>] - how long that move takes, each way\n"
+        "crossfade: CROSSFADE [OFF | <0-100> | <from> <to> [<0-100>]] - fade between two\n"
+        "        entries of the focused output's stack (1 is the base)\n"
+        "        VIDEO OUTPUT ASSIGN [<layer>] | UNASSIGN | LAYER [<n>] | HOST [<deck>]\n"
+        "        VIDEO OUTPUT LAYERBLEND [<mode> | NEXT | LIST] - how the focused layer combines with what is under it\n"
+        "        VIDEO OUTPUT LAYERWARP [OFF | <8 corner OFFSETS> | MODE linear/perspective] - map a layer onto a surface\n"
+        "        WARP EDIT [ON|OFF] | WARP SELECT TL|TR|BR|BL|<col> <row> | WARP AT <x> <y> - place a warp point to the pixel\n"
+        "        VIDEO BLEND L|R|T|B|ALL <0-49%> | RESET | CURVE PROJECTOR|LINEAR | GAMMA <1-3> | LIFT <0-20%>\n"
+        "        VIDEO BLEND PAIR <output> <overlap px> - this output left, <output> right, areas and blends set together\n"
+        "        offsets from each corner, as fractions of the layer; 0 0 0 0 0 0 0 0 is no pin\n"
+        "        - which playlists composite onto the focused output, and in what order\n"
+        "settings: GET [key] | SET <key> <value>   (GET alone lists all 86)\n"
+        "dashboard: DASH LIST | DASH <n> | DASH SET <n> <label> | <cmd> [| <glyph>]\n"
+        "           DASH CLEAR <n>   (a slot runs any command line above)\n"
+        "           DASH SHOW|HIDE|TOGGLE | DASH TRACKER|TILES   (put the page, or one view of it, on screen)\n"
+        "        FULLSCREEN DISPLAY <n> TC <hh:mm:ss:ff>   (OUT is trim-out)\n"
+        "vj: VJ ON|OFF|TOGGLE | VJ MIX <0-1> | VJ BLEND [mode]\n"
+        "    blends: dissolve add screen multiply lighten darken subtract\n"
+        "            undercut infiltrate ember   (no argument cycles)\n"
+        "    VJ TAP | VJ BPM <n> | VJ CLOCK <on|off>  (follow an external MIDI clock)\n"
+        "    VJ QUANTISE <on|off> | VJ DECKS <a> <b> | VJ STATUS\n"
+        "effects: FX LIST | FX ADD <effect> [amount] | FX AMOUNT <n> <0-1> | FX GET <n> | FX CLEAR\n"
+        "         FX PARAM <n> <A-D> <0-1>   (each effect's own shaping controls)\n"
+        "         FX COLOUR <n> [A-D] #rrggbb   (the effect's colour, or a hue slot's)\n"
+        "         FX LFO <n> <A-E> on|off|shape|rate|depth|phase|sync|beats [v]\n"
+        "         FX COPY | FX PASTE   (the chain only, not geometry or fades)\n"
+        "code: CODE GET | CODE SET <expression> | CODE EDIT\n"
+        "swirl: SWIRL [STATUS] | SPEED <0-3> | TWIST <0-4> | PIXELS <64-960> | COLOUR <0-1>\n"
+        "moire: MOIRE [STATUS] | SHAPE <0-5> | PALETTE <0-3> | DENSITY|SPEED|WARP|GREY|CENTREX|CENTREY <0-100>\n"
+        "       MOIRE TURN|HUE <0-360> | MOIRE LFO <control> ON|OFF|SHAPE|RATE|DEPTH|PHASE|SYNC [value]\n"
+        "decklink: DECKLINK ON|OFF|TOGGLE | DEVICE <n> | MODE <mode> | 10BIT on|off\n"
+        "          DECKLINK KEYFILL ON|OFF|TOGGLE [key device] | KEYDEVICE <n>\n"
+        "          (key+fill sends the picture and its matte down two cards)\n"
+        "webmonitor: WEBMONITOR | WEBMONITOR ON|OFF (programme with sound) | SHARE ON|OFF | SOURCE PROGRAMME|<n> | QR [ON|OFF] | PORT <n> | PIN <pin>|OFF\n"
+        "            WEBMONITOR CONTROL ON|OFF (PIN-protected phone controls at /remote)\n"
+        "fixtures: FIXTURE LIST | FIXTURE ADD <name> dimmer|rgb|rgbw|rgba|drgb|dcct <universe> [<address>]\n"
+        "          FIXTURE FIND <name> | FIXTURE REMOVE <name> | FIXTURE DIP <name> <%>|LEAVE\n"
+        "          VIDEODIP [ON|OFF] | VIDEODIP FADE <seconds> (dip marked fixtures while a video rolls)\n"
+        "          DMXCUE FIXTURE <name> <level%>|LEAVE [<colour>] | DMXCUE LFO <name> LEVEL|COLOUR ON|OFF [<Hz>] [<depth%>]\n"
+        "          DMXCUE LEVELS <universe> [<first>] [<count>] [SACN] (what is going out)\n"
+        "limiter: LIMITER [ON|OFF] [CEILING <dB>] [DEVICE <name>] (a ceiling on a playback device, after the mix)\n"
+        "         OUTPUTFX [ADD hpf|lpf|tilt|comp|width | SET <n> <0-100> | REMOVE <n> | BYPASS ON|OFF | CLEAR]\n"
+        "         [DEVICE <name>] (effects on the device before the limiter)\n"
+        "mic: MIC | MIC ADD [<device>|TEST] | MIC LIST | MIC INPUT SETTINGS|TEST|<device>\n"
+        "     MIC CHANNEL L|R|STEREO | MIC GAIN <dB> (a live input as a cue on a deck)\n"
+        "scopes: SCOPES [PROGRAM|SCOPES|BOTH|TOGGLE] | SCOPES BIG waveform|parade|vector|diamond|histogram|\n"
+        "        falsecolour|sound|OFF | SCOPES FREEZE [ON|OFF] | SCOPES MATRIX 709|2020\n"
+        "        SCOPES SOURCE PROGRAMME|<n> | SCOPES STATS (the programme output, full raster; HDR in nits)\n"
+        "        SCOPES SOUND [RESET] (phase, third octaves, R 128 loudness and true peak of the focused playlist)\n"
+        "trust:  TRUST <ip|a.b.c.d/bits> | TRUST REMOVE <entry> | TRUST LAST | TRUST LIST | TRUST CLEAR\n"
+        "        (with Listen on: all interfaces, only these machines may control this one)\n"
+        "        COMPANIONPASS <passphrase>|OFF - other machines must send AUTH <passphrase> first\n"
+        "      (programme with sound in any browser; /outputs shows individual outputs)\n"
+        "vmix: VMIX | VMIX ON|OFF|TOGGLE | VMIX PORTS <http> <tcp>\n"
+        "      (answers the vMix HTTP and TCP APIs, so a Stream Deck plugin or\n"
+        "       panel built for a vMix rig drives this desk unchanged)\n"
+        "watch: WATCH | WATCH <deck> <folder> | WATCH <deck> OFF\n"
+        "       (media dropped in the folder joins that playlist by itself)\n"
+        "text mode: ASCII ON|OFF|TOGGLE | STATUS | INK | SET | SHUFFLE | PRESET\n"
+        "           ASCII FONT | GLYPHS [chars] | CHAOS <0-1> | WOBBLE <0-1>\n"
+        "           ASCII WOBBLEMODE [drift|flow|hue] | COLS <n> | GLITCH | PHRASES | HOLD\n"
+        "record: RECORD [on|off|toggle]  (same action as the RECORD button on the bar)\n"
+        "        RECFORMAT <WxH|program> [fps|program]  (recording standard + rate)\n"
+        "        RECCODEC <h264|hevc|prores_lt|prores_422|prores_hq|prores_4444|dnxhr_lb|dnxhr_sq|dnxhr_hq|dnxhr_hqx>\n"
+        "        RECTC <hh:mm:ss:ff|timeofday> [df|ndf|auto]   RECSEGMENT <minutes> [megabytes]\n"
+        "cue indices are 1-based; every command answers 'OK <VERB>' or 'ERR unknown command: <VERB>'\n");
+      return true;
+    }
+    if (upper == "STATUS JSON" || upper == "STATE JSON") {
+      std::string snapshotJson;
+      {
+        std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+        snapshotJson = statusSnapshotJson_;
+      }
+      if (snapshotJson.empty()) {
+        snapshotJson = "{\"app\":\"DECKBOY_0.01\",\"deckCount\":0,\"decks\":[]}\n";
+      }
+      sendSnapshot(snapshotJson);
+      return true;
+    }
+    if (upper == "STATUS" || upper == "STATE" || upper == "STATUS ALL" || upper == "STATE ALL") {
+      std::string snapshot;
+      {
+        std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+        snapshot = statusSnapshot_;
+      }
+      if (snapshot.empty()) {
+        snapshot = "DECKBOY_0.01 decks=0\n";
+      }
+      sendSnapshot(snapshot);
+      return true;
+    }
+    if (upper == "STATUS CUES" || upper == "STATE CUES") {
+      std::string cueSnapshot;
+      {
+        std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+        cueSnapshot = statusCueSnapshot_;
+      }
+      if (cueSnapshot.empty()) {
+        cueSnapshot = "DECKBOY_0.01 cues decks=0\n";
+      }
+      sendSnapshot(cueSnapshot);
+      return true;
+    }
+    if (upper == "FINDSTATUS" || upper == "STATUS FIND" || upper == "STATE FIND") {
+      std::string cueSnapshot;
+      {
+        std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+        cueSnapshot = statusCueSnapshot_;
+      }
+      if (cueSnapshot.empty()) {
+        cueSnapshot = "DECKBOY_0.01 cues find=none\n";
+      } else {
+        size_t newline = cueSnapshot.find('\n');
+        cueSnapshot = newline == std::string::npos
+          ? cueSnapshot + "\n"
+          : cueSnapshot.substr(0, newline + 1);
+      }
+      sendSnapshot(cueSnapshot);
+      return true;
+    }
+
+    if (upper.rfind("STATUS ", 0) == 0 || upper.rfind("STATE ", 0) == 0) {
+      auto parts = splitWhitespace(query);
+      if (parts.size() >= 2) {
+        try {
+          int deckIndex = std::stoi(parts[1]) - 1;
+          std::string deckSnapshot;
+          {
+            std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+            if (deckIndex >= 0 && deckIndex < static_cast<int>(statusDeckSnapshots_.size())) {
+              deckSnapshot = statusDeckSnapshots_[deckIndex];
+            }
+          }
+          if (!deckSnapshot.empty()) {
+            sendSnapshot(deckSnapshot);
+            return true;
+          }
+        } catch (...) {
+        }
+      }
+    }
+
+    return false;
+  }
+
+  bool startCompanionControl() {
+    const char* portEnv = std::getenv("DECKBOY_COMPANION_PORT");
+    if (portEnv && *portEnv) {
+      try {
+        companionPort_ = std::clamp(std::stoi(portEnv), 1, 65535);
+      } catch (...) {
+        companionPort_ = 5510;
+      }
+    }
+
+    companionTcpListen_ = createBoundSocket(SOCK_STREAM, companionPort_, true, !project_.allowRemoteNetwork);
+    companionUdpSocket_ = createBoundSocket(SOCK_DGRAM, companionPort_, false, !project_.allowRemoteNetwork);
+    if (companionTcpListen_ == kInvalidSocket || companionUdpSocket_ == kInvalidSocket) {
+      closeSocket(companionTcpListen_);
+      closeSocket(companionUdpSocket_);
+      companionTcpListen_ = kInvalidSocket;
+      companionUdpSocket_ = kInvalidSocket;
+      companionReady_ = false;
+      // Windows silently reserves shifting port ranges for Hyper-V/WinNAT
+      // (netsh int ipv4 show excludedportrange) — the bind fails with
+      // WSAEACCES while netstat shows the port free. Without this warning
+      // the operator's Companion/remote control just dies invisibly.
+      triggerToast("COMPANION PORT " + std::to_string(companionPort_) +
+                   " UNAVAILABLE - remote control offline (change port in settings)");
+      std::cerr << "companion-control: could not bind tcp/udp port " << companionPort_
+                << " (port in use or inside a Windows excluded port range)\n";
+      return false;
+    }
+
+    companionStop_.store(false);
+    companionThread_ = std::thread([this]() {
+      companionLoop();
+    });
+    companionReady_ = true;
+    return true;
+  }
+
+  void stopCompanionControl() {
+    companionStop_.store(true);
+    if (companionThread_.joinable()) {
+      companionThread_.join();
+    }
+    {
+      std::lock_guard<std::mutex> lk(companionClientsMutex_);
+      for (auto client : companionClients_) {
+        closeSocket(client);
+      }
+      companionClients_.clear();
+      companionClientBuffers_.clear();
+      companionClientReplies_.clear();
+      companionClientGenerations_.clear();
+      companionClientFirstLine_.clear();
+      companionClientRemote_.clear();
+      companionClientAuthed_.clear();
+      companionClientAuthFailures_.clear();
+      companionReplyStartedAt_.clear();
+      companionDrainingClients_.clear();  // sockets already closed by the loop above
+    }
+    oscSubscribers_.clear();
+    lastOscFeedbackPayload_.clear();
+    lastOscFeedbackBroadcastMs_ = 0;
+    lastOscMirrorFeedbackPayload_.clear();
+    lastOscMirrorFeedbackBroadcastMs_ = 0;
+    closeSocket(companionTcpListen_);
+    closeSocket(companionUdpSocket_);
+    companionTcpListen_ = kInvalidSocket;
+    companionUdpSocket_ = kInvalidSocket;
+    companionReady_ = false;
+  }
+
+  void startIntegrationBridges() {
+    startTslTally();
+    startAtemBridgeListener();
+    startArtNetBridgeListener();
+    refreshNmcSyncState();
+    refreshNdiTriggerBridgeState();
+    refreshLtcCaptureState();
+  }
+
+  void stopIntegrationBridges() {
+    stopTslTally();
+    stopLtcIngest();
+    stopNmcSyncBridge();
+    stopNdiTriggerBridge();
+    stopAtemBridgeListener();
+    stopArtNetBridgeListener();
+  }
+
+  // ── The ATEM tally bridge ─────────────────────────────────────────────────
+  // Socket and thread in platform/atem.hpp. What stays is the port resolution
+  // and the two names the settings and project-state screens already call.
+
+  void ensureAtemBridgeHooked() {
+    if (atemBridgeHooked_) {
+      return;
+    }
+    atemBridgeHooked_ = true;
+    atemTallyBridge_.setEventSink(
+      [this](const std::string& line) { enqueueRemoteCommand(line); });
+  }
+
+  void startAtemBridgeListener() {
+    ensureAtemBridgeHooked();
+    atemTallyBridge_.start(resolvedAtemBridgePort(), !project_.allowRemoteNetwork);
+  }
+
+  void stopAtemBridgeListener() { atemTallyBridge_.stop(); }
+
+  int resolvedAtemBridgePort() const {
+    int port = kDefaultAtemBridgePort;
+    const char* env = std::getenv("DECKBOY_ATEM_BRIDGE_PORT");
+    if (env && *env) {
+      try {
+        port = std::stoi(env);
+      } catch (...) {
+      }
+    }
+    return std::clamp(port, 1, 65535);
+  }
+
+  // ── The Art-Net bridge ────────────────────────────────────────────────────
+  //
+  // The socket, the thread and the edge detection live in
+  // platform/artnet_bridge.hpp. What stays is resolving the port from the
+  // project and the environment, and the names the settings screens call.
+
+  void ensureArtNetHooked() {
+    if (artNetHooked_) {
+      return;
+    }
+    artNetHooked_ = true;
+    artNetBridge_.setEventSink(
+      [this](const std::string& line) { enqueueRemoteCommand(line); });
+  }
+
+  void startArtNetBridgeListener() {
+    ensureArtNetHooked();
+    artNetBridge_.start(resolvedArtNetBridgePort(), !project_.allowRemoteNetwork);
+  }
+
+  void stopArtNetBridgeListener() { artNetBridge_.stop(); }
+
+  void restartArtNetBridgeListener() { startArtNetBridgeListener(); }
+
+  int resolvedArtNetBridgePort() const {
+    return normalizeArtNetPort(project_.artNetPort);
+  }
+
+  // THE SHOW FIRST, THE ENVIRONMENT SECOND, THE DEFAULT LAST.
+  //
+  // Every one of these used to read the environment and nothing else, which
+  // made NMC unreachable without a launcher script and impossible to save with
+  // the show. The env vars still win over the default so an existing rig is
+  // unchanged; an explicit setting in the show wins over both.
+  std::string resolvedNmcSyncMode() const {
+    if (!project_.nmcMode.empty()) {
+      return normalizeNmcSyncModeToken(project_.nmcMode);
+    }
+    const char* env = std::getenv("DECKBOY_NMC_MODE");
+    return normalizeNmcSyncModeToken(env ? env : "");
+  }
+
+  int resolvedNmcSyncPort() const {
+    if (project_.nmcPort > 0) {
+      return std::clamp(project_.nmcPort, 1, 65535);
+    }
+    int port = kDefaultNmcSyncPort;
+    const char* env = std::getenv("DECKBOY_NMC_PORT");
+    if (env && *env) {
+      try {
+        port = std::stoi(env);
+      } catch (...) {
+      }
+    }
+    return std::clamp(port, 1, 65535);
+  }
+
+  int resolvedNmcSyncLocateIntervalMs() const {
+    int intervalMs = kDefaultNmcLocateIntervalMs;
+    const char* env = std::getenv("DECKBOY_NMC_LOCATE_MS");
+    if (env && *env) {
+      try {
+        intervalMs = std::stoi(env);
+      } catch (...) {
+      }
+    }
+    return std::clamp(intervalMs, 60, 2000);
+  }
+
+  std::string resolvedNmcSyncTargetHost() const {
+    if (!project_.nmcTargetHost.empty()) {
+      return project_.nmcTargetHost;
+    }
+    const char* env = std::getenv("DECKBOY_NMC_HOST");
+    std::string value = env ? trim(env) : std::string();
+    return value.empty() ? "255.255.255.255" : value;
+  }
+
+  // ── The NMC bridge ────────────────────────────────────────────────────────
+  //
+  // The socket, the listener thread and the change detection live in
+  // platform/nmc_sync.cpp. What stays here is the part that genuinely belongs
+  // to the app: reading the settings out of the project and the environment,
+  // and telling the bridge what the transport is doing. These five wrappers
+  // keep the names every other file already calls.
+
+  deckboy::platform::NmcSyncConfig nmcSyncConfig() const {
+    deckboy::platform::NmcSyncConfig config;
+    config.enabled = project_.nmcSyncEnabled;
+    config.mode = resolvedNmcSyncMode();
+    config.port = resolvedNmcSyncPort();
+    config.targetHost = resolvedNmcSyncTargetHost();
+    config.sourceFilter = resolvedNmcSyncSourceFilter();
+    config.locateIntervalMs = resolvedNmcSyncLocateIntervalMs();
+    config.localOnly = !project_.allowRemoteNetwork;
+    return config;
+  }
+
+  // Wired once, on first use: the bridge's listener thread must not touch the
+  // app, so an inbound packet becomes a queued command and an error becomes a
+  // toast, and nothing else crosses.
+  void ensureNmcSyncHooked() {
+    if (nmcSyncHooked_) {
+      return;
+    }
+    nmcSyncHooked_ = true;
+    nmcSync_.setHooks({
+      [this](const std::string& line) { enqueueRemoteCommand(line); },
+      [this](const std::string& message) { triggerToast(message); },
+    });
+  }
+
+  void refreshNmcSyncState() {
+    ensureNmcSyncHooked();
+    nmcSync_.refresh(nmcSyncConfig());
+  }
+
+  void stopNmcSyncBridge() { nmcSync_.stop(); }
+
+  // The settings screens call this after a change. It is refresh() under the
+  // old name: the bridge starts, stops or rebinds to match what the project
+  // now says, which is what every one of those call sites meant.
+  void startNmcSyncBridge() { refreshNmcSyncState(); }
+
+  std::string describeNmcSyncRuntime() const {
+    return nmcSync_.describe(nmcSyncConfig());
+  }
+
+  void tickNmcSyncOutput() {
+    MediaEngine* engine = focusedMediaEngine();
+    const Cue* activeCue = activeCuePtr();
+    const TransportState state = engine ? engine->state() : TransportState::Stopped;
+    const double seconds = engine ? engine->position() : 0.0;
+    nmcSync_.tickOutput(nmcSyncConfig(), state, seconds,
+                        engine != nullptr && activeCue != nullptr);
+  }
+
+  std::string resolvedNmcSyncSourceFilter() const {
+    if (!project_.nmcSourceFilter.empty()) {
+      return project_.nmcSourceFilter;
+    }
+    const char* env = std::getenv("DECKBOY_NMC_SOURCE");
+    return env ? trim(env) : std::string();
+  }
+
+
+
+
+
+
+
+
+  // ── The ATEM switcher client ──────────────────────────────────────────────
+  // The protocol, the session and the packet parsing live in
+  // platform/atem.hpp. What stays is reading the operator's switcher settings
+  // out of the project and the two names the rest of the app already calls.
+
+  void ensureAtemSwitcherHooked() {
+    if (atemSwitcherHooked_) {
+      return;
+    }
+    atemSwitcherHooked_ = true;
+    atemSwitcher_.setEventSink(
+      [this](const std::string& line) { enqueueRemoteCommand(line); });
+  }
+
+  void startAtemSwitcherClient() {
+    ensureAtemSwitcherHooked();
+    atemSwitcher_.start(project_.atemTallyTriggerEnabled,
+                        project_.atemSwitcherHost, project_.atemTallyInput);
+  }
+
+  void stopAtemSwitcherClient() { atemSwitcher_.stop(); }
+
+
+
+
+
+
+
+
+
+
+
+
+  std::string configuredNdiTriggerSourceFilter() const {
+    const char* env = std::getenv("DECKBOY_NDI_TRIGGER_SOURCE");
+    return env ? trim(env) : std::string();
+  }
+
+  static std::string normalizedNdiMetadataPayload(std::string payload) {
+    auto replaceAll = [&](const std::string& from, const std::string& to) {
+      if (from.empty()) {
+        return;
+      }
+      size_t pos = 0;
+      while ((pos = payload.find(from, pos)) != std::string::npos) {
+        payload.replace(pos, from.size(), to);
+        pos += to.size();
+      }
+    };
+    replaceAll("&quot;", "\"");
+    replaceAll("&apos;", "'");
+    replaceAll("&lt;", "<");
+    replaceAll("&gt;", ">");
+    replaceAll("&amp;", "&");
+    return trim(payload);
+  }
+
+  static std::optional<std::string> xmlAttributeValueCaseInsensitive(
+      const std::string& payload,
+      const std::string& attributeName) {
+    if (payload.empty() || attributeName.empty()) {
+      return std::nullopt;
+    }
+    std::string haystack = toUpper(payload);
+    std::string needle = toUpper(attributeName);
+    size_t pos = 0;
+    while ((pos = haystack.find(needle, pos)) != std::string::npos) {
+      size_t cursor = pos + needle.size();
+      while (cursor < haystack.size() && std::isspace(static_cast<unsigned char>(haystack[cursor]))) {
+        ++cursor;
+      }
+      if (cursor >= haystack.size() || haystack[cursor] != '=') {
+        pos += needle.size();
+        continue;
+      }
+      ++cursor;
+      while (cursor < haystack.size() && std::isspace(static_cast<unsigned char>(haystack[cursor]))) {
+        ++cursor;
+      }
+      if (cursor >= payload.size()) {
+        break;
+      }
+      char quote = payload[cursor];
+      if (quote == '"' || quote == '\'') {
+        ++cursor;
+        size_t end = payload.find(quote, cursor);
+        if (end == std::string::npos) {
+          break;
+        }
+        return normalizedNdiMetadataPayload(payload.substr(cursor, end - cursor));
+      }
+      size_t end = cursor;
+      while (end < payload.size() && !std::isspace(static_cast<unsigned char>(payload[end])) &&
+             payload[end] != '>' && payload[end] != '/') {
+        ++end;
+      }
+      return normalizedNdiMetadataPayload(payload.substr(cursor, end - cursor));
+    }
+    return std::nullopt;
+  }
+
+  static std::optional<std::string> xmlElementTextCaseInsensitive(
+      const std::string& payload,
+      const std::string& elementName) {
+    if (payload.empty() || elementName.empty()) {
+      return std::nullopt;
+    }
+    std::string upperPayload = toUpper(payload);
+    std::string openNeedle = "<" + toUpper(elementName);
+    size_t open = upperPayload.find(openNeedle);
+    if (open == std::string::npos) {
+      return std::nullopt;
+    }
+    size_t openEnd = payload.find('>', open);
+    if (openEnd == std::string::npos) {
+      return std::nullopt;
+    }
+    std::string closeNeedle = "</" + toUpper(elementName) + ">";
+    size_t close = upperPayload.find(closeNeedle, openEnd + 1);
+    if (close == std::string::npos || close <= openEnd + 1) {
+      return std::nullopt;
+    }
+    return normalizedNdiMetadataPayload(payload.substr(openEnd + 1, close - openEnd - 1));
+  }
+
+  static bool ndiSourceNameMatchesFilter(const std::string& sourceName, const std::string& filter) {
+    if (filter.empty()) {
+      return true;
+    }
+    std::string sourceUpper = toUpper(sourceName);
+    std::string filterUpper = toUpper(filter);
+    return sourceUpper == filterUpper || sourceUpper.find(filterUpper) != std::string::npos;
+  }
+
+  const NdiTriggerRuntimeSource* chooseNdiTriggerSource(
+      const NdiTriggerRuntimeSource* sources,
+      std::uint32_t count,
+      const std::string& filter,
+      const std::string& preferredName) const {
+    if (!sources || count == 0) {
+      return nullptr;
+    }
+    if (!preferredName.empty()) {
+      for (std::uint32_t i = 0; i < count; ++i) {
+        std::string sourceName = sources[i].p_ndi_name ? trim(sources[i].p_ndi_name) : std::string();
+        if (!sourceName.empty() && toUpper(sourceName) == toUpper(preferredName)) {
+          return &sources[i];
+        }
+      }
+    }
+    if (!filter.empty()) {
+      for (std::uint32_t i = 0; i < count; ++i) {
+        std::string sourceName = sources[i].p_ndi_name ? trim(sources[i].p_ndi_name) : std::string();
+        if (!sourceName.empty() && ndiSourceNameMatchesFilter(sourceName, filter)) {
+          return &sources[i];
+        }
+      }
+      return nullptr;
+    }
+    return &sources[0];
+  }
+
+  void ndiTriggerLoop() {
+    ndiTriggerRunning_.store(true);
+    void* finder = nullptr;
+    void* receiver = nullptr;
+    auto cleanup = [&]() {
+      if (receiver && ndiTriggerApi_.recvDestroyFn) {
+        ndiTriggerApi_.recvDestroyFn(receiver);
+        receiver = nullptr;
+      }
+      if (finder && ndiTriggerApi_.findDestroyFn) {
+        ndiTriggerApi_.findDestroyFn(finder);
+        finder = nullptr;
+      }
+      ndiTriggerRunning_.store(false);
+    };
+
+    if (!ndiTriggerApi_.ensureLoaded()) {
+      ndiTriggerLastError_ = ndiTriggerApi_.loadError.empty() ? "ndi runtime missing" : ndiTriggerApi_.loadError;
+      ndiTriggerRunning_.store(false);
+      return;
+    }
+
+    finder = ndiTriggerApi_.findCreateFn ? ndiTriggerApi_.findCreateFn(nullptr) : nullptr;
+    if (!finder) {
+      ndiTriggerLastError_ = "ndi source discovery unavailable";
+      ndiTriggerRunning_.store(false);
+      return;
+    }
+    receiver = ndiTriggerApi_.recvCreateFn ? ndiTriggerApi_.recvCreateFn(nullptr) : nullptr;
+    if (!receiver) {
+      ndiTriggerLastError_ = "ndi trigger receiver unavailable";
+      cleanup();
+      return;
+    }
+
+    ndiTriggerLastError_.clear();
+    ndiTriggerLastAnnouncedError_.clear();
+    ndiTriggerConnectedSource_.clear();
+    std::string requestedFilter = configuredNdiTriggerSourceFilter();
+    std::string lastPayload;
+    Uint64 lastPayloadAtMs = 0;
+
+    while (!ndiTriggerStop_.load()) {
+      std::uint32_t sourceCount = 0;
+      const NdiTriggerRuntimeSource* sources =
+        ndiTriggerApi_.findGetCurrentSourcesFn ? ndiTriggerApi_.findGetCurrentSourcesFn(finder, &sourceCount) : nullptr;
+      const NdiTriggerRuntimeSource* chosen =
+        chooseNdiTriggerSource(sources, sourceCount, requestedFilter, ndiTriggerConnectedSource_);
+      std::string chosenName = (chosen && chosen->p_ndi_name) ? trim(chosen->p_ndi_name) : std::string();
+      if (chosen && !chosenName.empty() && chosenName != ndiTriggerConnectedSource_) {
+        ndiTriggerApi_.recvConnectFn(receiver, chosen);
+        ndiTriggerConnectedSource_ = chosenName;
+        ndiTriggerLastError_.clear();
+      } else if (!chosen && !requestedFilter.empty() && ndiTriggerConnectedSource_.empty()) {
+        ndiTriggerLastError_ = "ndi trigger source not found";
+      }
+
+      NdiTriggerRuntimeMetadataFrame metadata {};
+      int frameType = ndiTriggerApi_.recvCaptureFn
+        ? ndiTriggerApi_.recvCaptureFn(receiver, nullptr, nullptr, &metadata, 250)
+        : 0;
+      if (frameType == 3) {
+        std::string payload;
+        if (metadata.p_data) {
+          if (metadata.length > 0) {
+            payload.assign(metadata.p_data, metadata.p_data + metadata.length);
+          } else {
+            payload = metadata.p_data;
+          }
+        }
+        if (ndiTriggerApi_.recvFreeMetadataFn) {
+          ndiTriggerApi_.recvFreeMetadataFn(receiver, &metadata);
+        }
+        payload = trim(payload);
+        if (!payload.empty()) {
+          Uint64 now = SDL_GetTicks();
+          if (!(payload == lastPayload && now - lastPayloadAtMs < 250)) {
+            enqueueRemoteCommand("NDIEVENT " + payload);
+            lastPayload = payload;
+            lastPayloadAtMs = now;
+          }
+        }
+        continue;
+      }
+      if (frameType == 4) {
+        ndiTriggerLastError_ = "ndi trigger capture error";
+      } else if (frameType == 100) {
+        ndiTriggerConnectedSource_.clear();
+      }
+      if (ndiTriggerApi_.findWaitForSourcesFn) {
+        ndiTriggerApi_.findWaitForSourcesFn(finder, 150);
+      } else {
+        SDL_Delay(120);
+      }
+    }
+
+    cleanup();
+  }
+
+  bool startNdiTriggerBridge() {
+    stopNdiTriggerBridge();
+    if (!ndiTriggerApi_.ensureLoaded()) {
+      ndiTriggerLastError_ = ndiTriggerApi_.loadError.empty() ? "ndi runtime missing" : ndiTriggerApi_.loadError;
+      return false;
+    }
+    ndiTriggerStop_.store(false);
+    ndiTriggerRunning_.store(false);
+    ndiTriggerThread_ = std::thread([this]() { ndiTriggerLoop(); });
+    return true;
+  }
+
+  void stopNdiTriggerBridge() {
+    ndiTriggerStop_.store(true);
+    if (ndiTriggerThread_.joinable()) {
+      ndiTriggerThread_.join();
+    }
+    ndiTriggerApi_.shutdown();
+    ndiTriggerConnectedSource_.clear();
+  }
+
+  void refreshNdiTriggerBridgeState() {
+    if (!project_.ndiTriggerEnabled) {
+      stopNdiTriggerBridge();
+      ndiTriggerLastError_.clear();
+      ndiTriggerLastAnnouncedError_.clear();
+      ndiTriggerRestartBlockedUntilMs_ = 0;
+      return;
+    }
+    if (ndiTriggerThread_.joinable()) {
+      if (ndiTriggerRunning_.load()) {
+        return;
+      }
+      ndiTriggerThread_.join();
+    }
+    Uint64 now = SDL_GetTicks();
+    if (ndiTriggerRestartBlockedUntilMs_ > now) {
+      if (!ndiTriggerLastError_.empty() && ndiTriggerLastError_ != ndiTriggerLastAnnouncedError_) {
+        triggerToast("ndi trigger: " + ndiTriggerLastError_);
+        ndiTriggerLastAnnouncedError_ = ndiTriggerLastError_;
+      }
+      return;
+    }
+    if (!startNdiTriggerBridge()) {
+      ndiTriggerRestartBlockedUntilMs_ = now + 3000;
+      if (!ndiTriggerLastError_.empty() && ndiTriggerLastError_ != ndiTriggerLastAnnouncedError_) {
+        triggerToast("ndi trigger: " + ndiTriggerLastError_);
+        ndiTriggerLastAnnouncedError_ = ndiTriggerLastError_;
+      }
+      return;
+    }
+    ndiTriggerRestartBlockedUntilMs_ = 0;
+  }
+
+  void resetMidiMtcDecoder() {
+    midiMtcDecoder_.reset();
+    midiMtcLastSentSeconds_ = -1.0;
+    midiMtcLastSentFps_ = 0.0;
+  }
+
+  // ONE quarter frame in, at most one command out -- and this is the only
+  // place that turns timecode into a command, on every platform.
+  //
+  // The assembly moved to core::MtcQuarterFrameDecoder, which is pure
+  // arithmetic on bytes and has nothing to do with which library delivered
+  // them. What is left here is the part that IS Deckboy's: how much the time
+  // has to move before it is worth telling the rest of the app.
+  //
+  // That filter is why this has to be shared rather than written twice. A
+  // sender transmits a nibble every quarter frame, so a naive path would emit
+  // a command four times per frame for a clock that is simply running -- and
+  // two implementations of "has it changed enough" would let Linux and Windows
+  // disagree about what the same sender is doing. Half a frame is the
+  // threshold: below it the time is the same time, above it somebody has
+  // jumped.
+  std::string mtcCommandFromQuarterFrame(int dataByte) {
+    const auto decoded = midiMtcDecoder_.feed(dataByte);
+    if (!decoded) {
+      return {};   // fewer than eight nibbles seen; nothing is known yet
+    }
+    const double seconds = decoded->seconds;
+    const double fps = decoded->fps;
+    const bool changed =
+      std::fabs(seconds - midiMtcLastSentSeconds_) > (0.5 / std::max(1.0, fps)) ||
+      std::fabs(fps - midiMtcLastSentFps_) > 0.01;
+    if (!changed) {
+      return {};
+    }
+    midiMtcLastSentSeconds_ = seconds;
+    midiMtcLastSentFps_ = fps;
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(6) << seconds;
+    std::ostringstream fpsText;
+    if (std::fabs(fps - 29.97) < 0.01) {
+      fpsText << "29.97";
+    } else {
+      fpsText << std::fixed << std::setprecision(2) << fps;
+    }
+    return "MTCEXT " + ss.str() + " " + fpsText.str();
+  }
+
+  // WHAT TO TYPE INTO THE OTHER BOX.
+  //
+  // A HyperDeck controller asks for an address, and the operator has to get it
+  // from somewhere. "Look it up in ipconfig" is not an answer on a show floor,
+  // and "the first NIC" is the wrong answer on any machine with more than one.
+  // Resolved towards the switcher when we know it, so a Deckboy on both a house
+  // network and a video LAN reports the address that side can actually reach.
+  std::string hyperDeckReachableAddress() {
+    std::string addr = deckboy::platform::video::localAddressTowards(
+      project_.atemSwitcherHost);
+    if (addr.empty()) addr = deckboy::platform::video::localAddressTowards({});
+    if (addr.empty()) addr = "127.0.0.1";
+    return addr + ":" + std::to_string(hyperDeckPort_);
+  }
+
+  void startHyperDeckServer() {
+    if (!project_.hyperDeckEnabled) {
+      return;
+    }
+    const char* portEnv = std::getenv("DECKBOY_HYPERDECK_PORT");
+    if (portEnv && *portEnv) {
+      try { hyperDeckPort_ = std::clamp(std::stoi(portEnv), 1, 65535); } catch (...) {}
+    }
+    hyperDeckListenFd_ = createBoundSocket(SOCK_STREAM, hyperDeckPort_, true, !project_.allowRemoteNetwork);
+    if (hyperDeckListenFd_ == kInvalidSocket) return;
+    hyperDeckRunning_.store(true);
+    hyperDeckThread_ = std::thread([this]() { hyperDeckLoop(); });
+  }
+
+  void stopHyperDeckServer() {
+    hyperDeckRunning_.store(false);
+    if (hyperDeckListenFd_ != kInvalidSocket) {
+      closeSocket(hyperDeckListenFd_);
+      hyperDeckListenFd_ = kInvalidSocket;
+    }
+    if (hyperDeckThread_.joinable()) hyperDeckThread_.join();
+  }
+
+  // Translate a parsed MIDI event into the same remote command the ALSA path
+  // produces, and queue it the same way. Shared so the two transports can't
+  // drift apart in what a given controller message does.
+  void queueMidiCommand(std::string cmd, std::string message = {}, int note = -1) {
+    if (cmd.empty()) {
+      return;
+    }
+    // Into the monitor as the message the controller sent, so its row can
+    // say what that turned into and whether it did anything. Timecode has no
+    // message: a hundred quarter frames a second would bury everything else.
+    if (message.empty()) {
+      enqueueRemoteCommand(std::move(cmd));
+      return;
+    }
+    enqueueMonitoredCommand(std::move(cmd), "MIDI", midiMonitorPort(), std::move(message),
+                            kInvalidSocket, 0, false, note);
+  }
+
+  // The port, as the monitor names it. Read on the MIDI thread, so a copy
+  // taken when the input was opened, never the show's field.
+  std::string midiMonitorPort() {
+    std::lock_guard<std::mutex> lock(inputMonitorMutex_);
+    return midiMonitorPortName_.empty() ? std::string("first port") : midiMonitorPortName_;
+  }
+
+  // Put MIDI back on the port its operator asked for, when it comes back.
+  //
+  // The audio path grew this first and the reasoning is identical: a control
+  // surface knocked out of a USB hub, or a rack powered on after the PC, left
+  // the deck with MIDI armed and nothing connected until somebody restarted the
+  // application. The difference is that MIDI now REFUSES an absent port rather
+  // than binding to a stranger, so the recovery is simply to try again once the
+  // port list changes -- there is no wrong device to move off first.
+  //
+  // Runs on a slow poll rather than an event: neither RtMidi nor the ALSA
+  // sequencer gives us a device-change callback here, and the cost is one
+  // enumeration every few seconds while MIDI is armed and not connected.
+  void reconcileMidiInput() {
+    if (!midiEnabled_ || midiDeviceName_().empty()) {
+      // Nothing armed, or no particular port asked for. A refused arm is left
+      // refused on purpose: the operator asked once and was told why, and a
+      // deck that silently connects itself minutes later is worse than one that
+      // waits to be asked again.
+      return;
+    }
+    if (midiDeviceInUse_ == midiDeviceName_()) {
+      // Where it should be -- unless the surface has since been unplugged, and
+      // nothing else would ever notice. RtMidi holds a port that has gone away
+      // without erroring; the callbacks simply stop, which from the operator's
+      // side is indistinguishable from a quiet desk.
+#if defined(DECKBOY_HAS_MIDI)
+      bool stillThere = false;
+      for (const auto& device : deckboy::platform::midi::MidiInput::listDevices()) {
+        if (device.name == midiDeviceName_()) {
+          stillThere = true;
+          break;
+        }
+      }
+      if (!stillThere) {
+        triggerToast("midi: " + midiDeviceName_() + " disconnected");
+        stopMidiInput();
+        midiDeviceInUse_.clear();   // the poll below reclaims it when it returns
+      }
+#endif
+      return;
+    }
+    // QUIETLY. The retry runs every few seconds forever while the surface is
+    // away, and startMidiInput says "not found" on each failure -- which as a
+    // one-off is exactly right and as a repeating toast is unusable.
+    if (startMidiInput(/*quiet=*/true)) {
+      triggerToast("midi: back on " + midiDeviceName_());
+    }
+  }
+
+  // ── Update check ──────────────────────────────────────────────────────────
+  //
+  // THE RULES THIS OBEYS, because it is a live-show tool:
+  //
+  //   It never installs anything by itself. It asks, it tells you, and the
+  //   installing is a button you press.
+  //   It never runs while anything is live. Not the check, not the download,
+  //   and certainly not the installer.
+  //   It is off until switched on. This is the only connection Deckboy opens
+  //   outward of its own accord, and a machine on a venue's network should do
+  //   nothing nobody asked for.
+  //
+  // The fetching is curl, which ships with Windows 10 and later, with macOS,
+  // and with essentially every Linux. That keeps TLS out of this codebase
+  // entirely -- the alternative was linking a TLS stack to read one number.
+
+  struct UpdateInfo {
+    std::string version;        // "0.90.0", empty when there is nothing newer
+    std::string assetName;
+    std::string assetUrl;
+    std::uintmax_t assetSize = 0;
+  };
+
+  // Declared here rather than with the rest of the app's state, because
+  // UpdateInfo is declared here: this file is included into the class body, so
+  // a member of that type has to come after it.
+  //
+  // Written by a worker (the curl call blocks for as long as the network takes)
+  // and read by the render loop, so everything but the running flag is under
+  // the mutex.
+  std::atomic<bool> updateCheckRunning_ {false};
+  std::mutex updateMutex_;
+  UpdateInfo updateFound_;              // version empty = nothing newer
+  std::string updateStatus_;            // one line, shown in settings
+  std::string updateReadyInstaller_;    // a verified download waiting to be run
+  std::string updateRunningInstaller_;  // spared from the startup sweep
+  bool updateAnnouncePending_ = false;  // the render loop owes a toast
+
+  // INSTALL & RESTART, SEEN TO HAPPEN (James, 2026-10-29: "sometimes i sit
+  // there and wonder whether the click worked"). The press used to do the
+  // whole hand-over inside the click: start the installer, sleep the main
+  // thread 1.2 s to see that it lived, quit. The window froze with the button
+  // exactly as it was, then went. Now the press only asks, the card goes up,
+  // and serviceUpdateInstall takes a step per frame once the card is on screen.
+  enum class UpdateInstallStage { None, Asked, Starting, Closing };
+  UpdateInstallStage updateInstallStage_ = UpdateInstallStage::None;
+  Uint64 updateInstallStageAtMs_ = 0;
+  int updateInstallFramesShown_ = 0;     // card frames drawn in this stage
+  int updateInstallCardFrames_ = 0;      // and since the press, for UPDATE STATUS
+  std::string updateInstallPath_;
+  std::string updateInstallVersion_;
+  // Held until the moment we quit, so a deck that starts in the meantime (a
+  // schedule, timecode, a GO over the network) can still call it off.
+  ChildProcess updateInstallerChild_;
+
+  // "v1.2.3" / "1.2.3" -> {1,2,3}. Anything unparseable sorts as {0,0,0}, so a
+  // tag we do not understand can never look newer than what is running.
+  static std::array<int, 3> parseVersionTriple(const std::string& text) {
+    std::array<int, 3> out {0, 0, 0};
+    std::size_t at = (!text.empty() && (text[0] == 'v' || text[0] == 'V')) ? 1 : 0;
+    for (int part = 0; part < 3 && at < text.size(); ++part) {
+      int value = 0;
+      bool any = false;
+      while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
+        if (value < 100000) value = value * 10 + (text[at] - '0');
+        any = true;
+        ++at;
+      }
+      if (!any) break;
+      out[static_cast<std::size_t>(part)] = value;
+      if (at < text.size() && text[at] == '.') ++at;
+    }
+    return out;
+  }
+
+  // Pull one string field out of the releases JSON.
+  //
+  // A hand parser rather than a JSON library, because this reads exactly three
+  // fields from one endpoint whose shape is fixed, and adding a dependency to
+  // do that would be the larger change. It is deliberately literal: find the
+  // key, expect a quoted value, stop at the closing quote.
+  static std::string jsonStringField(const std::string& json, const std::string& key,
+                                     std::size_t from = 0) {
+    const std::string needle = "\"" + key + "\"";
+    std::size_t at = json.find(needle, from);
+    if (at == std::string::npos) return "";
+    at = json.find(':', at + needle.size());
+    if (at == std::string::npos) return "";
+    ++at;
+    while (at < json.size() && (json[at] == ' ' || json[at] == '\t')) ++at;
+    if (at >= json.size() || json[at] != '"') return "";
+    ++at;
+    std::string out;
+    while (at < json.size() && json[at] != '"') {
+      if (json[at] == '\\' && at + 1 < json.size()) ++at;   // keep it simple: unescape one level
+      out += json[at++];
+    }
+    return out;
+  }
+
+  // Which artefact this build should be offered.
+  //
+  // macOS ships TWO of them. Since v0.99.307 every release carries both an
+  // Apple Silicon and an Intel bundle, and this asked for the arm64 one on
+  // both — so an Intel Mac was offered a build it cannot run, and the update
+  // either installed the wrong architecture or found nothing to install at
+  // all. Ask for the architecture this binary was compiled for; there is no
+  // universal build, so the running process already knows the answer.
+  static std::string updateAssetPatternForPlatform() {
+#if defined(_WIN32)
+    return "-windows-x64-setup.exe";
+#elif defined(__APPLE__)
+#  if defined(__aarch64__) || defined(__arm64__)
+    return "-macos-arm64.dmg";
+#  else
+    return "-macos-x86_64.dmg";
+#  endif
+#else
+    return "-x86_64.AppImage";
+#endif
+  }
+
+  bool anythingIsLive() const {
+    return !whatIsLive().empty();
+  }
+
+  // WHICH thing is live, named, or empty when nothing is.
+  //
+  // The update refused with "stop playback and disarm outputs first" and left
+  // the operator to work out which of the two it meant. Reported from the
+  // field: outputs disarmed, button pressed again, same sentence. Two ways
+  // that happens and neither is visible from the message --
+  //
+  //   - a PAUSED deck is not Stopped, so playback still counts as live and
+  //     disarming outputs cannot help;
+  //   - disarming acts on the FOCUSED output while this asks about every one
+  //     of them, so a second armed output keeps refusing from off screen.
+  //
+  // Naming the blocker is the whole fix. It is the same rule the remote
+  // protocol already follows: a verb that cannot act says which part it could
+  // not do, rather than repeating that it could not.
+  // deckOut / outputOut report WHICH one is blocking, so the caller can put
+  // the operator in front of it. Naming the blocker was half the fix; the
+  // other half is that the thing which clears it has to be reachable.
+  std::string whatIsLive(int* deckOut = nullptr, int* outputOut = nullptr) const {
+    if (deckOut) {
+      *deckOut = -1;
+    }
+    if (outputOut) {
+      *outputOut = -1;
+    }
+    for (std::size_t i = 0; i < deckRuntimes_.size(); ++i) {
+      const auto& runtime = deckRuntimes_[i];
+      if (runtime.mediaEngine &&
+          runtime.mediaEngine->state() != TransportState::Stopped) {
+        const bool paused = runtime.mediaEngine->state() == TransportState::Paused;
+        if (deckOut) {
+          *deckOut = static_cast<int>(i);
+        }
+        return "deck " + std::to_string(i + 1) +
+               (paused ? " is paused, not stopped" : " is playing");
+      }
+    }
+    for (std::size_t i = 0; i < project_.outputs.size(); ++i) {
+      const OutputTarget& output = project_.outputs[i];
+      if (output.enabled) {
+        if (outputOut) {
+          *outputOut = static_cast<int>(i);
+        }
+        return "output " + std::to_string(i + 1) + " is armed";
+      }
+      if (output.streamEnabled) {
+        if (outputOut) {
+          *outputOut = static_cast<int>(i);
+        }
+        return "output " + std::to_string(i + 1) + " is streaming";
+      }
+    }
+    return {};
+  }
+
+  // Put the operator in front of whatever is blocking the update.
+  //
+  // Naming it was not enough on its own, and this is the report that proved
+  // it: "I stop playback and it still says playback is active." STOP acts on
+  // the FOCUSED deck and disarm on the FOCUSED output, while the guard asks
+  // about every one of them -- so a second deck paused off screen refuses
+  // forever while the operator stops the one they can see, over and over.
+  // Focusing the blocker makes the very next STOP or disarm the right one.
+  std::string whatIsLiveAndFocusIt() {
+    int deckIndex = -1;
+    int outputIndex = -1;
+    std::string live = whatIsLive(&deckIndex, &outputIndex);
+    if (deckIndex >= 0) {
+      setFocusedDeckIndex(deckIndex);
+    } else if (outputIndex >= 0) {
+      project_.focusedOutputIndex = outputIndex;
+    }
+    return live;
+  }
+
+  // Ask GitHub what the newest release is. Blocking, so it is called from a
+  // worker; the caller owns the thread.
+  UpdateInfo fetchLatestRelease(std::string& error) const {
+    UpdateInfo info;
+    const std::vector<std::string> args {
+      "curl", "-sS", "-L", "--max-time", "20", "--fail",
+      "-H", "Accept: application/vnd.github+json",
+      "-A", std::string("Deckboy/") + deckboy::core::version::kVersion,
+      "https://api.github.com/repos/Utopian-Academy/Deckboy/releases/latest"
+    };
+    auto body = readAllText(args);
+    if (!body || body->empty()) {
+      error = "could not reach github";
+      return info;
+    }
+    const std::string tag = jsonStringField(*body, "tag_name");
+    if (tag.empty()) {
+      error = "no release found";
+      return info;
+    }
+    const auto latest = parseVersionTriple(tag);
+    const auto running = parseVersionTriple(deckboy::core::version::kVersion);
+    if (!(latest > running)) {
+      return info;                       // up to date; version stays empty
+    }
+    // Find the artefact for this platform, and take the URL and size that sit
+    // beside its name in the same asset object.
+    const std::string want = updateAssetPatternForPlatform();
+    std::size_t at = 0;
+    while ((at = body->find("\"name\"", at)) != std::string::npos) {
+      const std::string name = jsonStringField(*body, "name", at);
+      if (name.size() > want.size() &&
+          name.compare(name.size() - want.size(), want.size(), want) == 0) {
+        info.assetName = name;
+        info.assetUrl = jsonStringField(*body, "browser_download_url", at);
+        const std::size_t sizeAt = body->find("\"size\"", at);
+        if (sizeAt != std::string::npos) {
+          info.assetSize = static_cast<std::uintmax_t>(
+            std::strtoull(body->c_str() + body->find(':', sizeAt) + 1, nullptr, 10));
+        }
+        break;
+      }
+      at += 6;
+    }
+    if (info.assetUrl.empty()) {
+      error = "release has no build for this platform";
+      return info;
+    }
+    info.version = tag;
+    return info;
+  }
+
+  // Kick the check off on a worker. Never blocks the render loop, and never
+  // runs twice at once.
+  void checkForUpdateAsync(bool quiet) {
+    if (updateCheckRunning_.exchange(true)) {
+      return;
+    }
+    if (!quiet) {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      updateStatus_ = "checking...";
+    }
+    std::thread([this, quiet]() {
+      std::string error;
+      UpdateInfo info = fetchLatestRelease(error);
+      {
+        std::lock_guard<std::mutex> lock(updateMutex_);
+        updateFound_ = info;
+        if (!error.empty()) {
+          updateStatus_ = error;
+        } else if (info.version.empty()) {
+          updateStatus_ = std::string("up to date (") + deckboy::core::version::kVersionTag + ")";
+        } else {
+          updateStatus_ = info.version + " is available";
+        }
+        updateAnnouncePending_ = !quiet || !info.version.empty();
+      }
+      updateCheckRunning_ = false;
+    }).detach();
+  }
+
+  // Where a downloaded installer lives: under the state dir, never beside the
+  // application, which may sit in a read-only or signed location.
+#if defined(__APPLE__)
+  // The .app bundle this process is running from, or empty when we are not in
+  // one (a bare binary during development). Contents/MacOS/Deckboy -> up three.
+  fs::path macAppBundlePath() const {
+    const fs::path exe = deckboy::core::Paths::executablePath();
+    if (exe.empty()) {
+      return {};
+    }
+    const fs::path bundle = exe.parent_path().parent_path().parent_path();
+    if (bundle.extension() == ".app") {
+      return bundle;
+    }
+    return {};
+  }
+#endif
+
+  fs::path updateDownloadDir() const {
+    return deckboy::core::Paths::stateDir() / "updates";
+  }
+
+  // TIDY UP AFTER OURSELVES.
+  //
+  // Run at startup: anything left in the update folder has already served its
+  // purpose -- either it was installed, in which case this build IS the
+  // installer's work, or it was abandoned. Either way a 90MB file should not
+  // sit there forever, which is the part of this James asked for by name.
+  void removeStaleUpdateDownloads() {
+    std::error_code ec;
+    const fs::path dir = updateDownloadDir();
+    if (!fs::exists(dir, ec)) {
+      return;
+    }
+    int removed = 0;
+    for (const auto& entry : fs::directory_iterator(dir, ec)) {
+      if (ec) break;
+      if (!entry.is_regular_file(ec)) continue;
+      // Never delete the one we are about to run.
+      if (entry.path().filename().string() == updateRunningInstaller_) continue;
+      std::error_code rmEc;
+      if (fs::remove(entry.path(), rmEc)) ++removed;
+    }
+    if (removed > 0) {
+      showLog("UPDATE-CLEAN", std::to_string(removed) + " old download(s) removed");
+    }
+  }
+
+  // Download the offered build and hand it to the system installer.
+  //
+  // Refuses while anything is live. An update is a restart, and a restart in
+  // the middle of a show is the worst thing this program could do to somebody.
+  void downloadAndInstallUpdate() {
+    UpdateInfo info;
+    {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      info = updateFound_;
+    }
+    if (info.version.empty() || info.assetUrl.empty()) {
+      triggerToast("update: nothing to install");
+      return;
+    }
+    if (const std::string live = whatIsLiveAndFocusIt(); !live.empty()) {
+      // Name it, then FOCUS it: the operator was stopping the deck in front of
+      // them while a different one held the update up.
+      triggerToast("update blocked: " + live + " (now focused)");
+      return;
+    }
+    if (updateCheckRunning_.exchange(true)) {
+      return;
+    }
+    {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      updateStatus_ = "downloading " + info.assetName + "...";
+    }
+    std::thread([this, info]() {
+      std::error_code ec;
+      const fs::path dir = updateDownloadDir();
+      fs::create_directories(dir, ec);
+      const fs::path target = dir / info.assetName;
+      std::error_code rmEc;
+      fs::remove(target, rmEc);
+      const std::vector<std::string> args {
+        "curl", "-sS", "-L", "--fail", "--max-time", "1800",
+        "-A", std::string("Deckboy/") + deckboy::core::version::kVersion,
+        "-o", target.string(), info.assetUrl
+      };
+      const bool fetched = readAllText(args).has_value();
+      std::uintmax_t got = 0;
+      if (fetched) {
+        got = fs::file_size(target, ec);
+        if (ec) got = 0;
+      }
+      // SIZE IS THE CHECK. The release carries no digest to compare against, so
+      // this proves only that the whole file arrived -- which is the failure
+      // that actually happens on a venue connection. A partial installer that
+      // ran anyway would be far worse than one that refuses.
+      const bool complete = fetched && info.assetSize > 0 && got == info.assetSize;
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      if (!complete) {
+        std::error_code cleanEc;
+        fs::remove(target, cleanEc);
+        updateStatus_ = fetched ? "download was incomplete" : "download failed";
+        updateReadyInstaller_.clear();
+      } else {
+        updateReadyInstaller_ = target.string();
+        updateStatus_ = "ready to install " + info.version;
+      }
+      updateAnnouncePending_ = true;
+      updateCheckRunning_ = false;
+    }).detach();
+  }
+
+  // INSTALL & RESTART: the settings button and UPDATE INSTALL. Only asks; the
+  // card is drawn this frame and serviceUpdateInstall does the rest. Answers
+  // why not, or nothing when the install is under way.
+  std::string requestUpdateInstall() {
+    if (updateInstallStage_ != UpdateInstallStage::None) {
+      return {};   // a second press is the same request
+    }
+    std::string installer;
+    std::string version;
+    {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      installer = updateReadyInstaller_;
+      version = updateFound_.version;
+    }
+    // A test names its own installer (tools/check_update_install.py), so the
+    // whole hand-over runs without a release to download.
+    if (const char* standIn = std::getenv("DECKBOY_TEST_UPDATE_INSTALLER");
+        installer.empty() && standIn && *standIn) {
+      installer = standIn;
+    }
+    if (installer.empty()) {
+      return "update: nothing downloaded";
+    }
+    if (const std::string live = whatIsLiveAndFocusIt(); !live.empty()) {
+      // Name it, then FOCUS it: the operator was stopping the deck in front of
+      // them while a different one held the update up.
+      return "update blocked: " + live + " (now focused)";
+    }
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // Only an AppImage can be replaced in place. A tarball or distro build has
+    // no single file to swap and no business being overwritten by us, so the
+    // download is shown where it went, and nothing closes.
+    if (const char* appImage = std::getenv("APPIMAGE"); appImage == nullptr || *appImage == '\0') {
+      deckboy::platform::revealFileInFileManager(installer);
+      triggerToast("update: downloaded to " + installer);
+      return {};
+    }
+#endif
+    updateInstallPath_ = installer;
+    updateInstallVersion_ = version;
+    updateInstallCardFrames_ = 0;
+    setUpdateInstallStage(UpdateInstallStage::Asked);
+    {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      updateStatus_ = "installing " + (version.empty() ? std::string("the update") : version);
+    }
+    showLog("UPDATE-ASK", fs::path(installer).filename().string());
+    return {};
+  }
+
+  void setUpdateInstallStage(UpdateInstallStage stage) {
+    updateInstallStage_ = stage;
+    updateInstallStageAtMs_ = SDL_GetTicks();
+    updateInstallFramesShown_ = 0;
+  }
+
+  // Back to the desk, saying why. The download stays ready to install.
+  void abandonUpdateInstall(const std::string& why) {
+    updateInstallerChild_.stop();   // nothing is installed until it is clicked through
+    updateRunningInstaller_.clear();
+    setUpdateInstallStage(UpdateInstallStage::None);
+    {
+      std::lock_guard<std::mutex> lock(updateMutex_);
+      updateStatus_ = "ready to install " +
+        (updateInstallVersion_.empty() ? std::string("the update") : updateInstallVersion_);
+    }
+    showLog("UPDATE-STOP", why);
+    triggerToast(why, ToastKind::Warning, kToastReadableMs);
+  }
+
+  // The rest of INSTALL & RESTART, a step per frame, each one after the card
+  // saying so has been on screen. Called every tick.
+  void serviceUpdateInstall() {
+    if (updateInstallStage_ == UpdateInstallStage::None) {
+      return;
+    }
+    const Uint64 inStage = SDL_GetTicks() - updateInstallStageAtMs_;
+    // Two frames drawn, so the card is on the screen and not only in a back
+    // buffer before anything here can take time.
+    if (updateInstallFramesShown_ < 2) {
+      return;
+    }
+    // Asked again at every step: a schedule, timecode or a GO over the network
+    // can start a deck after the press, though the desk itself takes no input.
+    if (const std::string live = whatIsLive(); !live.empty()) {
+      abandonUpdateInstall("update stopped: " + live);
+      return;
+    }
+#if defined(_WIN32)
+    // MAKE SURE IT ACTUALLY STARTED BEFORE WE WALK AWAY.
+    //
+    // spawnProcess only reports that CreateProcess accepted the request. The
+    // installer can still die a moment later -- and this code once quit
+    // regardless, so Deckboy vanished and nothing replaced it. From the desk
+    // that is indistinguishable from the button doing nothing, which is
+    // exactly what James saw, twice, with no window and no prompt.
+    //
+    // So it has to stay alive until we quit, and if it does not, Deckboy stays
+    // running and SAYS SO, with the exit code. An updater that cannot install
+    // must at least leave the operator with the application they already had.
+    if (updateInstallStage_ != UpdateInstallStage::Asked) {
+      DWORD code = STILL_ACTIVE;
+      if (updateInstallerChild_.hProcess != INVALID_HANDLE_VALUE &&
+          GetExitCodeProcess(updateInstallerChild_.hProcess, &code) &&
+          code != STILL_ACTIVE) {
+        std::cerr << "update: installer " << updateInstallPath_ << " exited with "
+                  << code << " straight after launch\n";
+        abandonUpdateInstall("update: the installer closed straight away (code " +
+                             std::to_string(code) + ") - not restarting");
+        return;
+      }
+    }
+#endif
+    switch (updateInstallStage_) {
+      case UpdateInstallStage::Asked: {
+        // SAVED NOW, not on the way out. A save that fails at quit keeps the
+        // desk open (saveProjectBeforeQuit), which would leave an installer
+        // running against a Deckboy that does not close.
+        if (!saveProjectBeforeQuit()) {
+          abandonUpdateInstall("update stopped: the show could not be saved - "
+                               "SAVE AS, then install");
+          return;
+        }
+        std::string why;
+        if (!startUpdateInstaller(updateInstallPath_, why)) {
+          abandonUpdateInstall(why);
+          return;
+        }
+        setUpdateInstallStage(UpdateInstallStage::Starting);
+        return;
+      }
+      case UpdateInstallStage::Starting:
+#if defined(_WIN32)
+        // A moment for an installer that is going to die at once to do it.
+        if (inStage < 1200) {
+          return;
+        }
+#endif
+        setUpdateInstallStage(UpdateInstallStage::Closing);
+        return;
+      case UpdateInstallStage::Closing:
+        // Long enough to read that Deckboy is closing on purpose.
+        if (inStage < 900) {
+          return;
+        }
+        // LET IT GO, before the destructor does: ~ChildProcess kills.
+        updateInstallerChild_.release();
+        gShouldQuit.store(true);   // the installer replaces this build; step aside
+        return;
+      case UpdateInstallStage::None:
+        return;
+    }
+  }
+
+  // Start whatever replaces this build, and hold it in updateInstallerChild_.
+  // False, with the reason, when it could not be started.
+  bool startUpdateInstaller(const std::string& installer, std::string& why) {
+    updateRunningInstaller_ = fs::path(installer).filename().string();
+    showLog("UPDATE-RUN", updateRunningInstaller_);
+    // EACH BRANCH IS SELF-CONTAINED, deliberately. The first version declared
+    // `args` in the Windows and macOS arms and shared the spawn below the
+    // #endif -- which the Linux arm, having returned early, never declares, so
+    // the shared code did not compile there at all. Windows never sees that
+    // branch, which is why it took CI to find. Build the other configurations.
+#if defined(_WIN32)
+    // HAND OVER TO THE INSTALLER AND LET IT DO THE RESTART.
+    //
+    // The first attempt at this wrote a PowerShell relauncher that waited for
+    // us, ran the installer, then started the new build. It never worked, in
+    // two different ways: with the original flags PowerShell ran and was
+    // killed when we exited, and with DETACHED_PROCESS it could not start at
+    // all. Both left the script sitting on disk unrun, which is exactly what
+    // the operator saw -- an app that quit and never came back.
+    //
+    // The installer was always the better answer. It is a GUI process, so it
+    // outlives us without any flag cleverness, it knows precisely when the
+    // files are in place, and Inno already had a [Run] entry to launch
+    // Deckboy afterwards -- it was just marked "postinstall", which makes it
+    // a CHECKBOX the operator has to notice. That flag is gone, so the
+    // installer now relaunches on its own.
+    //
+    // Which leaves nothing for this to do but start the installer and get out
+    // of its way.
+    // /fromupdater=1 tells the installer WE started it, which is what lets it
+    // delete itself afterwards. Without the flag it leaves the file alone --
+    // an installer somebody downloaded and ran themselves is theirs to keep.
+    const std::vector<std::string> args {installer, "/fromupdater=1"};
+    // VISIBLE. The operator has to click through this; spawned silently it runs
+    // where nobody can see or reach it, and the update simply never happens.
+    if (!spawnProcess(updateInstallerChild_, args, SpawnOptions::detachedVisible())) {
+      why = "update: could not start the installer";
+      return false;
+    }
+    // Held, not released: serviceUpdateInstall watches it live for 1.2 s, and
+    // lets it go only as Deckboy quits. Released here, ~ChildProcess would not
+    // kill it, but nothing could see that it died either.
+    return true;
+#elif defined(__APPLE__)
+    // INSTALL IT, DON'T JUST SHOW IT.
+    //
+    // This used to `open` the .dmg and tell the operator to drag Deckboy to
+    // Applications -- which is not an update, it is a file manager. The whole
+    // cycle is meant to be download, install, relaunch, tidy up.
+    //
+    // An app cannot replace its own bundle while it is running, so the work
+    // goes to a detached helper script: it waits for us to exit, mounts the
+    // image, copies the new bundle over this one, unmounts, deletes the .dmg
+    // and reopens Deckboy. Unlike the Windows attempt at this, a detached
+    // POSIX child genuinely survives its parent, so the trap that bit that
+    // version does not exist here.
+    //
+    // ditto rather than cp: it preserves the bundle's symlinks, permissions
+    // and extended attributes, and a Deckboy.app copied with plain cp will not
+    // launch.
+    const fs::path bundlePath = macAppBundlePath();
+    if (bundlePath.empty()) {
+      why = "update: cannot find this app bundle to replace";
+      return false;
+    }
+    const fs::path script = fs::path(installer).parent_path() / "deckboy-install.sh";
+    {
+      std::ofstream out(script, std::ios::binary | std::ios::trunc);
+      if (!out) {
+        why = "update: could not write the install helper";
+        return false;
+      }
+      auto q = [](const std::string& value) {
+        std::string escaped;
+        for (char ch : value) {
+          if (ch == '\'') {
+            escaped += "'\''";
+          } else {
+            escaped.push_back(ch);
+          }
+        }
+        return "'" + escaped + "'";
+      };
+      out << "#!/bin/bash\n"
+          << "set -u\n"
+          << "LOG=" << q((fs::path(installer).parent_path() / "install.log").string()) << "\n"
+          << "exec >>\"$LOG\" 2>&1\n"
+          << "echo \"--- $(date) install helper\"\n"
+          // Wait for Deckboy to go, so the bundle is not being replaced under a
+          // running process.
+          << "for i in $(seq 1 300); do kill -0 " << getpid() << " 2>/dev/null || break; sleep 1; done\n"
+          // If it is somehow STILL there, do not replace an app that is running
+          // and do not relaunch into its instance lock. The first version pressed
+          // on regardless after two minutes: it swapped the file under the live
+          // process, then failed to relaunch because the old one still held the
+          // lock -- which is exactly what the Linux run did.
+          << "if kill -0 " << getpid() << " 2>/dev/null; then echo 'deckboy never exited - aborting'; exit 1; fi\n"
+          << "MNT=$(mktemp -d /tmp/deckboy-dmg-XXXXXX)\n"
+          << "hdiutil attach " << q(installer)
+          << " -nobrowse -quiet -mountpoint \"$MNT\" || { echo 'attach failed'; exit 1; }\n"
+          << "NEW=$(find \"$MNT\" -maxdepth 2 -name 'Deckboy.app' | head -1)\n"
+          << "if [ -n \"$NEW\" ]; then\n"
+          << "  rm -rf " << q(bundlePath.string()) << ".old\n"
+          << "  mv " << q(bundlePath.string()) << " " << q(bundlePath.string()) << ".old || true\n"
+          << "  if ditto \"$NEW\" " << q(bundlePath.string()) << "; then\n"
+          << "    rm -rf " << q(bundlePath.string()) << ".old\n"
+          << "    echo 'replaced bundle'\n"
+          << "  else\n"
+          // Put the old one back rather than leave the operator with nothing.
+          << "    echo 'ditto failed - restoring'\n"
+          << "    rm -rf " << q(bundlePath.string()) << "\n"
+          << "    mv " << q(bundlePath.string()) << ".old " << q(bundlePath.string()) << "\n"
+          << "  fi\n"
+          << "else\n"
+          << "  echo 'no Deckboy.app inside the image'\n"
+          << "fi\n"
+          << "hdiutil detach \"$MNT\" -quiet 2>/dev/null\n"
+          << "rmdir \"$MNT\" 2>/dev/null\n"
+          << "rm -f " << q(installer) << "\n"
+          << "open " << q(bundlePath.string()) << "\n"
+          << "rm -f \"$0\"\n";
+    }
+    std::error_code chmodErr;
+    fs::permissions(script,
+                    fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec,
+                    fs::perm_options::replace, chmodErr);
+    const std::vector<std::string> args {"/bin/bash", script.string()};
+    if (!spawnProcess(updateInstallerChild_, args, SpawnOptions::detachedSilent())) {
+      why = "update: could not start the install helper";
+      return false;
+    }
+    // HELD, AND RELEASED AS WE QUIT. The ChildProcess destructor SIGKILLs the
+    // whole helper process group: when this was a local, the helper that was
+    // about to wait for us and replace the app was started and killed a line
+    // later, so the install never happened and the app quit into nothing.
+    // serviceUpdateInstall releases it the moment it quits, and stops it only
+    // when a deck went live first -- before it has replaced anything.
+    return true;
+#else
+    // INSTALL IT, DON'T JUST POINT AT IT.
+    //
+    // This used to reveal the download in a file manager and leave the rest to
+    // the operator. An AppImage IS the application, though -- one executable
+    // file -- so replacing it in place is the whole install, and we can do the
+    // full cycle here too.
+    //
+    // Only when we are actually RUNNING from an AppImage: the runtime sets
+    // APPIMAGE to its own path. requestUpdateInstall has already shown any
+    // other build where its download went, so this is never reached without.
+    const char* appImagePath = std::getenv("APPIMAGE");
+    if (appImagePath == nullptr || *appImagePath == '\0') {
+      why = "update: not running from an AppImage";
+      return false;
+    }
+    const fs::path target(appImagePath);
+    const fs::path script = fs::path(installer).parent_path() / "deckboy-install.sh";
+    {
+      std::ofstream out(script, std::ios::binary | std::ios::trunc);
+      if (!out) {
+        why = "update: could not write the install helper";
+        return false;
+      }
+      auto q = [](const std::string& value) {
+        std::string escaped;
+        for (char ch : value) {
+          if (ch == '\'') {
+            escaped += "'\''";
+          } else {
+            escaped.push_back(ch);
+          }
+        }
+        return "'" + escaped + "'";
+      };
+      out << "#!/bin/bash\n"
+          << "set -u\n"
+          << "LOG=" << q((fs::path(installer).parent_path() / "install.log").string()) << "\n"
+          << "exec >>\"$LOG\" 2>&1\n"
+          << "echo \"--- $(date) install helper\"\n"
+          // The running AppImage keeps its file open; wait for us to exit.
+          << "for i in $(seq 1 300); do kill -0 " << getpid() << " 2>/dev/null || break; sleep 1; done\n"
+          // If it is somehow STILL there, do not replace an app that is running
+          // and do not relaunch into its instance lock. The first version pressed
+          // on regardless after two minutes: it swapped the file under the live
+          // process, then failed to relaunch because the old one still held the
+          // lock -- which is exactly what the Linux run did.
+          << "if kill -0 " << getpid() << " 2>/dev/null; then echo 'deckboy never exited - aborting'; exit 1; fi\n"
+          << "chmod +x " << q(installer) << "\n"
+          // Keep the old one until the new is in place, then drop it.
+          << "cp -f " << q(target.string()) << " " << q(target.string()) << ".old 2>/dev/null\n"
+          << "if mv -f " << q(installer) << " " << q(target.string()) << "; then\n"
+          << "  chmod +x " << q(target.string()) << "\n"
+          << "  rm -f " << q(target.string()) << ".old\n"
+          << "  echo 'replaced appimage'\n"
+          << "else\n"
+          << "  echo 'replace failed - restoring'\n"
+          << "  mv -f " << q(target.string()) << ".old " << q(target.string()) << " 2>/dev/null\n"
+          << "fi\n"
+          << "setsid " << q(target.string()) << " >/dev/null 2>&1 &\n"
+          << "rm -f \"$0\"\n";
+    }
+    std::error_code chmodErr;
+    fs::permissions(script,
+                    fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec,
+                    fs::perm_options::replace, chmodErr);
+    const std::vector<std::string> args {"/bin/bash", script.string()};
+    if (!spawnProcess(updateInstallerChild_, args, SpawnOptions::detachedSilent())) {
+      why = "update: could not start the install helper";
+      return false;
+    }
+    // Held and released as we quit, for the reason the macOS arm gives.
+    return true;
+#endif
+  }
+
+  bool startMidiInput(bool quiet = false) {
+#if defined(DECKBOY_HAS_ALSA)
+    stopMidiInput();
+    midiStop_ = false;
+    resetMidiMtcDecoder();
+    int err = snd_seq_open(&midiSeq_, "default", SND_SEQ_OPEN_INPUT, SND_SEQ_NONBLOCK);
+    if (err < 0) { midiSeq_ = nullptr; return false; }
+    snd_seq_set_client_name(midiSeq_, "Deckboy");
+    midiSeqPort_ = snd_seq_create_simple_port(midiSeq_, "input",
+      SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
+      SND_SEQ_PORT_TYPE_APPLICATION);
+    if (midiSeqPort_ < 0) { snd_seq_close(midiSeq_); midiSeq_ = nullptr; return false; }
+
+    // A CONFIGURED PORT THAT WILL NOT CONNECT IS A FAILURE, NOT A DETAIL.
+    //
+    // This used to parse the address, subscribe, and ignore the result of both
+    // -- then return true regardless. So a port that had been renamed, or was
+    // not plugged in, left the deck with an ALSA port created, nothing
+    // subscribed to it, and the operator told MIDI was on. Nothing would ever
+    // fire a cue and there was no way to tell that from a quiet desk. It is the
+    // same fault as the RtMidi path opening whatever port came first, wearing
+    // different clothes: one binds to a stranger, this one binds to nobody.
+    //
+    // With NO port configured the bare port is correct and stays: it advertises
+    // SUBS_WRITE, so an operator can `aconnect` anything to it by hand, which is
+    // how this is normally done on Linux.
+    if (!midiDeviceName_().empty()) {
+      snd_seq_addr_t sender;
+      if (snd_seq_parse_address(midiSeq_, &sender, midiDeviceName_().c_str()) != 0) {
+        if (!quiet) {
+          triggerToast("midi: " + midiDeviceName_() + " not found");
+        }
+        stopMidiInput();
+        return false;
+      }
+      snd_seq_port_subscribe_t* sub;
+      snd_seq_port_subscribe_alloca(&sub);
+      snd_seq_port_subscribe_set_sender(sub, &sender);
+      snd_seq_addr_t dest {static_cast<unsigned char>(snd_seq_client_id(midiSeq_)), static_cast<unsigned char>(midiSeqPort_)};
+      snd_seq_port_subscribe_set_dest(sub, &dest);
+      if (snd_seq_subscribe_port(midiSeq_, sub) < 0) {
+        if (!quiet) {
+          triggerToast("midi: " + midiDeviceName_() + " refused the connection");
+        }
+        stopMidiInput();
+        return false;
+      }
+    }
+
+    midiDeviceInUse_ = midiDeviceName_();
+    noteMidiMonitorPort();
+    midiThread_ = std::thread([this]() { midiLoop(); });
+    return true;
+#elif defined(DECKBOY_HAS_MIDI)
+    // Non-ALSA platforms (Windows, macOS) go through the cross-platform RtMidi
+    // wrapper. This path did not exist before: startMidiInput() simply returned
+    // false off Linux, so the MIDI toggle, the port picker and the documented
+    // note/CC mappings did nothing at all on the primary platform even though
+    // RtMidi was compiled in and enumerating ports.
+    //
+    // MTC quarter-frame now arrives here too. The claim that it could not --
+    // "the wrapper surfaces channel-voice messages only" -- was true of the
+    // wrapper and not of MIDI: a quarter frame is an ordinary two-byte message
+    // and 0xF1 was simply being dropped one layer below, which is why the
+    // catalog used to report mtc as a stub off Linux and blame ALSA for it.
+    //
+    // MMC and MSC are not ALSA-only either, and have not been since this path
+    // gained onSysEx: they arrive here and go through showcontrol::parse. What
+    // IS still true is that the ALSA loop parses them a second time, inline and
+    // by hand, so the two platforms can disagree about the same desk -- see the
+    // SysEx case in midiLoop().
+    stopMidiInput();
+    auto devices = deckboy::platform::midi::MidiInput::listDevices();
+    if (devices.empty()) {
+      return false;
+    }
+    // A CONFIGURED PORT THAT IS ABSENT IS AN ERROR, NOT A REASON TO GUESS.
+    //
+    // This used to start from devices.front() and only overwrite it on a name
+    // match, so a controller that was unplugged, renamed by its driver, or
+    // simply not switched on handed control of the deck to whatever enumerated
+    // first. That is rarely a control surface: a machine with a DAW installed
+    // answers this question with its plugin bridge ports, and a stray note from
+    // one of those fires cues. Refuse, say which port was wanted, and let the
+    // operator pick again -- `deckboy --devices` lists the names.
+    int deviceId = -1;
+    if (!midiDeviceName_().empty()) {
+      for (const auto& device : devices) {
+        if (device.name == midiDeviceName_()) {
+          deviceId = device.id;
+          break;
+        }
+      }
+      if (deviceId < 0) {
+        if (!quiet) {
+          triggerToast("midi: " + midiDeviceName_() + " not found");
+        }
+        return false;
+      }
+    } else {
+      // Nothing chosen: the first port is a reasonable guess when there is only
+      // one, and worth naming out loud when there is not.
+      deviceId = devices.front().id;
+      if (devices.size() > 1 && !quiet) {
+        triggerToast("midi: using " + devices.front().name +
+                     " (" + std::to_string(devices.size()) + " ports — pick one in settings)");
+      }
+    }
+    // Every channel message, with its channel, to the MIDI map.
+    midiRt_.onChannelMessage([this](int status, int channel, int data1, int data2) {
+      onMidiChannelMessage(status, channel, data1, data2);
+    });
+    midiRt_.onRealtime([this](std::uint8_t status) { onMidiRealtime(status); });
+    midiRt_.onSysEx([this](const std::vector<std::uint8_t>& data) {
+      onMidiSysEx(data);
+    });
+    // MIDI TIMECODE ON THIS PLATFORM TOO. The bytes were always arriving --
+    // a quarter frame is ordinary MIDI -- and were being dropped one layer
+    // below, so an operator on Windows or macOS pointed a timecode sender at
+    // Deckboy and nothing happened at all. Same decoder, same threshold, same
+    // MTCEXT command as the ALSA path; the only difference is which library
+    // handed over the byte.
+    midiRt_.onQuarterFrame([this](std::uint8_t dataByte) {
+      queueMidiCommand(mtcCommandFromQuarterFrame(static_cast<int>(dataByte)));
+    });
+    if (!midiRt_.open(deviceId)) {
+      return false;
+    }
+    midiDeviceInUse_ = midiDeviceName_().empty() ? devices.front().name : midiDeviceName_();
+    noteMidiMonitorPort();
+    return true;
+#else
+    return false;
+#endif
+  }
+
+  // ── MIDI Show Control ──────────────────────────────────────────────────────
+  //
+  // A desk sends GO with a cue number and everything in the rig answering to
+  // that number goes at once. The number is TEXT -- "12.4.1" and "A" are both
+  // legitimate cue numbers -- so it is matched the way an operator reads it,
+  // through the same lookup TAKE <token> uses.
+  //
+  // Everything understood is written to the show log whether or not it changed
+  // anything. When a cue fails to fire the first question is always whether
+  // the message reached the machine, and silence is not an answer to that.
+  void onMidiSysEx(const std::vector<std::uint8_t>& data) {
+    const auto message =
+      deckboy::showcontrol::parse(data, project_.showControlDeviceId);
+    if (!message.ok()) {
+      return;
+    }
+    using deckboy::showcontrol::Action;
+    showLog(std::string("MSC ") + deckboy::showcontrol::actionName(message.action),
+            message.cue.empty() ? std::string() : "cue " + message.cue);
+
+    auto selectByNumber = [this](const std::string& token) {
+      const Deck& deck = focusedDeck();
+      if (auto index = cueIndexByToken(deck, token); index) {
+        selectCueInDeck(project_.focusedDeckIndex, *index, false, false);
+        return true;
+      }
+      return false;
+    };
+
+    switch (message.action) {
+      case Action::Go:
+      case Action::MmcPlay:
+        // A GO with no cue number means "the next one", which is how a desk
+        // drives a straight rundown.
+        if (!message.cue.empty() && !selectByNumber(message.cue)) {
+          triggerToast("MSC: no cue " + message.cue);
+          return;
+        }
+        jumpSelectedCue();
+        break;
+      case Action::Load:
+        // Preselect without firing: the desk is arming the next one.
+        if (!message.cue.empty() && !selectByNumber(message.cue)) {
+          triggerToast("MSC: no cue " + message.cue);
+        }
+        break;
+      case Action::Stop:
+      case Action::MmcStop:
+        stopTransport();
+        break;
+      case Action::MmcPause:
+      case Action::Resume:
+        // RESUME is the counterpart of MSC STOP, and pauseTransport already
+        // toggles -- one control for both directions, as the transport button
+        // does.
+        pauseTransport();
+        break;
+      case Action::AllOff:
+        // No safety context: a desk sending ALL OFF has already decided.
+        runPanicOutputsOff(false, 0);
+        break;
+      case Action::Reset:
+        rerackTransport();
+        break;
+      case Action::MmcLocate:
+        if (message.locateSeconds >= 0.0) {
+          if (MediaEngine* engine = focusedMediaEngine()) {
+            engine->seek(message.locateSeconds);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  void stopMidiInput() {
+#if defined(DECKBOY_HAS_ALSA)
+    midiStop_ = true;
+    if (midiThread_.joinable()) midiThread_.join();
+    if (midiSeq_) {
+      if (midiSeqPort_ >= 0) snd_seq_delete_port(midiSeq_, midiSeqPort_);
+      snd_seq_close(midiSeq_);
+      midiSeq_ = nullptr;
+      midiSeqPort_ = -1;
+    }
+    resetMidiMtcDecoder();
+#elif defined(DECKBOY_HAS_MIDI)
+    midiRt_.close();
+#endif
+  }
+
+  // Polled from the update tick: the RtMidi wrapper dispatches its callbacks
+  // from here, so they land on the main thread. No-op on ALSA (that path has
+  // its own reader thread) and when MIDI isn't compiled in.
+  // ---- FOLLOWING AN EXTERNAL MIDI CLOCK ----------------------------------
+  //
+  // MIDI clock is 24 ticks per quarter note and carries no tempo of its own --
+  // the tempo IS the tick rate, so it has to be measured. Timing a single tick
+  // would read whatever jitter the sender, the USB stack and the OS scheduler
+  // put on that one message; timing a whole beat (24 ticks) divides that
+  // jitter by 24 before it reaches the number.
+  //
+  // The result is then smoothed, because a VJ tempo that twitches in the third
+  // decimal is worse than one that lags a beat.
+  // `nowMs` is a parameter rather than read inside, so the tempo maths can be
+  // exercised with known timings instead of whatever the machine happened to
+  // be doing. Real callers pass SDL_GetTicks(); nothing else changes.
+  void onMidiRealtime(std::uint8_t status, Uint64 nowMs) {
+    const Uint64 now = nowMs;
+    switch (status) {
+      case 0xFA:   // Start -- from the top
+      case 0xFB:   // Continue
+        midiClockRunning_ = true;
+        midiClockTicks_ = 0;
+        midiClockBeatStartMs_ = now;
+        break;
+      case 0xFC:   // Stop
+        midiClockRunning_ = false;
+        midiClockTicks_ = 0;
+        break;
+      case 0xF8: {  // Timing clock
+        midiClockLastTickMs_ = now;
+        // A sender that never sends Start still sends clock; treat the first
+        // tick as the start rather than ignoring the device entirely.
+        if (!midiClockRunning_) {
+          midiClockRunning_ = true;
+          midiClockTicks_ = 0;
+          midiClockBeatStartMs_ = now;
+          break;
+        }
+        if (midiClockBeatStartMs_ == 0) {
+          midiClockBeatStartMs_ = now;
+          midiClockTicks_ = 0;
+          break;
+        }
+        if (++midiClockTicks_ < 24) {
+          break;
+        }
+        const Uint64 beatMs = now - midiClockBeatStartMs_;
+        midiClockTicks_ = 0;
+        midiClockBeatStartMs_ = now;
+        if (beatMs < 100 || beatMs > 3000) {
+          break;   // 20..600 bpm; anything else is a dropout, not a tempo
+        }
+        const double bpm = 60000.0 / static_cast<double>(beatMs);
+        // SMOOTH THE JITTER, FOLLOW THE CHANGE.
+        //
+        // Easing every reading equally was measured taking four beats to get
+        // within 8 bpm of a new tempo -- fine for jitter, useless when someone
+        // actually changes tempo. A reading more than 5% away is not jitter, it
+        // is a different tempo, so it is taken whole; anything closer is eased,
+        // which is where the jitter lives.
+        if (midiClockBpm_ <= 0.0 ||
+            std::fabs(bpm - midiClockBpm_) > midiClockBpm_ * 0.05) {
+          midiClockBpm_ = bpm;
+        } else {
+          midiClockBpm_ = midiClockBpm_ * 0.7 + bpm * 0.3;
+        }
+        if (project_.midiClockSlave) {
+          setVjTempo(midiClockBpm_);
+        }
+        break;
+      }
+      default:
+        break;   // 0xFE active sensing, 0xFF reset: nothing to do here
+    }
+  }
+
+  void onMidiRealtime(std::uint8_t status) {
+    onMidiRealtime(status, SDL_GetTicks());
+  }
+
+  // True while clock ticks are still arriving. Used by the readout: a slaved
+  // deck with a dead cable should say so rather than sit on a stale number.
+  bool midiClockAlive() const {
+    if (!midiClockRunning_ || midiClockLastTickMs_ == 0) {
+      return false;
+    }
+    // Unsigned subtraction, so a stamp ahead of now would wrap to an enormous
+    // "age" and report a live clock as dead. Compare rather than subtract.
+    const Uint64 now = SDL_GetTicks();
+    return midiClockLastTickMs_ >= now || (now - midiClockLastTickMs_) < 1000;
+  }
+
+  void pumpMidiInput() {
+#if !defined(DECKBOY_HAS_ALSA) && defined(DECKBOY_HAS_MIDI)
+    if (midiEnabled_) {
+      midiRt_.update();
+    }
+#endif
+  }
+
+  void midiLoop() {
+#if defined(DECKBOY_HAS_ALSA)
+    while (!midiStop_) {
+      snd_seq_event_t* ev = nullptr;
+      int r = snd_seq_event_input(midiSeq_, &ev);
+      if (r < 0) {
+        if (r == -EAGAIN) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); continue; }
+        break;
+      }
+      if (!ev) continue;
+
+      std::string cmd;
+      switch (ev->type) {
+        // THE SAME HANDLERS THE RtMidi PATH CALLS. This built its own commands
+        // -- "GOTO n+1" for every note -- so on Linux a cue's own trigger note
+        // never fired, MIDI learn never learned and the synth never heard a
+        // note, while Windows and macOS did all three. The shared handlers
+        // are what queueMidiCommand's comment always said both used.
+        case SND_SEQ_EVENT_NOTEON:
+          onMidiChannelMessage(ev->data.note.velocity > 0 ? 0x90 : 0x80, ev->data.note.channel + 1,
+                               ev->data.note.note, ev->data.note.velocity);
+          break;
+        case SND_SEQ_EVENT_NOTEOFF:
+          onMidiChannelMessage(0x80, ev->data.note.channel + 1, ev->data.note.note, 0);
+          break;
+        case SND_SEQ_EVENT_CONTROLLER:
+          onMidiChannelMessage(0xB0, ev->data.control.channel + 1,
+                               static_cast<int>(ev->data.control.param),
+                               static_cast<int>(ev->data.control.value));
+          break;
+        // ALSA's pitch bend is -8192..8191; the wire's is 0..16383.
+        case SND_SEQ_EVENT_PITCHBEND:
+          onMidiChannelMessage(0xE0, ev->data.control.channel + 1,
+                               static_cast<int>(ev->data.control.value) + 8192, 0);
+          break;
+        case SND_SEQ_EVENT_CHANPRESS:
+          onMidiChannelMessage(0xD0, ev->data.control.channel + 1,
+                               static_cast<int>(ev->data.control.value), 0);
+          break;
+        case SND_SEQ_EVENT_KEYPRESS:
+          onMidiChannelMessage(0xA0, ev->data.note.channel + 1, ev->data.note.note,
+                               ev->data.note.velocity);
+          break;
+        case SND_SEQ_EVENT_PGMCHANGE:
+          onMidiChannelMessage(0xC0, ev->data.control.channel + 1,
+                               static_cast<int>(ev->data.control.value), 0);
+          break;
+        // ALSA names these rather than handing over the status byte, so they
+        // are mapped back onto the one follower -- the tempo maths must not
+        // exist twice or the two platforms will drift apart.
+        case SND_SEQ_EVENT_CLOCK:
+          onMidiRealtime(0xF8);
+          break;
+        case SND_SEQ_EVENT_START:
+          onMidiRealtime(0xFA);
+          break;
+        case SND_SEQ_EVENT_CONTINUE:
+          onMidiRealtime(0xFB);
+          break;
+        case SND_SEQ_EVENT_STOP:
+          onMidiRealtime(0xFC);
+          break;
+        case SND_SEQ_EVENT_QFRAME:
+          // ALSA hands over the data byte already separated from its status
+          // byte; RtMidi hands over both and platform/midi.cpp separates them.
+          // Past that point the two platforms run the same code.
+          cmd = mtcCommandFromQuarterFrame(ev->data.control.value);
+          break;
+        case SND_SEQ_EVENT_SYSEX: {
+          // Check for MMC (F0 7F <dev> 06 <cmd> F7)
+          auto* data = static_cast<unsigned char*>(ev->data.ext.ptr);
+          size_t len = ev->data.ext.len;
+          if (len >= 6 && data[0] == 0xF0 && data[1] == 0x7F && data[3] == 0x06) {
+            switch (data[4]) {
+              case 0x01: cmd = "STOP"; break;   // MMC Stop
+              case 0x02: cmd = "PLAY"; break;   // MMC Play
+              case 0x03: cmd = "PLAY"; break;   // MMC Deferred Play
+              case 0x05: cmd = "STOP"; break;   // MMC Record Exit (treat as stop)
+              case 0x44: {                        // MMC Goto
+                if (len >= 12 && data[5] == 0x06) {
+                  // Timecode target: data[7]=hr, data[8]=min, data[9]=sec, data[10]=fr
+                  double secs = data[7] * 3600.0 + data[8] * 60.0 + data[9] + data[10] / 30.0;
+                  cmd = "SEEKPOS " + std::to_string(secs);
+                }
+                break;
+              }
+              default: break;
+            }
+          }
+          // Check for MSC (F0 7F <dev> 02 <cmdFmt> 01 <cueNum> F7)
+          if (len >= 7 && data[0] == 0xF0 && data[1] == 0x7F && data[3] == 0x02 && data[5] == 0x01) {
+            int cueNum = data[6]; // cue number
+            cmd = "GOTO " + std::to_string(cueNum);
+          }
+          break;
+        }
+        default: break;
+      }
+
+      if (!cmd.empty()) {
+        enqueueRemoteCommand(std::move(cmd));
+      }
+      snd_seq_free_event(ev);
+    }
+#endif
+  }
+
+  void hyperDeckLoop() {
+    // Each connected client gets a simple blocking handler in this loop.
+    // We only handle one client at a time (sufficient for HyperDeck use).
+    while (hyperDeckRunning_.load()) {
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(hyperDeckListenFd_, &readFds);
+      timeval tv {0, 100000};  // 100ms timeout
+      if (select(selectNfds(hyperDeckListenFd_), &readFds, nullptr, nullptr, &tv) <= 0) continue;
+      sockaddr_in clientAddr {};
+      socklen_t addrLen = sizeof(clientAddr);
+      SocketHandle clientFd = accept(hyperDeckListenFd_, reinterpret_cast<sockaddr*>(&clientAddr), &addrLen);
+      if (clientFd == kInvalidSocket) continue;
+      if (!controlPeerAllowed(clientAddr, "HyperDeck")) {
+        closeSocket(clientFd);
+        continue;
+      }
+      setCloseOnExec(clientFd);
+      // Greet
+      const char* greeting =
+        "500 connection info:\r\n"
+        "protocol version: 1.11\r\n"
+        "model: HyperDeck Studio Mini\r\n"
+        "\r\n";
+      send(clientFd, greeting, static_cast<int>(strlen(greeting)), kSocketSendFlags);
+      // Handle client
+      std::string buf;
+      constexpr size_t kHyperDeckMaxBuf = 65536;  // 64KB max pending data per client
+      while (hyperDeckRunning_.load()) {
+        char tmp[256];
+        int n = recv(clientFd, tmp, static_cast<int>(sizeof(tmp) - 1), 0);
+        if (n <= 0) break;
+        tmp[n] = '\0';
+        buf += tmp;
+        // Disconnect clients that send too much data without line terminators
+        if (buf.size() > kHyperDeckMaxBuf) {
+          break;
+        }
+        // Process complete lines (\r\n terminated)
+        size_t pos;
+        while ((pos = buf.find("\r\n")) != std::string::npos) {
+          std::string line = buf.substr(0, pos);
+          buf.erase(0, pos + 2);
+          // Trim trailing \r if any
+          while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+          if (line.empty()) continue;
+
+          std::string resp = hyperDeckHandleCommand(line);
+          if (!resp.empty()) {
+            send(clientFd, resp.c_str(), static_cast<int>(resp.size()), kSocketSendFlags);
+          }
+        }
+      }
+      closeSocket(clientFd);
+    }
+  }
+
+  std::string hyperDeckHandleCommand(const std::string& line) {
+    // Parse "verb: key: val" style
+    std::string cmd = line;
+    // Lowercase for matching
+    std::string cmdL;
+    for (char ch : cmd) cmdL += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+    auto enqueueAndWait = [this](const std::string& rc) {
+      enqueueRemoteCommand(rc);
+    };
+
+    if (cmdL == "play") {
+      enqueueAndWait("PLAY");
+      return "200 ok\r\n\r\n";
+    }
+    if (cmdL == "stop") {
+      enqueueAndWait("STOP");
+      return "200 ok\r\n\r\n";
+    }
+    if (cmdL.rfind("goto:", 0) == 0) {
+      // "goto: clip id: N" or "goto: timeline: HH:MM:SS:FF"
+      size_t ci = cmdL.find("clip id:");
+      if (ci != std::string::npos) {
+        std::string numStr = cmd.substr(ci + 8);
+        while (!numStr.empty() && (numStr[0] == ' ' || numStr[0] == '\t')) numStr.erase(0, 1);
+        enqueueAndWait("GOTO " + numStr);
+        return "200 ok\r\n\r\n";
+      }
+      size_t ti = cmdL.find("timeline:");
+      if (ti != std::string::npos) {
+        std::string tcStr = cmd.substr(ti + 9);
+        while (!tcStr.empty() && (tcStr[0] == ' ' || tcStr[0] == '\t')) tcStr.erase(0, 1);
+        enqueueAndWait("TC SET " + tcStr);
+        return "200 ok\r\n\r\n";
+      }
+      return "200 ok\r\n\r\n";
+    }
+    if (cmdL.rfind("play range:", 0) == 0) {
+      size_t ci = cmdL.find("clip id:");
+      if (ci != std::string::npos) {
+        std::string numStr = cmd.substr(ci + 8);
+        while (!numStr.empty() && (numStr[0] == ' ' || numStr[0] == '\t')) numStr.erase(0, 1);
+        enqueueAndWait("GOTO " + numStr);
+        enqueueAndWait("PLAY");
+        return "200 ok\r\n\r\n";
+      }
+      return "200 ok\r\n\r\n";
+    }
+    // NOTE: these run on the HyperDeck TCP thread. Read ONLY the structured
+    // hyperDeckSnapshot_ (rebuilt on the main thread each tick) — never
+    // focusedDeck()/project_ directly, and never by substring-matching the
+    // human-readable snapshot text (a cue named "playing" would corrupt it).
+    if (cmdL == "transport info") {
+      std::string status;
+      int clipId = 0;
+      bool loop = false;
+      {
+        std::lock_guard<std::mutex> lk(statusSnapshotMutex_);
+        status = hyperDeckSnapshot_.transport;
+        clipId = hyperDeckSnapshot_.clipId;
+        loop = hyperDeckSnapshot_.loop;
+      }
+      std::ostringstream resp;
+      resp << "208 transport info:\r\n"
+           << "status: " << status << "\r\n"
+           << "speed: 100\r\n"
+           << "slot id: 1\r\n"
+           << "clip id: " << clipId << "\r\n"
+           << "single clip: false\r\n"
+           << "display timecode: 00:00:00:00\r\n"
+           << "timecode: 00:00:00:00\r\n"
+           << "video format: 1080p25\r\n"
+           << "loop: " << (loop ? "true" : "false") << "\r\n"
+           << "\r\n";
+      return resp.str();
+    }
+    if (cmdL == "clips count") {
+      size_t clipCount = 0;
+      {
+        std::lock_guard<std::mutex> lk(statusSnapshotMutex_);
+        clipCount = hyperDeckSnapshot_.clips.size();
+      }
+      std::ostringstream resp;
+      resp << "214 clips count:\r\n"
+           << "clip count: " << clipCount << "\r\n"
+           << "\r\n";
+      return resp.str();
+    }
+    if (cmdL == "clips get") {
+      std::vector<std::pair<std::string, std::string>> clips;
+      {
+        std::lock_guard<std::mutex> lk(statusSnapshotMutex_);
+        clips = hyperDeckSnapshot_.clips;
+      }
+      std::ostringstream resp;
+      resp << "205 clips info:\r\n"
+           << "clip count: " << clips.size() << "\r\n";
+      for (size_t i = 0; i < clips.size(); ++i) {
+        resp << (i + 1) << ": " << clips[i].first << " 00:00:00:00 "
+             << clips[i].second << "\r\n";
+      }
+      resp << "\r\n";
+      return resp.str();
+    }
+    if (cmdL == "device info") {
+      // 204, NOT 500. Checked against a real Blackmagic box on the bench:
+      // 5xx is the ASYNCHRONOUS range -- the unsolicited greeting and the
+      // status notifications -- and a reply to a command that arrives with
+      // an async code is a reply a strict controller will not match to the
+      // request it just sent. The greeting below is correctly 500.
+      return "204 device info:\r\n"
+             "protocol version: 1.11\r\n"
+             "model: HyperDeck Studio Mini\r\n"
+             "friendly name: Deckboy\r\n"
+             "unique id: DECKBOY00001\r\n"
+             "\r\n";
+    }
+    // Unknown command
+    return "109 unsupported parameter\r\n\r\n";
+  }
+
+// A WEB PAGE MUST NOT BE ABLE TO DRIVE THE SHOW.
+//
+// The control port is loopback-only, which is not the protection it sounds
+// like: a page in ANY browser on this machine -- including one loaded in a
+// browser cue -- can reach loopback. It cannot open a raw socket, but it does
+// not need one. `fetch("http://127.0.0.1:5510", {method:"POST",
+// headers:{"Content-Type":"text/plain"}, body:"BLACKOUT on\nSTOP\n"})` needs no
+// CORS preflight, because text/plain is safelisted, and CORS only stops the
+// page READING the reply -- the request is still delivered.
+//
+// This line protocol then does exactly what it was built to do: the HTTP
+// request line and headers come out as unknown commands, and every line of the
+// BODY is a valid command. Measured, not theorised: blackout went on and
+// playback stopped from a single fetch().
+//
+// So a connection that opens with an HTTP request line is dropped without
+// executing anything on it. A browser can only speak HTTP or WebSocket to a TCP
+// port (a WebSocket handshake is itself a GET request line), so this closes the
+// whole class, while Companion, netcat and every other line client are
+// untouched -- none of them open with "GET / HTTP/1.1".
+bool looksLikeHttpRequestLine(const std::string& line) {
+  static const char* kMethods[] = {
+    "GET ", "POST ", "PUT ", "HEAD ", "DELETE ", "OPTIONS ",
+    "PATCH ", "TRACE ", "CONNECT ",
+  };
+  const std::string upper = toUpper(line);
+  for (const char* method : kMethods) {
+    if (upper.rfind(method, 0) == 0) {
+      // Require the HTTP version token too, so a hypothetical future verb
+      // named GET or PATCH is not collateral damage.
+      return upper.find(" HTTP/") != std::string::npos;
+    }
+  }
+  return false;
+}
+
+  void companionLoop() {
+    while (!companionStop_.load()) {
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      fd_set writeFds;
+      FD_ZERO(&writeFds);
+      SocketHandle maxFd = 0;
+
+      watchFd(companionTcpListen_, &readFds, maxFd);
+      watchFd(companionUdpSocket_, &readFds, maxFd);
+
+      // Snapshot client list for select() FD setup (lock briefly, release before blocking select)
+      std::vector<SocketHandle> clientSnapshot;
+      {
+        std::lock_guard<std::mutex> lk(companionClientsMutex_);
+        for (SocketHandle client : companionClients_) {
+          if (!companionClientReplies_[client].empty()) watchFd(client, &writeFds, maxFd);
+          // A half-closed client reads EOF forever. Selecting on it would spin
+          // this loop and keep pushing its deadline back; it is only waiting
+          // for its reply now, not for us to read from it.
+          if (companionDrainingClients_.count(client) == 0) {
+            clientSnapshot.push_back(client);
+          }
+        }
+      }
+      // WITH maxFd. select() on macOS and Linux only examines descriptors
+      // below its first argument, and this used the overload that discards
+      // the maximum -- so a client socket, always numbered above the listener,
+      // was never looked at there, and its commands waited until the listener
+      // or the UDP socket happened to wake the loop. Windows ignores that
+      // argument, which is why it never showed on the machine this is built on.
+      for (auto client : clientSnapshot) {
+        watchFd(client, &readFds, maxFd);
+      }
+
+      timeval timeout {};
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 100000;  // 100ms (was 200ms)
+
+      int ready = select(selectNfds(maxFd), &readFds, &writeFds, nullptr, &timeout);
+      if (ready < 0) {
+#ifndef _WIN32
+        if (errno == EINTR) {
+          continue;
+        }
+#endif
+        break;
+      }
+      if (ready == 0) {
+        maybeBroadcastOscState();
+        retireDrainedCompanionClients();
+        continue;
+      }
+
+      // Accept new TCP clients (capped at 32 concurrent connections)
+      if (readyFd(companionTcpListen_, &readFds)) {
+        sockaddr_in clientAddress {};
+        socklen_t clientLength = sizeof(clientAddress);
+        SocketHandle client = accept(companionTcpListen_, reinterpret_cast<sockaddr*>(&clientAddress), &clientLength);
+        if (client != kInvalidSocket && !controlPeerAllowed(clientAddress, "Companion")) {
+          closeSocket(client);
+          client = kInvalidSocket;
+        }
+        if (client != kInvalidSocket) {
+          setCloseOnExec(client);
+#ifdef _WIN32
+          u_long nonblocking = 1;
+          if (ioctlsocket(client, FIONBIO, &nonblocking) != 0) { closeSocket(client); continue; }
+#else
+          const int flags = fcntl(client, F_GETFL, 0);
+          if (flags < 0 || fcntl(client, F_SETFL, flags | O_NONBLOCK) != 0) { closeSocket(client); continue; }
+#ifdef SO_NOSIGPIPE
+          const int noPipe = 1;
+          setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noPipe, sizeof(noPipe));
+#endif
+#endif
+          std::lock_guard<std::mutex> lk(companionClientsMutex_);
+          constexpr size_t kMaxCompanionClients = 32;
+          if (companionClients_.size() >= kMaxCompanionClients) {
+            closeSocket(client);  // reject — too many connections
+          } else {
+            companionClients_.push_back(client);
+            companionClientGenerations_[client] = companionNextGeneration_++;
+            companionClientBuffers_[client] = "";
+            companionClientAuthed_.erase(client);
+            companionClientAuthFailures_.erase(client);
+            if (peerIsLoopback(clientAddress)) companionClientRemote_.erase(client);
+            else companionClientRemote_.insert(client);
+            companionClientPeer_[client] = socketAddressToString(clientAddress);
+          }
+        }
+      }
+
+      if (readyFd(companionUdpSocket_, &readFds)) {
+        std::array<char, 2048> buffer {};
+        sockaddr_in sender {};
+        socklen_t senderLen = sizeof(sender);
+        int bytes = recvfrom(
+          companionUdpSocket_,
+          buffer.data(),
+          static_cast<int>(buffer.size()),
+          0,
+          reinterpret_cast<sockaddr*>(&sender),
+          &senderLen
+        );
+        if (bytes > 0 && !controlPeerAllowed(sender, "Companion UDP")) {
+          bytes = 0;
+        }
+        const bool udpFromPeer = !peerIsLoopback(sender);
+        if (bytes > 0) {
+          std::string payload(buffer.data(), static_cast<size_t>(bytes));
+          auto oscMessages = parseOscPacket(payload);
+          if (!oscMessages.empty()) {
+            rememberOscSubscriber(sender);
+            for (const auto& osc : oscMessages) {
+              std::string path = toUpper(trim(osc.address));
+              if (path == "/STATUS" || path == "/STATE" || path == "/DECKBOY/STATUS" || path == "/DECKBOY/STATE") {
+                sendOscStringTo(sender, "/deckboy/state", snapshotJsonForFeedback());
+                continue;
+              }
+              if (path == "/PING" || path == "/DECKBOY/PING") {
+                sendOscStringTo(sender, "/deckboy/pong", "DECKBOY_0.01");
+                continue;
+              }
+              // A mapped address belongs to the MIDI map, ahead of the
+              // built-in verbs: the operator chose it.
+              if (oscAddressIsMapped(osc.address)) {
+                queueOscForMidiMap(osc, udpFromPeer, socketAddressToString(sender));
+                sendOscStringTo(sender, "/deckboy/ack", "MIDIMAP " + trim(osc.address));
+                continue;
+              }
+              auto mapped = mapOscToRemoteCommand(osc);
+              if (!mapped || mapped->empty()) {
+                // No built-in verb answers it: it may be a cue's own address.
+                // Resolved on the main thread, which owns the show.
+                mapped = "OSCTRIGGER " + trim(osc.address);
+              }
+              if (mapped && !mapped->empty()) {
+                if (enqueueMonitoredCommand(*mapped, "OSC", socketAddressToString(sender),
+                                            oscMonitorText(osc), kInvalidSocket, 0, udpFromPeer,
+                                            -1, trim(osc.address)))
+                  sendOscStringTo(sender, "/deckboy/ack", *mapped);
+                else
+                  sendOscStringTo(sender, "/deckboy/error", "busy: command queue full");
+              }
+            }
+          } else if (payload.find('\0') != std::string::npos) {
+            continue;
+          } else {
+            enqueueRemoteCommandBatch(payload, '\n', udpFromPeer, socketAddressToString(sender));
+          }
+        }
+      }
+
+      // Process TCP client data (lock held for client vector + buffer access)
+      std::vector<SocketHandle> closedClients;
+      {
+        std::lock_guard<std::mutex> lk(companionClientsMutex_);
+        flushCompanionRepliesLocked(writeFds);
+        for (auto client : companionClients_) {
+          if (!readyFd(client, &readFds) || companionDrainingClients_.count(client)) {
+            continue;
+          }
+
+          std::array<char, 2048> buffer {};
+          int bytes = recv(client, buffer.data(), static_cast<int>(buffer.size()), 0);
+          if (bytes <= 0) {
+            if (bytes < 0 && companionSocketWouldBlock()) continue;
+            closedClients.push_back(client);
+            continue;
+          }
+
+          std::string& pending = companionClientBuffers_[client];
+          pending.append(buffer.data(), static_cast<size_t>(bytes));
+
+          // Disconnect clients that send too much data without newlines
+          constexpr size_t kMaxCompanionClientBuf = 65536;  // 64KB
+          if (pending.size() > kMaxCompanionClientBuf) {
+            closedClients.push_back(client);
+            continue;
+          }
+
+          size_t newlinePos = std::string::npos;
+          while ((newlinePos = pending.find('\n')) != std::string::npos) {
+            std::string line = trim(pending.substr(0, newlinePos));
+            pending.erase(0, newlinePos + 1);
+            if (!line.empty()) {
+              // First line only: a browser's request line arrives before any
+              // body, so one check per connection closes the whole vector.
+              if (companionClientFirstLine_.insert(client).second &&
+                  looksLikeHttpRequestLine(line)) {
+                closedClients.push_back(client);
+                pending.clear();
+                break;
+              }
+              if (!companionClientMayProceedLocked(client, line, closedClients)) {
+                continue;
+              }
+              if (!maybeRespondToCompanionQuery(client, line)) {
+                // The client gets an OK/ERR line once the main thread has run
+                // this command.
+                if (!enqueueMonitoredCommand(line, "REMOTE", companionClientPeer_[client], {},
+                                             client, companionClientGenerations_[client],
+                                             companionClientRemote_.count(client) != 0))
+                  queueCompanionReplyLocked(client, "ERR busy: command queue full\n");
+              }
+            }
+          }
+        }
+
+        // A client that stops sending is NOT necessarily gone. `printf 'TAKE\n'
+        // | nc host 5510` — the obvious way to script this — half-closes the
+        // moment its input ends, which arrives here as recv() == 0 while the
+        // socket is still perfectly writable. Closing immediately threw away
+        // the OK/ERR the main thread was about to produce, so the command ran
+        // but the caller saw silence: the exact failure the acks exist to fix.
+        //
+        // So a half-closed client lingers briefly instead. Its commands are
+        // already queued with it as the reply target, the queue drains every
+        // frame, and the deadline bounds the wait if the peer is truly gone.
+        for (auto client : closedClients) {
+          auto pendingIt = companionClientBuffers_.find(client);
+          if (pendingIt != companionClientBuffers_.end()) {
+            std::string leftover = trim(pendingIt->second);
+            std::vector<SocketHandle> ignoredClosures;
+            if (!leftover.empty() &&
+                companionClientMayProceedLocked(client, leftover, ignoredClosures)) {
+              if (!maybeRespondToCompanionQuery(client, leftover)) {
+                if (!enqueueMonitoredCommand(leftover, "REMOTE", companionClientPeer_[client], {},
+                                             client, companionClientGenerations_[client],
+                                             companionClientRemote_.count(client) != 0))
+                  queueCompanionReplyLocked(client, "ERR busy: command queue full\n");
+              }
+            }
+            companionClientBuffers_.erase(pendingIt);
+            companionClientFirstLine_.erase(client);
+          }
+          companionDrainingClients_[client] = SDL_GetTicks() + kCompanionDrainMs;
+        }
+
+        retireDrainedCompanionClientsLocked();
+      }
+      retireDrainedCompanionClients();
+      maybeBroadcastOscState();
+    }
+  }
+
+  // ── TSL/Tally Protocol (cross-platform, UDP send-only) ─────────────────────
+  // Sends TSL 3.1 tally packets to tally hardware on every deck state change.
+  // One 20-byte packet per deck: 1 address byte, 1 control byte, 16 label bytes.
+
+  void startTslTally() {
+    stopTslTally();
+    if (!project_.tslTallyEnabled) {
+      return;
+    }
+    tslTallySocket_ = deckboy::platform::createDatagramSocket(true);
+  }
+
+  void stopTslTally() {
+    if (tslTallySocket_ != deckboy::platform::kInvalidSocket) {
+      deckboy::platform::closeSocket(tslTallySocket_);
+      tslTallySocket_ = deckboy::platform::kInvalidSocket;
+    }
+  }
+
+  void sendTslTallyState() {
+    if (!project_.tslTallyEnabled || tslTallySocket_ == deckboy::platform::kInvalidSocket) {
+      return;
+    }
+    int port = std::clamp(project_.tslTallyPort, 1, 65535);
+    const std::string& host = project_.tslTallyAddress.empty()
+      ? std::string("255.255.255.255")
+      : project_.tslTallyAddress;
+
+    sockaddr_in target {};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(static_cast<uint16_t>(port));
+    if (inet_pton(AF_INET, host.c_str(), &target.sin_addr) != 1) {
+      target.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    }
+
+    int numDecks = static_cast<int>(project_.decks.size());
+    for (int i = 0; i < numDecks; ++i) {
+      const Deck& deck = project_.decks[i];
+      bool isPgm = (deck.activeIndex >= 0);
+      bool isPvw = (!isPgm && i == project_.focusedDeckIndex);
+
+      // TSL 3.1 control byte:
+      //   bit7 = 1 (TSL 3.1 marker)
+      //   bit6 = RH Tally (program / on-air)
+      //   bit2 = LH Tally (preview)
+      //   bits1-0 = brightness (3 = full)
+      std::uint8_t ctrl = 0x83; // bit7 + bits1-0 (full brightness, no tally)
+      if (isPgm) ctrl |= (1 << 6); // RH tally
+      if (isPvw) ctrl |= (1 << 2); // LH tally
+
+      // Build label: deck name, truncated/padded to 16 chars
+      std::array<std::uint8_t, 20> packet {};
+      packet[0] = static_cast<std::uint8_t>(std::clamp(i, 0, 255));
+      packet[1] = ctrl;
+      const std::string& label = deck.name;
+      for (int c = 0; c < 16; ++c) {
+        packet[2 + c] = (c < static_cast<int>(label.size()))
+          ? static_cast<std::uint8_t>(label[c]) : ' ';
+      }
+
+#ifdef _WIN32
+      sendto(
+        static_cast<SOCKET>(tslTallySocket_),
+        reinterpret_cast<const char*>(packet.data()),
+        static_cast<int>(packet.size()),
+        deckboy::platform::kSocketSendFlags,
+        reinterpret_cast<const sockaddr*>(&target),
+        static_cast<int>(sizeof(target))
+      );
+#else
+      sendto(
+        static_cast<int>(tslTallySocket_),
+        reinterpret_cast<const char*>(packet.data()),
+        static_cast<int>(packet.size()),
+        deckboy::platform::kSocketSendFlags,
+        reinterpret_cast<const sockaddr*>(&target),
+        static_cast<socklen_t>(sizeof(target))
+      );
+#endif
+    }
+  }
+
+  void notifyTallyStateChange() {
+    if (project_.tslTallyEnabled) {
+      sendTslTallyState();
+    }
+  }
+
+  // Close half-closed clients whose linger has expired. Caller holds
+  // companionClientsMutex_.
+  void retireDrainedCompanionClientsLocked() {
+    const Uint64 nowMs = SDL_GetTicks();
+    for (auto it = companionDrainingClients_.begin(); it != companionDrainingClients_.end();) {
+      if (nowMs < it->second) {
+        ++it;
+        continue;
+      }
+      SocketHandle client = it->first;
+      it = companionDrainingClients_.erase(it);
+      closeSocket(client);
+      companionClientReplies_.erase(client);
+      companionClientGenerations_.erase(client);
+      companionReplyStartedAt_.erase(client);
+      companionClientBuffers_.erase(client);
+      companionClientFirstLine_.erase(client);
+      companionClientRemote_.erase(client);
+      companionClientPeer_.erase(client);
+      companionClientAuthed_.erase(client);
+      companionClientAuthFailures_.erase(client);
+      companionClients_.erase(
+        std::remove(companionClients_.begin(), companionClients_.end(), client),
+        companionClients_.end()
+      );
+    }
+  }
+
+  // Same, taking the lock. Runs on the idle path too — a quiet socket must
+  // still be retired, or the descriptor lingers until the next packet arrives.
+  void retireDrainedCompanionClients() {
+    std::lock_guard<std::mutex> lk(companionClientsMutex_);
+    retireDrainedCompanionClientsLocked();
+  }
+
+  // Write one line to a Companion client, from any thread. Takes the same lock
+  // the network thread holds while it reads and answers queries, so the two
+  // can't interleave mid-line, and skips a client that has since disconnected.
+  void sendCompanionLine(SocketHandle client, const std::string& line, std::uint64_t generation = 0) {
+    if (client == kInvalidSocket) {
+      return;
+    }
+    const std::string payload = line + "\n";
+    std::lock_guard<std::mutex> lk(companionClientsMutex_);
+    const auto current = companionClientGenerations_.find(client);
+    if (generation && (current == companionClientGenerations_.end() || current->second != generation)) return;
+    if (std::find(companionClients_.begin(), companionClients_.end(), client)
+        == companionClients_.end()) {
+      return;
+    }
+    queueCompanionReplyLocked(client, payload);
+  }
+
+  static bool companionSocketWouldBlock() {
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+  }
+
+  // Caller owns the clients mutex; only the network thread touches sockets.
+  void queueCompanionReplyLocked(SocketHandle client, const std::string& payload) {
+    auto& pending = companionClientReplies_[client];
+    if (pending.size() + payload.size() > 1024u * 1024u) {
+      pending.clear();
+      companionDrainingClients_[client] = 0;
+      return;
+    }
+    if (pending.empty()) companionReplyStartedAt_[client] = SDL_GetTicks();
+    pending += payload;
+  }
+
+  void flushCompanionRepliesLocked(fd_set& writable) {
+    for (SocketHandle client : companionClients_) {
+      auto& pending = companionClientReplies_[client];
+      if (pending.empty()) continue;
+      if (SDL_GetTicks() - companionReplyStartedAt_[client] > 5000) {
+        companionDrainingClients_[client] = 0;
+        continue;
+      }
+      if (!readyFd(client, &writable)) continue;
+      const int bytes = send(client, pending.data(),
+        static_cast<int>(std::min<std::size_t>(pending.size(), 16384)), kSocketSendFlags);
+      if (bytes > 0) pending.erase(0, static_cast<std::size_t>(bytes));
+      else if (bytes == 0 || !companionSocketWouldBlock()) companionDrainingClients_[client] = 0;
+    }
+  }
+
+  void processRemoteCommands() {
+    const Uint64 started = SDL_GetTicks();
+    for (int processed = 0; processed < 32 && SDL_GetTicks() - started < 2; ++processed) {
+      PendingRemoteCommand command;
+      {
+        std::lock_guard<std::mutex> lock(remoteCommandMutex_);
+        if (remoteCommands_.empty()) break;
+        command = std::move(remoteCommands_.front());
+        remoteCommands_.pop_front();
+      }
+      remoteCommandRecognized_ = true;
+      remoteCommandDetail_.clear();
+      if (command.webReply) {
+        std::lock_guard<std::mutex> lock(command.webReply->mutex);
+        if (command.webReply->cancelled || std::chrono::steady_clock::now() >= command.webReply->deadline) continue;
+        remoteCommandError_.clear();
+        if (!project_.webRemoteEnabled || project_.webMonitorPin.size() < 8 ||
+            (!command.webReply->paired && command.webReply->pin != project_.webMonitorPin)) {
+          remoteCommandError_ = "phone control disabled or passphrase changed";
+        }
+      }
+      if (!command.webReply) {
+        remoteCommandError_.clear();
+        if (command.fromNetworkPeer && remoteVerbIsLocalOnly(command.text)) {
+          remoteCommandError_ = "only accepted from this computer";
+          const auto words = splitWhitespace(command.text);
+          showLog("CONTROL-REFUSED", "local-only verb from another machine: " +
+                                     (words.empty() ? std::string() : toUpper(words[0])));
+        }
+      }
+      // The phone counts as another machine too. Every level of a nested
+      // command is checked against this in handleRemoteCommand.
+      remoteCallerIsNetwork_ = command.fromNetworkPeer || command.webReply != nullptr;
+      const bool refusedBeforeRunning = !remoteCommandError_.empty();
+      if (remoteCommandError_.empty()) handleRemoteCommand(command.text);
+      remoteCallerIsNetwork_ = false;
+      if (!command.monitorKind.empty()) recordInputMonitorOutcome(command, refusedBeforeRunning);
+      // A phone reads the state straight after its command answers; refresh
+      // it now rather than at the next once-a-second sync, so a press is seen
+      // to have happened.
+      if (command.webReply) {
+        webMonitorDirSyncedMs_ = 0;
+        syncWebMonitorDirectory();
+      }
+      if (command.replyTo == kInvalidSocket && !command.webReply) {
+        continue;
+      }
+      // Every command gets an answer. Without one the only feedback a command
+      // has is a toast on the control window, which is useless to Companion,
+      // to a script, and to anyone testing over SSH — an unknown verb and a
+      // verb that worked were indistinguishable silence.
+      auto parts = splitWhitespace(command.text);
+      const std::string verb = parts.empty() ? std::string() : toUpper(parts[0]);
+      std::string reply;
+      if (!remoteCommandRecognized_) {
+        reply = "ERR unknown command: " + verb;
+      } else if (!remoteCommandError_.empty()) {
+        reply = "ERR " + verb + ": " + remoteCommandError_;
+      } else if (!remoteCommandDetail_.empty()) {
+        // A query that ran on the main thread and has something to SAY. The
+        // bare "OK VERB" is honest but useless to a script asking what the
+        // state is -- FX LIST answered OK and put the list in a toast, where
+        // nothing over the wire could read it.
+        reply = "OK " + verb + ": " + remoteCommandDetail_;
+      } else {
+        reply = "OK " + verb;
+      }
+      if (command.webReply) {
+        std::lock_guard<std::mutex> lock(command.webReply->mutex);
+        command.webReply->text = reply;
+        command.webReply->cv.notify_one();
+      } else {
+        sendCompanionLine(command.replyTo, reply, command.replyGeneration);
+      }
+    }
+  }

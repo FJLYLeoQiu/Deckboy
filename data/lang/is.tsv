@@ -1,0 +1,2347 @@
+#name Íslenska
+#english Icelandic
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	NÝTT
+OPEN	OPNA
+SAVE	VISTA
+SAVE AS	VISTA SEM
+BUNDLE	PAKKA SAMAN
+IMPORT	FLYTJA INN
+SOURCE	UPPSPRETTA
+PATTERN	MYNSTUR
+SETTINGS	STILLINGAR
+TAKE	TAKE
+STOP	STOPP
+REBOOT	ENDURRÆSA
+BLACKOUT	SVART
+CLEAR	HREINSA
+RECORD	TAKA UPP
+PLAYLIST	SPILUNARLISTI
+TIMELINE	TÍMALÍNA
+MEDIA	MIÐLAR
+TRANSPORT	FLUTNINGUR
+OUTPUT	ÚTTAK
+PROGRAM	PROGRAM
+WARP	SKEKKJA
+LIVE	Í BEINNI
+DECODE	AFKÓÐA
+STREAM	STREYMA ÚT
+System	Kerfi
+Audio	Hljóð
+Network	Net
+Video Outputs	Myndúttök
+About	Um
+Encoder	Kóðari
+Screen	Skjár
+Geometry	Rúmfræði
+Devices	Tæki
+Streaming	Streymi
+APPEARANCE	ÚTLIT
+REMOTE CONTROL	FJARSTÝRING
+INTEGRATION ADAPTERS	SAMSKIPTAMILLISTYKKI
+DISCOVERY / NOTES	UPPGÖTVUN / ATHUGASEMDIR
+DISPLAY & RASTER	SKJÁR OG RASTI
+CONNECTED DISPLAYS	TENGDIR SKJÁIR
+EDGE FEATHERING	KANTMÝKING
+MATTE & OVERLAY	MATTA OG YFIRLAG
+AREA OF INTEREST	ÁHUGASVÆÐI
+DEFAULT TRANSITION	SJÁLFGEFIN UMSKIPTI
+NMC IN & OUT	NMC INN OG ÚT
+OSC QUERY / FEEDBACK	OSC-FYRIRSPURN / SVAR
+CUE INSPECTOR	CUE-SKOÐARI
+SELECTED CUE	VALIN CUE
+PLAYBACK	SPILUN
+COPY	AFRITA
+PASTE	LÍMA
+RESET	ENDURSTILLA
+Theme	Þema
+Language	Tungumál
+Resolution	Upplausn
+Orientation	Stefna
+Toggle Fullscreen	Heilskjár
+IDENTIFY	GREINA
+REGION SIZE	STÆRÐ SVÆÐIS
+POSITION	STAÐA
+CENTRE	MIÐJA
+FULL	FULLT
+duration	lengd
+transition	umskipti
+fade in	deyfa inn
+fade out	deyfa út
+ON	Á
+OFF	AF
+Stopped	Stöðvað
+Playing	Spilar
+Paused	Í bið
+2-UP	2 SAMSÍÐA
+DONE	LOKIÐ
+EDIT	BREYTA
+HELD	HALDIÐ
+Mode	Hamur
+PICK	VELJA
+QUAD	FJÖGUR
+Rate	Tíðni
+STEP	SKREF
+Apply	Nota
+CLOSE	LOKA
+FIXED	FAST
+Help!	Hjálp!
+ORDER	RÖÐ
+READY	TILBÚIÐ
+TILES	FLÍSAR
+VIDEO	VÍDEÓ
+ALL ON	ALLT Á
+ALWAYS	ALLTAF
+ANALOG	HLIÐRÆNT
+Buffer	Biðminni
+Cancel	Hætta
+Custom	Eigið
+Device	Tæki
+Folder	Mappa
+FORMAT	SNIÐ
+HIDDEN	FALIÐ
+Length	Lengd
+Mascot	Lukkudýr
+Mirror	Spegill
+NATIVE	INNBYGGT
+PRESET	FORSTILLING
+Sender	Sendandi
+SUMMED	SAMLAGT
+TOGGLE	SKIPTA
+12 HOUR	12 KLST
+24 HOUR	24 KLST
+ALL OFF	ALLT AF
+ARRANGE	RAÐA
+Channel	Rás
+CONVERT	UMBREYTA
+DEFAULT	SJÁLFGEFIÐ
+END CUE	LOK CUE
+Key out	Key-úttak
+LTC out	LTC-úttak
+MISSING	VANTAR
+PRESETS	FORSTILLINGAR
+PROJECT	VERKEFNI
+RUNNING	Í GANGI
+Send to	Senda til
+SHUFFLE	HANDAHÓFI
+UPDATES	UPPFÆRSLUR
+VJ MODE	VJ-HAMUR
+CLOCK ON	KLUKKA Á
+DOWNLOAD	HALA NIÐUR
+EXAMPLES	DÆMI
+Mappings	Vörpun
+NMC sync	NMC-samstilling
+PROMPTER	SKJÁTEXTI
+SHOW SDP	SÝNA SDP
+TCP port	TCP-gátt
+UI scale	Viðmótsstærð
+vMix API	vMix-API
+WATCHING	VAKTAR
+A/V delay	A/V-seinkun
+ASIO outs	ASIO-úttök
+BOTH AXES	BÁÐIR ÁSAR
+CHECK NOW	ATHUGA NÚNA
+CLOCK OFF	KLUKKA AF
+Creatures	Kvikindi
+CUE TOOLS	CUE-VERKFÆRI
+Direction	Átt
+Freewheel	Frírúll
+HTTP port	HTTP-gátt
+Jump mode	Hopphamur
+Listen on	Hlusta á
+OSC Query	OSC-fyrirspurn
+OUTPUT ON	ÚTTAK Á
+Panic now	Neyðarstopp núna
+RECORDING	UPPTAKA
+REMAINING	EFTIR
+RESET ALL	ENDURSTILLA ALLT
+RUN PANIC	KEYRA NEYÐARSTOPP
+SHOW FLOW	SÝNINGARFLÆÐI
+TIMERS ON	TÍMAMÆLAR Á
+WHEN IDLE	Í HVÍLD
+ADD OUTPUT	BÆTA VIÐ ÚTTAKI
+BUILT WITH	BYGGT MEÐ
+CANCEL ALL	HÆTTA VIÐ ALLT
+colour tag	litamerki
+copy chain	afrita keðju
+Hover tips	Svifvísbendingar
+Input gain	Inntaksstyrkur
+Input mono	Inntak mónó
+live audio	beint hljóð
+Live input	Beint inntak
+MIDI input	MIDI-inntak
+no picture	engin mynd
+no preview	engin forsýn
+OPEN SAVED	OPNA VISTAÐ
+OUTPUT OFF	ÚTTAK AF
+Panic fade	Neyðardeyfing
+Tally port	Tally-gátt
+TIMERS OFF	TÍMAMÆLAR AF
+Accept from	Taka við frá
+ASIO driver	ASIO-stýring
+BACK TO TOP	AFTUR Á TOPPINN
+CANVAS MODE	MYNDFLATARHAMUR
+CODE SOURCE	KÓÐAGJAFI
+Cue numbers	Cue-númer
+Destination	Áfangastaður
+Mirror rate	Speglunartíðni
+no duration	engin lengd
+NO LIVE CUE	ENGIN BEIN CUE
+NO PREVIOUS	EKKERT FYRRA
+OVERLAY BIN	YFIRLAGSHIRSLA
+paste chain	líma keðju
+Sample rate	Söfnunartíðni
+SENDING OUT	SENDIR ÚT
+Shift: snap	Shift: hrökkva
+THIS OUTPUT	ÞETTA ÚTTAK
+(no matches)	(engar samsvaranir)
+(no subtext)	(enginn undirtexti)
+add a button	bæta við hnappi
+add a window	bæta við glugga
+Art-Net port	Art-Net-gátt
+AUDIO OUTPUT	HLJÓÐÚTTAK
+Auto restore	Endurheimta sjálfkrafa
+DECKLINK: ON	DECKLINK: Á
+free running	frírúllandi
+KEY+FILL: ON	KEY+FILL: Á
+LISTENING IN	HLUSTAR
+Miami cursor	Miami-bendill
+MIDI CONTROL	MIDI-STÝRING
+Mirror state	Spegla stöðu
+NDI KEY: OFF	NDI KEY: AF
+NDI KEY: ON	NDI KEY: Á
+NO PROGRAMME	ENGIN ÚTSENDING
+ST 2110: OFF	ST 2110: AF
+ST 2110: ON	ST 2110: Á
+WATCH FOLDER	VÖKTUÐ MAPPA
+COMPOSITE CUE	SAMSETT CUE
+DECKLINK: OFF	DECKLINK: AF
+default route	sjálfgefin leið
+Every adapter	Hvert netkort
+KEY+FILL: OFF	KEY+FILL: AF
+LEFT TO RIGHT	FRÁ VINSTRI TIL HÆGRI
+MEDIA ENCODER	MIÐLUNARKÓÐARI
+MSC device id	MSC-tækisnúmer
+NEW SHOW FILE	NÝ SÝNINGARSKRÁ
+No cue loaded	Engin cue hlaðin
+nothing taken	ekkert tekið
+OPEN PREVIOUS	OPNA FYRRA
+Output device	Úttakstæki
+Panic profile	Neyðarstoppsnið
+Quit Deckboy?	Loka Deckboy?
+REMOVE OUTPUT	FJARLÆGJA ÚTTAK
+Sound effects	Hljóðbrellur
+Tally address	Tally-vistfang
+TOP TO BOTTOM	FRÁ TOPPI TIL BOTNS
+127 (all-call)	127 (allsherjarkall)
+ALL INTERFACES	ÖLL NETKORT
+LOCALHOST ONLY	AÐEINS LOCALHOST
+Monitor device	Eftirlitstæki
+no audio track	ekkert hljóðspor
+PRESENTER VIEW	SÝN FLYTJANDA
+RECORD TO DISK	TAKA UPP Á DISK
+STOP RECORDING	STOPPA UPPTÖKU
+STOP STREAMING	STOPPA STREYMI
+TALLY TRIGGERS	TALLY-KVEIKJUR
+Device channels	Rásir tækis
+NDI SENDING: ON	NDI-SENDING: Á
+NO CUE SELECTED	ENGIN CUE VALIN
+Output channels	Úttaksrásir
+preview pending	forsýn í bið
+START RECORDING	BYRJA UPPTÖKU
+START STREAMING	BYRJA STREYMI
+(system default)	(sjálfgefið í stýrikerfi)
+Check at startup	Athuga við upphaf
+Global crossfade	Almenn krossdeyfing
+Mic to recording	Hljóðnemi í upptöku
+Monitor playlist	Eftirlit með spilunarlista
+NDI SENDING: OFF	NDI-SENDING: AF
+no still preview	engin stillumyndaforsýn
+Pocket 3 / touch	Pocket 3 / snerting
+SMPTE LTC OUTPUT	SMPTE LTC-ÚTTAK
+the whole screen	allur skjárinn
+Check for one now	Athuga núna
+INSTALL & RESTART	SETJA UPP OG ENDURRÆSA
+Registry: NOT SET	Skrásetning: EKKI STILLT
+SAFETY / TIMECODE	ÖRYGGI / TÍMAKÓÐI
+Timecode jam sync	Jam sync tímakóða
+esc or N to cancel	Esc eða N til að hætta
+KEYBOARD SHORTCUTS	FLÝTILYKLAR
+loading preview...	hleð forsýn...
+CONVERT ALL FLAGGED	UMBREYTA ÖLLU MERKTU
+dot-matrix cue deck	punktafylkis cue-borð
+HyperDeck emulation	HyperDeck-eftirlíking
+locked to the tempo	fest við taktinn
+VJ mode (two decks)	VJ-hamur (tvö borð)
+ADD ANOTHER PLAYLIST	BÆTA VIÐ SPILUNARLISTA
+Companion / OSC port	Companion- / OSC-gátt
+Esc or click to skip	Esc eða klikk til að sleppa
+PLAYLIST PREFERENCES	KJÖRSTILLINGAR SPILUNARLISTA
+press ENTER to start	ýttu á ENTER til að byrja
+ADD A SECOND PLAYLIST	BÆTA VIÐ ÖÐRUM SPILUNARLISTA
+filmstrip unavailable	filmustrimill ófáanlegur
+(empty — import media)	(tómt – flyttu inn efni)
+Ctrl+D or Esc to close	Ctrl+D eða Esc til að loka
+(no notes for this cue)	(engar athugasemdir við þessa cue)
+Timebase / start / fade	Tímagrunnur / upphaf / deyfing
+No cues need conversion.	Engin cue þarf umbreytingu.
+CLICK TO SAMPLE KEY COLOR	KLIKKAÐU TIL AÐ TAKA KEY-LIT
+normalize loudness (R128)	jafna hljóðstyrk (R128)
+off - all channels silent	af – allar rásir þögular
+no video lane for this cue	engin vídeórás fyrir þessa cue
+HyperDeck emulation is off.	HyperDeck-eftirlíking er af.
+OWN SCRIPT  (click to edit)	EIGIÐ HANDRIT  (klikkaðu til að breyta)
+Theme and operator feedback	Þema og svörun við stjórnanda
+Discovery and mirrored state	Uppgötvun og spegluð staða
+FOLLOWING THE LIVE CUE NOTES	FYLGIR ATHUGASEMDUM BEINU CUE
+Listening on all interfaces.	Hlustar á öll netkort.
+Network-facing runtime notes	Keyrsluupplýsingar sem netið sér
+Hi! Press I to import a clip.	Hæ! Ýttu á I til að flytja inn klippu.
+Global jump and panic behavior	Almenn hopp- og neyðarhegðun
+Roll when the show cuts to you	Rúllaðu þegar útsendingin fer á þig
+Choose a cue to inspect it here	Veldu cue til að skoða hana hér
+Defaults for newly created cues	Sjálfgefið fyrir nýjar cue
+Device routing for cue playback	Tækjaleiðing fyrir cue-spilun
+Smaller buffer = lower latency.	Minna biðminni = minni seinkun.
+Emergency fade and sync behavior	Neyðardeyfing og samstilling
+mixed selection: key unavailable	blandað val: key ófáanlegt
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (Á TILRAUNASTIGI)
+Esc=continue with current session	Esc = halda áfram með núverandi setu
+no per-cue settings for this type	engar cue-stillingar fyrir þessa gerð
+On stop: remux to an ordinary MP4	Við stopp: endurpakka í venjulegt MP4
+Where RECORD writes the programme	Hvar RECORD skrifar útsendinguna
+dot-matrix cue deck for live events	punktafylkis cue-borð fyrir beinar sýningar
+Listening on localhost (127.0.0.1).	Hlustar á localhost (127.0.0.1).
+three expressions: red, green, blue	þrjár segðir: rautt, grænt, blátt
+Transport sync with another machine	Samstilling við aðra vél
+Add slot sources in the cue inspector	Bættu við gjöfum í cue-skoðaranum
+Ask GitHub; never installs on its own	Spyr GitHub; setur aldrei upp sjálft
+Import or click a cue in the playlist	Flyttu inn eða klikkaðu á cue í listanum
+mixed selection: geometry unavailable	blandað val: rúmfræði ófáanleg
+generate timecode for the rig to chase	búðu til tímakóða sem búnaðurinn fylgir
+Lower Third and PIP fire independently	Neðri þriðjungur og PiP kveikja sjálfstætt
+Panels built for a vMix rig, unchanged	Spjöld gerð fyrir vMix-búnað, óbreytt
+Incoming transport arrives as NMCEVENT.	Aðkomandi flutningur kemur sem NMCEVENT.
+not in this build - saved with the show	ekki í þessari útgáfu – vistað með sýningunni
+Find from the playlist, not from a modal	Leitaðu úr listanum, ekki úr glugga
+take or select a cue to open the timeline	taktu eða veldu cue til að opna tímalínuna
+Optional external transport and cue control	Valfrjáls utanáliggjandi flutnings- og cue-stýring
+No previous show file found at startup path.	Engin fyrri sýningarskrá fannst við upphaf.
+Use Ctrl+F or type a cue id/number to search.	Notaðu Ctrl+F eða skrifaðu cue-númer til að leita.
+Companion / OSC ingress and HyperDeck emulation	Companion- / OSC-inntak og HyperDeck-eftirlíking
+A/V delay holds audio back for lagging displays.	A/V-seinkun heldur hljóði aftur fyrir hæga skjái.
+On stop: leave the crash-resilient file as it is	Við stopp: láttu hrunþolnu skrána vera
+same disk as Deckboy - a separate drive is safer	sami diskur og Deckboy – sérdiskur er öruggari
+A step fires one cue on each playlist, all at once.	Skref kveikir eina cue á hverjum lista, allt í einu.
+one expression: the same value in red, green and blue	ein segð: sama gildi í rauðu, grænu og bláu
+NDI transport is configured per output in Video Outputs.	NDI-flutningur er stilltur per úttak í Vídeóúttökum.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Sendir PLAY / PAUSE / STOP / LOCATE þegar flutningur hreyfist.
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC-áskrift: sendu /deckboy/subscribe frá stýringunni.
+NMC mode / host / port are runtime-configurable for sync work.	NMC-hamur / hýsill / gátt eru stillanleg á keyrslutíma.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Að fara í loftið tekur cue. Deckboy sendir aldrei skipun á blöndunartækið.
+FPS: ON	FPS: Á
+FPS: OFF	FPS: AF
+NMOS: ON	NMOS: Á
+NMOS: OFF	NMOS: AF
+SPOUT: ON	SPOUT: Á
+SPOUT: OFF	SPOUT: AF
+CANVAS: ON	MYNDFLÖTUR: Á
+CANVAS: OFF	MYNDFLÖTUR: AF
+10-BIT: ON	10-BITA: Á
+10-BIT: OFF	10-BITA: AF
+EDIT...	BREYTA...
+FOLDER...	MAPPA...
+ARRANGE...	RAÐA...
+ADD FILE...	BÆTA VIÐ SKRÁ...
+RENUMBER...	ENDURNÚMERA...
+set a port...	stilltu gátt...
+no script	ekkert handrit
++ OUTPUT	+ ÚTTAK
+Eddie's Clock	Klukka Eddies
+Ctrl+/ to close	Ctrl+/ til að loka
+(step lives here)	(skrefið er hér)
+4:2:2  8-BIT	4:2:2  8 BITA
+4:2:2  10-BIT	4:2:2  10 BITA
+No outputs — click + OUTPUT to add one.	Engin úttök – klikkaðu á + ÚTTAK.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, NDI-kveikja, NMC, MTC, LTC, Art-Net og Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Umbreyttu í H.264 þeim cue sem Deckboy spilar illa
+a button can run any command the network protocol understands	hnappur getur keyrt hverja skipun sem samskiptareglan skilur
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	RAÐA SÝN FLYTJANDA  -  dragðu spjald til að færa, horn til að stækka
+capture again - what is on now	taka upp aftur - það sem er í gangi
+change what it does...	breyta því sem hann gerir...
+decks - Stop deck...	dekk - stöðva dekk...
+decks - Take deck...	dekk - TAKE á dekk...
+delete step	eyða skrefi
+delete this button	eyða þessum hnappi
+label, command and glyph as text...	merki, skipun og tákn sem texti...
+move down	færa niður
+move up	færa upp
+next colour	næsti litur
+preset - a new preset from what is on now	forstilling - ný forstilling úr því sem er í gangi
+type a command myself...	slá sjálf(ur) inn skipun...
+type a length in seconds...	slá inn lengd í sekúndum...
+wait for GO	bíða eftir GO
+what it recalls...	það sem hann sækir...
+when its cues end	þegar vísbendingar hans klárast
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL jafnar allan spilunarlistann í einu
+back to the in point, not to zero	aftur að upphafspunkti, ekki á núll
+drag to scrub. the audio follows	dragðu til að skruna. hljóðið fylgir
+loops between the in and out points, not the file	endurtekur milli upphafs- og lokapunkts, ekki skrána
+(not set)	(ekki stillt)
+1.00x  (default 1080p)	1.00x  (sjálfgefið 1080p)
+1.25x  (large desktop)	1.25x  (stórt skjáborð)
+1.50x  (4K desktop)	1.50x  (4K skjáborð)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / lítið 4K)
+highest bandwidth	mesta bandbreidd
+lower bandwidth	minni bandbreidd
+film	kvikmynd
+CD, music rigs	geisladiskur, tónlistarbúnaður
+video standard	myndbandsstaðall
+every playlist	hver spilunarlisti
+None  (no character art)	Ekkert  (engin persóna)
+custom size...	sérsniðin stærð...
+Browser URL	Vefslóð vafra
+Camera	Myndavél
+Media File / Still	Margmiðlunarskrá / kyrrmynd
+RECORD TO FILE	TAKA UPP Í SKRÁ
+browser, with sound	vafri, með hljóði
+Window	Gluggi
+Desktop	Skjáborð
+full screen	allur skjárinn
+DeckLink Output	DeckLink-úttak
+FFmpeg Stream Output	FFmpeg-streymisúttak
+NDI Output	NDI-úttak
+SDL Window Output	SDL-gluggaúttak
+Spout Output	Spout-úttak
+DESK	STJÓRNBORÐ
+drop a folder in too - it reads the whole tree	dragðu líka inn möppu — allar undirmöppur eru lesnar
+cameras, windows, NDI, screens - all live sources	myndavélar, gluggar, NDI, skjáir — allt beinar mynduppsprettur
+test cards and generators - no file needed	prófunarmyndir og myndgjafar — engin skrá nauðsynleg
+space bar does this too, without moving your hand	bilstöngin gerir þetta líka, án þess að færa höndina
+stops the cue. ESC stops EVERYTHING	stöðvar cue. ESC stöðvar ALLT
+the safe one: audio and playback keep running	mildi kosturinn: hljóð og spilun halda áfram
+the thorough one. blackout is the reversible one	róttæki kosturinn. Hægt er að afturkalla myrkvun
+save as makes a new file instead	Vista sem býr til nýja skrá
+for a copy before you change something risky	fyrir afrit áður en þú gerir áhættusama breytingu
+this is what you carry to the venue	þetta tekurðu með þér á sýningarstaðinn
+the show on disk is untouched until you save	sýningin á disknum breytist ekki fyrr en þú vistar
+per cue. the deck has its own default too	fyrir hvert cue. Deckið hefur líka sín sjálfgefnu gildi
+stills hold instead - a fade would dip the frame	kyrrmyndir haldast — útdeyfing myndi dekkja myndina
+the frame stays up. good for slides	myndin helst á skjánum. Gott fyrir glærur
+gain, pan and normalise live in the inspector	styrkur, víðóma staðsetning og stöðlun eru í skoðaranum
+this clip has no audio track to enable	þessi bútur hefur enga hljóðrás til að kveikja á
+Hi! I am Deckboy.	Hæ! Ég er Deckboy.
+Press I to import a clip.	Ýttu á I til að flytja inn bút.
+Enter takes a cue live.	Enter setur cue í loftið.
+S stops the live cue.	S stöðvar cue sem er í loftinu.
+The timeline can be resized.	Hægt er að breyta stærð tímalínunnar.
+Try a terminal theme in Settings.	Prófaðu skjástöðvarþema í Stillingum.
+RELINK finds media that has moved.	RELINK finnur miðlaskrár sem hafa verið færðar.
+Cues have their own gain and fades.	Hvert cue hefur eigin styrk og deyfingar.
+Trim with Ctrl+I and Ctrl+O.	Stilltu upphaf og enda með Ctrl+I og Ctrl+O.
+Ctrl+/ shows every shortcut.	Ctrl+/ sýnir allar flýtileiðir.
+J jumps to the live cue.	J hoppar að cue sem er í loftinu.
+Normalize matches loudness across cues.	Stöðlun jafnar skynjaðan hljóðstyrk milli cue.
+Esc clears the desk, then the output, then quits.	Esc tæmir stjórnborðið, síðan úttakið og lokar svo forritinu.
+Stream SRT and RTMP at the same time.	Streymdu með SRT og RTMP samtímis.
+CHECK lists what is broken, before doors.	CHECK sýnir vandamálin áður en húsið opnar.
+A cue can wait before it starts.	Cue getur beðið áður en það byrjar.
+A cue can start the next one by itself.	Cue getur ræst það næsta sjálft.
+Disarm a cue and GO steps over it.	Taktu cue úr viðbragðsstöðu og GO sleppir því.
+Audition plays a cue to you, not the room.	Forhlustun spilar fyrir þig, ekki salinn.
+Preload racks the next cue warm, off air.	Forhleðsla undirbýr næsta cue utan útsendingar.
+A target cue starts or stops another cue.	Markcue ræsir eða stöðvar annað cue.
+A fade cue takes a deck down, then stops it.	Deyficue deyfir deck og stöðvar það síðan.
+A master cue fires one cue on every deck.	Aðalcue ræsir eitt cue á hverju decki.
+A MIDI cue can tell the lighting desk to go.	MIDI-cue getur gefið ljósaborðinu ræsimerki.
+A network cue speaks OSC, UDP or TCP.	Netcue talar OSC, UDP eða TCP.
+A DMX cue fades the house lights on a cue.	DMX-cue deyfir eða eykur salarljósin mjúklega.
+A script cue runs Deckboy's own commands.	Skriftucue keyrir skipanir Deckboy.
+A timecode cue jams LTC to a value.	Tímakóðacue stillir LTC á tiltekið gildi.
+Each output can show a different deck.	Hvert úttak getur sýnt annað deck.
+The matrix sends audio to any channel.	Fylkið sendir hljóð á hvaða rás sem er.
+The panel map numbers every LED tile.	Spjaldakortið númerar hverja LED-einingu.
+Hey!	Heyrðu!
+Quit it!	Hættu þessu!
+Ow. That was rude.	Á. Þetta var nú óþarfi.
+I am a professional.	Ég er nú fagmaður.
+Seriously?	Í alvöru?
+This is my monitor.	Þetta er minn skjár.
+I am telling the operator.	Ég segi tæknimanninum frá þessu.
+All right. Wow.	Jæja. Ekki vantar það.
+Right. That does it.	Nú er nóg komið.
+I am leaving. Good luck with the show.	Ég er farinn. Gangi ykkur vel með sýninguna.
+Still here? Me too.	Enn hér? Ég líka.
+Long show, huh.	Þetta er orðin ansi löng langloka.
+I could do this all day. Apparently.	Ég gæti gert þetta allan daginn. Það er víst planið.
+You have been staring at me for hours.	Þú ert búinn að stara á mig tímunum saman.
+Has anyone seen a clock?	Veit einhver hvað klukkan er, eða reddast það líka?
+Is it still the same show?	Er þetta enn sama sýningin?
+I'm not tired. You're tired.	Ég er ekki þreyttur. Þú ert þreyttur.
+Five more minutes. Then five more.	Fimm mínútur í viðbót. Já já, þetta reddast.
+A whole day. I need a restart.	Heill sólarhringur. Ég þarf endurræsingu.
+Save the show. Then let me sleep.	Vistaðu sýninguna. Leyfðu mér svo að sofa.
+Every pixel of me is tired.	Hver einasti díll í mér er búinn á því.
+Close me. Open me. I'll be fine.	Lokaðu mér. Opnaðu mig. Þá verð ég góður.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Þetta reddast! Það reddast alltaf.
+Oh hey. It's 4:20. Take it easy.	Ó, hæ. Klukkan er 4:20. Taktu því rólega.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	HALLÓ
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Ég er doktor Pixel. Fimm mínútur og þú stýrir sýningu. Styttra, ef þú hlustar á mig.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Og ég er prófessor Video. Fyrst hljóðgervlar, svo myndband. Núna mest myndband. Ýttu á START og við tengjum... byrjum.
+TURN THE OUTPUT ON	KVEIKTU Á ÚTTAKINU
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, skjárinn er tómur. Ekki láta þau bíða. Opnaðu VALMYND og láttu ÚTTAK AF verða ÚTTAK Á. Hajde!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Fyrsta lexía: ekkert kemur út fyrr en þú tengir sveifluvakann við... við ÚTTAKIÐ. Þetta er myndband. Ég veit.
+BRING IN A CLIP	SÆKTU MYNDSKEIÐ
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Nú mynd. Ýttu á I og veldu myndskeið úr tölvunni. Ekkert myndskeið? SHOW ME, og ég lána þér eitt af mínum.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Hvert myndskeið verður að cue í spilunarlistanum. Eins og að hlaða inn sampli. Sampli með myndum í.
+TAKE IT LIVE	Í LOFTIÐ
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Myndskeiðið bíður í spilunarlistanum. Veldu það, svo TAKE. Eða Enter. Öruggir tæknimenn ýta á Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE er gikkurinn á hjúpnum. Það er, öh, GO-takkinn. Sami hluturinn, bara með myndum.
+LINE UP THE NEXT ONE	HAFÐU NÆSTA TILBÚIÐ
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Smelltu á annað cue. Það bíður tilbúið þar til þú segir til. Bara eitt cue? Flyttu inn annað, eða SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Að velja er ekki að spila. Það valda er næsta nóta í röðinni. Næsta CUE.
+CROSSFADE TO IT	VÍXLDOFNAÐU YFIR
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Harðar klippur eru fyrir áhugamenn. Í eftirlitinu, ýttu á + við umskipti þar til tími stendur en ekki deck. Svo TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Víxldofnun! Portamento, bara fyrir myndir. Hvaða tími sem er dugar. Nokkrir smellir í viðbót og það er sekúnda. Svo TAKE.
+CLEAR THE SCREEN	HREINSAÐU SKJÁINN
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Fer eitthvað úrskeiðis á sviðinu? Ýttu á BLACK, eða B. Myndin hverfur. Sýningin heldur áfram undir niðri.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Ekkert tapast. Ýttu aftur á B og hún kemur aftur. Eins og mute á hljóðborði. Mjög róandi.
+SAVE THE SHOW	VISTAÐU SÝNINGUNA
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Vistaðu nú. Ctrl+S, eða VISTA. Sum forrit týna vinnunni þinni og kenna þér svo um. Ég aldrei.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Vistaðu patchið þitt. SÝNINGUNA þína. Sýningu. Þessi æfingasýning býr í möppu Deckboy sjálfs; þín er örugg.
+THAT'S A SHOW	ÞETTA ER SÝNING
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	Þetta er sýning! Úttak, cue, TAKE, víxldofnun, BLACK, vista. Nazdrave, skapi. Rakían er á mig.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Tíminn búinn. Dæmasýningarnar kenna lög, titla og áhrif. VALMYND > LEARN THE BASICS keyrir þetta aftur.
+*shakes head* That means yes. Bravo.	*hristir höfuðið* Það þýðir já. Bravó.
+Wonderful! Lovely signal flow.	Dásamlegt! Yndislegt merkjaflæði.
+Mm. I knew you had it in you.	Mm. Ég vissi að þú hefðir þetta í þér.
+Yes! Have a gold star. It's a dot.	Já! Hér er gullstjarna. Þetta er punktur.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Tilbúinn í næsta skref? *kinkar kolli* ...Það þýðir nei, skapi. Sá sem glóir. Hann glóir fyrir þig.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Þú hefur smellt á allt nema þann sem glóir. Meira að segja sveifluvakarnir mínir finna þann sem glóir.
+stop playback first - the lesson cannot hand a running show back as it was	stöðvaðu spilun fyrst - lexían getur ekki skilað sýningu í gangi eins og hún var
+choose RECOVER or KEEP SAVED first	veldu RECOVER eða KEEP SAVED fyrst
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	ekki tókst að vista sýninguna þína, svo lexían er ekki hafin. Vistaðu hana (VISTA SEM) og reyndu aftur
+the practice show would not open	æfingasýningin opnaðist ekki
+could not start the practice show	gat ekki ræst æfingasýninguna
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc hættir, og næst er haldið áfram héðan
+that's the basics - MENU > LESSONS has part two	þetta eru grunnatriðin - VALMYND > LESSONS er með annan hluta
+tour paused - LEARN THE BASICS picks up where you left off	kynning á bið - LEARN THE BASICS heldur áfram þar sem þú hættir
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Speglaðir skjáir, skapi. Ýttu á hvaða takka sem er eða smelltu, og doktor Pixel skilar honum.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Rangur skjár, skapi. Ýttu á hvaða takka sem er eða smelltu, og doktor Pixel skilar honum.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Hinn skjárinn hvarf, skapi. Ýttu á hvaða takka sem er eða smelltu, og doktor Pixel skilar honum.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Einn skjár, skapi. Ýttu á hvaða takka sem er eða smelltu, og doktor Pixel skilar honum.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Hinn skjárinn hvarf, skapi, svo myndin kom aftur á þennan. Ég setti hana í lítinn glugga, fyrir aftan. Tengdu hann aftur og myndin fer aftur á hann.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Það át borðið, skapi. Einn skjár, svo úttakið tók allt. Ég setti það í lítinn glugga, fyrir aftan. Alvöru sýning fær annan skjá.
+IT ATE THE DESK	ÞAÐ ÁT BORÐIÐ
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	Þarna. Hnappurinn sem segir ÚTTAK AF. Láttu hann segja Á, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Ekkert er í loftinu til að dofna frá, skapi. Gerðu TAKE á eitt cue fyrst, veldu svo hitt og gefðu því tíma.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	Þetta var klippa, skapi. Hröð, en ekki víxldofnun. Veldu hitt cue-ið, ýttu á + við umskipti, svo TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Afturverkunarlykkja! Úttakið tengt beint aftur inn í borðið. Kemur fyrir þá bestu. Mest mig. 1983. Við tölum ekki um 1983.
+No more rakia. The rat has a problem.	Ekki meiri rakía. Rottan á við vanda að stríða.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Rakía ömmu, frá Belogradchik. Eitt glas, fyrir lexíuna. Sterkari en brennivín, held ég.
+Is this... is this allowed during a tutorial?	Er þetta... er þetta leyfilegt í kennslu?
+*shakes head* That means one more.	*hristir höfuðið* Það þýðir eitt í viðbót.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Ég elska ykkur öll. Ég elska sveifluvakann. Ég elska ÚTTAKIÐ. Þetta er myndband. Ég veit. ÉG VEIT.
+...and the rat took the rakia. Every time, skapi. Every single time.	...og rottan tók rakíuna. Í hvert skipti, skapi. Í hvert einasta skipti.
+Was that a rat? In a hat? With a pizza?	Var þetta rotta? Með hatt? Með pítsu?
+Stop that. I am a serious man.	Hættu þessu. Ég er alvarlegur maður.
+Do not tell Dr. Pixel about this.	Ekki segja doktor Pixel frá þessu.
+This never happened. Back to the patch bay.	Þetta gerðist aldrei. Aftur að tengiborðinu.
+It was the eighties. Everyone had a bow tie.	Þetta var níundi áratugurinn. Allir voru með slaufu.
+LESSON LIST	LEXÍULISTI
+OPEN EXAMPLE SHOWS	OPNA DÆMASÝNINGAR
+EXIT (Esc)	HÆTTA (Esc)
+Taking it on the road	Sýningin á ferðalagi
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Láttu CHECK yfirfara sýningu áður en hún ferðast, lagaðu það sem finnst og pakkaðu henni með miðlunum.
+Effects, oscillators and colour	Áhrif, sveifluvakar og litur
+An effect, a ~ on its knob, and the colour picker.	Áhrif, ~ á takkanum og litavalið.
+The art school crit, with Mr. Salty	Rýni í myndlistarskólanum, með Mr. Salty
+Patterns, synths and Draw	Prófmyndir, hljóðgervlar og Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Prófmynd, myndgervillinn og teikning á myndina, vistuð sem kyrrmynd.
+The telestrator booth, with Coach Marv	Teiknibásinn, með Coach Marv
+Masks	Grímur
+A heart from the library, the pen, invert and feather.	Hjarta úr safninu, penninn, umsnúningur og mýking.
+The Signal Files: redact the evidence	Merkjamöppurnar: afmáðu sönnunargagnið
+Warp, blend and slices	Bjögun, blöndun og sneiðar
+A corner pin, two soft edges, then three slices in the Screens window.	Hornfesting, tvær mjúkar brúnir, svo þrjár sneiðar í Screens-glugganum.
+The haunted lighthouse, with Keeper Rook	Reimleikavitinn, með vitaverðinum Rook
+GO from anywhere	GO hvaðan sem er
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Cue-númer, GOTO, flýtilykill, og hvar Companion, MIDI og OSC koma inn.
+The game show, with Donna Wheel	Spurningakeppnin, með Donnu Wheel
+Words on screen	Orð á skjánum
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Nafnaborði með nafni, svo titilspjald með grænum lyklunarbakgrunni.
+The kaiju weather report, with June O'Neil	Kaiju-veðurfréttirnar, með June O'Neil
+Keeping time	Að halda tímanum
+A stage timer counting down, held, and a presenter view for the person on stage.	Sviðsklukka sem telur niður, sett á bið, og kynnisskjár fyrir þann sem er á sviðinu.
+A grand day out, with Wallis and Grommet	Stórkostlegur dagur, með Wallis og Grommet
+Two playlists and TAKE ALL	Tveir spilunarlistar og TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Annar listi sem lag, og TAKE ALL svo tveir hlutir breytist í sama slagi.
+The magic show, with Turnip Top	Töfrasýningin, með Turnip Top
+When it goes wrong	Þegar illa fer
+BLACK against PANIC, and getting a show back.	BLACK á móti PANIC, og að ná sýningu aftur.
+The cooking show, with Chef Bork	Matreiðsluþátturinn, með kokkinum Bork
+Presets	Forstillingar
+Capture a look on a DASH button, change everything, and get it back with one press.	Geymdu útlit á DASH-hnappi, breyttu öllu, og fáðu það aftur með einu ýti.
+Transitions	Umskipti
+The styles beyond the crossfade: an iris, a shatter, and their times.	Stílarnir handan víxldofnunar: ljósop, splundrun og tímarnir þeirra.
+The space-opera trailer, with Optimus Primetime	Geimóperustiklan, með Optimus Primetime
+Sound	Hljóð
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Hljóðáhrif á cue, beygja sem skemmir það fallega, og hvar patchið býr.
+The robot DJs, with Deft Funk	Vélmenna-plötusnúðarnir, með Deft Funk
+Reading the scopes	Að lesa mælana
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Bylgjuformið, vigursjáin og falskur litur: er bjarminn raunverulegur, eða bara of bjartur?
+The Signal Files: is the glow on the horizon a craft?	Merkjamöppurnar: er bjarminn við sjóndeildarhringinn geimfar?
+Out of the building	Út úr byggingunni
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Hvar NDI, SDI og ST 2110 búa, og kveikt á NDI þar sem þessi tölva hefur það.
+The webcam as a controller, as a game. Five rounds, a high score.	Vefmyndavélin sem stýripinni, sem leikur. Fimm umferðir, metstig.
+A handheld, and bugs	Handtölva, og pöddur
+The multiview	Fjölskjárinn
+Windows, the ... menu, what each one shows, layouts, and tally.	Gluggar, ...-valmyndin, hvað hver sýnir, uppsetningar og tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Ráðgáta um borð í geimskipinu Cathode, með Lt. Haila og liðsforingjaefninu Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Tveir spilunarlistar: Deckboy verður SUPER DECKBOY. Átti það skilið, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Hann þróaðist! Sveifluvakarnir mínir fengu aldrei lúðrablástur.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Hver sýning á einn skilið. Bravó.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Krafturinn! Fleiri listar, fleiri lög, meira súper.
+Intro video (left on the office PC)	Upphafsmyndband (gleymt á skrifstofutölvunni)
+ON THE ROAD	Á FERÐALAGI
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Sýning sem þú smíðaðir hér, skapi, keyrir í kvöld á fartölvu einhvers staðar annars staðar. Ýttu á START.
+Before it travels: check it, fix it, bundle it.	Áður en hún ferðast: yfirfara, laga, pakka.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Sérðu CHECK á efstu stikunni? Það birtist bara þegar eitthvað er að. Ýttu á það.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Það telur upp allt sem sýning myndi hrasa um: skrár sem vantar, tóm cue, úttök sem næst ekki í.
+FIX IT	LAGAÐU ÞAÐ
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Upphafsmyndbandið er á annarri tölvu. Veldu það og eyddu því, eða gerðu RELINK ef þú átt skrána.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Lagaðu það heima, þar sem það er auðvelt. Ekki á staðnum, þar sem það er það ekki.
+BUNDLE IT	PAKKAÐU HENNI
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Ýttu á PAKKA SAMAN og veldu hvert: USB-lykil, sameiginlega möppu. Sýningin og allir miðlar hennar, saman.
+The copy finds its media beside it, wherever the folder goes.	Afritið finnur miðlana sína við hliðina á sér, hvert sem mappan fer.
+SAFE TRAVELS	GÓÐA FERÐ
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Yfirfarið, lagað, pakkað. Á hinni vélinni, opnaðu sýninguna úr pakkanum: allt er á sínum stað.
+A show file is only text, so it travels light. The media is the heavy part.	Sýningarskrá er bara texti, svo hún ferðast létt. Þunga dótið eru miðlarnir.
+Student work no. 4 (untitled)	Nemendaverk nr. 4 (án titils)
+THE CRIT	RÝNIN
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Myndlistarskóli, skapi. Einn nemandi, ein mynd, einn gagnrýnandi sem hefur séð allt. Ýttu á START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Áhrif breyta mynd; sveifluvaki heldur áfram að breyta henni. Gagnrýnandanum líkar bara seinni gerðin.
+A grey square on beige. I have seen this at every graduate show since 1987.	Grár ferningur á drapplitu. Ég hef séð þetta á hverri útskriftarsýningu síðan 1987.
+AN EFFECT	ÁHRIF
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Í EFFECTS-hluta eftirlitsins bætir + einum við. Edges er góð byrjun: það teiknar útlínurnar.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Þau eru tugir. Hvert keyrir á örgjörvanum á fáeinum millisekúndum. Yfirleitt.
+Take a risk! Bad art is fine. Boring art is a crime.	Taktu áhættu! Vond list er í lagi. Leiðinleg list er glæpur.
+A ~ ON ITS KNOB	~ Á TAKKANUM
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Hvaða stýring sem er með ~ við hliðina getur fylgt sveifluvaka. Ýttu á einn. Takkinn fer að anda.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Lágtíðnisveifluvaki: hægur, svo augað nái að fylgja. Fjórðungur úr hertsi er fjögurra sekúndna andardráttur.
+Now it MOVES. Okay. Okay. I'm listening.	Nú HREYFIST það. Allt í lagi. Allt í lagi. Ég er að hlusta.
+A COLOUR OF ITS OWN	EIGINN LITUR
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Áhrif sem teikna lit, eins og lína Edges, hafa litaflís. Hún opnar valið: hjól, slegin heiti, eða lit af skjánum.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Hver litur á sér nafn einhvers staðar. Minn er 'sveiflusjárgrænn'. Enginn annar notar hann.
+That colour is doing something. I don't know what. I love it.	Þessi litur er að gera eitthvað. Ég veit ekki hvað. Ég elska hann.
+THE VERDICT	DÓMURINN
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Áhrif, ~ og litur. Gagnrýnandinn grætur, skapi. Af hrifningu, held ég.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Staflaðu nokkrum. Hvert hefur sitt eigið ~ á hverjum takka. Þannig verður útlit að gjörningi.
+It's still a square. But it's YOUR square. Post it.	Þetta er ennþá ferningur. En þetta er ÞINN ferningur. Birtu hann.
+THE TELESTRATOR BOOTH	TEIKNIBÁSINN
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Coach Marv útskýrir íþróttir með því að teikna hringi á þær. Einu sinni hringaði hann sólina. Tíu mínútur, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Í kvöld: prófmyndir, myndgervillinn og teikning á myndina. Ýttu á START.
+Get me a picture and a pen. BOOM.	Réttið mér mynd og penna. BÚMM.
+A TEST PATTERN	PRÓFMYND
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Stilltu skjáina af FYRIR sýninguna. Ekki á meðan. Ég lærði það í Plovdiv.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Hvert borð þarf prófmynd. PRÓFMYND bætir við Pocket Test: yfirfarið með alvöru mælum.
+A VIDEO SYNTH	MYNDGERVILL
+He says 'no camera needed' like it is a feature. It is a feature.	Hann segir 'engin myndavél nauðsynleg' eins og það sé eiginleiki. Það er eiginleiki.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Uppáhaldið mitt. UPPSPRETTA, svo Video Synth: sveifluvakar, speglar og afturverkun. Engin myndavél nauðsynleg.
+TAKE THE SYNTH	TAKE GERVILINN
+Select it, then TAKE. Confident operators press Enter.	Veldu hann, svo TAKE. Öruggir tæknimenn ýta á Enter.
+That's our replay. Every replay needs a pundit.	Þetta er endursýningin okkar. Hver endursýning þarf sérfræðing.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Hér er endursýningin. Hér er leikmaðurinn. Og BÚMM, hann er í henni.
+A SECOND PLAYLIST	ANNAR SPILUNARLISTI
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Blekið fer efst, á sitt eigið lag. Ýttu á + aftast í spilunarlistaflipunum.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	Annar listi er lag ofan á þeim fyrsta. Eins og annar sveifluvaki, blandaður ofan á.
+A DRAW CUE	DRAW-CUE
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Í nýja listanum: UPPSPRETTA, svo Draw. Gegnsætt alls staðar þar sem þú hefur ekki teiknað.
+A Draw cue is transparent outside the ink, so the synth shows through.	Draw-cue er gegnsætt utan bleksins, svo gervillinn skín í gegn.
+TAKE THE INK	TAKE BLEKIÐ
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Veldu Draw-cue-ið og gerðu TAKE. Tveir listar, tvö lög, ein mynd.
+Now both are live: the synth underneath, the ink on top.	Nú eru bæði í loftinu: gervillinn undir, blekið ofan á.
+CIRCLE SOMETHING	HRINGAÐU EITTHVAÐ
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Ýttu á DRAW í eftirlitinu og teiknaðu á útsendingarskjáinn. Með músinni, eða penna ef þú átt.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Þrýstingur pennans þykkir línuna. Mús ýtir alltaf jafnfast. Eins og ég.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Hringaðu hann! Nei, stærra. BÚMM. Þetta er ský. Allt í lagi. Hringaðu skýið.
+SAVE A STILL	VISTAÐU KYRRMYND
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL geymir teikninguna sem mynd með gegnsæjum bakgrunni og setur hana í listann.
+For next week's show. Coach Marv will want the cloud again.	Fyrir þátt næstu viku. Coach Marv vill skýið aftur.
+THAT'S THE BOOTH	ÞETTA VAR BÁSINN
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Prófmyndir, gervillinn, lag, blek, kyrrmynd. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Prófaðu Replay í Draw-hlutanum: það teiknar línurnar þínar aftur eins og þú teiknaðir þær.
+Same time next week. Bring a bigger pen. And a turducken.	Sami tími í næstu viku. Komdu með stærri penna. Og kæstan hákarl.
+Saucer photo (CLASSIFIED)	Mynd af disknum (TRÚNAÐARMÁL)
+THE SIGNAL FILES	MERKJAMÖPPURNAR
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Skrifstofa óútskýrðra merkja. Tveir fulltrúar, ein mynd, og hún má ekki fara í loftið. Ýttu á START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Grímur skera mynd í form. Í kvöld skerum við sönnunargögn.
+That's a craft, Brandt. Look at the lights. I want to believe.	Þetta er geimfar, Brandt. Sjáðu ljósin. Ég vil trúa.
+A MASK FROM THE LIBRARY	GRÍMA ÚR SAFNINU
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Í MASK-hluta eftirlitsins: mask, svo 'new heart'. Hvaða form sem er dugar. Hjartað er fyndnara.
+The library has circles, stars, hearts. Each one is points you can move.	Safnið á hringi, stjörnur, hjörtu. Hvert form er punktar sem þú getur fært.
+A heart, Hollis? The Bureau redacts with black bars.	Hjarta, Hollis? Skrifstofan strikar yfir með svörtum borðum.
+THE PEN	PENNINN
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Stilltu tólið á penna og smelltu hringinn í kringum diskinn á skjánum. Smelltu á fyrsta punktinn til að loka.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Smelltu fyrir horn, dragðu fyrir sveigjur. Eins og Bézier-bræður ætluðu.
+Draw round it carefully. It might be watching.	Teiknaðu varlega í kringum hann. Hann gæti verið að horfa.
+INVERT	SNÚÐU VIÐ
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Umsnúningur heldur ytra og sker það innra burt. Diskurinn fer. Himinninn verður eftir.
+The same shape, the other way round. Very useful. Slightly spooky.	Sama form, öfugt. Mjög gagnlegt. Svolítið draugalegt.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, það er hjartalaga gat á himninum.
+FEATHER	MÝKTU
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Mýking mýkir brúnina svo enginn sjái skurðinn. Ýttu á + við feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Hörð brún segir 'einhver var hér'. Mjúk segir ekki neitt.
+They'll never know.	Þau komast aldrei að því.
+CASE CLOSED	MÁLINU LOKIÐ
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Form úr safninu, penninn, umsnúningur og mýking. Skrifstofan þakkar þér. Skrifstofan var aldrei hér.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Grímur fara líka á lag, úttak eða möttu þess: MASK ON velur. Og hver stýring tekur ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	Sannleikurinn er í bylgjuforminu, Hollis. Næst: mælarnir.
+The ghost	Draugurinn
+THE HAUNTED LIGHTHOUSE	REIMLEIKAVITINN
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Viti, draugur og vitavörður sem hefur verið allt of lengi einn með ljósinu. Ýttu á START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Varpkortlagning: að beygja myndina svo hún passi á bygginguna. Bjögun, blöndun, sneiðar.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Þið viljið drauginn á gluggana, ha? Farið varlega með ljósið. Ljósið er MITT.
+THE OUTPUT'S GEOMETRY	RÚMFRÆÐI ÚTTAKSINS
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	VALMYND, svo Myndúttök, svo Rúmfræði. Þar býr lögun úttaks.
+Geometry: the projector-menu word for 'what shape is the picture'.	Rúmfræði: orð skjávarpavalmynda yfir 'hvernig er myndin í laginu'.
+PIN A CORNER	FESTU HORN
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Ýttu á warp edit og dragðu horn á útsendingarskjánum. Glugginn er ekki ferhyrndur. Ekki vörðurinn heldur.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Hornfesting færir hornin fjögur. Fjarvídd heldur línunum beinum, eins og alvöru gluggi.
+LEFT! Ye call that a corner? I've seen straighter gulls.	TIL VINSTRI! Kallarðu þetta horn? Ég hef séð beinni máva.
+TWO SOFT EDGES	TVÆR MJÚKAR BRÚNIR
+Back in Geometry: edge blend, + on the left and + on the right.	Aftur í Rúmfræði: edge blend, + vinstra megin og + hægra megin.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Tveir skjávarpar skarast; hvor dofnar á brúninni svo skörunin verði ekki tvöfalt bjartari.
+THE SCREENS WINDOW	SCREENS-GLUGGINN
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Rúmfræði, SLICES, opna. Í Screens-glugganum eru sneiðar skornar og settar niður.
+A slice is a piece of the picture, put anywhere on the output.	Sneið er bútur af myndinni, settur hvar sem er á úttakið.
+THREE SLICES	ÞRJÁR SNEIÐAR
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Í Screens-glugganum, + SLICE þrisvar, og dragðu hverja skurðarsneið á þriðjung myndarinnar.
+Three windows, three slices: left, middle and right of one picture.	Þrír gluggar, þrjár sneiðar: vinstri, miðja og hægri hlið einnar myndar.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Þrír gluggar. Ljósið fær miðgluggann. Ljósið fær ALLTAF miðgluggann.
+THE GHOST IS PLEASED	DRAUGURINN ER SÁTTUR
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Bjögun, blöndun, sneiðar. Vörðurinn sefur loksins. Mávarnir ekki.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Sneiðar hafa sína eigin bjögun og möskva í Screens-glugganum. Og ~ á staðsetningu og snúning.
+Ye did alright, lad. Now get away from the lamp.	Þetta var allt í lagi hjá þér, strákur. Farðu nú frá ljósinu.
+THE GAME SHOW	SPURNINGAKEPPNIN
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Spurningakeppni, skapi. Eins og Gettu betur, bara með fleiri snúrum. Þrír keppendur, einn bjölluhnappur og cue sem fara af hvaðan sem er. Ýttu á START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Cue-númer, flýtilyklar og GO frá öðrum vélum. Eins og raðgervill sem þú spilar á með hvaða takka sem er.
+Welcome to the show! Let's spin that wheel!	Velkomin í þáttinn! Snúum lukkuhjólinu!
+A CUE NUMBER	CUE-NÚMER
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Keppandi 3 er valinn. Í lýsigögnum eftirlitsins, gefðu honum cue-númer: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Leikhúsið númerar cue-in sín. Q3, Q3.5, Q12A. Deckboy les þau öll.
+I'd like to buy a number, please.	Ég ætla að kaupa númer, takk.
+GO TO IT	FARÐU ÞANGAÐ
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, sláðu inn númerið, Enter. Það fer í loftið, hvar sem listinn stendur.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. Fljótlegasta leiðin um langan lista. Fljótlegra en að skruna. Miklu fljótlegra en ég.
+And the number is... three!	Og númerið er... þrír!
+A BUZZER	BJÖLLUHNAPPUR
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Keppandi 1 er valinn. Í TRIGGERS, ýttu á key, svo F5. Sá takki ræsir nú þetta cue.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 til F10, F12 eða talnaborðið. Hver og einn, bjölluhnappur.
+Every contestant gets a buzzer.	Hver keppandi fær bjölluhnapp.
+BUZZ IN	Á BJÖLLUNA!
+Press the key. The cue fires, wherever the list is standing.	Ýttu á takkann. Cue-ið fer af, hvar sem listinn stendur.
+No mouse, no list, no looking. Just the key.	Engin mús, enginn listi, ekkert að horfa. Bara takkinn.
+Buzz! We have a winner!	Bzzz! Við eigum sigurvegara!
+FROM ANYWHERE	HVAÐAN SEM ER
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, MIDI-nóta, OSC-skilaboð: VALMYND, svo Net, segir hvert hvert og eitt tengist.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Stream Deck í næsta herbergi getur ýtt á GO. Hljómborðsgervill líka. Ég vil frekar gervilinn.
+And for our viewers at home: you can play along too.	Og fyrir áhorfendur heima: þið getið spilað með.
+THAT'S OUR SHOW	ÞETTA VAR ÞÁTTURINN OKKAR
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Númer, GOTO, bjölluhnappur og GO hvaðan sem er. Nú ertu sjálfur spurningakeppni, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Cue getur haft takka, MIDI-nótu og OSC-vistfang í einu. Belti, axlabönd og annað belti.
+Goodnight, everybody! Keep spinning!	Góða nótt, öll sömul! Haldið áfram að snúa!
+Weather map	Veðurkort
+THE KAIJU WEATHER	KAIJU-VEÐRIÐ
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Veðrið á Rás 6, skapi. Kort, kynnir og mjög stór eðla. Ef þér líkar ekki veðrið, bíddu í fimm mínútur. Ýttu á START.
+Words on screen: Lower Thirds, text, and backdrops.	Orð á skjánum: nafnaborðar, texti og bakgrunnar.
+I'm June O'Neil, and nothing about this forecast is normal.	Ég er June O'Neil, og ekkert við þessa spá er eðlilegt.
+A LAYER FOR WORDS	LAG FYRIR ORÐ
+Words go on their own layer: press the + at the end of the playlist tabs.	Orð fara á sitt eigið lag: ýttu á + aftast í spilunarlistaflipunum.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	Annar listi er lag ofan á kortinu. Eðlan helst undir. Yfirleitt.
+Words on top. Always on top.	Orð ofan á. Alltaf ofan á.
+A LOWER THIRD	NAFNABORÐI
+In the new playlist: SOURCE, then Lower Third.	Í nýja listanum: UPPSPRETTA, svo Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Nafn og titill, neðarlega á skjánum, úr vegi eðlunnar.
+HER NAME	NAFNIÐ HENNAR
+In the inspector, title: type the presenter's name. The second line is her job.	Í eftirlitinu, title: sláðu inn nafn kynnisins. Önnur línan er starfið hennar.
+Spelling counts. The audience reads it at the speed of light.	Stafsetning skiptir máli. Áhorfendur lesa á ljóshraða.
+Spell it right. Last week it said 'Jane O'Meal'.	Stafaðu það rétt. Í síðustu viku stóð 'June O'Neilsdóttir'.
+ON AIR	Í LOFTINU
+TAKE the Lower Third. Her name slides in over the map.	TAKE nafnaborðann. Nafnið hennar rennur yfir kortið.
+Two layers live: the weather, and the words on top of it.	Tvö lög í loftinu: veðrið, og orðin ofan á.
+Thank you. Now, about that lizard...	Takk. Jæja, varðandi eðluna...
+BREAKING NEWS	AUKAFRÉTTIR
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	UPPSPRETTA, svo Text: titilspjald. Svo bakgrunnsflísin: lyklunargrænn, svo myndblandarinn geti lyklað hann burt.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Bakgrunnur fyllir á bak við orðin. Lyklunargrænn eða lyklunarblár, og blandarinn sér um rest.
+Breaking news: it's standing on the five-day forecast.	Aukafréttir: hún stendur á fimm daga spánni.
+BREAKING: KAIJU	AUKAFRÉTTIR: KAIJU
+BACK TO YOU	AFTUR Í STÚDÍÓ
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Nafnaborði, nafn, titilspjald, bakgrunnur. Eðlan er farin úr stúdíóinu, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Nafnaborðar geta sjálfir beðið, runnið inn og farið. Hlutinn þeirra hefur allar stillingar.
+That's the weather. Back to you, guys. Run.	Þetta var veðrið. Aftur í stúdíó. Hlaupið.
+A GRAND DAY OUT	STÓRKOSTLEGUR DAGUR
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Eldflaug smíðuð í kjallara, skapi, og uppfinningamaður sem vill ost. Ýttu á START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Sviðsklukkur: niðurtalningar, klukkur og kynnisskjár fyrir þann sem er á sviðinu.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Ostur, Grommet! Tunglið er úr honum. Við þurfum niðurtalningu.
+A COUNTDOWN	NIÐURTALNING
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	UPPSPRETTA, svo Stage Timer. Klukka sem telur niður, í stórum vinalegum tölum.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Litirnir breytast þegar tíminn klárast: hvítt, raf, rautt. Eins og VU-mælir fyrir tíma.
+*raises an eyebrow*	*lyftir annarri augabrúninni*
+LIFT OFF	FLUGTAK
+Select the timer and TAKE it. The countdown starts.	Veldu klukkuna og gerðu TAKE. Niðurtalningin hefst.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Eftir núll heldur hún áfram og telur yfirtímann. Mjög heiðarlegt. Svolítið dónalegt.
+Ten... nine... ooh, I do love a countdown.	Tíu... níu... æ, ég elska niðurtalningu.
+HOLD!	BÍDDU!
+Something's loose! Space holds the countdown. The clock shows it is held.	Eitthvað er laust! Bilslá setur niðurtalninguna á bið. Klukkan sýnir að hún er á bið.
+A hold is not a stop. Space again, and it carries on from where it was.	Bið er ekki stopp. Bilslá aftur, og hún heldur áfram þaðan sem hún var.
+*holds up a spanner*	*lyftir skiptilykli*
+THE PILOT'S VIEW	SÝN FLUGMANNSINS
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	VALMYND, Myndúttök: gerðu tegund úttaks að PRESENTER. Sá sem er á sviðinu fær klukkuna, næsta cue og glósurnar sínar.
+A presenter view is an output like any other. Point it at the confidence monitor.	Kynnisskjár er úttak eins og hvert annað. Beindu honum að sviðsskjánum.
+So the pilot can see the time. The pilot is Grommet.	Svo flugmaðurinn sjái tímann. Flugmaðurinn er Grommet.
+TO THE MOON	TIL TUNGLSINS
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Niðurtalning, bið og sýn fyrir flugmanninn. Nazdrave, skapi. Taktu kex með.
+Timers can also count up, or show the time of day. Their section has the lot.	Klukkur geta líka talið upp eða sýnt klukkuna. Hlutinn þeirra hefur allt.
+A grand day out, Grommet! Pass the crackers.	Stórkostlegur dagur, Grommet! Réttu mér kexið.
+The trunk (closed)	Kistan (lokuð)
+The trunk (open)	Kistan (opin)
+THE MAGIC SHOW	TÖFRASÝNINGIN
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Töfrasýning, skapi. Kista, leikmunur og eitt slag þar sem allt breytist í einu. Ýttu á START.
+Two playlists are two layers. TAKE ALL changes both together.	Tveir listar eru tvö lög. TAKE ALL breytir báðum saman.
+Every trick needs two things happening at once. And a rubber chicken.	Hvert bragð þarf tvennt sem gerist í einu. Og gúmmíkjúkling.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Leikmunurinn fer á sitt eigið lag. Ýttu á + aftast í spilunarlistaflipunum.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Listi 2 situr ofan á lista 1. Eins og glæra á myndvarpa.
+Nothing up my sleeve. Everything in my trunk.	Ekkert í erminni. Allt í kistunni.
+THE PROP	LEIKMUNURINN
+In the new playlist, add anything: PATTERN will do. That is the prop.	Í nýja listanum, bættu einhverju við: PRÓFMYND dugar. Það er leikmunurinn.
+Whatever it is, it will appear the instant the trunk opens.	Hvað sem það er, birtist það um leið og kistan opnast.
+Is it a rubber chicken? It's always a rubber chicken.	Er þetta gúmmíkjúklingur? Það er alltaf gúmmíkjúklingur.
+The prop (rubber chicken)	Leikmunurinn (gúmmíkjúklingur)
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Veldu 'Kistan (opin)' í lista 1 og leikmuninn í lista 2. Svo TAKE ALL: bæði í sama slagi.
+One press, every playlist's selected cue. The audience never sees the seam.	Eitt ýt, valið cue hvers lista. Áhorfendur sjá aldrei sauminn.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaa! ...Bíðið eftir lófataki. Bíðið. Bíðið.
+THE PRESTIGE	STÓRA BRAGÐIÐ
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Tvö lög, eitt slag. Hver listi hefur sitt eigið ógegnsæi og getur setið á hvaða úttaki sem er. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Töframaður upplýsir aldrei. Listanum er sama þótt hann sé upplýstur.
+Thank you! I'm here all week! The chicken is here forever.	Takk! Ég er hér alla vikuna! Kjúklingurinn er hér að eilífu.
+The kitchen (on fire)	Eldhúsið (í ljósum logum)
+A lovely souffle	Dásamlegt soufflé
+THE COOKING SHOW	MATREIÐSLUÞÁTTURINN
+A cooking show, skapi. Live. Everything is on fire. Press START.	Matreiðsluþáttur, skapi. Í beinni. Allt logar. Ýttu á START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK felur myndina og sýningin heldur áfram. PANIC stöðvar allt. Vittu hvort þú þarft.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, eldhúsið logar-flurdy!
+The audience must not see this. Press BLACK, or B.	Áhorfendur mega ekki sjá þetta. Ýttu á BLACK, eða B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Myndin hverfur. Cue-ið spilar áfram undir niðri, tilbúið að koma aftur.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. Æ, myndin er farin.
+AND BACK	OG TIL BAKA
+The fire's out. Press B again: the picture comes back, still running.	Eldurinn er slökktur. Ýttu aftur á B: myndin kemur aftur, enn í gangi.
+Nothing was lost. A mute on a mixer, for pictures.	Ekkert tapaðist. Mute á hljóðborði, fyrir myndir.
+Ta-da! Still cookin'!	Ta-da! Enn að elda!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Verra: VALMYND, Kerfi, SAFETY-spjaldið: PANIC. Allt stöðvast, eins og ofsahræðslustillingin segir.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC er stóri rauði hnappurinn. Notaðu hann þegar BLACK dugar ekki. Andaðu svo.
+GET IT BACK	NÁÐU ÞVÍ AFTUR
+Close MENU, select the souffle, and TAKE it. The show is back on.	Lokaðu VALMYND, veldu soufflé-ið og gerðu TAKE. Sýningin er aftur í gangi.
+After a panic, the show is still there. Pick up where you meant to be.	Eftir ofsahræðslu er sýningin enn þarna. Haltu áfram þar sem þú ætlaðir að vera.
+Voila! De souffle, he is risen!	Voilà! Soufflé-ið, það reis!
+BON APPETIT	VERÐI YKKUR AÐ GÓÐU
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK til að fela, PANIC til að stöðva, TAKE til að koma aftur. Þú lifir hvaða eldhús sem er af, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Ofsahræðslustillingin velur hvað PANIC gerir: dofna út, klippa, eða bara úttökin.
+Bork bork bork! Goodnight!	Bork bork bork! Góða nótt!
+Look one	Útlit eitt
+Look two	Útlit tvö
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Forstillingar, skapi. Heilt útlit, munað, og aftur með einum hnappi. Ýttu á START.
+Like the patch memory on a synth: store, then recall.	Eins og patch-minni á hljóðgervli: geyma, svo kalla fram.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	Ýttu á DASH: þínir eigin hnappar, fyrir hvað sem er.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D virkar líka. Mjög hratt. Mjög fagmannlegt.
+A PRESET BUTTON	FORSTILLINGARHNAPPUR
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Ýttu á +, svo 'preset - a new preset from what is on now'. Hnappurinn man þetta útlit.
+Store. Like saving the patch before the drummer leans on the synth.	Geyma. Eins og að vista patchið áður en trommarinn hallar sér á gervilinn.
+CHANGE EVERYTHING	BREYTTU ÖLLU
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Lokaðu DASH (Esc), veldu svo Útlit tvö og gerðu TAKE. Annað útlit.
+Change it all. Don't worry. It remembers.	Breyttu öllu. Engar áhyggjur. Hann man.
+ONE PRESS	EITT ÝT
+Open the DASH and press your preset button. The first look comes back.	Opnaðu DASH og ýttu á forstillingarhnappinn þinn. Fyrsta útlitið kemur aftur.
+Recall. The patch memory, returning. Beautiful.	Kalla fram. Patch-minnið, á heimleið. Fallegt.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Útlit, geymt og kallað fram. Forstilling getur geymt cue, staðsetningar, áhrif, styrk og leiðir; valmynd hnappsins velur hvað.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Og DASH-hnappur getur keyrt hvaða skipun sem er. Hvaða sem er. Jafnvel þær spennandi.
+Opening titles	Upphafstitlar
+The planet	Plánetan
+The battle	Orrustan
+THE TRAILER	STIKLAN
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Geimóperustikla, skapi. Sögumaður með mjög djúpa rödd og skoðanir á umskiptum. Ýttu á START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Umskipti eru hvernig eitt cue verður að því næsta. Þau eru miklu fleiri en víxldofnunin.
+In a galaxy of content... one operator... must choose a transition.	Í vetrarbraut efnis... þarf einn tæknimaður... að velja umskipti.
+A STYLE	STÍLL
+'The planet' is selected. In the inspector, its transition style: choose iris.	'Plánetan' er valin. Í eftirlitinu, umskiptastíll hennar: veldu iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Ýtingar, þurrkur, ljósop, dýfa í hvítt. Jafnvel gátt. Ég skrifaði helminginn. Á þriðjudegi.
+The planet deserves... a dramatic entrance.	Plánetan á skilið... dramatíska innkomu.
+A TIME	TÍMI
+Give it a time: + on transition until it says a second or more.	Gefðu henni tíma: + við umskipti þar til sekúnda eða meira stendur.
+No time, no transition. A style needs a duration to do anything at all.	Enginn tími, engin umskipti. Stíll þarf lengd til að gera nokkuð.
+ROLL IT	RÚLLA
+TAKE the planet. Watch it arrive.	TAKE plánetuna. Horfðu á hana koma.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Umskiptin tilheyra cue-inu sem kemur. Hvert cue velur sína eigin innkomu.
+Autobots... roll the transition.	Autobotar... keyrið umskiptin.
+THE BATTLE	ORRUSTAN
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Nú 'Orrustan': veldu shatter, gefðu tíma og gerðu TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Splundrun lætur gömlu myndina falla eins og rúðu. Vinsamlegast ekki gera þetta í jarðarför.
+Transform... and shatter out!	Umbreyting... og í mél!
+IN CINEMAS NOW	Í BÍÓ NÚNA
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Stíll, tími og tvær mjög dramatískar innkomur. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	Listi hefur líka sjálfgefinn stíl, fyrir hvert cue sem velur ekki sinn eigin.
+Coming soon... to a desk near you.	Væntanlegt... á borð nálægt þér.
+The beat	Takturinn
+THE ROBOT DJS	VÉLMENNA-PLÖTUSNÚÐARNIR
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Tveir vélmenna-plötusnúðar, skapi. Þeir tala ekki. Hjálmarnir þeirra tala. Ýttu á START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Hvert cue hefur sína eigin keðju hljóðáhrifa, og sum brjóta hljóðið viljandi.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> HALLÓ. VIÐ ERUM KOMNIR AÐ LAGA BLÖNDUNA ÞÍNA.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Takturinn er valinn. Í AUDIO EFFECTS-hlutanum hans bætir + við. Prófaðu delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Töf, ómun, síur, þjappa. Magn þýðir alltaf 'minna af þessu'.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> EINU SINNI ENN. MEÐ BERGMÁLI. BERGMÁLI. BERGMÁLI.
+A BEND	BEYGJA
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Bættu við annarri: beygju, eins og crush. Hún skemmir hljóðið eins og biluð skrá.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Beygjurnar eru í uppáhaldi hjá mér. Eins og snælda sem gleymdist í sólinni. Viljandi.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> HARÐARA. BETRA. STÖKKARA. HÆRRA.
+THE PATCH	PATCHIÐ
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	VALMYND, svo Hljóð: hvert hljóð hvers lista fer, og patchið fyrir nefnd úttök.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Hátalarar, mónitorar, eyrnatól fyrir trommarann. Patchið sendir hverjum sitt.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> KRINGUM BLÖNDUNA. KRINGUM BLÖNDUNA. KRINGUM BLÖNDUNA.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Áhrif, beygja og patchið. Vélmennin samþykkja, skapi. Held ég. Andlitin þeirra eru hjálmar.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Öll hljóðáhrif geta líka fylgt ~, jafnvel Motion. Veifaðu til tafarinnar. Það er dásamlegt.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> TAKK. GÓÐA NÓTT. VIÐ ERUM VÉLMENNI.
+The glow on the horizon (evidence #2)	Bjarminn við sjóndeildarhringinn (sönnunargagn nr. 2)
+EVIDENCE #2	SÖNNUNARGAGN NR. 2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Skrifstofan aftur, skapi. Bjarmi við sjóndeildarhringinn, og tveir fulltrúar sem eru ósammála um hann. Ýttu á START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Mælarnir mæla mynd: birtu, lit, styrk. Tölur, ekki skoðanir.
+It's them, Brandt. It's a craft. Look how it glows.	Þetta eru þeir, Brandt. Þetta er geimfar. Sjáðu hvernig það glóir.
+THE REAL SIGNAL	ALVÖRU MERKIÐ
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Mælarnir lesa bara það sem raunverulega fer út, aldrei forskoðun. Kveiktu á úttakinu: VALMYND, Myndúttök, ÚTTAK AF.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Að mæla minnkaða forskoðun væri að mæla ljósrit. Við mælum frumritið.
+Chain of evidence, Hollis. The real signal or nothing.	Sönnunarkeðja, Hollis. Alvöru merkið eða ekkert.
+THE SCOPES	MÆLARNIR
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Lokaðu VALMYND. Fyrir ofan skjáinn, PROGRAM-hnappurinn: ýttu þar til stendur SCOPES eða BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH sýnir myndina og mælana hlið við hlið. Mjög siðmenntað.
+Let the scopes decide, Hollis.	Leyfum mælunum að skera úr, Hollis.
+THE WAVEFORM	BYLGJUFORMIÐ
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Smelltu á bylgjuformið til að stækka það. Bjartir hlutir sitja hátt, dökkir lágt, frá vinstri til hægri eins og á myndinni.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Bjarminn er þessi toppur nálægt efst. Mjög bjart. Bjart er ekki það sama og geimvera.
+Look at the peak. Nothing a streetlight couldn't do.	Sjáðu toppinn. Ekkert sem ljósastaur gæti ekki gert.
+THE VECTORSCOPE	VIGURSJÁIN
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Smelltu aftur til að fara til baka, smelltu svo á vigursjána: litur hringinn í kring. Mettaður hleypur út að brúninni.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Magenta, langt úti við jaðarinn. Sterkur litur. Sterkt er ekki ólöglegt. Ennþá.
+It's off the chart, Brandt! Literally off the chart!	Þetta er út af kvarðanum, Brandt! Bókstaflega!
+FALSE COLOUR	FALSKUR LITUR
+And false colour: red is clipped, yellow nearly. Is the glow red?	Og falskur litur: rautt er klippt, gult næstum. Er bjarminn rauður?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Klippt þýðir það bjartasta sem merkið ber, og eitthvað þar yfir tapað. Smáatriðin farin.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Rautt. Klippt. Ekki geimvera, Hollis. Bara of bjart. Málinu lokið.
+THE TRUTH	SANNLEIKURINN
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Bylgjuform, vigursjá, falskur litur. Mælarnir skáru úr, skapi. Fulltrúarnir ekki.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE les hvaða úttak sem er, og fylkið getur verið 709 eða 2020. Fyrir forvitna.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Of bjart fyrir ljósastaur, Brandt. Of bjart fyrir nokkuð. ...Ég vil trúa.
+OUT OF THE BUILDING	ÚT ÚR BYGGINGUNNI
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Myndir sem fara með snúru eða neti, skapi, ekki bara gluggi á skjá. Ýttu á START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI yfir netið, SDI af DeckLink-korti, ST 2110 fyrir útsendingarstöðvar.
+THE DEVICES PAGE	TÆKJASÍÐAN
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	VALMYND, Myndúttök, svo Tæki: allar leiðir sem úttak getur yfirgefið þessa tölvu.
+Each one says whether this machine can do it, and what it needs if not.	Hver segir hvort þessi vél geti það, og hvað hún þarf ef ekki.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Ef þessi tölva hefur NDI, kveiktu á NDI SENDING: myndin er á netinu. Ef ekki, heldur SHOW ME áfram.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI finnur sjálft sig á netinu. Engar snúrur, bara góður netrofi og þolinmæði.
+OUT THERE	ÞARNA ÚTI
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Síða úttaksins sjálfs hefur restina: SDI DeckLink-korts, ST 2110 með NMOS, Spout og Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Hvert og eitt er bara úttak. Sýningin hvorki veit né kærir sig um hvernig hún fer.
+Nebula ahead	Stjörnuþoka framundan
+Engine room	Vélarrúmið
+Deck 3: something moving	Þilfar 3: eitthvað hreyfist
+THE BRIDGE	BRÚIN
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Brúin á geimskipinu Cathode, skapi. Fjórir straumar, einn aðalskjár, ein ráðgáta. Ýttu á START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Fjölskjárinn sýnir alla lista í einu. Eins og veggur af sveiflusjám, bara í geimnum.
+Frequencies open, Captain. All of them. That's the problem.	Tíðnir opnar, skipstjóri. Allar. Það er vandinn.
+MULTI, above the monitor: every playlist in its own window.	MULTI, fyrir ofan skjáinn: hver listi í sínum eigin glugga.
+One window per playlist, the programme first.	Einn gluggi á lista, útsendingin fyrst.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Fjórir straumar. Og í einum þeirra er skrímsli.
+WHAT'S NEXT	HVAÐ KEMUR NÆST
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Bættu við glugga (+), svo ...-valmyndinni hans: láttu hann sýna NEXT. Það sem fer í loftið þegar þú ýtir á TAKE.
+Every window has a ... button. It chooses what that window shows.	Hver gluggi hefur ...-hnapp. Hann velur hvað glugginn sýnir.
+I need to see who's calling before they reach the main viewer.	Ég þarf að sjá hver hringir áður en það nær aðalskjánum.
+A CLOCK	KLUKKA
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Og einn gluggi enn, sem sýnir klukkuna. Tæknimenn sem fylgjast með klukkunni verða aldrei of seinir. Yfirleitt.
+Time of day, big. Stardates are just very long timecode.	Klukkan, stór. Stjörnudagsetningar eru bara mjög langur tímakóði.
+The monster only shows up at midnight. We're going to need a clock.	Skrímslið birtist bara á miðnætti. Við þurfum klukku.
+ONE BIG ONE	EINN STÓR
+Any window's ... menu, then a layout: one big, the rest small.	...-valmynd hvaða glugga sem er, svo uppsetning: einn stór, hinir litlir.
+The big window is window one. Usually the programme. Usually.	Stóri glugginn er gluggi eitt. Venjulega útsendingin. Venjulega.
+Main viewer big. The captain likes it big.	Aðalskjárinn stór. Skipstjóranum líkar hann stór.
+ON SCREEN	Á SKJÁINN
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Veldu Þilfar 3 í lista 3 og gerðu TAKE. Horfðu á gluggann hans.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Rauði ramminn er TALLY: glugginn sem er í loftinu. Á skjáinn, eins og sagt er á geimskipum.
+There! Feed three! Put it on screen!	Þarna! Straumur þrjú! Á skjáinn!
+THAT'S A WRAP	ÞAÐ ER KOMIÐ
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Gluggar, ...-valmyndin, NEXT, klukkan, uppsetning, tally. Ráðgátan leyst, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Gluggi getur líka sýnt úttak, með bjögun þess og sneiðum. Hentugt þegar það er viti.
+And the monster was... the ship's cook, all along. Jinkys.	Og skrímslið var... kokkur skipsins, allan tímann. Jinkys.
+there is no such lesson	sú lexía er ekki til
+finish or leave the lesson you are in first	kláraðu eða yfirgefðu lexíuna sem þú ert í fyrst
+leave Bug Swat first	yfirgefðu Bug Swat fyrst
+Psst. It's me, the desk. I'll be watching. Supportively.	Uss. Þetta er ég, borðið. Ég fylgist með. Styðjandi.
+Hi! I'm the one doing all of this, by the way.	Hæ! Það er reyndar ég sem geri þetta allt.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D opnar DASH. Ég segi nú bara.
+Nearly there. I can feel it in my pixels.	Næstum. Ég finn það í pixlunum mínum.
+You're good at this. I can tell. I'm the one doing it.	Þú ert góður í þessu. Ég sé það. Það er ég sem geri það.
+Every click, I heard. Every single one.	Hvern smell heyrði ég. Hvern og einn.
+The glowing one. I can see it from here. It's glowing for you.	Sá sem glóir. Ég sé hann héðan. Hann glóir fyrir þig.
+lesson paused - MENU > LESSONS picks up where you left off	lexía á bið - VALMYND > LESSONS heldur áfram þar sem þú hættir
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Merkið: úr hverju myndin er gerð, og hvernig á að beygja hana. Veldu lexíu.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Að stýra sýningunni, skapi. Snöggar hendur, rólegt andlit. Veldu lexíu.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	LEXÍUR  -  ANNAR HLUTI  -  HVERJUM FYLGIR ÞÚ?
+FOLLOW PROF. VIDEO	FYLGJA PROF. VIDEO
+FOLLOW DR. PIXEL	FYLGJA DR. PIXEL
+the signal	merkið
+running the show	að stýra sýningunni
+PICK UP	HALDA ÁFRAM
+CLOSE (Esc)	LOKA (Esc)
+PART ONE: THE BASICS	FYRSTI HLUTI: GRUNNATRIÐIN
+finish or leave LEARN THE BASICS first	kláraðu eða yfirgefðu LEARN THE BASICS fyrst
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc hættir, og sýningin þín kemur aftur eins og hún var
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: sýningin þín er komin aftur. Stýringar Motion eru í Stillingar > Hljóð
+TURN MOTION ON	KVEIKTU Á MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Pöddur skríða í átt að cue-listanum! Kremdu þær með því að veifa að myndavélinni. Fyrst Motion: í MOTION CONTROL settu það á ON og veldu hvað það les (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	Þessi er NullPointer. Hol, bendir á ekkert. Fingur fer beint í gegn. Notaðu alla höndina, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Veifaðu eins og þú sért að stöðva leigubíl! Lítinn, kurteisan leigubíl. Ekki hnappana. Leigubílinn.
+DRAW TWO ZONES	TEIKNAÐU TVÖ SVÆÐI
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: tvíburar, hvor um sig viss um að hafa komið fyrstur. Ein mæling greinir ekki hendurnar þínar sundur, svo dragðu tvö ZONES á Motion-myndina, eitt hvoru megin.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Hittu báða saman. Hittu annan og þeir skipta um sæti. Eins og frændur mínir í brúðkaupi.
+One hand each side. Together! Together!	Ein hönd hvoru megin. Saman! Saman!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Paddan er ekki andlitið, heldur litli aukabúturinn, og smá hreyfing þarf fínni mælingu. Lækkaðu SENSITIVITY niður í 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	Lægri tala, fínni mæling. Já, mér finnst það líka öfugt.
+Not the face. The little one on the end. Wiggle a finger.	Ekki andlitið. Litla dótið á endanum. Hreyfðu fingur.
+FALL 1.5 S OR MORE	FALL 1,5 S EÐA MEIRA
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Hún sleppir bara meðan mælingin helst uppi. Lengdu FALL, 1,5 sekúndu eða meira, svo sveiflurnar þínar renni saman í eina.
+Slow and steady, skapi. Like paying back a loan.	Hægt og rólega, skapi. Eins og að borga af verðtryggðu láni. Það tekur aldrei enda.
+Sweep, and sweep again. Let the fall carry you between.	Sópaðu, og sópaðu aftur. Leyfðu fallinu að bera þig á milli.
+MOTION X ON A TONE	MOTION X Á TÓN
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Heisenbuggið! Það dofnar í hvert skipti sem þú hreyfir þig. Settu tónhæð tón-cue á Motion X og fylgdu því eftir eyranu: tifið hraðast þegar þú nálgast.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME býr til tóninn fyrir þig. Hátt er hægri. Lágt er vinstri. Stattu kyrr og það kemur aftur.
+Follow it. Listen. Faster ticking, closer bug.	Fylgdu því. Hlustaðu. Hraðara tif, nær paddan.
+Waving paw	Veifandi loppa
+Heisenbug finder	Heisenbug-leitari
+FIXED! Lovely signal flow.	LAGAÐ! Yndislegt merkjaflæði.
+Closed as fixed. No regressions. Probably.	Lokað sem lagað. Engin afturför. Líklega.
+Squashed! Ship it.	Kramin! Sendu hana út.
+One reached the cue list. It has filed a bug report about you.	Ein náði í cue-listann. Hún hefur skráð villu um þig.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. Þetta er handtölva. Maður ýtir ekki á hana. Maður veifar til hennar.
+The buttons are for menus. The bugs are for flailing.	Hnapparnir eru fyrir valmyndir. Pöddurnar eru fyrir handapat.
+The D-pad is decorative. Like my diploma.	Stefnukrossinn er skraut. Eins og prófskírteinið mitt.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	Árið 1989 ýttum við líka á hnappa. Svo uppgötvuðum við veifið. Litum aldrei til baka.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Að ýta fastar hjálpar ekki. Pöddur finna ekki fyrir hnöppum. Bara handleggjum.
+It's called a handheld because your hands are held... up. In the air. Waving.	Hún heitir handtölva því hendurnar fara... upp. Upp í loft. Veifandi.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	Músin? Ertu að kremja pöddur með MÚS? Í Búlgaríu væri músin á bandi paddanna.
+Lovely clicking. Very crisp. The camera saw none of it.	Yndislegir smellir. Mjög stökkir. Myndavélin sá engan þeirra.
+DONE FOR YOU - PRESS START	GERT FYRIR ÞIG - ÝTTU Á START
+DONE! PRESS START	BÚIÐ! ÝTTU Á START
+SELECT OPENS MOTION CONTROL	SELECT OPNAR MOTION CONTROL
+ALL BUGS FIXED	ALLAR PÖDDUR LAGAÐAR
+GAME OVER	LEIK LOKIÐ
+NEW HIGH SCORE!	NÝTT MET!
+START PLAYS AGAIN	START SPILAR AFTUR
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Farðu nú og lagaðu alvöru pöddur.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Hver og ein af þessum er alvöru Motion-stýring. Settu þær á hvaða ~-takka sem þú vilt.
+START: AGAIN	START: AFTUR
+START: PLAY	START: SPILA
+# --- end of tutorials ---
+Splash	Upphafsskjár
+Beast mode	Skrímslahamur
+MIDI MAP	MIDI-KORT
++ ADD	+ BÆTA VIÐ
+LEARN	LÆRA
+LISTENING...	HLUSTAR...
+BACK	TIL BAKA
+READY-MADE...	TILBÚIN...
+Message	Skilaboð
+Runs	Keyrir
+On	Á
+Now	Núna
+Map	Kort
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	MIDI-inntak er af: kveiktu á því í MIDI CONTROL. OSC-línur svara samt.
+LEARN: move a knob or press a key on the controller...	LÆRA: snúðu takka eða ýttu á hnapp á stjórnborðinu...
+1 · WHAT COMES IN	1 · HVAÐ KEMUR INN
+learn it, or say how to read it	kenndu það, eða segðu hvernig á að lesa það
+2 · WHAT IT RUNS	2 · HVAÐ ÞAÐ KEYRIR
+any command, {value} is the number	hvaða skipun sem er, {value} er talan
+3 · WHAT IT RUNS ON	3 · Á HVAÐ ÞAÐ MIÐAR
+aimed here; the desk never moves	miðað hingað; borðið hreyfist aldrei
+Port	Tengi
+Read as	Lesa sem
+Hold for	Halda í
+Command	Skipun
+From	Frá
+Centre	Miðja
+To	Til
+Pickup	Grip
+On release	Við slepp
+Runs on	Keyrir á
+Playlist	Spilunarlisti
+Saved with	Vistað með
+Row	Lína
+DELETE	EYÐA
+THE SHOW	SÝNINGUNNI
+THIS COMPUTER	ÞESSARI TÖLVU
+any port	hvaða tengi sem er
+the desk	borðið
+the selected cue	valið cue
+what is on air	það sem er í loftinu
+one named cue	cue með nafni
+the focused one	virki listinn
+Test: move it on the controller	Prófun: hreyfðu það á stjórnborðinu
+knob 0-127	takki 0-127
+endless encoder	endalaus kóðari
+14-bit	14 bita
+press	ýta
+hold	halda
+press + release	ýta + sleppa
+play	spila
+on press	við ýtingu
+plays	spilar
+LED MAP	LED-KORT
+LAYOUT	UPPSETNING
+FEEDS: pick a window, then one of these	UPPSPRETTUR: veldu glugga, svo eina af þessum
++ CHOOSE A FEED	+ VELDU UPPSPRETTU
+audio meter	hljóðmælir
+safe areas	örugg svæði
++ ONE AFTER THIS	+ EINN Á EFTIR ÞESSUM
+- REMOVE THIS ONE	- FJARLÆGJA ÞENNAN
+ONE PER PLAYLIST	EINN Á HVERN LISTA
+on the desk	á borðinu
+tile width	breidd flísar
+tile height	hæð flísar
+LISTENS: OFF	HLUSTAR: AF
+LISTENS: the figure follows the sound	HLUSTAR: myndin fylgir hljóðinu
+import an SVG...	flytja inn SVG...
+the selected cue in playlist {n}	valið cue í lista {n}
+the selected cue in the focused playlist	valið cue í virka listanum
+on air in playlist {n}	í loftinu í lista {n}
+on air in the focused playlist	í loftinu í virka listanum
+cue "{n}"	cue „{n}“
+hold {n} s	halda {n} s
+any	hvaða sem er
+built in	innbyggt
+show	sýning
+motion	hreyfing
+METADATA	LÝSIGÖGN
+generated	myndað
+Fit	Laga að
+inf	óendanlegt
+NO	NEI
+YES	JÁ
+UP	UPP
+DOWN	NIÐUR
+Left	Vinstri
+Right	Hægri
+Top	Efst
+Bottom	Neðst
+add	bæta við
+all	allt
+none	ekkert
+Cut	Klippa
+Fade	Deyfing
+Load	Hlaða
+Pause	Hlé
+Resume	Halda áfram
+Start	Byrja
+Skip	Sleppa
+Arm	Virkja
+Disarm	Afvirkja
+ONE	EITT
+ONCE	EINU SINNI
+Size	Stærð
+Width	Breidd
+amount	magn
+brightness	birtustig
+contrast	birtuskil
+saturation	mettun
+hue	litblær
+level	stig
+speed	hraði
+style	stíll
+title	titill
+subtitle	undirtitill
+notes	athugasemdir
+font	letur
+frame	rammi
+type	gerð
+state	staða
+blend	blöndun
+align	jafna
+line	lína
+box	rétthyrningur
+oval	sporbaugur
+brush	pensill
+eraser	strokleður
+mask	gríma
+grow	stækka
+subtract	draga frá
+split	skipta
+stacked	staflað
+soft	mjúkt
+tolerance	vikmörk
+curve	ferill
+Linear	Línulegt
+Ease in	Mjúk byrjun
+Ease out	Mjúkur endir
+S-curve	S-ferill
+Position X	Staða X
+Position Y	Staða Y
+Deck volume	Hljóðstyrkur decks
+Deck opacity	Ógegnsæi decks
+Master dimmer	Aðaldimmir
+Cue brightness	Birtustig cues
+Cue contrast	Birtuskil cues
+Cue saturation	Mettun cues
+Cue hue	Litblær cues
+no effects	engin áhrif
+no audio effects	engin hljóðáhrif
+nothing yet	ekkert enn
+no output	ekkert úttak
+no window	enginn gluggi
+source missing	uppspretta vantar
+waiting for a picture	bíður eftir mynd
+clear frame	hreinsa ramma
+undo stroke	afturkalla strok
+save still	vista kyrrmynd
+save animation	vista hreyfimynd
+export	flytja út
+repeats	endurtekningar
+hold last	halda síðasta
+end action	lokaaðgerð
+cue id	cue-auðkenni
+goto target	stökkmark
+set	stilla
+send	senda
+run	keyra
+idle	óvirkt
+standby	tilbúið
+Loop	Lykkja
+loop forever	endalaus lykkja
+PATCH	PATCH
+OUTPUTS	ÚTTÖK
+SECTIONS	HLUTAR
+Video Synth	Myndgervill
+Browser	Vafri
+Browser Cue	Vafra-cue
+Window Source	Gluggauppspretta
+Camera Source	Myndavélaruppspretta
+NDI Source	NDI-uppspretta
+DeckLink Input	DeckLink-inntak
+Syphon/Spout Source	Syphon/Spout-uppspretta
+Live stream cue	Beinstreymis-cue
+Composite	Samsetning
+Composite scene cue	Samsett senu-cue
+Lower Third	Nafnaborði
+Lower Third overlay cue	Nafnaborða-cue
+PIP overlay cue	PIP-yfirlagscue
+MIDI File	MIDI-skrá
+Master	Master
+Memo	Minnispunktur
+Mic	Hljóðnemi
+Timer	Tímamælir
+Tone	Tónn
+Script	Skrift
+Target	Mark
+Draw	Teikning
+Code	Kóði
+Clouds	Ský
+Swirl	Hvirfill
+Moire	Moiré
+Picture	Mynd
+Placement	Staðsetning
+Frame lock	Rammalás
+Suspend	Fresta
+Seam	Samskeyti
+High pass	Hátíðnisía
+Low pass	Lágtíðnisía
+Tilt EQ	Hallandi EQ
+Compressor	Þjappa
+Gate	Hlið
+Delay	Seinkun
+Reverb	Ómur
+Binaural	Tvíeyra
+Crush	Mölun
+Word	Orð
+Scrub	Skrúbb
+Short	Stutt
+Shatter	Sundrun
+Pulse	Púls
+Crawl	Skriðtexti
+Typewriter	Ritvél
+Oscilloscope	Sveiflusjá
+Spectrum	Litróf
+Level Meters	Stigmælar
+Waveform	Bylgjuform
+EFFECTS	ÁHRIF
+TRIGGERS	KVEIKJUR
+SEQUENCE	RUNA
+MOTION CONTROL	HREYFISTÝRING
+THIS CUE	ÞETTA CUE
+FUNCTIONS	AÐGERÐIR
+VALUES	GILDI
+KEYS	TAKKAR
+FREEZE	FRYSTA
+FROZEN	FROSIÐ
+BYPASSED	FRAMHJÁ
+BYPASS ALL	FRAMHJÁ ÖLLU
+DEFAULTS	SJÁLFGEFIÐ
+CHANGE	BREYTA
+CHOOSE	VELJA
+Stop all	Stöðva allt
+Pause all	Gera hlé á öllu
+Resume all	Halda öllu áfram
+Do not continue	Ekki halda áfram
+Auto-continue	Halda sjálfkrafa áfram
+Auto-follow	Fylgja við lok
+END HOLD	LOK HALDA
+END LOOP	LOK LYKKJA
+END NEXT	LOK NÆSTA
+END STOP	LOK STOPP
+OUTPUT EFFECTS	ÚTTAKSÁHRIF
+LIVE CAPTIONS	BEIN TEXTUN
+captions	skjátextar
+Name Card	Nafnspjald
+TEST CARD	PRÓFMYND
+TEST CARD ON	PRÓFMYND VIRK
+EXPORT CARD	FLYTJA ÚT SPJALD
+EXPORTING...	FLYT ÚT...
+LOW LATENCY	LÍTIL TÖF
+WEB MONITOR	VEFSKJÁR
+PHONE & TABLET	SÍMI OG SPJALDTÖLVA
+SCAN TO PAIR	SKANNA TIL AÐ PARA
+WITH SOUND	MEÐ HLJÓÐI
+THE NETWORK	NETIÐ
+FIXTURES	LJÓS
+ADD FIXTURE	BÆTA VIÐ LJÓSI
+Dimmer	Dimmir
+Dimmer + RGB	Dimmir + RGB
+Dimmer + temperature	Dimmir + litahitastig
+QR CODE	QR-KÓÐI
+loop	lykkja
+inherit	erfa
+Fill	Fylla
+Stretch	Teygja
+Dissolve	Þoning
+Pattern	Mynstur
+mixed	blandað
+selected cue lane  |  TAKE to make it live	rás valins cue  |  TAKE setur í loftið
+Dip to black	Um svart
+Dip to white	Um hvítt
+Iris	Lithimna
+Push left	Ýta til vinstri
+Push right	Ýta til hægri
+Push up	Ýta upp
+Push down	Ýta niður
+Wipe left	Strjúka til vinstri
+Wipe right	Strjúka til hægri
+Wipe up	Strjúka upp
+Wipe down	Strjúka niður
+Still	Kyrrmynd
+Timecode	Tímakóði
+address	vistfang
+auto next	sjálfvirkt næst
+continue	halda áfram
+deck fader	deck-sleði
+fire	ræsa
+in	inn
+out	út
+routing	beining
+trim	snyrta
+0-63, the hardware's own gain range.	0-63, eigin mögnun vélbúnaðarins.
+1-16, as the desk counts them	1-16, eins og borðið telur þær
+7-segment, blocky, or a real font	7-hluta, kassalegt eða raunverulegt letur
+[ / ] keys — fade-in duration	[ / ] lyklar: lengd innfellingar
+a camera moves the ~ controls	myndavél hreyfir ~ stýringarnar
+a chain on a device, after the mix	keðja á tæki, eftir hljóðblöndun
+a comment	athugasemd
+Act now, without taking the cue	Gera núna, án þess að taka cue
+Add a light	Bæta við ljósi
+add a second output to pair	bættu við öðru úttaki til að para
+add shape	bæta við formi
+all driven by the cue's own transport	allt stýrt af eigin spilun cue
+All interfaces; trusted machines only.	Öll viðmót; aðeins traustar vélar.
+all to 0	allt í 0
+An audio effect's knob	Hnappur á hljóðbrellu
+An effect's knob	Hnappur á brellu
+any channel	hvaða rás sem er
+any window, any screen	hvaða gluggi sem er, hvaða skjár sem er
+arcade	spilakassi
+Arm this cue as the one GO will fire	Virkja þetta cue fyrir næsta GO
+Art-Net port address, 0-32767	Art-Net gáttarvistfang, 0-32767
+Attached overlays fire on TAKE only	Tengd yfirlög byrja aðeins á TAKE
+BACK TO BUG SWAT	AFTUR Í BUG SWAT
+backdrop	bakgrunnur
+bar	stika
+bg alpha	alfa bakgrunns
+black lift	lyfting svarts
+blend gamma	gamma blöndunar
+blueprint	teikning
+boxes	kassar
+bracket	hornklofar
+bulletin	fréttabréf
+by density	eftir þéttleika
+BY FIXTURE	EFTIR LJÓSI
+capsule	hylki
+caption	myndatexti
+card	spjald
+CARD OFF ALL	SPJALD AF ALLT
+CARD ON ALL	SPJALD Á ALLT
+cartridge	skothylki
+cassette	snælda
+Ceiling	Loft
+Chain	Keðja
+Changing this re-prepares the cue.	Breyting undirbýr cue aftur.
+channel list is not readable	rásalisti er ólæsilegur
+CHANNELS	RÁSIR
+channels on your interfaces, by name	rásir á viðmótum þínum, eftir nafni
+Checkerboard	Skákborð
+chime amber	viðvörun gulbrúnt
+chime red	viðvörun rautt
+chime zero	viðvörun núll
+Choose startup mode:	Veldu ræsingarham:
+circle, heart, star...	hringur, hjarta, stjarna...
+circuit	rafrás
+CLASSIC VIEW	KLASSÍSK SÝN
+clear driver	hreinsa drif
+Clear in/out trim points	Hreinsa inn-/útpunkta
+CLEAR OVERLAY  [Backspace]	HREINSA YFIRLAG  [Backspace]
+Clear the active Lower Third overlay now	Fjarlægja virkt Lower Third núna
+Clear the live PIP overlay now	Fjarlægja PIP-yfirlag núna
+CLICK ANYWHERE...	SMELLTU HVAR SEM ER...
+click or Esc to close	smelltu eða Esc til að loka
+click this window	smelltu á þennan glugga
+Click to edit cue notes	Smelltu til að breyta athugasemdum cue
+click to open the grid	smelltu til að opna netið
+Click to seek — drag to scrub	Smelltu til að fara, dragðu til að skruna
+Click to type it	Smelltu til að skrifa
+comic	teiknimynd
+Companion passphrase	Companion-aðgangsfrasi
+confetti	konfetti
+Connections at once	Samtímis tengingar
+count up	telja upp
+Countdown, count up, or wall clock	Niðurtalning, upptalning eða klukka
+credit	kreditlisti
+crossfade	krossdeyfir
+crosshair	sigti
+Crosshatch	Krossskygging
+Cue has no audio	Cue hefur ekkert hljóð
+cue number	cue-númer
+Cycle end action for selected cues	Breyta lokaaðgerð valinna cue
+Cycle which slot drives scene audio	Breyta rauf sem gefur hljóð senunnar
+dateline	dagsetningarlína
+decoder spin-up	afkóðari ræsist
+Default App Feed	Sjálfgefinn forritagjafi
+Default Camera	Sjálfgefin myndavél
+Delay before the continue fires	Töf áður en haldið er áfram
+Delay between GO and this cue starting	Töf milli GO og upphafs cue
+depth 1 turns it all the way round	dýpt 1 snýr heilan hring
+Digit colour once amber is reached	Litur tölustafa við gulbrúnt
+Digit colour while there is time in hand	Litur tölustafa þegar tími er nægur
+diskette	disklingur
+Do it now, without taking the cue	Gera það núna, án þess að taka cue
+dossier	skjalamappa
+dotmatrix	punktafylki
+Double-GO guard	Vörn gegn tvöföldu GO
+draw on the monitor	teikna á skjáinn
+driver speed	hraði drifs
+EDGE BLEND	KANTABLÖNDUN
+EDIT is on: typing changes the show	EDIT á: skrif breyta sýningunni
+edit on the monitor	breyta á skjánum
+Edit the main Lower Third title	Breyta titli Lower Third
+Edit the secondary Lower Third line	Breyta annarri línu Lower Third
+eq band	EQ-band
+equalizer	tónjafnari
+Esc cancels	Esc hættir við
+Esc cancels, arrows nudge	Esc hættir við, örvar færa
+Esc to close	Esc til að loka
+even grid	jafnt net
+EXAMPLE SHOWS	DÆMISÝNING
+EXIT  Esc	HÆTTA  Esc
+face	andlit
+factory settings	verksmiðjustillingar
+Fade+LoadNext	Deyfing+Hlaða næsta
+Fade+Pause	Deyfing+Hlé
+Fade+Rewind	Deyfing+Spóla til baka
+Fade-in duration	Lengd innfellingar
+Fade-in duration for this cue	Innfelling þessa cue
+Fade-out duration	Lengd útfellingar
+Fade-out duration before next cue	Útfelling á undan næsta cue
+Fade-out duration for this cue	Útfelling þessa cue
+false colour reads SDR pictures	falskir litir lesa SDR-myndir
+fill the frame	fylla rammann
+find a named colour	finna lit eftir nafni
+fires cues	ræsir cue
+first available	fyrsta lausa
+Fit/Fill/Stretch/Unscaled	Passa/Fylla/Teygja/Án kvarða
+Fixed repeat count — 0 = infinite	Fastur fjöldi endurtekninga: 0 = óendanlegt
+Fixed repeat count — 0 = loop forever	Fastur fjöldi endurtekninga: 0 = án enda
+FIXED!	LAGAÐ!
+flag	fáni
+FORGET MY DEFAULTS	GLEYMA SJÁLFGEFNUM MÍNUM
+Frames a second	Rammar á sekúndu
+from exactly this routing	beint úr þessari beiningu
+Full Black	Alsvart
+Full Blue	Alblátt
+Full Green	Algrænt
+Full Red	Alrautt
+Full White	Alhvítt
+garden	garður
+Ghastly	Draugalegt
+glass	gler
+glitch down	glitch niður
+glitch drift	rek glitch
+glitch reach	drægni glitch
+glitch through	glitch í gegn
+glitch up	glitch upp
+GO steps over it	GO hoppar yfir það
+hairline	hárlína
+Haptics	Titringur
+HDR input	HDR-inntak
+Hex, e.g. 90 3C 7F	Hex, t.d. 90 3C 7F
+HOLDING OFF AIR	HALDIÐ UTAN ÚTSENDINGAR
+Home — skip to start	Home: í byrjun
+Horizontal output offset in pixels	Lárétt hliðrun úttaks í dílum
+How many features fit on screen.	Hversu mörg komast á skjáinn.
+how much of this effect	hversu mikið af þessari brellu
+How solid the ink is	Þekja bleksins
+How tall the logo is above the clock	Hæð merkis yfir klukkunni
+In-point: cue starts playback here	Innpunktur: cue byrjar hér
+index	skrá
+initializing webview	webview ræsist
+install Tailscale here and on the phone	settu upp Tailscale hér og í símanum
+INSTALLING...	SET UPP...
+Its amount, or one of its knobs A to D	Magn þess, eða hnappur frá A til D
+J jump to row	J: fara í röð
+jam to	samstilla við
+Jump the driver back to its first frame	Setja drifið aftur á fyrsta ramma
+K — cycle cue color tag	K: breyta lit cue
+Keep counting past zero, or stop dead	Telja fram hjá núlli eða stöðva
+key	lykill
+Key edge softness	Mýkt lykilkants
+knob	hnappur
+L - loop this cue continuously	L: endurtaka þetta cue
+last reading	síðasti lestur
+Last refused	Síðast hafnað
+Learn it	Læra
+LEARN THE BASICS	LÆRÐU GRUNNINN
+ledger	höfuðbók
+Left — skip back 10s	Vinstri: 10 sek. til baka
+Left, centre or right	Vinstri, miðja eða hægri
+LESSONS	KENNSLA
+Levels	Stig
+Limiter	Takmarkari
+Limiting	Takmörkun
+line  |  Enter: apply	lína  |  Enter: nota
+LINEAR - a feather, not a blend	LÍNULEGT: litbrigði, ekki blöndun
+Linear, ease in, ease out or S-curve	Línulegt, inn, út eða S-ferill
+Lines	Línur
+link aspect	tengja hlutföll
+Listen to	Hlusta
+listener	hlustandi
+LIVE - every assigned deck matches	LIVE: öll úthlutuð deck passa
+lock to screen	læsa við skjá
+logo	merki
+logo size	stærð merkis
+look at it	sjáðu það
+lower 3rd	Lower Third
+marquee	ljósaskilti
+mask on	gríma virk
+Master oscillator rate.	Hraði aðalsveifils.
+Maximum quality	Mestu gæði
+MIDI and OSC monitor	MIDI- og OSC-vakt
+midi in	MIDI-inntak
+MIDI note	MIDI-nóta
+move points	færa punkta
+Move the height on its own oscillator	Færa tónhæð með eigin sveifli
+name or number...	nafn eða númer...
+name, from anywhere	nafn, hvaðan sem er
+NDI source cue	NDI-gjafa-cue
+needs file-backed video	þarf myndskeið úr skrá
+new paths	nýjar slóðir
+New shows start from	Nýjar sýningar byrja frá
+next xfade	næsta deyfing
+no effects for this cue type	engar brellur fyrir þessa gerð cue
+nobody	ekkert
+none - click to learn	ekkert: smelltu til að læra
+none - click to set some	ekkert: smelltu til að stilla
+none - click to write some	ekkert: smelltu til að skrifa
+none yet	ekkert enn
+none: the one picture	ekkert: eina myndin
+none: the whole picture	ekkert: öll myndin
+notebook	minnisbók
+nothing	ekkert
+nothing assigned yet	engu úthlutað
+nothing follows	fylgir engu
+Nothing here with this filter.	Ekkert með þessari síu.
+nothing set - this cue sends nothing	ekkert stillt: þetta cue sendir ekkert
+nothing targeted yet	ekkert mark
+Nothing to see here. Probably.	Ekkert að sjá hér. Líklega.
+nothing to send - check the message	ekkert að senda: athugaðu skilaboðin
+offset X	hliðrun X
+offset Y	hliðrun Y
+on any channel	á hvaða rás sem er
+on the header to add another	á hausnum til að bæta við
+on the monitor	á skjánum
+one big on top, the rest below	eitt stórt efst, restin undir
+one big, the rest beside it	eitt stórt, restin við hliðina
+onion off	smjörpappír af
+onion on	smjörpappír á
+only this computer	aðeins þessi tölva
+Open a .deckboy show file	Opna .deckboy-skrá
+open the monitor	opna skjáinn
+or your own bytes	eða þín eigin bæti
+ORDER - cues advance down the list	RÖÐ: cue fara niður listann
+Out-point: cue stops playback here	Útpunktur: cue endar hér
+output already has	úttakið hefur þegar
+Outputs Off	Úttök af
+outs	úttök
+over budget - video will drop frames	yfir mörkum: myndskeið missir ramma
+over the picture	yfir myndinni
+PAIR	PARA
+Pair a phone	Para síma
+Pair overlap	Skörun pars
+Paired phones	Paraðir símar
+Passphrase	Aðgangsfrasi
+Pattern motion toggle	Hreyfing mynsturs
+pause begin	hlé í byrjun
+pennant	veifa
+Per-cue transition duration override	Lengd umbreytingar þessa cue
+Perspective	Fjarvídd
+PHASE	FASI
+Phone access	Símaaðgangur
+Phone control	Símastýring
+phrase hold	lengd frasa
+PICK FROM SCREEN	TAKA AF SKJÁ
+Pitch, in semitones.	Tónhæð, í hálftónum.
+PIXEL FOR PIXEL, TOP-LEFT	DÍLL FYRIR DÍL, EFST TIL VINSTRI
+placard	skilti
+play a note...	spilaðu nótu...
+PLAY BUG SWAT, a game	SPILA BUG SWAT
+Play the out move now, then take it off	Spila úttakið núna og fjarlægja svo
+Playback speed: 0.25–4.0×	Spilunarhraði: 0,25–4,0×
+playlists into the named outputs	spilunarlisti á nefnd úttök
+plays synth	spilaðu á hljóðgervil
+plugin	viðbót
+PNG matte	PNG-matta
+podium	verðlaunapallur
+pop	popp
+press a key...	ýttu á lykil...
+PRESS AGAIN TO FORGET	ÝTTU AFTUR TIL AÐ GLEYMA
+Previous show file:	Fyrri skrá:
+prog bar	framvindustika
+programme	dagskrá
+Programme with sound in any browser	Dagskrá með hljóði í hverjum vafra
+PROJECTOR - gamma matched	VARPI: samræmt gamma
+Projector gamma	Gamma varpa
+put it on a button	settu það á hnapp
+Put the brush's opacity on an oscillator	Setja þekju pensils á sveifil
+Put the brush's size on an oscillator	Setja stærð pensils á sveifil
+Put this control on an oscillator	Setja þessa stýringu á sveifil
+rack it	hlaða því
+RACKED, WARM	HLAÐIÐ, TILBÚIÐ
+rail	braut
+rain	rigning
+Reads	Les
+reads the same on any screen	les eins á hverjum skjá
+recent and in this show	nýlegt og í þessari sýningu
+Recent shows:	Nýlegar sýningar:
+red at	rautt við
+red col	rauður dálkur
+render height	hæð myndgerðar
+render width	breidd myndgerðar
+REPORT A PROBLEM	TILKYNNA VANDAMÁL
+reported rather than swapped	tilkynnt, ekki skipt út
+restart driver now	endurræsa drif núna
+restart on take	endurræsa á take
+restore at end	endurheimta í lok
+ribbon	borði
+Right — skip forward 10s	Hægri: 10 sek. áfram
+Right-click turns them off.	Hægrismellur slekkur á þeim.
+Rise	Ris
+rise, slide or wipe	rísa, skruna eða strjúka
+Rotation speed, degrees per second.	Snúningshraði, gráður á sekúndu.
+rounded rect	ávalur ferhyrn.
+row turns the matrix off again	röðin slekkur aftur á fylkinu
+Run it now, without taking the cue	Keyra núna, án þess að taka cue
+Run the show from a phone	Keyra sýninguna úr síma
+runs off the show thread	utan sýningarþráðar
+sACN universe, 1-63999	sACN-alheimur, 1-63999
+SAVE AS MY DEFAULTS	VISTA SEM SJÁLFGEFIÐ
+says	segir
+SCALED TO FILL	KVARÐAÐ TIL AÐ FYLLA
+Scene dwell time — 0 = hold	Tími senu: 0 = halda
+Scene fade-in duration	Innfelling senu
+Scene fade-out duration	Útfelling senu
+scoreboard	stigatafla
+SCREENS	SKJÁIR
+scroll	skrun
+Scroll up	Skruna upp
+sea	haf
+SELECT: MOTION	VAL: HREYFING
+sends	senda
+Sensitivity	Næmi
+Set browser URL/path	Stilla slóð vafra
+set by	stillt af
+Set capture source from the cue menu	Stilla gjafa úr valmynd cue
+Set cue ID for selected cues	Stilla auðkenni valinna cue
+Set cue token to jump to when cue ends	Stilla cue til að hoppa í við lok
+Set goto target for selected cues	Stilla mark valinna cue
+Set Lower Third background alpha	Alfa bakgrunns Lower Third
+Set per-cue transition duration	Lengd umbreytingar cue
+Set playback speed for selected cues	Hraði valinna cue
+Set repeat count for selected cues	Endurtekningar valinna cue
+Set short cue id for search/goto	Stutt auðkenni fyrir leit/stökk
+Set short cue label for search/goto	Stutt nafn fyrir leit/stökk
+Set the NDI source name to receive	Nafn NDI-gjafans sem á að taka við
+Shift+[ / ] — fade-out duration	Shift+[ / ]: lengd útfellingar
+SHOW ME	SÝNDU MÉR
+Show on	Sýna á
+Shows	Sýna
+sideline	hliðarlína
+sketch	skissa
+slide	renna
+slide from left	renna frá vinstri
+slide from right	renna frá hægri
+SMOOTH	MJÚKT
+snow	snjór
+SOS. Kidding. The show is fine.	SOS. Grín. Sýningin er í lagi.
+Sound when the clock turns amber	Hljóð þegar klukkan verður gulbrún
+Sound when the clock turns red	Hljóð þegar klukkan verður rauð
+Sound when time is up	Hljóð þegar tíminn er búinn
+Space — pause	Bil: hlé
+Space — play	Bil: spila
+span	dreifing
+sparkle	glitur
+Speech models	Talmódel
+Speed, like tape	Hraði, eins og segulband
+stamp	stimpill
+Start NEW from factory	Byrja NÝTT frá verksmiðju
+starting browser	vafri ræsist
+starting capture	upptaka ræsist
+starting xvfb	xvfb ræsist
+sticky	minnismiði
+stop at 0	stöðva við 0
+Stop puppeteering this cue	Hætta að stýra þessu cue
+STRAIGHT	BEINT
+survey	upphleyping
+SVG paths	SVG-slóðir
+tab	flipi
+tag	merkimiði
+TAP	PIKKA
+terminal	skipanalína
+text mode	textahamur
+the file cannot be read	skráin er ólæsileg
+The name	Nafnið
+The OSC path, e.g. /cue/1/start	OSC-slóðin, t.d. /cue/1/start
+the playlist's PATCH	PATCH spilunarlistans
+The role, or leave it empty	Hlutverkið, eða hafa autt
+the system output	kerfisúttakið
+The text this cue puts on screen	Textinn sem þetta cue sýnir
+theatre	leikhús
+then stop	stöðva svo
+they have	þau hafa
+things that are oscillating	það sem sveiflast
+this cue lives on	þetta cue er á
+This show's setup, no cues	Uppsetning þessarar sýningar, án cue
+ticket	miði
+tile h	reitur h
+Tile height in pixels.	Hæð reits í dílum.
+tile w	reitur b
+time of day	tími dags
+Toggle audio enable for selected cues	Hljóð valinna cue
+Toggle chroma key	Kveikja/slökkva á chroma key
+Toggle cue audio	Hljóð cue
+Toggle cue audio track for this cue	Hljóðrás þessa cue
+Toggle fade in	Innfelling
+Toggle fade out	Útfelling
+Toggle hold on last frame	Halda síðasta ramma
+Toggle hold-at-end for selected cues	Halda í lok á völdum cue
+Toggle loop	Lykkja
+Toggle loop for selected cues	Lykkja valinna cue
+Toggle the live input's audio	Hljóð beins inntaks
+Total time	Heildartími
+transcoding - plays clean until ready	umkóðun: spilar hreint til enda
+transparent: put its playlist on a layer	gegnsætt: settu spilunarlistann á lag
+Trusted controllers	Traustir stýringar
+TURN OFF	SLÖKKVA
+turn phone control on	kveiktu á símastýringu
+two big on top, the rest below	tvö stór efst, restin undir
+type a cue number	skrifaðu cue-númer
+Typing needs EDIT on	Skrif krefjast EDIT á
+Use GEOMETRY for exact placement	Notaðu GEOMETRY fyrir nákvæma staðsetningu
+value to type one	gildi til að skrifa
+Vertical output offset in pixels	Lóðrétt hliðrun úttaks í dílum
+VIDEO DIP: OFF	VIDEO DIP: NEI
+VIDEO DIP: ON	VIDEO DIP: JÁ
+walk the outputs one at a time.	farðu gegnum úttökin eitt í einu.
+walks every output in turn	fer gegnum hvert úttak
+WHAT DECKBOY DID	HVAÐ DECKBOY GERÐI
+what is on air in a playlist	hvað er í beinni á spilunarlista
+What NEW starts from, never this show	Hvar NÝTT byrjar, aldrei þessi sýning
+whatever the style says	hvað sem stíllinn segir
+Where the ramp ends	Hvar rampinn endar
+Which deck the cue it acts on lives on	Á hvaða deck mark-cue er
+Which frame you draw on	Á hvaða ramma þú teiknar
+Who can see it	Hver getur séð það
+whole network	allt netið
+will not open	opnast ekki
+window and recording outputs only	aðeins glugga- og upptökuúttök
+wipe	strok
+Wobble	Vagg
+wobble by	vagga um
+words	orð
+X — cycle end action	X: breyta lokaaðgerð
+X — cycle end action: stop / next / loop	X: lokaaðgerð: stöðva / næsta / lykkja
+Zones	Svæði
+~ makes the level breathe	~ lætur styrkinn anda
+a note or an address becomes that cue's trigger	nóta eða vistfang verður kveikja þess cue
+acts on every deck; deck and cue are ignored	virkar á öll deck; deck og cue hunsuð
+Add an output above, then send playlists to it here.	Bættu við úttaki að ofan og sendu svo spilunarlista hingað.
+Ancient cypher, modern video desk. Respect.	Forn ritun, nútíma borð. Virðing.
+Any font on this computer, Deckboy's own, or a font file	Letur tölvunnar, Deckboy eða skrá
+Apply fade-in to selected video/audio cues	Innfelling á völdum mynd-/hljóð-cue
+Apply fade-out to selected video/audio cues	Útfelling á völdum mynd-/hljóð-cue
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net eða sACN (E1.31): það sem ljósin hlusta á
+Auto-advance duration — 0 = hold until taken	Sjálfvirkt áfram: 0 = halda til take
+Bypass: this master leaves that deck alone	Framhjá: þessi aðalstýring lætur það deck í friði
+Characters across. Fewer means bigger cells.	Stafir í línu. Færri gefa stærri reiti.
+Choose a mask from this show's library, or start a new one from a shape	Veldu grímu úr safninu eða búðu til úr formi
+Click a value to change it. A red address overlaps another fixture.	Smelltu á gildi til að breyta. Rautt vistfang skarast við annað ljós.
+Click to show or hide this cue's captions	Smelltu til að sýna eða fela texta cue
+Copy the show AND its media into one portable folder	Afrita sýninguna OG miðlana í eina færanlega möppu
+Ctrl+S - write back over the show that is open	Ctrl+S: vista í opnu sýninguna
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: vista í NÝJA skrá
+Device output pair this cue's audio plays on	Úttakspar fyrir hljóð þessa cue
+E - freeze on last frame instead of stopping	E: frysta á síðasta ramma í stað þess að stöðva
+Edit title/subtitle here or fire it live with TAKE	Breyttu titli/undirtitli hér eða ræstu með TAKE
+Every channel on every universe this session has touched	Hver rás í hverjum alheimi sem þessi lota hefur snert
+generator is off - a START cue turns it on	gjafi af: START-cue kveikir á honum
+How long the note takes to reach full level.	Tíminn þar til nótan nær fullum styrk.
+How much it throws off; 0 is a clean burn	Hve mikið flagnar; 0 brennur hreint
+INPUT: the programme. Drag a crop to move it, its corners to size it.	INNTAK: dagskráin. Dragðu skurð til að færa, horn til að breyta stærð.
+Keep the outside and cut the inside instead	Halda ytra og skera innra
+LED panel height in pixels. Click to type it	Hæð LED-skjás í dílum. Smelltu til að skrifa
+Legacy target mode — switch type to convert	Eldri markhamur: skiptu um gerð til að umbreyta
+Lissajous, spectrum, meters or a name card	Lissajous, róf, mælar eða nafnspjald
+Load the cue and hold first frame when taken	Hlaða cue og halda fyrsta ramma til take
+no fixtures patched - Settings > Network > FIXTURES	engin ljós tengd: Stillingar > Net > FIXTURES
+Nothing here changes the show that is open.	Ekkert hér breytir opnu sýningunni.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Hljóð cue: kveikt/slökkt, trim, pan, mono, deyfingar, jöfnun
+Phone control is in PHONE & TABLET, below	Símastýring er í PHONE & TABLET, að neðan
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Vista grímu sem gráa PNG í stærð úttaks: hvítt heldur, svart sker
+Seconds REMAINING when the clock turns amber	Sekúndur EFTIR þegar klukkan verður gulbrún
+Seconds REMAINING when the clock turns red	Sekúndur EFTIR þegar klukkan verður rauð
+Shown to the operator when GO reaches this cue	Sýnt stjórnanda þegar GO nær þessu cue
+SHUFFLE - the next cue is picked at random	HANDAHÓF: næsta cue dregið
+Slots are self-contained sources in this first pass	Raufar eru sjálfstæðir gjafar í þessari útgáfu
+that output's whole picture, or its matte	öll mynd þess úttaks, eða matta þess
+The cue number on the other desk, e.g. 12.5	Cue-númerið á hinu borðinu, t.d. 12.5
+Toggle pause-at-beginning for selected cues	Hlé í byrjun á völdum cue
+Toggle transition-to-next for selected cues	Umbreyting í næsta á völdum cue
+transparent outside the blobs: put it on a layer	gegnsætt utan klessna: settu á lag
+transparent outside the ink: put it on a layer	gegnsætt utan bleks: settu á lag
+what is said, on screen, made on this computer	það sem er sagt, á skjánum, gert á þessari tölvu
+What this cue does when it ends - click to change	Hvað þetta cue gerir í lokin: smelltu til að breyta
+Whether the next shape or pen path adds or cuts	Hvort næsta form eða slóð bætir við eða sker
+shape	lögun
+palette	litaspjald
+scale	kvarði
+feedback	endurgjöf
+RED	RAUTT
+do it	framkvæma
+(empty)	(tómt)
+(unset)	(óstillt)
+English	Enska
+amber at	gult við
++ section	+ kafli
++pause pt	+ biðpunktur
+a-fade in	hljóð inn
+amber col	gulur litur
+(no notes)	(engar athugasemdir)
+a-fade out	hljóð út
+gain (each)	mögnun (hvert)
+% of the height	% af hæð
++  a first step	+  fyrsta skref
++ ADD AN EFFECT	+ BÆTA VIÐ ÁHRIFUM
+(none playing now)	(ekkert í spilun)
+Keep a transcript (.srt)	Vista uppskrift (.srt)
+Key tolerance (RGB distance)	Key-þolmörk (RGB-fjarlægð)
+Contrast multiplier (0.0-2.0x)	Margfaldari birtuskila (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	Margfaldari birtu (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	Margfaldari litmettunar (0.0–2.0x)
+Output rotation angle (-180..180)	Snúningshorn úttaks (-180..180)
+Hue rotation (-180 to +180 degrees)	Litblæssnúningur (-180 til +180 gráður)
+Lower Third background opacity (0-255)	Ógagnsæi bakgrunns nafnborða (0–255)
+0-127; 127 addresses every device on the line	0–127; 127 ávarpar öll tæki á línunni
+GO shows the note; picture and sound carry on	GO sýnir athugasemdina; mynd og hljóð halda áfram
+How fast it moves; no effect when it is still	Hraði hreyfingar; engin áhrif í kyrrstöðu
+Fires when incoming timecode passes this point	Virkjast þegar innkomandi tímakóði fer yfir þennan punkt
+Source pixels, independent of output placement	Upprunapixlar, óháð staðsetningu á úttaki
+Stereo balance, applied live (snaps to center)	Stereojafnvægi í beinni (smellur í miðju)
+bypassed: nothing here is processed or limited	framhjá: engin vinnsla eða takmörkun
+Per-cue audio trim: -40 to +40 dB, applied live	Mögnun cue: -40 til +40 dB, í beinni
+Show the message in red - the wrap up NOW state	Sýna skilaboð rauð: ljúka NÚNA
+The brush's width, as % of the picture's height	Breidd pensils sem % af myndhæð
+What the stream carries: SDR, PQ (HDR10) or HLG	Efni straums: SDR, PQ (HDR10) eða HLG
+Digit colour once red is reached, and in overtime	Litur talna eftir rauð mörk og í yfirvinnslu tíma
+Downmix this cue to mono (mono sources / mono PA)	Blanda cue í mono (mono-gjafi / mono-hljóðkerfi)
+Drag to scrub (shift = fine), click to type exact	Dragðu til að leita (Shift: nákvæmt), smelltu til að slá inn gildi
+Hand this to an oscillator so it moves on its own	Úthluta sveifli svo þetta hreyfist sjálft
+Changing width also scales height (and vice versa)	Breytt breidd skalar líka hæð og öfugt
+How long the levels take to arrive; zero is a snap	Tími að markgildum; núll skiptir strax
+Set the self-contained PIP source for this overlay	Velja sjálfstæðan PIP-gjafa þessarar yfirlagningar
+Take the newest shape or pen path out of this mask	Fjarlægja nýjasta form eða pennaslóð úr maskanum
+An address sent to Deckboy's OSC port fires this cue	Þetta vistfang á OSC-tengi Deckboy ræsir cue
+Hold on the last composite frame when the scene ends	Halda síðasta samsetta ramma þegar atriðinu lýkur
+How long it takes; zero is a snap rather than a fade	Lengd; núll skiptir strax án deyfingar
+Set still/pattern/browser duration for selected cues	Velja lengd kyrrmyndar/mynsturs/vafra fyrir valin cue
+Start the LTC carrier, stop it, or jam it to a value	Ræsa, stöðva eða samstilla LTC-burðarbylgju við gildi
+Which cue on that deck; step off the end to clear it	Cue á þeim spilara; fara fram yfir endann til að hreinsa
+Bob up and down. Depth 1 is half the frame either way	Upp og niður. Dýpt 1: hálfur rammi í hvora átt
+Output width in pixels | click value to type exact px	Úttaksbreidd í pixlum; smelltu til að slá inn nákvæmt gildi
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Setja straumslóð (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	Virkjast daglega á þessum tíma samkvæmt klukku tölvunnar
+Output height in pixels | click value to type exact px	Úttakshæð í pixlum; smelltu til að slá inn nákvæmt gildi
+Bar across the foot - readable further back than digits	Stika neðst: læsileg lengra að en tölur
+OUTPUT: drag a slice to move it, its corners to size it.	ÚTTAK: dragðu sneið til að færa, horn til að breyta stærð
+Choose a Lower Third from the overlay bin to fire on TAKE	Velja nafnborða úr yfirlagningasafni til að ræsa með TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	Velja PIP úr yfirlagningasafni til að ræsa með TAKE
+OUTPUT: drag a slice to move it, its corners to pin them.	ÚTTAK: dragðu sneið til að færa, horn til að festa þau
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 eða talnaborð ræsir þetta cue hvaðan sem er
+Use transition when auto-advancing or goto-taking next cue	Nota umskipti við sjálfvirkt framhald eða stökk í næsta cue
+Nothing has arrived yet. Press something on the controller.	Ekkert komið. Hreyfðu stjórntæki á stýringunni.
+Audio fade-in: follow visual fade, none, or explicit seconds	Hljóð inn: fylgja mynddeyfingu, engin eða ákveðnar sekúndur
+Audio fade-out: follow visual fade, none, or explicit seconds	Hljóð út: fylgja mynddeyfingu, engin eða ákveðnar sekúndur
+Add a library shape to this mask; its points are yours to move	Bæta safnformi í maskann; færa má punkta þess
+No slices: this output shows its one picture. + SLICE to start.	Engar sneiðar: úttakið sýnir sína mynd. Byrja með + SLICE.
+Open and close this edge on an oscillator -- a wipe that breathes	Opna og loka jaðrinum með sveifli: umskipti sem anda
+(none)	(ekkert)
+(nothing yet)	(ekkert enn)
++ ADD AN OUTPUT	+ BÆTA VIÐ ÚTTAKI
+>LIVE	>Í BEINNI
+(no media source)	(enginn miðlagjafi)
+snap	strax
+this deck	þessi spilari
+protocol	samskiptaregla
+does	aðgerð
+signal	merki
+sine	sínus
+freq	tíðni
+visuals	mynd
+black	svart
+green	grænt
+blue	blátt
+Pause at start	Bið í byrjun
+Pause at end	Bið í lok
+Transition to next	Næstu skipti
+Hardware display	Skjár
+Raster mode	Rasturhamur
+Refresh rate	Uppfærslutíðni
+Bit depth	Bitadýpt
+SDR material at	SDR-stig
+HDR signal	HDR-merki
+Fullscreen	Heilskjár
+Matte aspect	Matte-hlutfall
+Bar opacity	Þekja stika
+Output mask	Úttaksmaski
+Overlay still	Kyrrmynd yfir
+Overlay opacity	Þekja yfirlags
+Overlay image	Yfirlagsmynd
+Place it	Staðsetja
+Corner pin	Hornfesting
+Slices	Sneiðar
+choose...	velja...
+not configured	óstillt
+(default system device)	(sjálfgefið kerfistæki)
+(no monitor)	(enginn monitor)
+System audio (SDL)	Kerfishljóð (SDL)
+Not watching a folder	Engin mappa vöktuð
+anyone	hver sem er
+When taken off air	Þegar tekið úr útsendingu
+browser cue added	vafra-cue bætt við
+source cue added	gjafa-cue bætt við
+text added	texta bætt við
+tone cue added	tón-cue bætt við
+gain	mögnun
+follow	fylgja
+moves	hreyfing
+overtime	umfram tíma
+chime	hljómur
+bell	bjalla
+load a sprite sheet from a file...	hlaða spriteblaði úr skrá...
+Run the clock	Ræsa klukkuna
+What fires this cue besides GO	Hvað ræsir cue fyrir utan GO
+center	Miðja
+visual	mynd
+JAM	SAMSTILLA
+MIX	BLÖNDUN
+CLIP	BÚTUR
+TEXT	TEXTI
+KEY L	KEY V
+WACKY	BRJÁLAÐ
+COLOUR	LITUR
+DARKEN	DEKKJA
+STEREO	STEREÓ
+COMPARE	BERA SAMAN
+LIGHTEN	LÝSA
+DASHBOARD	MÆLABORÐ
+29.97 fps (NTSC)	29,97 fps (NTSC)
+Pocket Test (day)	Pocket-próf (dagur)
+Dark Detail (0-12%)	Smáatriði í skugga (0-12%)
+Frame Count (emoji)	Rammateljari (emoji)
+PLUGE (black level)	PLUGE (svartstig)
+Pocket Test (night)	Pocket-próf (nótt)
+Pocket Test (storm)	Pocket-próf (stormur)
+Marks stacked BELOW.	Merki hlaðin FYRIR NEÐAN.
+Panel Map (animated)	Flísakort (hreyfimynd)
+Pocket Test (sunset)	Pocket-próf (sólarlag)
+Boresight (alignment)	Mið (stilling)
+SMPTE 75% Colour Bars	SMPTE 75% litaslár
+(projector curve only)	(aðeins skjávarpaferill)
+Multiburst (bandwidth)	Multiburst (bandbreidd)
+Convergence (fine grid)	Samleitni (fínt net)
+Greyscale Steps (gamma)	Grátónaþrep (gamma)
+Uniformity (flat fields)	Jafnleiki (sléttir fletir)
+MULTIVIEW carries this too.	MULTIVIEW ber þetta líka.
+Test Clock (sync + latency)	Prófunarklukka (samstilling + töf)
+auto (reads the common two)	sjálfvirkt (les algengu tvö)
+Panel Map (LED tile numbers)	Flísakort (númer LED-flísa)
+Portal (blobs of deep space)	Gátt (bólur úr djúpgeimnum)
+Terrarium (living ecosystem)	Terrarium (lifandi vistkerfi)
+Window 10% (peak brightness)	Gluggi 10% (hámarksbirta)
+Window 50% (peak at mid APL)	Gluggi 50% (hámark við miðlungs APL)
+Frame Count (drops + latency)	Rammateljari (tap + töf)
+Terrarium Pico (1px per cell)	Terrarium Pico (1 px á reit)
+Banding Ramps (real bit depth)	Banding-rampar (raunveruleg bitadýpt)
+Fireside (a hearth that burns)	Arineldur (eldstæði sem logar)
+HLG - live broadcast (BT.2100)	HLG - bein útsending (BT.2100)
+Test Bars (motion diagnostics)	Prófunarslár (hreyfigreining)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (er eitthvað að kvarða?)
+Send now, without taking the cue	Senda núna, án þess að taka cue-ið
+Pocket Test (test card + scene cycle)	Pocket-próf (prófunarmynd + senuhringur)
+Critters (pixel-exact scaling, animated)	Critters (pixlanákvæm kvörðun, hreyfð)
+headphones, desk sounds and LTC stay out of it	heyrnartól, borðhljóð og LTC eru ekki með
+Above 1 tunnels inward, below 1 blooms outward.	Yfir 1 sogast göngin inn, undir 1 blómstra þau út.
+Read everything right to left. Yes, everything.	Lestu allt frá hægri til vinstri. Já, allt.
+Amber is closest to the 1976 single-phosphor look.	Raf er næst hinu einfalda fosfóri frá 1976.
+Greetings, primitive. Your "slideshow" amuses us.	Kveðja, frumstæða vera. „Myndasýningin“ þín skemmtir okkur.
+Sway sideways. Depth 1 is half the frame either way	Sveifla til hliðar. Dýpt 1 er hálfur rammi til hvorrar hliðar
+Draw the diagnostic over the card, or just the text.	Teikna greininguna yfir prófunarmyndina, eða bara textann.
+All interfaces, but only this computer is trusted yet.	Öll viðmót, en aðeins þessari tölvu er treyst enn.
+Choose the legacy cue token to show inside the PIP window	Veldu gamla cue-táknið sem birtist í PIP-glugganum
+ASIO carries the show's sound, and these are not on it yet	ASIO ber hljóð sýningarinnar, og þessir eru ekki á því enn
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=nýtt  Enter/P=fyrra  O=opna vistað  E=dæmi  L=læra
+Hand this parameter to an oscillator so it moves on its own	Láttu sveiflugjafa fá þessa breytu svo hún hreyfist sjálf
+How long the finished drawing stays before it is drawn again	Hve lengi fullbúna teikningin stendur áður en hún er teiknuð aftur
+How it comes on and goes off: none, fade, rise, slide or wipe	Hvernig það kemur og fer: ekkert, dofnun, rís, renna eða þurrka
+The 64-step wavetable, quantised to 6 bits like the hardware.	64 þrepa bylgjutaflan, magnbundin í 6 bita eins og vélbúnaðurinn.
+Vary tile size per cell, so the grid stops looking like a grid.	Breyta stærð flísa eftir reitum, svo netið hætti að líta út eins og net.
+Which output channel carries the signal. 'all' feeds every one.	Hvaða útgangsrás ber merkið. 'all' fæðir þær allar.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Það sem er sent. Bakstrik-n, -r, -t og -0 verða að þeim stöfum
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Eigin sagnir fjarstýrisamskipta Deckboy, ein í línu; # er athugasemd
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Hraði mótarans sem hlutfall af nótunni, svo beygjan fylgi tónhæðinni.
+Play this cue to the preview only; the outputs keep what they have	Spila þetta cue aðeins í forskoðun; útgangarnir halda því sem þeir hafa
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Settu tónhæðina á sveiflugjafa: Motion X sópar henni eins og þeremín
+A disarmed cue stays in the list and does nothing; GO steps over it	Afvopnað cue er áfram á listanum og gerir ekkert; GO stígur yfir það
+Where the clock reads from this cue on; click the value to type one	Hvaðan klukkan les frá þessu cue; smelltu á gildið til að slá það inn
+Add a dashboard button that fires this master by name, from anywhere	Bæta við mælaborðshnapp sem ræsir þennan master eftir nafni, hvaðan sem er
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Nýr hér? LÆRÐU GRUNNINN tekur fimm mínútur. Við sýnum þér um.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	IPv4-vistfang, eða 255.255.255.255 til að senda á allt netið
+How much playing audio widens and brightens the pattern. 0 free-runs.	Hve mikið spilað hljóð breikkar og lýsir mynstrið. 0 gengur frjálst.
+LED panel width in pixels - what one tile really is. Click to type it	Breidd LED-flísar í pixlum: hvað ein flís er í raun. Smelltu til að slá inn
+Which deck it acts on; step off the end for the one this cue lives on	Á hvaða deck það virkar; farðu fram yfir endann fyrir deck þessa cue
+only one playlist - use the routing chip on the header to add another	aðeins einn spilunarlisti: leiðarflagan í hausnum bætir öðrum við
+Which cue this master fires on that deck; step off the end to clear it	Hvaða cue þessi master ræsir á því decki; farðu fram yfir endann til að hreinsa
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Teiknaðu á dagskrárskjáinn með mús eða penna (DRAW). Esc stöðvar
+How long the move takes, each way. 0 is instant whatever the style says	Hve lengi hreyfingin tekur, hvora leið. 0 er strax, hvað sem stíllinn segir
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Stöðva þetta deck þegar rampinn lendir: hið venjulega niður-og-stöðva
+Which of the file's sound tracks plays: a second language, a commentary	Hvaða hljóðrás skrárinnar spilar: annað tungumál, lýsing
+An oscillator on the colour: depth is how far round the wheel it travels	Sveiflugjafi á litnum: dýptin er hve langt hann fer um litahjólið
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Hlaða þessu cue í biðstöðu og utan útsendingar, svo GO ræsi það án biðtíma afkóðarans
+Note, control change, program change, MIDI Show Control, or your own bytes	Nóta, control change, program change, MIDI Show Control eða þín eigin bæti
+Black behind the words. Zero leaves it over whatever the output already has	Svart á bak við orðin. Núll lætur þau liggja yfir því sem útgangurinn hefur þegar
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Hve mikið mótarinn beygir tónhæðina. 0-63, eigið mögnunarsvið vélbúnaðarins.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	orðin sem þetta cue setur á skjáinn  |  Shift+Enter: ný lína  |  Enter: virkja
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC og UDP eru send og gleymd; TCP tengist, svo það keyrir utan sýningarþráðarins
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Settu stigið á sveiflugjafa: Motion gerir það að hliði sem opnast þegar þú hreyfir þig
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Merki hlaðin FYRIR OFAN stafina, eins og samsettir broddar sem flæða yfir línu.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Hvaða bjalla. Að fletta SPILAR hana, svo hægt er að velja eftir eyranu frekar en nafni.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Engar raðir. + BÆTA VIÐ eða LÆRA býr til eina; MIDIMAP RESET skilar innbyggðu röðunum.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Vista slóðir grímunnar sem SVG, fyrir Illustrator og allt annað sem les þær
+Which MIDI output; a named port that is missing is reported rather than swapped	Hvaða MIDI-útgangur; nefnd gátt sem vantar er tilkynnt frekar en skipt út
+An oscillator on the level, running after GO until a later cue sets this fixture	Sveiflugjafi á stiginu, keyrir eftir GO þar til síðara cue stillir þetta ljós
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Þrep í þriðjungsáttundum, því eyrað vinnur í hlutföllum. 1 kHz er venjan.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Strik ÞVERT yfir reitinn, sem skemma stafinn frekar en að skreyta hann.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Hvort innkomnar MIDI-nótur spila þennan hljóðgervil eða ræsa cue eins og alltaf.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Nótunúmer, eða sláðu inn LEARN og spilaðu hana. Nótur sem ekkert cue á fara enn í cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Einfalt stereópar. Smelltu til að opna fylkið, frá nákvæmlega þessari leið
+Folding is what turns an arbitrary pattern into something that reads as designed.	Brot gera hvaða mynstur sem er að einhverju sem lítur út fyrir að vera hannað.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Rás=stig, aðskilið með kommum. Líka bil: 1=255, 10-14=64. Rásir eru taldar frá 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Færir trim hvers valins cue um sama dB; að slá inn gildi setur þau öll á það
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Beygir TÓNHÆÐ burðarbylgjunnar frekar en að blandast henni. Þetta lætur FDS urra.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	Hálfnuð með LÆRÐU GRUNNINN. Ýttu á L og við höldum áfram þar sem þú hættir, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Birta sem stafanet með 16 lita vísaðri litaspjaldi, frekar en sem pixla.
+Which MIDI output this file plays to; step past the end for the first one available	Á hvaða MIDI-útgang þessi skrá spilar; farðu fram yfir endann fyrir þann fyrsta lausa
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	IPv4-vistfang, eða 255.255.255.255 fyrir fjölvarpshóp alheimsins (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Smelltu á reit til að fara í gegnum hann: af, fullt, -3, -6, -12. Þessi röð slekkur aftur á fylkinu
+How long each phrase stays before it moves. Zero hides them without losing the list.	Hve lengi hver setning stendur áður en hún færist. Núll felur þær án þess að missa listann.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Hve lengi það tekur að dvína eftir áslátt. Heyrist aðeins þegar endurræsing er á.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Af, frá byrjun (næsta cue ræsist þegar þetta byrjar) eða frá enda (þegar því lýkur)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Hæð einnar línu sem hlutfall af rastanum, svo spjald lesist eins á öllum skjám
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Stilltu uppsprettu raufar sem media:/slóð, browser:url, window:nafn, camera:nafn eða syphon:nafn
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Stuttur LFSR-hamur. Tímabilið er nógu stutt til að hljóma eins og stillt málmhljóð frekar en suð.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Hvítt, hlýtt, rautt, raf, grænt, blágrænt, blátt, magenta. ~ snýr því um litahjólið
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Endurræsa hjúpinn svona oft. Hold heldur einni nótu, sem drone vill.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond er skarpbrýnda Atari Video Music-grindin; hringir mynda góð göng með endurgjafaraðdrætti.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Rugga eða snúa. Dýpt 1 er hálfur hringur til hvorrar hliðar; sög á dýpt 1 snýr alla leið
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	Spilunarstig DECKS (í beinni, ekki vistað með cue) - trim hvers cue er mögnun í HLJÓÐ-hlutanum
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Kyrrt, dofna inn, ritvél, fletta upp, skríða eða púls, allt drifið af eigin flutningi cue-sins
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Svið á birtan ramma. 1 er eitt á móti einu, 0,5 heldur hverju sviði í tvo ramma, 0 frystir.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Hvað þetta cue sýnir meðan það spilar: bylgjuform, sjá, Lissajous, róf, mælar eða nafnspjald
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 velur flísar eftir birtu svo myndin skiljist. 1 velur af handahófi svo netið verði áferð.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Hve langt það fer, í hálftónum. Upp hljómar eins og koma, niður eins og brottför, núll er slegin nóta.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	IPv4-vistfang. Nöfn eru ekki leyst: DNS-fyrirspurn er hindrandi kall og GO má ekki gera slíkt
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Breidd flísar í pixlum. Verður að passa við net blaðsins, annars lenda bútarnir yfir nágrannasprítum.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Spegla á víxl eftir staðsetningu reits, sem les sem mynstur þar sem tilviljanakenndur viðsnúningur les sem suð.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 sýður þau við reitinn, eins og grafin. Þar fyrir ofan er dregið aftur, eins og þau sjóði.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L spilar vinstri inngang í báðum hátölurum: hljóðnemi 1 á flestum viðmótum. STEREO er fyrir línuuppsprettu.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Öll hreyfingin. Þetta ER lengd cue-sins: stef er eina myndaða merkið hér sem endar.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Smelltu á gildið til að senda þetta ljós eða láta það vera þar sem síðasta cue setti það. ~ lætur stigið anda
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS er bylgjutafla sem mótari beygir. 2A03 er púls/þríhyrningur/suð-settið sem flest chiptune er gert úr.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Rugla hvaða tákn þýðir hvaða birtu. Sama sett, önnur rithönd. Með fræi, svo það haggast ekki.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Pixlaröðun: runur pixla raðaðar eftir birtu innan raðar, sem gefur datamosh bráðið útlit.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	Hve marga reiti merkin mega klifra. Þau þynnast á leiðinni, svo hátt ris dregur slóða frekar en að tvöfaldast.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue aðg gildi  -  G taka  S stöðva  F dofna út (gildi = tíundu úr sekúndu)  V hljóðstyrkur  O þekja  J hoppa í röð
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Yfirtónaþyngd: hrein bjalla við núll, málmblástur í botni. Þetta er munurinn á pingi og lúðrablæstri.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Fer í gegnum innganga þessarar tölvu. 'Settings input' fylgir inngangnum sem valinn er í Stillingar > Hljóð.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Frá glæðum til báls. Það rís og sest á hvaða stillingu sem er: eldur sem hreyfist ekki lítur út eins og ljósmynd
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Viðmiðunartónn. 440 er nútímastaðall, 432 algengur valkostur, og eldri hljóðfæri lágu enn lægra.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Hvar stefið byrjar. Undir rödd á það að halda sig til hliðar; yfir sal á það að skera í gegn.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Stafræn mögnun á inngangi, -40 til +40 dB. Stilltu fyrst formagnara viðmótsins; þetta er fyrir síðustu dB.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Púlsa stærðina. Eitt og sér hreyfir þetta breidd OG hæð saman; gefðu hæðinni sitt eigið ~ til að kremja og teygja
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Spjald fyllir rammann; Lower Third er nafn og hlutverk, neðarlega á gagnsæjum ramma, með inn og út
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held heldur síðustu tilfærslu frekar en að fjarlægja hana: myndin helst bogin eins og rekillinn skildi við hana.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12,5 og 25 eru þunn og nefmælt, 50 er holt. 75 hljómar eins og 25: það er hér því trackerar bjóða það.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Magnbinda útganginn eins og vélbúnaðurinn. Þrepin ERU hljóðið; að slétta þau gerir hljóðgervil sem hermir eftir kubb.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Færir trim hvers valins cue um sama dB og heldur muninum; að slá inn gildi setur þau öll á það
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Hvert krosspunktar spilunarlistans senda það (Stillingar > Hljóð). Smelltu til að opna fylkið eftir nafni, frá nákvæmlega þeirri leið
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	nefndu gildi með  d = ...;  endaðu á einni segð, eða þremur fyrir rautt grænt blátt  |  Shift+Enter: ný lína  |  Enter: virkja
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Setja aftur það sem var í byrjun þegar rampinn lendir (eftir stöðvun): deck tilbúið fyrir næsta cue, bylgja sem sleppir
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Hvaða talmódel býr til skjátextann: enska, hvaða mál sem er, eða hægara og nákvæmara parið. Hvert er sótt einu sinni
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Það sem gríman sker: þetta cue hvar sem það spilar, þennan spilunarlista á völdum útgangi, alla mynd þess útgangs, eða matte hans
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Spila á tíðni skjásins þegar hún er innan 0,2% (59,94 á 60): hver rammi sýndur einu sinni, hljóðið allt að 3,5 sent of hátt eða lágt
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Fjórðungssnúningar eru nákvæmir og haldast skarpir. Snúningur sýnatekur á ská, sem rífur pixlalist: stundum er það einmitt það sem maður vill.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Hver taka byrjar brúðuleikinn eins, svo æft útlit endurtaki sig frekar en að ráðast af því hve lengi forritið hefur verið opið.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Hvað stýrir hverri halla: eigin staðsetning, birtustigull myndarinnar svo stafirnir halli eins og myndin, eða litblær reitsins.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Nefndu rás eða par einu sinni. Spilunarlistar senda á nafnið, svo annað viðmót þýðir að breyta nöfnunum hér, ekki hverju cue.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Smelltu á krosspunkt til að fara í gegnum hann: af, 0, -3, -6, -12 dB. Dragðu til hliðar fyrir hvaða stig sem er. Spilunarlisti án krosspunkta spilar á eigið tæki.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Sprítusett sett upp í data/sprites. Hver mappa er sett; að fletta velur eitt og fer aftur í ekkert. Hægrismellur slekkur á þeim.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Innri upplausn, 1 grófast til 5 fínast. Þetta er jafnmikið fagurfræðileg stilling og hraðastilling: 8 bita útlitið kemur frá stórum pixlum.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture tekur lit úr myndinni. Grænt, raf og blágrænt eru skjáfosfór. Palette læsir textann við valið vélbúnaðarlitaspjald.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE læknar sig sjálft (H.264). CLASSIC er hin raunverulega klessa (MPEG-4). EXTREME er grófara og klessir stöðugt. Að breyta þessu undirbýr cue-ið aftur.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Sínus til uppröðunar, bleikt til að stilla PA, hvítt til að finna glamur, sóp til að heyra hvar salur hringir, identify til að fara yfir útgangana einn í einu.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Hvaða áhrif, eftir stað í stafla cue-sins sem það deck spilar þegar þetta ræsist. Ef ekkert er þar segir dofnunin það og gerir ekkert
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Hver rammi blandaður inn í þann næsta. Þetta er einkenni Hypno: við 0 er það mynsturgjafi, fyrir ofan byrjar myndin að nærast á sjálfri sér.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Það sem sést út um gluggann á eldstæðisveggnum: garður, regn, snjór eða hafið. Herbergi með veðri úti les sem staður frekar en veggur
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	EFTIR LJÓSI: ljósin í patchinu (Stillingar > Net > LJÓS), eftir nafni. RÁSIR: rás=stig í höndunum. Cue getur haft hvort tveggja; rásir koma síðast
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Hver stafur ruggar eins og spil sem hallað er. Hver reitur hefur eigin fasa, svo netið andar frekar en að renna sem eitt blað.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Penni: smelltu fyrir horn, dragðu fyrir boga, smelltu á fyrsta punkt til að loka (P). Punktar: dragðu, smelltu á útlínuna til að bæta við, Alt-smellur eða Delete til að eyða
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Þrjár rásir kubbsins. Þær eru ólíkar: þríhyrningur hefur engan hljóðstyrk á vélbúnaðinum, og suð er hliðrunarskrá frekar en sveiflugjafi.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Valin sett tákna og emoji: stjörnur, nótur, blóm, örvar, veður, rúnir, andlit. Að velja eitt fyllir eigin tákn fyrir neðan, sem haldast breytanleg.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Spila af tölvulyklaborðinu, Ableton-útlit: A W S E D F T G Y H U J, Z og X fyrir áttund. Meðan þetta er Á spila þeir lyklar nótur frekar en að ræsa cue.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Þekja decks, hljóðstyrkur decks, aðaldeyfirinn, birta / birtuskil / mettun / litblær virka cue-sins, eða hnappur á einum af áhrifum þess eða hljóðáhrifum
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Skannlínur, fosfórljómi og RGB-jaðrar. Ljóminn skiptir máli: fosfór lekur til hliðar, og þess vegna virðist CRT gefa frá sér ljós.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Rifin línubönd og RGB-aðskilnaður. Í textaham skemmir það líka REITI: heilar raðir læsast á einn endurtekinn staf, eins og raunverulegur textaskjár sem missir samstillingu.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still heldur rammanum sem þú ert á. Flipbook spilar rammana til skiptis. Replay teiknar fyrsta rammann strik fyrir strik, eins og hann var teiknaður, heldur og byrjar aftur
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (gera tilbúið án þess að ræsa), Arm, Disarm eða Devamp (lykkja klárar umferð sína og endar); eða Stop all, Pause all, Resume all: hvert deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope sýnir lögun og klippingu. Lissajous sýnir fasa og pólun milli fyrstu tveggja rásanna: hornalína á rangan veg þýðir að önnur er snúin. Spectrum er þriðjungsáttundarslár.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 velur táknið sem birtan biður um, 1 hvaða tákn sem er í settinu. Hækkaðu til að sjá allt stafrófið: raðað stranglega eftir bleki velur sléttur flötur eitt merki og hin birtast aldrei.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Kubbar og dreifing lesast sem þéttleiki; ASCII-rampinn sem texti; tákn sem brak. Að fletta þessu hreinsar eigin táknastreng, þar sem hann myndi yfirskrifa það; forstillingaröðin setur einn aftur.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Jöfn stilling kaupir frjálsa tóntegundaskiptingu á kostnað þess að hvert tónbil sé örlítið rangt. Hrein og pýþagórísk eru fullkomlega stillt í einni tóntegund. Bohlen-Pierce skiptir duodecimu, svo hún hefur engar áttundir.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+pan	hliðrun
+trans	yfirf.
+TRACKER	RAKNARI
+Motion: Bug Swat	Hreyfing: Bug Swat
+Passphrase (shared)	Aðgangsorð (sameiginlegt)
+, — skip to previous cue	, — fara í fyrra cue
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  gerir ekkert á þeim spilunarlista  -  (M) spilunarlisti skrefsins sjálfs
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS er EBU-stilling, -20 SMPTE. Takmarkað undir 0: þetta fæðir lifandi PA.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  gerir ekkert á þeim spilunarlista  -  (M) spilunarlisti skrefsins sjálfs  -  EDIT er á: að skrifa breytir sýningunni
+Fall	Fall
+deck	deck
+neon	neon
+MULTI	MULTI
+TA-DA	TA-DA
+Bork bork BORK!	Bork bork BORK!
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	VELDU DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Smelltu nú á flipann hans, Deck 2. Nýr listi er ekki valinn fyrr en þú smellir á hann.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Upplýsti flipinn er þar sem UPPSPRETTA setur hlutina. Slepptu þessu og blekið lendir undir hljóðgervlinum.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	Sérðu þennan flipa? Smelltu á hann. Nú ertu á Deck 2. BÚMM. Grunnatriði.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Smelltu á flipann hans, Deck 2. Upplýsti flipinn er listinn sem UPPSPRETTA bætir í.
+Skip this and the words go under the map. With the lizard.	Slepptu þessu og orðin fara undir kortið. Hjá eðlunni.
+Nine years of live weather. Always click the tab.	Níu ár af veðri í beinni. Smelltu alltaf á flipann.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Smelltu á flipann hans, Deck 2. Nýr listi bíður þar til þú velur hann.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Upplýsti flipinn fær næsta cue. Eins og að velja hvaða skyggna fer í sýningarvélina.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Veldu stokk. Hvaða stokk sem er. ...Deck 2. Veldu Deck 2.
+MENU	VALMYND
+VOLUME	HLJÓÐSTYRKUR
++ step	+ skref
+< BACK	< TIL BAKA
+ATEM switcher	ATEM-myndblandari
+ATEM tally	ATEM-tally
+AUDIO: DEFAULT	HLJÓÐ: SJÁLFGEFIÐ
+Animated GIF	Hreyfð GIF
+Arrows	Örvar
+CLICKER	FJARSTÝRING
+Copyright	Höfundarréttur
+DEST...	ÁFANGASTAÐUR...
+Datamosh - classic	Datamosh – sígilt
+Datamosh - extreme	Datamosh – öfgafullt
+Datamosh - subtle	Datamosh – lúmskt
+Deckboy is input	Deckboy er inntak
+Device: None	Tæki: ekkert
+Drag	Draga
+Drop media here	Slepptu miðlum hér
+Enter Take  Space Play/Pause	Enter Take  Space Spila/Hlé
+FFmpeg / libav  (in-process)	FFmpeg / libav  (innbyggt)
+FPS: SOURCE	FPS: UPPSPRETTA
+Fonts	Letur
+Free software. You may use, study, share	Frjáls hugbúnaður. Þú mátt nota hann, rannsaka,
+GO / BACK	GO / TIL BAKA
+GO / BACK (clicker)	GO / TIL BAKA (fjarstýring)
+Key out: None - fill only	Key-úttak: ekkert – aðeins fill
+LTC in	LTC-inntak
+Licence	Leyfi
+MATCH SOURCE	EINS OG UPPSPRETTA
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> flutningur
+MOSH: SUBTLE	MOSH: LÚMSKT
+MSC Trigger -> cue by id	MSC Trigger -> cue eftir auðkenni
+MTC in	MTC-inntak
+Mode: CALLER	Hamur: CALLER
+NDI receiver	NDI-móttakari
+NDI trigger	NDI-kveikja
+NO STEPS YET	ENGIN SKREF ENN
+No PTP lock, wide-model pacing - will not genlock to plant sources	Enginn PTP-lás, gróf tímasetning – samstillist ekki við upptökur versins
+ONCE  |  ORDER	EINU SINNI  |  RÖÐ
+Optional	Valfrjálst
+PNG sequence	PNG-röð
+Platform	Stýrikerfi
+Press A to take cue	Ýttu á A til að taka cue
+RATE: AUTO	TÍÐNI: SJÁLFV.
+S Stop   C Clear   Esc Panic	S Stöðva   C Hreinsa   Esc Neyð
+SIZE: SOURCE	STÆRÐ: UPPSPRETTA
+SPOUT TEXTURE SHARE	SPOUT-ÁFERÐADEILING
+Session	Lota
+TSL tally out	TSL-tally-úttak
+Thanks	Þakkir
+Timecode chase	Elta tímakóða
+Timecode run	Keyra tímakóða
+Toolkit	Verkfærasett
+Trigger	Kveikja
+WAV (audio only)	WAV (aðeins hljóð)
+Warranty	Ábyrgð
+address...	vistfang...
+and modify it; derivatives stay GPL.	deila og breyta; afleiður haldast GPL.
+auto	sjálfv.
+clear the cell	hreinsa reitinn
+companion ping	Companion-ping
+fire this row	ræsa þessa röð
+insert a row	setja inn röð
+live lane  |  I/O set trim  |  click or drag to seek	beinlína  |  I/O stillir klippingu  |  smelltu eða dragðu til að leita
+media in	miðlar inn
+move the cursor	færa bendilinn
+mute / solo a column	þagga / sóló dálk
+off -- edit on monitor	slökkt -- breyta á skjánum
+off: no camera is open. Drag on the picture to draw a zone.	slökkt: engin myndavél opin. Dragðu á myndina til að teikna svæði.
+open the code editor	opna kóðaritilinn
+play / stop	spila / stöðva
+stop, fade, vol, opacity	stöðva, deyfa, hljóðst., ógegnsæi
+the FFmpeg, SDL and FreeType projects,	FFmpeg-, SDL- og FreeType-verkefnin,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion og x42/libltc.
+Keys	Lyklar
+None. See LICENSE sections 15-16.	Engin. Sjá LICENSE, kafla 15-16.
+none compiled in	ekkert innbyggt
+Alpha	Alfa
+Group	Hópur
+Normal	Venjulegt
+Remote	Fjarstýring
+lesson	lexía
+Bitrate	Bitahraði
+Latency	Biðtími
+OUT {n}	ÚT {n}
+Out {n}	Út {n}
+{n} row	{n} lína
+Key name	Heiti lykils
+Keyframe	Lykilrammi
+Registry	Skrásetning
+fade {n}	deyfing {n}
+{n} rows	{n} línur
+Node port	Tengi hnúts
+Stream ID	Auðkenni streymis
+added {1}	bætti við {1}
+start {n}	byrja {n}
+still {n}	kyrrmynd {n}
+FADE {n} s	DEYFING {n} s
+LAYER {n}%	LAG {n}%
+Output {n}	Úttak {n}
+PTP domain	PTP-lén
+Stream key	Streymislykill
+[ASSIGNED]	[ÚTHLUTAÐ]
+audio only	aðeins hljóð
+to Out {n}	á Út {n}
+{n} of {n}	{n} af {n}
+Display {n}	Skjár {n}
+active jobs	virk verk
+local clock	staðbundin klukka
+not running	ekki í gangi
+click to set	smelltu til að stilla
+full {n}x{n}	fullt {n}x{n}
+running v{n}	í gangi v{n}
+the other one	hinn
+DELIVERY H.{n}	AFHENDING H.{n}
+Output {n} mix	Blöndun úttaks {n}
+made by Deckboy	gert með Deckboy
+{1} plays to {2}	{1} spilar á {2}
+the picture {1} plays	myndin sem {1} spilar
+New media joins {1} by itself	Nýir miðlar bætast sjálfkrafa í {1}
+Press Win+P and choose Extend	Ýttu á Win+P og veldu Extend
+{n} patched - DMX cues set them by name	{n} tengd - DMX-cue stilla þau eftir heiti
+Set them to extend in your display settings	Stilltu þá á Extend í skjástillingunum
+lesson: {1}. Esc leaves, and it picks up here next time	lexía: {1}. Esc hættir, og næst er haldið áfram héðan
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Svarar ATEM Software Control sem deck á TCP 9993 á {1}
+In System Settings > Displays, use it as an extended display	Í System Settings > Displays skaltu nota hann sem útvíkkaðan skjá
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Það át borðið, skapi. Þú ert með {1} skjái: SKJÁR úttaksins í VALMYND setur það á annan.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Það át borðið, skapi. Þú ert með tvo skjái: SKJÁR úttaksins í VALMYND setur það á hinn.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} skjáir, skapi. Borðið verður á þessum, myndin fer á {2}. Opnaðu VALMYND og láttu ÚTTAK AF segja ÚTTAK Á.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Tveir skjáir, skapi. Borðið verður á þessum, myndin fer á hinn: {1}. Opnaðu VALMYND og láttu ÚTTAK AF segja ÚTTAK Á.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Það át borðið, skapi. Speglaðir skjáir sýna myndina á báðum, svo ég setti hana í lítinn glugga, fyrir aftan. {1}, og hún fær sinn eigin skjá.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Skjáirnir þínir eru speglaðir, skapi: {1} sýnir það sama og þessi, svo myndin hylur borðið á báðum. {2}, og ég set myndina á sinn eigin skjá. Eða opnaðu VALMYND og láttu ÚTTAK AF segja ÚTTAK Á.

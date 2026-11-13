@@ -1,0 +1,24 @@
+# Deckboy Theme: Star Fox
+# Family: tinted chassis. Gunmetal-navy body -- dark enough for a dim booth,
+# but a real colour rather than true black, so it reads as its own machine.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	232B3EFF
+shell_inner	2C3650FF
+shell_shadow	11151FFF
+screen_light	7FA8FFFF
+screen_mid	3858C4FF
+screen_dark	1E2C66FF
+screen_deep	0B1020FF
+screen_ink_soft	A3B3EAFF
+screen_fg	A8C4FFFF
+screen_fg_soft	AAB6FFFF
+screen_tile	141C33FF
+button_bezel	3A4A7AFF
+delete_bezel	C0503AFF
+scanline_alpha	14
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	bird	3

@@ -1,0 +1,607 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Deckboy Contributors
+#
+# package_windows.ps1 — Build a self-contained Windows zip release.
+#
+# What this script bundles:
+#   - Deckboy.exe and every .dll already co-located by CMake in build/Release
+#     (SDL3, SDL3_ttf, freetype, libpng16, brotli*, bz2, zlib, SpoutLibrary,
+#     WebView2Loader, ltc, and the libav* DLLs for in-process decode:
+#     avcodec/avformat/avutil/avfilter/swscale/swresample)
+#   - FFmpeg license/copyright notice for the bundled libav* DLLs
+#   - ffmpeg.exe + ffprobe.exe from C:\ffmpeg\bin (override with -FfmpegDir)
+#   - MSVC C++ runtime DLLs (app-local, so the target machine doesn't need
+#     the Visual C++ Redistributable installed)
+#   - data/ — fonts, themes, UI pack, default project
+#   - LICENSE, README.txt
+#
+# What this script does NOT bundle (licensing / driver reasons):
+#   - NDI runtime (operator installs NDI Tools — free, signed by Vizrt)
+#   - Blackmagic Desktop Video (operator installs from blackmagicdesign.com)
+#   - WebView2 Runtime (operator installs from Microsoft, preinstalled on W11)
+#
+# Deckboy already prompts the operator the first time they try to use a
+# feature whose runtime isn't installed, so no setup-time install is needed.
+#
+# Usage (from repo root):
+#   .\tools\package_windows.ps1
+#   .\tools\package_windows.ps1 -FfmpegDir "D:\ffmpeg\bin" -Configuration Release
+#
+# Output: dist\Deckboy-<VERSION>-windows-x64.zip
+
+[CmdletBinding()]
+param(
+    [string]$RepoRoot      = (Resolve-Path (Join-Path $PSScriptRoot "..")),
+    [string]$Configuration = "Release",
+    [string]$BuildDir      = "",
+    [string]$FfmpegDir     = "C:\ffmpeg\bin",
+    [string]$WhisperCli    = "",
+    [switch]$AllowCliDecode,
+    [string]$OutputDir     = ""
+)
+
+$ErrorActionPreference = "Stop"
+
+if (-not $BuildDir) {
+    $BuildDir = Join-Path $RepoRoot ("build\windows\" + $Configuration)
+}
+if (-not $OutputDir) {
+    $OutputDir = Join-Path $RepoRoot "dist"
+}
+
+# --- Sanity checks ----------------------------------------------------------
+$Version = (Get-Content (Join-Path $RepoRoot "VERSION") -Raw).Trim()
+if (-not $Version) {
+    throw "VERSION file is empty"
+}
+$Exe = Join-Path $BuildDir "Deckboy.exe"
+if (-not (Test-Path $Exe)) {
+    throw "Deckboy.exe not found at $Exe. Build first: cmake --build build\windows --config $Configuration"
+}
+# The binary must BE the version we are about to name the zip after. This script
+# takes its version from the VERSION file and the binary from a build directory,
+# and nothing tied the two together -- so packaging from a stale or unrelated
+# build directory produced a "0.85.0" zip containing a 0.84.0 executable, which
+# is exactly the sort of thing nobody checks until it is in someone's hands.
+$ExeVersion = (& $Exe --version 2>&1 | Select-Object -First 1) -replace '^Deckboy\s+v?', ''
+$ExeVersion = $ExeVersion.Trim()
+if ($ExeVersion -ne $Version) {
+    throw ("Version mismatch: VERSION says $Version but $Exe reports '$ExeVersion'. " +
+           "Rebuild that directory, or pass -BuildDir <the one you actually built>.")
+}
+if (-not (Test-Path (Join-Path $FfmpegDir "ffmpeg.exe"))) {
+    throw "ffmpeg.exe not found in $FfmpegDir. Pass -FfmpegDir <path> if installed elsewhere."
+}
+if (-not (Test-Path (Join-Path $FfmpegDir "ffprobe.exe"))) {
+    throw "ffprobe.exe not found in $FfmpegDir."
+}
+
+# --- Stage layout -----------------------------------------------------------
+$StageName = "Deckboy-$Version-windows-x64"
+$StageDir  = Join-Path $OutputDir "staging\$StageName"
+$ZipPath   = Join-Path $OutputDir "$StageName.zip"
+
+if (Test-Path $StageDir) {
+    Remove-Item $StageDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
+if (-not (Test-Path $OutputDir)) {
+    New-Item -ItemType Directory -Path $OutputDir | Out-Null
+}
+
+Write-Host "Staging Deckboy $Version -> $StageDir"
+
+# --- Copy app binaries (exe + every .dll CMake placed next to it) -----------
+Copy-Item $Exe -Destination $StageDir
+Get-ChildItem $BuildDir -Filter *.dll | ForEach-Object {
+    Copy-Item $_.FullName -Destination $StageDir
+}
+# Deckboy Mini, the single-deck command-line player. Required: a zip that
+# quietly lacked it would look exactly like one where it was left out on
+# purpose, and nobody would find out until a kiosk script failed.
+$MiniExe = Join-Path $BuildDir "deckboy-mini.exe"
+if (-not (Test-Path $MiniExe)) {
+    throw "deckboy-mini.exe not found at $MiniExe. It builds with Deckboy unless DECKBOY_BUILD_MINI is OFF."
+}
+Copy-Item $MiniExe -Destination $StageDir
+# Bundled companion apps (terrarium easter egg)
+$TerrariumExe = Join-Path $BuildDir "terrarium.exe"
+if (Test-Path $TerrariumExe) {
+    Copy-Item $TerrariumExe -Destination $StageDir
+}
+
+# --- Copy ffmpeg / ffprobe --------------------------------------------------
+Copy-Item (Join-Path $FfmpegDir "ffmpeg.exe")  -Destination $StageDir
+Copy-Item (Join-Path $FfmpegDir "ffprobe.exe") -Destination $StageDir
+
+# --- whisper-cli (captions made on this computer) ---------------------------
+# A static whisper.cpp build: one exe, beside Deckboy, where captioning.hpp
+# looks first. The speech model is fetched on first use, never bundled. CI sets
+# DECKBOY_REQUIRE_WHISPER=1 so a zip without it fails instead of shipping a
+# captions button that cannot run.
+if (-not $WhisperCli) { $WhisperCli = $env:DECKBOY_WHISPER_CLI }
+if (-not $WhisperCli) { $WhisperCli = Join-Path $BuildDir "whisper-cli.exe" }
+if (Test-Path $WhisperCli) {
+    Copy-Item $WhisperCli -Destination (Join-Path $StageDir "whisper-cli.exe")
+    Write-Host "  + whisper-cli.exe"
+} elseif ($env:DECKBOY_REQUIRE_WHISPER -eq "1") {
+    throw "whisper-cli.exe not found at $WhisperCli and DECKBOY_REQUIRE_WHISPER=1"
+} else {
+    Write-Warning "whisper-cli.exe not found - captions made on this computer will be unavailable"
+}
+# deckboy-listen: LIVE CAPTIONS' speech engine, built from the same whisper.cpp
+# (tools/listen). Required whenever whisper-cli is, for the same reason.
+$ListenBin = $env:DECKBOY_LISTEN_BIN
+if (-not $ListenBin) { $ListenBin = Join-Path $BuildDir "deckboy-listen.exe" }
+if (Test-Path $ListenBin) {
+    Copy-Item $ListenBin -Destination (Join-Path $StageDir "deckboy-listen.exe")
+    Write-Host "  + deckboy-listen.exe"
+} elseif ($env:DECKBOY_REQUIRE_WHISPER -eq "1") {
+    throw "deckboy-listen.exe not found at $ListenBin and DECKBOY_REQUIRE_WHISPER=1"
+} else {
+    Write-Warning "deckboy-listen.exe not found - live captions will be unavailable"
+}
+
+# --- Copy MSVC C++ runtime DLLs (app-local) ---------------------------------
+# Microsoft permits app-local deployment of the MSVC runtime DLLs, which is
+# what lets the target machine run Deckboy without installing the Visual C++
+# Redistributable. We pick the highest-numbered redist directory installed
+# alongside the VS 2022 toolchain so a freshly updated VS still works.
+# EVERY VS edition, not just Community.
+#
+# The path was hardcoded to Community, so on a machine with Enterprise,
+# Professional or just the Build Tools the redist was "not found", the warning
+# scrolled past, and the zip shipped WITHOUT the runtime -- which is precisely
+# the machine that builds a release in CI. The README promises the target
+# machine does not need the Visual C++ Redistributable, and on those builds it
+# would have.
+$RedistRoot = $null
+foreach ($Edition in @("Enterprise", "Professional", "Community", "BuildTools")) {
+    $Candidate = "C:\Program Files\Microsoft Visual Studio\2022\$Edition\VC\Redist\MSVC"
+    if (Test-Path $Candidate) { $RedistRoot = $Candidate; break }
+    $Candidate = "C:\Program Files (x86)\Microsoft Visual Studio\2022\$Edition\VC\Redist\MSVC"
+    if (Test-Path $Candidate) { $RedistRoot = $Candidate; break }
+}
+if ($RedistRoot) {
+    $CrtDir = Get-ChildItem $RedistRoot -Directory |
+              Where-Object { Test-Path (Join-Path $_.FullName "x64\Microsoft.VC143.CRT") } |
+              Sort-Object Name -Descending |
+              Select-Object -First 1
+    if ($CrtDir) {
+        $CrtPath = Join-Path $CrtDir.FullName "x64\Microsoft.VC143.CRT"
+        Get-ChildItem $CrtPath -Filter *.dll | ForEach-Object {
+            Copy-Item $_.FullName -Destination $StageDir
+        }
+        Write-Host "  + MSVC runtime: $($CrtDir.Name)"
+    } else {
+        Write-Warning "VS 2022 redist root exists but no VC143.CRT/x64 dir found under $RedistRoot. The zip may require the Visual C++ Redistributable on the target machine."
+    }
+} else {
+    Write-Warning ("No VS 2022 redist directory found for any edition. " +
+                   "The zip will require the Visual C++ Redistributable on the " +
+                   "target machine, which the README says it does not.")
+}
+
+# --- Copy data + license ----------------------------------------------------
+$DataSrc = Join-Path $RepoRoot "data"
+if (Test-Path $DataSrc) {
+    Copy-Item $DataSrc -Destination $StageDir -Recurse
+    # data/last_project.txt is per-machine state, not shipping content: it holds
+    # the absolute path of the last show opened on the BUILD machine. Releases
+    # up to v0.80.1 carried the packager's own local path into every download,
+    # which leaks a local directory layout and leaves a fresh install offering
+    # "open previous show" for a file the user has never had.
+    #
+    # data/default.deckboy is the same class of mistake and was still shipping:
+    # it is gitignored scratch state (the auto-loaded startup show), so whatever
+    # the packager last had open goes out in the zip. On this build machine that
+    # was a CAMERA cue naming a specific webcam model — releases were carrying
+    # the packager's hardware inventory, and a fresh install's first TAKE would
+    # open a webcam. Both files are per-machine state; neither ships.
+    #
+    # recent_projects.txt (v0.99.331) is the same thing again, one file later:
+    # the splash's recent-shows list, holding an absolute path per show this
+    # machine has opened. It was added without being taught to any of the three
+    # packagers, so it would have shipped the packager's show library.
+    #
+    # The three packagers had also drifted apart — Linux stripped the crash and
+    # soak logs and these two did not. One list, kept the same in all three.
+    foreach ($StaleName in @("last_project.txt", "recent_projects.txt", "defaults.deckboy",
+                             "default.deckboy", "deckboy-first-run", "found-sources", "tabletop",
+                             "deckboy-crash.log", "deckboy-soak.log",
+                             "deckboy-render.log", "deckboy-show.log",
+                             "deckboy-live-frame.bmp", "paired-phones.txt",
+                             "tutorial-practice.deckboy", "tutorial-progress.txt",
+                             "lessons.txt", "midi_map.tsv", "lesson-road", "lesson-road-bundle",
+                             "bugswat-highscore.txt", "bugswat-practice.deckboy")) {
+        $StaleState = Join-Path (Join-Path $StageDir "data") $StaleName
+        if (Test-Path $StaleState) {
+            Remove-Item $StaleState -Force -Recurse   # some are folders (tabletop, lesson-road)
+            Write-Host "  - stripped data\$StaleName (build-machine state)"
+        }
+    }
+    # Captions made on THIS machine: the downloaded speech model (~140 MB), the
+    # captions written for media it had no folder for, the scratch audio, and a
+    # whisper-cli someone placed by hand. None of it is the package's. And the
+    # colour tables an operator added for the effect colour picker: theirs,
+    # possibly licensed (a Pantone table), never the package's.
+    foreach ($StaleDir in @("models", "captions", "captions-work", "whisper", "colours")) {
+        $StaleState = Join-Path (Join-Path $StageDir "data") $StaleDir
+        if (Test-Path $StaleState) {
+            Remove-Item $StaleState -Recurse -Force
+            Write-Host "  - stripped data\$StaleDir\ (build-machine state)"
+        }
+    }
+
+    # data/_converted/ holds the operator OWN transcoded media -- datamosh
+    # preps, proxies, format conversions. It is gitignored, but .gitignore does
+    # not apply to a file copy, so without this the zip ships whatever personal
+    # footage is on the packaging machine. One real prep here was 1.7 GB, which
+    # is how this was noticed.
+    # recordings/ is the same class one directory later: captured programme
+    # output, gitignored, and never taught to ANY of the three packagers. Found
+    # while building an isolated instance for demo capture -- a copied data/
+    # brought both directories along.
+    foreach ($StaleDir in @("_converted", "recordings", "updates", "test-cards")) {
+        $StaleDirPath = Join-Path (Join-Path $StageDir "data") $StaleDir
+        if (Test-Path $StaleDirPath) {
+            $StaleMB = [math]::Round(((Get-ChildItem $StaleDirPath -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1MB)
+            Remove-Item $StaleDirPath -Recurse -Force
+            Write-Host "  - stripped data\$StaleDir (operator media, $StaleMB MB)"
+        }
+    }
+}
+$LicenseSrc = Join-Path $RepoRoot "LICENSE"
+if (Test-Path $LicenseSrc) {
+    Copy-Item $LicenseSrc -Destination $StageDir
+}
+# FFmpeg license notice for the bundled libav* DLLs (in-process decode).
+# vcpkg installs the port's consolidated copyright file; carrying it in the
+# zip satisfies the LGPL/GPL notice requirement for redistribution.
+# Derived, not hardcoded to one machine: VCPKG_ROOT if set, else the usual
+# locations. This was a literal path under one developer home directory, which
+# both put a username in the repo and silently skipped the licence notice on
+# every other machine.
+# Where vcpkg installed the libav ports, found the way THIS build found them:
+# VCPKG_ROOT; the toolchain file recorded in the build's CMake cache; a
+# manifest-mode tree beside the build; a clone in the repo (what CI does);
+# then the usual homes. CI clones vcpkg into the repo, which none of the old
+# candidates covered, so every CI zip warned and shipped without the notice
+# (audit 2026-10-19, F4).
+$CopyrightRel = "installed/x64-windows/share/ffmpeg/copyright"
+$CopyrightCandidates = @()
+if ($env:VCPKG_ROOT) { $CopyrightCandidates += Join-Path $env:VCPKG_ROOT $CopyrightRel }
+foreach ($Cache in @((Join-Path (Split-Path $BuildDir -Parent) "CMakeCache.txt"), (Join-Path $BuildDir "CMakeCache.txt"))) {
+    if (Test-Path $Cache) {
+        $Line = Select-String -Path $Cache -Pattern '^CMAKE_TOOLCHAIN_FILE:[A-Z]*=(.+)$' | Select-Object -First 1
+        if ($Line) {
+            # <vcpkg>/scripts/buildsystems/vcpkg.cmake -> <vcpkg>
+            $ToolchainRoot = Split-Path (Split-Path (Split-Path $Line.Matches[0].Groups[1].Value -Parent) -Parent) -Parent
+            $CopyrightCandidates += Join-Path $ToolchainRoot $CopyrightRel
+        }
+    }
+}
+foreach ($Dir in @((Split-Path $BuildDir -Parent), $BuildDir)) {
+    $CopyrightCandidates += Join-Path $Dir ("vcpkg_" + $CopyrightRel)
+}
+foreach ($Root in @((Join-Path $RepoRoot "vcpkg"), (Join-Path $env:USERPROFILE "vcpkg"), "C:/vcpkg", "C:/dev/vcpkg")) {
+    $CopyrightCandidates += Join-Path $Root $CopyrightRel
+}
+$FfmpegCopyright = $CopyrightCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+$StagedLibav = Get-ChildItem -Path $StageDir -Filter "av*.dll" -ErrorAction SilentlyContinue
+if ($FfmpegCopyright) {
+    Copy-Item $FfmpegCopyright -Destination (Join-Path $StageDir "LICENSE-ffmpeg.txt")
+    Write-Host "  + LICENSE-ffmpeg.txt (libav DLLs) from $FfmpegCopyright"
+} elseif ($StagedLibav) {
+    # A zip that redistributes FFmpeg without its notice is not shippable.
+    # This was a warning, and the published 0.99.417 zip went out without it.
+    throw ("libav DLLs are bundled but FFmpeg's notice was not found. Looked in:`n  " +
+           ($CopyrightCandidates -join "`n  "))
+}
+# ffmpeg.exe and ffprobe.exe are a separate, statically linked build with its
+# own licence (GPL for gyan's and BtbN's): carry the build's LICENSE and the
+# README that names its version, configuration and source.
+$FfmpegBuildRoot = Split-Path $FfmpegDir -Parent
+$ExeLicense = @("LICENSE", "LICENSE.txt", "COPYING.GPLv3", "COPYING") |
+    ForEach-Object { Join-Path $FfmpegBuildRoot $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $ExeLicense) {
+    throw "ffmpeg.exe is bundled but no LICENSE was found beside its build ($FfmpegBuildRoot)."
+}
+Copy-Item $ExeLicense -Destination (Join-Path $StageDir "LICENSE-ffmpeg-exe.txt")
+Write-Host "  + LICENSE-ffmpeg-exe.txt from $ExeLicense"
+$ExeReadme = Join-Path $FfmpegBuildRoot "README.txt"
+if (Test-Path $ExeReadme) {
+    Copy-Item $ExeReadme -Destination (Join-Path $StageDir "README-ffmpeg-exe.txt")
+}
+
+# --- README ------------------------------------------------------------------
+$ReadmeBody = @"
+Deckboy $Version (Windows x64)
+==============================
+
+Unzip anywhere, double-click Deckboy.exe. No install required.
+
+The MSVC C++ runtime DLLs are bundled, so the target machine does NOT need
+the Visual C++ Redistributable.
+
+Optional features that need separate vendor installs:
+  * NDI input/output    -> NDI Tools  (free, signed by Vizrt)
+                           https://ndi.video/tools/
+  * DeckLink output     -> Blackmagic Desktop Video
+                           https://www.blackmagicdesign.com/support/family/capture-and-playback
+  * Browser cues        -> Microsoft WebView2 Runtime
+                           https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+
+Deckboy will pop a prompt the first time you try to enable any of these,
+with a button to the official vendor download page. You do not need to
+install them up front.
+
+Run-as: Deckboy.exe resolves its data root from the executable's folder,
+so leaving the zip contents intact (Deckboy.exe and data\ side by side) is
+all that's needed.
+
+Reporting issues / source code:
+  https://github.com/Utopian-Academy/Deckboy
+"@
+$ReadmeBody | Set-Content -Path (Join-Path $StageDir "README.txt") -Encoding UTF8
+
+# --- The staged copy has to actually start ----------------------------------
+#
+# The version check near the top runs the exe in the BUILD directory, where
+# every DLL the machine has is already to hand. That proves the build is the
+# right version and nothing about whether the thing we are shipping works.
+#
+# A feature build once staged without rtmidi.dll -- because CMake never put it
+# beside the exe, so "copy every DLL here" copied a set with a hole in it. The
+# zip could not start on any machine that did not already have RtMidi, and it
+# ran perfectly on the machine that built it. That is the worst way for a
+# packaging fault to behave, and it is caught here now rather than by whoever
+# downloads it.
+$StagedExe = Join-Path $StageDir "Deckboy.exe"
+Write-Host "Checking the staged build starts"
+# Start-Process -Wait, with the output redirected to a file.
+#
+# Deckboy is a GUI-subsystem binary and PowerShell does not wait for those. A
+# piped call operator looked like it would be enough and was not: this check
+# reported a failure with an EMPTY exit code, which is indistinguishable from
+# the binary genuinely refusing to start. Start-Process waits and returns a real
+# number, and the number is the whole point of the check.
+$StagedOut = Join-Path $env:TEMP ("deckboy-staged-" + [guid]::NewGuid() + ".txt")
+$Proc = Start-Process -FilePath $StagedExe -ArgumentList "--version" `
+                      -Wait -NoNewWindow -PassThru `
+                      -RedirectStandardOutput $StagedOut
+$StagedVersion = ""
+if (Test-Path $StagedOut) {
+    $StagedVersion = (Get-Content $StagedOut -TotalCount 1)
+    Remove-Item $StagedOut -Force -ErrorAction SilentlyContinue
+}
+if ($Proc.ExitCode -ne 0 -or -not $StagedVersion) {
+    throw ("The staged Deckboy.exe would not run (exit $($Proc.ExitCode), " +
+           "printed '$StagedVersion'). Usually a DLL that CMake did not place " +
+           "next to the binary: compare $BuildDir with $StageDir.")
+}
+$StagedVersion = ($StagedVersion -replace '^Deckboy\s+v?', '').Trim()
+if ($StagedVersion -ne $Version) {
+    throw "The staged build reports '$StagedVersion', not $Version."
+}
+Write-Host "  staged build reports v$StagedVersion"
+
+# Mini is a console program, so its own --version is checked the same way: the
+# staged copy runs, and it is the version the zip is named after.
+$StagedMini = Join-Path $StageDir "deckboy-mini.exe"
+$MiniOut = Join-Path $env:TEMP ("deckboy-mini-staged-" + [guid]::NewGuid() + ".txt")
+$MiniProc = Start-Process -FilePath $StagedMini -ArgumentList "--version" `
+                          -Wait -NoNewWindow -PassThru -RedirectStandardOutput $MiniOut
+$MiniVersion = ""
+if (Test-Path $MiniOut) {
+    $MiniVersion = (Get-Content $MiniOut -TotalCount 1)
+    Remove-Item $MiniOut -Force -ErrorAction SilentlyContinue
+}
+$MiniVersion = ($MiniVersion -replace '^deckboy-mini\s+v?', '').Trim()
+if ($MiniProc.ExitCode -ne 0 -or $MiniVersion -ne $Version) {
+    throw "The staged deckboy-mini.exe would not run or reports '$MiniVersion' (exit $($MiniProc.ExitCode)), not $Version."
+}
+Write-Host "  staged deckboy-mini reports v$MiniVersion"
+
+# --- The staged copy has to have libltc, and it has to WORK -----------------
+#
+# Every Windows release up to v0.99.379 shipped with no ltc.dll at all, so LTC
+# generation, LTC chase and timecode cues were dead in the zip while working
+# on the machine that built them. vcpkg has no libltc port, so the Windows CI
+# job had nothing that could have produced one; macOS and Linux install it
+# from brew and apt, so only Windows was affected and only Windows had no way
+# to notice. tools/build_libltc_windows.ps1 builds it now.
+#
+# THIS ASKS THE BINARY, not the file system. A Test-Path would pass on a DLL
+# that exports nothing -- which is exactly what libltc built the obvious way
+# on MSVC produces, because its headers carry no __declspec(dllexport), and
+# LoadLibrary succeeds while every GetProcAddress fails. --self-check loads it
+# through the code path the show uses.
+#
+# FATAL, not a warning. An optional dependency missing by accident is
+# indistinguishable from one left out on purpose, and three features have
+# shipped disabled that way already.
+Write-Host "Checking the staged build can load libltc"
+$LtcOut = Join-Path $env:TEMP ("deckboy-ltc-" + [guid]::NewGuid() + ".txt")
+$LtcProc = Start-Process -FilePath $StagedExe -ArgumentList "--self-check" `
+                         -Wait -NoNewWindow -PassThru `
+                         -RedirectStandardOutput $LtcOut
+$LtcLine = ""
+if (Test-Path $LtcOut) {
+    $LtcLine = (Select-String -Path $LtcOut -Pattern "^ltc-runtime:" |
+                Select-Object -First 1).Line
+    Remove-Item $LtcOut -Force -ErrorAction SilentlyContinue
+}
+if (-not $LtcLine) {
+    throw ("The staged build printed no ltc-runtime line at all " +
+           "(--self-check exit $($LtcProc.ExitCode)).")
+}
+if ($LtcLine -notmatch "ltc-runtime:\s*ok") {
+    throw ("The staged build cannot use libltc: '$LtcLine'. " +
+           "LTC generation, LTC chase and timecode cues would be dead in this " +
+           "zip. Run tools/build_libltc_windows.ps1 -OutDir '$BuildDir' and " +
+           "package again.")
+}
+Write-Host '  libltc loads'
+
+# --- In-process decode (libav) has to be IN the binary -----------------------
+#
+# Every Windows release up to v0.99.398 was built without the FFmpeg dev
+# libraries -- CI skipped them to save time -- and CMake fell back to the
+# ffmpeg-CLI decode path with a warning nobody reads. The zip had no GPU
+# zero-copy decode and no SRT sound while macOS and Linux had both. Asked of
+# the staged binary, like libltc above; -AllowCliDecode is the escape hatch
+# for a deliberate CLI-only package.
+if (-not $AllowCliDecode) {
+    Write-Host "Checking the staged build decodes in-process"
+    $DecOut = Join-Path $env:TEMP ("deckboy-dec-" + [guid]::NewGuid() + ".txt")
+    $DecProc = Start-Process -FilePath $StagedExe -ArgumentList "--self-check" `
+                             -Wait -NoNewWindow -PassThru `
+                             -RedirectStandardOutput $DecOut
+    $DecLine = ""
+    if (Test-Path $DecOut) {
+        $DecLine = (Select-String -Path $DecOut -Pattern "^inproc-decode:" |
+                    Select-Object -First 1).Line
+        Remove-Item $DecOut -Force -ErrorAction SilentlyContinue
+    }
+    if ($DecLine -notmatch "inproc-decode:\s*yes") {
+        throw ("The staged build does not decode in-process: '$DecLine' " +
+               "(--self-check exit $($DecProc.ExitCode)). It would ship without " +
+               "GPU decode and without SRT sound. Build with the FFmpeg dev " +
+               "libraries (vcpkg ffmpeg) or pass -AllowCliDecode on purpose.")
+    }
+    Write-Host '  in-process decode is built in'
+}
+
+
+# --- The bundled ffmpeg has to encode what Deckboy offers --------------------
+#
+# The app PROBES ffmpeg at runtime and quietly drops any format whose encoder
+# is absent, so a missing one is invisible: the operator simply never sees it
+# in the list and cannot tell "never supported" from "silently lost". That is
+# how every Windows release up to v0.99.392 shipped without a HAP encoder --
+# CI installed chocolatey's "essentials" ffmpeg, which has hap as a decoder
+# only, while a developer machine with a full build showed it working.
+#
+# Checked against the STAGED copy, which is the one that goes in the zip.
+Write-Host "Checking the staged ffmpeg can encode what Deckboy offers"
+$StagedFfmpeg = Join-Path $StageDir "ffmpeg.exe"
+if (-not (Test-Path $StagedFfmpeg)) {
+    throw "No ffmpeg.exe was staged; the zip would have no decoder at all."
+}
+$EncoderList = & $StagedFfmpeg -hide_banner -encoders 2>&1 | Out-String
+# The ones an operator is offered and would notice the absence of. Not the
+# whole catalogue: some formats are genuinely optional and the app is right to
+# hide those. These are the masters and the GPU-native format, and a zip
+# without them is not the product.
+$Required = @{
+    "hap"       = "HAP / HAP Alpha / HAP Q (needs --enable-libsnappy)"
+    "prores_ks" = "ProRes 422 and 4444"
+    "dnxhd"     = "DNxHR"
+    "libx264"   = "H.264"
+    "qtrle"     = "QuickTime RLE"
+}
+$MissingEncoders = @()
+foreach ($name in $Required.Keys) {
+    # The encoders table lists one per line as "FLAGS name description", so a
+    # word-boundary match on the name column avoids matching a description.
+    if ($EncoderList -notmatch "(?m)^\s*\S+\s+$([regex]::Escape($name))\s") {
+        $MissingEncoders += ("  {0} -- {1}" -f $name, $Required[$name])
+    }
+}
+if ($MissingEncoders.Count -gt 0) {
+    throw ("The staged ffmpeg cannot encode:" + [Environment]::NewLine +
+           ($MissingEncoders -join [Environment]::NewLine) + [Environment]::NewLine +
+           "Deckboy offers these in its encoder list and would silently drop " +
+           "them. Use a full ffmpeg build (chocolatey: ffmpeg-full, not ffmpeg).")
+}
+Write-Host "  ffmpeg encodes all of them"
+
+# --- Zip --------------------------------------------------------------------
+if (Test-Path $ZipPath) {
+    Remove-Item $ZipPath -Force
+}
+Write-Host "Compressing -> $ZipPath"
+# Passing $StageDir (not $StageDir\*) keeps the top-level folder name inside
+# the archive, so unzipping always produces a Deckboy-<VERSION>-windows-x64
+# directory rather than spilling files into the operator's current folder.
+Compress-Archive -Path $StageDir -DestinationPath $ZipPath -CompressionLevel Optimal
+
+$SizeMb = "{0:N1}" -f ((Get-Item $ZipPath).Length / 1MB)
+Write-Host ""
+Write-Host "Packaged: $ZipPath  ($SizeMb MB)"
+Write-Host "Staging dir kept at: $StageDir"
+
+# --- Deckboy Mini on its own -------------------------------------------------
+# For a screen that only needs to play, and SMALL: Mini, the libraries it
+# loads, its one font and the licence. Not ffmpeg.exe and ffprobe.exe: on
+# Windows they are self-contained builds of 138 MB each, and Mini needs them
+# for one thing, subtitles stored inside a file -- it uses an ffmpeg on PATH
+# for that, and subtitle files beside a clip need nothing. Not the desk's own
+# DLLs (Spout, WebView2, timecode) either.
+$MiniName  = "Deckboy-Mini-$Version-windows-x64"
+$MiniStage = Join-Path $OutputDir "staging\$MiniName"
+$MiniZip   = Join-Path $OutputDir "$MiniName.zip"
+if (Test-Path $MiniStage) { Remove-Item $MiniStage -Recurse -Force }
+New-Item -ItemType Directory -Path (Join-Path $MiniStage "data\fonts") -Force | Out-Null
+Copy-Item (Join-Path $RepoRoot "data\icons") -Destination (Join-Path $MiniStage "data\icons") -Recurse
+Copy-Item (Join-Path $StageDir "deckboy-mini.exe") -Destination $MiniStage
+# deckboy-mini.exe imports SpoutLibrary.dll (without it Windows refuses to start it), so only these two stay out.
+$DeskOnlyDlls = @("WebView2Loader.dll", "ltc.dll")
+Get-ChildItem -Path $StageDir -Filter *.dll |
+    Where-Object { $DeskOnlyDlls -notcontains $_.Name } |
+    Copy-Item -Destination $MiniStage
+# The subtitle face, and the faces that draw Arabic, Persian, Tamazight and Lao
+# on a machine without them, each with the licence that has to travel with it.
+foreach ($Font in @("LiberationSans-Regular.ttf", "LICENSE-Liberation.txt", "NotoSansArabic-Regular.ttf",
+                    "NotoSansTifinagh-Regular.ttf", "NotoSansLao-Regular.ttf", "NotoSansCherokee-Regular.ttf", "LICENSE-Noto.txt")) {
+    Copy-Item (Join-Path $RepoRoot "data\fonts\$Font") -Destination (Join-Path $MiniStage "data\fonts")
+}
+Copy-Item (Join-Path $RepoRoot "LICENSE") -Destination $MiniStage
+# Mini carries the libav DLLs too, so it carries their notice (audit F4: the
+# 0.99.417 Mini zip had four av*.dll and no FFmpeg notice).
+if (Get-ChildItem -Path $MiniStage -Filter "av*.dll" -ErrorAction SilentlyContinue) {
+    $DeskNotice = Join-Path $StageDir "LICENSE-ffmpeg.txt"
+    if (-not (Test-Path $DeskNotice)) { throw "Mini bundles libav DLLs but there is no FFmpeg notice to give it." }
+    Copy-Item $DeskNotice -Destination $MiniStage
+}
+@"
+Deckboy Mini $Version for Windows
+
+One deck, one output, run from the keyboard. Unzip anywhere, then
+double-click deckboy-mini.exe and drop videos, pictures or a folder on its
+window. Or name them, in a terminal in this folder -- with the .\ in front,
+which PowerShell needs to run a program from the folder it is in:
+
+  .\deckboy-mini "C:\Videos"          a folder plays in name order
+  .\deckboy-mini clip.mp4 logo.png    files in the order given
+  .\deckboy-mini --help               every option
+
+Or drag the files or the folder onto deckboy-mini.exe: it opens with them.
+
+Press ? in the terminal for the keys. The manual has a miniature one:
+https://utopian-academy.github.io/Deckboy/manual.html#deckboy-mini
+
+Subtitle files beside a clip (clip.srt, clip.en.vtt) just work. Subtitles
+stored INSIDE a video file are read with ffmpeg: install it (for example
+winget install ffmpeg) or use the full Deckboy download, which includes it.
+"@ | Set-Content -Path (Join-Path $MiniStage "README.txt") -Encoding UTF8
+
+# The copy in the Mini folder has to run on its own and be this version.
+$MiniAloneOut = Join-Path $env:TEMP ("deckboy-mini-alone-" + [guid]::NewGuid() + ".txt")
+$MiniAlone = Start-Process -FilePath (Join-Path $MiniStage "deckboy-mini.exe") -ArgumentList "--version" `
+                          -Wait -NoNewWindow -PassThru -RedirectStandardOutput $MiniAloneOut
+$MiniAloneVersion = ""
+if (Test-Path $MiniAloneOut) {
+    # One line, as a string, whatever Get-Content hands back (it gave a list here).
+    $MiniAloneVersion = [string](@(Get-Content $MiniAloneOut) | Where-Object { $_ -match '\S' } | Select-Object -First 1)
+    Remove-Item $MiniAloneOut -Force -ErrorAction SilentlyContinue
+}
+$MiniAloneVersion = ($MiniAloneVersion -replace '^deckboy-mini\s+v?', '').Trim()
+if ($MiniAlone.ExitCode -ne 0 -or $MiniAloneVersion -ne $Version) {
+    throw "Deckboy Mini on its own would not run or reports '$MiniAloneVersion' (exit $($MiniAlone.ExitCode)), not $Version."
+}
+if (Test-Path $MiniZip) { Remove-Item $MiniZip -Force }
+Compress-Archive -Path $MiniStage -DestinationPath $MiniZip -CompressionLevel Optimal
+$MiniMb = "{0:N1}" -f ((Get-Item $MiniZip).Length / 1MB)
+Write-Host "Packaged: $MiniZip  ($MiniMb MB), runs on its own as v$MiniAloneVersion"

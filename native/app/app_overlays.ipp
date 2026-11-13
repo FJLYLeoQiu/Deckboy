@@ -1,0 +1,2400 @@
+// ============================================================================
+// app_overlays.ipp — Monitor window and overlay management.
+//
+// Manages the secondary "Monitors" window and quit confirmation dialog:
+//
+//   monitorsVisible() / setMonitorsVisible() — show/hide the monitors window
+//   renderQuitConfirm()                       — unsaved-changes quit dialog
+//
+// The monitors window provides a multi-output preview showing all active
+// output destinations in a tiled layout. It also hosts the output menu
+// for adding/removing outputs and toggling FPS counters.
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Returns whether the monitors window is currently visible.
+  bool monitorsVisible() const {
+    if (!monitorsWindow_) return false;
+    return (SDL_GetWindowFlags(monitorsWindow_) & SDL_WINDOW_HIDDEN) == 0;
+  }
+
+  void setMonitorsVisible(bool visible, bool raiseWindow = false) {
+    if (!monitorsWindow_) return;
+    if (visible) {
+      SDL_ShowWindow(monitorsWindow_);
+      if ((SDL_GetWindowFlags(monitorsWindow_) & SDL_WINDOW_MINIMIZED) != 0)
+        SDL_RestoreWindow(monitorsWindow_);
+      if (raiseWindow) SDL_RaiseWindow(monitorsWindow_);
+    } else {
+      SDL_HideWindow(monitorsWindow_);
+    }
+  }
+
+  void renderQuitConfirm() {
+    int width = 0, height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+
+    // Semi-transparent dark overlay
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, 0x0F, 0x38, 0x0F, 160);
+    SDL_Rect overlay {0, 0, width, height};
+    SDL_RenderFillRect(controlRenderer_, &overlay);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    // Dialog panel: larger default sizing for legibility.
+    SDL_Rect dialog {(width - 420) / 2, (height - 232) / 2, 420, 232};
+    Primitives::drawFramedPanel(controlRenderer_, dialog, pal.light, pal.deep, pal.mid);
+
+    drawTextSafe(controlRenderer_, fontLarge_,
+                 SDL_Rect {dialog.x + 28, dialog.y + 30, dialog.w - 56, 36},
+                 "Quit Deckboy?", pal.deep);
+
+    // YES / NO buttons
+    quitYesBtn_ = {dialog.x + 32,  dialog.y + 130, 156, 54};
+    quitNoBtn_  = {dialog.x + 232, dialog.y + 130, 156, 54};
+    Primitives::drawFramedPanel(controlRenderer_, quitYesBtn_, pal.dark, pal.deep, pal.mid);
+    Primitives::drawFramedPanel(controlRenderer_, quitNoBtn_,  pal.dark, pal.deep, pal.mid);
+    drawCenteredText(controlRenderer_, fontBase_, "YES", pal.light, quitYesBtn_);
+    drawCenteredText(controlRenderer_, fontBase_, "NO",  pal.light, quitNoBtn_);
+
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {dialog.x + 32, dialog.y + 194, dialog.w - 64, 18},
+                 "esc or N to cancel", pal.inkSoft);
+  }
+
+  // ── Runtime dependency detection ──────────────────────────────────────────
+  // Each helper returns true when the host machine has the runtime piece the
+  // matching backend needs. False means "not installed" — the caller should
+  // route the operator to showDependencyPrompt rather than silently enabling
+  // a feature that will then no-op or crash.
+
+  bool ndiRuntimeAvailable() {
+#if defined(DECKBOY_HAS_NDI_SDK)
+    // ensureLoaded() tries the DLL search order from ndi_api.hpp and caches
+    // the result. Re-calling after a successful first load is effectively
+    // free. After a failed first attempt the operator may install NDI and
+    // hit the toggle again; we reset attempted to allow a fresh try.
+    if (ndiApi_.ensureLoaded()) return true;
+    ndiApi_.attempted = false;
+    return false;
+#else
+    return false;
+#endif
+  }
+
+  bool deckLinkRuntimeAvailable() {
+#if defined(DECKBOY_HAS_DECKLINK)
+    // listDevices() returns empty in two cases: Desktop Video is not
+    // installed at all (CoCreateInstance fails on the CLSID) OR it is
+    // installed but no card is present. We treat both as "show the prompt"
+    // because the operator's next step is the same either way — install
+    // / verify Desktop Video, then connect a device. The prompt body
+    // explains both possibilities.
+    auto devices = deckboy::platform::video::DeckLinkOutput::listDevices();
+    return !devices.empty();
+#else
+    return false;
+#endif
+  }
+
+  bool webView2RuntimeAvailable() {
+#if defined(_WIN32) && defined(DECKBOY_HAS_WEBVIEW)
+    // The official check is GetAvailableCoreWebView2BrowserVersionString
+    // from WebView2Loader.dll. Querying the registry would also work but
+    // breaks when WebView2 is installed per-user instead of per-machine.
+    // We resolve the symbol dynamically to avoid a hard link dependency.
+    // The returned buffer is COM-allocated; release with CoTaskMemFree
+    // (combaseapi.h, pulled in via the explicit objbase include below).
+    HMODULE lib = ::LoadLibraryW(L"WebView2Loader.dll");
+    if (!lib) return false;
+    using FnPtr = HRESULT (STDAPICALLTYPE *)(PCWSTR, LPWSTR*);
+    auto fn = reinterpret_cast<FnPtr>(
+      ::GetProcAddress(lib, "GetAvailableCoreWebView2BrowserVersionString"));
+    bool available = false;
+    if (fn) {
+      LPWSTR version = nullptr;
+      HRESULT hr = fn(nullptr, &version);
+      available = SUCCEEDED(hr) && version != nullptr;
+      if (version) ::CoTaskMemFree(version);
+    }
+    ::FreeLibrary(lib);
+    return available;
+#else
+    return false;
+#endif
+  }
+
+  // Shortcut helpers — show the prompt with the right text + URL for the
+  // backend the operator was trying to enable. Keep these together so a
+  // future fourth dependency follows the same shape.
+  void promptForNdiRuntime() {
+    showDependencyPrompt(
+      "NDI Runtime required",
+      "NDI Output sends video over IP to NDI receivers. The free NDI Tools "
+      "or NDI Runtime installer from Vizrt provides the libraries Deckboy "
+      "needs. Install it, then try the toggle again.",
+      "https://ndi.video/tools/",
+      "Open NDI Tools page");
+  }
+
+  void promptForDeckLinkRuntime() {
+    showDependencyPrompt(
+      "Blackmagic Desktop Video required",
+      "DeckLink output needs Blackmagic Desktop Video installed AND a "
+      "DeckLink card connected. Install Desktop Video first; if a card is "
+      "already plugged in, also check it appears in Blackmagic's Desktop "
+      "Video Setup utility.",
+      "https://www.blackmagicdesign.com/support/family/capture-and-playback",
+      "Open Blackmagic downloads");
+  }
+
+  void promptForWebView2Runtime() {
+    showDependencyPrompt(
+      "Microsoft WebView2 Runtime required",
+      "Browser cues render web pages with the Microsoft WebView2 Runtime "
+      "(usually preinstalled on Windows 11). Install the free Evergreen "
+      "Runtime from Microsoft and try the cue again.",
+      "https://developer.microsoft.com/en-us/microsoft-edge/webview2/",
+      "Open WebView2 page");
+  }
+
+  // THE FOURTH, which the note above anticipated -- and the only one that is
+  // not about something to install. Everything Deckboy needs is already in
+  // the bundle; the machine is refusing to run it.
+  void promptForBlockedHelpers() {
+    showDependencyPrompt(
+      "macOS is blocking Deckboy's own tools",
+      "Deckboy draws its icons and decodes video with ffmpeg, which ships "
+      "inside the app. macOS quarantines anything downloaded and will not "
+      "run those tools until the quarantine is cleared, so buttons appear "
+      "blank and media will not play. Move Deckboy to Applications, then in "
+      "Terminal run:  xattr -dr com.apple.quarantine /Applications/Deckboy.app",
+      "https://github.com/Utopian-Academy/Deckboy#macos",
+      "Open the macOS notes");
+  }
+
+  // Open the dependency prompt with the given message + vendor URL. Caller
+  // is responsible for deciding whether the dep is missing in the first
+  // place — this is just the presentation step.
+  void showDependencyPrompt(const std::string& title,
+                            const std::string& body,
+                            const std::string& url,
+                            const std::string& ctaLabel) {
+    // A pending recovery must not lose its callbacks to another suggestion.
+    if (projectRecoveryPromptShown_) return;
+    depPrompt_ = DependencyPromptState{};
+    depPrompt_.title = title;
+    depPrompt_.body = body;
+    depPrompt_.url = url;
+    depPrompt_.ctaLabel = ctaLabel;
+    depPrompt_.active = true;
+  }
+
+  // ---- HAP suggestion ------------------------------------------------------
+  // Offer HAP only when it would actually pay, and say what it costs. MEASURED
+  // on this machine, 5s of 1080p:
+  //   per-stream CPU (1 thread)   H.264 454ms   HAP 265ms   -> 1.7x cheaper
+  //   six concurrent (1 thread)   H.264 540ms   HAP 361ms
+  //   file size                   H.264 4.5MB   HAP 19.3MB  -> 4.3x bigger
+  // So the win is CPU per LAYER, which compounds with how many run at once,
+  // and the price is disk. A single-layer show gains almost nothing and pays
+  // the full 4x, which is why this does not fire on cue count alone.
+  //
+  // Trigger: the operator has actually SEEN decode trouble (a stall), or is
+  // running video on more than one deck at once. Never twice in a session, and
+  // never again once dismissed.
+  void maybeSuggestHapConversion() {
+    if (hapSuggestionShown_ || project_.hapSuggestionDismissed) return;
+    if (depPrompt_.active) return;
+    if (!encoderHasHapSupport()) return;
+
+    int liveVideoDecks = 0;
+    for (const Deck& deck : project_.decks) {
+      if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) continue;
+      const Cue& cue = deck.cues[deck.activeIndex];
+      if (cue.kind == CueKind::Video && !cue.path.empty()) ++liveVideoDecks;
+    }
+    const bool worthIt = hapStallSeen_ || liveVideoDecks >= 2;
+    if (!worthIt) return;
+
+    // Count what would convert, and what it would cost on disk.
+    std::vector<std::pair<int, int>> targets;   // deck, cue
+    std::uintmax_t sourceBytes = 0;
+    std::error_code ec;
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      const Deck& deck = project_.decks[d];
+      for (std::size_t c = 0; c < deck.cues.size(); ++c) {
+        const Cue& cue = deck.cues[c];
+        if (cue.kind != CueKind::Video || cue.path.empty()) continue;
+        const std::string ext = toLower(fs::path(cue.path).extension().string());
+        if (ext == ".mov" && toLower(cue.videoCodec).find("hap") != std::string::npos) continue;
+        auto n = fs::file_size(fs::path(cue.path), ec);
+        if (!ec) sourceBytes += n;
+        targets.emplace_back(static_cast<int>(d), static_cast<int>(c));
+      }
+    }
+    if (targets.empty()) return;
+
+    // 4.3x measured, rounded up. If the disk cannot take it, say so and offer
+    // nothing -- an offer that fills the operator's disk mid-show is worse
+    // than no offer.
+    const std::uintmax_t needBytes = static_cast<std::uintmax_t>(sourceBytes * 4.5);
+    auto space = fs::space(convertedMediaDir().empty() ? Paths::stateDir() : convertedMediaDir(), ec);
+    const bool roomOnDisk = !ec && space.available > needBytes;
+
+    hapSuggestionShown_ = true;
+    const int mb = static_cast<int>(needBytes / (1024 * 1024));
+    std::string body =
+      "This show runs several video layers at once. HAP costs about 1.7x less "
+      "CPU per layer than H.264, which is what decides how many you can run "
+      "together, and it seeks instantly because every frame is a keyframe.\n\n"
+      "It is not free: HAP files are roughly 4x larger. Converting "
+      + std::to_string(static_cast<int>(targets.size())) + " clip(s) needs about "
+      + std::to_string(mb) + " MB.\n\n"
+      "Originals are kept either way.";
+    if (!roomOnDisk) {
+      body += "\n\nThere is NOT enough free space on the encoder's disk for this, "
+              "so conversion is not offered. Point the encoder at a bigger drive "
+              "in Settings > Encoder if you want to reconsider.";
+    }
+    depPrompt_ = DependencyPromptState{};
+    depPrompt_.title = "HAP would help this show";
+    depPrompt_.body = body;
+    depPrompt_.ctaLabel = roomOnDisk
+      ? ("Convert " + std::to_string(static_cast<int>(targets.size())) + " clip(s) to HAP")
+      : "";
+    if (roomOnDisk) {
+      depPrompt_.onCta = [this, targets]() { convertCuesToHap(targets); };
+    }
+    // CLOSING IT MEANS NEVER AGAIN, which is what the note above this
+    // function has always promised. project_.hapSuggestionDismissed is saved
+    // with the show and was read here and set NOWHERE, so the suggestion came
+    // back every launch with no way to stop it -- the session flag only holds
+    // until the app restarts.
+    depPrompt_.onDismiss = [this]() {
+      if (!project_.hapSuggestionDismissed) {
+        project_.hapSuggestionDismissed = true;
+        markProjectDirty();
+      }
+    };
+    depPrompt_.active = true;
+  }
+
+  void dismissDependencyPrompt() {
+    if (depPrompt_.onDismiss) {
+      depPrompt_.onDismiss();
+    }
+    // Cleared whole rather than field by field, so a prompt cannot leave a
+    // callback behind for the next one to run.
+    depPrompt_ = DependencyPromptState{};
+  }
+
+  // Modal informing the operator that a runtime dependency is missing.
+  // Mirrors renderQuitConfirm visually so it feels like part of the same
+  // dialog family. CTA opens the vendor's download page.
+  // ── Loading overlay ────────────────────────────────────────────────────────
+  // Opening a 1,500-cue show parses, resolves and builds runtimes with the
+  // render loop stopped, so the window just sat there looking hung. This draws
+  // and PRESENTS its own frames from inside that work, which is the only way to
+  // show anything while the main loop is not turning.
+  //
+  // It stays hidden for the first quarter second: a loader that flashes up on
+  // every small file is worse than no loader at all, and most shows open too
+  // fast to need one.
+  void beginLoadingOverlay(std::string title, std::string detail = {}) {
+    loadingTitle_ = std::move(title);
+    loadingDetail_ = std::move(detail);
+    loadingFrac_ = 0.0;
+    loadingStartMs_ = SDL_GetTicks();
+    loadingLastPresentMs_ = 0;
+    loadingActive_ = true;
+    // Fresh hand of quips per load, so a long open isn't the same three lines.
+    loadingQuipSeed_ = static_cast<unsigned>(loadingStartMs_);
+  }
+
+  void loadingOverlayProgress(double frac, const std::string& detail = {}) {
+    if (!loadingActive_) {
+      return;
+    }
+    loadingFrac_ = std::clamp(frac, 0.0, 1.0);
+    if (!detail.empty()) {
+      loadingDetail_ = detail;
+    }
+    const Uint64 now = SDL_GetTicks();
+    constexpr Uint64 kAppearAfterMs = 250;   // don't flash on quick opens
+    constexpr Uint64 kFramePeriodMs = 33;    // ~30fps is plenty for a loader
+    if (now - loadingStartMs_ < kAppearAfterMs) {
+      return;
+    }
+    if (loadingLastPresentMs_ != 0 && now - loadingLastPresentMs_ < kFramePeriodMs) {
+      return;
+    }
+    loadingLastPresentMs_ = now;
+    // Keep Windows from marking the app "not responding" during a long open.
+    SDL_PumpEvents();
+    renderLoadingOverlayFrame();
+  }
+
+  void endLoadingOverlay() {
+    loadingActive_ = false;
+    loadingLastPresentMs_ = 0;
+  }
+
+  void renderLoadingOverlayFrame() {
+    if (!controlRenderer_) {
+      return;
+    }
+    int winW = 0, winH = 0;
+    SDL_GetCurrentRenderOutputSize(controlRenderer_, &winW, &winH);
+    if (winW <= 0 || winH <= 0) {
+      return;
+    }
+    const Uint64 nowMs = SDL_GetTicks();
+
+    SDL_SetRenderDrawColor(controlRenderer_, pal.shellOuter.r, pal.shellOuter.g,
+                           pal.shellOuter.b, 255);
+    SDL_RenderClear(controlRenderer_);
+    Primitives::beginSurfaceFrame(controlRenderer_, pal.shellOuter);
+
+    const int pad = uiScaled(16);
+    const int gap = uiScaled(8);
+    TTF_Font* titleFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
+    const int titleH = snapUpToGrid(std::max(uiScaled(20), textLineHeight(titleFont)));
+    const int lineH = snapUpToGrid(std::max(uiScaled(18), textLineHeight(fontSmall_)));
+    const int barH = snapUpToGrid(uiScaled(20));
+    const int panelW = std::min(uiScaled(560), std::max(1, winW - pad * 2));
+    const int panelH = std::min(titleH + barH + lineH * 3 + gap * 4 + pad * 2,
+                               std::max(1, winH - pad * 2));
+    SDL_Rect panel {(winW - panelW) / 2, (winH - panelH) / 2, panelW, panelH};
+    Primitives::drawFramedPanel(controlRenderer_, panel, pal.shellInner, pal.deep, pal.light);
+    VerticalLayout rows(insetRect(panel, pad), gap);
+    drawCenteredTextSafe(controlRenderer_, titleFont, rows.takeFixed(titleH),
+                         loadingTitle_, pal.fg);
+
+    // The cartridge blocks and percentage report measured work.
+    const SDL_Rect bar = rows.takeFixed(barH);
+    constexpr int kBlocks = 12;
+    const int filled = static_cast<int>(std::lround(loadingFrac_ * kBlocks));
+    for (int i = 0; i < kBlocks; ++i) {
+      const int left = bar.x + bar.w * i / kBlocks;
+      const int right = bar.x + bar.w * (i + 1) / kBlocks;
+      SDL_Rect block {left + uiScaled(2), bar.y,
+                      std::max(0, right - left - uiScaled(4)), bar.h};
+      if (block.w <= 0 || block.h <= 0) {
+        continue;
+      }
+      if (i < filled) {
+        Primitives::fillRect(controlRenderer_, block, pal.light);
+      } else if (i == filled) {
+        const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(nowMs) * 0.010f);
+        SDL_Color c {
+          static_cast<Uint8>(pal.mid.r + (pal.light.r - pal.mid.r) * pulse),
+          static_cast<Uint8>(pal.mid.g + (pal.light.g - pal.mid.g) * pulse),
+          static_cast<Uint8>(pal.mid.b + (pal.light.b - pal.mid.b) * pulse), 255};
+        Primitives::fillRect(controlRenderer_, block, c);
+      } else {
+        Primitives::fillRect(controlRenderer_, block, pal.deep);
+      }
+      Primitives::strokeRect(controlRenderer_, block, pal.mid);
+    }
+    char pct[16];
+    std::snprintf(pct, sizeof(pct), "%d%%", static_cast<int>(std::lround(loadingFrac_ * 100.0)));
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, rows.takeFixed(lineH), pct, pal.fgSoft);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, rows.takeFixed(lineH),
+                         loadingDetail_, pal.inkSoft);
+    const SDL_Rect quipRow = rows.takeFixed(lineH);
+
+    // Same playful register as the boot console — a slow open should feel like
+    // the machine is doing something charming, not like it has died.
+    // A few of these point at things the desk keeps hidden (James,
+    // 2026-10-30: "perhaps a few could allude to the secret codes").
+    // Allusions only, never the way in: tools/audit_spoilers.py rules the
+    // published text, and these lines are written to the same standard.
+    static const char* kQuips[] = {
+      "waking the cue gremlins",
+      "counting frames by hand",
+      "buttering the playhead",
+      "reticulating playlists",
+      "asking the drive nicely",
+      "warming the flux capacitor",
+      "alphabetising the sprockets",
+      "feeding the terrarium",
+      "blood for the blood code",
+      "the terrarium remembers an old cheat for thirty lives",
+      "something in the walls smells of pizza",
+      "dad says hi. from the hole. don't ask",
+      "Baba says: knock three times for the good bottle",
+      "the dice are in the About box. don't tell anyone",
+      "folding the Lower Thirds",
+      "polishing the crossfades",
+      "reminding the strobe about epilepsy warnings",
+      "counting the cues called Untitled",
+      "letting the dolphin out",
+      "untangling a fade from a fade",
+      "explaining 1983 to Prof. Video",
+      "Dr. Pixel is labelling the labels",
+      "teaching the eel the Thames",
+      "rounding the timecode to the nearest feeling",
+      "consulting the vectorscope",
+      "persuading the projector it is straight",
+      "loading the playlist the long way round",
+      "finding the second screen",
+    };
+    constexpr int kQuipCount = static_cast<int>(sizeof(kQuips) / sizeof(kQuips[0]));
+    const int quip = static_cast<int>(((nowMs / 1400) + loadingQuipSeed_) % kQuipCount);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                         quipRow,
+                         kQuips[quip], pal.mid);
+
+    SDL_RenderPresent(controlRenderer_);
+    revealControlWindow();  // the loading overlay, which can be the first frame when a show is opening
+  }
+
+  void renderDependencyPrompt() {
+    if (!depPrompt_.active) {
+      return;
+    }
+    int width = 0, height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, pal.deep.r, pal.deep.g, pal.deep.b, 180);
+    SDL_Rect overlay {0, 0, width, height};
+    SDL_RenderFillRect(controlRenderer_, &overlay);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    // SIZED FROM THE TEXT, WRAPPED. This was a fixed 540x280 at 1x with the
+    // body on ONE ellipsized line, so every prompt it carries -- NDI,
+    // DeckLink, WebView2, the macOS quarantine fix, the HAP offer -- showed
+    // its first half-sentence and never the instruction. Wrap to a little
+    // less than the rect handed to drawTextSafe, which insets before it
+    // ellipsizes (see the friend's speech bubble in app_render_main.ipp).
+    const int pad = uiScaled(28);
+    const int dialogW = std::min(width - uiScaled(32), uiScaled(640));
+    const int innerW = dialogW - pad * 2;
+    const int wrapW = innerW - uiScaled(16);
+    const int titleLineH = textLineHeight(fontLarge_) + uiScaled(4);
+    const int bodyLineH = textLineHeight(fontSmall_) + uiScaled(3);
+    const int buttonH = uiScaled(44);
+    const int gap = uiScaled(12);
+
+    const std::vector<std::string> titleLines = codeWrapText(fontLarge_, depPrompt_.title, wrapW);
+    std::vector<std::string> bodyLines;   // "" = paragraph break, half a line
+    std::size_t start = 0;
+    while (start <= depPrompt_.body.size()) {
+      const std::size_t nl = depPrompt_.body.find('\n', start);
+      const std::string para = depPrompt_.body.substr(
+        start, nl == std::string::npos ? std::string::npos : nl - start);
+      if (para.empty()) {
+        if (!bodyLines.empty() && !bodyLines.back().empty()) bodyLines.push_back("");
+      } else {
+        for (auto& l : codeWrapText(fontSmall_, para, wrapW)) bodyLines.push_back(l);
+      }
+      if (nl == std::string::npos) break;
+      start = nl + 1;
+    }
+    int bodyH = 0;
+    for (const auto& l : bodyLines) bodyH += l.empty() ? bodyLineH / 2 : bodyLineH;
+
+    int dialogH = pad + static_cast<int>(titleLines.size()) * titleLineH + gap + bodyH;
+    if (!depPrompt_.url.empty()) dialogH += gap + bodyLineH;
+    dialogH += gap * 2 + buttonH + pad;
+    SDL_Rect dialog {(width - dialogW) / 2, std::max(uiScaled(8), (height - dialogH) / 2),
+                     dialogW, dialogH};
+    Primitives::drawFramedPanel(controlRenderer_, dialog, pal.light, pal.deep, pal.mid);
+
+    int y = dialog.y + pad;
+    for (const auto& l : titleLines) {
+      drawTextSafe(controlRenderer_, fontLarge_, SDL_Rect {dialog.x + pad, y, innerW, titleLineH},
+                   l, pal.deep);
+      y += titleLineH;
+    }
+    y += gap;
+    for (const auto& l : bodyLines) {
+      if (l.empty()) { y += bodyLineH / 2; continue; }
+      drawTextSafe(controlRenderer_, fontSmall_, SDL_Rect {dialog.x + pad, y, innerW, bodyLineH},
+                   l, pal.deep);
+      y += bodyLineH;
+    }
+    if (!depPrompt_.url.empty()) {
+      y += gap;
+      drawTextSafe(controlRenderer_, fontSmall_, SDL_Rect {dialog.x + pad, y, innerW, bodyLineH},
+                   depPrompt_.url, pal.inkSoft);
+      y += bodyLineH;
+    }
+    y += gap * 2;
+
+    // Two buttons: CTA (open page) is wider, CLOSE is narrow on the right. A
+    // prompt with no CTA (HAP with no room on disk) gets no dead button.
+    const int closeW = uiScaled(depPrompt_.closeLabel == "CLOSE" ? 112 : 160);
+    depPrompt_.closeRect = {dialog.x + dialog.w - pad - closeW, y, closeW, buttonH};
+    depPrompt_.ctaRect = depPrompt_.ctaLabel.empty()
+      ? SDL_Rect {}
+      : SDL_Rect {dialog.x + pad, y, dialog.w - pad * 2 - closeW - uiScaled(12), buttonH};
+    if (!depPrompt_.ctaLabel.empty()) {
+      Primitives::drawFramedPanel(controlRenderer_, depPrompt_.ctaRect, pal.dark, pal.deep, pal.mid);
+      drawCenteredText(controlRenderer_, fontBase_, depPrompt_.ctaLabel.c_str(), pal.light, depPrompt_.ctaRect);
+    }
+    Primitives::drawFramedPanel(controlRenderer_, depPrompt_.closeRect, pal.mid, pal.deep, pal.light);
+    drawCenteredText(controlRenderer_, fontBase_, depPrompt_.closeLabel.c_str(), pal.deep, depPrompt_.closeRect);
+  }
+
+  // THE EXAMPLE SHOWS, from the first screen (James, 2026-10-21). They ship in
+  // the read-only data folder -- inside a Mac app bundle, writing there breaks
+  // the signature -- so they are copied once to Documents/Deckboy Examples,
+  // beside their media, and opened from there. A copy that is already there
+  // is never overwritten: it may hold the operator's own changes.
+  //
+  // THE FOLDER IS NEW for the five-show ladder (0.99.420). The four shows of
+  // 0.99.418-419 went to "Deckboy Example Shows"; copying the new five in
+  // beside them would leave two numberings in one folder, so the old folder is
+  // left exactly as it is and the ladder gets one of its own.
+  static constexpr const char* kFirstExampleShow = "01-picture-on-screen.deckboy";
+  void openExampleShows() {
+    const fs::path source = Paths::dataDir() / "demos" / "starter-pack";
+    if (!fs::exists(source / kFirstExampleShow)) {
+      triggerToast("the example shows are not in this download", ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    fs::path home;
+    bool inDocuments = false;
+    if (const char* documents = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS)) home = fs::u8path(documents);
+    if (!home.empty() && fs::is_directory(home)) {
+      inDocuments = true;
+    } else {
+      home = Paths::stateDir();
+    }
+    const fs::path target = home / "Deckboy Examples";
+    std::error_code error;
+    if (!fs::exists(target / kFirstExampleShow)) {
+      fs::create_directories(target, error);
+      fs::copy(source, target, fs::copy_options::recursive | fs::copy_options::skip_existing, error);
+      if (error) {
+        triggerToast("could not copy the example shows: " + error.message(), ToastKind::Warning, kToastReadableMs);
+        return;
+      }
+    }
+    openProjectFromPath(target / kFirstExampleShow);
+    showStartupDialog_ = false;
+    triggerToast(inDocuments ? "example shows: Documents > Deckboy Examples. Start with 01, read the notes"
+                             : "example shows: in Deckboy's settings folder. Start with 01, read the notes",
+                 ToastKind::Help, kToastReadableMs);
+  }
+
+  void renderStartupDialog() {
+    int width = 0, height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+
+    // Full-screen dim
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, 0x0F, 0x38, 0x0F, 200);
+    SDL_Rect overlay {0, 0, width, height};
+    SDL_RenderFillRect(controlRenderer_, &overlay);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    // Button width is derived from the MEASURED labels in the current font, and
+    // the dialog is then sized to hold them — not the other way round. The old
+    // code fixed the dialog at 660 and the buttons at 184, which left the three
+    // labels nearly filling the panel: fine in Segoe UI, but "NEW SHOW FILE"
+    // and "OPEN SAVED" ellipsized under the wider Arial/Liberation used on macOS
+    // and Linux ("NEW SHOW F...", "OPEN SAVED..."). This is the splash text the
+    // operator sees first, so it truncating reads as a broken build.
+    const char* kStartupLabels[5] = {"NEW SHOW FILE", "OPEN PREVIOUS", "OPEN SAVED", "EXAMPLE SHOWS",
+                                     "LEARN THE BASICS"};
+    int startupWidest = 0;
+    for (const char* label : kStartupLabels) {
+      startupWidest = std::max(startupWidest, measuredTextWidth(fontBase_, label));
+    }
+    // +28 covers drawCenteredText's inset and the framed-panel bevel; 184 keeps
+    // the original size as a floor so Segoe UI is unchanged.
+    const int startupBtnW = std::max(uiScaled(184), startupWidest + uiScaled(28));
+    const int startupBtnGap = uiScaled(10);
+    const int startupMargin = uiScaled(36);
+    const int startupRowW = startupBtnW * 5 + startupBtnGap * 4;
+
+    // THE RECENT SHOWS, AND WHY THE DIALOG IS MEASURED RATHER THAN 440 TALL.
+    //
+    // "Open a show file" was already here -- OPEN SAVED, and the O key, open
+    // the picker. What was missing is the list: Deckboy remembered exactly one
+    // previous show, so an operator keeping a house show, a rehearsal file and
+    // last night's on one machine went through the picker for all but the most
+    // recent of them.
+    //
+    // The number of rows is not fixed, so neither is the height. The old
+    // dialog was 440 tall with every element at a hand-typed offset (24, 78,
+    // 116, 152, 176, 270, 352, 374) and none of them scaled -- the same
+    // arrangement that put SAFETY / TIMECODE through the UI Scale picker on
+    // the settings page. It flows from a cursor now and the panel is sized
+    // from where the cursor ended.
+    const std::vector<fs::path> recents = startupRecentShows();
+    const int kRecentRows = std::min<int>(5, static_cast<int>(recents.size()));
+
+    const int lineH = std::max(uiScaled(18), textLineHeight(fontSmall_));
+    const int bodyH = std::max(uiScaled(24), textLineHeight(fontBase_));
+    const int gap = uiScaled(8);
+    const int rowH = std::max(uiScaled(26), textLineHeight(fontSmall_) + uiScaled(10));
+    TTF_Font* titleFont = fontPixelTitle_ ? fontPixelTitle_
+                        : (fontPixel_ ? fontPixel_ : fontLarge_);
+    const int titleH = std::max(uiScaled(52), textLineHeight(titleFont) + uiScaled(8));
+    const int buttonH = uiScaled(58);
+
+    // Height, from the rows that are actually about to be drawn.
+    int neededH = uiScaled(24) + titleH               // wordmark
+                + lineH + uiScaled(16)                // subtitle
+                + bodyH + gap                         // "Choose startup mode:"
+                + lineH + uiScaled(4) + lineH + gap;  // previous-file pair
+    if (kRecentRows > 0) {
+      neededH += lineH + uiScaled(4)                  // "Recent shows:"
+               + kRecentRows * (rowH + uiScaled(4)) + uiScaled(16);
+    }
+    // The tour's invitation, under the buttons: a teacher and one line.
+    const int learnStripH = std::max(uiScaled(48), bodyH + uiScaled(16));
+    neededH += buttonH + gap                          // the button row
+             + learnStripH + gap                      // "New here?" strip
+             + lineH + uiScaled(4) + lineH            // two hint lines
+             + lineH + uiScaled(8)                    // updates
+             + uiScaled(24);                          // bottom margin
+
+    const int kDW = std::max(uiScaled(660), startupRowW + startupMargin * 2);
+    // The floor is a floor, not the size. It used to be a flat 440 because
+    // every row inside was at a fixed offset; now that the panel is measured,
+    // holding it at 440 with no recents just leaves 120px of empty green under
+    // the hint lines, which reads as an unfinished dialog.
+    const int kDH = std::min(std::max(uiScaled(260), neededH),
+                             std::max(uiScaled(240), height - uiScaled(20)));
+    SDL_Rect dialog {(width - kDW) / 2, (height - kDH) / 2, kDW, kDH};
+    Primitives::drawFramedPanel(controlRenderer_, dialog, pal.shellInner, pal.deep, pal.shellOuter);
+
+    // Title — the WORDMARK is headline-sized; the version stays small on
+    // the subtitle line (it's metadata, not brand).
+    const int tx = dialog.x + startupMargin;
+    const int tw = dialog.w - startupMargin * 2;
+    int y = dialog.y + uiScaled(24);
+    drawTextSafe(controlRenderer_, titleFont,
+                 SDL_Rect {tx, y, tw, titleH},
+                 std::string(kAppTitle), pal.fg);
+    y += titleH;
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {tx, y, tw, lineH},
+                 "dot-matrix cue deck  -  " + std::string(kAppVersionTag), pal.inkSoft);
+    y += lineH + uiScaled(16);
+
+    // The dialog panel is shell_inner (near-black on terminal themes), so its
+    // body text rides the on-body ink roles, not the dark screen_deep/dark.
+    SDL_Color dlgInk = pal.fg;
+    SDL_Color dlgSub = pal.inkSoft;
+    drawTextSafe(controlRenderer_, fontBase_,
+                 SDL_Rect {tx, y, tw, bodyH},
+                 "Choose startup mode:", dlgInk);
+    y += bodyH + gap;
+
+    std::string fname = currentProjectFile_.empty() ? "default.deckboy" : currentProjectFile_.filename().string();
+    bool hasSavedFile = startupProjectAvailable();
+    if (hasSavedFile) {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {tx, y, tw, lineH},
+                   "Previous show file:", dlgInk);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {tx, y + lineH + uiScaled(4), tw, lineH},
+                   fname, dlgSub);
+    } else {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {tx, y, tw, lineH},
+                   "No previous show file found at startup path.", dlgSub);
+    }
+    y += lineH + uiScaled(4) + lineH + gap;
+
+    // Recent shows: named, clickable, and numbered so the keyboard reaches
+    // them too. The folder goes on the row as well -- two shows called
+    // "show.deckboy" in different venues is the normal case, not the odd one.
+    startupRecentBtns_.clear();
+    if (kRecentRows > 0) {
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {tx, y, tw, lineH}, "Recent shows:", dlgInk);
+      y += lineH + uiScaled(4);
+      for (int i = 0; i < kRecentRows; ++i) {
+        SDL_Rect row {tx, y, tw, rowH};
+        const bool hot = pointInRect(mouseX_, mouseY_, row);
+        Primitives::drawFramedPanel(controlRenderer_, row,
+                                    hot ? pal.dark : pal.mid, pal.deep, pal.light);
+        const std::string name = recents[i].filename().string();
+        const std::string folder = recents[i].parent_path().filename().string();
+        const SDL_Color rowInk = hot ? pal.light : pal.deep;
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {row.x + uiScaled(8), row.y, tw / 2, rowH},
+                     std::to_string(i + 1) + ".  " + name, rowInk);
+        if (!folder.empty()) {
+          // "in <folder>", not a bare folder name floating in the row's other
+          // half with nothing to say what it is. Reported as the recent-shows
+          // list being hard to parse; two names side by side with no stated
+          // relationship between them is exactly that. ASCII only -- ink
+          // colour is left alone rather than guessed at a "softer" role that
+          // was never contrast-checked against THIS row's hot/cold fill.
+          drawTextSafe(controlRenderer_, fontSmall_,
+                       SDL_Rect {row.x + tw / 2, row.y,
+                                 tw / 2 - uiScaled(8), rowH},
+                       "in " + folder, rowInk);
+        }
+        startupRecentBtns_.push_back(row);
+        y += rowH + uiScaled(4);
+      }
+      // The list and the buttons are different kinds of thing; without real
+      // air between them the last recent reads as a fourth button.
+      y += uiScaled(16) - uiScaled(4);
+    }
+
+    // Buttons — centred as a row using the measured width computed above, so
+    // they stay inside the (possibly widened) dialog on every font.
+    int buttonRowX = dialog.x + (dialog.w - startupRowW) / 2;
+    startupNewBtn_ = {buttonRowX, y, startupBtnW, buttonH};
+    startupLoadBtn_ = {startupNewBtn_.x + startupBtnW + startupBtnGap, y, startupBtnW, buttonH};
+    startupOpenSavedBtn_ = {startupLoadBtn_.x + startupBtnW + startupBtnGap, y, startupBtnW, buttonH};
+    startupExamplesBtn_ = {startupOpenSavedBtn_.x + startupBtnW + startupBtnGap, y, startupBtnW, buttonH};
+    startupLearnBtn_ = {startupExamplesBtn_.x + startupBtnW + startupBtnGap, y, startupBtnW, buttonH};
+    y += buttonH + gap;
+
+    Primitives::drawFramedPanel(controlRenderer_, startupNewBtn_, pal.mid,
+                                pal.deep, pal.light);
+    drawCenteredText(controlRenderer_, fontBase_, "NEW SHOW FILE", pal.deep, startupNewBtn_);
+
+    SDL_Color loadFill = hasSavedFile ? pal.dark : pal.shellOuter;
+    SDL_Color loadText = hasSavedFile ? pal.light : pal.mid;
+    Primitives::drawFramedPanel(controlRenderer_, startupLoadBtn_, loadFill, pal.deep, pal.mid);
+    drawCenteredText(controlRenderer_, fontBase_, hasSavedFile ? "OPEN PREVIOUS" : "NO PREVIOUS", loadText, startupLoadBtn_);
+
+    Primitives::drawFramedPanel(controlRenderer_, startupOpenSavedBtn_, pal.mid,
+                                pal.deep, pal.light);
+    // "OPEN SAVED" without the trailing "..." — it cost width for no meaning
+    // (this is a button; clicking it opens the picker regardless).
+    drawCenteredText(controlRenderer_, fontBase_, "OPEN SAVED", pal.deep, startupOpenSavedBtn_);
+    // Four shows that teach the desk; the way in for someone opening it the first time.
+    Primitives::drawFramedPanel(controlRenderer_, startupExamplesBtn_, pal.mid, pal.deep, pal.light);
+    drawCenteredText(controlRenderer_, fontBase_, "EXAMPLE SHOWS", pal.deep, startupExamplesBtn_);
+    // LEARN THE BASICS stands out: dark, with the tour's yellow round it.
+    {
+      SDL_SetRenderDrawColor(controlRenderer_, 255, 220, 0, 255);
+      for (int i = 1; i <= uiScaled(3); ++i) {
+        const SDL_FRect ring {static_cast<float>(startupLearnBtn_.x - i), static_cast<float>(startupLearnBtn_.y - i),
+                              static_cast<float>(startupLearnBtn_.w + i * 2), static_cast<float>(startupLearnBtn_.h + i * 2)};
+        SDL_RenderRect(controlRenderer_, &ring);
+      }
+      Primitives::drawFramedPanel(controlRenderer_, startupLearnBtn_, pal.deep, pal.deep, pal.mid);
+      drawCenteredText(controlRenderer_, fontBase_, "LEARN THE BASICS", pal.light, startupLearnBtn_);
+    }
+    {
+      const SDL_Rect strip {tx, y, tw, learnStripH};
+      Primitives::fillRect(controlRenderer_, strip, pal.deep);
+      const int face = learnStripH - uiScaled(8);
+      drawTutorialPortrait(SDL_Rect {strip.x + uiScaled(6), strip.y + uiScaled(4), face, face}, true, true);
+      const int keyW = measuredTextWidth(fontSmall_, "KEY L") + uiScaled(20);
+      drawTextSafe(controlRenderer_, fontBase_,
+                   SDL_Rect {strip.x + face + uiScaled(16), strip.y, strip.w - face - keyW - uiScaled(24), strip.h},
+                   readTutorialProgress() > 0
+                     ? "Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi."
+                     : "New here? LEARN THE BASICS takes five minutes. We'll show you round.",
+                   pal.light);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {strip.x + strip.w - keyW, strip.y, keyW, strip.h}, "KEY L", pal.light);
+      y += learnStripH + gap;
+    }
+
+    SDL_Color hintInk = pal.inkSoft;
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {tx, y, tw, lineH},
+                 kRecentRows > 0
+                   ? "N=new  Enter/P=previous  O=open saved  E=examples  L=learn  1-" +
+                       std::to_string(kRecentRows) + "=recent"
+                   : std::string("N=new  Enter/P=previous  O=open saved  E=examples  L=learn"),
+                 hintInk);
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {tx, y + lineH + uiScaled(4), tw, lineH},
+                 "Esc=continue with current session",
+                 hintInk);
+
+    // UPDATES, ON THE SPLASH: the one screen nothing is live behind (James
+    // chose this, 2026-10-28). The check runs at startup when it is on
+    // (Settings > System > Updates), and never once a show is going. A click
+    // checks now when it is off or failed -- the operator asked -- and opens
+    // Settings > System (where DOWNLOAD is) when something newer is out.
+    {
+      std::string status;
+      bool newer = false;
+      {
+        std::lock_guard<std::mutex> lock(updateMutex_);
+        status = updateStatus_;
+        newer = !updateFound_.version.empty();
+      }
+      const std::string text = newer
+        ? "Updates: " + status + "  -  click to get it"
+        : !status.empty() ? "Updates: " + status
+        : project_.updateCheckEnabled ? std::string("Updates: checking...")
+        : std::string("Updates: not checked (the check at startup is off)  -  click to check now");
+      startupUpdateRect_ = SDL_Rect {tx, y + 2 * lineH + uiScaled(12), tw, lineH};
+      drawTextSafe(controlRenderer_, fontSmall_, startupUpdateRect_, text,
+                   newer ? SDL_Color {255, 220, 0, 255} : hintInk);
+    }
+  }
+
+
+  // ── THE DASHBOARD ──────────────────────────────────────────────────────────
+  //
+  // A page of the operator's own buttons. Each tile runs any command the remote
+  // protocol understands, so anything the app can do can be put on one -- and
+  // the same slots are what Companion fires with DASH <n>, so a surface and the
+  // screen stay the same dashboard rather than two that drift.
+  //
+  // MODULAR: the grid flows to the window. Tiles are added and removed, and the
+  // rest reflow around them; nothing is positioned by hand.
+  //
+  // ANIMATED: every tile floats on its own phase, so the page breathes instead
+  // of sitting there, and a fired tile squishes and springs back. The motion is
+  // per-tile and slow -- a dashboard that jitters is a dashboard nobody can
+  // read at a glance across a room.
+  //
+  // The colours come out of the THEME, not out of a fixed sixteen: an indexed
+  // palette of its own would be the one thing on screen ignoring the colourway.
+  SDL_Color dashboardSlotColor(int index) const {
+    // Four tints between the theme's own roles, so a slot's colour means
+    // "different from its neighbour" in every theme rather than "red".
+    const int i = ((index % 8) + 8) % 8;
+    const SDL_Color a = pal.light;
+    const SDL_Color b = pal.mid;
+    const SDL_Color c = pal.fg;
+    auto mix = [](SDL_Color x, SDL_Color y, double f) {
+      SDL_Color o;
+      o.r = static_cast<Uint8>(std::lround(x.r * (1.0 - f) + y.r * f));
+      o.g = static_cast<Uint8>(std::lround(x.g * (1.0 - f) + y.g * f));
+      o.b = static_cast<Uint8>(std::lround(x.b * (1.0 - f) + y.b * f));
+      o.a = 255;
+      return o;
+    };
+    switch (i) {
+      case 0:  return a;
+      case 1:  return mix(a, b, 0.35);
+      case 2:  return mix(a, c, 0.30);
+      case 3:  return b;
+      case 4:  return mix(b, c, 0.35);
+      case 5:  return mix(a, b, 0.65);
+      case 6:  return mix(b, a, 0.20);
+      default: return mix(c, a, 0.55);
+    }
+  }
+
+  // -- THE MASTER TRACKER -------------------------------------------------
+  //
+  // Steps down the page, playlists across it. A master cue already holds one
+  // assignment per destination, so this draws data that was always there and
+  // was only ever shown as a single row in a cue list -- which is why picking
+  // what a master fires has been awkward everywhere else.
+  //
+  // Reading DOWN is time and reading ACROSS is destinations. That is the whole
+  // reason a grid beats a list here: you can see a whole sequence and what
+  // fires together, at once.
+  void renderMasterTracker(const SDL_Rect& fullArea) {
+    if (project_.trackerClassicView) {
+      renderMasterTrackerClassic(fullArea);
+    } else {
+      renderMasterTrackerPattern(fullArea);
+    }
+  }
+
+  // One cell as the pattern view writes it: cue, act, value, fixed width,
+  // so a column reads straight down. "C04 G  --" takes cue 4; "--- F  20"
+  // fades out over two seconds. state: 0 nothing here, 1 acts, 2 names a
+  // cue that has gone, 3 bypassed, 4 the step's own playlist.
+  std::string trackerPatternCellText(int masterDeck, int masterCue, int targetDeck, int* state) const {
+    *state = 0;
+    if (targetDeck == masterDeck) {
+      *state = 4;
+      return "(M)";
+    }
+    const Cue* master = masterTrackerCue(masterDeck, masterCue);
+    if (!master) {
+      return "--- -- --";
+    }
+    for (const MasterAssignment& a : master->masterAssignments) {
+      if (a.deckIndex != targetDeck) {
+        continue;
+      }
+      char text[32];
+      if (a.action == 'G') {
+        const int idx = findCueIndexById(targetDeck, a.cueId);
+        if (idx < 0) {
+          *state = 2;
+          return "C?? G  --";
+        }
+        std::snprintf(text, sizeof(text), "C%02d G  --", idx + 1);
+      } else if (a.action == 'S') {
+        std::snprintf(text, sizeof(text), "--- S  --");
+      } else {
+        std::snprintf(text, sizeof(text), "--- %c %3d", a.action, std::max(0, a.value));
+      }
+      *state = a.bypassed ? 3 : 1;
+      return text;
+    }
+    return "--- -- --";
+  }
+
+  // -- THE PATTERN TRACKER (James's design, 2026-10-15) --------------------
+  //
+  // The same steps and cells as the classic grid, read the way a music
+  // tracker reads: hex row numbers, a fixed-width cell per playlist, the
+  // play bar held in the middle while the rows scroll through it, and the
+  // keyboard doing the work (handleTrackerPatternKey). The classic grid is
+  // one switch away -- James: "keep the old tracker for now in case the new
+  // one is not practical".
+  void renderMasterTrackerPattern(const SDL_Rect& fullArea) {
+    const auto rows = masterTrackerRows();
+    const int rowCount = static_cast<int>(rows.size());
+    const std::vector<int> shown = trackerShownDecks();
+    const int shownCount = static_cast<int>(shown.size());
+    TTF_Font* mono = fontMono_ ? fontMono_ : fontSmall_;
+    const int playhead = trackerPlayheadRow();
+    const int gap = uiScaled(8);
+
+    // A dark pattern with the LCD's light ink on it, in every theme: the
+    // grid is the one place on the desk that should look like a tracker.
+    const SDL_Color white {255, 255, 255, 255};
+    const SDL_Color gridBg = pal.deep;
+    const SDL_Color gridBeat = paletteMix(pal.deep, pal.dark, 0.35);
+    const SDL_Color gridHead = paletteMix(pal.deep, pal.dark, 0.75);
+    const SDL_Color ink = pal.light;
+    const SDL_Color inkPlay = paletteMix(pal.light, white, 0.6);
+    const SDL_Color inkDim = paletteMix(pal.mid, pal.deep, 0.55);
+    const SDL_Color rule = paletteMix(pal.deep, pal.mid, 0.3);
+    const SDL_Color cursorInk = trackerEditMode_ ? pal.deleteBezel : pal.light;
+
+    // The cursor follows the playhead whenever a step fires, from anywhere.
+    if (playhead != trackerLastFollowedRow_) {
+      trackerLastFollowedRow_ = playhead;
+      if (playhead >= 0) {
+        trackerCursorRow_ = playhead;
+      }
+    }
+    trackerCursorRow_ = std::clamp(trackerCursorRow_, 0, std::max(0, rowCount - 1));
+    trackerCursorCol_ = std::clamp(trackerCursorCol_, 0, std::max(0, shownCount - 1));
+
+    // -- THE TRANSPORT ---------------------------------------------------
+    const int barH = std::max(uiScaled(30), textLineHeight(fontSmall_) + uiScaled(12));
+    {
+      struct TransportButton {
+        const char* label;
+        QuickAction action;
+        const char* tip;
+        bool lit;
+        int w;
+      };
+      const TransportButton buttons[] = {
+        {"< BACK", QuickAction::TrackerBack, "Fire the step before this one (Page Up)", false, 76},
+        {"GO >", QuickAction::TrackerGo, "Fire the next step (Page Down)", true, 76},
+        {"PLAY", QuickAction::TrackerPlay,
+         "Run the sequence: each step holds for its LEN, then the next fires (Space)", trackerPlaying_, 62},
+        {"STOP", QuickAction::TrackerStop, "Stop running the sequence (Space)", false, 62},
+        {"LOOP", QuickAction::TrackerLoopToggle,
+         "At the last step, go back to the first instead of stopping", project_.trackerLoop, 62},
+        {"EDIT", QuickAction::TrackerEditToggle,
+         "Let the keyboard change the cells: cue numbers, S F V O, Del, Ins", trackerEditMode_, 62},
+        {"CLICKER", QuickAction::TrackerClickerToggle,
+         "Page Down / Page Up step the tracker even with the dashboard closed",
+         project_.clickerDrivesTracker, 82},
+      };
+      int bx = fullArea.x;
+      for (const TransportButton& b : buttons) {
+        SDL_Rect r {bx, fullArea.y, uiScaled(b.w), barH};
+        drawUIPanel(r, paletteToggleFill(b.lit), pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, r, b.label, paletteToggleInk(b.lit));
+        dashButtons_.push_back({r, b.action, b.tip});
+        bx += r.w + uiScaled(6);
+      }
+      // ROW 04 / 0B - NEXT IN 04.2s - SECTION 01 Intro
+      std::string status;
+      if (rows.empty()) {
+        status = "NO STEPS YET";
+      } else {
+        char text[64];
+        if (playhead >= 0) {
+          std::snprintf(text, sizeof(text), "ROW %02X / %02X", playhead, rowCount - 1);
+        } else {
+          std::snprintf(text, sizeof(text), "ROW -- / %02X", rowCount - 1);
+        }
+        status = text;
+        const double remaining = trackerRemainingSeconds();
+        if (remaining >= 0.0) {
+          std::snprintf(text, sizeof(text), " - NEXT IN %04.1fs", remaining);
+          status += text;
+        }
+        const int at = playhead >= 0 ? playhead : trackerCursorRow_;
+        int section = -1;
+        std::string sectionName;
+        for (int r = 0, k = 0; r < rowCount && r <= at; ++r) {
+          const Cue* step = masterTrackerCue(rows[r].first, rows[r].second);
+          if (step && !step->trackerSection.empty()) {
+            section = k++;
+            sectionName = step->trackerSection;
+          }
+        }
+        if (section >= 0) {
+          std::snprintf(text, sizeof(text), " - SECTION %02X ", section);
+          status += text + sectionName;
+        }
+      }
+      drawTextSafe(controlRenderer_, mono,
+                   SDL_Rect {bx + uiScaled(6), fullArea.y,
+                             std::max(0, fullArea.x + fullArea.w - bx - uiScaled(6)), barH},
+                   status, pal.fg);
+    }
+
+    const int sideW = uiScaled(250);
+    SDL_Rect grid {fullArea.x, fullArea.y + barH + gap,
+                   std::max(uiScaled(200), fullArea.w - sideW - gap),
+                   std::max(0, fullArea.h - barH - gap)};
+    SDL_Rect side {grid.x + grid.w + gap, grid.y, sideW, grid.h};
+    Primitives::fillRect(controlRenderer_, grid, gridBg);
+
+    // -- THE COLUMNS -----------------------------------------------------
+    const int monoH = textLineHeight(mono);
+    const int numW = uiScaled(44);
+    const int stepW = uiScaled(170);
+    const int lenW = uiScaled(70);
+    const int colsX = grid.x + numW + stepW + lenW;
+    const int colsW = std::max(0, grid.x + grid.w - colsX);
+    const int colW = std::max(uiScaled(100), colsW / std::max(1, shownCount));
+    const int visibleCols = std::max(1, colsW / colW);
+    // More playlists than fit: the columns scroll to keep the cursor's.
+    if (trackerCursorCol_ < trackerFirstCol_) trackerFirstCol_ = trackerCursorCol_;
+    if (trackerCursorCol_ >= trackerFirstCol_ + visibleCols) trackerFirstCol_ = trackerCursorCol_ - visibleCols + 1;
+    trackerFirstCol_ = std::clamp(trackerFirstCol_, 0, std::max(0, shownCount - visibleCols));
+    const int lastCol = std::min(shownCount, trackerFirstCol_ + visibleCols);
+
+    const int meterH = uiScaled(30);
+    const int headH = monoH + meterH + uiScaled(14);
+    Primitives::fillRect(controlRenderer_, SDL_Rect {grid.x, grid.y, grid.w, headH}, gridHead);
+    drawTextSafe(controlRenderer_, mono, SDL_Rect {grid.x + numW + uiScaled(6), grid.y + uiScaled(4), stepW, monoH},
+                 "STEP", ink);
+    drawTextSafe(controlRenderer_, mono,
+                 SDL_Rect {grid.x + numW + stepW + uiScaled(6), grid.y + uiScaled(4), lenW, monoH}, "LEN", ink);
+    for (int c = trackerFirstCol_; c < lastCol; ++c) {
+      const int d = shown[c];
+      const SDL_Rect head {colsX + (c - trackerFirstCol_) * colW, grid.y, colW, headH};
+      Primitives::fillRect(controlRenderer_, SDL_Rect {head.x, head.y, 1, head.h}, gridBg);
+      const int flagW = uiScaled(20);
+      const SDL_Rect nameRect {head.x + uiScaled(6), head.y + uiScaled(4), head.w - flagW * 2 - uiScaled(14), monoH};
+      drawTextSafe(controlRenderer_, mono, nameRect,
+                   ellipsizeToPixelWidth(mono, deckLabel(d), nameRect.w), trackerColumnLive(d) ? ink : inkDim);
+      if (c == trackerCursorCol_) {
+        Primitives::fillRect(controlRenderer_,
+                             SDL_Rect {nameRect.x, nameRect.y + nameRect.h, nameRect.w, std::max(1, uiScaled(2))},
+                             cursorInk);
+      }
+      // M and S: mute this column, or fire only the soloed ones (F9 / F10).
+      const bool muted = (project_.trackerMutedDecks & (1u << d)) != 0u;
+      const bool solo = (project_.trackerSoloDecks & (1u << d)) != 0u;
+      const SDL_Rect mRect {head.x + head.w - flagW * 2 - uiScaled(6), head.y + uiScaled(4), flagW, monoH};
+      const SDL_Rect sRect {mRect.x + flagW + uiScaled(2), mRect.y, flagW, monoH};
+      drawUIPanel(mRect, paletteToggleFill(muted), pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, mRect, "M", paletteToggleInk(muted));
+      drawUIPanel(sRect, paletteToggleFill(solo), pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, sRect, "S", paletteToggleInk(solo));
+      dashButtons_.push_back({mRect, QuickAction::TrackerMuteToggle, "Mute this column: the tracker fires nothing here (F9)", d});
+      dashButtons_.push_back({sRect, QuickAction::TrackerSoloToggle, "Solo this column: only soloed columns fire (F10)", d});
+      // Where the playlist goes, and how loud it is.
+      const SDL_Rect box {head.x + uiScaled(6), nameRect.y + monoH + uiScaled(4), head.w - uiScaled(12), meterH};
+      Primitives::fillRect(controlRenderer_, box, paletteMix(pal.deep, SDL_Color {0, 0, 0, 255}, 0.4));
+      Primitives::strokeRect(controlRenderer_, box, rule);
+      std::string outs;
+      for (int o = 0; o < static_cast<int>(project_.outputs.size()); ++o) {
+        if (project_.outputs[o].hostDeckIndex == d) {
+          outs += (outs.empty() ? "Out " : "+") + std::to_string(o + 1);
+        }
+      }
+      const int barW = std::max(3, uiScaled(6));
+      drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                           SDL_Rect {box.x + 2, box.y, box.w - barW - 6, box.h},
+                           outs.empty() ? std::string("no output") : outs, inkDim);
+      double level = 0.0;
+      if (const DeckRuntime* runtime = runtimeForDeck(d); runtime && runtime->mediaEngine) {
+        level = std::clamp(runtime->mediaEngine->programAudioLevel01(), 0.0, 1.0);
+      }
+      const int litH = static_cast<int>(std::lround((box.h - 4) * level));
+      if (litH > 0) {
+        Primitives::fillRect(controlRenderer_,
+                             SDL_Rect {box.x + box.w - barW - 2, box.y + box.h - 2 - litH, barW, litH}, ink);
+      }
+    }
+    if (shownCount > visibleCols) {
+      char more[48];
+      std::snprintf(more, sizeof(more), "%d-%d of %d", trackerFirstCol_ + 1, lastCol, shownCount);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {grid.x + uiScaled(4), grid.y + monoH + uiScaled(10), numW + stepW, meterH}, more, inkDim);
+    }
+
+    // -- THE ROWS, the play bar held in the middle -----------------------
+    const int legendH = textLineHeight(fontSmall_) * 2 + uiScaled(12);
+    const int bodyTop = grid.y + headH;
+    const int bodyBottom = grid.y + grid.h - legendH;
+    const int rowH = monoH + uiScaled(6);
+    const int slots = std::max(1, (bodyBottom - bodyTop) / rowH);
+    // Playing, the play row stays centred; stopped, the cursor's row does.
+    const int centreRow = (trackerPlaying_ && playhead >= 0) ? playhead : trackerCursorRow_;
+    const int firstRow = centreRow - slots / 2;
+    for (int i = 0; i < slots; ++i) {
+      const int r = firstRow + i;
+      const int y = bodyTop + i * rowH;
+      if (r < 0) {
+        continue;
+      }
+      const bool isPlay = r == playhead;
+      const SDL_Rect rowRect {grid.x, y, grid.w, rowH};
+      if (isPlay) {
+        // The brightest bar on the page: pal.dark alone sat a shade off the
+        // grid in the default theme and the play row went unfound.
+        Primitives::fillRect(controlRenderer_, rowRect, paletteMix(pal.dark, pal.mid, 0.45));
+      } else if (r % 4 == 0) {
+        Primitives::fillRect(controlRenderer_, rowRect, gridBeat);
+      }
+      const SDL_Color rowInk = isPlay ? inkPlay : ink;
+      char num[8];
+      std::snprintf(num, sizeof(num), r > 0xFF ? "%03X" : "%02X", r);
+      const SDL_Rect numRect {grid.x, y, numW, rowH};
+      const SDL_Rect stepRect {grid.x + numW, y, stepW, rowH};
+      const SDL_Rect lenRect {grid.x + numW + stepW, y, lenW, rowH};
+      const auto inset = [&](const SDL_Rect& rc) {
+        return SDL_Rect {rc.x + uiScaled(6), rc.y, std::max(0, rc.w - uiScaled(10)), rc.h};
+      };
+
+      if (r >= rowCount) {
+        // Past the last step: the empty pattern, and one row that makes the
+        // next step, so the page is never a dead end.
+        drawTextSafe(controlRenderer_, mono, inset(numRect), num, inkDim);
+        if (r == rowCount) {
+          drawTextSafe(controlRenderer_, mono, inset(stepRect), "+ step", ink);
+          dashButtons_.push_back({stepRect, QuickAction::TrackerAddStep, "Another step at the end"});
+        } else {
+          drawTextSafe(controlRenderer_, mono, inset(stepRect), "...", inkDim);
+        }
+        drawTextSafe(controlRenderer_, mono, inset(lenRect), "..:..", inkDim);
+        for (int c = trackerFirstCol_; c < lastCol; ++c) {
+          const SDL_Rect cell {colsX + (c - trackerFirstCol_) * colW, y, colW, rowH};
+          Primitives::fillRect(controlRenderer_, SDL_Rect {cell.x, cell.y, 1, cell.h}, rule);
+          drawTextSafe(controlRenderer_, mono, inset(cell), "--- -- --", inkDim);
+        }
+        continue;
+      }
+
+      const int masterDeck = rows[r].first;
+      const int masterCue = rows[r].second;
+      const Cue* master = masterTrackerCue(masterDeck, masterCue);
+      if (!master) {
+        continue;
+      }
+      if (!master->trackerSection.empty()) {
+        // A section starts here: a rule across the pattern above it.
+        Primitives::fillRect(controlRenderer_, SDL_Rect {grid.x, y, grid.w, std::max(1, uiScaled(1))}, pal.mid);
+      }
+      drawTextSafe(controlRenderer_, mono, inset(numRect), num, isPlay ? inkPlay : pal.mid);
+      dashButtons_.push_back({numRect, QuickAction::TrackerCursorTo, "Put the cursor on this row", r});
+
+      // The step: its name is still the button that fires it, and a jump
+      // says where GO goes after it.
+      std::string jump;
+      if (const int to = trackerRowOfStepId(master->trackerJumpStepId); to >= 0) {
+        char text[8];
+        std::snprintf(text, sizeof(text), "J%02X", to);
+        jump = text;
+      }
+      const int jumpW = jump.empty() ? 0 : uiScaled(40);
+      const SDL_Rect nameRect = inset(SDL_Rect {stepRect.x, y, stepRect.w - jumpW, rowH});
+      drawTextSafe(controlRenderer_, mono, nameRect,
+                   ellipsizeToPixelWidth(mono, master->name.empty() ? std::string("step") : master->name, nameRect.w),
+                   master->armed ? rowInk : inkDim);
+      if (!jump.empty()) {
+        drawTextSafe(controlRenderer_, mono, SDL_Rect {stepRect.x + stepRect.w - jumpW, y, jumpW, rowH}, jump, rowInk);
+      }
+      dashButtons_.push_back({stepRect, QuickAction::TrackerFire,
+                              "Fire this step on every playlist at once (right-click: rename, move, delete)", r});
+
+      const double remaining = isPlay ? trackerRemainingSeconds() : -1.0;
+      const double hold = remaining >= 0.0 ? trackerCountdownSpan_ : -1.0;
+      if (hold > 0.0) {
+        const double done = std::clamp(1.0 - remaining / hold, 0.0, 1.0);
+        Primitives::fillRect(controlRenderer_,
+                             SDL_Rect {lenRect.x + 2, lenRect.y + lenRect.h - uiScaled(3),
+                                       static_cast<int>((lenRect.w - 4) * done), uiScaled(2)},
+                             inkPlay);
+      }
+      drawTextSafe(controlRenderer_, mono, inset(lenRect), trackerStepLengthLabel(r), rowInk);
+      dashButtons_.push_back({lenRect, QuickAction::TrackerLength, "How long this step holds when the sequence plays", r});
+
+      for (int c = trackerFirstCol_; c < lastCol; ++c) {
+        const int d = shown[c];
+        const SDL_Rect cell {colsX + (c - trackerFirstCol_) * colW, y, colW, rowH};
+        Primitives::fillRect(controlRenderer_, SDL_Rect {cell.x, cell.y, 1, cell.h}, rule);
+        int state = 0;
+        const std::string text = trackerPatternCellText(masterDeck, masterCue, d, &state);
+        const SDL_Color cellInk = !trackerColumnLive(d) || state == 0 || state == 3 || state == 4 ? inkDim
+                                : state == 2 ? pal.deleteBezel : rowInk;
+        drawTextSafe(controlRenderer_, mono, inset(cell), ellipsizeToPixelWidth(mono, text, cell.w - uiScaled(10)),
+                     cellInk);
+        dashButtons_.push_back({cell, QuickAction::TrackerCell,
+                                "Pick what this step does on this playlist (right-click: the step)",
+                                r * kMaxDecks + d});
+        if (r == trackerCursorRow_ && c == trackerCursorCol_) {
+          Primitives::strokeRect(controlRenderer_, cell, cursorInk);
+          Primitives::strokeRect(controlRenderer_, SDL_Rect {cell.x + 1, cell.y + 1, cell.w - 2, cell.h - 2}, cursorInk);
+        }
+      }
+      if (r == trackerCursorRow_) {
+        Primitives::strokeRect(controlRenderer_, rowRect, cursorInk);
+      }
+    }
+
+    // -- THE LEGEND --------------------------------------------------------
+    {
+      const SDL_Rect legend {grid.x, bodyBottom, grid.w, legendH};
+      Primitives::fillRect(controlRenderer_, SDL_Rect {legend.x, legend.y, legend.w, 1}, rule);
+      const int lineH = textLineHeight(fontSmall_);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {legend.x + uiScaled(10), legend.y + uiScaled(5), legend.w - uiScaled(20), lineH},
+                   "cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  "
+                   "J jump to row",
+                   inkDim);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {legend.x + uiScaled(10), legend.y + uiScaled(5) + lineH, legend.w - uiScaled(20), lineH},
+                   trackerEditMode_ ? "--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  "
+                                      "EDIT is on: typing changes the show"
+                                    : "--- -- --  does nothing on that playlist  -  (M) the step's own playlist",
+                   trackerEditMode_ ? pal.deleteBezel : inkDim);
+    }
+
+    // -- THE SIDE: sections, keys, the classic view ----------------------
+    {
+      const int lineH = textLineHeight(fontSmall_) + uiScaled(8);
+      const int viewH = barH;
+      std::vector<std::pair<int, std::string>> sections;
+      for (int r = 0; r < rowCount; ++r) {
+        const Cue* step = masterTrackerCue(rows[r].first, rows[r].second);
+        if (step && !step->trackerSection.empty()) {
+          sections.emplace_back(r, step->trackerSection);
+        }
+      }
+      const int at = playhead >= 0 ? playhead : trackerCursorRow_;
+      int current = -1;
+      for (int k = 0; k < static_cast<int>(sections.size()); ++k) {
+        if (sections[k].first <= at) current = k;
+      }
+      const int maxEntries = std::max(1, (side.h / 2 - lineH) / lineH - 1);
+      const int entries = std::min(static_cast<int>(sections.size()), maxEntries);
+      SDL_Rect panel {side.x, side.y, side.w, lineH * (entries + 2)};
+      Primitives::fillRect(controlRenderer_, SDL_Rect {panel.x, panel.y, panel.w, lineH}, pal.dark);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {panel.x + uiScaled(10), panel.y, panel.w - uiScaled(20), lineH}, "SECTIONS", pal.light);
+      // The current section's neighbours in view when there are more than fit.
+      const int firstEntry = std::clamp(current - entries / 2, 0,
+                                        std::max(0, static_cast<int>(sections.size()) - entries));
+      for (int k = 0; k < entries; ++k) {
+        const int idx = firstEntry + k;
+        const SDL_Rect entry {panel.x, panel.y + lineH * (k + 1), panel.w, lineH};
+        const bool lit = idx == current;
+        if (lit) Primitives::fillRect(controlRenderer_, entry, pal.dark);
+        char label[16];
+        std::snprintf(label, sizeof(label), "%02X ", idx);
+        drawTextSafe(controlRenderer_, mono, SDL_Rect {entry.x + uiScaled(10), entry.y, entry.w - uiScaled(20), lineH},
+                     ellipsizeToPixelWidth(mono, label + sections[idx].second, entry.w - uiScaled(20)),
+                     lit ? pal.light : pal.fg);
+        dashButtons_.push_back({entry, QuickAction::TrackerCursorTo, "Put the cursor on this section's first row",
+                                sections[idx].first});
+      }
+      const SDL_Rect add {panel.x, panel.y + lineH * (entries + 1), panel.w, lineH};
+      drawTextSafe(controlRenderer_, mono, SDL_Rect {add.x + uiScaled(10), add.y, add.w - uiScaled(20), lineH},
+                   "+ section", pal.fgSoft);
+      dashButtons_.push_back({add, QuickAction::TrackerSectionAdd,
+                              "Start a section at the cursor's row (or rename the one there)"});
+      Primitives::strokeRect(controlRenderer_, panel, pal.deep);
+
+      static const char* const kKeys[][2] = {
+        {"Arrows", "move the cursor"},     {"Enter", "fire this row"},
+        {"Space", "play / stop"},          {"PgDn/Up", "GO / BACK (clicker)"},
+        {"0-9", "type a cue number"},      {"S F V O", "stop, fade, vol, opacity"},
+        {"Del", "clear the cell"},         {"Ins", "insert a row"},
+        {"F9/F10", "mute / solo a column"},
+      };
+      const int keysCount = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
+      const int keyLineH = textLineHeight(fontSmall_) + uiScaled(2);
+      SDL_Rect keys {side.x, panel.y + panel.h + gap, side.w, keyLineH * (keysCount + 2) + uiScaled(8)};
+      if (keys.y + keys.h <= side.y + side.h - viewH - gap) {
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {keys.x + uiScaled(10), keys.y + uiScaled(4), keys.w - uiScaled(20), keyLineH}, "KEYS",
+                     pal.fg);
+        const int keyW = uiScaled(70);
+        for (int k = 0; k < keysCount; ++k) {
+          const int ky = keys.y + uiScaled(4) + keyLineH * (k + 1);
+          drawTextSafe(controlRenderer_, fontSmall_, SDL_Rect {keys.x + uiScaled(10), ky, keyW, keyLineH}, kKeys[k][0],
+                       pal.fg);
+          drawTextSafe(controlRenderer_, fontSmall_,
+                       SDL_Rect {keys.x + uiScaled(10) + keyW, ky, keys.w - keyW - uiScaled(20), keyLineH},
+                       kKeys[k][1], pal.fgSoft);
+        }
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     SDL_Rect {keys.x + uiScaled(10), keys.y + uiScaled(4) + keyLineH * (keysCount + 1),
+                               keys.w - uiScaled(20), keyLineH},
+                     "Typing needs EDIT on", pal.fgSoft);
+        Primitives::strokeRect(controlRenderer_, keys, pal.deep);
+      }
+
+      const SDL_Rect view {side.x, side.y + side.h - viewH, side.w, viewH};
+      drawUIPanel(view, pal.mid, pal.deep, pal.light);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, view, "CLASSIC VIEW", pal.deep);
+      dashButtons_.push_back({view, QuickAction::TrackerViewToggle,
+                              "The tracker as the plain grid it was before (TRACKER VIEW CLASSIC)"});
+    }
+  }
+
+  void renderMasterTrackerClassic(const SDL_Rect& fullArea) {
+    const auto rows = masterTrackerRows();
+    const int rowH = std::max(uiScaled(22), textLineHeight(fontSmall_) + uiScaled(8));
+    const int stepW = uiScaled(132);
+    const int lenW = uiScaled(58);
+    const int gap = uiScaled(3);
+
+    // -- THE TRANSPORT -------------------------------------------------
+    //
+    // Above the grid, because it acts on the whole sequence rather than on
+    // a row. BACK and GO are also what a slide clicker sends (Page Up /
+    // Page Down) while the tracker is open, or always with CLICKER on.
+    const int barH = std::max(uiScaled(26), textLineHeight(fontSmall_) + uiScaled(10));
+    {
+      struct TransportButton {
+        const char* label;
+        QuickAction action;
+        const char* tip;
+        bool lit;
+        int w;
+      };
+      const TransportButton buttons[] = {
+        {"< BACK", QuickAction::TrackerBack,
+         "Fire the step before this one (Page Up)", false, 76},
+        {"GO >", QuickAction::TrackerGo,
+         "Fire the next step (Page Down)", false, 76},
+        {trackerPlaying_ ? "STOP" : "PLAY", QuickAction::TrackerPlay,
+         "Run the sequence: each step holds for its LEN, then the next fires",
+         trackerPlaying_, 70},
+        {"LOOP", QuickAction::TrackerLoopToggle,
+         "At the last step, go back to the first instead of stopping",
+         project_.trackerLoop, 60},
+        {"CLICKER", QuickAction::TrackerClickerToggle,
+         "Page Down / Page Up step the tracker even with the dashboard closed",
+         project_.clickerDrivesTracker, 82},
+        {"PATTERN", QuickAction::TrackerViewToggle,
+         "The tracker as a pattern, keyboard first (TRACKER VIEW PATTERN)", false, 82},
+      };
+      int bx = fullArea.x;
+      for (const TransportButton& b : buttons) {
+        SDL_Rect r {bx, fullArea.y, uiScaled(b.w), barH};
+        drawUIPanel(r, b.lit ? pal.dark : pal.mid, pal.deep, pal.light);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, r, b.label,
+                             b.lit ? pal.light : pal.deep);
+        dashButtons_.push_back({r, b.action, b.tip});
+        bx += r.w + uiScaled(6);
+      }
+      // Where the sequence stands, in words.
+      const int playhead = trackerPlayheadRow();
+      std::string status;
+      if (rows.empty()) {
+        status = "no steps yet";
+      } else if (playhead < 0) {
+        status = std::to_string(rows.size()) + " steps - GO fires the first";
+      } else {
+        status = "step " + std::to_string(playhead + 1) + " of " +
+                 std::to_string(rows.size());
+        const double remaining = trackerRemainingSeconds();
+        if (remaining >= 0.0) {
+          char next[48];
+          std::snprintf(next, sizeof(next), " - next in %.1fs", remaining);
+          status += next;
+        } else if (trackerWaitingForEnd_) {
+          status += " - waiting for its cues to end";
+        } else if (trackerPlaying_) {
+          status += " - playing";
+        }
+      }
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {bx + uiScaled(4), fullArea.y,
+                             std::max(0, fullArea.x + fullArea.w - bx - uiScaled(4)), barH},
+                   status, pal.fg);
+    }
+    SDL_Rect area {fullArea.x, fullArea.y + barH + uiScaled(8), fullArea.w,
+                   std::max(0, fullArea.h - barH - uiScaled(8))};
+
+    if (rows.empty()) {
+      // NEVER A DEAD END. An empty tracker that only says 'empty' gives an
+      // operator nowhere to go; this row makes the first step.
+      SDL_Rect make {area.x, area.y, std::min(area.w, uiScaled(320)), rowH};
+      drawUIPanel(make, pal.mid, pal.deep, pal.light);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, make,
+                           "+  a first step", pal.deep);
+      dashButtons_.push_back({make, QuickAction::TrackerAddStep,
+                              "Make a step: one cue on each playlist, fired together"});
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {area.x, area.y + rowH + uiScaled(8), area.w, rowH},
+                   "A step fires one cue on each playlist, all at once.",
+                   pal.fgSoft);
+      return;
+    }
+
+    const std::vector<int> shown = trackerShownDecks();
+    const int shownCount = static_cast<int>(shown.size());
+
+    // The columns share whatever is left after the step name and its length.
+    const int colsX = area.x + stepW + gap + lenW + gap;
+    const int colsW = std::max(uiScaled(60), area.x + area.w - colsX);
+    const int colW = std::max(uiScaled(56),
+                              (colsW - gap * std::max(0, shownCount - 1)) /
+                                std::max(1, shownCount));
+
+    // -- THE HEADER: which playlist each column is ----------------------
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {area.x + uiScaled(4), area.y, stepW - uiScaled(8), rowH},
+                 "STEP", pal.fgSoft);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                         SDL_Rect {area.x + stepW + gap, area.y, lenW, rowH},
+                         "LEN", pal.fgSoft);
+    for (int col = 0; col < shownCount; ++col) {
+      const int d = shown[col];
+      SDL_Rect head {colsX + col * (colW + gap), area.y, colW, rowH};
+      if (head.x + head.w > area.x + area.w) {
+        break;
+      }
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, head,
+                           ellipsizeToPixelWidth(fontSmall_, deckLabel(d),
+                                                 head.w - uiScaled(6)),
+                           d == project_.focusedDeckIndex ? pal.light : pal.fgSoft);
+    }
+
+    // -- WHICH STEPS FIT, and the playhead kept among them ---------------
+    const int gridTop = area.y + rowH + gap;
+    // One row is kept back for "+ step" and the hint under the grid.
+    const int visibleRows = std::max(1, (area.y + area.h - gridTop) / (rowH + gap) - 1);
+    const int rowCount = static_cast<int>(rows.size());
+    const int playhead = trackerPlayheadRow();
+    if (playhead != trackerLastFollowedRow_) {
+      trackerLastFollowedRow_ = playhead;
+      if (playhead >= 0 && (playhead < trackerScrollRow_ ||
+                            playhead >= trackerScrollRow_ + visibleRows)) {
+        trackerScrollRow_ = playhead - visibleRows / 2;
+      }
+    }
+    trackerScrollRow_ = std::clamp(trackerScrollRow_, 0,
+                                   std::max(0, rowCount - visibleRows));
+
+    // -- THE STEPS ------------------------------------------------------
+    int y = gridTop;
+    for (int r = trackerScrollRow_; r < rowCount && r < trackerScrollRow_ + visibleRows; ++r) {
+      const int masterDeck = rows[r].first;
+      const int masterCue = rows[r].second;
+      const Cue* master = masterTrackerCue(masterDeck, masterCue);
+      if (!master) {
+        continue;
+      }
+      // THE STEP NAME IS THE GO BUTTON. In a tracker the row header is what
+      // you hit to play the row, and a separate button would be a second
+      // thing to aim at in a grid that is already dense.
+      const bool isHead = r == playhead;
+      SDL_Rect stepRect {area.x, y, stepW, rowH};
+      // KAWAII, BUT THE GRID STAYS STILL. A fired step springs the way a
+      // dashboard tile does, and the playhead's step breathes by a pixel --
+      // enough to find it at a glance. The cells never move: a grid you
+      // read across has to line up.
+      {
+        int sq = 0;
+        if (r == trackerSquishRow_ && animationNow_ >= trackerSquishAtMs_) {
+          const double age = static_cast<double>(animationNow_ - trackerSquishAtMs_) / 320.0;
+          if (age < 1.0) {
+            sq = static_cast<int>(std::lround(
+              std::sin(age * 3.14159265358979) * (1.0 - age) * 5.0));
+          }
+        }
+        const int bob = isHead
+          ? static_cast<int>(std::lround(std::sin(animationNow_ / 1000.0 * 3.2) * 1.2)) : 0;
+        stepRect = SDL_Rect {stepRect.x + sq, stepRect.y + sq / 2 + bob,
+                             stepRect.w - sq * 2, stepRect.h - sq};
+      }
+      // The playhead in the ACTIVE style the settings tabs use -- dark fill,
+      // light ink. light-on-tile was the same green as every other step in
+      // half the themes, and the > was left doing all the work.
+      drawUIPanel(stepRect, isHead ? pal.dark : pal.tile, pal.deep,
+                  isHead ? pal.light : pal.mid);
+      char label[96];
+      std::snprintf(label, sizeof(label), "%s%2d  %s", isHead ? ">" : " ", r + 1,
+                    master->name.empty() ? "step" : master->name.c_str());
+      const SDL_Color stepInk = !master->armed ? pal.fgSoft
+                              : isHead ? pal.light : pal.fg;
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {stepRect.x + uiScaled(5), stepRect.y,
+                             stepRect.w - uiScaled(10), stepRect.h},
+                   ellipsizeToPixelWidth(fontSmall_, label, stepRect.w - uiScaled(10)),
+                   stepInk);
+      dashButtons_.push_back({stepRect, QuickAction::TrackerFire,
+                              "Fire this step on every playlist at once "
+                              "(right-click: rename, move, delete)", r});
+
+      // LEN, with the countdown drawn through it while PLAY is running.
+      SDL_Rect lenRect {area.x + stepW + gap, y, lenW, rowH};
+      drawUIPanel(lenRect, pal.tile, pal.deep, pal.mid);
+      const double remaining = isHead ? trackerRemainingSeconds() : -1.0;
+      const double hold = remaining >= 0.0 ? trackerCountdownSpan_ : -1.0;
+      if (hold > 0.0) {
+        const double done = std::clamp(1.0 - remaining / hold, 0.0, 1.0);
+        SDL_Rect fill {lenRect.x + 2, lenRect.y + lenRect.h - uiScaled(4),
+                       static_cast<int>((lenRect.w - 4) * done), uiScaled(3)};
+        Primitives::fillRect(controlRenderer_, fill, pal.light);
+      }
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, lenRect,
+                           trackerStepLengthLabel(r), pal.fg);
+      dashButtons_.push_back({lenRect, QuickAction::TrackerLength,
+                              "How long this step holds when the sequence plays", r});
+
+      for (int col = 0; col < shownCount; ++col) {
+        const int d = shown[col];
+        SDL_Rect cell {colsX + col * (colW + gap), y, colW, rowH};
+        if (cell.x + cell.w > area.x + area.w) {
+          break;
+        }
+        if (d == masterDeck) {
+          // The step's own playlist: it cannot fire here, and says so rather
+          // than offering a cell that would never do anything.
+          drawUIPanel(cell, pal.tile, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, cell, "(step lives here)",
+                               pal.fgSoft);
+          continue;
+        }
+        bool bypassed = false;
+        const std::string text =
+          masterTrackerCellLabel(masterDeck, masterCue, d, &bypassed);
+        const bool empty = text.empty();
+        const bool missing = text == "(missing)";
+        drawUIPanel(cell, empty ? pal.deep : (bypassed ? pal.tile : pal.light),
+                    pal.deep, isHead ? pal.light : pal.mid);
+        drawCenteredTextSafe(
+          controlRenderer_, fontSmall_, cell,
+          empty ? std::string("--")
+                : ellipsizeToPixelWidth(fontSmall_, text, cell.w - uiScaled(6)),
+          empty ? pal.fgSoft
+                : missing ? SDL_Color {200, 90, 70, 255}
+                          : (bypassed ? pal.fgSoft : pal.deep));
+        // One id per cell, so a click knows both the step and the playlist.
+        // The row AND the column in one number, because a button carries one
+        // param and a cell is two coordinates.
+        dashButtons_.push_back({cell, QuickAction::TrackerCell,
+                                "Pick what this step fires on this playlist",
+                                r * kMaxDecks + d});
+      }
+      y += rowH + gap;
+    }
+
+    SDL_Rect add {area.x, y, stepW, rowH};
+    drawUIPanel(add, pal.tile, pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, fontSmall_, add, "+  step", pal.fg);
+    dashButtons_.push_back({add, QuickAction::TrackerAddStep,
+                            "Another step at the end"});
+    // More steps than the page shows: say so, and how to reach them.
+    if (rowCount > visibleRows) {
+      char more[64];
+      std::snprintf(more, sizeof(more), "steps %d-%d of %d  (wheel to scroll)",
+                    trackerScrollRow_ + 1,
+                    std::min(rowCount, trackerScrollRow_ + visibleRows), rowCount);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {add.x + add.w + uiScaled(10), y,
+                             std::max(0, area.x + area.w - add.x - add.w - uiScaled(10)), rowH},
+                   more, pal.fgSoft);
+    }
+  }
+
+  void renderDashboardOverlay() {
+    dashButtons_.clear();
+    dashModalRect_ = SDL_Rect {};
+    dashCloseRect_ = SDL_Rect {};
+    if (!dashboardOverlayOpen_) return;
+    int ww = 0, wh = 0;
+    SDL_GetWindowSize(controlWindow_, &ww, &wh);
+    const double t = static_cast<double>(animationNow_) / 1000.0;
+
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 190);
+    SDL_Rect full {0, 0, ww, wh};
+    SDL_RenderFillRect(controlRenderer_, &full);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    // The pattern tracker wants the room its design was drawn at.
+    const bool patternTracker = project_.dashboardMode == 1 && !project_.trackerClassicView;
+    const int mw = std::min(uiScaled(patternTracker ? 1240 : 900), ww - 40);
+    const int mh = std::min(uiScaled(patternTracker ? 760 : 640), wh - 40);
+    SDL_Rect modal {(ww - mw) / 2, (wh - mh) / 2, mw, mh};
+    dashModalRect_ = modal;
+    Primitives::drawFramedPanel(controlRenderer_, modal, pal.shellInner, pal.deep, pal.shellOuter);
+    // Scaled. The hint was a raw 180px box, so at a 1.5x desktop it read
+    // "Ctrl+D or Esc..." -- an instruction ellipsized into an instruction you
+    // cannot follow.
+    const int hintW = uiScaled(190);
+    drawTextSafe(controlRenderer_, fontBase_,
+                 SDL_Rect {modal.x + uiScaled(16), modal.y + uiScaled(10),
+                           mw - hintW - uiScaled(28), uiScaled(24)},
+                 "DASHBOARD", pal.fg);
+    // A button, not only a hint: a touch panel has no Esc, and in a lesson
+    // Esc was taken by the tour (James, 2026-11-07: "dash needs a way to
+    // close without esc or cmd d").
+    {
+      SDL_Rect close {modal.x + mw - hintW - uiScaled(8), modal.y + uiScaled(8),
+                      hintW, uiScaled(26)};
+      drawUIPanel(close, paletteToggleFill(false), pal.deep, pal.mid);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, close, "CLOSE (Esc)",
+                           paletteToggleInk(false));
+      dashCloseRect_ = close;
+    }
+
+    // TILES | TRACKER. Two views of the same page rather than two pages:
+    // the dashboard is where a show is laid out, and a master sequence is
+    // exactly that. Two tabs, the open one lit: a single chip naming the
+    // view you were already in read as a label, and the tracker behind it
+    // went unfound (James, 2026-10-16).
+    {
+      const int tabW = uiScaled(96);
+      const int tabH = uiScaled(26);
+      const int tabsX = modal.x + mw - hintW - 2 * tabW - uiScaled(20);
+      const bool trackerOpen = project_.dashboardMode == 1;
+      const char* names[2] = {"TILES", "TRACKER"};
+      for (int i = 0; i < 2; ++i) {
+        const bool open = (i == 1) == trackerOpen;
+        SDL_Rect tab {tabsX + i * tabW, modal.y + uiScaled(8), tabW, tabH};
+        drawUIPanel(tab, paletteToggleFill(open), pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_, tab, names[i],
+                             paletteToggleInk(open));
+        // Only the closed tab is a button; the open one is where you are.
+        if (!open) {
+          dashButtons_.push_back({tab, QuickAction::TrackerToggle,
+                                  i == 1 ? "The master tracker: steps that fire cues on every deck"
+                                         : "The dashboard's buttons"});
+        }
+      }
+    }
+
+    // ── The grid ────────────────────────────────────────────────────────────
+    const int pad = uiScaled(14);
+    // Clear of the title AND its baseline. At 40 the first row of tiles rode
+    // up over the word DASHBOARD -- the tiles float by a couple of pixels, so
+    // a gap that only just fits is a gap that intermittently does not.
+    const int headerH = uiScaled(56);
+    SDL_Rect area {modal.x + pad, modal.y + headerH,
+                   mw - pad * 2, mh - headerH - pad};
+    const int tileW = uiScaled(150);
+    const int tileH = uiScaled(96);
+    const int gap = uiScaled(10);
+    const int cols = std::max(1, (area.w + gap) / (tileW + gap));
+
+    if (project_.dashboardMode == 1) {
+      renderMasterTracker(area);
+      return;
+    }
+
+    const int slots = static_cast<int>(project_.dashboard.size());
+    // One trailing tile to add another, so the page is never a dead end.
+    const int cells = slots + 1;
+
+    for (int i = 0; i < cells; ++i) {
+      const int col = i % cols;
+      const int row = i / cols;
+      int tx = area.x + col * (tileW + gap);
+      int ty = area.y + row * (tileH + gap);
+      if (ty + tileH > area.y + area.h) {
+        break;   // the page is full; the rest wait for a bigger window
+      }
+
+      // Each tile drifts on its own phase. Slow, and only a couple of pixels:
+      // enough to be alive, not enough to make a target move under a finger.
+      const double phase = i * 0.7;
+      const int fx = static_cast<int>(std::lround(std::sin(t * 0.8 + phase) * 2.0));
+      const int fy = static_cast<int>(std::lround(std::sin(t * 0.6 + phase * 1.3) * 2.5));
+
+      // A fired tile squishes and springs back over a third of a second.
+      double squish = 0.0;
+      if (dashPressedSlot_ == i && animationNow_ >= dashPressedAtMs_) {
+        const double age = static_cast<double>(animationNow_ - dashPressedAtMs_) / 320.0;
+        if (age < 1.0) {
+          squish = std::sin(age * 3.14159265358979) * (1.0 - age) * 6.0;
+        }
+      }
+      const int sq = static_cast<int>(std::lround(squish));
+      SDL_Rect tile {tx + fx + sq, ty + fy + sq / 2,
+                     tileW - sq * 2, tileH - sq};
+
+      const bool isAdd = (i >= slots);
+      if (isAdd) {
+        Primitives::drawFramedPanel(controlRenderer_, tile, pal.shellInner, pal.deep, pal.mid);
+        drawCenteredTextSafe(controlRenderer_, fontLarge_ ? fontLarge_ : fontBase_,
+                             SDL_Rect{tile.x, tile.y + tile.h / 2 - uiScaled(16),
+                                      tile.w, uiScaled(28)},
+                             "+", pal.fgSoft);
+        drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                             SDL_Rect{tile.x, tile.y + tile.h - uiScaled(22),
+                                      tile.w, uiScaled(16)},
+                             "add a button", pal.fgSoft);
+        dashButtons_.push_back({tile, QuickAction::DashSlotAdd,
+                                 "Add a dashboard button", i});
+        continue;
+      }
+
+      const DashboardSlot& slot = project_.dashboard[i];
+      const SDL_Color tint = dashboardSlotColor(slot.colorIndex);
+      Primitives::drawFramedPanel(controlRenderer_, tile, tint, pal.deep, pal.shellOuter);
+
+      // The glyph breathes very slightly on its own clock, which is what makes
+      // the tile read as a little creature rather than a rectangle.
+      const std::string glyph = slot.glyph.empty() ? std::string("*") : slot.glyph;
+      const int glyphDrop = static_cast<int>(std::lround(std::sin(t * 1.4 + phase) * 1.5));
+      drawCenteredTextSafe(controlRenderer_, fontLarge_ ? fontLarge_ : fontBase_,
+                           SDL_Rect{tile.x, tile.y + uiScaled(10) + glyphDrop,
+                                    tile.w, uiScaled(30)},
+                           glyph, pal.deep);
+
+      std::string label = slot.label.empty()
+        ? (slot.command.empty() ? std::string("(empty)") : slot.command)
+        : slot.label;
+      // A tile running a sequence says where it is, and fills as it goes.
+      if (const SequenceRun* run = sequenceRunFor(static_cast<int>(i))) {
+        const std::size_t total = std::max<std::size_t>(1, run->steps.size());
+        const std::size_t at = std::min(run->next, run->steps.size());
+        label = run->waitingForGo ? std::string("PRESS FOR GO")
+                                  : "STEP " + std::to_string(at) + "/" + std::to_string(total);
+        SDL_Rect bar {tile.x + 2, tile.y + tile.h - uiScaled(6),
+                      static_cast<int>((tile.w - 4) * static_cast<double>(at) / static_cast<double>(total)),
+                      uiScaled(4)};
+        Primitives::fillRect(controlRenderer_, bar, pal.deep);
+      }
+      drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                           SDL_Rect{tile.x + 4, tile.y + tile.h - uiScaled(44),
+                                    tile.w - 8, uiScaled(18)},
+                           label, pal.deep);
+
+      // Firing is the whole tile; the two small controls sit in the bottom
+      // corners so a fat finger aiming at the middle can never hit them.
+      //
+      // Big enough to find. They were 18x13 with "..." on the pencil, and
+      // "there is no way to edit or remove a button" was the report -- with
+      // both controls on screen. EDIT says what it does; right-click on the
+      // tile reaches the same things for anyone who never spots them.
+      SDL_Rect editBtn {tile.x + tile.w - uiScaled(44), tile.y + tile.h - uiScaled(24),
+                        uiScaled(40), uiScaled(20)};
+      SDL_Rect colBtn {tile.x + uiScaled(4), tile.y + tile.h - uiScaled(24),
+                       uiScaled(24), uiScaled(20)};
+      std::string tileTip = slot.command.empty()
+        ? std::string("Empty - EDIT sets what it does")
+        : ("Run: " + slot.command);
+      if (slot.command.rfind("PRESET RECALL ", 0) == 0) {
+        if (const ShowPreset* preset = findPreset(trim(slot.command.substr(14)))) {
+          tileTip = "Recall " + preset->name + ": " + presetScopeSummary(preset->scope) +
+                    "  (right-click: capture again, or change what it recalls)";
+        } else {
+          tileTip = "This preset has been deleted";
+        }
+      }
+      dashButtons_.push_back({tile, QuickAction::DashSlotFire, tileTip, i});
+      Primitives::drawFramedPanel(controlRenderer_, colBtn,
+                                  dashboardSlotColor(slot.colorIndex + 1), pal.deep, pal.deep);
+      dashButtons_.push_back({colBtn, QuickAction::DashSlotColor, "Change this tile's colour", i});
+      // On its own plate. Drawn straight onto the tile it was ink-on-ink at
+      // several tints and simply vanished.
+      Primitives::drawFramedPanel(controlRenderer_, editBtn, pal.shellInner, pal.deep, pal.deep);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, editBtn, "EDIT", pal.fg);
+      dashButtons_.push_back({editBtn, QuickAction::DashSlotEdit,
+                               "Change what this button does", i});
+
+      // DELETE, top-right, diagonally opposite nothing else and as far from
+      // the middle of the tile as the tile allows. Armed it turns red and
+      // says so, because the press that follows is the one that counts.
+      const bool armed = dashDeleteArmedSlot_ == i &&
+                         animationNow_ - dashDeleteArmedAtMs_ <= 4000;
+      SDL_Rect delBtn {tile.x + tile.w - uiScaled(24), tile.y + uiScaled(4),
+                       uiScaled(20), uiScaled(20)};
+      Primitives::drawFramedPanel(controlRenderer_, delBtn,
+                                  armed ? SDL_Color {170, 40, 40, 255} : pal.shellInner,
+                                  pal.deep, pal.deep);
+      drawCenteredTextSafe(controlRenderer_, fontSmall_, delBtn, "x",
+                           armed ? SDL_Color {255, 220, 220, 255} : pal.fg);
+      dashButtons_.push_back({delBtn, QuickAction::DashSlotDelete,
+                               armed ? "Press again to delete this button"
+                                     : "Delete this button (asks twice)", i});
+    }
+
+    if (slots == 0) {
+      drawCenteredTextSafe(controlRenderer_, fontSmall_,
+                           SDL_Rect{area.x, area.y + area.h - uiScaled(26),
+                                    area.w, uiScaled(18)},
+                           "a button can run any command the network protocol understands",
+                           pal.fgSoft);
+    }
+
+    // ── SOMETHING LIVES HERE ────────────────────────────────────────────
+    //
+    // The dashboard is the one page in Deckboy an operator opens on purpose
+    // and then just looks at, and it was a grid of rectangles on a flat
+    // ground. The habitat is the strip BELOW the last row of tiles -- the
+    // same rule the playlist creatures follow, and for the same reason: the
+    // one thing that must never happen is an animal wandering over a button
+    // that fires a command.
+    //
+    // NOTHING MOVES WHILE THE SHOW IS LIVE, also as on the playlist. A page
+    // full of motion behind an operator's decision is not charm, it is noise
+    // at the worst possible moment.
+    {
+      const int usedRows = (cells + cols - 1) / cols;
+      const int habitatTop = area.y + usedRows * (tileH + gap);
+      SDL_Rect habitat {area.x, habitatTop, area.w,
+                        std::max(0, area.y + area.h - habitatTop - uiScaled(4))};
+      if (habitat.h >= uiScaled(26) && !showIsLive()) {
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+        // Three of them, each on its own path across the strip, each pausing
+        // at a different point in its walk. Drawn in the panel's own inks so
+        // they read on every theme -- the moth that vanished on bright
+        // colourways was drawn in a FILL role, not an ink one.
+        for (int c = 0; c < 3; ++c) {
+          const double speed = 0.055 + c * 0.021;
+          const double walk = std::fmod(t * speed + c * 0.37, 1.0);
+          // A little dwell in the middle of the walk, so they amble rather
+          // than track across at a constant rate like a progress bar.
+          const double eased = walk + std::sin(walk * 6.2831853) * 0.04;
+          const int cx = habitat.x + static_cast<int>(eased * habitat.w);
+          const int bob = static_cast<int>(std::lround(std::sin(t * 2.1 + c * 1.9) * 2.0));
+          const int cy = habitat.y + habitat.h / 2 + bob + (c - 1) * uiScaled(5);
+          const int size = uiScaled(c == 1 ? 5 : 4);
+          SDL_Color ink = (c == 1) ? pal.fg : pal.fgSoft;
+          ink.a = 170;
+          Primitives::fillRect(controlRenderer_, SDL_Rect {cx, cy, size, size}, ink);
+          // Two legs, alternating, which is the whole of what makes a square
+          // read as walking rather than sliding.
+          const int step = (static_cast<int>(t * 6.0 + c) % 2) ? 1 : -1;
+          Primitives::fillRect(controlRenderer_,
+                               SDL_Rect {cx - 1, cy + size, 1, uiScaled(2)}, ink);
+          Primitives::fillRect(controlRenderer_,
+                               SDL_Rect {cx + size, cy + size + step, 1, uiScaled(2)}, ink);
+          // An antenna, on the middle one only: one of them being different
+          // is what stops three identical squares reading as a loading bar.
+          if (c == 1) {
+            Primitives::fillRect(controlRenderer_,
+                                 SDL_Rect {cx + size / 2, cy - uiScaled(3), 1, uiScaled(3)}, ink);
+          }
+        }
+        SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+      }
+    }
+  }
+
+  void renderShortcutsOverlay() {
+    if (!shortcutsOverlayOpen_) return;
+    int ww = 0, wh = 0;
+    SDL_GetWindowSize(controlWindow_, &ww, &wh);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, 0, 0, 0, 180);
+    SDL_Rect full {0, 0, ww, wh};
+    SDL_RenderFillRect(controlRenderer_, &full);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+    // SIZED FROM THE FONT, not from 720x600. Every measurement on this page
+    // was a 1x pixel while the type scaled with the desktop, so at 150% the
+    // rows nearly touched and half the descriptions were ellipsized into
+    // uselessness -- "Skip to next / pr...", "Blackout - insta...". A page of
+    // instructions that cannot finish its own sentences is worse than no page.
+    const int keysHintW = uiScaled(180);
+    int mw = std::min(uiScaled(720), ww - uiScaled(40));
+    int mh = std::min(uiScaled(620), wh - uiScaled(40));
+    SDL_Rect modal {(ww - mw) / 2, (wh - mh) / 2, mw, mh};
+    Primitives::drawFramedPanel(controlRenderer_, modal, pal.shellInner, pal.deep, pal.shellOuter);
+    drawTextSafe(controlRenderer_, fontBase_,
+                 SDL_Rect {modal.x + uiScaled(16), modal.y + uiScaled(10),
+                           mw - keysHintW - uiScaled(28), uiScaled(24)},
+                 "KEYBOARD SHORTCUTS", pal.fg);
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect {modal.x + mw - keysHintW - uiScaled(8), modal.y + uiScaled(14),
+                           keysHintW, uiScaled(18)},
+                 "Ctrl+/ to close", pal.inkSoft);
+
+    // These MUST match handleKeyDown in app_input.ipp. Audited v0.81.5, where
+    // seven entries were found to be fiction: Ctrl+O was listed twice (it sets
+    // the out point and returns early, so it never opened a project — that is
+    // bare O), H/N/B/P named actions their keys do not perform (hold is E, N is
+    // NDI send, B adds a browser cue, P adds a pattern cue), G advertised an
+    // overlay feature that is parked, and Backspace was described as "clear all
+    // overlays" while it silently DELETES THE SELECTED CUE when no overlay is
+    // active. If you add or move a key binding, update this table in the same
+    // commit.
+    struct ShortcutEntry { const char* key; const char* desc; };
+    static const ShortcutEntry shortcuts[] = {
+      {"Enter",           "Take selected cue live"},
+      {"Space",           "Play / Pause"},
+      {". / ,",           "Skip to next / previous cue"},
+      {"PgDn / PgUp",     "Take next / previous with the transition, even from an output"},
+      {"S",               "Stop active cue"},
+      // EVERY DECK AT ONCE. These three are the whole point of running more
+      // than one playlist, and none of them was listed -- so the operator who
+      // needed them most had no way to find out they exist.
+      {"Ctrl+Enter",      "Take on every deck at once"},
+      {"Ctrl+Space",      "Play / Pause every deck"},
+      {"Ctrl+Shift+Space", "Stop every deck"},
+      {"Ctrl+R",          "Rerack (rewind to start)"},
+      {"Up / Down",       "Navigate cue list"},
+      {"Ctrl+A",          "Select every cue in the focused playlist"},
+      {"Left / Right",    "Skip back/forward 10s"},
+      {"Home / End",      "Skip to start/end"},
+      {"I",               "Import media files"},
+      {"Ctrl+I",          "Set in point at playhead"},
+      {"Ctrl+O",          "Set out point at playhead"},
+      {"Delete / Bksp",   "Delete selected cue(s)"},
+      {"Ctrl+C",          "Copy selected cue settings"},
+      {"Ctrl+V",          "Paste cue settings to selection"},
+      {"Ctrl+Shift+C",    "Copy focused warp settings"},
+      {"Ctrl+Shift+V",    "Paste focused warp settings"},
+      {"Ctrl+Z",          "Undo"},
+      {"Ctrl+Shift+Z",    "Redo"},
+      {"Ctrl+G",          "GOTO cue number"},
+      {"Ctrl+F",          "Find cue by name/number"},
+      {"Ctrl+Shift+F",    "Find the next match"},
+      {"Ctrl+Shift+R",    "Renumber cues"},
+      {"Ctrl+S",          "Save project"},
+      {"Ctrl+Shift+S",    "Save project as..."},
+      {"Ctrl+Shift+E",    "Export bundled project"},
+      {"O",               "Open project"},
+      {"Ctrl+N",          "New project"},
+      {"L",               "Toggle loop"},
+      {"E",               "Toggle hold (pause at end)"},
+      {"X",               "Cycle end action"},
+      {"K",               "Cycle color tag"},
+      {"J",               "Jump to the live cue"},
+      {"B",               "Blackout - instant, playback continues"},
+      {"C",               "Clear instantly - stop all decks, disarm output"},
+      {"U",               "Clear overlays"},
+      {"N",               "Toggle NDI send"},
+      {"F",               "Toggle fullscreen output"},
+      {"F11",             "Fullscreen the control window"},
+      {"Shift+B",         "Add browser cue"},
+      {"P",               "Add pattern cue"},
+      {"A / D",           "Cycle audio device / display"},
+      {"T",               "Run timecode"},
+      {"Shift+O",         "Toggle time overlay"},
+      {"[ / ]",           "Shorten / lengthen fade"},
+      {"Esc",             "Desk, then clear output, then quit"},
+      {"Ctrl+Q",          "Quit (asks first)"},
+      // THE DASHBOARD, and with it the master tracker -- the grid that fires
+      // one cue on every playlist per step, with its own lengths and
+      // transport. It was reachable only by already knowing this key: the
+      // dashboard tells you "Ctrl+D to close" once you are inside it, and
+      // nothing anywhere told you how to get in.
+      {"Ctrl+D",          "Dashboard: tiles and the master tracker"},
+      {"Ctrl+/",          "This shortcut overlay"},
+      {"Ctrl+,",          "Preferences"},
+      {"+/-",             "Volume up/down"},
+      {"Shift+drag",      "Snap warp corners to grid"},
+    };
+    // THE KEY COLUMN IS AS WIDE AS THE WIDEST KEY, measured in the font
+    // actually in use -- "Ctrl+Shift+Z" is the long one, and a fixed 130px was
+    // tuned to a font nobody is necessarily running.
+    int keyColW = uiScaled(80);
+    for (const auto& e : shortcuts) {
+      keyColW = std::max(keyColW, measuredTextWidth(fontSmall_, e.key));
+    }
+    keyColW += uiScaled(10);
+
+    const int keysRowH = std::max(uiScaled(18), textLineHeight(fontSmall_) + uiScaled(3));
+    const int keysTop = modal.y + uiScaled(44);
+    const int keysBottom = modal.y + mh - uiScaled(10);
+    const int colGap = uiScaled(16);
+    const int colW = (mw - uiScaled(32) - colGap) / 2;
+    int rowY = keysTop;
+    int col = 0;
+    for (const auto& e : shortcuts) {
+      if (rowY + keysRowH > keysBottom) {
+        if (col == 0) { col = 1; rowY = keysTop; } else break;
+      }
+      const int cx = modal.x + uiScaled(16) + col * (colW + colGap);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {cx, rowY, keyColW, keysRowH}, e.key, pal.fgSoft);
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {cx + keyColW, rowY,
+                             std::max(uiScaled(60), colW - keyColW), keysRowH},
+                   e.desc, pal.fg);
+      rowY += keysRowH;
+    }
+  }
+
+  void renderSplashOverlay() {
+    if (!showSplashOverlay_) {
+      return;
+    }
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(controlWindow_, &width, &height);
+
+    // ── Full-screen background: splash art ──
+    SDL_SetRenderDrawColor(controlRenderer_, pal.deep.r, pal.deep.g, pal.deep.b, 255);
+    SDL_Rect full {0, 0, width, height};
+    SDL_RenderFillRect(controlRenderer_, &full);
+    if (uiPackAvailable_) {
+      SDL_Rect artRect {0, 0, width, height};
+      // Tint strength depends on which pool the art came from. The grayscale
+      // masters take the theme accent FULLY -- they have no colour of their own
+      // to lose. The colour scenes take it only PARTLY: colour-modulation is a
+      // multiply, so tinting a saturated image to the accent muddies it, but
+      // leaving it untouched makes it ignore the colorway entirely. Mixing the
+      // accent toward white pulls the scene toward the theme while keeping the
+      // artwork's own palette readable.
+      const float k = splashTintStrength_;
+      const bool tint = k > 0.01f;
+      if (tint) {
+        ensureUiImageLoaded(uiSplashArt_);
+        if (uiSplashArt_.texture) {
+          auto mix = [k](Uint8 accent) {
+            return static_cast<Uint8>(255.0f + (accent - 255.0f) * k);
+          };
+          SDL_SetTextureColorMod(uiSplashArt_.texture,
+                                 mix(pal.light.r), mix(pal.light.g), mix(pal.light.b));
+        }
+      }
+      // SMOOTH, NOT NEAREST. Every desk texture is nearest-neighbour for the
+      // pixel icons; the splash is a 4K illustration drawn at whatever size the
+      // window is, and nearest at 1.25x-2x made uneven blocky pixels -- the
+      // panels looked low-res (James, 2026-11-07).
+      if (ensureUiImageLoaded(uiSplashArt_) && uiSplashArt_.texture) {
+        SDL_SetTextureScaleMode(uiSplashArt_.texture, SDL_SCALEMODE_LINEAR);
+      }
+      drawUiImageCover(uiSplashArt_, artRect, tint ? 235 : 220);
+      if (tint && uiSplashArt_.texture) {
+        SDL_SetTextureColorMod(uiSplashArt_.texture, 255, 255, 255);
+      }
+    }
+
+    // ── Framed card — the green golden box, centred over the art ──
+    SDL_Rect card {(width - 760) / 2, (height - 430) / 2, 760, 430};
+    // Semi-transparent backing so art peeks through edges
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(controlRenderer_, pal.shellInner.r, pal.shellInner.g, pal.shellInner.b, 220);
+    SDL_RenderFillRect(controlRenderer_, &card);
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+    Primitives::drawFramedPanel(controlRenderer_, card, pal.shellInner, pal.deep, pal.mid);
+
+    // ── Title ──
+    TTF_Font* titleFont = fontPixel_ ? fontPixel_ : fontLarge_;
+    drawTextSafe(controlRenderer_, titleFont,
+                 SDL_Rect {card.x + 36, card.y + 28, card.w - 72, 34},
+                 std::string(kAppTitle) + " " + std::string(kAppVersionTag), pal.fg);
+    drawTextSafe(controlRenderer_, fontBase_,
+                 SDL_Rect {card.x + 38, card.y + 76, card.w - 76, 24},
+                 "dot-matrix cue deck", pal.inkSoft);
+
+    // ── Boot console — nested framed panel ──
+    // Real init values interleaved with the important diagnostics, built
+    // once per boot (startupBootLog_) and revealed line by line. Uses the
+    // tile fill + fg text so it reads as a dark terminal console on OLED
+    // themes and a bright panel on light themes.
+    SDL_Rect bootRect {card.x + 36, card.y + 126, card.w - 72, 196};
+    Primitives::drawFramedPanel(controlRenderer_, bootRect, pal.tile, pal.deep, pal.mid);
+
+    if (startupBootLog_.empty()) {
+      auto [bootW, bootH] = outputRenderSizeForOutput(0);
+      size_t bootCues = 0;
+      for (const auto& bootDeck : project_.decks) bootCues += bootDeck.cues.size();
+      std::string themeName = currentThemeName_.empty() ? "gameboy" : currentThemeName_;
+
+      uint32_t seed = static_cast<uint32_t>(SDL_GetTicks() ^ 0x9E3779B9u);
+      auto nextRand = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return seed >> 16;
+      };
+
+      // The classic boot tasks joined by real init values — these always
+      // print because they carry live numbers the operator can trust.
+      startupBootLog_.push_back("cue gremlin bios " + std::string(kAppVersionTag) + "...");
+      startupBootLog_.push_back("checking dot-matrix memory... 8192 KB OK");
+      startupBootLog_.push_back("initializing deck runtime...");
+      startupBootLog_.push_back("loading theme '" + themeName + "'... ok");
+      startupBootLog_.push_back("mounting font cartridges... 6 faces");
+      startupBootLog_.push_back("loading outputs... "
+        + std::to_string(bootW) + "x" + std::to_string(bootH)
+        + " on " + std::to_string(std::max(0, deckboyGetNumVideoDisplays())) + " display(s)");
+      startupBootLog_.push_back("starting compositor...");
+      startupBootLog_.push_back("spooling ffmpeg decode pipeline... armed");
+      startupBootLog_.push_back("negotiating audio bus... "
+        + std::to_string(project_.audioBufferSamples) + " sample buffer");
+      startupBootLog_.push_back("shelving cartridges... "
+        + std::to_string(project_.decks.size()) + " deck(s), "
+        + std::to_string(bootCues) + " cues");
+      startupBootLog_.push_back("opening companion port " + std::to_string(companionPort_) + "...");
+      startupBootLog_.push_back(std::string("waking ndi mesh... ")
+        + (ndiRuntimeAvailable() ? "listening" : "not installed"));
+
+      // The sci-fi subsystems the hardware team insists are real: a wide
+      // pool, a fresh random hand each boot so the console stays quotable.
+      static const char* kBootWhimsyPool[] = {
+        "reticulating splines...",
+        "blood for the blood code... pending",
+        "listening at the walls... pizza detected",
+        "thirty lives requested... terrarium noncommittal",
+        "charging flux capacitor... 1.21 GW nominal",
+        "engaging heisenberg compensators... probably",
+        "dilithium matrix... crystal ok",
+        "arming safety guards...",
+        "pressurizing gremlin containment field...",
+        "dampening tachyon feedback... 0.003%",
+        "calibrating rubber chicken... ok",
+        "aligning chroma phase array... locked",
+        "defragmenting pixel silo... 3 shards",
+        "warming vacuum tubes... 340K",
+        "counting frame ghosts... none found",
+        "bribing the vsync daemon... accepted",
+        "untangling patch cables... 12 m reclaimed",
+        "polishing scanlines... streak-free",
+        "feeding the cue gremlins... fed",
+        "rewinding cassette buffers... ok",
+        "degaussing crt yoke... thunk",
+        "consulting the show bible... canon",
+        "sweeping dead pixels... 0 swept",
+        "tuning subcarrier... 4.43361875 MHz",
+        "greasing the t-bar... smooth",
+        "waking the intern... declined",
+        "sorting loose bnc caps... 7 found",
+        "petting the watchdog... good boy",
+        "spinning up hamster wheel... 88 mph",
+        "checking for y2k residue... clean",
+        "certifying blinkenlights... blinken",
+        "torquing pixel bolts... 12 Nm",
+        "asking the house electrician... granted",
+        "phase-locking disco ball... 33 rpm",
+        "shooing moths from the beam... 2 shooed",
+        "laminating run sheet... crisp",
+        "priming confetti cannons... standby",
+        "zeroing the applause meter...",
+        "warming green room coffee... 74C",
+        "counting backstage flashlights... all lit",
+        "ironing the pixel grid... flat",
+        "auditioning standby pixels... cast",
+        "sandbagging the render queue... secure",
+        "spinning down the tape reels... ok",
+        "buffering the laugh track... 1 loop",
+        "calibrating the fog machine... haze nominal",
+        "checking gaff tape reserves... 3 rolls",
+        "aligning the follow spot... on their mark",
+        "rechecking the redundant redundancy... twice",
+        "waxing the fader caps... slick",
+        "flushing the frame buffer... whoosh",
+        "counting spare fuses... 5A x4",
+        "negotiating with the smoke detector... truce",
+        "seeding the random number goblin...",
+        "syncing genlock to the moon... tidal",
+        "topping up phantom power... +48V",
+        "checking the gate for hairs... clean",
+        "tightening truss bolts... 40 Nm",
+        "coiling cables over-under... tidy",
+        "labelling the mystery cable... 'do not touch'",
+        "polling the stage manager... standing by",
+        "counting gobos... 24 in the wheel",
+        "leveling the turntable... 33 1/3",
+        "checking latency budget... 2 frames",
+        "waking the render farm... 1 node, brave",
+        "aligning projector convergence... rgb stacked",
+        "checking the fire curtain... ready",
+        "chalking the spike marks... taped",
+        "muting the green room monitor... shh",
+        "swapping the gaffer's AA batteries... fresh",
+        "priming haze timing... 8 s",
+      };
+      constexpr int kWhimsyCount = static_cast<int>(std::size(kBootWhimsyPool));
+      // Deal a random-sized hand of distinct lines via partial Fisher-Yates.
+      // The size itself varies per boot (9-13) so no two boots feel alike.
+      int whimsyIdx[kWhimsyCount];
+      for (int i = 0; i < kWhimsyCount; ++i) whimsyIdx[i] = i;
+      int kHand = 9 + static_cast<int>(nextRand() % 5);
+      kHand = std::min(kHand, kWhimsyCount);
+      for (int i = 0; i < kHand; ++i) {
+        int j = i + static_cast<int>(nextRand() % static_cast<uint32_t>(kWhimsyCount - i));
+        std::swap(whimsyIdx[i], whimsyIdx[j]);
+      }
+      // Sprinkle the hand through the back half of the console (after the
+      // early real-value lines, before the final status).
+      for (int i = 0; i < kHand; ++i) {
+        size_t minPos = 7;
+        size_t span = startupBootLog_.size() - minPos;
+        size_t pos = minPos + static_cast<size_t>(nextRand() % static_cast<uint32_t>(span + 1));
+        startupBootLog_.insert(startupBootLog_.begin() + pos, kBootWhimsyPool[whimsyIdx[i]]);
+      }
+      // ONCE IN A WHILE, THE CONSOLE ANSWERS DIFFERENTLY.
+      //
+      // Not a new joke line — a line the operator has read a hundred times,
+      // giving the wrong answer. That is the whole trick: a fresh gag reads as
+      // content, but "counting frame ghosts... 1 found" reads as the machine
+      // having seen something, and the only way to be sure you did not imagine
+      // it is to boot again, which will not reproduce it. Roughly one boot in
+      // forty, and only ever one line.
+      //
+      // Deliberately harmless: it swaps a string in a decorative log. Nothing
+      // downstream parses these lines, nothing on the output changes, and a
+      // show does not care. The Konami secret stays the real one.
+      {
+        struct WhimsyTwin { const char* ordinary; const char* uncanny; };
+        static const WhimsyTwin kTwins[] = {
+          {"counting frame ghosts... none found", "counting frame ghosts... 1 found"},
+          {"sweeping dead pixels... 0 swept",     "sweeping dead pixels... it moved"},
+          {"waking the intern... declined",       "waking the intern... they were already up"},
+          {"checking for y2k residue... clean",   "checking for y2k residue... 1997 detected"},
+          {"shooing moths from the beam... 2 shooed",
+           "shooing moths from the beam... they came back"},
+          {"petting the watchdog... good boy",    "petting the watchdog... it did not blink"},
+          {"consulting the show bible... canon",  "consulting the show bible... a page is missing"},
+          {"counting backstage flashlights... all lit",
+           "counting backstage flashlights... one is pointing at me"},
+        };
+        if (nextRand() % 40 == 0) {
+          // Choose from the twins THIS boot actually dealt, not from the whole
+          // table. Picking blind and hoping the line is on screen turns one in
+          // forty into nearer one in three hundred, which is not rare-and-
+          // delightful, it is nobody ever sees it.
+          std::vector<std::size_t> present;
+          for (std::size_t i = 0; i < startupBootLog_.size(); ++i) {
+            for (const WhimsyTwin& twin : kTwins) {
+              if (startupBootLog_[i] == twin.ordinary) {
+                present.push_back(i);
+                break;
+              }
+            }
+          }
+          if (!present.empty()) {
+            const std::size_t at = present[nextRand() % present.size()];
+            for (const WhimsyTwin& twin : kTwins) {
+              if (startupBootLog_[at] == twin.ordinary) {
+                startupBootLog_[at] = twin.uncanny;
+                break;    // one line, one boot
+              }
+            }
+          }
+        }
+      }
+
+      // Konami hint + A/V clock line ride near the end every boot, then the
+      // handoff to the operator.
+      // The one line that is news: whether a newer Deckboy is out (James,
+      // 2026-10-28). Its answer is filled in as it is drawn, because the
+      // check is still on the wire while the log is being typed.
+      startupUpdateLogLine_ = static_cast<int>(startupBootLog_.size());
+      startupBootLog_.push_back("asking GitHub for a newer deck...");
+      startupBootLog_.push_back("polling konami interrupt vector... hidden");
+      startupBootLog_.push_back("syncing wall clock to audio crystal...");
+      startupBootLog_.push_back("boot ok - awaiting operator");
+
+      // Randomized reveal schedule — real boots stutter: quick bursts,
+      // normal lines, and the occasional probe that stalls. Scaled so the
+      // whole sequence always lands within the splash window.
+      startupBootLogAtMs_.clear();
+      Uint64 at = 0;
+      for (size_t i = 0; i < startupBootLog_.size(); ++i) {
+        uint32_t roll = nextRand() % 100;
+        Uint64 delay;
+        if (roll < 25) delay = 30 + nextRand() % 60;        // burst
+        else if (roll < 85) delay = 110 + nextRand() % 200; // normal
+        else delay = 480 + nextRand() % 420;                // hardware stall
+        at += delay;
+        startupBootLogAtMs_.push_back(at);
+      }
+      if (!startupBootLogAtMs_.empty() && startupBootLogAtMs_.back() > 4300) {
+        double scale = 4300.0 / static_cast<double>(startupBootLogAtMs_.back());
+        for (auto& ts : startupBootLogAtMs_) {
+          ts = static_cast<Uint64>(ts * scale);
+        }
+      }
+    }
+    Uint64 now = SDL_GetTicks();
+    Uint64 elapsed = splashStartedAt_ > 0 ? (now - splashStartedAt_) : 0;
+    int totalLines = static_cast<int>(startupBootLog_.size());
+    int visibleLines = 1;
+    for (size_t i = 0; i < startupBootLogAtMs_.size(); ++i) {
+      if (startupBootLogAtMs_[i] <= elapsed) {
+        visibleLines = static_cast<int>(i) + 1;
+      }
+    }
+    visibleLines = std::clamp(visibleLines, 1, totalLines);
+    // Console-style scroll: the panel holds a window of lines; once the log
+    // outgrows it, older lines scroll off the top.
+    int lineStep = std::max(16, textLineHeight(fontSmall_) + 2);
+    int fitLines = std::max(1, (bootRect.h - 20) / lineStep);
+    int firstLine = std::max(0, visibleLines - fitLines);
+    for (int i = firstLine; i < visibleLines; ++i) {
+      std::string text = startupBootLog_[i];
+      SDL_Color ink = pal.fg;
+      if (i == startupUpdateLogLine_) {
+        std::string status;
+        std::string newer;
+        {
+          std::lock_guard<std::mutex> lock(updateMutex_);
+          status = updateStatus_;
+          newer = updateFound_.version;
+        }
+        if (!newer.empty()) {
+          text += " v" + newer + " is out!";
+          ink = SDL_Color {255, 220, 0, 255};
+        } else if (status.rfind("up to date", 0) == 0) {
+          text += " up to date";
+        } else if (status.empty() && !project_.updateCheckEnabled) {
+          text += " switched off";   // short: a longer line is drawn smaller than its neighbours
+        } else if (status.empty() || status == "checking...") {
+          text += ((now / 300) % 2) == 0 ? " ." : " ..";
+        } else {
+          text += " no answer";
+        }
+      }
+      drawTextSafe(controlRenderer_, fontSmall_,
+                   SDL_Rect {bootRect.x + 12, bootRect.y + 10 + (i - firstLine) * lineStep,
+                             bootRect.w - 24, lineStep},
+                   text, ink);
+    }
+    if (visibleLines < totalLines && ((now / 300) % 2) == 0) {
+      int cursorRow = std::min(visibleLines - firstLine, fitLines - 1);
+      drawText(controlRenderer_, fontSmall_, "_", pal.fg,
+               bootRect.x + 12, bootRect.y + 10 + cursorRow * lineStep);
+    }
+
+    // ── Hint text ──
+    drawText(controlRenderer_, fontBase_, "press ENTER to start",
+             pal.fg, card.x + 36, card.y + card.h - 74);
+    drawText(controlRenderer_, fontSmall_, "Esc or click to skip",
+             pal.inkSoft, card.x + 36, card.y + card.h - 44);
+
+    // ── Sparkles around the card ──
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_BLEND);
+    {
+      SDL_Color starC = pal.mid;
+      for (int s = 0; s < 6; ++s) {
+        double phase = static_cast<double>(elapsed) * 0.002 + s * 1.047;
+        int sx = card.x + card.w / 2 - 100 + s * 40 + static_cast<int>(std::sin(phase) * 14.0);
+        int sy = card.y - 12 + static_cast<int>(std::cos(phase * 0.7) * 6.0);
+        starC.a = static_cast<Uint8>(100 + 155 * std::abs(std::sin(phase * 0.5)));
+        drawStar(controlRenderer_, sx, sy, 2 + (s % 3), starC);
+      }
+      for (int s = 0; s < 4; ++s) {
+        double phase = static_cast<double>(elapsed) * 0.0018 + s * 1.57;
+        int sx = card.x + card.w / 2 - 60 + s * 40 + static_cast<int>(std::sin(phase) * 10.0);
+        int sy = card.y + card.h + 8 + static_cast<int>(std::cos(phase * 0.8) * 4.0);
+        starC.a = static_cast<Uint8>(80 + 175 * std::abs(std::sin(phase * 0.6)));
+        drawStar(controlRenderer_, sx, sy, 2 + (s % 2), starC);
+      }
+      // Corner accents
+      for (int c = 0; c < 4; ++c) {
+        int cornX = (c % 2 == 0) ? card.x - 8 : card.x + card.w + 8;
+        int cornY = (c < 2) ? card.y - 8 : card.y + card.h + 8;
+        double cPhase = static_cast<double>(elapsed) * 0.003 + c * 1.57;
+        starC.a = static_cast<Uint8>(60 + 195 * std::abs(std::sin(cPhase)));
+        drawStar(controlRenderer_, cornX, cornY, 3, starC);
+      }
+    }
+    SDL_SetRenderDrawBlendMode(controlRenderer_, SDL_BLENDMODE_NONE);
+
+  }
+
+  // ---------------------------------------------------------------------------
+  // Deck panel column helpers
+  // ---------------------------------------------------------------------------

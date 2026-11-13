@@ -1,0 +1,1902 @@
+// ============================================================================
+// app_accessors.ipp — State accessor methods for the App class.
+//
+// Provides getter/helper functions for accessing deck, cue, output, and
+// project state. These are convenience wrappers that handle bounds checking,
+// focused-deck resolution, and safe fallbacks for empty state.
+//
+// Key accessors:
+//   focusedDeck() / focusedDeckMutable() — the currently selected deck
+//   activeCue() / activeCuePtr()         — the cue loaded in the focused deck
+//   focusedMediaEngine()                  — the MediaEngine for the focused deck
+//   focusedRuntime()                      — the DeckRuntime for the focused deck
+//   focusedOutput()                       — the selected output target
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  Deck& focusedDeckMutable() {
+    normalizeProject(project_);
+    return project_.decks[project_.focusedDeckIndex];
+  }
+
+  // The live browser page on the focused deck, or nullptr. Everything that
+  // drives a page goes through here so there is one definition of "the page
+  // the operator means".
+  // Is the cue currently live on this deck a browser page? Both cue kinds that
+  // use the browser backend count -- a lower third is a page too.
+  bool activeCueIsBrowser(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return false;
+    }
+    const CueKind kind = deck.cues[deck.activeIndex].kind;
+    return kind == CueKind::Browser || kind == CueKind::LowerThird;
+  }
+
+  // A browser cue is LIVE on this deck and its renderer is up. Both halves
+  // matter: the cue can be selected without being taken, and the renderer can
+  // be gone while the cue is still the active one.
+  bool deckHasLiveBrowserCue(int deckIndex) {
+    if (!activeCueIsBrowser(deckIndex)) {
+      return false;
+    }
+    const DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    return runtime && runtime->browserRenderer && runtime->browserRenderer->isRunning();
+  }
+
+  bool liveBrowserIsInteractive() {
+    const auto* page = const_cast<App*>(this)->liveBrowserRenderer();
+    return page && page->isInteractive();
+  }
+
+  deckboy::platform::browser::BrowserRenderer* liveBrowserRenderer() {
+    DeckRuntime* runtime = runtimeForDeck(project_.focusedDeckIndex);
+    if (!runtime || !runtime->browserRenderer) {
+      return nullptr;
+    }
+    return runtime->browserRenderer.get();
+  }
+
+  const Deck& focusedDeck() const {
+    if (project_.decks.empty()) {
+      static Deck fallback;
+      return fallback;
+    }
+    int index = std::clamp(project_.focusedDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    return project_.decks[index];
+  }
+
+  std::string focusedDeckLabel() const {
+    const Deck& deck = focusedDeck();
+    return deck.name.empty() ? deckDefaultName(project_.focusedDeckIndex) : deck.name;
+  }
+
+
+  DeckRuntime* runtimeForDeck(int deckIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckRuntimes_.size())) {
+      return nullptr;
+    }
+    return &deckRuntimes_[deckIndex];
+  }
+
+  const DeckRuntime* runtimeForDeck(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckRuntimes_.size())) {
+      return nullptr;
+    }
+    return &deckRuntimes_[deckIndex];
+  }
+
+  DeckRuntime* focusedRuntime() {
+    return runtimeForDeck(project_.focusedDeckIndex);
+  }
+
+  const DeckRuntime* focusedRuntime() const {
+    return runtimeForDeck(project_.focusedDeckIndex);
+  }
+
+  MediaEngine* focusedMediaEngine() {
+    auto* runtime = focusedRuntime();
+    return runtime ? runtime->mediaEngine.get() : nullptr;
+  }
+
+  const MediaEngine* focusedMediaEngine() const {
+    auto* runtime = focusedRuntime();
+    return runtime ? runtime->mediaEngine.get() : nullptr;
+  }
+
+  // A callable that draws a picture as a character grid, using THIS cue's
+  // text-mode settings and THIS deck's engine (which owns any sprite sheet).
+  //
+  // Returned empty when the cue carries no text-mode effect, so the common
+  // case builds no std::function and the stack sees a null callback and skips
+  // the work entirely.
+  //
+  // The four effect parameters are folded into a copy of the cue's settings
+  // rather than replacing them: everything the character grid can do stays
+  // reachable in the inspector, and the four here are the ones worth having
+  // on a fader.
+  std::function<void(std::uint8_t*, int, int)> textModeRendererFor(
+      int deckIndex, const Cue& cue) {
+    bool wanted = false;
+    deckboy::effects::CueEffect chosen;
+    for (const auto& fx : cue.effects) {
+      if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+        wanted = true;
+        chosen = fx;
+        break;
+      }
+    }
+    if (!wanted) {
+      return {};
+    }
+    MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (!engine) {
+      return {};
+    }
+    VideoSynthSettings vs = cue.videoSynth;
+    vs.ascii = true;
+    // paramA..D ride ON TOP of the cue's own settings. The neutral values a
+    // freshly added effect carries (A=0.5, B=0, C=0, D=0) have to land
+    // somewhere sensible, because that is what the operator sees first: 0.5
+    // gives a middling grid, and zero corruption, glyph set and ink are all
+    // the defaults anyone would expect.
+    // ONE mapping, shared with the inspector -- see applyTextModeParams. When
+    // these were written out twice the two drifted, and every control in the
+    // TEXT MODE section was dead against a picture that ignored it.
+    applyTextModeParams(chosen, vs);
+    const std::uint64_t serial = motionDriverFrameCounter_;
+    const double seconds = static_cast<double>(animationNow_) / 1000.0;
+    return [engine, vs, serial, seconds](std::uint8_t* pixels, int w, int h) {
+      // In place: the grid is drawn from the picture into the same buffer,
+      // which the renderer supports because it reads a cell's worth of source
+      // before it writes that cell.
+      engine->renderTextMode(pixels, w, h, pixels, w, h, vs, serial, seconds);
+    };
+  }
+
+  MediaEngine* mediaEngineForDeck(int deckIndex) {
+    auto* runtime = runtimeForDeck(deckIndex);
+    return runtime ? runtime->mediaEngine.get() : nullptr;
+  }
+
+  const MediaEngine* mediaEngineForDeck(int deckIndex) const {
+    auto* runtime = runtimeForDeck(deckIndex);
+    return runtime ? runtime->mediaEngine.get() : nullptr;
+  }
+
+  OutputRuntime* runtimeForOutput(int outputIndex) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(outputRuntimes_.size())) {
+      return nullptr;
+    }
+    return &outputRuntimes_[outputIndex];
+  }
+
+  const OutputRuntime* runtimeForOutput(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(outputRuntimes_.size())) {
+      return nullptr;
+    }
+    return &outputRuntimes_[outputIndex];
+  }
+
+  // Whether output n's window is fullscreen right now, as the window says.
+  bool outputWindowIsFullscreen(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    return runtime && runtime->outputWindow &&
+           (SDL_GetWindowFlags(runtime->outputWindow) & SDL_WINDOW_FULLSCREEN) != 0;
+  }
+
+  void setOutputRecoveryPausedByEscape(int outputIndex, bool paused) {
+    if (OutputRuntime* runtime = runtimeForOutput(outputIndex); runtime) {
+      runtime->recoveryPausedByEscape = paused;
+      if (outputIndex >= 0 && outputIndex < static_cast<int>(project_.outputs.size()) &&
+          project_.outputs[outputIndex].enabled) {
+        if (paused) {
+          setOutputHealthState(outputIndex, OutputHealthState::Armed, "escaped to windowed");
+        } else if (runtime->healthState != OutputHealthState::Error &&
+                   runtime->healthState != OutputHealthState::Recovering) {
+          setOutputHealthState(outputIndex, OutputHealthState::Armed);
+        }
+      }
+    }
+  }
+
+  const OutputTarget& focusedOutput() const {
+    static OutputTarget fallback;
+    if (project_.outputs.empty()) {
+      return fallback;
+    }
+    int index = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    return project_.outputs[index];
+  }
+
+  OutputTarget& focusedOutputMutable() {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      project_.outputs.push_back(OutputTarget {});
+      project_.focusedOutputIndex = 0;
+    }
+    int index = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    return project_.outputs[index];
+  }
+
+  std::string outputLabel(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return outputDefaultName(0);
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    return output.name.empty() ? outputDefaultName(outputIndex) : output.name;
+  }
+
+  static const char* outputHealthLabelToken(OutputHealthState state) {
+    switch (state) {
+      case OutputHealthState::Off: return "OFF";
+      case OutputHealthState::Armed: return "ARMED";
+      case OutputHealthState::Live: return "LIVE";
+      case OutputHealthState::Recovering: return "RECOVERING";
+      case OutputHealthState::Error: return "ERROR";
+    }
+    return "OFF";
+  }
+
+  void setOutputHealthState(int outputIndex, OutputHealthState state, const std::string& reason = {}) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return;
+    }
+    std::string normalizedReason = trim(reason);
+    // A stream that failed to start says WHY while it waits to retry; the
+    // retry message used to overwrite the reason before anyone saw it.
+    if (state == OutputHealthState::Error && !normalizedReason.empty()) {
+      runtime->streamFailureReason = normalizedReason;
+    }
+    bool changed = runtime->healthState != state || runtime->healthReason != normalizedReason;
+    runtime->healthState = state;
+    runtime->healthReason = normalizedReason;
+    if (changed) {
+      runtime->healthUpdatedAtMs = SDL_GetTicks();
+    }
+  }
+
+  OutputHealthState outputHealthStateForDisplay(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return OutputHealthState::Off;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.enabled) {
+      return OutputHealthState::Off;
+    }
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return OutputHealthState::Error;
+    }
+    if (runtime->healthState == OutputHealthState::Recovering ||
+        runtime->healthState == OutputHealthState::Error) {
+      return runtime->healthState;
+    }
+
+    bool streamLive = false;
+#ifdef _WIN32
+    streamLive = output.streamEnabled && runtime->streamProcess.running();
+#else
+    streamLive = output.streamEnabled && runtime->streamPid > 0;
+#endif
+    bool ndiLive = false;
+#if defined(DECKBOY_HAS_NDI_SDK)
+    ndiLive = (output.ndiEnabled || output.ndiKeyEnabled) && runtime->ndiSender;
+#endif
+
+    std::string outputType = normalizeOutputType(output.outputType);
+    // A presenter view is a window and is healthy on the same terms as one.
+    if (outputTypeIsWindowed(outputType)) {
+      if (!runtime->outputWindow) {
+        return OutputHealthState::Error;
+      }
+      SDL_WindowFlags flags = SDL_GetWindowFlags(runtime->outputWindow);
+      bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+      bool hidden = (flags & SDL_WINDOW_HIDDEN) != 0;
+      bool minimized = (flags & SDL_WINDOW_MINIMIZED) != 0;
+      if (fullscreen && !hidden && !minimized && !runtime->recoveryPausedByEscape) {
+        return OutputHealthState::Live;
+      }
+      if (streamLive || ndiLive) {
+        return OutputHealthState::Live;
+      }
+      return OutputHealthState::Armed;
+    }
+    if (streamLive || ndiLive) {
+      return OutputHealthState::Live;
+    }
+    return OutputHealthState::Armed;
+  }
+
+  std::string outputHealthLabel(int outputIndex) const {
+    return outputHealthLabelToken(outputHealthStateForDisplay(outputIndex));
+  }
+
+  std::string outputHealthReason(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return "";
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return output.enabled ? "runtime unavailable" : "";
+    }
+    OutputHealthState state = outputHealthStateForDisplay(outputIndex);
+    if (state == OutputHealthState::Error || state == OutputHealthState::Recovering) {
+      if (!runtime->healthReason.empty()) {
+        return runtime->healthReason;
+      }
+      return state == OutputHealthState::Recovering ? "recovering" : "output fault";
+    }
+    bool streamLive = false;
+#ifdef _WIN32
+    streamLive = output.streamEnabled && runtime->streamProcess.running();
+#else
+    streamLive = output.streamEnabled && runtime->streamPid > 0;
+#endif
+    bool ndiLive = false;
+#if defined(DECKBOY_HAS_NDI_SDK)
+    ndiLive = (output.ndiEnabled || output.ndiKeyEnabled) && runtime->ndiSender;
+#endif
+    if (runtime->recoveryPausedByEscape &&
+        normalizeOutputType(output.outputType) == "window" &&
+        !streamLive && !ndiLive) {
+      return "escaped to windowed";
+    }
+    if (output.streamEnabled && runtime->streamStartFailed) {
+      return "stream restart needed";
+    }
+    return "";
+  }
+
+  void recordOutputFramePresented(int outputIndex) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime) {
+      return;
+    }
+    Uint64 now = SDL_GetTicks();
+    if (runtime->fpsSampleStartedAtMs == 0) {
+      runtime->fpsSampleStartedAtMs = now;
+      runtime->fpsFrameCount = 0;
+      runtime->fpsMeasured = 0.0;
+    }
+    runtime->fpsFrameCount += 1;
+    // Hitches against the screen's own frame, so it means the same thing on a
+    // 50, 60 or 144 Hz screen and a steady shortfall counts (see presentTargetHz).
+    // Nothing is judged until there is a rate to judge by.
+    const Uint64 nowNs = SDL_GetTicksNS();
+    if (runtime->firstPresentNs == 0) runtime->firstPresentNs = nowNs;
+    if (runtime->presentTargetHz <= 1.0) runtime->presentTargetHz = outputPresentTargetHz(outputIndex, *runtime);
+    if (runtime->lastPresentNs != 0 && runtime->presentTargetHz > 1.0) {
+      const double gapMs = static_cast<double>(nowNs - runtime->lastPresentNs) / 1.0e6;
+      const double frameMs = 1000.0 / runtime->presentTargetHz;
+      runtime->presentsCounted += 1;
+      if (gapMs > frameMs * 1.5) {
+        runtime->presentHitches += 1;
+        const long missed = std::max(1L, std::lround(gapMs / frameMs) - 1);
+        runtime->presentsMissed += static_cast<std::uint64_t>(missed);
+        runtime->lastMissNs = nowNs;
+        noteOutputFramesMissed(outputIndex, *runtime, static_cast<int>(missed), nowNs);
+      } else {
+        runtime->pacedSumMs += gapMs;
+        runtime->pacedCount += 1;
+      }
+      runtime->worstPresentGapMs = std::max(runtime->worstPresentGapMs, gapMs);
+      if (runtime->pacedWindowStartNs == 0) {
+        runtime->pacedWindowStartNs = nowNs;
+      } else if (nowNs - runtime->pacedWindowStartNs >= 10000000000ULL) {
+        // Ten seconds: the sum of ~600 intervals is the span between its ends,
+        // so a millisecond of jitter at either end is 0.01% of it, and 59.94
+        // and 60 (0.1% apart) cannot be mistaken for each other.
+        runtime->presentPacedHz = runtime->pacedCount >= 60 && runtime->pacedSumMs > 0.0
+          ? 1000.0 * runtime->pacedCount / runtime->pacedSumMs : 0.0;
+        runtime->pacedSumMs = 0.0;
+        runtime->pacedCount = 0;
+        runtime->pacedWindowStartNs = nowNs;
+        checkOutputPresentClock(outputIndex, *runtime);
+      }
+    }
+    runtime->lastPresentNs = nowNs;
+    Uint64 elapsedMs = now - runtime->fpsSampleStartedAtMs;
+    if (elapsedMs >= 750) {
+      runtime->presentTargetHz = outputPresentTargetHz(outputIndex, *runtime);
+      runtime->fpsMeasured = elapsedMs > 0
+        ? (static_cast<double>(runtime->fpsFrameCount) * 1000.0 / static_cast<double>(elapsedMs))
+        : runtime->fpsMeasured;
+      runtime->fpsFrameCount = 0;
+      runtime->fpsSampleStartedAtMs = now;
+    }
+  }
+
+  // The rate an output's presents are judged by: its screen's refresh, which
+  // a vsynced window presents at; a set rate where there is no window; else
+  // what it measured (and then only a stall shows).
+  double outputPresentTargetHz(int outputIndex, const OutputRuntime& runtime) const {
+    if (runtime.outputWindow) {
+      const double display = outputDisplayRefreshHz(outputIndex);
+      if (display > 1.0) return display;
+    }
+    if (std::isfinite(project_.outputRefreshRateHz) && project_.outputRefreshRateHz > 1.0) {
+      return project_.outputRefreshRateHz;
+    }
+    return runtime.fpsMeasured;
+  }
+
+  // WHOSE CLOCK AN OUTPUT KEPT, after each ten seconds of presents.
+  //
+  // Every renderer here keeps one frame in flight, so a present waits until
+  // the last frame has been taken, and the rate the presents keep IS the rate
+  // of whatever takes them: the screen, for a window flipped straight to it;
+  // the desktop compositor, for a COMPOSED window. On Windows the compositor
+  // keeps one clock for every screen, so a composed output on a 59.94 Hz
+  // screen beside a 60 Hz desk keeps 60 and its screen has to drop or repeat
+  // a frame at every beat of the two -- every 17 s. That is the reading of
+  // 2026-11-01's run (platform/display_topology.hpp); this is what lets the
+  // next run say so outright. The render log keeps each change, STATUS the
+  // latest, and the operator is told once, with what to change.
+  void checkOutputPresentClock(int outputIndex, OutputRuntime& runtime) {
+    const bool windowed = runtime.outputWindow && runtime.outputRenderer &&
+      SDL_GetRenderWindow(runtime.outputRenderer) == runtime.outputWindow &&
+      (SDL_GetWindowFlags(runtime.outputWindow) & SDL_WINDOW_HIDDEN) == 0;
+    if (!windowed) {
+      runtime.presentPath = {};
+      runtime.presentClockSuspect = false;
+      return;
+    }
+    // The screen's own refresh, or 0: presentTargetHz falls back to a rate it
+    // measured, and a clock cannot be judged against itself.
+    const double screenHz = outputDisplayRefreshHz(outputIndex);
+    const double pacedHz = runtime.presentPacedHz;
+    // How often the screen and the clock the presents kept slip a frame past
+    // each other. None when they agree, or when one is a whole multiple of the
+    // other (60 on a 120 Hz screen is a steady 1:2).
+    double beatHz = 0.0;
+    if (screenHz > 1.0 && pacedHz > 1.0) {
+      const double hi = std::max(screenHz, pacedHz);
+      const double lo = std::min(screenHz, pacedHz);
+      beatHz = std::abs(hi - std::max(1.0, std::round(hi / lo)) * lo);
+      if (beatHz < hi * 0.0003) {
+        beatHz = 0.0;   // one clock, as far as ten seconds can tell
+      }
+    }
+#ifdef _WIN32
+    // The walk over the windows above it costs a call into DWM per window, on
+    // this thread: only when there is a slip to explain.
+    const SDL_PropertiesID rendererProps = SDL_GetRendererProperties(runtime.outputRenderer);
+    runtime.presentPath = deckboy::platform::queryPresentPath(
+      SDL_GetPointerProperty(SDL_GetWindowProperties(runtime.outputWindow), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr),
+      SDL_GetPointerProperty(rendererProps, SDL_PROP_RENDERER_D3D11_DEVICE_POINTER, nullptr),
+      SDL_GetPointerProperty(rendererProps, SDL_PROP_RENDERER_D3D11_SWAPCHAIN_POINTER, nullptr),
+      beatHz > 0.0);
+#endif
+    const deckboy::platform::PresentPathInfo& path = runtime.presentPath;
+    const bool followsCompositor = beatHz > 0.0 && path.compositorHz > 1.0 &&
+      std::abs(pacedHz - path.compositorHz) < path.compositorHz * 0.0003;
+
+    char summary[400];
+    std::snprintf(summary, sizeof(summary),
+                  "present clock: output %d screen=%.3f Hz paced=%.2f Hz compositor=%.3f Hz%s"
+                  " dxgi_mode=%s same_gpu=%s covers_screen=%d windows_above=%d on_top=%d raised=%llu",
+                  outputIndex + 1, screenHz, pacedHz, path.compositorHz,
+                  followsCompositor ? " (KEEPS THE COMPOSITOR'S CLOCK)" : "",
+                  deckboy::platform::dxgiPresentationModeName(path.dxgiMode),
+                  path.sameAdapter == 1 ? "yes" : (path.sameAdapter == 0 ? "no" : "unknown"),
+                  path.coversScreen, path.windowsAbove, runtime.onTop ? 1 : 0,
+                  static_cast<unsigned long long>(runtime.onTopRaises));
+    // Logged when the verdict changes: the paced rate to a tenth, so the
+    // jitter of one ten seconds against the next is not a change.
+    char verdict[200];
+    std::snprintf(verdict, sizeof(verdict), "%.3f %.1f %.3f %d %d %d %d %d", screenHz, pacedHz,
+                  path.compositorHz, followsCompositor ? 1 : 0, path.dxgiMode, path.sameAdapter,
+                  path.coversScreen, path.windowsAbove);
+    if (runtime.presentClockLogged != verdict) {
+      runtime.presentClockLogged = verdict;
+      std::string line = summary;
+      if (path.sameAdapter == 0) {
+        line += " draws_on=\"" + path.drawAdapter + "\" screen_on=\"" + path.screenAdapter + "\"";
+      }
+      if (path.windowsAbove > 0) {
+        line += " above=\"" + path.windowsAboveTitles + "\"";
+      }
+      renderDiagnosticLog(line);
+      std::cerr << line << '\n';
+      tracePresentInfo(line);
+    }
+
+    if (followsCompositor && runtime.presentClockSuspect && !runtime.presentClockWarned) {
+      runtime.presentClockWarned = true;
+      char every[48];
+      if (beatHz < 1.0) {
+        std::snprintf(every, sizeof(every), "every %.0f s", 1.0 / beatHz);
+      } else {
+        std::snprintf(every, sizeof(every), "%.0f times a second", beatHz);
+      }
+      std::string fix = "Set both screens to the same refresh rate.";
+      if (path.sameAdapter == 0) {
+        fix = "Its screen is on another graphics card: connect it to the one Deckboy draws on, "
+              "or set both screens to the same refresh rate.";
+      } else if (path.windowsAbove > 0) {
+        fix = "A window is over it on its screen: " + path.windowsAboveTitles + ".";
+      }
+      triggerToast(outputLabel(outputIndex) + ": Windows shows it at " + formatRefreshRateLabel(pacedHz) +
+                     ", its screen runs at " + formatRefreshRateLabel(screenHz) +
+                     ", so a frame is dropped or repeated " + every + ". " + fix,
+                   ToastKind::Warning, kToastReadableMs);
+    }
+    runtime.presentClockSuspect = followsCompositor;
+  }
+
+  // AN EXPERIMENT, OFF UNLESS DECKBOY_OUTPUT_ON_TOP=1 (Windows): keep a
+  // full-screen output on its own screen on top of everything.
+  //
+  // Windows composes an output on a 59.94 Hz screen beside a 60 Hz desk, so it
+  // is presented on the compositor's 60.001 Hz clock and its screen drops or
+  // doubles a frame every 15 s (2026-11-01). The taskbar on that screen sat
+  // over it, and SDL places a full-screen window HWND_NOTOPMOST, so this keeps
+  // it always-on-top, tells the shell it is full screen, and puts it back on
+  // top whenever another program's window comes over it.
+  //
+  // MEASURED 2026-11-02 on that PC: it does not help. On top, nothing over it,
+  // covering its screen, drawn on the GPU that drives it, the output was still
+  // composed at 60.001 -- and a bare test window with the taskbars over it
+  // kept the screen's 59.94 (tools/output_flip_lab.cpp). Something else about
+  // the output window keeps it composed; the lab is finding what. Kept, off,
+  // so that work can switch it on to compare.
+  void serviceOutputOnTop(int outputIndex, OutputRuntime& runtime) {
+#ifdef _WIN32
+    if (!runtime.outputWindow || !controlWindow_) {
+      return;
+    }
+    const Uint64 nowMs = SDL_GetTicks();
+    if (runtime.onTopCheckedMs != 0 && nowMs - runtime.onTopCheckedMs < 250) {
+      return;
+    }
+    runtime.onTopCheckedMs = nowMs;
+    static const bool enabled = [] {
+      const char* env = std::getenv("DECKBOY_OUTPUT_ON_TOP");
+      return env && (std::strcmp(env, "1") == 0 || std::strcmp(env, "on") == 0);
+    }();
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(runtime.outputWindow);
+    const SDL_DisplayID screen = SDL_GetDisplayForWindow(runtime.outputWindow);
+    const bool want = enabled && outputIndex >= 0 &&
+                      outputIndex < static_cast<int>(project_.outputs.size()) &&
+                      project_.outputs[outputIndex].enabled && (flags & SDL_WINDOW_FULLSCREEN) != 0 &&
+                      (flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)) == 0 && screen != 0 &&
+                      screen != SDL_GetDisplayForWindow(controlWindow_);
+    void* hwnd = SDL_GetPointerProperty(SDL_GetWindowProperties(runtime.outputWindow),
+                                        SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    if (want != runtime.onTop) {
+      runtime.onTop = want;
+      SDL_SetWindowAlwaysOnTop(runtime.outputWindow, want);
+      deckboy::platform::markFullscreenWindow(hwnd, want);
+      const std::string line = "output " + std::to_string(outputIndex + 1) +
+                               (want ? " kept on top of its screen" : " no longer kept on top");
+      renderDiagnosticLog(line);
+      tracePresentInfo(line);
+    }
+    if (want && deckboy::platform::windowCoveredOnItsScreen(hwnd)) {
+      deckboy::platform::raiseOutputWindow(hwnd);
+      runtime.onTopRaises += 1;
+    }
+#else
+    (void) outputIndex;
+    (void) runtime;
+#endif
+  }
+
+  // THE DESK QUEUES TWO FRAMES (Windows, Direct3D 11). SDL gives every device
+  // one frame in flight, so the desk's present waited for the compositor to
+  // take its last frame -- with vsync off too -- and a pass that presented
+  // the desk twice inside one of the compositor's refreshes sat out the
+  // second, so the output's present missed its vblank: 25 of 35 slow passes
+  // on a quiet PC on 2026-11-01. With two in flight that present does not
+  // wait (Codex's bench the same night: stalls of up to 4.6 ms with one, about
+  // 0.07 ms with two). Outputs keep one: their presents pace the loop.
+  // DECKBOY_DESK_FRAMES=1 puts it back, to compare.
+  void applyDeskFrameLatency() {
+#ifdef _WIN32
+    if (!controlRenderer_) {
+      return;
+    }
+    const char* env = std::getenv("DECKBOY_DESK_FRAMES");
+    const unsigned frames = env && *env ? static_cast<unsigned>(std::clamp(std::atoi(env), 1, 3)) : 2u;
+    deckboy::platform::setDeviceFrameLatency(
+      SDL_GetPointerProperty(SDL_GetRendererProperties(controlRenderer_), SDL_PROP_RENDERER_D3D11_DEVICE_POINTER,
+                             nullptr),
+      frames);
+#endif
+  }
+
+  // ── DECKBOY_PRESENT_TRACE=<file> ────────────────────────────────────────
+  // One line for every present of the desk, the Monitors window and each
+  // output window, one at the top of each pass of the loop, and each present
+  // clock verdict above -- so a slow pass is pinned on the present that held
+  // it, and (Direct3D 11) each output frame on the refresh that showed it.
+  // tools/present_trace_report.py reads it. Times are SDL's performance
+  // counter, which on Windows IS QueryPerformanceCounter, the unit the swap
+  // chain's own statistics and DWM's timing are stamped in.
+  void openPresentTrace() {
+    const char* path = std::getenv("DECKBOY_PRESENT_TRACE");
+    if (!path || !*path) {
+      return;
+    }
+    presentTrace_ = std::make_unique<std::ofstream>(path, std::ios::out | std::ios::trunc);
+    if (!*presentTrace_) {
+      std::cerr << "DECKBOY_PRESENT_TRACE: could not open " << path << '\n';
+      presentTrace_.reset();
+      return;
+    }
+    *presentTrace_ << "# deckboy present trace 1 counter_hz=" << SDL_GetPerformanceFrequency()
+                   << " compositor_hz=" << deckboy::platform::compositorRefreshHz() << '\n'
+                   << "# pass,counter,dwm_vblank,dwm_refresh,dwm_frame,dwm_dropped,dwm_missed\n"
+                   << "# present,window,before,after,last_present,stat_present,stat_present_refresh,"
+                      "stat_sync_refresh,stat_sync_counter\n"
+                   << "# info,<present clock verdict>\n";
+    std::cerr << "present trace: " << path << '\n';
+  }
+
+  void tracePassStart() {
+    if (!presentTrace_) {
+      return;
+    }
+    const deckboy::platform::CompositorTiming dwm = deckboy::platform::queryCompositorTiming();
+    std::ostream& out = *presentTrace_;
+    out << "pass," << SDL_GetPerformanceCounter();
+    if (dwm.valid) {
+      out << ',' << dwm.vblankQpc << ',' << dwm.refreshCount << ',' << dwm.frameCount << ','
+          << dwm.framesDropped << ',' << dwm.framesMissed;
+    }
+    out << '\n';
+    // About once a second, so a run that is killed keeps nearly all of it.
+    if (++presentTracePasses_ % 64 == 0) {
+      out.flush();
+    }
+  }
+
+  void tracePresentInfo(const std::string& line) {
+    if (presentTrace_) {
+      *presentTrace_ << "info," << line << '\n';
+    }
+  }
+
+  // SDL_RenderPresent, traced when DECKBOY_PRESENT_TRACE is set. `label` is
+  // "desk", "monitors" or "out"; an output's number follows its label.
+  void presentTraced(SDL_Renderer* renderer, const char* label, int outputIndex = -1) {
+    if (!presentTrace_) {
+      SDL_RenderPresent(renderer);
+      return;
+    }
+    const Uint64 before = SDL_GetPerformanceCounter();
+    SDL_RenderPresent(renderer);
+    const Uint64 after = SDL_GetPerformanceCounter();
+    const deckboy::platform::PresentStats stats = deckboy::platform::queryPresentStats(
+      SDL_GetPointerProperty(SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_D3D11_SWAPCHAIN_POINTER,
+                             nullptr));
+    std::ostream& out = *presentTrace_;
+    out << "present," << label;
+    if (outputIndex >= 0) {
+      out << (outputIndex + 1);
+    }
+    out << ',' << before << ',' << after << ',' << stats.lastPresentCount;
+    if (stats.valid) {
+      out << ',' << stats.presentCount << ',' << stats.presentRefreshCount << ',' << stats.syncRefreshCount
+          << ',' << stats.syncQpcTime;
+    }
+    out << '\n';
+  }
+
+  // Frames an output missed in the last five seconds: the badge turns to a
+  // warning, and three of them in five seconds tell the operator. A missed
+  // frame is a repeated picture on the screen, and nothing else on the desk
+  // would say so.
+  //
+  // QUIETER (James, 2026-11-05: "do we think there are too many missing
+  // frames warnings?" ... "Do it"). The badge still shows every miss; the
+  // toast now leaves out the cases that are not the show stuttering:
+  //   - the first three seconds after an output opens (window creation and
+  //     the mode change settle there),
+  //   - windows hidden for a test run (DECKBOY_HIDE_WINDOWS), which the OS
+  //     throttles to about 22 fps by design,
+  // and after the first warning it speaks again only when it is clearly
+  // worse -- twice the misses -- and never more than once a minute.
+  bool outputMissingFrames(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    return runtime && runtime->lastMissNs != 0 && SDL_GetTicksNS() - runtime->lastMissNs < 5000000000ULL;
+  }
+
+  void noteOutputFramesMissed(int outputIndex, OutputRuntime& runtime, int missed, Uint64 nowNs) {
+    if (windowsHiddenForMeasurement()) return;
+    if (runtime.firstPresentNs != 0 && nowNs - runtime.firstPresentNs < 3000000000ULL) return;
+    if (nowNs - runtime.missWindowStartNs > 5000000000ULL) {
+      runtime.missWindowStartNs = nowNs;
+      runtime.missedInWindow = 0;
+    }
+    runtime.missedInWindow += missed;
+    const Uint64 nowMs = SDL_GetTicks();
+    if (runtime.missedInWindow < 3 ||
+        (runtime.lastMissWarningMs != 0 && nowMs - runtime.lastMissWarningMs < 60000) ||
+        (runtime.lastWarnedMissed > 0 && runtime.missedInWindow < runtime.lastWarnedMissed * 2)) {
+      return;
+    }
+    runtime.lastMissWarningMs = nowMs;
+    runtime.lastWarnedMissed = runtime.missedInWindow;
+    char rate[32];
+    std::snprintf(rate, sizeof(rate), "%.2f", runtime.presentTargetHz);
+    triggerToast("Output " + std::to_string(outputIndex + 1) + " is missing frames: " +
+                   std::to_string(runtime.missedInWindow) + " in 5 s on a " + rate + " Hz screen",
+                 ToastKind::Warning, kToastReadableMs);
+  }
+
+  void resetOutputStreamFpsTelemetry(OutputRuntime& runtime) {
+    runtime.streamFpsSampleStartedAtMs = 0;
+    runtime.streamFpsPacketsAtSampleStart = 0;
+    runtime.streamFpsMeasured = 0.0;
+  }
+
+  void recordOutputStreamFrameWritten(int outputIndex) {
+    OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (!output.enabled || !output.streamEnabled || !runtime->streamWriter) {
+      resetOutputStreamFpsTelemetry(*runtime);
+      return;
+    }
+
+    std::uint64_t packetsWritten = 0;
+    {
+      std::lock_guard<std::mutex> lock(runtime->streamWriter->mutex);
+      packetsWritten = runtime->streamWriter->packetsWritten;
+    }
+
+    Uint64 now = SDL_GetTicks();
+    if (runtime->streamFpsSampleStartedAtMs == 0) {
+      runtime->streamFpsSampleStartedAtMs = now;
+      runtime->streamFpsPacketsAtSampleStart = packetsWritten;
+      runtime->streamFpsMeasured = 0.0;
+      return;
+    }
+
+    Uint64 elapsedMs = now - runtime->streamFpsSampleStartedAtMs;
+    if (elapsedMs >= 750) {
+      std::uint64_t packetDelta = packetsWritten >= runtime->streamFpsPacketsAtSampleStart
+        ? (packetsWritten - runtime->streamFpsPacketsAtSampleStart)
+        : 0;
+      runtime->streamFpsMeasured = elapsedMs > 0
+        ? (static_cast<double>(packetDelta) * 1000.0 / static_cast<double>(elapsedMs))
+        : runtime->streamFpsMeasured;
+      runtime->streamFpsPacketsAtSampleStart = packetsWritten;
+      runtime->streamFpsSampleStartedAtMs = now;
+    }
+  }
+
+  std::string formatTelemetryFps(double fpsValue) const {
+    if (fpsValue <= 0.01) {
+      return "--.-";
+    }
+    std::ostringstream fps;
+    fps << std::fixed << std::setprecision(1) << fpsValue;
+    return fps.str();
+  }
+
+  // The rate an output is presenting at NOW. The measurement is only updated
+  // by a present, so an output that stops keeps its last figure forever: turned
+  // off, it went on reading 60.0. A rate with no present in the last second is
+  // no rate.
+  double outputFpsNow(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+        !project_.outputs[outputIndex].enabled) {
+      return 0.0;
+    }
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (!runtime || runtime->lastPresentNs == 0 ||
+        SDL_GetTicksNS() - runtime->lastPresentNs > 1000000000ULL) {
+      return 0.0;
+    }
+    return runtime->fpsMeasured;
+  }
+
+  std::string outputFpsLabel(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    return runtime ? formatTelemetryFps(outputFpsNow(outputIndex)) : "--.-";
+  }
+
+  std::string outputStreamFpsLabel(int outputIndex) const {
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    return runtime ? formatTelemetryFps(runtime->streamFpsMeasured) : "--.-";
+  }
+
+  std::string deckDecodeFpsLabel(int deckIndex) const {
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    return engine ? formatTelemetryFps(engine->mediaFpsMeasured()) : "--.-";
+  }
+
+  std::string programMonitorOutputTelemetryLabel(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return "OUTPUT --.-";
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    // OFF first: the runtime keeps its last measured rate after the output
+    // stops, and checked first it read OUTPUT 60.0 with nothing on screen.
+    if (!output.enabled) {
+      return "OUTPUT OFF";
+    }
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (runtime && outputFpsNow(outputIndex) > 0.01) {
+      return "OUTPUT " + outputFpsLabel(outputIndex);
+    }
+    return "OUTPUT WARM";
+  }
+
+  std::string programMonitorDecodeTelemetryLabel(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "DECODE --.-";
+    }
+    const Cue* liveCue = activeCuePtr(deckIndex);
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (engine && engine->mediaFpsMeasured() > 0.01) {
+      return "DECODE " + deckDecodeFpsLabel(deckIndex);
+    }
+    bool decodeRelevantCue = liveCue &&
+      (liveCue->kind == CueKind::Video ||
+       liveCue->kind == CueKind::Browser ||
+       isSourceCueKind(liveCue->kind));
+    if (!decodeRelevantCue) {
+      return "DECODE OFF";
+    }
+    return "DECODE WARM";
+  }
+
+  std::string programMonitorStreamTelemetryLabel(int outputIndex) const {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return "STREAM --.-";
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    if (runtime && runtime->streamFpsMeasured > 0.01) {
+      return "STREAM " + outputStreamFpsLabel(outputIndex);
+    }
+    if (!output.enabled || !output.streamEnabled) {
+      return "STREAM OFF";
+    }
+    if (runtime && runtime->streamStartFailed) {
+      return "STREAM ERR";
+    }
+    return "STREAM WARM";
+  }
+
+  std::string deckLabel(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return deckDefaultName(0);
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    return deck.name.empty() ? deckDefaultName(deckIndex) : deck.name;
+  }
+
+  int outputIndexById(const std::string& outputId) const {
+    std::string needle = trim(outputId);
+    if (needle.empty()) {
+      return -1;
+    }
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      if (project_.outputs[outputIndex].outputId == needle) {
+        return outputIndex;
+      }
+    }
+    return -1;
+  }
+
+  // Single-deck: layer index is always 0.
+  int primaryLayerIndexForDeck(int /*deckIndex*/) const {
+    return 0;
+  }
+
+  // Single-deck: deck 0 always maps to output 0.
+  std::optional<int> primaryOutputIndexForDeck(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return std::nullopt;
+    }
+    if (project_.outputs.empty()) {
+      return std::nullopt;
+    }
+    // The output this deck is shown on, which is the one hosting it. Returning
+    // 0 unconditionally meant every deck reported deck 1's raster, bit depth
+    // and routing label -- so even where a second deck DID have an output, the
+    // status said otherwise.
+    //
+    // Falls back to 0 when no output claims this deck, which is what every
+    // single-deck show is and keeps their behaviour identical.
+    //
+    // A MIRROR IS NOT WHERE A DECK IS SHOWN. The programme recording (and any
+    // stream) is an output that mirrors another, and it is created hosting
+    // whichever deck had focus -- a host it never draws. Counting it made a
+    // LAYER deck's primary output the recorder: focusing that deck moved the
+    // focused output there, and the program monitor, which taps the focused
+    // deck's primary output, fell back to that deck alone -- every other deck
+    // sharing the real output vanished from the monitor. So skip mirrors, and
+    // a deck that is a layer somewhere is shown there, not on output 1.
+    auto mirrors = [this](int i) {
+      const int source = project_.outputs[static_cast<std::size_t>(i)].mirrorSourceOutputIndex;
+      return source >= 0 && source != i &&
+             source < static_cast<int>(project_.outputs.size());
+    };
+    const int outputCount = static_cast<int>(project_.outputs.size());
+    for (int i = 0; i < outputCount; ++i) {
+      if (!mirrors(i) && project_.outputs[static_cast<std::size_t>(i)].hostDeckIndex == deckIndex) {
+        return i;
+      }
+    }
+    for (int i = 0; i < outputCount; ++i) {
+      if (!mirrors(i) && assignmentIndexForDeckOutput(deckIndex, i)) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  int resolveDeckOutputHostIndex(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return deckIndex;
+    }
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    if (!outputIndex || *outputIndex < 0 || *outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return std::clamp(project_.decks[deckIndex].outputRouteDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    }
+    return std::clamp(project_.outputs[*outputIndex].hostDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+  }
+
+  int outputIndexForHostDeck(int hostDeckIndex) const {
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (project_.outputs[i].hostDeckIndex == hostDeckIndex) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  int ensureOutputIndexForHostDeck(int hostDeckIndex, bool* created = nullptr) {
+    normalizeProject(project_);
+    if (created) {
+      *created = false;
+    }
+    int clampedHost = std::clamp(hostDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    int existing = outputIndexForHostDeck(clampedHost);
+    if (existing >= 0) {
+      return existing;
+    }
+    OutputTarget output;
+    output.name = outputDefaultName(static_cast<int>(project_.outputs.size()));
+    output.hostDeckIndex = clampedHost;
+    output.displayIndex = std::max(0, project_.decks[clampedHost].outputDisplayIndex);
+    output.enabled = false;
+    output.outputId = makeOutputId(output, static_cast<int>(project_.outputs.size()));
+    project_.outputs.push_back(output);
+    if (created) {
+      *created = true;
+    }
+    return static_cast<int>(project_.outputs.size()) - 1;
+  }
+
+  // -- THE MULTIVIEW'S WINDOWS --------------------------------------------
+  //
+  // The effective tile list: what the operator arranged, or -- while they
+  // have arranged nothing -- the automatic set the multiview always drew.
+  //
+  // Returning a BUILT list rather than a flag keeps every caller (the
+  // renderer, the click handler, the menu, the remote verb) working from one
+  // answer. The alternative is four places that each decide what a window is,
+  // which is how the compositor and the playlist column came to disagree
+  // about which deck an output showed.
+  // -- THE MONITOR: WHICH PLAYLIST YOU HEAR -------------------------------
+  //
+  // -1 means follow the focused playlist. Resolved here rather than stored,
+  // so following focus cannot go stale and cannot be left pointing at a
+  // playlist that has since been removed.
+  int monitoredDeckIndex() const {
+    const int count = static_cast<int>(project_.decks.size());
+    if (count <= 0) {
+      return -1;
+    }
+    if (project_.monitorDeckIndex < 0) {
+      return std::clamp(project_.focusedDeckIndex, 0, count - 1);
+    }
+    return std::clamp(project_.monitorDeckIndex, 0, count - 1);
+  }
+
+  // Push that decision onto the engines. Cheap enough to call whenever
+  // anything that feeds it changes -- it is a store per deck, no devices are
+  // touched -- which is what lets the monitor follow the focused playlist
+  // without an audio reopen on every arrow key.
+  void applyAudioMonitorSelection() {
+    const int listening = monitoredDeckIndex();
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      DeckRuntime* runtime = runtimeForDeck(d);
+      if (!runtime || !runtime->mediaEngine) {
+        continue;
+      }
+      runtime->mediaEngine->setMonitorMuted(d != listening);
+      runtime->mediaEngine->setMainDeviceMuted(!project_.decks[d].audioToProgram);
+    }
+  }
+
+  // -- THE MASTER TRACKER ------------------------------------------------
+  //
+  // The rows: master cues still sitting in playlists (shows built before the
+  // tracker kept its own steps), in deck then cue order, and then the
+  // tracker's own steps. Playlist masters first so "+ step" -- which always
+  // appends to the tracker -- lands at the end of an older sequence too.
+  // A tracker step's row names kTrackerStepsDeck.
+  std::vector<std::pair<int, int>> masterTrackerRows() const {
+    std::vector<std::pair<int, int>> rows;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        if (deck.cues[c].kind == CueKind::Master) {
+          rows.emplace_back(d, c);
+        }
+      }
+    }
+    for (int s = 0; s < static_cast<int>(project_.trackerSteps.size()); ++s) {
+      rows.emplace_back(kTrackerStepsDeck, s);
+    }
+    return rows;
+  }
+
+  // WHICH PLAYLISTS GET A TRACKER COLUMN. Not one that holds nothing but
+  // steps: a step cannot fire the playlist it lives on, so that column could
+  // only ever read "--" all the way down. A playlist with anything else in it
+  // keeps its column, even if a step lives there too.
+  std::vector<int> trackerShownDecks() const {
+    std::vector<int> shown;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[d];
+      bool onlySteps = !deck.cues.empty() || deck.isMasterDeck;
+      for (const Cue& cue : deck.cues) {
+        if (cue.kind != CueKind::Master) {
+          onlySteps = false;
+          break;
+        }
+      }
+      if (!onlySteps) {
+        shown.push_back(d);
+      }
+    }
+    return shown;
+  }
+
+  // A new step at a row of the tracker (Ins). Steps the tracker owns come
+  // after any still living in playlists, so a row among those inserts at the
+  // start of the tracker's own.
+  void insertTrackerStepAt(int row) {
+    const int legacy = static_cast<int>(masterTrackerRows().size() - project_.trackerSteps.size());
+    const int at = std::clamp(row - legacy, 0, static_cast<int>(project_.trackerSteps.size()));
+    Cue step;
+    step.kind = CueKind::Master;
+    step.name = "Step " + std::to_string(masterTrackerRows().size() + 1);
+    step.color = {120, 80, 30, 255};
+    step.formatName = "control";
+    project_.trackerSteps.insert(project_.trackerSteps.begin() + at, step);
+    normalizeProject(project_);   // gives it an id
+    trackerCurrentStepId_ = project_.trackerSteps[static_cast<std::size_t>(at)].id;
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // M and S on a tracker column, from a click, F9 / F10 or the wire.
+  void toggleTrackerColumn(int deck, bool solo) {
+    if (deck < 0 || deck >= 32 || deck >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    std::uint32_t& bits = solo ? project_.trackerSoloDecks : project_.trackerMutedDecks;
+    bits ^= 1u << deck;
+    const bool on = (bits & (1u << deck)) != 0u;
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Toggle);
+    triggerToast(deckLabel(deck) + (solo ? (on ? " solo" : " unsoloed") : (on ? " muted in the tracker" : " unmuted")));
+  }
+
+  // The row a step id is on now, or -1 (empty, or the step has gone).
+  int trackerRowOfStepId(const std::string& id) const {
+    if (id.empty()) return -1;
+    const auto rows = masterTrackerRows();
+    for (int r = 0; r < static_cast<int>(rows.size()); ++r) {
+      const Cue* step = masterTrackerCue(rows[r].first, rows[r].second);
+      if (step && step->id == id) return r;
+    }
+    return -1;
+  }
+
+  const Cue* masterTrackerCue(int masterDeck, int masterCue) const {
+    if (masterDeck == kTrackerStepsDeck) {
+      if (masterCue < 0 || masterCue >= static_cast<int>(project_.trackerSteps.size())) {
+        return nullptr;
+      }
+      return &project_.trackerSteps[masterCue];
+    }
+    if (masterDeck < 0 || masterDeck >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    const Deck& deck = project_.decks[masterDeck];
+    if (masterCue < 0 || masterCue >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[masterCue];
+  }
+
+  Cue* masterTrackerCueMutable(int masterDeck, int masterCue) {
+    return const_cast<Cue*>(std::as_const(*this).masterTrackerCue(masterDeck, masterCue));
+  }
+
+  // A step by id, wherever it lives. Menus outlive the frame that opened
+  // them, so they hold the id and resolve it again when the choice lands.
+  Cue* masterStepById(const std::string& id) {
+    for (Cue& step : project_.trackerSteps) {
+      if (step.id == id) {
+        return &step;
+      }
+    }
+    for (Deck& deck : project_.decks) {
+      for (Cue& cue : deck.cues) {
+        if (cue.kind == CueKind::Master && cue.id == id) {
+          return &cue;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  // A new step, in the tracker. Never in a playlist.
+  void addTrackerStep() {
+    Cue step;
+    step.kind = CueKind::Master;
+    step.name = "Step " + std::to_string(masterTrackerRows().size() + 1);
+    step.color = {120, 80, 30, 255};
+    step.formatName = "control";
+    project_.trackerSteps.push_back(step);
+    normalizeProject(project_);   // gives it an id
+    trackerCurrentStepId_ = project_.trackerSteps.back().id;
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Import);
+  }
+
+  // What one cell says. Empty means this step does nothing on this playlist,
+  // which is a real and common answer -- a step usually touches one or two.
+  std::string masterTrackerCellLabel(int masterDeck, int masterCue,
+                                     int targetDeck, bool* bypassed = nullptr) const {
+    if (bypassed) {
+      *bypassed = false;
+    }
+    const Cue* master = masterTrackerCue(masterDeck, masterCue);
+    if (!master) {
+      return std::string();
+    }
+    for (const MasterAssignment& a : master->masterAssignments) {
+      if (a.deckIndex != targetDeck) {
+        continue;
+      }
+      if (bypassed) {
+        *bypassed = a.bypassed;
+      }
+      if (a.action != 'G') {
+        char text[32];
+        if (a.action == 'S') return "stop";
+        if (a.action == 'F') {
+          std::snprintf(text, sizeof(text), "fade out %.1fs", std::max(0, a.value) / 10.0);
+          return text;
+        }
+        std::snprintf(text, sizeof(text), "%s %d%%", a.action == 'V' ? "volume" : "opacity", std::max(0, a.value));
+        return text;
+      }
+      const int idx = findCueIndexById(targetDeck, a.cueId);
+      if (idx < 0) {
+        // The cue it named has been deleted. Said out loud rather than drawn
+        // as empty: an empty cell means 'does nothing here', and a step that
+        // silently stopped firing is the opposite of that.
+        return std::string("(missing)");
+      }
+      const std::string& name = project_.decks[targetDeck].cues[idx].name;
+      return name.empty() ? ("cue " + std::to_string(idx + 1)) : name;
+    }
+    return std::string();
+  }
+
+  // Point a cell at one of that playlist's cues, or at nothing. Takes the
+  // master EXPLICITLY -- the older helpers all act on the selected cue, which
+  // a grid where every row is visible at once cannot use.
+  bool setMasterTrackerCell(int masterDeck, int masterCue, int targetDeck,
+                            int targetCueIndex) {
+    if (targetDeck < 0 || targetDeck >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    Cue* masterPtr = masterTrackerCueMutable(masterDeck, masterCue);
+    if (!masterPtr) {
+      return false;
+    }
+    Cue& master = *masterPtr;
+    if (master.kind != CueKind::Master) {
+      return false;
+    }
+    // fireMasterCue skips a master's own deck, so a cell pointing there would
+    // be one that never does anything. Refused here rather than stored.
+    if (targetDeck == masterDeck && targetCueIndex >= 0) {
+      return false;
+    }
+    auto& list = master.masterAssignments;
+    if (targetCueIndex < 0) {
+      list.erase(std::remove_if(list.begin(), list.end(),
+                                [&](const MasterAssignment& a) {
+                                  return a.deckIndex == targetDeck;
+                                }),
+                 list.end());
+      markProjectDirty();
+      return true;
+    }
+    const Deck& target = project_.decks[targetDeck];
+    if (targetCueIndex >= static_cast<int>(target.cues.size())) {
+      return false;
+    }
+    // A master firing a master is not the model, and fireMasterCue already
+    // refuses it at the point of firing. Refusing it here as well means the
+    // grid cannot be made to hold a cell that will never do anything.
+    if (target.cues[targetCueIndex].kind == CueKind::Master) {
+      return false;
+    }
+    const std::string id = target.cues[targetCueIndex].id;
+    for (MasterAssignment& a : list) {
+      if (a.deckIndex == targetDeck) {
+        a.cueId = id;
+        a.action = 'G';   // a cue in the cell is a take, whatever it was
+        a.value = -1;
+        markProjectDirty();
+        return true;
+      }
+    }
+    MasterAssignment added;
+    added.deckIndex = targetDeck;
+    added.cueId = id;
+    list.push_back(added);
+    markProjectDirty();
+    return true;
+  }
+
+  // A cell's other actions (the tracker's S / F / V / O): the deck itself,
+  // no cue. Replaces whatever the cell held.
+  bool setMasterTrackerCellAction(int masterDeck, int masterCue, int targetDeck, char action, int value) {
+    if (targetDeck < 0 || targetDeck >= static_cast<int>(project_.decks.size()) || targetDeck == masterDeck) {
+      return false;
+    }
+    if (action != 'S' && action != 'F' && action != 'V' && action != 'O') return false;
+    Cue* master = masterTrackerCueMutable(masterDeck, masterCue);
+    if (!master || master->kind != CueKind::Master) return false;
+    auto& list = master->masterAssignments;
+    list.erase(std::remove_if(list.begin(), list.end(),
+                              [&](const MasterAssignment& a) { return a.deckIndex == targetDeck; }),
+               list.end());
+    MasterAssignment added;
+    added.deckIndex = targetDeck;
+    added.action = action;
+    added.value = action == 'S' ? -1 : std::clamp(value, 0, action == 'F' ? 6000 : 100);
+    list.push_back(added);
+    markProjectDirty();
+    return true;
+  }
+
+  std::vector<MultiviewTile> multiviewTilePlan() const {
+    if (!project_.multiviewTiles.empty()) {
+      return project_.multiviewTiles;
+    }
+    std::vector<MultiviewTile> plan;
+    MultiviewTile programme;
+    programme.source = "programme";
+    plan.push_back(programme);
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      MultiviewTile tile;
+      tile.source = "deck:" + std::to_string(d);
+      plan.push_back(tile);
+    }
+    return plan;
+  }
+
+  // The deck a tile shows, or -1 for the programme, or -2 for an empty
+  // window. An out-of-range deck reads as empty rather than as deck 0:
+  // a window pointed at a playlist that has since been removed must say so,
+  // not quietly show a different one.
+  int multiviewTileDeck(const MultiviewTile& tile) const {
+    if (tile.source == "programme") {
+      return -1;
+    }
+    if (tile.source.rfind("deck:", 0) == 0) {
+      const int d = std::atoi(tile.source.c_str() + 5);
+      return (d >= 0 && d < static_cast<int>(project_.decks.size())) ? d : -2;
+    }
+    return -2;
+  }
+
+  // The output an "output:<id>" window shows, or -1.
+  int multiviewTileOutput(const MultiviewTile& tile) const {
+    if (tile.source.rfind("output:", 0) != 0) return -1;
+    return outputIndexById(tile.source.substr(7));
+  }
+
+  // What a window that is not a playlist or the programme shows.
+  enum class MultiviewFeed { None, Programme, Deck, Output, Next, Clock, Missing };
+
+  MultiviewFeed multiviewTileFeed(const MultiviewTile& tile) const {
+    if (tile.source.empty()) return MultiviewFeed::None;
+    if (tile.source == "next") return MultiviewFeed::Next;
+    if (tile.source == "clock") return MultiviewFeed::Clock;
+    if (tile.source.rfind("output:", 0) == 0) {
+      return multiviewTileOutput(tile) >= 0 ? MultiviewFeed::Output : MultiviewFeed::Missing;
+    }
+    const int d = multiviewTileDeck(tile);
+    if (d == -1) return MultiviewFeed::Programme;
+    if (d >= 0) return MultiviewFeed::Deck;
+    return MultiviewFeed::Missing;
+  }
+
+  // The cue the "next" window shows: what GO plays next on the focused
+  // playlist, or null when nothing follows.
+  const Cue* multiviewNextCue(int* deckOut = nullptr, int* cueOut = nullptr) const {
+    const int deck = project_.focusedDeckIndex;
+    if (deckOut) *deckOut = deck;
+    return previewCuePtr(deck, cueOut);
+  }
+
+  std::string multiviewTileSourceLabel(const MultiviewTile& tile) const {
+    switch (multiviewTileFeed(tile)) {
+      case MultiviewFeed::None:      return "empty";
+      case MultiviewFeed::Programme: return "PROGRAMME";
+      case MultiviewFeed::Deck:      return deckLabel(multiviewTileDeck(tile));
+      case MultiviewFeed::Output: {
+        // Its number as well as its name: output 1 is called "Programme"
+        // until it is renamed, which a programme window is called too.
+        const int o = multiviewTileOutput(tile);
+        return "OUT " + std::to_string(o + 1) + "  " + toUpper(outputLabel(o));
+      }
+      case MultiviewFeed::Clock:     return "CLOCK";
+      case MultiviewFeed::Next: {
+        int cue = -1;
+        const Cue* next = multiviewNextCue(nullptr, &cue);
+        return next ? "NEXT: " + std::to_string(cue + 1) + "  " + next->name : std::string("NEXT: nothing");
+      }
+      default: break;
+    }
+    // An output that was removed says so, rather than showing another one.
+    return tile.source.rfind("output:", 0) == 0 ? std::string("missing: an output that was removed")
+                                                : std::string("missing: ") + tile.source;
+  }
+
+  // The time of day for the clock window, HH:MM:SS on this machine's clock.
+  static std::string multiviewClockText() {
+    const std::time_t now = std::time(nullptr);
+    std::tm local {};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    char text[16];
+    std::snprintf(text, sizeof text, "%02d:%02d:%02d", local.tm_hour, local.tm_min, local.tm_sec);
+    return text;
+  }
+
+  // ON AIR, for the window's red border: the programme; a playlist that is
+  // playing and reaches a running output; an output that is running.
+  bool multiviewTileOnAir(const MultiviewTile& tile) const {
+    switch (multiviewTileFeed(tile)) {
+      case MultiviewFeed::Programme: return true;
+      case MultiviewFeed::Deck: {
+        const int d = multiviewTileDeck(tile);
+        if (!deckIsOnAir(d) || deckIsHeldOffOutput(d)) return false;
+        for (int o = 0; o < static_cast<int>(project_.outputs.size()); ++o) {
+          if (project_.outputs[static_cast<std::size_t>(o)].enabled && stackPositionFor(o, d) >= 0) return true;
+        }
+        return false;
+      }
+      case MultiviewFeed::Output: {
+        const int o = multiviewTileOutput(tile);
+        return o >= 0 && project_.outputs[static_cast<std::size_t>(o)].enabled;
+      }
+      default: return false;
+    }
+  }
+
+  // The level this window's meter shows. The programme window meters the
+  // programme; a playlist window meters that playlist, which is the whole
+  // point of having one per window rather than one for the desk.
+  double multiviewTileLevel01(const MultiviewTile& tile) const {
+    const int d = multiviewTileDeck(tile);
+    const DeckRuntime* runtime =
+      (d >= 0) ? runtimeForDeck(d)
+               : runtimeForDeck(std::max(0, project_.focusedDeckIndex));
+    if (d == -1) {
+      const int host = project_.outputs.empty()
+        ? 0 : std::clamp(project_.outputs[0].hostDeckIndex, 0,
+                         std::max(0, static_cast<int>(project_.decks.size()) - 1));
+      runtime = runtimeForDeck(host);
+    }
+    if (!runtime || !runtime->mediaEngine) {
+      return 0.0;
+    }
+    return runtime->mediaEngine->programAudioLevel01();
+  }
+
+  std::vector<std::pair<int, int>> layeredDeckEntriesForOutput(int outputIndex) const {
+    std::vector<std::pair<int, int>> entries;
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return entries;
+    }
+    // THE CROSSFADER IS NOT DECIDED HERE ANY MORE.
+    //
+    // VJ mode used to replace this output's whole stack with an A/B pair
+    // whenever its global flag was on, discarding the routing every other
+    // output had been given. It is now a property of the output itself
+    // (OutputTarget::crossfadeEnabled) and is applied when the stack is
+    // COMPOSITED rather than when it is chosen -- so what follows is the
+    // whole answer, and a fade can change how much of a layer you see but
+    // never which layers an output has.
+    //
+    // normalizeProjectOutputsAndLayers migrates an old show's VJ settings
+    // onto that crossfader on load, so no show has to be rebuilt.
+    // EVERY OUTPUT SHOWS THE DECK IT IS HOSTED BY.
+    //
+    // This said `entries.emplace_back(0, 0)` -- deck 0, always, whatever the
+    // output was. OutputTarget::hostDeckIndex existed the whole time, was
+    // saved, was settable, and was overridden here, so a second deck could
+    // decode and play and never appear anywhere. Measured rather than read:
+    // deck 1 showing full white recorded a mean of 251, deck 2 showing the
+    // same pattern with deck 1 stopped recorded 0.
+    //
+    // That is also what made master cues decorative for picture -- a master
+    // fires cues on decks 2 and 3 that nothing composites.
+    if (!project_.decks.empty()) {
+      const int deckCount = static_cast<int>(project_.decks.size());
+      const int host = std::clamp(project_.outputs[outputIndex].hostDeckIndex,
+                                  0, deckCount - 1);
+      entries.emplace_back(0, host);
+      // SUPER DECKBOY: the rest of the stack, bottom first. The compositor
+      // below already walks whatever this returns and draws each deck in
+      // order, so the whole of "playlist 2 sits on top of playlist 1 on this
+      // output" is this loop.
+      int layer = 1;
+      for (const OutputLayer& entry : project_.outputs[outputIndex].layerDecks) {
+        if (entry.deckIndex < 0 || entry.deckIndex >= deckCount ||
+            entry.deckIndex == host) {
+          continue;   // normalizeProject prunes these; belt and braces
+        }
+        entries.emplace_back(layer++, entry.deckIndex);
+      }
+    }
+    return entries;
+  }
+
+  std::string deckOutputRoutingLabel(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "out:--";
+    }
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    if (!outputIndex) {
+      return "out:--";
+    }
+    return "out:" + std::to_string(*outputIndex + 1);
+  }
+
+  std::optional<int> parseDeckReferenceToken(const std::string& token) const {
+    std::string trimmed = trim(token);
+    if (trimmed.empty()) {
+      return std::nullopt;
+    }
+    std::string upper = toUpper(trimmed);
+    if (upper == "SELF" || upper == "THIS" || upper == "FOCUSED" || upper == "FOCUS") {
+      return project_.focusedDeckIndex;
+    }
+    if (upper == "HOST" || upper == "OUTPUT") {
+      return resolveDeckOutputHostIndex(project_.focusedDeckIndex);
+    }
+    try {
+      int index = std::stoi(trimmed);
+      if (index >= 1 && index <= static_cast<int>(project_.decks.size())) {
+        return index - 1;
+      }
+    } catch (...) {
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      std::string deckName = project_.decks[deckIndex].name.empty()
+        ? deckDefaultName(deckIndex)
+        : project_.decks[deckIndex].name;
+      if (toUpper(deckName) == upper) {
+        return deckIndex;
+      }
+    }
+    return std::nullopt;
+  }
+
+  bool setFocusedDeckIndex(int deckIndex) {
+    normalizeProject(project_);
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    project_.focusedDeckIndex = deckIndex;
+    if (auto outputIndex = primaryOutputIndexForDeck(deckIndex); outputIndex) {
+      project_.focusedOutputIndex = *outputIndex;
+    }
+    selectionChangedAt_ = SDL_GetTicks();
+    cueSettingsScroll_ = 0;
+    cueSettingsScrollMax_ = 0;
+    clearCueFindState();
+    // The monitor follows the focused playlist unless one is pinned, so the
+    // decision is re-pushed here. It is a store per deck -- no device is
+    // opened or closed -- which is the whole reason the monitor stream is
+    // held open on every deck rather than moved between them.
+    applyAudioMonitorSelection();
+    triggerToast("deck: " + focusedDeckLabel());
+    markProjectDirty();
+    return true;
+  }
+
+  void cycleFocusedDeck(int direction) {
+    normalizeProject(project_);
+    if (project_.decks.empty()) {
+      return;
+    }
+    int deckCount = static_cast<int>(project_.decks.size());
+    int nextIndex = (project_.focusedDeckIndex + direction + deckCount) % deckCount;
+    setFocusedDeckIndex(nextIndex);
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  bool setFocusedOutputIndex(int outputIndex) {
+    normalizeProject(project_);
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    if (project_.focusedOutputIndex == outputIndex) {
+      triggerToast("output: " + outputLabel(outputIndex));
+      return false;
+    }
+    project_.focusedOutputIndex = outputIndex;
+    triggerToast("output: " + outputLabel(outputIndex));
+    markProjectDirty();
+    return true;
+  }
+
+  void cycleFocusedOutput(int direction) {
+    normalizeProject(project_);
+    if (project_.outputs.empty()) {
+      return;
+    }
+    int outputCount = static_cast<int>(project_.outputs.size());
+    int nextIndex = (project_.focusedOutputIndex + direction + outputCount) % outputCount;
+    if (setFocusedOutputIndex(nextIndex)) {
+      playUiSound(UiSoundEffect::Navigate);
+    }
+  }
+
+  int addOutput(int hostDeckIndex = -1, std::string outputType = "window") {
+    normalizeProject(project_);
+    if (project_.decks.empty()) {
+      return 0;
+    }
+    int normalizedHost = hostDeckIndex;
+    if (normalizedHost < 0 || normalizedHost >= static_cast<int>(project_.decks.size())) {
+      normalizedHost = project_.focusedDeckIndex;
+    }
+    normalizedHost = std::clamp(normalizedHost, 0, static_cast<int>(project_.decks.size()) - 1);
+
+    OutputTarget output;
+    output.name = outputDefaultName(static_cast<int>(project_.outputs.size()));
+    output.hostDeckIndex = normalizedHost;
+    output.displayIndex = std::max(0, project_.decks[normalizedHost].outputDisplayIndex);
+    output.enabled = false;
+    output.outputType = normalizeOutputType(outputType);
+    output.mirrorSourceOutputIndex = -1;
+    output.streamEnabled = (output.outputType == "stream");
+    output.streamProtocol = "srt";
+    output.streamUrl = defaultOutputStreamUrl(output.streamProtocol, static_cast<int>(project_.outputs.size()));
+    output.streamBitrateKbps = 6000;
+    output.outputId = makeOutputId(output, static_cast<int>(project_.outputs.size()));
+    project_.outputs.push_back(output);
+    int newIndex = static_cast<int>(project_.outputs.size()) - 1;
+    project_.focusedOutputIndex = newIndex;
+
+    if (!rebuildOutputRuntimes()) {
+      triggerToast("output create failed");
+      return project_.focusedOutputIndex;
+    }
+    triggerToast("output added (off): " + outputLabel(newIndex));
+    playUiSound(UiSoundEffect::Import);
+    markProjectDirty();
+    return newIndex;
+  }
+
+  bool removeOutput(int outputIndex) {
+    normalizeProject(project_);
+    int outputCount = static_cast<int>(project_.outputs.size());
+    if (outputCount <= 1) {
+      triggerToast("keep at least one output");
+      return false;
+    }
+    if (outputIndex < 0 || outputIndex >= outputCount) {
+      return false;
+    }
+
+    std::string removedLabel = outputLabel(outputIndex);
+    // THE RUNTIME GOES WITH ITS OUTPUT. The sync below only ever trims the
+    // runtime list from the END, so removing a middle output destroyed the
+    // LAST output's runtime and handed the removed one's window to it: with
+    // a recording on output 3, removing output 2 stopped that recording and
+    // started a new file. Take this output's own runtime out, at its index,
+    // so every other output keeps the one it had.
+    if (outputIndex < static_cast<int>(outputRuntimes_.size())) {
+      destroyOutputRuntime(outputRuntimes_[static_cast<std::size_t>(outputIndex)]);
+      outputRuntimes_.erase(outputRuntimes_.begin() + outputIndex);
+    }
+    project_.outputs.erase(project_.outputs.begin() + outputIndex);
+
+    for (OutputTarget& output : project_.outputs) {
+      if (output.mirrorSourceOutputIndex == outputIndex) {
+        output.mirrorSourceOutputIndex = -1;
+      } else if (output.mirrorSourceOutputIndex > outputIndex) {
+        output.mirrorSourceOutputIndex -= 1;
+      }
+    }
+
+    if (project_.focusedOutputIndex > outputIndex) {
+      project_.focusedOutputIndex -= 1;
+    } else if (project_.focusedOutputIndex >= static_cast<int>(project_.outputs.size())) {
+      project_.focusedOutputIndex = static_cast<int>(project_.outputs.size()) - 1;
+    }
+
+    normalizeProject(project_);
+    if (!rebuildOutputRuntimes()) {
+      triggerToast("output remove failed");
+      return false;
+    }
+    triggerToast("output removed: " + removedLabel);
+    playUiSound(UiSoundEffect::Delete);
+    markProjectDirty();
+    return true;
+  }
+
+  // ── SUPER DECKBOY: DECK -> OUTPUT ROUTING ─────────────────────────────
+  //
+  // Every function in this block was a single-deck stub. assignDeckToOutput
+  // ignored the layer it was handed and set a field nothing composited;
+  // assignmentIndexForDeckOutput answered "deck 0 on output 0" and nothing
+  // else; setDeckOutputAssignmentLayer returned false; unassign refused
+  // outright. The output menu's ASSIGN, LAYER - / + and MOVE controls were all
+  // wired to them, so all six controls did nothing at all -- which is what
+  // "the UI is a mess, with controls missing" reads like from the operator's
+  // side, and why there was no way to answer "how do I assign a playlist to an
+  // output?" except over the socket.
+  //
+  // The stack is the output's, not the deck's: layer 0 IS hostDeckIndex, and
+  // layerDecks holds 1..N above it.
+
+  // Which layer this deck occupies on this output, or nothing if it is not
+  // on it at all.
+  std::optional<int> assignmentIndexForDeckOutput(int deckIndex, int outputIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return std::nullopt;
+    }
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return std::nullopt;
+    }
+    const OutputTarget& output = project_.outputs[outputIndex];
+    if (output.hostDeckIndex == deckIndex) {
+      return 0;
+    }
+    for (std::size_t i = 0; i < output.layerDecks.size(); ++i) {
+      if (output.layerDecks[i].deckIndex == deckIndex) {
+        return static_cast<int>(i) + 1;
+      }
+    }
+    return std::nullopt;
+  }
+
+  bool assignDeckToOutput(int deckIndex, int outputIndex,
+                          std::optional<int> requestedLayer = std::nullopt) {
+    normalizeProject(project_);
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    project_.focusedOutputIndex = outputIndex;
+    OutputTarget& output = project_.outputs[outputIndex];
+    if (output.hostDeckIndex == deckIndex) {
+      triggerToast(deckLabel(deckIndex) + " is already the base of " + outputLabel(outputIndex));
+      return false;
+    }
+    if (assignmentIndexForDeckOutput(deckIndex, outputIndex)) {
+      triggerToast(deckLabel(deckIndex) + " is already on " + outputLabel(outputIndex));
+      return false;
+    }
+    // Bounded by how many playlists there ARE, which is the real limit: an
+    // output cannot carry more layers than the show has decks to put on them.
+    // This said kMaxDecks, which is a different quantity that happens to be a
+    // safe number -- the kind of coincidence that stops being one later.
+    if (static_cast<int>(output.layerDecks.size()) + 1 >=
+        static_cast<int>(project_.decks.size())) {
+      triggerToast("layer limit reached on " + outputLabel(outputIndex));
+      return false;
+    }
+    // A requested layer of 0 would mean "be the base", which is a different
+    // operation (setFocusedOutputHostDeck) -- so the lowest a new layer can
+    // land is 1, directly above the host.
+    int at = static_cast<int>(output.layerDecks.size());
+    if (requestedLayer) {
+      at = std::clamp(*requestedLayer - 1, 0, static_cast<int>(output.layerDecks.size()));
+    }
+    OutputLayer added;
+    added.deckIndex = deckIndex;   // full frame, dissolve: see OutputLayer
+    output.layerDecks.insert(output.layerDecks.begin() + at, added);
+    triggerToast("assign: " + deckLabel(deckIndex) + " -> " + outputLabel(outputIndex) +
+                 " layer " + layerLetter(at + 1));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool assignFocusedDeckToFocusedOutput(std::optional<int> requestedLayer = std::nullopt) {
+    return assignDeckToOutput(project_.focusedDeckIndex, project_.focusedOutputIndex, requestedLayer);
+  }
+
+  // How many destinations this deck reaches. Used to warn about a playlist
+  // that is running and going nowhere.
+  int enabledAssignmentCountForDeck(int deckIndex) const {
+    int count = 0;
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (assignmentIndexForDeckOutput(deckIndex, i)) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  bool setDeckOutputAssignmentLayer(int deckIndex, int outputIndex, int layerIndex) {
+    auto at = assignmentIndexForDeckOutput(deckIndex, outputIndex);
+    if (!at) {
+      return false;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    const int stackSize = static_cast<int>(output.layerDecks.size());
+    // MOVING THE BASE, OR MOVING SOMETHING ONTO THE BASE, IS A SWAP.
+    //
+    // The host is layer 0 and cannot simply be reordered out of existence --
+    // an output with no base deck has nothing to composite onto. So dragging
+    // the base up, or a layer down to 0, exchanges the two.
+    if (layerIndex <= 0) {
+      if (*at == 0) {
+        return false;   // already the base
+      }
+      const int wasHost = output.hostDeckIndex;
+      output.hostDeckIndex = deckIndex;
+      // The demoted host takes the geometry of the slot it drops into, which
+      // is what "swap places" means -- a base deck has no geometry of its own.
+      output.layerDecks[static_cast<std::size_t>(*at) - 1].deckIndex = wasHost;
+      triggerToast(deckLabel(deckIndex) + " is now the base of " + outputLabel(outputIndex));
+      markProjectDirty();
+      return true;
+    }
+    if (layerIndex > stackSize) {
+      return false;
+    }
+    if (*at == 0) {
+      const int promoted = output.layerDecks[static_cast<std::size_t>(layerIndex) - 1].deckIndex;
+      output.layerDecks[static_cast<std::size_t>(layerIndex) - 1].deckIndex = deckIndex;
+      output.hostDeckIndex = promoted;
+      triggerToast(deckLabel(deckIndex) + " -> layer " + layerLetter(layerIndex));
+      markProjectDirty();
+      return true;
+    }
+    if (*at == layerIndex) {
+      return false;
+    }
+    const OutputLayer moved = output.layerDecks[static_cast<std::size_t>(*at) - 1];
+    output.layerDecks.erase(output.layerDecks.begin() + (*at - 1));
+    output.layerDecks.insert(output.layerDecks.begin() + (layerIndex - 1), moved);
+    triggerToast(deckLabel(deckIndex) + " -> layer " + layerLetter(layerIndex));
+    markProjectDirty();
+    return true;
+  }
+
+  bool unassignDeckFromOutput(int deckIndex, int outputIndex) {
+    auto at = assignmentIndexForDeckOutput(deckIndex, outputIndex);
+    if (!at) {
+      return false;
+    }
+    OutputTarget& output = project_.outputs[outputIndex];
+    if (*at == 0) {
+      // THE BASE CANNOT JUST LEAVE. If something is layered above it, that
+      // becomes the base; if nothing is, the output would have no picture at
+      // all, and an output that silently shows black is the fault this whole
+      // feature exists to stop being possible.
+      if (output.layerDecks.empty()) {
+        triggerToast("an output needs a base playlist");
+        return false;
+      }
+      output.hostDeckIndex = output.layerDecks.front().deckIndex;
+      output.layerDecks.erase(output.layerDecks.begin());
+      triggerToast(deckLabel(output.hostDeckIndex) + " is now the base of " +
+                   outputLabel(outputIndex));
+      markProjectDirty();
+      return true;
+    }
+    output.layerDecks.erase(output.layerDecks.begin() + (*at - 1));
+    triggerToast("off " + outputLabel(outputIndex) + ": " + deckLabel(deckIndex));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  // Take this deck off every other output and put it on this one. What the
+  // output menu's "move" arrows mean.
+  bool moveDeckToOutput(int deckIndex, int outputIndex,
+                        std::optional<int> requestedLayer = std::nullopt) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return false;
+    }
+    for (int i = 0; i < static_cast<int>(project_.outputs.size()); ++i) {
+      if (i == outputIndex) {
+        continue;
+      }
+      // Only where it can leave without stranding that output.
+      if (assignmentIndexForDeckOutput(deckIndex, i)) {
+        OutputTarget& other = project_.outputs[i];
+        if (other.hostDeckIndex == deckIndex && other.layerDecks.empty()) {
+          continue;
+        }
+        unassignDeckFromOutput(deckIndex, i);
+      }
+    }
+    if (assignmentIndexForDeckOutput(deckIndex, outputIndex)) {
+      project_.focusedOutputIndex = outputIndex;
+      return true;
+    }
+    return assignDeckToOutput(deckIndex, outputIndex, requestedLayer);
+  }
+
+  // A, B, C... An output's layers are read out loud far more often than they
+  // are counted, and "layer B over layer A" is how an operator says it.
+  static std::string layerLetter(int layerIndex) {
+    if (layerIndex < 0) {
+      return "-";
+    }
+    if (layerIndex < 26) {
+      return std::string(1, static_cast<char>('A' + layerIndex));
+    }
+    return std::to_string(layerIndex + 1);
+  }
+
+  bool setFocusedOutputHostDeck(int hostDeckIndex) {
+    normalizeProject(project_);
+    if (hostDeckIndex < 0 || hostDeckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    OutputTarget& output = focusedOutputMutable();
+    int clampedHost = std::clamp(hostDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    if (output.hostDeckIndex == clampedHost) {
+      triggerToast("host: " + deckLabel(clampedHost));
+      return false;
+    }
+    output.hostDeckIndex = clampedHost;
+    project_.decks[clampedHost].outputDisplayIndex = std::max(0, output.displayIndex);
+    applyOutputDisplaySelection(project_.focusedOutputIndex);
+    triggerToast("host: " + deckLabel(clampedHost));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+

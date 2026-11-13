@@ -1,0 +1,2898 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// project_file.ipp — reading and writing a .deckboy show.
+//
+// Lifted out of main.cpp, which held the application class, the CLI, the
+// inspector and this. The show file is the part hardest to work on and easiest
+// to get wrong, and it was in the middle of the largest file in the project.
+//
+// INCLUDED, not compiled separately: these are free functions in main.cpp's
+// anonymous namespace and they lean on the cue and colour helpers declared
+// above the include point. The include sits exactly where they used to be, so
+// every name they see is the one they saw before.
+//
+// THE RECORD IS POSITIONAL. Fields are addressed as `base + N`, so a field
+// inserted into the middle of the writer shifts every column after it and the
+// reader goes on addressing the old positions -- silently, because the wrong
+// values clamp back into range and look plausible. APPEND to the end of a
+// record, never insert into the middle, and run tools/audit_record_layout.py,
+// which compares the writer's order against the reader's and is the only
+// check that catches this.
+// ═══════════════════════════════════════════════════════════════════════════
+// Does this cue carry an unbypassed TEXT MODE effect? Free, because both the
+// writer and the migration ask it.
+// A LIST OF INDICES IN ONE FIELD.
+//
+// The output record is positional and tab-delimited, so a list whose length
+// varies cannot have a column each without moving every field after it. One
+// comma-separated field keeps the format append-only, which is the rule the
+// whole file follows.
+// A LAYER LIST IN ONE FIELD, and it still reads what the old one wrote.
+//
+// "1,2" meant decks 1 and 2 full-frame; it now writes
+// "1:0:0:1:1:dissolve,2:...". A token with no colons is the old form and gets
+// the defaults, which ARE full-frame dissolve -- so a show saved this morning
+// opens with its layers exactly where they were.
+inline std::string joinLayerList(const std::vector<OutputLayer>& layers) {
+  std::ostringstream out;
+  for (std::size_t i = 0; i < layers.size(); ++i) {
+    if (i) out << ',';
+    const OutputLayer& l = layers[i];
+    out << l.deckIndex << ':' << l.x << ':' << l.y << ':' << l.w << ':' << l.h
+        << ':' << (l.blendMode.empty() ? "dissolve" : l.blendMode);
+    // The layer's own corner pin, appended. Written only when it is armed,
+    // so a show that does not map keeps the short token it always had.
+    // A mask (field 16) needs the pin's fields before it, so a masked layer
+    // writes them whether or not the pin is armed.
+    if (l.warpEnabled || !l.maskId.empty()) {
+      out << ':' << (l.warpEnabled ? 1 : 0)
+          << ':' << l.warpTopLeftX     << ':' << l.warpTopLeftY
+          << ':' << l.warpTopRightX    << ':' << l.warpTopRightY
+          << ':' << l.warpBottomRightX << ':' << l.warpBottomRightY
+          << ':' << l.warpBottomLeftX  << ':' << l.warpBottomLeftY
+          << ':' << (l.warpPerspective ? 1 : 0);
+    }
+    if (!l.maskId.empty()) {
+      out << ':' << l.maskId;   // ids never hold ':' or ','
+    }
+  }
+  return out.str();
+}
+
+inline std::vector<OutputLayer> parseLayerList(const std::string& text) {
+  std::vector<OutputLayer> out;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t comma = text.find(',', start);
+    if (comma == std::string::npos) comma = text.size();
+    const std::string token = trim(text.substr(start, comma - start));
+    start = comma + 1;
+    if (token.empty()) {
+      continue;
+    }
+    std::vector<std::string> bits;
+    std::size_t p = 0;
+    while (p <= token.size()) {
+      std::size_t colon = token.find(':', p);
+      if (colon == std::string::npos) colon = token.size();
+      bits.push_back(token.substr(p, colon - p));
+      p = colon + 1;
+    }
+    OutputLayer layer;
+    try {
+      layer.deckIndex = std::stoi(bits[0]);
+    } catch (...) {
+      continue;   // not a number: drop it rather than default to deck 1
+    }
+    auto readF = [&](std::size_t at, float fallback) {
+      if (at >= bits.size()) return fallback;
+      try {
+        return std::stof(bits[at]);
+      } catch (...) {
+        return fallback;
+      }
+    };
+    layer.x = readF(1, 0.0f);
+    layer.y = readF(2, 0.0f);
+    layer.w = readF(3, 1.0f);
+    layer.h = readF(4, 1.0f);
+    if (bits.size() > 5 && !bits[5].empty()) {
+      layer.blendMode = bits[5];
+    }
+    // The layer's corner pin. Absent in every show written before it, which
+    // readF already answers with the neutral value.
+    layer.warpEnabled = readF(6, 0.0f) != 0.0f;
+    layer.warpTopLeftX     = readF(7, 0.0f);
+    layer.warpTopLeftY     = readF(8, 0.0f);
+    layer.warpTopRightX    = readF(9, 0.0f);
+    layer.warpTopRightY    = readF(10, 0.0f);
+    layer.warpBottomRightX = readF(11, 0.0f);
+    layer.warpBottomRightY = readF(12, 0.0f);
+    layer.warpBottomLeftX  = readF(13, 0.0f);
+    layer.warpBottomLeftY  = readF(14, 0.0f);
+    // Missing in every pin saved before the choice: those drew linear.
+    layer.warpPerspective = readF(15, 0.0f) != 0.0f;
+    if (bits.size() > 16) {
+      layer.maskId = trim(bits[16]);
+    }
+    out.push_back(layer);
+  }
+  return out;
+}
+
+// A list of NAMES in one field. Semicolon separated, because an audio device
+// name routinely contains a comma ("Speakers (2- USB Audio, Realtek)").
+inline std::string joinStringList(const std::vector<std::string>& values, char sep) {
+  std::string out;
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i) out += sep;
+    out += values[i];
+  }
+  return out;
+}
+
+inline std::vector<std::string> parseStringList(const std::string& text, char sep) {
+  std::vector<std::string> out;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t at = text.find(sep, start);
+    if (at == std::string::npos) at = text.size();
+    const std::string token = trim(text.substr(start, at - start));
+    if (!token.empty()) {
+      out.push_back(token);
+    }
+    start = at + 1;
+  }
+  return out;
+}
+
+// A playlist's row of the PATCH in one field: "FOH=0;SUB=-6". Output names
+// cannot hold ';' or '=' (cleanAudioOutputName), so the split is unambiguous.
+inline std::string serializeAudioPatch(const std::vector<AudioPatchPoint>& points) {
+  std::string out;
+  for (const AudioPatchPoint& point : points) {
+    if (point.output.empty()) continue;
+    if (!out.empty()) out += ';';
+    char level[16];
+    std::snprintf(level, sizeof(level), "%.1f", point.gainDb);
+    out += point.output + "=" + level;
+  }
+  return out;
+}
+
+inline std::vector<AudioPatchPoint> parseAudioPatch(const std::string& text) {
+  std::vector<AudioPatchPoint> out;
+  for (const std::string& item : parseStringList(text, ';')) {
+    const std::size_t eq = item.rfind('=');
+    if (eq == std::string::npos || eq == 0) continue;
+    AudioPatchPoint point;
+    point.output = trim(item.substr(0, eq));
+    point.gainDb = std::clamp(static_cast<float>(std::atof(item.c_str() + eq + 1)),
+                              kAudioPatchMinDb, kAudioPatchMaxDb);
+    if (!point.output.empty()) out.push_back(point);
+  }
+  return out;
+}
+
+inline std::string joinIntList(const std::vector<int>& values) {
+  std::string out;
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i) out += ',';
+    out += std::to_string(values[i]);
+  }
+  return out;
+}
+
+inline std::vector<int> parseIntList(const std::string& text) {
+  std::vector<int> out;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t comma = text.find(',', start);
+    if (comma == std::string::npos) comma = text.size();
+    const std::string token = trim(text.substr(start, comma - start));
+    if (!token.empty()) {
+      try {
+        out.push_back(std::stoi(token));
+      } catch (...) {
+        // A field that is not a number is dropped rather than defaulted to
+        // zero: zero is deck 1, and silently layering deck 1 onto an output
+        // because a show file was damaged is worse than losing the layer.
+      }
+    }
+    start = comma + 1;
+  }
+  return out;
+}
+
+inline bool cueHasTextModeEffect(const Cue& cue) {
+  for (const auto& fx : cue.effects) {
+    if (fx.kind == deckboy::effects::CueEffectKind::TextMode && !fx.bypassed) {
+      return true;
+    }
+  }
+  return false;
+}
+// The project's named scalar settings, one "key<TAB>value" line each.
+//
+// Split out of saveProject so that the SHOW FILE and the GET/SET commands
+// read the same 86 keys through the same code. They were only ever writable
+// by editing a show file by hand: applyProjectScalarLine below already gave
+// every one of them a name and a validated setter, and nothing on the wire
+// could reach any of it.
+//
+// Sharing the writer is what keeps the two honest. A second list of keys for
+// the protocol would drift from this one the first time a setting was added,
+// and drift here means a command that silently sets nothing.
+void writeProjectScalars(std::ostream& output, const Project& project) {
+  output << "title\t" << escapeField(project.title) << '\n';
+  output << "focused_deck\t" << project.focusedDeckIndex << '\n';
+  output << "focused_output\t" << project.focusedOutputIndex << '\n';
+  output << "advanced_mode\t" << (project.advancedOutputMode ? 1 : 0) << '\n';
+  output << "ptp_domain\t" << project.ptpDomain << '\n';
+  output << "nmos_enabled\t" << (project.nmosEnabled ? 1 : 0) << '\n';
+  output << "nmos_registry\t" << escapeField(project.nmosRegistryUrl) << '\n';
+  output << "nmos_port\t" << project.nmosPort << '\n';
+  output << "nmos_interface\t" << escapeField(project.nmosInterfaceName) << '\n';
+  output << "ltc_out\t" << (project.ltcOutputEnabled ? 1 : 0) << '\n';
+  output << "ltc_out_device\t" << escapeField(project.ltcOutputDeviceName) << '\n';
+  output << "midi_device\t" << escapeField(project.midiDeviceName) << '\n';
+  output << "update_check\t" << (project.updateCheckEnabled ? 1 : 0) << '\n';
+  // The mask library, one line each (core/masks.hpp, serializeMask).
+  for (const deckboy::masks::Mask& mask : project.masks) {
+    output << "mask\t" << escapeField(deckboy::masks::serializeMask(mask, serializeGeometryLfos(mask.lfo)))
+           << '\n';
+  }
+  output << "mediamtx_host\t" << escapeField(project.mediamtxHost) << '\n';
+  output << "captions_model\t" << escapeField(project.captionsModel) << '\n';
+  output << "live_captions\t" << (project.liveCaptionsEnabled ? 1 : 0) << '\n';
+  output << "live_captions_source\t" << escapeField(project.liveCaptionsSource) << '\n';
+  output << "live_captions_outputs\t" << project.liveCaptionsOutputs << '\n';
+  output << "live_captions_lines\t" << project.liveCaptionsLines << '\n';
+  output << "live_captions_top\t" << (project.liveCaptionsTop ? 1 : 0) << '\n';
+  output << "live_captions_size\t" << project.liveCaptionsSize << '\n';
+  output << "live_captions_transcript\t" << (project.liveCaptionsTranscript ? 1 : 0) << '\n';
+  output << "hdr_outputs\t" << project.hdrOutputs << '\n';
+  output << "hdr_auto_outputs\t" << project.hdrAutoOutputs << '\n';
+  output << "hdr_sdr_white\t" << project.hdrSdrWhiteNits << '\n';
+  output << "hdr_hlg_outputs\t" << project.hdrHlgOutputs << '\n';
+  output << "clock_mode\t"
+         << (project.clockMode.empty() ? std::string("off") : project.clockMode)
+         << '\n';
+  output << "ndi_tally_trigger\t" << (project.ndiTallyTriggerEnabled ? 1 : 0) << '\n';
+  output << "tally_switch_off\t" << project.tallySwitchOffAction << '\n';
+  output << "atem_tally_trigger\t" << (project.atemTallyTriggerEnabled ? 1 : 0) << '\n';
+  output << "atem_switcher_host\t" << project.atemSwitcherHost << '\n';
+  output << "atem_tally_input\t" << project.atemTallyInput << '\n';
+  output << "hyperdeck_enabled\t" << (project.hyperDeckEnabled ? 1 : 0) << '\n';
+  output << "language\t" << project.language << '\n';
+  output << "nmc_mode\t" << project.nmcMode << '\n';
+  output << "nmc_port\t" << project.nmcPort << '\n';
+  output << "nmc_target_host\t" << project.nmcTargetHost << '\n';
+  output << "nmc_source_filter\t" << project.nmcSourceFilter << '\n';
+  output << "ltc_out_fps\t" << project.ltcOutputFps << '\n';
+  output << "ui_sounds\t" << (project.uiSoundsEnabled ? 1 : 0) << '\n';
+  output << "hover_tips\t" << (project.hoverTipsEnabled ? 1 : 0) << '\n';
+  output << "browser_scrollbars\t" << (project.browserScrollbars ? 1 : 0) << '\n';
+  output << "midi_clock_slave\t" << (project.midiClockSlave ? 1 : 0) << '\n';
+  output << "ui_sounds\t" << (project.uiSoundsEnabled ? 1 : 0) << '\n';
+  output << "miami_cursor\t" << (project.miamiCursorEnabled ? 1 : 0) << '\n';
+  output << "browser_scrollbars\t" << (project.browserScrollbars ? 1 : 0) << '\n';
+  output << "midi_clock_slave\t" << (project.midiClockSlave ? 1 : 0) << '\n';
+  output << "ui_transitions\t" << (project.uiTransitionsEnabled ? 1 : 0) << '\n';
+  output << "splash_character\t" << escapeField(project.splashCharacter) << '\n';
+  output << "beast_mode\t" << (project.beastMode ? 1 : 0) << '\n';
+  output << "multiview\t" << project.multiviewMode << '\n';
+  output << "multiview_layout\t" << deckboy::multiview::layoutToken(project.multiviewLayout) << '\n';
+  // The draw brush, on one line: tool, colour, size, opacity, onion, its ~s.
+  {
+    char rgba[16];
+    std::snprintf(rgba, sizeof rgba, "%08x", static_cast<unsigned>(project.drawBrush.rgba));
+    output << "draw_brush\t" << deckboy::draw::toolToken(project.drawBrush.tool) << '\t' << rgba << '\t'
+           << project.drawBrush.size << '\t' << project.drawBrush.opacity << '\t'
+           << (project.drawBrush.onion ? 1 : 0) << '\t' << escapeField(serializeToneLfos(project.drawBrushLfo))
+           << '\n';
+  }
+  // Motion, on one line: on, source, sensitivity, rise, fall, mirror, zones.
+  output << "motion\t" << (project.motionEnabled ? 1 : 0) << '\t' << escapeField(project.motionSource)
+         << '\t' << project.motion.sensitivity << '\t' << project.motion.riseSeconds
+         << '\t' << project.motion.fallSeconds << '\t' << (project.motion.mirror ? 1 : 0)
+         << '\t' << deckboy::motion::zonesToText(project.motion.zones) << '\n';
+  output << "monitor_device\t" << escapeField(project.monitorDeviceName) << '\n';
+  output << "monitor_deck\t" << project.monitorDeckIndex << '\n';
+  for (const NamedAudioOutput& named : project.namedAudioOutputs) {
+    output << "audio_output\t" << escapeField(named.name) << '\t' << escapeField(named.deviceName) << '\t'
+           << named.firstChannel << '\t' << named.width << '\n';
+  }
+  for (const OutputLimiterSetting& limiter : project.outputLimiters) {
+    output << "output_limiter\t" << (limiter.enabled ? 1 : 0) << '\t' << limiter.ceilingDb << '\t'
+           << escapeField(limiter.deviceName) << '\t'
+           << escapeField(deckboy::audiofx::serializeAudioEffects(limiter.effects)) << '\t'
+           << (limiter.bypassAll ? 1 : 0) << '\n';
+  }
+  output << "dashboard_mode\t" << project.dashboardMode << '\n';
+  output << "tracker_loop\t" << (project.trackerLoop ? 1 : 0) << '\n';
+  output << "tracker_muted\t" << project.trackerMutedDecks << '\n';
+  output << "tracker_solo\t" << project.trackerSoloDecks << '\n';
+  output << "tracker_classic\t" << (project.trackerClassicView ? 1 : 0) << '\n';
+  output << "clicker_tracker\t" << (project.clickerDrivesTracker ? 1 : 0) << '\n';
+  // One line per window, in the order they are drawn. Written only when the
+  // operator has actually arranged them: an empty list means "the automatic
+  // set", and writing no lines at all is how that round-trips.
+  for (const auto& tile : project.multiviewTiles) {
+    output << "multiview_tile\t" << escapeField(tile.source)
+           << '\t' << (tile.vuMeter ? 1 : 0)
+           << '\t' << (tile.safeAreas ? 1 : 0)
+           << '\t' << (tile.label ? 1 : 0)
+           << '\n';
+  }
+  output << "recording_dir\t" << escapeField(project.recordingDir) << '\n';
+  // The recording FORMAT is part of the show. An operator who set 1080p25
+  // ProRes with drop-frame timecode must get it back tomorrow, not the
+  // defaults — a setting that does not round-trip is a setting that does not
+  // exist, which is exactly what the cue-kind bug taught.
+  output << "recording_width\t" << project.recordingWidth << '\n';
+  output << "recording_height\t" << project.recordingHeight << '\n';
+  output << "recording_fps\t" << project.recordingFps << '\n';
+  output << "recording_codec\t" << escapeField(project.recordingCodec) << '\n';
+  output << "normalize_target_lufs\t" << project.normalizeTargetLufs << '\n';
+  output << "recording_tc_mode\t" << escapeField(project.recordingTimecodeMode) << '\n';
+  output << "recording_tc_start\t" << escapeField(project.recordingTimecodeStart) << '\n';
+  output << "recording_tc_df\t" << escapeField(project.recordingTimecodeDropFrame) << '\n';
+  output << "recording_segment_minutes\t" << project.recordingSegmentMinutes << '\n';
+  output << "recording_segment_mb\t" << project.recordingSegmentMegabytes << '\n';
+  output << "recording_remux\t" << (project.recordingRemuxOnStop ? 1 : 0) << '\n';
+  output << "asio_driver\t" << escapeField(project.asioDriverName) << '\n';
+  output << "audio_input_device\t" << escapeField(project.audioInputDeviceName) << '\n';
+  output << "synth_keyboard\t" << (project.synthKeyboardEnabled ? 1 : 0) << '\n';
+  output << "synth_octave\t" << project.synthKeyboardOctave << '\n';
+  output << "midi_to_synth\t" << (project.midiToSynth ? 1 : 0) << '\n';
+  // Escaped once more as a whole: a row is itself tab-separated fields.
+  for (const std::string& row : project.midiMapRows) {
+    output << "midimap_row\t" << deckboy::midimap::escapeValue(row) << '\n';
+  }
+  output << "audio_input_enabled\t" << (project.audioInputEnabled ? 1 : 0) << '\n';
+  output << "audio_input_gain_db\t" << project.audioInputGainDb << '\n';
+  output << "audio_input_to_program\t" << (project.audioInputToProgram ? 1 : 0) << '\n';
+  output << "audio_input_mono\t" << (project.audioInputMono ? 1 : 0) << '\n';
+  output << "asio_channels\t" << project.asioChannels << '\n';
+  output << "hap_suggestion_dismissed\t" << (project.hapSuggestionDismissed ? 1 : 0) << '\n';
+  output << "theme\t" << escapeField(project.theme) << '\n';
+  output << "terrarium_unlocked\t" << (project.terrariumUnlocked ? 1 : 0) << '\n';
+  output << "tabletop_unlocked\t" << (project.tabletopUnlocked ? 1 : 0) << '\n';
+  output << "geometry_aspect_link\t" << (project.geometryAspectLinked ? 1 : 0) << '\n';
+  output << "ui_scale\t" << project.uiScale << '\n';
+  output << "creatures\t" << (project.creaturesEnabled ? 1 : 0) << '\n';
+  output << "creatures_while_live\t" << (project.creaturesWhileLive ? 1 : 0) << '\n';
+  output << "show_control_device\t" << project.showControlDeviceId << '\n';
+  // VJ mode. Written as project scalars so a show that never turns it on
+  // carries the defaults and behaves exactly as it always did.
+  output << "vj_mode\t" << (project.vjModeEnabled ? 1 : 0) << '\n';
+  output << "vj_deck_a\t" << project.vjDeckA << '\n';
+  output << "vj_deck_b\t" << project.vjDeckB << '\n';
+  output << "vj_mix\t" << project.vjMixPosition << '\n';
+  output << "vj_blend\t" << project.vjBlendMode << '\n';
+  output << "vj_bpm\t" << project.vjTempoBpm << '\n';
+  output << "vj_quantise\t" << (project.vjQuantiseTakes ? 1 : 0) << '\n';
+  output << "interaction_mode\t" << escapeField(project.interactionMode) << '\n';
+  output << "allow_remote_network\t" << (project.allowRemoteNetwork ? 1 : 0) << '\n';
+  output << "trusted_controllers\t" << project.trustedControllers << '\n';
+  output << "companion_passphrase\t" << project.companionPassphrase << '\n';
+  output << "osc_query_enabled\t" << (project.oscQueryEnabled ? 1 : 0) << '\n';
+  output << "osc_query_port\t" << project.oscQueryPort << '\n';
+  output << "web_monitor_enabled\t" << (project.webMonitorEnabled ? 1 : 0) << '\n';
+  output << "web_remote_enabled\t" << (project.webRemoteEnabled ? 1 : 0) << '\n';
+  output << "web_remote_level\t" << project.webRemoteLevel << '\n';
+  output << "go_guard_ms\t" << project.goGuardMs << '\n';
+  output << "web_remote_haptics\t" << (project.webRemoteHaptics ? 1 : 0) << '\n';
+  output << "web_monitor_port\t" << project.webMonitorPort << '\n';
+  output << "web_monitor_share\t" << (project.webMonitorShareLan ? 1 : 0) << '\n';
+  output << "web_monitor_pin\t" << escapeField(project.webMonitorPin) << '\n';
+  output << "web_monitor_max_height\t" << project.webMonitorMaxHeight << '\n';
+  output << "web_monitor_max_clients\t" << project.webMonitorMaxClients << '\n';
+  output << "web_monitor_low_latency\t" << (project.webMonitorLowLatency ? 1 : 0) << '\n';
+  output << "browse_folder\t" << escapeField(project.browseFolder) << '\n';
+  output << "audio_sample_rate\t" << project.audioSampleRate << '\n';
+  output << "vmix_api_enabled\t" << (project.vmixApiEnabled ? 1 : 0) << '\n';
+  output << "vmix_http_port\t" << project.vmixHttpPort << '\n';
+  output << "vmix_tcp_port\t" << project.vmixTcpPort << '\n';
+  output << "osc_feedback_mirror\t" << (project.oscFeedbackMirrorEnabled ? 1 : 0) << '\n';
+  output << "osc_feedback_rate_ms\t" << project.oscFeedbackRateMs << '\n';
+  output << "integration_atem_trigger\t" << (project.atemTriggerEnabled ? 1 : 0) << '\n';
+  output << "integration_ndi_trigger\t" << (project.ndiTriggerEnabled ? 1 : 0) << '\n';
+  output << "integration_nmc_sync\t" << (project.nmcSyncEnabled ? 1 : 0) << '\n';
+  output << "integration_mtc_ingest\t" << (project.mtcIngestEnabled ? 1 : 0) << '\n';
+  output << "integration_ltc_ingest\t" << (project.ltcIngestEnabled ? 1 : 0) << '\n';
+  output << "integration_dmx_artnet\t" << (project.dmxArtNetEnabled ? 1 : 0) << '\n';
+  for (const auto& fixture : project.fixtures) {
+    output << "fixture\t" << escapeField(fixture.name) << '\t'
+           << deckboy::fixtures::fixtureTypeToken(fixture.type) << '\t'
+           << fixture.universe << '\t' << fixture.address << '\t' << fixture.videoDip << '\n';
+  }
+  output << "video_dip\t" << (project.videoDipEnabled ? 1 : 0) << '\n';
+  output << "video_dip_fade\t" << project.videoDipFadeSeconds << '\n';
+  output << "integration_artnet_port\t" << project.artNetPort << '\n';
+  output << "integration_tsl_tally\t" << (project.tslTallyEnabled ? 1 : 0) << '\n';
+  output << "integration_tsl_port\t" << project.tslTallyPort << '\n';
+  output << "integration_tsl_address\t" << escapeField(project.tslTallyAddress) << '\n';
+  output << "audio_buffer_samples\t" << project.audioBufferSamples << '\n';
+  output << "audio_delay_ms\t" << project.audioDelayMs << '\n';
+  output << "jump_mode\t" << escapeField(project.jumpMode) << '\n';
+  output << "jump_transition\t" << (project.jumpTransitionEnabled ? 1 : 0) << '\n';
+  output << "panic_profile\t" << escapeField(project.panicProfile) << '\n';
+  output << "panic_fade_seconds\t" << project.panicFadeSeconds << '\n';
+  output << "panic_auto_restore\t" << (project.panicAutoRestore ? 1 : 0) << '\n';
+  output << "master_volume\t" << project.masterVolume << '\n';
+  output << "master_dimmer\t" << project.masterDimmer << '\n';
+  output << "output_follow_display\t" << (project.outputFollowDisplay ? 1 : 0) << '\n';
+  output << "output_render_width\t" << project.outputRenderWidth << '\n';
+  output << "output_render_height\t" << project.outputRenderHeight << '\n';
+  output << "output_refresh_hz\t" << project.outputRefreshRateHz << '\n';
+  output << "output_bit_depth\t" << project.outputBitDepth << '\n';
+  output << "output_canvas_enabled\t" << (project.outputCanvasEnabled ? 1 : 0) << '\n';
+  output << "output_canvas_width\t" << project.outputCanvasWidth << '\n';
+  output << "output_canvas_height\t" << project.outputCanvasHeight << '\n';
+}
+
+
+fs::path projectSavingFile(const fs::path& file) {
+  fs::path saving = file;
+  saving += ".saving";
+  return saving;
+}
+
+// A scanner may briefly hold either file without delete sharing on Windows.
+// Keep replacement atomic on every platform; never unlink the old show first.
+//
+// PATIENT ONLY WHEN NOBODY IS WATCHING. The retries sleep on the main loop,
+// which also draws the outputs, so a file held during a live show would
+// freeze the picture for up to 140 ms per rename. A show in progress makes
+// one attempt and leaves the rest to the app's deferred retry.
+bool renameProjectWithRetry(const fs::path& source, const fs::path& destination,
+                            bool patient = true) {
+  const int attempts = patient ? 4 : 1;
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    std::error_code ec;
+    fs::rename(source, destination, ec);
+    if (!ec) return true;
+    if (attempt + 1 < attempts) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20 << attempt));
+    }
+  }
+  return false;
+}
+
+fs::path newerProjectRecoveryFile(const fs::path& file) {
+  const fs::path saving = projectSavingFile(file);
+  std::error_code ec;
+  if (!fs::is_regular_file(saving, ec) || ec) return {};
+  const auto savingTime = fs::last_write_time(saving, ec);
+  if (ec) return {};
+  const bool targetExists = fs::exists(file, ec);
+  if (ec) return {};
+  if (targetExists) {
+    const auto savedTime = fs::last_write_time(file, ec);
+    if (ec || savingTime <= savedTime) return {};
+  }
+  // Do not offer empty/unreadable scratch files as a recovered show.
+  std::ifstream input(saving, std::ios::binary);
+  std::string firstLine;
+  if (!std::getline(input, firstLine) || firstLine.rfind("title\t", 0) != 0) return {};
+  return saving;
+}
+
+bool saveProject(const fs::path& projectFile, const Project& project, bool patient = true) {
+  fs::path resolved = projectFile.empty() ? Paths::defaultProjectFile() : projectFile;
+  if (resolved.has_parent_path()) {
+    std::error_code ec;
+    fs::create_directories(resolved.parent_path(), ec);
+    if (ec) return false;
+  }
+
+  // WRITE BESIDE IT, THEN RENAME OVER IT.
+  //
+  // This opened the operator's show with ios::trunc and wrote in place, so the
+  // file was empty from the instant the save began until it finished. Anything
+  // interrupting the write -- a crash, a power cut, a full disk, a USB stick
+  // pulled -- left a truncated show, and the previous good copy was already
+  // gone. That is not a rare window: the app writes this file 300ms after any
+  // edit, and after unattended metadata repairs, so it saves constantly during
+  // a show.
+  //
+  // A rename within one directory is atomic, so a reader sees either the whole
+  // old show or the whole new one, never a half-written file. The temp sits
+  // beside the target rather than in the system temp dir because a rename
+  // across volumes is a copy, which reopens the same window.
+  // Stage separately so a later short write cannot truncate a complete
+  // recovery copy left by an earlier failed replacement.
+  const fs::path saving = projectSavingFile(resolved);
+  fs::path temp = saving;
+  temp += ".tmp";
+  std::ofstream output(temp, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    return false;
+  }
+
+  writeProjectScalars(output, project);
+  // ONE LINE PER SLOT, and none at all when the dashboard is empty -- which is
+  // every show that predates it. A key/value record rather than a positional
+  // one, so a field can be added later without shifting the ones after it.
+  for (std::size_t i = 0; i < project.dashboard.size(); ++i) {
+    const DashboardSlot& slot = project.dashboard[i];
+    output << "dashboard\t" << i
+           << '\t' << escapeField(slot.label)
+           << '\t' << escapeField(slot.command)
+           << '\t' << escapeField(slot.glyph)
+           << '\t' << slot.colorIndex << '\n';
+  }
+  // PRESETS: a header line each, then one line per playlist and per output it
+  // captured. Key/value records like the dashboard's, and none at all in a
+  // show that has no presets.
+  for (const ShowPreset& preset : project.presets) {
+    output << "preset\t" << escapeField(preset.id)
+           << '\t' << escapeField(preset.name)
+           << '\t' << preset.scope
+           << '\t' << preset.masterDimmer
+           << '\t' << preset.masterVolume << '\n';
+    for (const PresetDeckState& d : preset.decks) {
+      output << "preset_deck\t" << escapeField(preset.id)
+             << '\t' << d.deckIndex << '\t' << (d.live ? 1 : 0)
+             << '\t' << escapeField(d.cueId) << '\t' << d.opacity
+             << '\t' << d.scaleMode << '\t' << d.scaleX << '\t' << d.scaleY
+             << '\t' << d.offsetX << '\t' << d.offsetY << '\t' << d.rotation
+             << '\t' << d.cropLeft << '\t' << d.cropRight
+             << '\t' << d.cropTop << '\t' << d.cropBottom
+             << '\t' << escapeField(d.geometryLfo)
+             << '\t' << d.brightness << '\t' << d.contrast
+             << '\t' << d.saturation << '\t' << d.hueShift
+             << '\t' << (d.keyOn ? 1 : 0)
+             << '\t' << static_cast<int>(d.keyColor.r)
+             << '\t' << static_cast<int>(d.keyColor.g)
+             << '\t' << static_cast<int>(d.keyColor.b)
+             << '\t' << d.keyTolerance << '\t' << d.keySoftness
+             << '\t' << escapeField(d.effects) << '\n';
+    }
+    for (const PresetOutputState& o : preset.outputs) {
+      output << "preset_output\t" << escapeField(preset.id)
+             << '\t' << o.outputIndex << '\t' << o.hostDeckIndex
+             << '\t' << escapeField(o.layers)
+             << '\t' << (o.crossfadeEnabled ? 1 : 0)
+             << '\t' << o.crossfadeFrom << '\t' << o.crossfadeTo
+             << '\t' << o.crossfadeMix << '\n';
+    }
+  }
+  for (size_t outputIndex = 0; outputIndex < project.outputs.size(); ++outputIndex) {
+    const auto& outputTarget = project.outputs[outputIndex];
+    output
+      << "output_target\t"
+      << outputIndex << '\t'
+      << escapeField(outputTarget.name) << '\t'
+      << outputTarget.hostDeckIndex << '\t'
+      << outputTarget.displayIndex << '\t'
+      << (outputTarget.enabled ? 1 : 0) << '\t'
+      << (outputTarget.streamEnabled ? 1 : 0) << '\t'
+      << escapeField(outputTarget.streamProtocol) << '\t'
+      << escapeField(outputTarget.streamUrl) << '\t'
+      << outputTarget.streamBitrateKbps << '\t'
+      << (outputTarget.ndiEnabled ? 1 : 0) << '\t'
+      << escapeField(outputTarget.ndiSourceName) << '\t'
+      << (outputTarget.ndiKeyEnabled ? 1 : 0) << '\t'
+      << escapeField(outputTarget.ndiKeySourceName) << '\t'
+      << escapeField(outputTarget.outputType) << '\t'
+      << outputTarget.mirrorSourceOutputIndex << '\t'
+      << escapeField(outputTarget.outputId) << '\t'
+      << outputTarget.outputAlpha << '\t'
+      << outputTarget.outputDelayMs << '\t'
+      << (outputTarget.outputTimeOverlayEnabled ? 1 : 0) << '\t'
+      << escapeField(outputTarget.outputColorSpace) << '\t'
+      << escapeField(outputTarget.outputLayoutMode) << '\t'
+      << outputTarget.outputOrientationDegrees << '\t'
+      // The test card is a check, not part of the show: never saved up, so
+      // a show cannot open with bars on its screens. The field keeps its
+      // place so every later field stays where old readers expect it.
+      << 0 << '\t'
+      << (outputTarget.deckLinkEnabled ? 1 : 0) << '\t'
+      << outputTarget.deckLinkDeviceId << '\t'
+      << escapeField(outputTarget.deckLinkMode) << '\t'
+      << (outputTarget.deckLink10Bit ? 1 : 0)
+      << '\t' << outputTarget.aoiLeft
+      << '\t' << outputTarget.aoiRight
+      << '\t' << outputTarget.aoiTop
+      << '\t' << outputTarget.aoiBottom
+      << '\t' << (outputTarget.spoutEnabled ? 1 : 0)
+      << '\t' << escapeField(outputTarget.spoutSenderName)
+      << '\t' << escapeField(outputTarget.streamKey)
+      << '\t' << escapeField(outputTarget.displayName)
+      // ST 2110-20 (fields 36-40) — appended, guarded on load as always
+      << '\t' << (outputTarget.st2110Enabled ? 1 : 0)
+      << '\t' << escapeField(outputTarget.st2110Address)
+      << '\t' << escapeField(outputTarget.st2110Interface)
+      << '\t' << outputTarget.st2110Port
+      << '\t' << (outputTarget.st2110TenBit ? 1 : 0)
+      // SRT transport + encoder (fields 41-45)
+      << '\t' << outputTarget.srtLatencyMs
+      << '\t' << escapeField(outputTarget.srtPassphrase)
+      << '\t' << escapeField(outputTarget.srtStreamId)
+      << '\t' << escapeField(outputTarget.srtMode)
+      << '\t' << outputTarget.streamKeyframeSeconds
+      << '\t' << outputTarget.streamAudioBitrateKbps
+      // Matte & overlay (fields 47-51)
+      << '\t' << escapeField(outputTarget.matteAspect)
+      << '\t' << outputTarget.matteOpacity
+      << '\t' << escapeField(outputTarget.overlayImagePath)
+      << '\t' << outputTarget.overlayOpacity
+      << '\t' << (outputTarget.overlayEnabled ? 1 : 0)
+      // Presenter view (fields 52-65) -- appended, guarded on load as always.
+      << '\t' << escapeField(outputTarget.presenter.layout)
+      << '\t' << (outputTarget.presenter.showPrevious ? 1 : 0)
+      << '\t' << (outputTarget.presenter.showNext ? 1 : 0)
+      << '\t' << (outputTarget.presenter.showNotes ? 1 : 0)
+      << '\t' << (outputTarget.presenter.showClock ? 1 : 0)
+      << '\t' << (outputTarget.presenter.showTimers ? 1 : 0)
+      << '\t' << escapeField(outputTarget.presenter.background)
+      << '\t' << escapeField(outputTarget.presenter.ink)
+      << '\t' << escapeField(outputTarget.presenter.accent)
+      << '\t' << outputTarget.presenter.notesScale
+      << '\t' << (outputTarget.presenter.buildsConsumeAdvance ? 1 : 0)
+      << '\t' << (outputTarget.presenter.showLive ? 1 : 0)
+      << '\t' << outputTarget.presenter.notesShare
+      << '\t' << escapeField(outputTarget.presenter.customLayout)
+      // Prompter (fields 66-75).
+      << '\t' << escapeField(outputTarget.prompter.script)
+      << '\t' << (outputTarget.prompter.mirrorHorizontal ? 1 : 0)
+      << '\t' << (outputTarget.prompter.mirrorVertical ? 1 : 0)
+      << '\t' << outputTarget.prompter.linesPerMinute
+      << '\t' << (outputTarget.prompter.running ? 1 : 0)
+      << '\t' << outputTarget.prompter.fontScale
+      << '\t' << outputTarget.prompter.readingLineFraction
+      << '\t' << (outputTarget.prompter.showReadingLine ? 1 : 0)
+      << '\t' << escapeField(outputTarget.prompter.background)
+      << '\t' << escapeField(outputTarget.prompter.ink)
+      << '\t' << escapeField(outputTarget.prompter.accent)
+      // Super Deckboy's layer stack (field 77). One field, comma separated,
+      // because the count varies per output and the format is positional --
+      // a variable number of columns would move every field after it.
+      << '\t' << escapeField(joinLayerList(outputTarget.layerDecks))
+      // Projection mapping (fields 78-91), which used to live on the deck.
+      << '\t' << (outputTarget.warpEnabled ? 1 : 0)
+      << '\t' << escapeField(outputTarget.warpMode)
+      << '\t' << outputTarget.warpTopLeftX
+      << '\t' << outputTarget.warpTopLeftY
+      << '\t' << outputTarget.warpTopRightX
+      << '\t' << outputTarget.warpTopRightY
+      << '\t' << outputTarget.warpBottomRightX
+      << '\t' << outputTarget.warpBottomRightY
+      << '\t' << outputTarget.warpBottomLeftX
+      << '\t' << outputTarget.warpBottomLeftY
+      << '\t' << outputTarget.edgeBlendLeft
+      << '\t' << outputTarget.edgeBlendRight
+      << '\t' << outputTarget.edgeBlendTop
+      << '\t' << outputTarget.edgeBlendBottom
+      // The crossfader, appended at the END of the record. An output written
+      // before it comes back with the fader off, which is what every show
+      // that has never used one already does.
+      << '\t' << (outputTarget.crossfadeEnabled ? 1 : 0)
+      << '\t' << outputTarget.crossfadeFrom
+      << '\t' << outputTarget.crossfadeTo
+      << '\t' << outputTarget.crossfadeMix
+      // Key + fill (fields 96-97), appended at the END. An output written
+      // before this comes back with key+fill off, which is every output
+      // that has ever been saved.
+      << '\t' << (outputTarget.deckLinkKeyFill ? 1 : 0)
+      << '\t' << outputTarget.deckLinkKeyDeviceId
+      // Grid warp (field 98), appended at the END: empty for no grid, which
+      // is what every output saved before it reads back as.
+      << '\t' << serializeWarpGrid(outputTarget)
+      // Independent RTP essences (fields 99-107); older shows keep the pair.
+      << '\t' << (outputTarget.st2110VideoMasterEnabled ? 1 : 0)
+      << '\t' << (outputTarget.st2110AudioMasterEnabled ? 1 : 0)
+      << '\t' << (outputTarget.st2110VideoRtpEnabled ? 1 : 0)
+      << '\t' << (outputTarget.st2110AudioRtpEnabled ? 1 : 0)
+      << '\t' << outputTarget.st2110VideoSourcePort
+      << '\t' << outputTarget.st2110AudioSourcePort
+      << '\t' << escapeField(outputTarget.st2110AudioAddress)
+      << '\t' << outputTarget.st2110AudioPort
+      << '\t' << escapeField(outputTarget.st2110AudioInterface)
+      // Area of interest sent pixel for pixel (field 108).
+      << '\t' << (outputTarget.aoiPixelForPixel ? 1 : 0)
+      // The blend's curve, gamma and black lift (fields 109-111).
+      << '\t' << (outputTarget.edgeBlendProjectorCurve ? 1 : 0)
+      << '\t' << outputTarget.edgeBlendGamma
+      << '\t' << outputTarget.edgeBlendBlackLift
+      // Masks: the whole picture, and the output's own playlist (112-113).
+      << '\t' << escapeField(outputTarget.maskId)
+      << '\t' << escapeField(outputTarget.baseLayerMaskId)
+      << '\t' << escapeField(deckboy::slices::serialize(outputTarget.slices))   // 114: slices
+      << '\t' << escapeField(serializeSliceLfos(outputTarget.slices))         // 115: their oscillators
+      << '\t' << escapeField(deckboy::slices::serializeGrids(outputTarget.slices))  // 116: their meshes
+      << '\n';
+  }
+  // ONE CUE RECORD, shared by the playlists and the tracker's own steps
+  // (deck field -1), so a step can never be saved with fewer fields than a
+  // cue and drift out of step with the loader.
+  auto writeCueRecord = [&output](long long deckField, const Cue& cue) {
+      output
+        << "cue\t"
+        << deckField << '\t'
+        << escapeField(cue.path) << '\t'
+        << escapeField(cue.name) << '\t'
+        << cueKindToken(cue.kind) << '\t'
+        << cue.duration << '\t'
+        << cue.width << '\t'
+        << cue.height << '\t'
+        << cue.fps << '\t'
+        << escapeField(cue.formatName) << '\t'
+        << escapeField(cue.videoCodec) << '\t'
+        << escapeField(cue.audioCodec) << '\t'
+        << (cue.hasAudio ? "1" : "0") << '\t'
+        << cue.sizeBytes << '\t'
+        << colorToHex(cue.color) << '\t'
+        << cue.fadeInSeconds << '\t'
+        << cue.fadeOutSeconds << '\t'
+        << (cue.loop ? "1" : "0") << '\t'
+        << (cue.pauseOnLastFrame ? "1" : "0") << '\t'
+        << escapeField(cue.id) << '\t'
+        << cue.inPointSeconds << '\t'
+        << cue.outPointSeconds << '\t'
+        << cue.triggerTimecodeSeconds << '\t'
+        << cueEndActionToken(cue.endAction) << '\t'
+        << cue.cueTransitionSeconds << '\t'
+        << escapeField(cue.cueTransitionStyle) << '\t'
+        << escapeField(cue.lowerThirdText) << '\t'
+        << escapeField(cue.lowerThirdSubtext) << '\t'
+        << cue.lowerThirdBgAlpha << '\t'
+        << cue.stillDurationSeconds << '\t'
+        << cue.loopCount << '\t'
+        << cue.playbackSpeed << '\t'
+        << escapeField(cue.colorTag)
+        << '\t' << escapeField(cue.notes)
+        << '\t' << cue.outputScaleX
+        << '\t' << cue.outputScaleY
+        << '\t' << static_cast<int>(cue.scaleMode)
+        << '\t' << cue.outputOffsetX
+        << '\t' << cue.outputOffsetY
+        << '\t' << escapeField(cue.cueNumber)
+        << '\t' << [&]() {
+             std::ostringstream pp;
+             for (size_t i = 0; i < cue.pausePoints.size(); ++i) {
+               if (i) pp << ',';
+               pp << cue.pausePoints[i];
+             }
+             return pp.str();
+           }()
+        << '\t' << cue.outputRotationDegrees
+        << '\t' << cue.cropLeft
+        << '\t' << cue.cropRight
+        << '\t' << cue.cropTop
+        << '\t' << cue.cropBottom
+        << '\t' << (cue.chromaKeyEnabled ? "1" : "0")
+        << '\t' << colorToHex(cue.chromaKeyColor)
+        << '\t' << cue.chromaKeyTolerance
+        << '\t' << cue.chromaKeySoftness
+        << '\t' << cue.brightness
+        << '\t' << cue.contrast
+        << '\t' << cue.saturation
+        << '\t' << cue.hueShift
+        << '\t' << escapeField(cue.cueId)
+        << '\t' << (cue.audioEnabled ? "1" : "0")
+        << '\t' << (cue.pauseAtBeginning ? "1" : "0")
+        << '\t' << (cue.transitionToNext ? "1" : "0")
+        << '\t' << escapeField(cue.gotoTarget)
+        << '\t' << cue.audioChannels
+        << '\t' << cue.audioSampleRate
+        << '\t' << escapeField(cue.pipTargetCue)
+        << '\t' << escapeField(cue.pipSourceType)
+        << '\t' << escapeField(cue.attachedLowerThirdCue)
+        << '\t' << escapeField(cue.attachedPipCue)
+        << '\t' << escapeField(cue.compositeLayoutPreset)
+        << '\t' << escapeField(cue.compositeAudioSlotId)
+        << '\t' << colorToHex(cue.compositeBackgroundColor)
+        << '\t' << cue.compositeSlots.size();
+      for (const CompositeSlot& slot : cue.compositeSlots) {
+        output
+          << '\t' << escapeField(slot.id)
+          << '\t' << escapeField(slot.name)
+          << '\t' << escapeField(slot.sourceType)
+          << '\t' << escapeField(slot.source)
+          << '\t' << (slot.visible ? "1" : "0")
+          << '\t' << (slot.audioEnabled ? "1" : "0")
+          << '\t' << static_cast<int>(slot.scaleMode)
+          << '\t' << slot.normX
+          << '\t' << slot.normY
+          << '\t' << slot.normW
+          << '\t' << slot.normH;
+      }
+      // Subtitle fields (appended after composite slots for backward compat)
+      output
+        << '\t' << escapeField(cue.subtitlePath)
+        << '\t' << escapeField(cue.subtitleStreamId)
+        << '\t' << (cue.subtitleEnabled ? "1" : "0")
+        << '\t' << (cue.refreshOnTake ? "1" : "0")
+        << '\t' << cue.audioGainDb
+        << '\t' << cue.audioPan
+        << '\t' << (cue.audioMono ? "1" : "0")
+        << '\t' << cue.audioFadeInSeconds
+        << '\t' << cue.audioFadeOutSeconds
+        << '\t' << cue.audioOutputPair
+        << '\t' << (cue.datamoshEnabled ? "1" : "0")
+        << '\t' << escapeField(cue.moshPath)
+        << '\t' << cue.timer.durationSeconds
+        << '\t' << cue.timer.amberSeconds
+        << '\t' << cue.timer.redSeconds
+        << '\t' << (cue.timer.countUpAfterZero ? "1" : "0")
+        << '\t' << (cue.timer.blinkAtZero ? "1" : "0")
+        << '\t' << escapeField(cue.timer.message)
+        << '\t' << static_cast<int>(cue.timer.mode)
+        << '\t' << static_cast<int>(cue.timer.face)
+        << '\t' << (cue.timer.showProgressBar ? "1" : "0")
+        << '\t' << (cue.timer.messageIsUrgent ? "1" : "0")
+        << '\t' << cue.scheduledStartSeconds
+        << '\t' << joinMarkerTimes(cue)
+        << '\t' << escapeField(joinMarkerNames(cue))
+        << '\t' << cue.datamoshLook
+        << '\t' << cue.timer.colorNormal
+        << '\t' << cue.timer.colorAmber
+        << '\t' << cue.timer.colorRed
+        << '\t' << cue.timer.colorBackground
+        << '\t' << (cue.timer.chimeAtAmber ? "1" : "0")
+        << '\t' << (cue.timer.chimeAtRed ? "1" : "0")
+        << '\t' << (cue.timer.chimeAtZero ? "1" : "0")
+        << '\t' << cue.timer.chimeSound
+        << '\t' << static_cast<int>(cue.tone.waveform)
+        << '\t' << cue.tone.frequencyHz
+        << '\t' << cue.tone.levelDbfs
+        << '\t' << cue.tone.channel
+        << '\t' << static_cast<int>(cue.tone.visual)
+        << '\t' << (cue.tone.visualEnabled ? "1" : "0")
+        << '\t' << static_cast<int>(cue.tone.synth.chip)
+        << '\t' << cue.tone.synth.noteHz
+        << '\t' << cue.tone.synth.attackSeconds
+        << '\t' << cue.tone.synth.releaseSeconds
+        << '\t' << cue.tone.synth.retriggerSeconds
+        << '\t' << static_cast<int>(cue.tone.synth.carrier)
+        << '\t' << static_cast<int>(cue.tone.synth.modulator)
+        << '\t' << cue.tone.synth.modDepth
+        << '\t' << cue.tone.synth.modRatio
+        << '\t' << static_cast<int>(cue.tone.synth.nesVoice)
+        << '\t' << static_cast<int>(cue.tone.synth.nesDuty)
+        << '\t' << (cue.tone.synth.nesNoiseShort ? "1" : "0")
+        << '\t' << (cue.tone.synth.nesQuantise ? "1" : "0")
+        << '\t' << static_cast<int>(cue.tone.synth.tuning)
+        << '\t' << cue.tone.synth.referenceHz
+        << '\t' << static_cast<int>(cue.videoSynth.shape)
+        << '\t' << static_cast<int>(cue.videoSynth.mirror)
+        << '\t' << static_cast<int>(cue.videoSynth.palette)
+        << '\t' << cue.videoSynth.speed
+        << '\t' << cue.videoSynth.scale
+        << '\t' << cue.videoSynth.warp
+        << '\t' << cue.videoSynth.feedbackAmount
+        << '\t' << cue.videoSynth.feedbackZoom
+        << '\t' << cue.videoSynth.feedbackRotate
+        << '\t' << cue.videoSynth.audioReactivity
+        << '\t' << cue.videoSynth.resolution
+        << '\t' << cue.videoSynth.pixelSort
+        << '\t' << cue.videoSynth.glitch
+        // A BRIDGE FOR OLDER BUILDS, not the switch any more. Text mode is the
+        // effect now, and this is written as "does this cue have one" so a
+        // show saved here still opens with its character grid in a build that
+        // predates the change. It cannot be dropped either way -- the record
+        // is positional, and removing a field from the middle shifts every
+        // column after it.
+        //
+        // It still NAMES the member, for two reasons. The layout audit anchors
+        // a column by the member it mentions and cannot check what it cannot
+        // name. And a Project built in memory that has never been through the
+        // loader may still carry the retired flag; writing only the derived
+        // value would drop it, which is a way to lose a setting rather than
+        // retire one.
+        << '\t' << ((cueHasTextModeEffect(cue) || cue.videoSynth.ascii)
+                      ? "1" : "0")
+        << '\t' << cue.videoSynth.asciiCols
+        << '\t' << (cue.videoSynth.asciiGreen ? "1" : "0")
+        << '\t' << cue.videoSynth.crt
+        << '\t' << cue.videoSynth.asciiCharSet
+        << '\t' << cue.videoSynth.asciiShuffle
+        << '\t' << cue.videoSynth.asciiInk
+        << '\t' << escapeField(cue.videoSynth.spriteSheetPath)
+        << '\t' << cue.videoSynth.spriteTileW
+        << '\t' << cue.videoSynth.spriteTileH
+        << '\t' << cue.videoSynth.spriteRotate
+        << '\t' << cue.videoSynth.spriteFreeAngle
+        << '\t' << cue.videoSynth.spriteFlip
+        << '\t' << cue.videoSynth.spriteJitter
+        << '\t' << cue.videoSynth.spriteChaos
+        << '\t' << escapeField(cue.timer.logoPath)
+        << '\t' << cue.timer.logoHeightPercent
+        // Effect stack, appended at the END like every other addition.
+        // Packed into ONE field as "token:amount:a:b|..." so a stack of any
+        // length costs a single column -- a variable number of columns would
+        // shift every positional index after it, which is the trap the loader
+        // offsets already carry scars from.
+        << '\t' << escapeField(serializeCueEffects(cue.effects))
+        << '\t' << escapeField(cue.motionDriverPath)
+        << '\t' << cue.motionDriverSpeed
+        << '\t' << (cue.motionDriverPaused ? 1 : 0)
+        << '\t' << (cue.motionDriverRestartOnTake ? 1 : 0)
+        << '\t' << escapeField(cue.codeExpression)
+        // Appended after the expression, so every show saved before text mode
+        // could carry words still loads and simply has none.
+        << '\t' << escapeField(cue.videoSynth.asciiGlyphs)
+        << '\t' << escapeField(cue.videoSynth.asciiPhrases)
+        << '\t' << cue.videoSynth.asciiPhraseHold
+        << '\t' << cue.videoSynth.asciiZalgoUp
+        << '\t' << cue.videoSynth.asciiZalgoDown
+        << '\t' << cue.videoSynth.asciiZalgoMid
+        << '\t' << cue.videoSynth.asciiZalgoReach
+        << '\t' << cue.videoSynth.asciiZalgoDrift
+        // APPENDED, never inserted: the record is positional.
+        << '\t' << cue.videoSynth.asciiChaos
+        << '\t' << escapeField(cue.videoSynth.asciiFontPath)
+        << '\t' << cue.videoSynth.asciiWobble
+        << '\t' << cue.videoSynth.asciiWobbleMode
+        // What an Audio cue draws while it plays. APPENDED, never inserted.
+        << '\t' << static_cast<int>(cue.audioVisual)
+        // The displacement mesh. APPENDED, never inserted.
+        << '\t' << (cue.meshEnabled ? "1" : "0")
+        << '\t' << cue.meshHeight
+        << '\t' << cue.meshTiltX
+        << '\t' << cue.meshTiltY
+        << '\t' << cue.meshSpin
+        << '\t' << cue.meshGrid
+        // AT THE END, per the warning on the read side. The timer's
+        // typeface: empty means the app's own bundled face, which is
+        // what every show saved before this carries.
+        << '\t' << escapeField(cue.timer.fontPath)
+        // The audio effect stack, one field, for the same reason the picture
+        // stack is one field. STILL at the end.
+        << '\t' << escapeField(deckboy::audiofx::serializeAudioEffects(cue.audioEffects))
+        // The sequencing spine, appended so every show written before it loads
+        // unchanged: absent fields mean no waits and no continue, which is
+        // exactly what those shows did.
+        << '\t' << cue.preWaitSeconds
+        << '\t' << cue.postWaitSeconds
+        << '\t' << cueContinueModeToken(cue.continueMode)
+        << '\t' << escapeField(serializeMasterAssignments(cue.masterAssignments))
+        // A Target cue's victim and verb, and the arm flag every cue carries.
+        << '\t' << escapeField(cue.targetCueId)
+        << '\t' << cue.targetDeckIndex
+        << '\t' << cueTargetVerbToken(cue.targetVerb)
+        << '\t' << (cue.armed ? 1 : 0)
+        // The LED tile size a panel map is drawn to.
+        << '\t' << cue.ledPanelWidth
+        << '\t' << cue.ledPanelHeight
+        // A Fade cue's ramp.
+        << '\t' << cue.fadeOverSeconds
+        << '\t' << cue.fadeToValue
+        << '\t' << cueFadeWhatToken(cue.fadeWhat)
+        << '\t' << cueFadeCurveToken(cue.fadeCurve)
+        << '\t' << (cue.fadeStopWhenDone ? 1 : 0)
+        // A MIDI cue's message.
+        << '\t' << escapeField(cue.midiPortName)
+        << '\t' << escapeField(cue.midiMessage)
+        << '\t' << escapeField(cue.midiRawHex)
+        << '\t' << escapeField(cue.mscCue)
+        << '\t' << escapeField(cue.mscList)
+        << '\t' << cue.midiChannel
+        << '\t' << cue.midiData1
+        << '\t' << cue.midiData2
+        << '\t' << cue.mscDevice
+        // A Network cue's message.
+        << '\t' << escapeField(cue.netProtocol)
+        << '\t' << escapeField(cue.netHost)
+        << '\t' << escapeField(cue.netAddress)
+        << '\t' << escapeField(cue.netPayload)
+        << '\t' << cue.netPort
+        // A Timecode cue.
+        << '\t' << escapeField(cue.tcAction)
+        << '\t' << cue.tcJamSeconds
+        // A Script cue's lines. escapeField carries the newlines.
+        << '\t' << escapeField(cue.scriptText)
+        // A DMX cue.
+        << '\t' << escapeField(cue.dmxChannels)
+        << '\t' << escapeField(cue.dmxHost)
+        << '\t' << cue.dmxFadeSeconds
+        << '\t' << cue.dmxUniverse
+        << '\t' << cue.dmxPort
+        // The audio crosspoint matrix. Empty for every cue that has not
+        // been given one, which is every cue in every older show.
+        << '\t' << escapeField(serializeAudioMatrix(cue.audioMatrix))
+        // A Text cue.
+        << '\t' << escapeField(cue.textBody)
+        << '\t' << cueTextAnimationToken(cue.textAnimation)
+        << '\t' << cue.textSizePct
+        << '\t' << cue.textSpeed
+        << '\t' << cue.textAlign
+        << '\t' << cue.textBgAlpha
+        << '\t' << static_cast<int>(cue.textColor.r)
+        << '\t' << static_cast<int>(cue.textColor.g)
+        << '\t' << static_cast<int>(cue.textColor.b)
+        // Fireside, as a source with parameters.
+        << '\t' << cue.firesideIntensity
+        << '\t' << cue.firesideSparks
+        << '\t' << cue.firesideView
+        // How a lower third arrives and leaves, appended at the end. A cue
+        // written before this comes back as `none`, which is what it did.
+        << '\t' << cue.lowerThirdStyle
+        << '\t' << cue.lowerThirdAnimSeconds
+        // The geometry oscillators. Empty unless one is armed.
+        << '\t' << escapeField(serializeGeometryLfos(cue.geometryLfo))
+        // A Portal source's controls.
+        << '\t' << cue.portal.blobs
+        << '\t' << cue.portal.size
+        << '\t' << cue.portal.blend
+        << '\t' << cue.portal.outline
+        << '\t' << cue.portal.speed
+        << '\t' << cue.portal.hue
+        // A text cue's lower-third layout.
+        << '\t' << (cue.lowerThird.on ? 1 : 0)
+        << '\t' << static_cast<int>(cue.lowerThird.look)
+        << '\t' << lowerThirdMoveToken(cue.lowerThird.moveIn)
+        << '\t' << lowerThirdMoveToken(cue.lowerThird.moveOut)
+        << '\t' << cue.lowerThird.inSeconds
+        << '\t' << cue.lowerThird.outSeconds
+        << '\t' << cue.lowerThird.holdSeconds
+        << '\t' << cue.lowerThird.side
+        << '\t' << cue.lowerThird.height
+        << '\t' << cue.lowerThird.size
+        << '\t' << cue.lowerThird.bar
+        << '\t' << cue.lowerThird.accent
+        << '\t' << cue.swirl.speed
+        << '\t' << cue.swirl.twist
+        << '\t' << cue.swirl.cells
+        << '\t' << cue.swirl.hue
+        << '\t' << cue.swirl.zoom
+        << '\t' << cue.swirl.flow
+        << '\t' << cue.swirl.centreX
+        << '\t' << cue.swirl.centreY
+        << '\t' << cue.swirl.bands
+        << '\t' << cue.swirl.palette
+        // Triggers (fields vs+138..140), appended after everything else.
+        << '\t' << escapeField(cue.triggerHotkey)
+        << '\t' << cue.triggerMidiNote
+        << '\t' << escapeField(cue.triggerOscAddress)
+        // Which sound track plays (vs+141) and how many the file has (vs+142),
+        // so the picker still knows there is a choice after a reload.
+        << '\t' << cue.audioTrack
+        << '\t' << cue.audioTrackCount
+        // Append, because inserting beside the other lower-third fields would
+        // shift the Swirl and trigger records in shows already on disk.
+        << '\t' << (cue.lowerThird.wiggle ? 1 : 0)
+        // vs+144: a DMX cue's protocol, appended for the same reason.
+        << '\t' << escapeField(cue.dmxProtocol)
+        // vs+145: a Mic cue's channel (MONO L / MONO R / STEREO).
+        << '\t' << static_cast<int>(cue.micChannel)
+        // vs+146: a DMX cue's fixture levels (see serializeFixtureLevels).
+        << '\t' << escapeField(serializeFixtureLevels(cue.dmxFixtures))
+        // vs+147: a stream cue's HDR (0 SDR, 1 PQ, 2 HLG).
+        << '\t' << cue.liveHdrTransfer
+        // vs+148, vs+149: a tracker step's jump (the step's id) and section name.
+        << '\t' << escapeField(cue.trackerJumpStepId)
+        << '\t' << escapeField(cue.trackerSection)
+        // vs+150..161: a Moire source -- shape, palette, the eight 0-1
+        // controls, the theme inks it captured, and its oscillators.
+        << '\t' << cue.moire.shape
+        << '\t' << cue.moire.palette
+        << '\t' << cue.moire.density
+        << '\t' << cue.moire.speed
+        << '\t' << cue.moire.warp
+        << '\t' << cue.moire.turn
+        << '\t' << cue.moire.centreX
+        << '\t' << cue.moire.centreY
+        << '\t' << cue.moire.grey
+        << '\t' << cue.moire.hue
+        << '\t' << escapeField(serializeMoireInks(cue.moire.themeInks))
+        << '\t' << escapeField(serializeGeometryLfos(cue.moire.lfo))
+        << '\t' << cue.fadeEffectSlot          // vs + 162: a fade cue's effect and knob
+        << '\t' << cue.fadeEffectKnob
+        << '\t' << (cue.fadeRestoreAtEnd ? 1 : 0)   // vs + 164: and whether it restores
+        << '\t' << cue.backdrop                     // vs + 165: the colour behind it
+        << '\t' << (cue.lockToScreen ? 1 : 0)       // vs + 166: played at the screen's rate
+        << '\t' << escapeField(cue.maskId)          // vs + 167: the cue's own mask
+        << '\t' << escapeField(serializeToneLfos(cue.toneLfo))   // vs + 168: a tone's oscillators
+        << '\t' << escapeField(serializeCueDrawing(cue))          // vs + 169: a Draw cue's strokes
+        << '\t' << (cue.sourceHasAlpha ? 1 : 0)                    // vs + 170: its pixels carry alpha
+        << '\n';
+  };
+  for (size_t deckIndex = 0; deckIndex < project.decks.size(); ++deckIndex) {
+    const auto& deck = project.decks[deckIndex];
+    output
+      << "deck\t"
+      << deckIndex << '\t'
+      << escapeField(deck.name) << '\t'
+      << deck.selectedIndex << '\t'
+      << deck.activeIndex << '\t'
+      << 0 << '\t' // legacy auto-advance placeholder: cue endings are now per-cue
+      << (deck.playlistLoop ? 1 : 0) << '\t'
+      << escapeField(deck.audioOutputDeviceName) << '\t'
+      << deck.outputDisplayIndex << '\t'
+      << (deck.ndiEnabled ? 1 : 0) << '\t'
+      << escapeField(deck.ndiSourceName) << '\t'
+      << (deck.timeOverlayEnabled ? 1 : 0) << '\t'
+      << deck.transitionSeconds << '\t'
+      << escapeField(deck.transitionStyle) << '\t'
+      << (deck.timecodeChaseEnabled ? 1 : 0) << '\t'
+      << (deck.timecodeRunEnabled ? 1 : 0) << '\t'
+      << (deck.timecodeTriggerEnabled ? 1 : 0) << '\t'
+      << deck.timecodeFps << '\t'
+      << deck.timecodeCurrentSeconds << '\t'
+      << (deck.shuffle ? 1 : 0) << '\t'
+      << (deck.ndiKeyEnabled ? 1 : 0) << '\t'
+      << escapeField(deck.ndiKeySourceName) << '\t'
+      << deck.canvasViewX << '\t'
+      << deck.canvasViewY << '\t'
+      << (deck.warpEnabled ? 1 : 0) << '\t'
+      << escapeField(deck.warpMode) << '\t'
+      << deck.warpTopLeftX << '\t'
+      << deck.warpTopLeftY << '\t'
+      << deck.warpTopRightX << '\t'
+      << deck.warpTopRightY << '\t'
+      << deck.warpBottomRightX << '\t'
+      << deck.warpBottomRightY << '\t'
+      << deck.warpBottomLeftX << '\t'
+      << deck.warpBottomLeftY << '\t'
+      << deck.edgeBlendLeft << '\t'
+      << deck.edgeBlendRight << '\t'
+      << deck.edgeBlendTop << '\t'
+      << deck.edgeBlendBottom << '\t'
+      << deck.outputRouteDeckIndex << '\t'
+      << 0 << '\t'
+      << deck.timecodeFreewheelSeconds << '\t'
+      << (deck.timecodeJamSyncEnabled ? 1 : 0) << '\t'
+      << deck.playlistOpacity << '\t'
+      << (deck.playlistAutoFade ? 1 : 0) << '\t'
+      << deck.playlistFadeSeconds << '\t'
+      << deck.playlistTimebaseFps << '\t'
+      << deck.playlistStartOffsetSeconds << '\t'
+      << deck.playlistDefaultCueFadeSeconds << '\t'
+      << deck.playlistDefaultStillDurationSeconds << '\t'
+      << (deck.playlistDefaultLoop ? 1 : 0) << '\t'
+      << (deck.playlistDefaultFadeInEnabled ? 1 : 0) << '\t'
+      << (deck.playlistDefaultFadeOutEnabled ? 1 : 0) << '\t'
+      << (deck.playlistDefaultAudioEnabled ? 1 : 0) << '\t'
+      << (deck.playlistDefaultPauseAtBeginning ? 1 : 0) << '\t'
+      << (deck.playlistDefaultPauseAtEnd ? 1 : 0) << '\t'
+      << (deck.playlistDefaultTransitionToNext ? 1 : 0) << '\t'
+      << deck.audioOutputChannels
+      << '	' << deck.standbyIndex
+      // Extra audio destinations, appended: one field, semicolon
+      // separated, because a device name may contain a comma.
+      << '	' << escapeField(joinStringList(deck.extraAudioDeviceNames, ';'))
+      << '	' << (deck.audioToProgram ? 1 : 0)
+      << '	' << escapeField(deck.watchFolder)
+      << '	' << escapeField(serializeAudioPatch(deck.audioPatch))
+      << '\n';
+
+    for (const auto& cue : deck.cues) {
+      writeCueRecord(static_cast<long long>(deckIndex), cue);
+    }
+  }
+  for (const Cue& step : project.trackerSteps) {
+    writeCueRecord(-1, step);
+  }
+
+  // Everything above is buffered. Close BEFORE the rename and check the
+  // stream: a disk that filled up reports it here, and the operator's
+  // existing show has to survive that rather than be replaced by a short
+  // file.
+  output.close();
+  if (!output) {
+    std::error_code ignored;
+    fs::remove(temp, ignored);
+    return false;
+  }
+  // ONE GENERATION OF ROLLBACK, kept from the first save of each session.
+  //
+  // The save is atomic, so a show can never be half-written -- but atomic only
+  // means the overwrite is complete, not that it was wanted. Deckboy autosaves,
+  // so anything that changes a cue is on disk moments later with nothing to go
+  // back to: an effect stack cleared by a misfired command, a show opened on a
+  // machine that could not find the media. I destroyed a cue's effect stack in
+  // exactly this way while testing and there was nothing to restore from.
+  //
+  // The copy is taken ONCE per run, before the first overwrite, so it holds the
+  // show as it was when Deckboy opened it rather than as it was a second ago --
+  // which is the version worth having, because a mistake is usually noticed
+  // after several autosaves, not before the next one.
+  // Not guarded, because every path into saveProject is the main thread:
+  // saveProjectNow and persistProject are called from the update loop, and the
+  // one that arrives from a file dialog is marshalled into sdlDialogActions_
+  // and run at a safe point rather than on whatever thread SDL used. If a save
+  // is ever moved onto a worker, this needs a lock.
+  static std::set<std::string> backedUp;
+  const std::string key = resolved.string();
+  if (backedUp.find(key) == backedUp.end()) {
+    backedUp.insert(key);
+    std::error_code exists;
+    if (fs::exists(resolved, exists) && !exists) {
+      std::error_code copyError;
+      fs::copy_file(resolved, fs::path(key + ".bak"),
+                    fs::copy_options::overwrite_existing, copyError);
+      // A failed backup must not stop the save: the operator asked to save,
+      // and refusing because a spare copy could not be made would lose the
+      // very work the copy was meant to protect.
+    }
+  }
+
+  if (!renameProjectWithRetry(temp, saving, patient)) {
+    return false;
+  }
+  // A complete .saving survives failure for recovery at the next open.
+  return renameProjectWithRetry(saving, resolved, patient);
+}
+
+// onProgress (optional) receives 0..1 as the file is consumed, so a caller can
+// draw a loading overlay while this blocks. Progress is measured in BYTES READ
+// rather than lines, because a show's line count isn't known until it has been
+// read — and byte position is exact and free.
+// The project-level scalars: one key per line, `key<TAB>value`.
+//
+// LIFTED OUT OF loadProject because MSVC counts every `else if` as a nested
+// block and refuses past a limit -- C1061, the same wall handleSettingsClick
+// hit and was split for. There were a hundred and twelve of these and adding
+// one more broke the build, which is a poor reason for a show file to stop
+// gaining settings.
+//
+// Returns true when the line was a scalar it knows, so the caller can tell a
+// key it does not recognise from one it simply has nothing to do for.
+// The second half of the chain -- see the note at the split inside Part1.
+template <typename EnsureDeck>
+bool applyProjectScalarLinePart2(Project& project, const std::vector<std::string>& fields,
+                                 EnsureDeck&& ensureDeck);
+
+template <typename EnsureDeck>
+bool applyProjectScalarLine(Project& project, const std::vector<std::string>& fields,
+                            EnsureDeck&& ensureDeck) {
+  if (fields[0] == "title") {
+    project.title = safeString(fields, 1);
+  } else if (fields[0] == "focused_deck") {
+    project.focusedDeckIndex = safeInt(fields, 1, 0);
+  } else if (fields[0] == "focused_output") {
+    project.focusedOutputIndex = safeInt(fields, 1, 0);
+  } else if (fields[0] == "focused_group" || fields[0] == "layer_names") {
+    // Legacy fields — ignored (single-deck, no layer assignments or group presets).
+  } else if (fields[0] == "dashboard") {
+    // Addressed by its own index rather than appended in file order, so a
+    // show hand-edited out of order still lands each slot where it belongs.
+    const std::size_t at = safeSize(fields, 1, 0);
+    if (at < 512) {   // a bound, so a corrupt index cannot allocate the world
+      if (project.dashboard.size() <= at) {
+        project.dashboard.resize(at + 1);
+      }
+      DashboardSlot& slot = project.dashboard[at];
+      slot.label = safeString(fields, 2);
+      slot.command = safeString(fields, 3);
+      slot.glyph = safeString(fields, 4);
+      slot.colorIndex = std::clamp(safeInt(fields, 5, 0), 0, 15);
+    }
+  } else if (fields[0] == "advanced_mode") {
+    project.advancedOutputMode = safeBool(fields, 1, false);
+  } else if (fields[0] == "ptp_domain") {
+    project.ptpDomain = std::clamp(safeInt(fields, 1, 127), 0, 127);
+  } else if (fields[0] == "nmos_enabled") {
+    project.nmosEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "nmos_registry") {
+    project.nmosRegistryUrl = safeString(fields, 1);
+  } else if (fields[0] == "nmos_port") {
+    project.nmosPort = std::clamp(safeInt(fields, 1, 3210), 1, 65535);
+  } else if (fields[0] == "nmos_interface") {
+    project.nmosInterfaceName = safeString(fields, 1);
+  } else if (fields[0] == "ltc_out") {
+    project.ltcOutputEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "ltc_out_device") {
+    project.ltcOutputDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "ltc_out_fps") {
+    project.ltcOutputFps = std::clamp(safeDouble(fields, 1, 30.0), 23.0, 60.0);
+  } else if (fields[0] == "ltc_out_channel") {
+    project.ltcOutputChannel = std::clamp(safeInt(fields, 1, 0), 0, 7);
+  } else if (fields[0] == "ltc_out_channels") {
+    project.ltcOutputChannelCount = std::clamp(safeInt(fields, 1, 2), 1, 8);
+  } else if (fields[0] == "selected") {
+    ensureDeck(0).selectedIndex = safeInt(fields, 1, -1);
+  } else if (fields[0] == "active") {
+    ensureDeck(0).activeIndex = safeInt(fields, 1, -1);
+  } else if (fields[0] == "auto_advance") {
+    // Legacy field: cue endings now follow per-cue hold/end settings.
+  } else if (fields[0] == "playlist_loop") {
+    ensureDeck(0).playlistLoop = safeBool(fields, 1, false);
+  } else if (fields[0] == "ui_sounds") {
+    project.uiSoundsEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "hover_tips") {
+    project.hoverTipsEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "midimap_row") {
+    if (fields.size() > 1) {
+      project.midiMapRows.push_back(deckboy::midimap::unescapeValue(fields[1]));
+    }
+  } else if (fields[0] == "beast_mode") {
+    project.beastMode = safeBool(fields, 1, false);
+  } else if (fields[0] == "miami_cursor") {
+    project.miamiCursorEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "browser_scrollbars") {
+    project.browserScrollbars = safeBool(fields, 1, false);
+  } else if (fields[0] == "midi_clock_slave") {
+    project.midiClockSlave = safeBool(fields, 1, false);
+  } else if (fields[0] == "ui_transitions") {
+    project.uiTransitionsEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "hap_suggestion_dismissed") {
+    project.hapSuggestionDismissed = safeBool(fields, 1, false);
+  } else if (fields[0] == "synth_keyboard") {
+    project.synthKeyboardEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "synth_octave") {
+    project.synthKeyboardOctave = std::clamp(safeInt(fields, 1, 4), 0, 8);
+  } else if (fields[0] == "midi_to_synth") {
+    project.midiToSynth = safeBool(fields, 1, false);
+  } else if (fields[0] == "audio_input_device") {
+    project.audioInputDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "audio_input_enabled") {
+    project.audioInputEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "audio_input_mono") {
+    project.audioInputMono = safeBool(fields, 1, true);
+  } else if (fields[0] == "audio_input_to_program") {
+    project.audioInputToProgram = safeBool(fields, 1, true);
+  } else if (fields[0] == "audio_input_gain_db") {
+    project.audioInputGainDb = std::clamp(safeDouble(fields, 1, 0.0), -40.0, 40.0);
+  } else if (fields[0] == "asio_driver") {
+    project.asioDriverName = safeString(fields, 1);
+  } else if (fields[0] == "asio_channels") {
+    project.asioChannels = std::clamp(safeInt(fields, 1, 2), 2, kMaxAudioOutputs);
+  } else if (fields[0] == "recording_dir") {
+    project.recordingDir = safeString(fields, 1);
+  } else if (fields[0] == "recording_width") {
+    project.recordingWidth = safeInt(fields, 1, 0);
+  } else if (fields[0] == "recording_height") {
+    project.recordingHeight = safeInt(fields, 1, 0);
+  } else if (fields[0] == "recording_fps") {
+    project.recordingFps = safeDouble(fields, 1, 0.0);
+  } else if (fields[0] == "recording_codec") {
+    project.recordingCodec = safeString(fields, 1);
+  } else if (fields[0] == "normalize_target_lufs") {
+    project.normalizeTargetLufs = std::clamp(safeDouble(fields, 1, -16.0), -40.0, -5.0);
+  } else if (fields[0] == "recording_tc_mode") {
+    project.recordingTimecodeMode = safeString(fields, 1);
+  } else if (fields[0] == "recording_tc_start") {
+    project.recordingTimecodeStart = safeString(fields, 1);
+  } else if (fields[0] == "recording_tc_df") {
+    project.recordingTimecodeDropFrame = safeString(fields, 1);
+  } else if (fields[0] == "recording_segment_minutes") {
+    project.recordingSegmentMinutes = safeInt(fields, 1, 0);
+  } else if (fields[0] == "recording_segment_mb") {
+    project.recordingSegmentMegabytes = safeInt(fields, 1, 0);
+  } else if (fields[0] == "recording_remux") {
+    project.recordingRemuxOnStop = safeBool(fields, 1, true);
+  } else if (fields[0] == "splash_character") {
+    std::string v = safeString(fields, 1);
+    project.splashCharacter = v.empty() ? std::string("deckbot") : v;
+  } else if (fields[0] == "monitor_device") {
+    project.monitorDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "monitor_deck") {
+    project.monitorDeckIndex = safeInt(fields, 1, -1);
+  } else if (fields[0] == "audio_output") {
+    NamedAudioOutput named;
+    named.name = cleanAudioOutputName(safeString(fields, 1));
+    named.deviceName = safeString(fields, 2);
+    named.firstChannel = std::clamp(safeInt(fields, 3, 1), 1, kMaxAudioOutputs);
+    named.width = safeInt(fields, 4, 2) == 1 ? 1 : 2;
+    if (!named.name.empty() &&
+        static_cast<int>(project.namedAudioOutputs.size()) < kMaxNamedAudioOutputs) {
+      project.namedAudioOutputs.push_back(named);
+    }
+  } else if (fields[0] == "output_limiter") {
+    OutputLimiterSetting limiter;
+    limiter.enabled = safeBool(fields, 1, false);
+    limiter.ceilingDb = std::clamp(safeDouble(fields, 2, -1.0), -40.0, 0.0);
+    limiter.deviceName = safeString(fields, 3);
+    limiter.effects = deckboy::audiofx::parseAudioEffects(safeString(fields, 4));   // absent: none
+    limiter.bypassAll = safeBool(fields, 5, false);
+    project.outputLimiters.push_back(limiter);
+  } else if (fields[0] == "dashboard_mode") {
+    project.dashboardMode = std::clamp(safeInt(fields, 1, 0), 0, 1);
+  } else if (fields[0] == "multiview") {
+    project.multiviewMode = std::clamp(safeInt(fields, 1, 0), 0, 1);
+  } else if (fields[0] == "draw_brush") {
+    deckboy::draw::Brush b;
+    deckboy::draw::toolFromToken(safeString(fields, 1), b.tool);
+    const std::string rgba = safeString(fields, 2);
+    if (!rgba.empty()) b.rgba = static_cast<std::uint32_t>(std::strtoul(rgba.c_str(), nullptr, 16));
+    b.size = std::clamp(static_cast<float>(safeDouble(fields, 3, b.size)), deckboy::draw::kMinBrushSize,
+                        deckboy::draw::kMaxBrushSize);
+    b.opacity = std::clamp(static_cast<float>(safeDouble(fields, 4, b.opacity)), 0.01f, 1.0f);
+    b.onion = safeBool(fields, 5, true);
+    project.drawBrush = b;
+    project.drawBrushLfo = parseToneLfos(safeString(fields, 6));
+  } else if (fields[0] == "motion") {
+    project.motionEnabled = safeBool(fields, 1, false);
+    project.motionSource = safeString(fields, 2);
+    deckboy::motion::Settings m;
+    m.sensitivity = static_cast<float>(safeDouble(fields, 3, m.sensitivity));
+    m.riseSeconds = static_cast<float>(safeDouble(fields, 4, m.riseSeconds));
+    m.fallSeconds = static_cast<float>(safeDouble(fields, 5, m.fallSeconds));
+    m.mirror = safeBool(fields, 6, m.mirror);
+    m.zones = deckboy::motion::zonesFromText(safeString(fields, 7));
+    project.motion = deckboy::motion::clampSettings(m);
+  } else if (fields[0] == "multiview_layout") {
+    // An unknown name (a later version's layout) opens as the even grid.
+    deckboy::multiview::Layout layout = deckboy::multiview::Layout::Grid;
+    deckboy::multiview::layoutFromToken(safeString(fields, 1), layout);
+    project.multiviewLayout = layout;
+  } else if (fields[0] == "multiview_tile") {
+    MultiviewTile tile;
+    tile.source = safeString(fields, 1);
+    tile.vuMeter = safeBool(fields, 2, false);
+    tile.safeAreas = safeBool(fields, 3, false);
+    tile.label = safeBool(fields, 4, true);
+    project.multiviewTiles.push_back(tile);
+  } else if (fields[0] == "captions_model") {
+    const std::string token = safeString(fields, 1);
+    project.captionsModel = token.empty() ? std::string("base.en") : token;
+  } else if (fields[0] == "live_captions") {
+    project.liveCaptionsEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "live_captions_source") {
+    const std::string source = safeString(fields, 1);
+    project.liveCaptionsSource = source.empty() ? std::string("output 1") : source;
+  } else if (fields[0] == "live_captions_outputs") {
+    project.liveCaptionsOutputs = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 1)));
+  } else if (fields[0] == "live_captions_lines") {
+    project.liveCaptionsLines = std::clamp(safeInt(fields, 1, 2), 1, 3);
+  } else if (fields[0] == "live_captions_top") {
+    project.liveCaptionsTop = safeBool(fields, 1, false);
+  } else if (fields[0] == "live_captions_size") {
+    project.liveCaptionsSize = std::clamp(safeInt(fields, 1, 100), 50, 200);
+  } else if (fields[0] == "live_captions_transcript") {
+    project.liveCaptionsTranscript = safeBool(fields, 1, false);
+  } else if (fields[0] == "hdr_outputs") {
+    project.hdrOutputs = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 0)));
+  } else if (fields[0] == "hdr_sdr_white") {
+    project.hdrSdrWhiteNits = std::clamp(safeInt(fields, 1, 203), 80, 500);
+  } else if (fields[0] == "mediamtx_host") {
+    project.mediamtxHost = safeString(fields, 1);
+  } else if (fields[0] == "update_check") {
+    project.updateCheckEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "mask") {
+    deckboy::masks::Mask mask;
+    std::string lfoText;
+    if (deckboy::masks::parseMask(safeString(fields, 1), mask, lfoText)) {
+      mask.lfo = parseGeometryLfos(lfoText);
+      project.masks.push_back(std::move(mask));
+    }
+  } else if (fields[0] == "clock_mode") {
+    const std::string clockValue = safeString(fields, 1);
+    project.clockMode = clockValue.empty() ? std::string("off") : clockValue;
+  } else if (fields[0] == "ndi_tally_trigger") {
+    project.ndiTallyTriggerEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "tally_switch_off") {
+    const std::string tallyOff = safeString(fields, 1);
+    project.tallySwitchOffAction = tallyOff.empty() ? std::string("nothing") : tallyOff;
+  } else if (fields[0] == "atem_tally_trigger") {
+    project.atemTallyTriggerEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "atem_switcher_host") {
+    project.atemSwitcherHost = safeString(fields, 1);
+  } else if (fields[0] == "atem_tally_input") {
+    project.atemTallyInput = safeInt(fields, 1, 0);
+  } else if (fields[0] == "hyperdeck_enabled") {
+    project.hyperDeckEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "language") {
+    project.language = safeString(fields, 1);
+  } else if (fields[0] == "nmc_mode") {
+    project.nmcMode = safeString(fields, 1);
+  } else if (fields[0] == "nmc_port") {
+    project.nmcPort = safeInt(fields, 1, 0);
+  } else if (fields[0] == "nmc_target_host") {
+    project.nmcTargetHost = safeString(fields, 1);
+  } else if (fields[0] == "nmc_source_filter") {
+    project.nmcSourceFilter = safeString(fields, 1);
+  } else {
+    // SPLIT, for the same reason this function exists at all: MSVC counts
+    // every `else if` as a nested block and refuses past a limit (C1061).
+    // The chain outgrew one function, so it continues in a second -- the
+    // same shape handleSettingsClick uses. Put new keys in Part2.
+    return applyProjectScalarLinePart2(project, fields,
+                                       std::forward<EnsureDeck>(ensureDeck));
+  }
+  return true;
+}
+
+template <typename EnsureDeck>
+bool applyProjectScalarLinePart2(Project& project, const std::vector<std::string>& fields,
+                                 EnsureDeck&& ensureDeck) {
+  if (fields[0] == "fixture") {
+    if (project.fixtures.size() < 1024) {
+      deckboy::fixtures::Fixture fixture;
+      fixture.name = safeString(fields, 1);
+      deckboy::fixtures::fixtureTypeFromToken(safeString(fields, 2), fixture.type);
+      fixture.universe = std::clamp(safeInt(fields, 3, 0), 0, 63999);
+      fixture.address = std::clamp(safeInt(fields, 4, 1), 1, 512);
+      fixture.videoDip = std::clamp(safeInt(fields, 5, -1), -1, 100);
+      if (!fixture.name.empty()) project.fixtures.push_back(fixture);
+    }
+  } else if (fields[0] == "hdr_hlg_outputs") {
+    project.hdrHlgOutputs = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 0)));
+  } else if (fields[0] == "hdr_auto_outputs") {
+    project.hdrAutoOutputs = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 0)));
+  } else if (fields[0] == "video_dip") {
+    project.videoDipEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "video_dip_fade") {
+    project.videoDipFadeSeconds = std::clamp(safeDouble(fields, 1, 2.0), 0.0, 30.0);
+  } else if (fields[0] == "midi_device") {
+    project.midiDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "tracker_muted") {
+    project.trackerMutedDecks = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 0)));
+  } else if (fields[0] == "tracker_solo") {
+    project.trackerSoloDecks = static_cast<std::uint32_t>(std::max(0, safeInt(fields, 1, 0)));
+  } else if (fields[0] == "tracker_classic") {
+    project.trackerClassicView = safeBool(fields, 1, false);
+  } else if (fields[0] == "tracker_loop") {
+    project.trackerLoop = safeBool(fields, 1, false);
+  } else if (fields[0] == "clicker_tracker") {
+    project.clickerDrivesTracker = safeBool(fields, 1, false);
+  } else if (fields[0] == "preset") {
+    if (project.presets.size() < 512) {   // a bound, as for the dashboard
+      ShowPreset preset;
+      preset.id = safeString(fields, 1);
+      preset.name = safeString(fields, 2);
+      preset.scope = static_cast<unsigned>(safeInt(fields, 3, static_cast<int>(kPresetScopeAll))) &
+                     kPresetScopeAll;
+      preset.masterDimmer = std::clamp(safeDouble(fields, 4, 1.0), 0.0, 1.0);
+      preset.masterVolume = std::clamp(safeDouble(fields, 5, 1.0), 0.0, 2.0);
+      project.presets.push_back(preset);
+    }
+  } else if (fields[0] == "preset_deck" || fields[0] == "preset_output") {
+    // Belongs to the preset with its id -- the most recent one, normally, but
+    // looked up rather than assumed so a hand-edited show still reads.
+    const std::string presetId = safeString(fields, 1);
+    ShowPreset* owner = nullptr;
+    for (auto it = project.presets.rbegin(); it != project.presets.rend(); ++it) {
+      if (it->id == presetId) {
+        owner = &*it;
+        break;
+      }
+    }
+    if (owner && fields[0] == "preset_deck" && owner->decks.size() < 64) {
+      PresetDeckState d;
+      d.deckIndex = std::max(0, safeInt(fields, 2, 0));
+      d.live = safeBool(fields, 3, false);
+      d.cueId = safeString(fields, 4);
+      d.opacity = static_cast<float>(std::clamp(safeDouble(fields, 5, 1.0), 0.0, 1.0));
+      d.scaleMode = safeInt(fields, 6, 0);
+      d.scaleX = static_cast<float>(safeDouble(fields, 7, 1.0));
+      d.scaleY = static_cast<float>(safeDouble(fields, 8, 1.0));
+      d.offsetX = static_cast<float>(safeDouble(fields, 9, 0.0));
+      d.offsetY = static_cast<float>(safeDouble(fields, 10, 0.0));
+      d.rotation = static_cast<float>(safeDouble(fields, 11, 0.0));
+      d.cropLeft = static_cast<float>(safeDouble(fields, 12, 0.0));
+      d.cropRight = static_cast<float>(safeDouble(fields, 13, 0.0));
+      d.cropTop = static_cast<float>(safeDouble(fields, 14, 0.0));
+      d.cropBottom = static_cast<float>(safeDouble(fields, 15, 0.0));
+      d.geometryLfo = safeString(fields, 16);
+      d.brightness = static_cast<float>(safeDouble(fields, 17, 1.0));
+      d.contrast = static_cast<float>(safeDouble(fields, 18, 1.0));
+      d.saturation = static_cast<float>(safeDouble(fields, 19, 1.0));
+      d.hueShift = static_cast<float>(safeDouble(fields, 20, 0.0));
+      d.keyOn = safeBool(fields, 21, false);
+      d.keyColor = SDL_Color {static_cast<Uint8>(std::clamp(safeInt(fields, 22, 0), 0, 255)),
+                              static_cast<Uint8>(std::clamp(safeInt(fields, 23, 255), 0, 255)),
+                              static_cast<Uint8>(std::clamp(safeInt(fields, 24, 0), 0, 255)),
+                              255};
+      d.keyTolerance = static_cast<float>(safeDouble(fields, 25, 60.0));
+      d.keySoftness = static_cast<float>(safeDouble(fields, 26, 20.0));
+      d.effects = safeString(fields, 27);
+      owner->decks.push_back(d);
+    } else if (owner && fields[0] == "preset_output" && owner->outputs.size() < 64) {
+      PresetOutputState o;
+      o.outputIndex = std::max(0, safeInt(fields, 2, 0));
+      o.hostDeckIndex = std::max(0, safeInt(fields, 3, 0));
+      o.layers = safeString(fields, 4);
+      o.crossfadeEnabled = safeBool(fields, 5, false);
+      o.crossfadeFrom = safeInt(fields, 6, 0);
+      o.crossfadeTo = safeInt(fields, 7, 1);
+      o.crossfadeMix = std::clamp(safeDouble(fields, 8, 0.0), 0.0, 1.0);
+      owner->outputs.push_back(o);
+    }
+  } else if (fields[0] == "theme") {
+    project.theme = safeString(fields, 1);
+  } else if (fields[0] == "terrarium_unlocked") {
+    project.terrariumUnlocked = safeBool(fields, 1, false);
+  } else if (fields[0] == "tabletop_unlocked") {
+    project.tabletopUnlocked = safeBool(fields, 1, false);
+  } else if (fields[0] == "geometry_aspect_link") {
+    project.geometryAspectLinked = safeBool(fields, 1, true);
+  } else if (fields[0] == "vj_mode") {
+    project.vjModeEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "vj_deck_a") {
+    project.vjDeckA = std::max(0, safeInt(fields, 1, 0));
+  } else if (fields[0] == "vj_deck_b") {
+    project.vjDeckB = std::max(0, safeInt(fields, 1, 1));
+  } else if (fields[0] == "vj_mix") {
+    project.vjMixPosition = std::clamp(safeDouble(fields, 1, 0.0), 0.0, 1.0);
+  } else if (fields[0] == "vj_blend") {
+    const std::string mode = safeString(fields, 1);
+    project.vjBlendMode = (mode == "add" || mode == "multiply") ? mode : "dissolve";
+  } else if (fields[0] == "vj_bpm") {
+    project.vjTempoBpm = std::clamp(safeDouble(fields, 1, 120.0), 20.0, 300.0);
+  } else if (fields[0] == "vj_quantise") {
+    project.vjQuantiseTakes = safeBool(fields, 1, false);
+  } else if (fields[0] == "creatures") {
+    project.creaturesEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "creatures_while_live") {
+    project.creaturesWhileLive = safeBool(fields, 1, false);
+  } else if (fields[0] == "show_control_device") {
+    project.showControlDeviceId = std::clamp(safeInt(fields, 1, 0), 0, 127);
+  } else if (fields[0] == "ui_scale") {
+    // 0 is "follow the desktop" and must survive the clamp; a saved sentinel
+    // turned into 0.75 by a range check is a setting that silently un-picks
+    // itself every time the show is opened.
+    const double savedScale = safeDouble(fields, 1, 0.0);
+    project.uiScale = (savedScale < 0.01) ? 0.0 : std::clamp(savedScale, 0.75, 3.0);
+  } else if (fields[0] == "interaction_mode") {
+    std::string v = safeString(fields, 1);
+    project.interactionMode = (v == "touch") ? "touch" : "mouse";
+  } else if (fields[0] == "allow_remote_network") {
+    project.allowRemoteNetwork = safeBool(fields, 1, false);
+  } else if (fields[0] == "trusted_controllers") {
+    project.trustedControllers = safeString(fields, 1);
+  } else if (fields[0] == "companion_passphrase") {
+    project.companionPassphrase = safeString(fields, 1);
+  } else if (fields[0] == "osc_query_enabled") {
+    project.oscQueryEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "osc_query_port") {
+    project.oscQueryPort = safeInt(fields, 1, 5511);
+  } else if (fields[0] == "web_remote_enabled") {
+    project.webRemoteEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "go_guard_ms") {
+    project.goGuardMs = std::clamp(safeInt(fields, 1, 0), 0, 2000);
+  } else if (fields[0] == "web_remote_level") {
+    project.webRemoteLevel = std::clamp(safeInt(fields, 1, 0), 0, 2);
+  } else if (fields[0] == "web_remote_haptics") {
+    project.webRemoteHaptics = safeBool(fields, 1, true);
+  } else if (fields[0] == "web_monitor_enabled") {
+    project.webMonitorEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "web_monitor_port") {
+    project.webMonitorPort = std::clamp(safeInt(fields, 1, 8090), 1, 65535);
+  } else if (fields[0] == "web_monitor_share") {
+    project.webMonitorShareLan = safeBool(fields, 1, false);
+  } else if (fields[0] == "web_monitor_pin") {
+    project.webMonitorPin = safeString(fields, 1);
+  } else if (fields[0] == "web_monitor_max_height") {
+    const int height = safeInt(fields, 1, 1080);
+    project.webMonitorMaxHeight = (height == 720 || height == 1440 || height == 2160) ? height : 1080;
+  } else if (fields[0] == "web_monitor_low_latency") {
+    project.webMonitorLowLatency = safeBool(fields, 1, false);
+  } else if (fields[0] == "web_monitor_max_clients") {
+    project.webMonitorMaxClients = std::clamp(safeInt(fields, 1, 8), 1, 64);
+  } else if (fields[0] == "browse_folder") {
+    project.browseFolder = safeString(fields, 1);
+  } else if (fields[0] == "audio_sample_rate") {
+    // Only the rates the desk is built to run at. A show carrying anything
+    // else -- hand-edited, or written by something else -- opens at 48000
+    // rather than trying to open a device at a rate nothing supports.
+    const int wanted = safeInt(fields, 1, 48000);
+    project.audioSampleRate =
+      (wanted == 44100 || wanted == 48000 || wanted == 88200 ||
+       wanted == 96000 || wanted == 192000) ? wanted : 48000;
+  } else if (fields[0] == "vmix_api_enabled") {
+    project.vmixApiEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "vmix_http_port") {
+    project.vmixHttpPort = safeInt(fields, 1, 8088);
+  } else if (fields[0] == "vmix_tcp_port") {
+    project.vmixTcpPort = safeInt(fields, 1, 8099);
+  } else if (fields[0] == "osc_feedback_mirror") {
+    project.oscFeedbackMirrorEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "osc_feedback_rate_ms") {
+    project.oscFeedbackRateMs = safeInt(fields, 1, 120);
+  } else if (fields[0] == "integration_atem_trigger") {
+    project.atemTriggerEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_ndi_trigger") {
+    project.ndiTriggerEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_nmc_sync") {
+    project.nmcSyncEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_mtc_ingest") {
+    project.mtcIngestEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_ltc_ingest") {
+    project.ltcIngestEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_dmx_artnet") {
+    project.dmxArtNetEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_artnet_port") {
+    project.artNetPort = safeInt(fields, 1, 6454);
+  } else if (fields[0] == "integration_tsl_tally") {
+    project.tslTallyEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "integration_tsl_port") {
+    project.tslTallyPort = std::clamp(safeInt(fields, 1, 5800), 1, 65535);
+  } else if (fields[0] == "integration_tsl_address") {
+    { std::string v = safeString(fields, 1); project.tslTallyAddress = v.empty() ? "255.255.255.255" : v; }
+  } else if (fields[0] == "audio_buffer_samples") {
+    int v = safeInt(fields, 1, 1024);
+    // Snap to valid sizes only
+    if (v <= 256) v = 256; else if (v <= 512) v = 512; else if (v <= 1024) v = 1024; else v = 2048;
+    project.audioBufferSamples = v;
+  } else if (fields[0] == "audio_delay_ms") {
+    project.audioDelayMs = std::clamp(safeInt(fields, 1, 0), 0, 1000);
+  } else if (fields[0] == "jump_mode") {
+    project.jumpMode = normalizeJumpModeToken(safeString(fields, 1));
+  } else if (fields[0] == "jump_transition") {
+    project.jumpTransitionEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "panic_profile") {
+    project.panicProfile = normalizePanicProfileToken(safeString(fields, 1));
+  } else if (fields[0] == "panic_fade_seconds") {
+    project.panicFadeSeconds = safeDouble(fields, 1, 0.9);
+  } else if (fields[0] == "panic_auto_restore") {
+    project.panicAutoRestore = safeBool(fields, 1, false);
+  } else if (fields[0] == "master_volume") {
+    // Range is 0..2 (values above 1.0 are boost) — the old 0..1 clamp here
+    // silently flattened saved boost levels on load.
+    project.masterVolume = std::clamp(safeDouble(fields, 1, 1.0), 0.0, 2.0);
+  } else if (fields[0] == "master_dimmer") {
+    project.masterDimmer = std::clamp(safeDouble(fields, 1, 1.0), 0.0, 1.0);
+  } else if (fields[0] == "output_follow_display") {
+    project.outputFollowDisplay = safeBool(fields, 1, true);
+  } else if (fields[0] == "output_render_width") {
+    project.outputRenderWidth = safeInt(fields, 1, 1920);
+  } else if (fields[0] == "output_render_height") {
+    project.outputRenderHeight = safeInt(fields, 1, 1080);
+  } else if (fields[0] == "output_refresh_hz") {
+    project.outputRefreshRateHz = std::max(0.0, safeDouble(fields, 1, 0.0));
+  } else if (fields[0] == "output_bit_depth") {
+    project.outputBitDepth = safeInt(fields, 1, 0);
+  } else if (fields[0] == "output_canvas_enabled") {
+    project.outputCanvasEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "output_canvas_width") {
+    project.outputCanvasWidth = safeInt(fields, 1, 3840);
+  } else if (fields[0] == "output_canvas_height") {
+    project.outputCanvasHeight = safeInt(fields, 1, 2160);
+  } else if (fields[0] == "output_target") {
+    int outputIndex = safeInt(fields, 1, static_cast<int>(project.outputs.size()));
+    int normalizedIndex = std::clamp(outputIndex, 0, kMaxOutputs - 1);
+    while (normalizedIndex >= static_cast<int>(project.outputs.size())) {
+      project.outputs.push_back(OutputTarget {});
+    }
+    OutputTarget& outputTarget = project.outputs[normalizedIndex];
+    // A blend saved before its curve existed was the straight ramp, and reads
+    // back as one; fields 109-111 below put a newer show's own back.
+    outputTarget.edgeBlendProjectorCurve = false;
+    outputTarget.name = safeString(fields, 2);
+    outputTarget.hostDeckIndex = safeInt(fields, 3, 0);
+    outputTarget.displayIndex = safeInt(fields, 4, 0);
+    outputTarget.enabled = safeBool(fields, 5, false);
+    outputTarget.streamEnabled = safeBool(fields, 6, false);
+    outputTarget.streamProtocol = safeString(fields, 7);
+    outputTarget.streamUrl = safeString(fields, 8);
+    outputTarget.streamBitrateKbps = safeInt(fields, 9, 6000);
+    if (fields.size() >= 17) {
+      outputTarget.ndiEnabled = safeBool(fields, 10, false);
+      outputTarget.ndiSourceName = safeString(fields, 11);
+      outputTarget.ndiKeyEnabled = safeBool(fields, 12, false);
+      outputTarget.ndiKeySourceName = safeString(fields, 13);
+      outputTarget.outputType = safeString(fields, 14);
+      outputTarget.mirrorSourceOutputIndex = safeInt(fields, 15, -1);
+      outputTarget.outputId = safeString(fields, 16);
+      if (fields.size() >= 21) {
+        outputTarget.outputAlpha = static_cast<float>(safeDouble(fields, 17, 1.0));
+        outputTarget.outputDelayMs = safeInt(fields, 18, 0);
+        outputTarget.outputTimeOverlayEnabled = safeBool(fields, 19, false);
+        outputTarget.outputColorSpace = safeString(fields, 20);
+        if (fields.size() >= 24) {
+          outputTarget.outputLayoutMode = safeString(fields, 21);
+          outputTarget.outputOrientationDegrees = safeInt(fields, 22, 0);
+          // Field 23 was the test card; a show saved with one up opens clean.
+          if (fields.size() >= 28) {
+            outputTarget.deckLinkEnabled = safeBool(fields, 24, false);
+            outputTarget.deckLinkDeviceId = safeInt(fields, 25, -1);
+            outputTarget.deckLinkMode = safeString(fields, 26);
+            outputTarget.deckLink10Bit = safeBool(fields, 27, true);
+            if (fields.size() >= 32) {
+              outputTarget.aoiLeft   = static_cast<float>(safeDouble(fields, 28, 0.0));
+              outputTarget.aoiRight  = static_cast<float>(safeDouble(fields, 29, 0.0));
+              outputTarget.aoiTop    = static_cast<float>(safeDouble(fields, 30, 0.0));
+              outputTarget.aoiBottom = static_cast<float>(safeDouble(fields, 31, 0.0));
+              if (fields.size() >= 34) {
+                outputTarget.spoutEnabled = safeBool(fields, 32, false);
+                outputTarget.spoutSenderName = safeString(fields, 33);
+                if (fields.size() >= 35) {
+                  outputTarget.streamKey = safeString(fields, 34);
+                  if (fields.size() >= 36) {
+                    outputTarget.displayName = safeString(fields, 35);
+                    if (fields.size() >= 41) {
+                      outputTarget.st2110Enabled = safeBool(fields, 36, false);
+                      outputTarget.st2110Address = safeString(fields, 37);
+                      outputTarget.st2110Interface = safeString(fields, 38);
+                      outputTarget.st2110Port = safeInt(fields, 39, 20000);
+                      outputTarget.st2110TenBit = safeBool(fields, 40, true);
+                      if (trim(outputTarget.st2110Address).empty()) {
+                        outputTarget.st2110Address = "239.20.10.1";
+                      }
+                      if (fields.size() >= 46) {
+                        outputTarget.srtLatencyMs = std::clamp(safeInt(fields, 41, 120), 20, 8000);
+                        outputTarget.srtPassphrase = safeString(fields, 42);
+                        outputTarget.srtStreamId = safeString(fields, 43);
+                        outputTarget.srtMode =
+                          (safeString(fields, 44) == "listener") ? "listener" : "caller";
+                        outputTarget.streamKeyframeSeconds =
+                          std::clamp(safeInt(fields, 45, 2), 1, 10);
+                        // Appended after the keyframe field; older
+                        // shows take the previous hardcoded 160.
+                        outputTarget.streamAudioBitrateKbps =
+                          std::clamp(safeInt(fields, 46, 160), 32, 512);
+                        // Matte & overlay. A show saved before these had no
+                        // house frame, so the defaults must be "no mask, no
+                        // layer" or every old show gains black bars.
+                        if (fields.size() >= 52) {
+                          outputTarget.matteAspect = safeString(fields, 47);
+                          if (outputTarget.matteAspect.empty()) {
+                            outputTarget.matteAspect = "off";
+                          }
+                          outputTarget.matteOpacity =
+                            std::clamp(safeDouble(fields, 48, 1.0), 0.0, 1.0);
+                          outputTarget.overlayImagePath = safeString(fields, 49);
+                          outputTarget.overlayOpacity =
+                            std::clamp(safeDouble(fields, 50, 1.0), 0.0, 1.0);
+                          outputTarget.overlayEnabled = safeBool(fields, 51, false);
+                          // Presenter view. A show saved before these gets the struct's own
+                          // defaults, which are what an unconfigured presenter screen should
+                          // look like -- so an old show opened on a presenter output is
+                          // readable rather than blank.
+                          if (fields.size() >= 63) {
+                            const std::string presLayout = safeString(fields, 52);
+                            if (!presLayout.empty()) outputTarget.presenter.layout = presLayout;
+                            outputTarget.presenter.showPrevious = safeBool(fields, 53, true);
+                            outputTarget.presenter.showNext = safeBool(fields, 54, true);
+                            outputTarget.presenter.showNotes = safeBool(fields, 55, true);
+                            outputTarget.presenter.showClock = safeBool(fields, 56, true);
+                            outputTarget.presenter.showTimers = safeBool(fields, 57, true);
+                            const std::string presBg = safeString(fields, 58);
+                            const std::string presInk = safeString(fields, 59);
+                            const std::string presAccent = safeString(fields, 60);
+                            if (!presBg.empty()) outputTarget.presenter.background = presBg;
+                            if (!presInk.empty()) outputTarget.presenter.ink = presInk;
+                            if (!presAccent.empty()) outputTarget.presenter.accent = presAccent;
+                            outputTarget.presenter.notesScale =
+                              std::clamp(safeDouble(fields, 61, 1.4), 0.5, 4.0);
+                            outputTarget.presenter.buildsConsumeAdvance = safeBool(fields, 62, false);
+                          }
+                          // The live-picture switch and the notes share arrived
+                          // later; an older presenter output keeps both panels
+                          // and its layout's own share, which is how it looked.
+                          if (fields.size() >= 65) {
+                            outputTarget.presenter.showLive = safeBool(fields, 63, true);
+                            outputTarget.presenter.notesShare =
+                              std::clamp(safeDouble(fields, 64, 1.0), 0.15, 1.0);
+                          }
+                          if (fields.size() >= 66) {
+                            outputTarget.presenter.customLayout = safeString(fields, 65);
+                          }
+                          // The prompter. An output saved before it keeps the
+                          // struct's defaults, which are a readable black-on-
+                          // white-text screen mirrored for the glass.
+                          if (fields.size() >= 77) {
+                            outputTarget.prompter.script = safeString(fields, 66);
+                            outputTarget.prompter.mirrorHorizontal = safeBool(fields, 67, true);
+                            outputTarget.prompter.mirrorVertical = safeBool(fields, 68, false);
+                            outputTarget.prompter.linesPerMinute =
+                              std::clamp(safeDouble(fields, 69, 140.0), 10.0, 600.0);
+                            outputTarget.prompter.running = safeBool(fields, 70, false);
+                            outputTarget.prompter.fontScale =
+                              std::clamp(safeDouble(fields, 71, 2.6), 0.5, 8.0);
+                            outputTarget.prompter.readingLineFraction =
+                              std::clamp(safeDouble(fields, 72, 0.42), 0.05, 0.95);
+                            outputTarget.prompter.showReadingLine = safeBool(fields, 73, true);
+                            const std::string pbg = safeString(fields, 74);
+                            const std::string pink = safeString(fields, 75);
+                            const std::string pacc = safeString(fields, 76);
+                            if (!pbg.empty()) outputTarget.prompter.background = pbg;
+                            if (!pink.empty()) outputTarget.prompter.ink = pink;
+                            if (!pacc.empty()) outputTarget.prompter.accent = pacc;
+                          }
+                          // The layer stack. Absent means "just the host",
+                          // which is what every show saved before Super
+                          // Deckboy did and must keep doing.
+                          if (fields.size() >= 78) {
+                            outputTarget.layerDecks = parseLayerList(safeString(fields, 77));
+                          }
+                          // Projection mapping. ABSENT means the show predates
+                          // per-output warp, and normalizeProjectOutputsAndLayers
+                          // lifts it off the host deck instead -- so an old show
+                          // keeps exactly the alignment it was set up with.
+                          if (fields.size() >= 92) {
+                            outputTarget.warpEnabled = safeBool(fields, 78, false);
+                            const std::string wm = safeString(fields, 79);
+                            if (!wm.empty()) outputTarget.warpMode = wm;
+                            outputTarget.warpTopLeftX     = static_cast<float>(safeDouble(fields, 80, 0.0));
+                            outputTarget.warpTopLeftY     = static_cast<float>(safeDouble(fields, 81, 0.0));
+                            outputTarget.warpTopRightX    = static_cast<float>(safeDouble(fields, 82, 0.0));
+                            outputTarget.warpTopRightY    = static_cast<float>(safeDouble(fields, 83, 0.0));
+                            outputTarget.warpBottomRightX = static_cast<float>(safeDouble(fields, 84, 0.0));
+                            outputTarget.warpBottomRightY = static_cast<float>(safeDouble(fields, 85, 0.0));
+                            outputTarget.warpBottomLeftX  = static_cast<float>(safeDouble(fields, 86, 0.0));
+                            outputTarget.warpBottomLeftY  = static_cast<float>(safeDouble(fields, 87, 0.0));
+                            outputTarget.edgeBlendLeft    = static_cast<float>(safeDouble(fields, 88, 0.0));
+                            outputTarget.edgeBlendRight   = static_cast<float>(safeDouble(fields, 89, 0.0));
+                            outputTarget.edgeBlendTop     = static_cast<float>(safeDouble(fields, 90, 0.0));
+                            outputTarget.edgeBlendBottom  = static_cast<float>(safeDouble(fields, 91, 0.0));
+                            if (fields.size() >= 96) {
+                              outputTarget.crossfadeEnabled = safeBool(fields, 92, false);
+                              outputTarget.crossfadeFrom    = safeInt(fields, 93, 0);
+                              outputTarget.crossfadeTo      = safeInt(fields, 94, 1);
+                              outputTarget.crossfadeMix     = safeDouble(fields, 95, 0.0);
+                              if (fields.size() >= 98) {
+                                outputTarget.deckLinkKeyFill =
+                                  safeBool(fields, 96, false);
+                                outputTarget.deckLinkKeyDeviceId =
+                                  safeInt(fields, 97, -1);
+                              }
+                              if (fields.size() >= 99) {
+                                parseWarpGrid(outputTarget, safeString(fields, 98));
+                              }
+                              if (fields.size() >= 108) {
+                                outputTarget.st2110VideoMasterEnabled = safeBool(fields, 99, true);
+                                outputTarget.st2110AudioMasterEnabled = safeBool(fields, 100, true);
+                                outputTarget.st2110VideoRtpEnabled = safeBool(fields, 101, true);
+                                outputTarget.st2110AudioRtpEnabled = safeBool(fields, 102, true);
+                                outputTarget.st2110VideoSourcePort = std::clamp(safeInt(fields, 103, 0), 0, 65535);
+                                outputTarget.st2110AudioSourcePort = std::clamp(safeInt(fields, 104, 0), 0, 65535);
+                                outputTarget.st2110AudioAddress = safeString(fields, 105);
+                                outputTarget.st2110AudioPort = std::clamp(safeInt(fields, 106, 0), 0, 65535);
+                                outputTarget.st2110AudioInterface = safeString(fields, 107);
+                              }
+                              if (fields.size() >= 109) {
+                                outputTarget.aoiPixelForPixel = safeBool(fields, 108, false);
+                              }
+                              if (fields.size() >= 112) {
+                                outputTarget.edgeBlendProjectorCurve = safeBool(fields, 109, true);
+                                outputTarget.edgeBlendGamma =
+                                  std::clamp(static_cast<float>(safeDouble(fields, 110, 2.2)), 1.0f, 3.0f);
+                                outputTarget.edgeBlendBlackLift =
+                                  std::clamp(static_cast<float>(safeDouble(fields, 111, 0.0)), 0.0f, 0.2f);
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Backward compatibility with older 13-column output_target lines.
+      outputTarget.outputType = safeString(fields, 10);
+      outputTarget.mirrorSourceOutputIndex = safeInt(fields, 11, -1);
+      outputTarget.outputId = safeString(fields, 12);
+    }
+    // Flat, not nested in the chain above: that chain is at MSVC's nesting
+    // limit. Absent before masks: none.
+    if (fields.size() >= 114) {
+      outputTarget.maskId = safeString(fields, 112);
+      outputTarget.baseLayerMaskId = safeString(fields, 113);
+    }
+    // Absent before slices: none, so the output shows what it did.
+    if (fields.size() >= 115) {
+      outputTarget.slices = deckboy::slices::parse(safeString(fields, 114));
+    }
+    if (fields.size() >= 116) {
+      parseSliceLfos(safeString(fields, 115), outputTarget.slices);
+    }
+    if (fields.size() >= 117) {
+      deckboy::slices::parseGrids(safeString(fields, 116), outputTarget.slices);
+    }
+  } else if (fields[0] == "layer_assignment" || fields[0] == "group_preset" ||
+             fields[0] == "group_slot" || fields[0] == "group_preset_meta") {
+    // Legacy fields — ignored (single-deck, no layer assignments or group presets).
+  } else if (fields[0] == "audio_output") {
+    ensureDeck(0).audioOutputDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "display_index") {
+    ensureDeck(0).outputDisplayIndex = safeInt(fields, 1, 0);
+  } else if (fields[0] == "ndi_enabled") {
+    ensureDeck(0).ndiEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "ndi_name") {
+    ensureDeck(0).ndiSourceName = safeString(fields, 1);
+  } else if (fields[0] == "ndi_key_enabled") {
+    ensureDeck(0).ndiKeyEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "ndi_key_name") {
+    ensureDeck(0).ndiKeySourceName = safeString(fields, 1);
+  } else if (fields[0] == "time_overlay") {
+    ensureDeck(0).timeOverlayEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "transition_seconds") {
+    ensureDeck(0).transitionSeconds = std::max(0.0, safeDouble(fields, 1, 0.0));
+  } else if (fields[0] == "transition_style") {
+    ensureDeck(0).transitionStyle = safeString(fields, 1);
+  } else if (fields[0] == "timecode_chase") {
+    ensureDeck(0).timecodeChaseEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "timecode_run") {
+    ensureDeck(0).timecodeRunEnabled = safeBool(fields, 1, false);
+  } else if (fields[0] == "timecode_trigger") {
+    ensureDeck(0).timecodeTriggerEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "timecode_jam") {
+    ensureDeck(0).timecodeJamSyncEnabled = safeBool(fields, 1, true);
+  } else if (fields[0] == "timecode_freewheel") {
+    ensureDeck(0).timecodeFreewheelSeconds = safeDouble(fields, 1, 1.0);
+  } else if (fields[0] == "timecode_fps") {
+    ensureDeck(0).timecodeFps = safeDouble(fields, 1, 30.0);
+  } else if (fields[0] == "timecode_current") {
+    ensureDeck(0).timecodeCurrentSeconds = std::max(0.0, safeDouble(fields, 1, 0.0));
+  } else {
+    return false;
+  }
+  return true;
+}
+
+// TEXT MODE USED TO HAVE TWO SWITCHES. A video synth cue turned its own
+// character grid on with videoSynth.ascii; every other cue got there by
+// carrying the TEXT MODE effect. Same renderer, two ways in -- and every
+// control had to work through both, which is the seam three separate bugs
+// lived in.
+//
+// There is one way now: the effect. A cue saved by an older build with the
+// flag set and no effect gets one here, carrying the settings it already had,
+// so a show opens looking exactly as it did. The flag is then cleared: it is
+// still written to the file (the record is positional and a field cannot be
+// removed from the middle of it) and now means "this cue has text mode", which
+// keeps an older build able to open a show this one wrote.
+//
+// Runs before normalizeProject so the effect it adds is normalised with the
+// rest.
+inline void migrateVideoSynthTextMode(Project& project) {
+  for (Deck& deck : project.decks) {
+    for (Cue& cue : deck.cues) {
+      if (!cue.videoSynth.ascii) {
+        continue;
+      }
+      bool hasTextMode = false;
+      for (const auto& fx : cue.effects) {
+        if (fx.kind == deckboy::effects::CueEffectKind::TextMode) {
+          hasTextMode = true;
+          break;
+        }
+      }
+      cue.videoSynth.ascii = false;
+      if (hasTextMode) {
+        continue;
+      }
+      deckboy::effects::CueEffect fx;
+      fx.kind = deckboy::effects::CueEffectKind::TextMode;
+      fx.amount = 1.0f;
+      // The four the effect carries, taken from what the cue was already set
+      // to, so the picture does not change on opening.
+      fx.paramA = ::textModeParamForCols(cue.videoSynth.asciiCols);
+      fx.paramB = static_cast<float>(
+        std::clamp(cue.videoSynth.glitch, 0.0, 1.0));
+      fx.paramC = ::textModeParamForCharSet(cue.videoSynth.asciiCharSet);
+      fx.paramD = static_cast<float>(
+        std::clamp(cue.videoSynth.asciiInk, 0, 5) / 5.0);
+      cue.effects.push_back(fx);
+    }
+  }
+}
+
+Project loadProject(const fs::path& projectFile,
+                    const std::function<void(double)>& onProgress = {}) {
+  Project project;
+  fs::path resolved = projectFile.empty() ? Paths::defaultProjectFile() : projectFile;
+  std::ifstream input(resolved, std::ios::binary);
+  if (!input) {
+    return project;
+  }
+  std::uintmax_t totalBytes = 0;
+  {
+    std::error_code ec;
+    totalBytes = fs::file_size(resolved, ec);
+    if (ec) {
+      totalBytes = 0;
+    }
+  }
+  // DID THE FILE END WHERE A FILE SHOULD END?
+  //
+  // Every record the writer emits is terminated, so a complete show ends with a
+  // newline. One that does not was cut off mid-record -- a power cut during the
+  // old in-place save, a USB stick pulled, a half-finished copy.
+  //
+  // This is the check that matters, because the OTHER signal is not enough on
+  // its own: a truncation landing inside a `cue` line still matches the cue
+  // branch and simply reads short fields, so nothing downstream notices. That
+  // is precisely the file that got silently rewritten during testing.
+  if (totalBytes > 0) {
+    std::ifstream tail(resolved, std::ios::binary);
+    if (tail) {
+      tail.seekg(static_cast<std::streamoff>(totalBytes) - 1);
+      char lastByte = 0;
+      if (tail.get(lastByte) && lastByte != '\n') {
+        project.loadedCleanly = false;
+      }
+    }
+  }
+
+  std::size_t lineCounter = 0;
+
+  project.decks.clear();
+  project.decks.push_back(Deck {});
+  project.outputs.clear();
+
+  auto ensureDeck = [&](int deckIndex) -> Deck& {
+    // Clamped, not grown to fit: see kMaxDecks. A real show never comes near
+    // this, and a corrupt one no longer asks the machine for thousands of
+    // audio devices.
+    int normalizedIndex = std::clamp(deckIndex, 0, kMaxDecks - 1);
+    while (normalizedIndex >= static_cast<int>(project.decks.size())) {
+      Deck deck;
+      deck.name = deckDefaultName(static_cast<int>(project.decks.size()));
+      project.decks.push_back(deck);
+    }
+    return project.decks[normalizedIndex];
+  };
+
+  std::string line;
+  while (std::getline(input, line)) {
+    // Report every 64 lines: often enough to animate, rare enough that tellg()
+    // and the callback cost nothing on a small show.
+    if (onProgress && totalBytes > 0 && (++lineCounter & 63u) == 0u) {
+      const std::streampos pos = input.tellg();
+      if (pos >= 0) {
+        onProgress(static_cast<double>(pos) / static_cast<double>(totalBytes));
+      }
+    }
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    auto fields = splitEscapedTabs(line);
+    if (fields.empty()) {
+      continue;
+    }
+
+    if (applyProjectScalarLine(project, fields, ensureDeck)) {
+      // handled above
+    } else if (fields[0] == "deck") {
+      int deckIndex = safeInt(fields, 1, static_cast<int>(project.decks.size()) - 1);
+      Deck& deck = ensureDeck(deckIndex);
+      deck.name = safeString(fields, 2);
+      deck.selectedIndex = safeInt(fields, 3, -1);
+      deck.activeIndex = safeInt(fields, 4, -1);
+      deck.playlistLoop = safeBool(fields, 6, false);
+      deck.audioOutputDeviceName = safeString(fields, 7);
+      deck.outputDisplayIndex = safeInt(fields, 8, 0);
+      deck.ndiEnabled = safeBool(fields, 9, false);
+      deck.ndiSourceName = safeString(fields, 10);
+      deck.timeOverlayEnabled = safeBool(fields, 11, false);
+      deck.transitionSeconds = std::max(0.0, safeDouble(fields, 12, 0.0));
+      deck.transitionStyle = safeString(fields, 13);
+      deck.timecodeChaseEnabled = safeBool(fields, 14, false);
+      deck.timecodeRunEnabled = safeBool(fields, 15, false);
+      deck.timecodeTriggerEnabled = safeBool(fields, 16, true);
+      deck.timecodeFps = safeDouble(fields, 17, 30.0);
+      deck.timecodeCurrentSeconds = std::max(0.0, safeDouble(fields, 18, 0.0));
+      deck.timecodeLastSeconds = deck.timecodeCurrentSeconds;
+      deck.shuffle = safeBool(fields, 19, false);
+      deck.ndiKeyEnabled = safeBool(fields, 20, false);
+      deck.ndiKeySourceName = safeString(fields, 21);
+      deck.canvasViewX = safeInt(fields, 22, 0);
+      deck.canvasViewY = safeInt(fields, 23, 0);
+      deck.warpEnabled = safeBool(fields, 24, false);
+      size_t warpFieldOffset = 0;
+      if (fields.size() >= 56) {
+        deck.warpMode = safeString(fields, 25);
+        warpFieldOffset = 1;
+      }
+      deck.warpTopLeftX = static_cast<float>(safeDouble(fields, 25 + warpFieldOffset, 0.0));
+      deck.warpTopLeftY = static_cast<float>(safeDouble(fields, 26 + warpFieldOffset, 0.0));
+      deck.warpTopRightX = static_cast<float>(safeDouble(fields, 27 + warpFieldOffset, 0.0));
+      deck.warpTopRightY = static_cast<float>(safeDouble(fields, 28 + warpFieldOffset, 0.0));
+      deck.warpBottomRightX = static_cast<float>(safeDouble(fields, 29 + warpFieldOffset, 0.0));
+      deck.warpBottomRightY = static_cast<float>(safeDouble(fields, 30 + warpFieldOffset, 0.0));
+      deck.warpBottomLeftX = static_cast<float>(safeDouble(fields, 31 + warpFieldOffset, 0.0));
+      deck.warpBottomLeftY = static_cast<float>(safeDouble(fields, 32 + warpFieldOffset, 0.0));
+      deck.edgeBlendLeft = static_cast<float>(safeDouble(fields, 33 + warpFieldOffset, 0.0));
+      deck.edgeBlendRight = static_cast<float>(safeDouble(fields, 34 + warpFieldOffset, 0.0));
+      deck.edgeBlendTop = static_cast<float>(safeDouble(fields, 35 + warpFieldOffset, 0.0));
+      deck.edgeBlendBottom = static_cast<float>(safeDouble(fields, 36 + warpFieldOffset, 0.0));
+      deck.outputRouteDeckIndex = safeInt(fields, 37 + warpFieldOffset, deckIndex);
+      (void)safeInt(fields, 38 + warpFieldOffset, 0);
+      deck.timecodeFreewheelSeconds = safeDouble(fields, 39 + warpFieldOffset, 1.0);
+      deck.timecodeJamSyncEnabled = safeBool(fields, 40 + warpFieldOffset, true);
+      deck.playlistOpacity = static_cast<float>(safeDouble(fields, 41 + warpFieldOffset, 1.0));
+      deck.playlistAutoFade = safeBool(fields, 42 + warpFieldOffset, false);
+      deck.playlistFadeSeconds = safeDouble(fields, 43 + warpFieldOffset, 0.8);
+      deck.playlistTimebaseFps = safeDouble(fields, 44 + warpFieldOffset, deck.timecodeFps);
+      deck.playlistStartOffsetSeconds = safeDouble(fields, 45 + warpFieldOffset, 0.0);
+      deck.playlistDefaultCueFadeSeconds = safeDouble(fields, 46 + warpFieldOffset, 1.5);
+      deck.playlistDefaultStillDurationSeconds = safeDouble(fields, 47 + warpFieldOffset, 8.0);
+      deck.playlistDefaultLoop = safeBool(fields, 48 + warpFieldOffset, false);
+      deck.playlistDefaultFadeInEnabled = safeBool(fields, 49 + warpFieldOffset, true);
+      deck.playlistDefaultFadeOutEnabled = safeBool(fields, 50 + warpFieldOffset, true);
+      deck.playlistDefaultAudioEnabled = safeBool(fields, 51 + warpFieldOffset, true);
+      deck.playlistDefaultPauseAtBeginning = safeBool(fields, 52 + warpFieldOffset, false);
+      deck.playlistDefaultPauseAtEnd = safeBool(fields, 53 + warpFieldOffset, true);
+      deck.playlistDefaultTransitionToNext = safeBool(fields, 54 + warpFieldOffset, true);
+      // Clamped to what the app can open. This said 8 after the selector went
+      // to 16, 32 and 64, so a wide deck came back from a save as 8 outputs.
+      deck.audioOutputChannels = std::clamp(safeInt(fields, 55 + warpFieldOffset, 2), 2,
+                                            kMaxAudioOutputs);
+      // Neutral default -1: a show written before the standby pointer existed
+      // opens with no standby and behaves exactly as it did.
+      deck.standbyIndex = safeInt(fields, 56 + warpFieldOffset, -1);
+      // Appended after standbyIndex; a show saved before this has none,
+      // which is exactly "only the one device".
+      if (fields.size() >= 58 + warpFieldOffset) {
+        deck.extraAudioDeviceNames =
+          parseStringList(safeString(fields, 57 + warpFieldOffset), ';');
+      }
+      // Appended after the extra devices. TRUE is the backward-compatible
+      // default and it is not the zero value: every show written before the
+      // monitor existed had every playlist going to the room, and one that
+      // came back silent would be a show that had lost its sound.
+      if (fields.size() >= 59 + warpFieldOffset) {
+        deck.audioToProgram = safeBool(fields, 58 + warpFieldOffset, true);
+      }
+      // Appended after audioToProgram. Empty is off, so a show written before
+      // watch folders existed opens watching nothing.
+      if (fields.size() >= 60 + warpFieldOffset) {
+        deck.watchFolder = safeString(fields, 59 + warpFieldOffset);
+      }
+      // Appended after the watch folder. Absent is not in the patch, which
+      // is how every playlist played before named outputs.
+      if (fields.size() >= 61 + warpFieldOffset) {
+        deck.audioPatch = parseAudioPatch(safeString(fields, 60 + warpFieldOffset));
+      }
+    } else if (fields[0] == "cue") {
+      int deckIndex = 0;
+      size_t offset = 1;
+      if (fields.size() >= 19) {
+        try {
+          deckIndex = std::stoi(fields[1]);
+          offset = 2;
+        } catch (...) {
+          deckIndex = 0;
+          offset = 1;
+        }
+      }
+
+      Cue cue;
+      cue.path = safeString(fields, offset + 0);
+      cue.name = safeString(fields, offset + 1);
+      std::string kind = safeString(fields, offset + 2);
+      cue.kind =
+        kind == "image" ? CueKind::Image :
+        kind == "pattern" ? CueKind::Pattern :
+        kind == "browser" ? CueKind::Browser :
+        (kind == "window_source" || kind == "window") ? CueKind::WindowSource :
+        kind == "camera" ? CueKind::Camera :
+        (kind == "syphon" || kind == "spout") ? CueKind::Syphon :
+        kind == "srt_stream" ? CueKind::SrtStream :
+        kind == "ndi_source" ? CueKind::NdiSource :
+        kind == "decklink_source" ? CueKind::DeckLinkSource :
+        kind == "pip" ? CueKind::Pip :
+        kind == "lower_third" ? CueKind::LowerThird :
+        kind == "composite" ? CueKind::Composite :
+        kind == "audio" ? CueKind::Audio :
+        // Timer, Tone and VideoSynth were missing here as well as in
+        // cueKindToken, so even a correctly-written show came back with all
+        // three demoted to Video. Keep this list in step with that function --
+        // a kind that only one side knows about does not survive a round trip.
+        kind == "timer" ? CueKind::Timer :
+        kind == "tone" ? CueKind::Tone :
+        (kind == "video_synth" || kind == "vsynth") ? CueKind::VideoSynth :
+        kind == "master" ? CueKind::Master :
+        kind == "target" ? CueKind::Target :
+        kind == "fade" ? CueKind::Fade :
+        kind == "memo" ? CueKind::Memo :
+        kind == "mic" ? CueKind::Mic :
+        kind == "midi" ? CueKind::Midi :
+        kind == "network" ? CueKind::Network :
+        kind == "timecode" ? CueKind::Timecode :
+        kind == "script" ? CueKind::Script :
+        kind == "dmx" ? CueKind::Dmx :
+        kind == "text" ? CueKind::Text :
+        kind == "midifile" ? CueKind::MidiFile :
+        CueKind::Video;
+      // Repair shows written while the round trip was broken. cueKindToken was
+      // missing SEVEN kinds, so each was saved as "video" while keeping its
+      // real path -- and a Video cue pointed at timer:// can never play, it
+      // just racks. v0.84.0 shipped this way, which means every Timer, Pip,
+      // Composite, Camera, Window and Syphon cue in a show saved by it comes
+      // back dead. The path is the surviving evidence of what the cue was, and
+      // every affected kind has its own scheme, so all of them recover.
+      if (cue.kind == CueKind::Video) {
+        const std::string& p = cue.path;
+        if (p.rfind("tone://", 0) == 0)               cue.kind = CueKind::Tone;
+        else if (p.rfind("timer://", 0) == 0)         cue.kind = CueKind::Timer;
+        else if (p.rfind("vsynth://", 0) == 0)        cue.kind = CueKind::VideoSynth;
+        else if (p.rfind("graphic://pip", 0) == 0)    cue.kind = CueKind::Pip;
+        else if (p.rfind("graphic://composite", 0) == 0) cue.kind = CueKind::Composite;
+        else if (p.rfind("source://camera/", 0) == 0) cue.kind = CueKind::Camera;
+        else if (p.rfind("source://window/", 0) == 0) cue.kind = CueKind::WindowSource;
+        else if (p.rfind("source://syphon/", 0) == 0) cue.kind = CueKind::Syphon;
+        else if (p.rfind("mic://", 0) == 0)           cue.kind = CueKind::Mic;
+      }
+      cue.duration = safeDouble(fields, offset + 3, 0.0);
+      cue.width = safeInt(fields, offset + 4, 0);
+      cue.height = safeInt(fields, offset + 5, 0);
+      cue.fps = safeDouble(fields, offset + 6, cue.kind == CueKind::Video ? 30.0 : 0.0);
+      cue.formatName = safeString(fields, offset + 7);
+      cue.videoCodec = safeString(fields, offset + 8);
+      cue.audioCodec = safeString(fields, offset + 9);
+      cue.hasAudio = safeBool(fields, offset + 10, false);
+      cue.sizeBytes = safeSize(fields, offset + 11, 0);
+      cue.color = parseColor(safeString(fields, offset + 12));
+      cue.fadeInSeconds = std::max(0.0, safeDouble(fields, offset + 13, 0.0));
+      cue.fadeOutSeconds = std::max(0.0, safeDouble(fields, offset + 14, 0.0));
+      cue.loop = safeBool(fields, offset + 15, false);
+      cue.pauseOnLastFrame = safeBool(fields, offset + 16, false);
+      cue.id = safeString(fields, offset + 17);
+      cue.inPointSeconds = std::max(0.0, safeDouble(fields, offset + 18, 0.0));
+      cue.outPointSeconds = std::max(0.0, safeDouble(fields, offset + 19, 0.0));
+      cue.triggerTimecodeSeconds = safeDouble(fields, offset + 20, -1.0);
+      cue.endAction = parseCueEndAction(safeString(fields, offset + 21));
+      cue.cueTransitionSeconds = safeDouble(fields, offset + 22, -1.0);
+      cue.cueTransitionStyle = safeString(fields, offset + 23);
+      cue.lowerThirdText = safeString(fields, offset + 24);
+      cue.lowerThirdSubtext = safeString(fields, offset + 25);
+      cue.lowerThirdBgAlpha = safeInt(fields, offset + 26, 180);
+      cue.stillDurationSeconds = std::max(0.0, safeDouble(fields, offset + 27, 0.0));
+      cue.loopCount = safeInt(fields, offset + 28, 0);
+      cue.playbackSpeed = std::clamp(safeDouble(fields, offset + 29, 1.0), 0.25, 4.0);
+      cue.colorTag = safeString(fields, offset + 30);
+      cue.notes = safeString(fields, offset + 31);
+      cue.outputScaleX = static_cast<float>(std::clamp(safeDouble(fields, offset + 32, 1.0), 0.25, 4.0));
+      cue.outputScaleY = static_cast<float>(std::clamp(safeDouble(fields, offset + 33, 1.0), 0.25, 4.0));
+      cue.scaleMode = static_cast<ScaleMode>(safeInt(fields, offset + 34, 0));
+      cue.outputOffsetX = static_cast<float>(safeDouble(fields, offset + 35, 0.0));
+      cue.outputOffsetY = static_cast<float>(safeDouble(fields, offset + 36, 0.0));
+      cue.cueNumber = safeString(fields, offset + 37);
+      {
+        std::string ppStr = safeString(fields, offset + 38);
+        if (!ppStr.empty()) {
+          std::istringstream ss(ppStr);
+          std::string tok;
+          while (std::getline(ss, tok, ',')) {
+            try { cue.pausePoints.push_back(std::stod(tok)); } catch (...) {}
+          }
+          std::sort(cue.pausePoints.begin(), cue.pausePoints.end());
+        }
+      }
+      cue.outputRotationDegrees = static_cast<float>(safeDouble(fields, offset + 39, 0.0));
+      cue.cropLeft = static_cast<float>(safeDouble(fields, offset + 40, 0.0));
+      cue.cropRight = static_cast<float>(safeDouble(fields, offset + 41, 0.0));
+      cue.cropTop = static_cast<float>(safeDouble(fields, offset + 42, 0.0));
+      cue.cropBottom = static_cast<float>(safeDouble(fields, offset + 43, 0.0));
+      cue.chromaKeyEnabled = safeBool(fields, offset + 44, false);
+      cue.chromaKeyColor = parseColor(safeString(fields, offset + 45));
+      cue.chromaKeyTolerance = static_cast<float>(safeDouble(fields, offset + 46, 60.0));
+      cue.chromaKeySoftness = static_cast<float>(safeDouble(fields, offset + 47, 20.0));
+      cue.brightness = std::clamp(static_cast<float>(safeDouble(fields, offset + 48, 1.0)), 0.0f, 2.0f);
+      cue.contrast = std::clamp(static_cast<float>(safeDouble(fields, offset + 49, 1.0)), 0.0f, 2.0f);
+      cue.saturation = std::clamp(static_cast<float>(safeDouble(fields, offset + 50, 1.0)), 0.0f, 2.0f);
+      cue.hueShift = std::clamp(static_cast<float>(safeDouble(fields, offset + 51, 0.0)), -180.0f, 180.0f);
+      cue.cueId = normalizeCueIdShort(safeString(fields, offset + 52));
+      cue.audioEnabled = safeBool(fields, offset + 53, true);
+      cue.pauseAtBeginning = safeBool(fields, offset + 54, false);
+      cue.transitionToNext = safeBool(fields, offset + 55, true);
+      cue.gotoTarget = safeString(fields, offset + 56);
+      cue.audioChannels = safeInt(fields, offset + 57, 0);
+      cue.audioSampleRate = safeInt(fields, offset + 58, 0);
+      cue.pipTargetCue = safeString(fields, offset + 59);
+      cue.pipSourceType = safeString(fields, offset + 60);
+      cue.attachedLowerThirdCue = safeString(fields, offset + 61);
+      cue.attachedPipCue = safeString(fields, offset + 62);
+      cue.compositeLayoutPreset = safeString(fields, offset + 63);
+      cue.compositeAudioSlotId = safeString(fields, offset + 64);
+      cue.compositeBackgroundColor = parseColor(safeString(fields, offset + 65));
+      int compositeSlotCount = safeInt(fields, offset + 66, 0);
+      size_t compositeBase = offset + 67;
+      // NEVER TRUST A COUNT OVER THE DATA BEHIND IT. A damaged line saying
+      // 2000000000 slots reserved that many before the loop found no fields
+      // for them (audit 2026-10-19, F6). Each slot is 11 fields; a count past
+      // what the line carries is cut to what it carries.
+      {
+        const std::size_t carried = fields.size() > compositeBase ? (fields.size() - compositeBase) / 11 : 0;
+        compositeSlotCount = static_cast<int>(std::min<std::size_t>(
+          static_cast<std::size_t>(std::max(0, compositeSlotCount)), carried));
+      }
+      cue.compositeSlots.clear();
+      cue.compositeSlots.reserve(static_cast<std::size_t>(compositeSlotCount));
+      for (int slotIndex = 0; slotIndex < compositeSlotCount; ++slotIndex) {
+        size_t slotOffset = compositeBase + static_cast<size_t>(slotIndex) * 11;
+        if (slotOffset + 10 >= fields.size()) {
+          break;
+        }
+        CompositeSlot slot;
+        slot.id = safeString(fields, slotOffset + 0);
+        slot.name = safeString(fields, slotOffset + 1);
+        slot.sourceType = safeString(fields, slotOffset + 2);
+        slot.source = safeString(fields, slotOffset + 3);
+        slot.visible = safeBool(fields, slotOffset + 4, true);
+        slot.audioEnabled = safeBool(fields, slotOffset + 5, false);
+        slot.scaleMode = static_cast<ScaleMode>(safeInt(fields, slotOffset + 6, static_cast<int>(ScaleMode::Fit)));
+        slot.normX = static_cast<float>(safeDouble(fields, slotOffset + 7, 0.0));
+        slot.normY = static_cast<float>(safeDouble(fields, slotOffset + 8, 0.0));
+        slot.normW = static_cast<float>(safeDouble(fields, slotOffset + 9, 0.5));
+        slot.normH = static_cast<float>(safeDouble(fields, slotOffset + 10, 0.5));
+        ensureCompositeSlotIdentity(slot, slotIndex);
+        cue.compositeSlots.push_back(slot);
+      }
+      if (cue.kind == CueKind::Composite) {
+        applyCompositePresetToCue(cue, cue.compositeLayoutPreset);
+      }
+      // Subtitle fields (after composite slots)
+      size_t subtitleBase = compositeBase + static_cast<size_t>(compositeSlotCount) * 11;
+      cue.subtitlePath = safeString(fields, subtitleBase + 0);
+      cue.subtitleStreamId = safeString(fields, subtitleBase + 1);
+      cue.subtitleEnabled = safeBool(fields, subtitleBase + 2, true);
+      cue.refreshOnTake = safeBool(fields, subtitleBase + 3, false);
+      cue.audioGainDb = std::clamp(static_cast<float>(safeDouble(fields, subtitleBase + 4, 0.0)),
+                                   kCueAudioGainMinDb, kCueAudioGainMaxDb);
+      cue.audioPan = std::clamp(static_cast<float>(safeDouble(fields, subtitleBase + 5, 0.0)), -1.0f, 1.0f);
+      cue.audioMono = safeBool(fields, subtitleBase + 6, false);
+      cue.audioFadeInSeconds = std::clamp(static_cast<float>(safeDouble(fields, subtitleBase + 7, -1.0)), -1.0f, 60.0f);
+      cue.audioFadeOutSeconds = std::clamp(static_cast<float>(safeDouble(fields, subtitleBase + 8, -1.0)), -1.0f, 60.0f);
+      cue.audioOutputPair = std::clamp(safeInt(fields, subtitleBase + 9, 0), 0, 7);
+      // Appended after audioOutputPair; older saves simply lack them.
+      cue.datamoshEnabled = safeBool(fields, subtitleBase + 10, false);
+      cue.moshPath = safeString(fields, subtitleBase + 11);
+      // Timer settings, appended after moshPath. Older saves lack them and
+      // fall back to the struct defaults, which are a sane 5:00 / 60 / 15.
+      {
+        const std::size_t tb = subtitleBase + 12;
+        cue.timer.durationSeconds = safeInt(fields, tb + 0, cue.timer.durationSeconds);
+        cue.timer.amberSeconds    = safeInt(fields, tb + 1, cue.timer.amberSeconds);
+        cue.timer.redSeconds      = safeInt(fields, tb + 2, cue.timer.redSeconds);
+        cue.timer.countUpAfterZero = safeBool(fields, tb + 3, cue.timer.countUpAfterZero);
+        cue.timer.blinkAtZero      = safeBool(fields, tb + 4, cue.timer.blinkAtZero);
+        cue.timer.message          = safeString(fields, tb + 5);
+        // Appended after message. These four were rendering but NOT persisting,
+        // so a saved show lost its timer mode and face on reload.
+        cue.timer.mode = static_cast<TimerMode>(std::clamp(safeInt(fields, tb + 6, 0), 0, 2));
+        cue.timer.face = static_cast<TimerFace>(std::clamp(safeInt(fields, tb + 7, 0), 0, 2));
+        cue.timer.showProgressBar = safeBool(fields, tb + 8, true);
+        cue.timer.messageIsUrgent = safeBool(fields, tb + 9, false);
+        cue.scheduledStartSeconds = safeDouble(fields, tb + 10, -1.0);
+        parseMarkerTimes(cue, safeString(fields, tb + 11));
+        parseMarkerNames(cue, safeString(fields, tb + 12));
+        // Appended after the markers. Shows saved before the look existed were
+        // all prepared with the CLASSIC recipe, which is this field's default,
+        // so an old show keeps playing exactly as it did.
+        cue.datamoshLook = std::clamp(safeInt(fields, tb + 13, kDatamoshLookClassic),
+                                      0, kDatamoshLookCount - 1);
+        // Timer colours and chimes, appended last. -1 keeps the built-in
+        // colour, so a show saved before these existed looks unchanged.
+        cue.timer.colorNormal     = safeInt(fields, tb + 14, -1);
+        cue.timer.colorAmber      = safeInt(fields, tb + 15, -1);
+        cue.timer.colorRed        = safeInt(fields, tb + 16, -1);
+        cue.timer.colorBackground = safeInt(fields, tb + 17, -1);
+        cue.timer.chimeAtAmber    = safeBool(fields, tb + 18, false);
+        cue.timer.chimeAtRed      = safeBool(fields, tb + 19, false);
+        cue.timer.chimeAtZero     = safeBool(fields, tb + 20, true);
+        cue.timer.chimeSound      = std::clamp(safeInt(fields, tb + 21, 0), 0, 5);
+        // Tone settings. Appended after the timer block; a show saved before
+        // tone cues existed simply gets the defaults.
+        cue.tone.waveform = static_cast<ToneWaveform>(
+          std::clamp(safeInt(fields, tb + 22, 0), 0, kToneWaveformCount - 1));
+        cue.tone.frequencyHz = std::clamp(safeDouble(fields, tb + 23, 1000.0), 20.0, 20000.0);
+        cue.tone.levelDbfs = std::clamp(safeDouble(fields, tb + 24, -18.0), -60.0, -1.0);
+        cue.tone.channel = std::clamp(safeInt(fields, tb + 25, -1), -1, 15);
+        cue.tone.visual = static_cast<ToneVisual>(
+          std::clamp(safeInt(fields, tb + 26, 1), 0, 3));
+        cue.tone.visualEnabled = safeBool(fields, tb + 27, true);
+        // Chip voice. Appended after the tone block; a show saved before the
+        // synth existed takes the defaults. This is the THIRD time a cue field
+        // shipped wired to state and effect but not to storage -- it works
+        // perfectly until the show is reopened, which is the worst moment to
+        // find out. Worth checking deliberately, not eventually.
+        cue.tone.synth.chip = static_cast<SynthChip>(
+          std::clamp(safeInt(fields, tb + 28, 0), 0, 1));
+        cue.tone.synth.noteHz = std::clamp(safeDouble(fields, tb + 29, 220.0), 20.0, 8000.0);
+        cue.tone.synth.attackSeconds = std::clamp(safeDouble(fields, tb + 30, 0.01), 0.0, 2.0);
+        cue.tone.synth.releaseSeconds = std::clamp(safeDouble(fields, tb + 31, 0.30), 0.01, 4.0);
+        cue.tone.synth.retriggerSeconds = std::clamp(safeDouble(fields, tb + 32, 0.0), 0.0, 4.0);
+        cue.tone.synth.carrier = static_cast<FdsCarrier>(
+          std::clamp(safeInt(fields, tb + 33, 0), 0, 4));
+        cue.tone.synth.modulator = static_cast<FdsModulator>(
+          std::clamp(safeInt(fields, tb + 34, 1), 0, 4));
+        cue.tone.synth.modDepth = std::clamp(safeInt(fields, tb + 35, 16), 0, 63);
+        cue.tone.synth.modRatio = std::clamp(safeDouble(fields, tb + 36, 0.5), 0.0, 8.0);
+        cue.tone.synth.nesVoice = static_cast<NesVoice>(
+          std::clamp(safeInt(fields, tb + 37, 0), 0, 2));
+        cue.tone.synth.nesDuty = static_cast<NesDuty>(
+          std::clamp(safeInt(fields, tb + 38, 2), 0, 3));
+        cue.tone.synth.nesNoiseShort = safeBool(fields, tb + 39, false);
+        cue.tone.synth.nesQuantise = safeBool(fields, tb + 40, true);
+        // WHERE THE SAVER PUTS THEM. These two are written mid-record, right
+        // after the NES flags, but were read from tb+64/65 as though they had
+        // been appended after the video-synth block. The result was a
+        // two-column skew across every video-synth field from shape to
+        // spriteTileH: text mode came back holding the pixel-sort value, the
+        // sprite path came back holding the glyph shuffle seed, and a saved
+        // reference pitch came back as a sprite tile height.
+        //
+        // A show written before these fields existed has neither column, so
+        // the layout is DETECTED rather than assumed: in the older record the
+        // reference-pitch column holds videoSynth.palette, an int 0-4, and a
+        // reference pitch is 380-480. Nothing overlaps, so one comparison
+        // separates them, and every offset below hangs off the result.
+        const bool hasSynthTuning = safeDouble(fields, tb + 42, 0.0) >= 100.0;   // layout-probe
+        const std::size_t vs = hasSynthTuning ? tb + 43 : tb + 41;
+        if (hasSynthTuning) {
+          cue.tone.synth.tuning = static_cast<SynthTuning>(
+            std::clamp(safeInt(fields, tb + 41, 0), 0, 6));
+          cue.tone.synth.referenceHz =
+            std::clamp(safeDouble(fields, tb + 42, 440.0), 380.0, 480.0);
+        }
+        // Video synth. Written at the same time as the feature rather than
+        // discovered missing on reload, which is how the last three went.
+        cue.videoSynth.shape = static_cast<VideoSynthShape>(
+          std::clamp(safeInt(fields, vs + 0, 0), 0, 4));
+        cue.videoSynth.mirror = static_cast<VideoSynthMirror>(
+          std::clamp(safeInt(fields, vs + 1, 2), 0, 3));
+        cue.videoSynth.palette = static_cast<VideoSynthPalette>(
+          std::clamp(safeInt(fields, vs + 2, 0), 0, kVideoSynthPaletteCount - 1));
+        cue.videoSynth.speed = std::clamp(safeDouble(fields, vs + 3, 1.0), 0.05, 8.0);
+        cue.videoSynth.scale = std::clamp(safeDouble(fields, vs + 4, 1.0), 0.1, 8.0);
+        cue.videoSynth.warp = std::clamp(safeDouble(fields, vs + 5, 0.35), 0.0, 2.0);
+        cue.videoSynth.feedbackAmount = std::clamp(safeDouble(fields, vs + 6, 0.55), 0.0, 0.95);
+        cue.videoSynth.feedbackZoom = std::clamp(safeDouble(fields, vs + 7, 1.02), 0.90, 1.15);
+        cue.videoSynth.feedbackRotate = std::clamp(safeDouble(fields, vs + 8, 0.6), -10.0, 10.0);
+        cue.videoSynth.audioReactivity = std::clamp(safeDouble(fields, vs + 9, 0.5), 0.0, 1.0);
+        cue.videoSynth.resolution = std::clamp(safeInt(fields, vs + 10, 2), 1, 5);
+        cue.videoSynth.pixelSort = std::clamp(safeDouble(fields, vs + 11, 0.0), 0.0, 1.0);
+        cue.videoSynth.glitch = std::clamp(safeDouble(fields, vs + 12, 0.0), 0.0, 1.0);
+        cue.videoSynth.ascii = safeBool(fields, vs + 13, false);
+        cue.videoSynth.asciiCols = std::clamp(safeInt(fields, vs + 14, 80), 20, 200);
+        cue.videoSynth.asciiGreen = safeBool(fields, vs + 15, true);
+        cue.videoSynth.crt = std::clamp(safeDouble(fields, vs + 16, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiCharSet = std::clamp(safeInt(fields, vs + 17, 0), 0, 7);
+        cue.videoSynth.asciiShuffle = std::clamp(safeInt(fields, vs + 18, 0), 0, 8);
+        // Older shows carry only the green boolean; map it onto the ink mode
+        // so they reopen looking the way they were left.
+        cue.videoSynth.asciiInk =
+          std::clamp(safeInt(fields, vs + 19, cue.videoSynth.asciiGreen ? 1 : 0), 0, 5);
+        cue.videoSynth.spriteSheetPath = safeString(fields, vs + 20);
+        cue.videoSynth.spriteTileW = std::clamp(safeInt(fields, vs + 21, 16), 8, 128);
+        cue.videoSynth.spriteTileH = std::clamp(safeInt(fields, vs + 22, 16), 8, 128);
+        cue.videoSynth.spriteRotate = std::clamp(safeInt(fields, vs + 23, 0), 0, 5);
+        cue.videoSynth.spriteFreeAngle =
+          std::clamp(safeDouble(fields, vs + 24, 0.0), -720.0, 720.0);
+        cue.videoSynth.spriteFlip = std::clamp(safeInt(fields, vs + 25, 0), 0, 3);
+        cue.videoSynth.spriteJitter =
+          std::clamp(safeDouble(fields, vs + 26, 0.0), 0.0, 1.0);
+        cue.videoSynth.spriteChaos =
+          std::clamp(safeDouble(fields, vs + 27, 0.0), 0.0, 1.0);
+        // APPENDED, so they read from the END of the record — which is where
+        // saveProject writes them. They were read from tb+22/tb+23 instead,
+        // i.e. inserted into the MIDDLE, which silently shifted the loader's
+        // view of every field after them by two: the whole tone block and all
+        // ~47 video-synth fields. Symptom: a cue named "Test Tone 1kHz" came
+        // back as 20Hz at -1.0dBFS, because frequencyHz was reading the
+        // channel column (-1, clamped up to 20) and levelDbfs was reading the
+        // visual column (1, clamped down to -1).
+        //
+        // Append new cue fields at the END and read them at the END. Inserting
+        // mid-record corrupts everything downstream of the insertion.
+        cue.timer.logoPath          = safeString(fields, vs + 28);
+        cue.timer.logoHeightPercent = std::clamp(safeInt(fields, vs + 29, 18), 2, 40);
+        // At the END, per the warning above. Absent on every show saved before
+        // effects existed, which safeString reports as empty and parses to an
+        // empty stack -- so an old show simply has no effects, which is right.
+        cue.effects = parseCueEffects(safeString(fields, vs + 30));
+        cue.motionDriverPath = safeString(fields, vs + 31);
+        cue.motionDriverSpeed = std::clamp(
+          static_cast<float>(safeDouble(fields, vs + 32, 1.0)), 0.0f, 4.0f);
+        cue.motionDriverPaused = safeBool(fields, vs + 33, false);
+        cue.motionDriverRestartOnTake = safeBool(fields, vs + 34, true);
+        // Appended after the motion driver. Absent on every older save, which
+        // safeString reports as empty -- and an empty expression leaves the
+        // cue's default in place rather than rendering black.
+        {
+          const std::string expr = safeString(fields, vs + 35);
+          if (!expr.empty()) {
+            cue.codeExpression = expr;
+          }
+        }
+        cue.videoSynth.asciiGlyphs = safeString(fields, vs + 36);
+        cue.videoSynth.asciiPhrases = safeString(fields, vs + 37);
+        // Absent on older shows, where safeDouble returns the default. 2.5s is
+        // the pace a phrase can be read at before it moves.
+        cue.videoSynth.asciiPhraseHold =
+          std::clamp(safeDouble(fields, vs + 38, 2.5), 0.0, 60.0);
+        // Absent on every show written before glitch text existed, where
+        // safeDouble returns the default and the marks stay switched off.
+        cue.videoSynth.asciiZalgoUp =
+          std::clamp(safeDouble(fields, vs + 39, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiZalgoDown =
+          std::clamp(safeDouble(fields, vs + 40, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiZalgoMid =
+          std::clamp(safeDouble(fields, vs + 41, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiZalgoReach =
+          std::clamp(safeInt(fields, vs + 42, 2), 1, 6);
+        cue.videoSynth.asciiZalgoDrift =
+          std::clamp(safeDouble(fields, vs + 43, 0.0), 0.0, 1.0);
+        // Defaults to 0 -- strictly by brightness -- so every show saved before
+        // this existed looks exactly as it did.
+        cue.videoSynth.asciiChaos =
+          std::clamp(safeDouble(fields, vs + 44, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiFontPath = safeString(fields, vs + 45);
+        cue.videoSynth.asciiWobble =
+          std::clamp(safeDouble(fields, vs + 46, 0.0), 0.0, 1.0);
+        cue.videoSynth.asciiWobbleMode =
+          std::clamp(safeInt(fields, vs + 47, 0), 0, 2);
+        // Audio visualiser, appended last. 0 is Waveform, which is the only
+        // thing an audio cue could draw before this existed, so every show
+        // saved until now reopens showing exactly what it always showed.
+        cue.audioVisual = static_cast<AudioVisual>(
+          std::clamp(safeInt(fields, vs + 48, 0), 0,
+                     static_cast<int>(AudioVisual::Cover)));
+        // Mesh, appended last. Disabled by default, so every show saved
+        // before it existed reopens as the flat quad it has always been.
+        cue.meshEnabled = safeBool(fields, vs + 49, false);
+        cue.meshHeight = std::clamp(
+          static_cast<float>(safeDouble(fields, vs + 50, 0.35)), 0.0f, 1.0f);
+        cue.meshTiltX = std::clamp(
+          static_cast<float>(safeDouble(fields, vs + 51, 0.25)), -1.0f, 1.0f);
+        cue.meshTiltY = std::clamp(
+          static_cast<float>(safeDouble(fields, vs + 52, 0.0)), -1.0f, 1.0f);
+        cue.meshSpin = std::clamp(
+          static_cast<float>(safeDouble(fields, vs + 53, 0.15)), 0.0f, 1.0f);
+        cue.meshGrid = std::clamp(safeInt(fields, vs + 54, 48), 8, 160);
+        // At the END. Absent on an older show, which safeString gives
+        // back empty -- the app's own face, which is what a timer that
+        // never had a typeface mode should use if it is switched to one.
+        cue.timer.fontPath = safeString(fields, vs + 55);
+        // And the audio stack after it. Absent on an older show, which parses
+        // to an empty chain -- the cue sounds exactly as it always has.
+        cue.audioEffects =
+          deckboy::audiofx::parseAudioEffects(safeString(fields, vs + 56));
+        // The sequencing spine, after it. Absent on an older show, and the
+        // defaults are what that show did: no waits, and nothing follows.
+        // Waits are clamped to something sane rather than trusted -- a
+        // negative pre-wait would fire a cue before its own GO.
+        cue.preWaitSeconds = std::max(0.0, safeDouble(fields, vs + 57, 0.0));
+        cue.postWaitSeconds = std::max(0.0, safeDouble(fields, vs + 58, 0.0));
+        cue.continueMode = cueContinueModeFromToken(safeString(fields, vs + 59));
+        // A master cue's assignments. Absent on every older show, which is
+        // correct: they had no masters.
+        cue.masterAssignments = parseMasterAssignments(safeString(fields, vs + 60));
+        // A Target cue's victim. Absent on an older show for the same reason.
+        cue.targetCueId = safeString(fields, vs + 61);
+        cue.targetDeckIndex = safeInt(fields, vs + 62, -1);
+        cue.targetVerb = cueTargetVerbFromToken(safeString(fields, vs + 63));
+        // ARMED DEFAULTS TRUE, and that matters more than it looks: an older
+        // show has no field here, and reading a missing field as 0 would open
+        // every show ever saved with every cue disarmed.
+        cue.armed = safeBool(fields, vs + 64, true);
+        // 128x128 is the common LED tile, and the value an older show
+        // that never had a panel map should come back with.
+        cue.ledPanelWidth = std::max(8, safeInt(fields, vs + 65, 128));
+        cue.ledPanelHeight = std::max(8, safeInt(fields, vs + 66, 128));
+        // A Fade cue's ramp. The defaults are a 3-second linear fade to
+        // black on the deck's picture, which is the one everybody means.
+        cue.fadeOverSeconds = std::max(0.0, safeDouble(fields, vs + 67, 3.0));
+        cue.fadeToValue = std::clamp(safeDouble(fields, vs + 68, 0.0), 0.0, 1.0);
+        cue.fadeWhat = cueFadeWhatFromToken(safeString(fields, vs + 69));
+        cue.fadeCurve = cueFadeCurveFromToken(safeString(fields, vs + 70));
+        cue.fadeStopWhenDone = safeBool(fields, vs + 71, false);
+        // A MIDI cue's message. The defaults are a middle-C note on
+        // channel 1, which is what a NEW midi cue arrives as -- an older
+        // show has no MIDI cues at all, so nothing here can restage one.
+        cue.midiPortName = safeString(fields, vs + 72);
+        cue.midiMessage = safeString(fields, vs + 73);
+        if (cue.midiMessage.empty()) {
+          cue.midiMessage = "note-on";
+        }
+        cue.midiRawHex = safeString(fields, vs + 74);
+        cue.mscCue = safeString(fields, vs + 75);
+        cue.mscList = safeString(fields, vs + 76);
+        cue.midiChannel = std::clamp(safeInt(fields, vs + 77, 1), 1, 16);
+        cue.midiData1 = std::clamp(safeInt(fields, vs + 78, 60), 0, 127);
+        cue.midiData2 = std::clamp(safeInt(fields, vs + 79, 127), 0, 127);
+        cue.mscDevice = std::clamp(safeInt(fields, vs + 80, 0), 0, 127);
+        // A Network cue's message. An older show has no network cues,
+        // so nothing here can restage one -- these are the defaults a
+        // NEW cue arrives with.
+        cue.netProtocol = safeString(fields, vs + 81);
+        if (cue.netProtocol.empty()) {
+          cue.netProtocol = "osc";
+        }
+        cue.netHost = safeString(fields, vs + 82);
+        if (cue.netHost.empty()) {
+          cue.netHost = "127.0.0.1";
+        }
+        cue.netAddress = safeString(fields, vs + 83);
+        cue.netPayload = safeString(fields, vs + 84);
+        cue.netPort = std::clamp(safeInt(fields, vs + 85, 53000), 1, 65535);
+        // A Timecode cue. Absent on every older show, which had none.
+        cue.tcAction = safeString(fields, vs + 86);
+        if (cue.tcAction.empty()) {
+          cue.tcAction = "start";
+        }
+        cue.tcJamSeconds = std::max(0.0, safeDouble(fields, vs + 87, 0.0));
+        cue.scriptText = safeString(fields, vs + 88);
+        // A DMX cue. Broadcast and the registered Art-Net port are the
+        // defaults, which is what a rig on its own network wants.
+        cue.dmxChannels = safeString(fields, vs + 89);
+        cue.dmxHost = safeString(fields, vs + 90);
+        if (cue.dmxHost.empty()) {
+          cue.dmxHost = "255.255.255.255";
+        }
+        cue.dmxFadeSeconds = std::max(0.0, safeDouble(fields, vs + 91, 0.0));
+        cue.dmxUniverse = std::clamp(safeInt(fields, vs + 92, 0), 0, 32767);
+        cue.dmxPort = std::clamp(safeInt(fields, vs + 93, 6454), 1, 65535);
+        // The audio matrix. ABSENT MEANS EMPTY, and empty means "use
+        // audioOutputPair" -- so an older show routes exactly as it did.
+        cue.audioMatrix = parseAudioMatrix(safeString(fields, vs + 94));
+        // A Text cue. Absent on every older show, which had none.
+        cue.textBody = safeString(fields, vs + 95);
+        cue.textAnimation = cueTextAnimationFromToken(safeString(fields, vs + 96));
+        cue.textSizePct = std::clamp(safeDouble(fields, vs + 97, 12.0), 1.0, 100.0);
+        cue.textSpeed = std::clamp(safeDouble(fields, vs + 98, 1.0), 0.05, 20.0);
+        cue.textAlign = std::clamp(safeInt(fields, vs + 99, 1), 0, 2);
+        cue.textBgAlpha = std::clamp(safeInt(fields, vs + 100, 0), 0, 255);
+        cue.textColor.r = static_cast<Uint8>(std::clamp(safeInt(fields, vs + 101, 255), 0, 255));
+        cue.textColor.g = static_cast<Uint8>(std::clamp(safeInt(fields, vs + 102, 255), 0, 255));
+        cue.textColor.b = static_cast<Uint8>(std::clamp(safeInt(fields, vs + 103, 255), 0, 255));
+        cue.textColor.a = 255;
+        // Fireside. The defaults are exactly what it burned at before it
+        // had controls, so an older show's hearth is unchanged.
+        cue.firesideIntensity = std::clamp(safeDouble(fields, vs + 104, 1.0), 0.2, 2.0);
+        cue.firesideSparks = std::clamp(safeInt(fields, vs + 105, 34), 0, 160);
+        // A show saved before the window defaults to not having one, so it
+        // opens as the bare brick wall it was saved as.
+        cue.firesideView = std::clamp(safeInt(fields, vs + 106, 0), 0,
+                                      kFiresideViewCount - 1);
+        cue.lowerThirdStyle = std::clamp(safeInt(fields, vs + 107, 0), 0,
+                                         kLowerThirdStyleCount - 1);
+        cue.lowerThirdAnimSeconds = std::clamp(safeDouble(fields, vs + 108, 0.4), 0.0, 5.0);
+        // Absent on an older show, which leaves every oscillator off.
+        cue.geometryLfo = parseGeometryLfos(safeString(fields, vs + 109));
+        // A Portal's controls. The defaults are the look it arrives with, and
+        // an older show has no portals to restage.
+        {
+          const PortalSettings fresh;
+          cue.portal.blobs = std::clamp(safeInt(fields, vs + 110, fresh.blobs), 3, 48);
+          cue.portal.size = std::clamp(safeDouble(fields, vs + 111, fresh.size), 0.0, 1.0);
+          cue.portal.blend = std::clamp(safeDouble(fields, vs + 112, fresh.blend), 0.0, 1.0);
+          cue.portal.outline = std::clamp(safeDouble(fields, vs + 113, fresh.outline), 0.0, 1.0);
+          cue.portal.speed = std::clamp(safeDouble(fields, vs + 114, fresh.speed), 0.1, 3.0);
+          cue.portal.hue = std::clamp(safeDouble(fields, vs + 115, fresh.hue), 0.0, 1.0);
+        }
+        // A lower third. Off on an older show, which is what it was.
+        {
+          const LowerThirdDesign fresh;
+          LowerThirdDesign& l = cue.lowerThird;
+          l.on = safeBool(fields, vs + 116, false);
+          l.look = static_cast<LowerThirdLook>(std::clamp(
+            safeInt(fields, vs + 117, static_cast<int>(fresh.look)), 0,
+            static_cast<int>(LowerThirdLook::Count) - 1));
+          const std::string moveIn = safeString(fields, vs + 118);
+          const std::string moveOut = safeString(fields, vs + 119);
+          l.moveIn = moveIn.empty() ? fresh.moveIn : lowerThirdMoveFromToken(moveIn);
+          l.moveOut = moveOut.empty() ? fresh.moveOut : lowerThirdMoveFromToken(moveOut);
+          l.inSeconds = std::clamp(safeDouble(fields, vs + 120, fresh.inSeconds), 0.0, 5.0);
+          l.outSeconds = std::clamp(safeDouble(fields, vs + 121, fresh.outSeconds), 0.0, 5.0);
+          l.holdSeconds = std::clamp(safeDouble(fields, vs + 122, fresh.holdSeconds), 0.0, 600.0);
+          l.side = std::clamp(safeInt(fields, vs + 123, fresh.side), 0, 2);
+          l.height = std::clamp(safeDouble(fields, vs + 124, fresh.height), 0.0, 0.8);
+          l.size = std::clamp(safeDouble(fields, vs + 125, fresh.size), 0.5, 2.0);
+          l.bar = std::clamp(safeInt(fields, vs + 126, fresh.bar), 0, kLowerThirdColourCount - 1);
+          l.accent = std::clamp(safeInt(fields, vs + 127, fresh.accent), 0,
+                                kLowerThirdColourCount - 1);
+        }
+        {
+          const SwirlSettings fresh;
+          cue.swirl.speed = std::clamp(safeDouble(fields, vs + 128, fresh.speed), -3.0, 3.0);
+          cue.swirl.twist = std::clamp(safeDouble(fields, vs + 129, fresh.twist), 0.0, 4.0);
+          cue.swirl.cells = std::clamp(safeInt(fields, vs + 130, fresh.cells), 64, 960);
+          cue.swirl.hue = std::clamp(safeDouble(fields, vs + 131, fresh.hue), 0.0, 1.0);
+          cue.swirl.zoom = std::clamp(safeDouble(fields, vs + 132, fresh.zoom), 0.25, 4.0);
+          cue.swirl.flow = std::clamp(safeDouble(fields, vs + 133, fresh.flow), 0.0, 3.0);
+          cue.swirl.centreX = std::clamp(safeDouble(fields, vs + 134, fresh.centreX), 0.0, 1.0);
+          cue.swirl.centreY = std::clamp(safeDouble(fields, vs + 135, fresh.centreY), 0.0, 1.0);
+          cue.swirl.bands = std::clamp(safeInt(fields, vs + 136, fresh.bands), 2, 8);
+          cue.swirl.palette = std::clamp(safeInt(fields, vs + 137, fresh.palette), 0,
+                                         kSwirlPaletteCount - 1);
+        }
+        cue.triggerHotkey = safeString(fields, vs + 138);
+        cue.triggerMidiNote = std::clamp(safeInt(fields, vs + 139, -1), -1, 127);
+        cue.triggerOscAddress = safeString(fields, vs + 140);
+        cue.audioTrack = std::clamp(safeInt(fields, vs + 141, 0), 0, 63);
+        cue.audioTrackCount = std::clamp(safeInt(fields, vs + 142, 0), 0, 64);
+        if (fields.size() >= static_cast<std::size_t>(vs + 144)) {
+          cue.lowerThird.wiggle = safeBool(fields, vs + 143, false);
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 145)) {
+          cue.dmxProtocol = safeString(fields, vs + 144) == "sacn" ? "sacn" : "artnet";
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 146)) {
+          cue.micChannel = static_cast<MicChannel>(std::clamp(safeInt(fields, vs + 145, 0), 0, 2));
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 147)) {
+          cue.dmxFixtures = parseFixtureLevels(safeString(fields, vs + 146));
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 148)) {
+          cue.liveHdrTransfer = std::clamp(safeInt(fields, vs + 147, 0), 0, 2);
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 150)) {
+          cue.trackerJumpStepId = safeString(fields, vs + 148);
+          cue.trackerSection = safeString(fields, vs + 149);
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 162)) {
+          const MoireSettings fresh;
+          MoireSettings& m = cue.moire;
+          m.shape = std::clamp(safeInt(fields, vs + 150, fresh.shape), 0, kMoireShapeCount - 1);
+          m.palette = std::clamp(safeInt(fields, vs + 151, fresh.palette), 0, kMoirePaletteCount - 1);
+          m.density = std::clamp(safeDouble(fields, vs + 152, fresh.density), 0.0, 1.0);
+          m.speed = std::clamp(safeDouble(fields, vs + 153, fresh.speed), 0.0, 1.0);
+          m.warp = std::clamp(safeDouble(fields, vs + 154, fresh.warp), 0.0, 1.0);
+          m.turn = std::clamp(safeDouble(fields, vs + 155, fresh.turn), 0.0, 1.0);
+          m.centreX = std::clamp(safeDouble(fields, vs + 156, fresh.centreX), 0.0, 1.0);
+          m.centreY = std::clamp(safeDouble(fields, vs + 157, fresh.centreY), 0.0, 1.0);
+          m.grey = std::clamp(safeDouble(fields, vs + 158, fresh.grey), 0.0, 1.0);
+          m.hue = std::clamp(safeDouble(fields, vs + 159, fresh.hue), 0.0, 1.0);
+          m.themeInks = parseMoireInks(safeString(fields, vs + 160), fresh.themeInks);
+          m.lfo = parseGeometryLfos(safeString(fields, vs + 161));
+        }
+        if (fields.size() >= static_cast<std::size_t>(vs + 164)) {
+          cue.fadeEffectSlot = std::clamp(safeInt(fields, vs + 162, 1), 1, 64);
+          cue.fadeEffectKnob = std::clamp(safeInt(fields, vs + 163, 0), 0, 4);
+        }
+        // Absent in every show saved before it: a fade that stays where it
+        // lands, which is what they all did.
+        if (fields.size() >= static_cast<std::size_t>(vs + 165)) {
+          cue.fadeRestoreAtEnd = safeBool(fields, vs + 164, false);
+        }
+        // Absent before it: no backdrop, which is what they all had.
+        if (fields.size() >= static_cast<std::size_t>(vs + 166)) {
+          cue.backdrop = safeInt(fields, vs + 165, -1);
+        }
+        // Absent before it: the clip's own rate, which is what they all did.
+        if (fields.size() >= static_cast<std::size_t>(vs + 167)) {
+          cue.lockToScreen = safeBool(fields, vs + 166, false);
+        }
+        // Absent before masks: none.
+        if (fields.size() >= static_cast<std::size_t>(vs + 168)) {
+          cue.maskId = safeString(fields, vs + 167);
+        }
+        // Absent before them: a tone holds still.
+        if (fields.size() >= static_cast<std::size_t>(vs + 169)) {
+          cue.toneLfo = parseToneLfos(safeString(fields, vs + 168));
+        }
+        // Absent before the Draw source: nothing drawn.
+        if (fields.size() >= static_cast<std::size_t>(vs + 170)) {
+          const std::string drawn = safeString(fields, vs + 169);
+          if (!drawn.empty()) deckboy::draw::parse(drawn, cue.drawing);
+        }
+        // Absent before it: no alpha, which is how every clip decoded.
+        if (fields.size() >= static_cast<std::size_t>(vs + 171)) {
+          cue.sourceHasAlpha = safeBool(fields, vs + 170, false);
+        }
+      }
+      // A MASTER CUE HAS NO PATH, and this gate would have dropped it on load
+      // without a word -- the show would come back one cue shorter every time
+      // it was opened. Every kind before this one carried a path, even the
+      // generated ones ("pattern://", "timer://"), so the gate was safe until
+      // now.
+      if (!cue.path.empty() || cue.kind == CueKind::Master ||
+          cue.kind == CueKind::Target || cue.kind == CueKind::Fade ||
+          cue.kind == CueKind::Memo ||
+          cue.kind == CueKind::Midi || cue.kind == CueKind::Network ||
+          cue.kind == CueKind::Timecode || cue.kind == CueKind::Script ||
+          cue.kind == CueKind::Dmx || cue.kind == CueKind::Text) {
+        if (cue.name.empty()) {
+          cue.name = cue.kind == CueKind::Master
+            ? std::string("Master")
+            : fs::path(cue.path).stem().string();
+        }
+        if (deckIndex == -1 && cue.kind == CueKind::Master) {
+          project.trackerSteps.push_back(cue);   // the tracker's own step
+        } else {
+          ensureDeck(deckIndex).cues.push_back(cue);
+        }
+      }
+    } else {
+      // A LINE WE DO NOT UNDERSTAND.
+      //
+      // Which is what the back half of a truncated show looks like, and what a
+      // show written by a newer build looks like. Either way this project is
+      // not a faithful reading of that file, and the auto-save must not write
+      // it back over the original 300ms later -- which is exactly what happened
+      // to a show truncated mid-cue during testing, destroying the bytes a
+      // recovery tool could still have used.
+      project.loadedCleanly = false;
+    }
+  }
+
+  migrateVideoSynthTextMode(project);
+  normalizeProject(project);
+  return project;
+}

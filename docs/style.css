@@ -1,0 +1,449 @@
+/* Deckboy's site, in Deckboy's clothes.
+ *
+ * The palette is not a taste decision. Sampling a capture of the application
+ * running its DEFAULT theme returns, in order of area:
+ *
+ *   #fcfe1f  bright yellow   the buttons and the lit chrome
+ *   #1f601f  dark green      the panels everything sits on
+ *   #f3fdca  pale cream      secondary ink
+ *   #94ae79  sage            muted ink and rules
+ *
+ * So the site uses those. An earlier version of this file used the Game Boy
+ * DMG greens, because the screenshot that had been to hand was shot in the
+ * "gameboy" colourway -- one of about thirty themes the app ships -- and I
+ * took a theme for the identity. The default is yellow on green.
+ *
+ * Long body copy is set in the cream rather than the yellow. The application
+ * can put #fcfe1f on #1f601f because its text is short and its panels are
+ * small; a paragraph of it on a web page is a migraine. Headings, buttons and
+ * the lit accents keep the yellow, which is where the app uses it too.
+ *
+ * The font is not a choice either. The application draws its branding in
+ * Press Start 2P by name (native/core/paths.cpp: "retro pixel font used for
+ * the Deckboy branding/logo") and its interface in a monospace. Headings are
+ * Press Start 2P; everything else is mono.
+ *
+ * Press Start 2P is used ONLY at headline sizes -- it is enormously wide and
+ * has no lower-case rhythm, so body copy set in it is unreadable, and a site
+ * nobody can read is not on brand, it is broken.
+ */
+
+/* The application's OWN font files, copied from data/. Not Google's cut of
+ * Press Start 2P but the very binary the deck draws its wordmark with, and
+ * Liberation Mono because that is what the interface sets its text in. Served
+ * from the site so the page does not depend on a third party to look like
+ * itself. */
+@font-face {
+    font-family: 'Deckboy Pixel';
+    src: url('fonts/PressStart2P.ttf') format('truetype');
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Deckboy Mono';
+    src: url('fonts/LiberationMono-Regular.ttf') format('truetype');
+    font-display: swap;
+}
+
+:root {
+    --db-yellow:      #fcfe1f;
+    --db-yellow-dim:  #e3fd1f;
+    --db-green:       #1f601f;
+    --db-green-deep:  #143f14;
+    --db-cream:       #f3fdca;
+    --db-sage:        #94ae79;
+
+    --ground:   var(--db-green-deep);
+    --panel:    var(--db-green);
+    --ink:      var(--db-yellow);
+    --ink-body: var(--db-cream);
+    --ink-soft: var(--db-sage);
+    --rule:     #2c7a2c;
+
+    --pixel: 'Deckboy Pixel', 'Press Start 2P', 'Courier New', monospace;
+    --mono: 'Deckboy Mono', ui-monospace, 'Consolas', Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--mono);
+    background-color: var(--ground);
+    color: var(--ink-body);
+    line-height: 1.7;
+    overflow-x: hidden;
+    position: relative;
+    /* the faint scanline of a screen you are looking at rather than reading */
+    background-image: repeating-linear-gradient(
+        0deg, rgba(252, 254, 31, 0.03) 0 1px, transparent 1px 3px);
+}
+
+/* Every link, unless something more specific says otherwise. Without this a
+   link in running text is the browser's own blue -- close to invisible on this
+   green -- and there are well over a hundred of them across the site. The nav,
+   the buttons and the footer keep their own rules below, which win on
+   specificity. */
+a { color: var(--ink); text-underline-offset: 0.18em; }
+a:visited { color: var(--ink); }
+a:hover, a:focus-visible { color: var(--ink-body); }
+
+/* The old design had two blurred colour blobs behind everything. Nothing in the
+ * interface is blurred, so they are gone rather than recoloured. */
+.background-glow { display: none; }
+
+/* ── navigation ─────────────────────────────────────────────────────────── */
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 2px solid var(--rule);
+}
+
+.logo {
+    font-family: var(--pixel);
+    font-size: 1rem;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+}
+
+.nav-links { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; }
+
+.nav-links a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.nav-links a:hover { color: var(--ink); }
+
+.btn-primary {
+    /* Safe today only because .nav-links is flex, which blockifies it. Stated
+       here so it survives being written into a paragraph -- see .btn-large. */
+    display: inline-block;
+    border: 2px solid var(--ink-soft);
+    padding: 0.45rem 0.9rem;
+    color: var(--ink) !important;
+}
+
+.btn-primary:hover { background: var(--db-green); }
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+
+.hero { padding: 4.5rem 1.5rem 2rem; text-align: center; }
+.hero-content { max-width: 900px; margin: 0 auto; }
+
+h1 {
+    font-family: var(--pixel);
+    font-size: clamp(1.1rem, 4.2vw, 2.4rem);
+    line-height: 1.6;
+    color: var(--ink);
+}
+
+/* was a pink-to-blue gradient. The interface has no gradients in it. */
+.gradient-text { color: var(--db-yellow-dim); }
+
+.hero-subtitle {
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+}
+
+.cta-group {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 2.25rem;
+}
+
+.btn-large {
+    /* inline-block, NOT inline: an inline box that wraps is drawn as two
+       fragments, each with its own padding and half the border, which is what
+       the kit button did on a phone. Its vertical padding would not push the
+       lines around it apart either. The buttons in .cta-group escaped it only
+       because flex blockifies its children; one written into a paragraph did not. */
+    display: inline-block;
+    font-family: var(--pixel);
+    font-size: 0.7rem;
+    line-height: 1.6;
+    text-align: center;
+    text-decoration: none;
+    padding: 1rem 1.2rem;
+    border: 2px solid var(--ink);
+    background: var(--db-green);
+    color: var(--ink);
+}
+
+.btn-large:hover { background: var(--ink); color: var(--ground); }
+
+/* Worn beside .btn-large everywhere at present, so it inherits the display
+   from there; set again so the class does not depend on that pairing. */
+.btn-outline { display: inline-block; background: transparent; }
+
+.badges {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1.75rem;
+    filter: grayscale(1) sepia(1) hue-rotate(38deg) saturate(2.2);
+}
+/* A bare <img> flex item stretches to the row while a linked one does not, so
+   badges with and without a link came out at two sizes. Size them all. */
+.badges a { display: flex; }
+.badges img { height: 26px; width: auto; }
+
+/* ── panels ─────────────────────────────────────────────────────────────── */
+
+.glass {
+    background: var(--panel);
+    border: 2px solid var(--rule);
+}
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.25rem;
+    max-width: 1100px;
+    margin: 3rem auto;
+    padding: 0 1.5rem;
+}
+
+.feature-card { padding: 1.5rem; }
+.feature-card .icon { font-size: 1.6rem; }
+
+.feature-card h3 {
+    font-family: var(--pixel);
+    font-size: 0.72rem;
+    line-height: 1.7;
+    margin: 0.9rem 0 0.7rem;
+    color: var(--ink);
+}
+
+.feature-card p { color: var(--ink-body); font-size: 0.88rem; }
+
+/* ── the screenshot ─────────────────────────────────────────────────────── */
+
+.shot { max-width: 1100px; margin: 0 auto 4rem; padding: 0 1.5rem; text-align: center; }
+
+.shot img, .shot video {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 2px solid var(--rule);
+    image-rendering: pixelated;   /* it is a pixel interface; do not smooth it */
+}
+
+.shot-caption { margin-top: 0.9rem; font-size: 0.82rem; color: var(--ink-soft); }
+
+/* ── the terminal block ─────────────────────────────────────────────────── */
+
+.code-preview { max-width: 880px; margin: 0 auto 4rem; padding: 0; }
+
+.window-header {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 2px solid var(--rule);
+}
+
+.dot { width: 10px; height: 10px; background: var(--db-green); border: 1px solid var(--ink-soft); }
+.dot.green { background: var(--ink-soft); }
+
+.terminal { padding: 1.5rem; font-size: 0.88rem; }
+.terminal p { margin-bottom: 0.55rem; color: var(--ink-body); }
+.prompt { color: var(--ink-soft); margin-right: 0.5rem; }
+
+/* ── footer ─────────────────────────────────────────────────────────────── */
+
+footer {
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+    border-top: 2px solid var(--rule);
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+}
+
+footer a { color: var(--ink); }
+
+/* The site outgrew a navigation bar: fourteen links across the top on every
+   page. The bar now carries six, and the rest live here -- grouped, labelled,
+   and one click from anywhere. auto-fit rather than a fixed column count so
+   it collapses to a single column on a phone without a media query. */
+.footer-cols {
+    display: grid;
+    gap: 2rem 2.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    max-width: 1000px;
+    margin: 0 auto 2rem;
+    text-align: left;
+}
+.footer-cols h4 {
+    font-family: var(--pixel);
+    font-size: 0.62rem;
+    line-height: 1.8;
+    color: var(--ink);
+    margin: 0 0 .7rem;
+}
+.footer-cols a {
+    display: block;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: .22rem 0;
+}
+.footer-cols a:hover { color: var(--ink); text-decoration: underline; }
+.footer-note { margin: 0; opacity: .75; }
+.release-mote {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin: 0 0 0 .15rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    vertical-align: middle;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+}
+.release-mote[hidden], .release-mote svg { display: none; }
+.release-mote:focus-visible { outline: 1px dotted currentColor; outline-offset: 2px; }
+.release-mote.is-lit span { display: none; }
+.release-mote.is-lit svg { display: block; width: 16px; height: 16px; color: var(--ink); }
+
+/* ── prose, used by compare.html and faq.html ───────────────────────────── */
+
+.prose { overflow-wrap: anywhere; }
+.prose h2 { font-family: var(--pixel); font-size: 0.8rem; line-height: 1.8; color: var(--ink); }
+.prose h3 { font-family: var(--pixel); font-size: 0.68rem; line-height: 1.8; color: var(--ink); }
+.prose p, .prose li { color: var(--ink-body); }
+.prose a { color: var(--ink); }
+
+table th { font-family: var(--mono); color: var(--ink); }
+table td { color: var(--ink-body); }
+table th, table td { border-bottom: 1px solid var(--rule); }
+
+.callout { border-left: 3px solid var(--ink-soft); background: var(--panel); }
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+
+.animate-up {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fadeUp 0.7s steps(6, end) forwards;   /* stepped, not eased */
+}
+
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
+@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-up { animation: none; opacity: 1; transform: none; }
+}
+
+/* Shared navigation and the current-release media tour. */
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 5px; }
+html { scroll-padding-top: 1.5rem; }
+.skip-link { position: absolute; top: .5rem; left: 1rem; z-index: 10; padding: .7rem; background: var(--ground); transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+.home .hero { padding-top: 3.2rem; }
+.home .hero-subtitle { max-width: 64ch; margin: 1.3rem auto 0; color: var(--ink-body); font-size: 1.05rem; }
+.eyebrow, .feature-number { color: var(--ink-soft); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { margin-bottom: 1rem; }
+.platform-line, .release-note { margin-top: 1rem; font-size: .82rem; }
+.home h1 { font-size: clamp(2rem, 6vw, 4rem); }
+.hero-motto { color: var(--ink); font: .85rem/1.8 var(--pixel); margin-top: .8rem; }
+.recognition { color: var(--ink-soft); font-size: .8rem; text-align: center; }
+.home .badges { margin-top: 1.2rem; }
+.home .badges img { max-width: 100%; height: auto; min-height: 20px; }
+.media-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .8rem; padding: .8rem 1rem; border: 2px solid var(--rule); border-bottom: 0; background: var(--panel); font-size: .8rem; }
+.theme-choices { display: flex; flex-wrap: wrap; gap: .35rem; }
+.theme-choices button { cursor: pointer; background: var(--ground); color: var(--ink-body); font: inherit; border: 1px solid var(--ink-soft); padding: .5rem .7rem; min-height: 40px; }
+.theme-choices button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+.desk-gallery img, .tracker-shot img { image-rendering: auto; }
+.site-section { max-width: 1100px; margin: 0 auto 4rem; padding: 0 1.5rem; }
+.section-heading { max-width: 72ch; margin-bottom: 1.8rem; }
+.section-heading h2 { font: .95rem/1.8 var(--pixel); color: var(--ink); margin-bottom: .8rem; }
+.section-heading p { font-size: .9rem; }
+.latest-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 2px solid var(--rule); border-left: 2px solid var(--rule); }
+.latest-grid article { padding: 1.5rem; border-right: 2px solid var(--rule); border-bottom: 2px solid var(--rule); }
+.latest-grid h3, .demo-grid h3 { font: .73rem/1.8 var(--pixel); color: var(--ink); margin: .8rem 0; }
+.latest-grid p, .latest-grid a, .demo-grid p { font-size: .87rem; }
+.latest-grid a { display: inline-block; margin-top: .9rem; }
+.tracker-shot { margin: 1.5rem 0 0; }
+.tracker-shot img { width: 100%; height: auto; display: block; border: 2px solid var(--rule); }
+.tracker-shot figcaption, .section-note { color: var(--ink-soft); font-size: .8rem; margin-top: .8rem; }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.demo-grid figure { min-width: 0; border: 2px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; }
+.demo-grid video { display: block; width: 100%; height: auto; aspect-ratio: 16/10; object-fit: contain; background: var(--ground); }
+.demo-grid figcaption { padding: .5rem 1.2rem 1.2rem; }
+.demo-grid .phone-demo video { height: 390px; aspect-ratio: auto; }
+.section-links { display: flex; flex-wrap: wrap; gap: .6rem 1rem; padding: 1rem 0; border-block: 1px solid var(--rule); margin: 1.4rem 0; font-size: .85rem; }
+.table-wrap { max-width: 100%; overflow-x: auto; }
+.prose .table-wrap table:not(.cmp):not(.feat) { min-width: 480px; }
+.prose .asset-version { font-size: .8rem; color: var(--ink-soft); }
+.more-demos { border-top: 2px solid var(--rule); padding-top: 1.2rem; }
+.more-demos summary { cursor: pointer; color: var(--ink); font-size: .9rem; padding: .6rem 0 1.5rem; }
+.older-demos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 1.5rem; }
+.older-demos .shot { margin: 0 0 1rem; padding: 0; text-align: left; }
+.older-demos video { aspect-ratio: 16/10; object-fit: contain; background: var(--ground); }
+@media (max-width: 640px) {
+    .navbar { padding: 1rem; }
+    .nav-links { gap: .65rem 1rem; }
+    .nav-links a { font-size: .8rem; }
+    .home .hero { padding-top: 2.2rem; }
+    .home .hero-subtitle { font-size: .93rem; }
+    .latest-grid, .demo-grid { grid-template-columns: minmax(0, 1fr); }
+    .site-section, .shot { padding-inline: 1rem; }
+    .section-heading h2 { font-size: .8rem; }
+    .code-preview { margin-inline: 1rem; }
+    .latest-grid article { padding: 1.2rem; }
+    .media-heading { padding: .7rem; }
+}
+
+/* ── the front page, 24 Oct 2026 (approved design): pitch, the press-and-see
+   loop, who it is for, the idea, the demos, then the short feature list ── */
+.hero-media { margin: 1.6rem 0 0; }
+.hero-media video { display: block; width: 100%; height: auto; border: 3px solid var(--rule); background: var(--ground); }
+.hero-media figcaption { color: var(--ink-soft); font-size: .78rem; margin-top: .5rem; text-align: left; }
+@media (min-width: 960px) {
+    .home .hero-split .hero-content { max-width: 1052px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); column-gap: 2.5rem; align-items: center; text-align: left; }
+    .home .hero-split .hero-content > * { grid-column: 1; }
+    .home .hero-split h1 { font-size: clamp(2rem, 3.6vw, 3.2rem); }
+    .home .hero-split .hero-media { grid-column: 2; grid-row: 1 / span 6; margin: 0; }
+    .home .hero-split .hero-subtitle { margin-inline: 0; }
+    .home .hero-split .cta-group { justify-content: flex-start; }
+}
+.made-for-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.made-for-grid a { display: flex; flex-direction: column; gap: .5rem; padding: 1.2rem; background: var(--db-green); border: 2px solid var(--rule); text-decoration: none; }
+.made-for-grid a:hover { border-color: var(--ink); }
+.made-for-grid b { font: .75rem/1.7 var(--pixel); color: var(--ink); }
+.made-for-grid span { color: var(--ink-body); font-size: .9rem; }
+.idea { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 2.5rem; align-items: start; border-top: 2px solid var(--rule); padding-top: 2.5rem; }
+.idea h2 { font: 1rem/1.7 var(--pixel); color: var(--ink); margin-bottom: 1rem; }
+.idea-text p { margin-bottom: 1rem; }
+.idea-chain { color: var(--ink); font-size: .85rem; }
+.idea-shot img { width: 100%; height: auto; display: block; border: 2px solid var(--rule); }
+.idea-shot .shot-caption { font-size: .8rem; color: var(--ink-soft); margin-top: .6rem; }
+.what-it-does { border-top: 2px solid var(--rule); padding-top: 2.5rem; }
+.what-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 1.5rem 2rem; }
+.what-grid h3 { font: .72rem/1.7 var(--pixel); color: var(--ink); margin-bottom: .5rem; }
+.what-grid p { font-size: .9rem; color: var(--ink-body); margin-bottom: .4rem; }
+.what-grid a { font-size: .85rem; }
+.latest-short { border-top: 2px solid var(--rule); padding-top: 1.8rem; }
+.latest-short p:not(.eyebrow) { font-size: .92rem; }
+@media (max-width: 760px) {
+    .made-for-grid, .idea { grid-template-columns: minmax(0, 1fr); }
+    .hero-media { margin-inline: -1.5rem; }
+    .hero-media video { border-width: 2px 0; }
+    .hero-media figcaption { padding-inline: 1.5rem; }
+}

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free 1080p test patterns: SMPTE bars, test card, crosshatch, frame counter, latency clock | Deckboy</title>
+    <meta name="description" content="Free broadcast test patterns at 1920x1080: SMPTE colour bars with pluge, crosshatch for geometry, a checkerboard for scaling and two reference pictures as PNG, plus a full test card, a latency clock and a frame counter as looping H.264 video. Free to use, no sign-up. Download the lot as a zip.">
+    <link rel="canonical" href="https://utopian-academy.github.io/Deckboy/test-patterns.html">
+
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Deckboy">
+    <meta property="og:title" content="Free 1080p test patterns">
+    <meta property="og:description" content="Bars, pluge, crosshatch and a checkerboard as stills; a test card, a latency clock and a frame counter as video, because a counter in a still is one number forever.">
+    <meta property="og:url" content="https://utopian-academy.github.io/Deckboy/test-patterns.html">
+    <meta property="og:image" content="https://utopian-academy.github.io/Deckboy/patterns/pocket-test.png">
+    <meta property="og:image:width" content="1920">
+    <meta property="og:image:height" content="1080">
+    <meta property="og:image:alt" content="A PM5544-style test card: colour bars, a grey staircase, a circle for geometry and a frame counter">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Free 1080p test patterns">
+    <meta name="twitter:image" content="https://utopian-academy.github.io/Deckboy/patterns/pocket-test.png">
+
+    <link rel="stylesheet" href="style.css?v=20261024b">
+
+    <style>
+        .prose { max-width: 980px; margin: 0 auto 4rem; padding: 0 1.5rem; }
+        .prose h2 { margin: 2.8rem 0 .6rem; font-size: 1.22rem; color: var(--ink); }
+        .prose p { margin-bottom: 1rem; color: var(--ink-soft); max-width: 60ch; }
+        .prose code { background: var(--rule); padding: .12em .4em; font-size: .9em; }
+        .cards { display: grid; gap: 1.75rem 1.5rem; margin: 2.5rem 0;
+                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+        .card figure { margin: 0; }
+        .card img, .card video { width: 100%; height: auto; display: block;
+                    background: var(--rule); aspect-ratio: 16 / 9; }
+        .card h3 { margin: .7rem 0 .25rem; font-size: 1rem; color: var(--ink); }
+        .card p { margin: 0 0 .4rem; font-size: .92rem; color: var(--ink-soft);
+                  max-width: none; }
+        .card .grab { font-size: .86rem; }
+        .tag { display: inline-block; font-size: .72rem; letter-spacing: .08em;
+               text-transform: uppercase; padding: .1rem .4rem; margin-left: .4rem;
+               border: 1px solid var(--ink-soft); color: var(--ink-soft);
+               vertical-align: .12em; }
+        .kit { border: 1px solid var(--rule); padding: 1.25rem 1.4rem;
+               margin: 2.5rem 0; }
+        .kit p { margin-bottom: .6rem; }
+    </style>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": "Free 1080p test patterns",
+      "description": "Test patterns at 1920x1080, free to use: SMPTE colour bars with pluge, crosshatch, a checkerboard and two reference pictures, plus the engineering set for commissioning a screen - a numbered LED panel map, moire 1:1, dark detail, uniformity fields, banding ramps, safe areas, boresight, PLUGE, greyscale steps, convergence, multiburst and 10% and 50% windows - and a full test card, a latency clock and a frame counter as looping video.",
+      "url": "https://utopian-academy.github.io/Deckboy/test-patterns.html",
+      "inLanguage": "en",
+      "isAccessibleForFree": true,
+      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+      "author": { "@type": "Organization", "name": "Utopian Academy" },
+      "mainEntity": {
+        "@type": "ItemList",
+        "numberOfItems": 22,
+        "itemListElement": [
+          { "@type": "ImageObject", "position": 1, "name": "SMPTE colour bars with pluge", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/smpte-bars.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 2, "name": "Crosshatch geometry grid", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/crosshatch.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 3, "name": "Checkerboard for scaling and overscan", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/checkerboard.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 4, "name": "Full test card", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/pocket-test.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "VideoObject", "position": 5, "name": "Full test card, moving", "description": "The PM5544-style card with its moving element, so a frozen frame cannot pretend to be a live one.", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/pocket-test.mp4", "thumbnailUrl": "https://utopian-academy.github.io/Deckboy/patterns/pocket-test.png", "encodingFormat": "video/mp4", "width": 1920, "height": 1080, "uploadDate": "2026-09-14" },
+          { "@type": "VideoObject", "position": 6, "name": "Latency clock", "description": "A running counter for measuring the delay between two screens from a single photograph.", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/latency-clock.mp4", "thumbnailUrl": "https://utopian-academy.github.io/Deckboy/patterns/posters/latency-clock.png", "encodingFormat": "video/mp4", "width": 1920, "height": 1080, "uploadDate": "2026-09-14" },
+          { "@type": "VideoObject", "position": 7, "name": "Frame counter", "description": "A numbered frame every frame, for finding dropped and repeated frames with a high-shutter photograph.", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/frame-count.mp4", "thumbnailUrl": "https://utopian-academy.github.io/Deckboy/patterns/posters/frame-count.png", "encodingFormat": "video/mp4", "width": 1920, "height": 1080, "uploadDate": "2026-09-14" },
+          { "@type": "ImageObject", "position": 8, "name": "Reference picture, day", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/picture-day.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 9, "name": "Reference picture, night", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/picture-night.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 10, "name": "LED panel map, every tile numbered", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/panel-map.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 11, "name": "Moire 1:1, one-pixel detail fields", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/moire.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 12, "name": "Dark detail, zero to twelve percent", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/dark-detail.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 13, "name": "Uniformity flat fields", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/uniformity.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 14, "name": "Banding ramps per channel", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/banding-ramps.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 15, "name": "Safe areas, 90 and 80 percent", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/safe-areas.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 16, "name": "Boresight alignment chart", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/boresight.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 17, "name": "PLUGE black level chart", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/pluge.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 18, "name": "Greyscale staircase for gamma", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/greyscale-steps.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 19, "name": "Convergence grid", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/convergence.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 20, "name": "Multiburst frequency packets", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/multiburst.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 21, "name": "10 percent white window", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/window-10.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" },
+          { "@type": "ImageObject", "position": 22, "name": "50 percent white window", "contentUrl": "https://utopian-academy.github.io/Deckboy/patterns/window-50.png", "width": 1920, "height": 1080, "encodingFormat": "image/png" }
+        ]
+      }
+    }
+    </script>
+</head>
+<body>
+    <div class="background-glow"></div>
+
+    <nav class="navbar">
+        <div class="logo"><a href="./" style="color:inherit;text-decoration:none">Deckboy</a></div>
+        <div class="nav-links">
+            <a href="trailer.html">Trailer</a>
+            <a href="compare.html">Compare</a>
+            <a href="manual.html">Manual</a>
+            <a href="faq.html">FAQ</a>
+            <a href="specs.html">Specs</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy">GitHub</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-primary">Download Free</a>
+        </div>
+    </nav>
+
+    <header class="hero" style="min-height:auto;padding-top:4rem;padding-bottom:1rem">
+        <div class="hero-content">
+            <h1>Test patterns, free</h1>
+            <p class="hero-subtitle">Nine files at 1920&times;1080. Take them &mdash; you do not need Deckboy to use them.</p>
+        </div>
+    </header>
+
+    <div class="prose">
+        <p>Somebody hands you a cable and a screen and asks whether it is right. These
+        are what answers that. Each one is aimed at a specific way a signal chain goes
+        wrong, and between them they will find most of what goes wrong before doors.</p>
+
+        <p>The frame counter, the latency clock and the moving test card come as
+        ten-second H.264 loops at 25&nbsp;fps, because they only work in motion &mdash; a
+        counter has to count. Everything else is a PNG still.</p>
+
+        <p>No sign-up, no watermark, no email. Right-click and save, or take the lot.</p>
+
+        <div class="kit">
+            <p><strong>The whole kit</strong> &mdash; nineteen PNGs and three video loops at
+            1920&times;1080, with a note on what each one catches. Broadcast cards,
+            reference pictures, and the engineering set for commissioning an LED wall.</p>
+            <p><a href="patterns/deckboy-test-patterns.zip" class="btn-large">Download the kit (1.1&nbsp;MB)</a></p>
+            <p style="margin-top:.8rem"><a href="led-calculator.html">Working out what a wall will
+            give you? The calculator does resolution, size and viewing distance &rarr;</a></p>
+            <p style="margin-top:.8rem"><a href="led-wall.html">Need them at another size, or for an
+            LED wall? Generate boresight, crosshatch, SMPTE, PLUGE, convergence and a numbered
+            panel map at your exact raster &rarr;</a></p>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <figure><a href="patterns/smpte-bars.png"><img src="patterns/smpte-bars.png" alt="SMPTE colour bars with the pluge strip along the bottom" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>SMPTE bars <span class="tag">PNG</span></h3>
+                <p>Colour and levels. The pluge strip along the bottom is the one that
+                matters: it tells you whether black on that screen is actually black.</p>
+                <p class="grab"><a href="patterns/smpte-bars.png">smpte-bars.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/crosshatch.png"><img src="patterns/crosshatch.png" alt="A crosshatch grid of thin lines with centre cross and safe-area box" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Crosshatch <span class="tag">PNG</span></h3>
+                <p>Geometry and convergence. Straight lines go bent long before a
+                picture looks wrong, and the safe-area box shows what a projector is
+                quietly eating off the edges.</p>
+                <p class="grab"><a href="patterns/crosshatch.png">crosshatch.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/checkerboard.png"><img src="patterns/checkerboard.png" alt="A fine black and white checkerboard filling the frame" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Checkerboard <span class="tag">PNG</span></h3>
+                <p>Scaling and overscan. A scaler that is not running 1:1 turns these
+                squares into moire the instant you look at them.</p>
+                <p class="grab"><a href="patterns/checkerboard.png">checkerboard.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><video src="patterns/pocket-test.mp4" poster="patterns/pocket-test.png" autoplay loop muted playsinline preload="none" width="1920" height="1080" aria-label="A PM5544-style test card with colour bars, a grey staircase, a geometry circle and a moving element"></video></figure>
+                <h3>The test card <span class="tag">MP4 + PNG</span></h3>
+                <p>The whole chain on one card, in the PM5544 tradition: bars, a grey
+                staircase and geometry. The video also carries a moving element, so a
+                frozen frame cannot pretend to be a live one &mdash; which is exactly
+                what the still, by definition, cannot show you.</p>
+                <p class="grab"><a href="patterns/pocket-test.mp4">pocket-test.mp4</a>
+                &middot; <a href="patterns/pocket-test.png">pocket-test.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><video src="patterns/latency-clock.mp4" poster="patterns/posters/latency-clock.png" autoplay loop muted playsinline preload="none" width="1920" height="1080" aria-label="Colour bars behind a large running seconds and frame counter inside a geometry circle"></video></figure>
+                <h3>Latency clock <span class="tag">MP4</span></h3>
+                <p>Latency, measured rather than argued about. Play it on two screens,
+                photograph both in one shot, read the difference. The counter is exact,
+                not a spinning wheel you have to judge.</p>
+                <p class="grab"><a href="patterns/latency-clock.mp4">latency-clock.mp4</a></p>
+            </div>
+
+            <div class="card">
+                <figure><video src="patterns/frame-count.mp4" poster="patterns/posters/frame-count.png" autoplay loop muted playsinline preload="none" width="1920" height="1080" aria-label="A very large four-digit frame number, changing every frame"></video></figure>
+                <h3>Frame counter <span class="tag">MP4</span></h3>
+                <p>Dropped and repeated frames. Shoot it at a high shutter speed and
+                count: a number that appears twice, or not at all, is a frame that did
+                not survive the chain.</p>
+                <p class="grab"><a href="patterns/frame-count.mp4">frame-count.mp4</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/picture-day.png"><img src="patterns/picture-day.png" alt="A pixel-art seaside scene in daylight: sky gradient, sea, sand and small details" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Reference picture, day <span class="tag">PNG</span></h3>
+                <p>A picture rather than a chart. Gradients, fine detail and saturated
+                flats in the same frame, which is where banding and posterisation show
+                up and bars never will.</p>
+                <p class="grab"><a href="patterns/picture-day.png">picture-day.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/picture-night.png"><img src="patterns/picture-night.png" alt="The same seaside scene at night, mostly dark blues with small bright points" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Reference picture, night <span class="tag">PNG</span></h3>
+                <p>The same scene after dark, for black level and shadow detail. A
+                screen that looked perfect on bars can still crush everything below
+                ten percent.</p>
+                <p class="grab"><a href="patterns/picture-night.png">picture-night.png</a></p>
+            </div>
+        </div>
+
+        <h2>The engineering set</h2>
+
+        <p>The charts for commissioning a screen rather than checking one: black
+        level, uniformity, real bit depth, and a numbered map of every LED tile in
+        the wall. Same list the
+        <a href="led-wall.html">wall generator</a> draws at your exact raster, and
+        the same list Deckboy draws live on the output.</p>
+
+        <div class="cards">
+            <div class="card">
+                <figure><a href="patterns/panel-map.png"><img src="patterns/panel-map.png" alt="A grid of numbered LED tiles, each labelled with its row, column and pixel origin" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Panel map <span class="tag">PNG</span></h3>
+                <p>Every tile numbered by row and column, with its own pixel origin
+                printed inside it and a different marker in each corner of the wall. A
+                swapped tile shows the wrong number, a rotated one shows the marker on
+                the wrong side, and a dead receiver card shows nothing at all. This is
+                the one that turns &ldquo;something is wrong up there&rdquo; into
+                &ldquo;row 3, column 7&rdquo;. Drawn here for 128&times;128 tiles;
+                Deckboy draws it for whatever yours are.</p>
+                <p class="grab"><a href="patterns/panel-map.png">panel-map.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/moire.png"><img src="patterns/moire.png" alt="Three bands of one-pixel detail: a checkerboard, horizontal lines and vertical lines" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Moir&eacute; 1:1 <span class="tag">PNG</span></h3>
+                <p>A one-pixel checkerboard and one-pixel line fields. It only means
+                anything at 1:1 &mdash; if it looks soft or swims, something in the
+                chain is scaling, which is worth establishing before anybody starts
+                blaming the camera.</p>
+                <p class="grab"><a href="patterns/moire.png">moire.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/dark-detail.png"><img src="patterns/dark-detail.png" alt="Thirteen near-black steps from zero to twelve percent, each labelled" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Dark detail <span class="tag">PNG</span></h3>
+                <p>Steps from black to twelve percent, which is where LED walls
+                actually struggle: crushed blacks, a grey floor that is not black, and
+                tiles that disagree with each other down here long before they disagree
+                in the light.</p>
+                <p class="grab"><a href="patterns/dark-detail.png">dark-detail.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/uniformity.png"><img src="patterns/uniformity.png" alt="Eight flat panels: four greys, then red, green, blue and black" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Uniformity <span class="tag">PNG</span></h3>
+                <p>Flat fields at 25, 50, 75 and 100 percent, plus full red, green and
+                blue. Flat colour is unforgiving &mdash; a panel from a different batch
+                of LEDs shows up immediately, and so does a dead pixel.</p>
+                <p class="grab"><a href="patterns/uniformity.png">uniformity.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/banding-ramps.png"><img src="patterns/banding-ramps.png" alt="Four horizontal gradients: grey, red, green and blue" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Banding ramps <span class="tag">PNG</span></h3>
+                <p>Ramps per channel and in grey, for finding the bit depth you are
+                really getting after processing. A ten-bit chain quietly truncated to
+                eight shows its steps here and nowhere else in a show.</p>
+                <p class="grab"><a href="patterns/banding-ramps.png">banding-ramps.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/safe-areas.png"><img src="patterns/safe-areas.png" alt="Nested ninety and eighty percent boxes with thirds and a centre cross" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Safe areas <span class="tag">PNG</span></h3>
+                <p>Centre cross, thirds, and 90% and 80% boxes, so content gets framed
+                against the screen&rsquo;s real aspect rather than a guess.</p>
+                <p class="grab"><a href="patterns/safe-areas.png">safe-areas.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/boresight.png"><img src="patterns/boresight.png" alt="Concentric rings around a centre cross, with markers at every corner and edge" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Boresight <span class="tag">PNG</span></h3>
+                <p>Centre cross, concentric rings and markers at every corner and edge
+                midpoint. For lining a projector or a camera up on the middle of the
+                screen before any content exists to line it up on.</p>
+                <p class="grab"><a href="patterns/boresight.png">boresight.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/pluge.png"><img src="patterns/pluge.png" alt="Four near-black bars beside a white patch, labelled minus two percent, black, plus two and plus four" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>PLUGE <span class="tag">PNG</span></h3>
+                <p>Black level, on its own. Set brightness so the below-black bar is
+                invisible and the just-above-black one is only barely visible.
+                Everything else about a picture is downstream of getting this right.</p>
+                <p class="grab"><a href="patterns/pluge.png">pluge.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/greyscale-steps.png"><img src="patterns/greyscale-steps.png" alt="An eleven-step staircase from black to white, each step labelled" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Greyscale steps <span class="tag">PNG</span></h3>
+                <p>An eleven-step staircase for gamma and grey tracking. A screen that
+                goes green in the mids, or loses the top two steps into each other,
+                shows it in a second.</p>
+                <p class="grab"><a href="patterns/greyscale-steps.png">greyscale-steps.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/convergence.png"><img src="patterns/convergence.png" alt="A fine one-pixel white grid with red, green and blue crosses along the top and bottom" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Convergence <span class="tag">PNG</span></h3>
+                <p>A fine one-pixel grid with pure red, green and blue crosses on it.
+                Fringing is a colour fault, and a white grid on its own does not tell
+                you which channel is the one that is off.</p>
+                <p class="grab"><a href="patterns/convergence.png">convergence.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/multiburst.png"><img src="patterns/multiburst.png" alt="Six packets of vertical bars getting finer from left to right" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>Multiburst <span class="tag">PNG</span></h3>
+                <p>Bar packets from sixteen pixels down to one. The finest packet going
+                grey means detail is being lost somewhere, and which packet fails says
+                roughly where.</p>
+                <p class="grab"><a href="patterns/multiburst.png">multiburst.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/window-10.png"><img src="patterns/window-10.png" alt="A small white rectangle centred on black" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>10% window <span class="tag">PNG</span></h3>
+                <p>For peak brightness at a realistic average picture level. A screen
+                that hits its rated figure here and nowhere near it on a full white
+                field is behaving normally, and this is how that gets measured rather
+                than argued about.</p>
+                <p class="grab"><a href="patterns/window-10.png">window-10.png</a></p>
+            </div>
+
+            <div class="card">
+                <figure><a href="patterns/window-50.png"><img src="patterns/window-50.png" alt="A larger white rectangle centred on black" loading="lazy" width="1920" height="1080"></a></figure>
+                <h3>50% window <span class="tag">PNG</span></h3>
+                <p>The same measurement at half the screen, which is closer to what
+                real content actually asks a display for.</p>
+                <p class="grab"><a href="patterns/window-50.png">window-50.png</a></p>
+            </div>
+        </div>
+
+        <h2>How to actually use them</h2>
+
+        <p>Put the card up, then walk the chain rather than the picture. Bars first,
+        because a black level that is wrong makes every later judgement wrong too. Then
+        crosshatch, at the screen, from where the audience sits &mdash; keystone looks
+        fine from the booth. Then the checkerboard, close, because that is the one that
+        catches a scaler nobody told you about. Then a real picture, because charts
+        cannot show you banding.</p>
+
+        <p>If two screens have to agree, the latency clock settles it in one photograph.
+        If a recording or a stream is suspect, the frame counter at a high shutter speed
+        will tell you exactly which frames went missing. Both of those want a player that
+        is not dropping frames of its own, which is worth establishing before you trust
+        the answer.</p>
+
+        <h2>Where these came from</h2>
+
+        <p>Deckboy generates them. It is a free, open-source cue player for live video,
+        and it makes these patterns <em>live</em>, at whatever raster and refresh the
+        output is actually running &mdash; which is the version you want, because a
+        1080p file stretched onto a 1200-line projector is testing the stretch as much as
+        the projector. It also means the moving ones are generated per frame rather than
+        played back from a file, so they never loop and never repeat a number.</p>
+
+        <p>So the files above are for the situation where you need bars on a screen in
+        the next ten minutes and installing something is not on the table. If you are
+        going to be doing this again next week, the application is
+        <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">free as well</a>.</p>
+
+        <div class="cta-group" style="justify-content:flex-start;margin-top:2.5rem">
+            <a href="patterns/deckboy-test-patterns.zip" class="btn-large">Download the kit</a>
+            <a href="./" class="btn-large btn-outline">What Deckboy is</a>
+        </div>
+
+        <p class="grab" style="margin-top:2rem"><a href="latency.html">Where latency hides in a live chain</a>
+        &middot; <a href="screen-check.html">Check this screen in the browser</a>
+        &middot; <a href="manual.html#test-patterns">The patterns Deckboy generates</a></p>
+    </div>
+
+    <footer>
+        <div class="footer-cols">
+            <div>
+                <h4>Deckboy</h4>
+                <a href="./">What it does</a>
+                <a href="trailer.html">The trailer</a>
+                <a href="compare.html">How it compares</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">Download</a>
+            </div>
+            <div>
+                <h4>Using it</h4>
+                <a href="manual.html">Manual</a>
+                <a href="faq.html">FAQ</a>
+                <a href="specs.html">Specifications</a>
+                <a href="slides.html">Slides &amp; presenting</a>
+                <a href="window-cues.html">Window &amp; browser cues</a>
+                <a href="ndi.html">NDI in and out</a>
+                <a href="stream-deck.html">Stream Deck &amp; Companion</a>
+                <a href="latency.html">Where latency hides</a>
+            </div>
+            <div>
+                <h4>Tools</h4>
+                <a href="test-patterns.html">Test patterns</a>
+                <a href="led-wall.html">LED pattern generator</a>
+                <a href="led-calculator.html">LED calculator</a>
+                <a href="screen-check.html">Screen check</a>
+                <a href="databend.html">Databend</a>
+            </div>
+            <div>
+                <h4>Guides</h4>
+                <a href="shooting-led.html">Shooting an LED wall</a>
+                <a href="press.html">Press kit</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy">Source on GitHub</a>
+            </div>
+        </div>
+        <p class="footer-note">Built as an open-source project by Utopian-Academy.
+        Free under the GPL-3.0.</p>
+    </footer>
+</body>
+</html>

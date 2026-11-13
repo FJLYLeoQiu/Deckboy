@@ -1,0 +1,170 @@
+"""Drop a .mid into a show and see whether Deckboy makes a playable cue of it.
+
+The parse itself is covered in --smoke, on bytes. This is the other half, the
+half that is easy to get wrong: does IMPORT recognise the file, does the cue
+come out with a LENGTH, does it survive a save, does taking it run a transport
+-- and is a file that only wears the extension refused.
+
+It cannot check that notes reach an instrument: there is no MIDI hardware on a
+CI runner. It says so rather than pretending.
+
+    python3 tools/check_midifile.py [--exe PATH] [--port N]
+"""
+
+import io
+import os
+import shutil
+import struct
+import sys
+import tempfile
+import time
+
+from deckboy_harness import Deckboy, finish, parse_args
+
+
+def varlen(n):
+    out = bytearray([n & 0x7F])
+    n >>= 7
+    while n:
+        out.insert(0, (n & 0x7F) | 0x80)
+        n >>= 7
+    return bytes(out)
+
+
+def write_midi(path):
+    """Two seconds of quarter notes at 120 bpm, 96 ticks per quarter."""
+    track = bytearray()
+    for i in range(8):
+        track += varlen(0) + bytes([0x90, 60 + i, 0x40])
+        track += varlen(96) + bytes([0x80, 60 + i, 0x40])
+    track += varlen(0) + bytes([0xFF, 0x2F, 0x00])
+    data = b"MThd" + struct.pack(">IHHH", 6, 0, 1, 96)
+    data += b"MTrk" + struct.pack(">I", len(track)) + bytes(track)
+    io.open(path, "wb").write(data)
+    return 8 * 0.5
+
+
+def main():
+    args = parse_args(__doc__, 5635)
+    fails = []
+    media = tempfile.mkdtemp(prefix="dbmidi-media-")
+    midi_path = os.path.join(media, "stinger.mid")
+    expected = write_midi(midi_path)
+    impostor = os.path.join(media, "notreally.mid")
+    io.open(impostor, "wb").write(b"RIFF....this is not a midi file at all........")
+
+    # Imported on the command line: there is no remote verb that adds media.
+    with Deckboy(args, "dbmidi-", ["--import", midi_path]) as db:
+        time.sleep(2.0)
+        print("1  imported at launch: %s" % os.path.basename(midi_path))
+        db.send("SELECT LAST")
+        time.sleep(0.5)
+
+        report = db.send("MIDIFILE")
+        print("2  reports:     %s" % report[:110])
+        if "UNREADABLE" in report or report.startswith("ERR"):
+            fails.append("the imported cue does not report as a readable MIDI file: %s" % report)
+        if "8 event" not in report and "16 event" not in report:
+            fails.append("the event count is not what the file contains: %s" % report)
+        print("3  port:        %s" % db.send("MIDIFILE PORT")[:60])
+
+        # Nothing is heard without MIDI hardware, but the cue must still run a
+        # transport rather than sit at zero.
+        take_reply = db.send("TAKE")
+        # WAITED FOR, NOT SAMPLED ONCE. On a CI runner the take started on time
+        # and STATUS still read 00:00.0 for two seconds, then 00:02.2: STATUS is
+        # a snapshot the main thread refreshes, and the main thread was inside
+        # the MIDI output's open, which a runner's GS synth (no audio device
+        # behind it) takes about two seconds to refuse. A late start is
+        # reported, with the app's own timing of the open; only a transport that
+        # never moves fails.
+        taken_at = time.monotonic()
+        pos, moved_after = "", None
+        while time.monotonic() - taken_at < 8.0:
+            time.sleep(0.25)
+            pos = db.status("DECK 1", "pos")
+            if pos not in ("", "00:00.0"):
+                moved_after = time.monotonic() - taken_at
+                break
+        print("4  after TAKE:  pos=%s%s" % (
+            pos, "" if moved_after is None else "  (moving %.1f s after the take)" % moved_after))
+        if moved_after is not None and moved_after > 1.5:
+            log = os.path.join(db.root, "app.log")
+            opens = [line for line in io.open(log, encoding="utf-8", errors="replace").read().splitlines()
+                     if "MIDI out" in line] if os.path.exists(log) else []
+            print("   LATE: the desk was busy for about %.1f s after the take." % moved_after)
+            for line in opens[-4:]:
+                print("     | %s" % line[:160])
+        if pos in ("", "00:00.0"):
+            fails.append("taking the cue did not start a transport (pos stayed at %r)" % pos)
+            # -- WHY, as far as the app will say ---------------------------
+            #
+            # This has only ever happened on a CI runner: the cue is active
+            # and reports its duration, so the take reached the engine, and
+            # the transport is nonetheless not running. Everything below is
+            # read only on failure, so a passing run is unchanged.
+            print("   the take did not start. what the app says:")
+            print("     TAKE replied:  %s" % take_reply[:120])
+            for line in db.send("STATUS").splitlines():
+                if line.startswith("DECK 1") or line.startswith("APP"):
+                    print("     %s" % line[:200])
+            # Never started, started late, or keeps starting again? The deck
+            # reports Playing with the right duration, and its position is a
+            # steady clock from the take -- so 00:00.0 means that clock was
+            # restarted. Eight readings tell the three apart (CI, 2026-10-28).
+            samples = []
+            for _ in range(8):
+                samples.append(db.status("DECK 1", "pos") + "/" + db.status("DECK 1", "status"))
+                time.sleep(0.25)
+            print("     pos/status every 0.25 s: %s" % " ".join(samples))
+            for line in db.send("STATUS").splitlines():
+                if line.startswith("DECK 1"):
+                    print("     full: %s" % line)
+            # The cue itself: a disarmed cue and a pre-waiting one both look
+            # exactly like this from the outside, and both are ruled in or out
+            # by one line.
+            # PREWAIT with no argument reports rather than sets, and a
+            # pre-waiting cue is the one explanation that looks EXACTLY like
+            # this from the outside: active, correct duration, not running.
+            print("     PREWAIT:       %s" % db.send("PREWAIT")[:160])
+            print("     MIDIFILE:      %s" % db.send("MIDIFILE")[:160])
+            log = os.path.join(db.root, "app.log")
+            if os.path.exists(log):
+                tail = io.open(log, encoding="utf-8", errors="replace").read()[-900:]
+                print("     --- app.log tail ---")
+                for line in tail.splitlines()[-14:]:
+                    print("     | %s" % line[:160])
+
+        # Read AFTER the take: STATUS describes the active cue.
+        dur = db.status("DECK 1", "dur")
+        print("5  duration:    %s   (the file is %.1fs)" % (dur, expected))
+        if dur in ("", "00:00.0"):
+            fails.append("the cue has no duration, so it never ends and never advances")
+        db.send("STOP")
+
+        # The kind has to survive a save, or it comes back as a video cue
+        # pointed at a .mid, which racks and never plays.
+        has_kind = "\tmidifile\t" in db.saved_show()
+        print("6  saved kind:  %s" % has_kind)
+        if not has_kind:
+            fails.append("the cue was not saved as a midifile cue")
+
+    # The impostor, in its own launch: refused at import, not racked as a cue
+    # that does nothing when taken.
+    with Deckboy(args, "dbmidi2-", ["--import", impostor], port=args.port + 1) as db:
+        time.sleep(4.0)
+        made_a_cue = "notreally" in db.send("STATUS")
+        print("7  impostor:    made a cue: %s  (it must not)" % made_a_cue)
+        if made_a_cue:
+            fails.append("a file that is not a MIDI file was imported as one anyway")
+
+    shutil.rmtree(media, ignore_errors=True)
+    return finish("midi file source", fails, notes=(
+        "NOT CHECKED: that notes reach an instrument. There is no MIDI output here, so",
+        "the send path is covered only by the parse tests in --smoke and by the port-open",
+        "code being shared with the MIDI cue.",
+        ""))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

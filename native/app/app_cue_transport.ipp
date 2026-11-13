@@ -1,0 +1,10317 @@
+// ============================================================================
+// app_cue_transport.ipp — Cue playback transport operations.
+//
+// Implements the core transport controls for cue playback:
+//
+//   triggerButton()      — dispatches UI button presses (IMPORT, TAKE, STOP, etc.)
+//   goNextCue()          — advance to the next cue and start playback
+//   jumpSelectedCue()    — TAKE: load and play the selected cue immediately
+//   stopTransport()      — stop all playback with optional fade-out
+//   rerackTransport()    — rewind to the beginning of the current cue
+//   clearOutput()        — stop playback and clear the output to black
+//   playTransport()      — start/resume playback of the active cue
+//   pauseTransport()     — pause playback at the current position
+//   togglePlayPause()    — toggle between play and pause states
+//   fadeOutAndStop()     — fade audio and/or video, then stop
+//
+// Also handles:
+//   - Auto-advance: chain cues with configurable end actions
+//   - Crossfade transitions between cues
+//   - Still timer management for image/pattern cues
+//   - In/out point trimming for seek operations
+//   - NMC sync transport broadcasting
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Dispatch a UI button press by its label string.
+  // Maps button labels to transport and management operations.
+  void triggerButton(const std::string& label) {
+    if (label == "IMPORT") {
+      importWithPicker();
+    } else if (label == "BROWSER") {
+      addBrowserCueFromPrompt();
+    } else if (label == "SOURCE") {
+      openSourceTypeMenu();
+    } else if (label == "PATTERN") {
+      addKawaiiPatternCue();
+    } else if (label == "TAKE") {
+      jumpSelectedCue();
+    } else if (label == "TAKE ALL") {
+      takeAllDecks(true);
+    } else if (label == "RERACK") {
+      rerackTransport();
+    } else if (label == "STOP") {
+      stopTransport();
+    } else if (label == "CLEAR") {
+      // Stops every deck and disarms the outputs, and sits beside BLACK: while
+      // live it takes a second press, the same as the C key.
+      if (confirmLiveKey(SDLK_C, "press CLEAR again to stop everything and clear the output")) {
+        clearOutput();
+      }
+    } else if (label == "BLACK" || label == "BLACKOUT") {   // old label still accepted
+      // Instant and reversible: kills the picture without touching playback,
+      // so the show keeps running underneath and one press brings it back.
+      const bool dark = masterDimmerTarget_ < 0.5;
+      masterDimmerTarget_ = dark ? 1.0 : 0.0;
+      triggerToast(dark ? "blackout off" : "BLACKOUT");
+      playUiSound(dark ? UiSoundEffect::Toggle : UiSoundEffect::Clear);
+    } else if (label == "RECORD") {
+      toggleRecording();
+    } else if (label == "DASH" || label == "DASHBOARD") {
+      // IT HAD NO DOOR. The dashboard could only be opened with Ctrl+D, so an
+      // operator who has not read the shortcuts page has no way to know it
+      // exists at all -- and no way in if they cannot reach the keyboard,
+      // which on a touch panel is most of them.
+      if (showStartupDialog_ || showSplashOverlay_) {
+        triggerToast("choose a show first");
+        return;
+      }
+      dashboardOverlayOpen_ = !dashboardOverlayOpen_;
+    } else if (label == "MENU" || label == "SETUP" || label == "SETTINGS") {   // old labels still accepted
+      settingsOpen_ = true;
+      // SYSTEM, which is what the tab strip starts on and what the field
+      // defaults to. This forced tab 3 (Video Outputs), so the button always
+      // opened on the fourth tab regardless of what the operator last used or
+      // what they pressed the button to do.
+      settingsTab_ = 0;
+      uiWatchdogPopupEvent("settings_modal", true);
+    }
+  }
+
+  // Resolve where a deck's playback naturally goes after activeCue: goto
+  // target first, then shuffle (when advancing), then the adjacent playable
+  // cue; finally a bounded walk past missing-media cues so one dead drive
+  // doesn't stop the show. Shared by end-of-cue auto-advance and manual SKIP.
+  int resolveAutoAdvanceIndex(Deck& deck, const Cue& activeCue, bool shouldAdvance) {
+    int nextIndex = -1;
+    if (!trim(activeCue.gotoTarget).empty()) {
+      if (auto resolved = cueIndexByTokenInOverlayRole(deck, activeCue.gotoTarget, false); resolved) {
+        if (!cueIsOverlayOnly(deck.cues[*resolved])) {
+          nextIndex = *resolved;
+        }
+      }
+    }
+    if (nextIndex < 0) {
+      auto playableIndices = cueIndicesForOverlayRole(deck, false);
+      if (deck.shuffle && shouldAdvance && !playableIndices.empty()) {
+        std::vector<int> shuffleChoices;
+        shuffleChoices.reserve(playableIndices.size());
+        for (int cueIndex : playableIndices) {
+          if (cueIndex != deck.activeIndex) {
+            shuffleChoices.push_back(cueIndex);
+          }
+        }
+        if (!shuffleChoices.empty()) {
+          std::uniform_int_distribution<std::size_t> pick(0, shuffleChoices.size() - 1);
+          nextIndex = shuffleChoices[pick(shuffleRng_)];
+        } else if (deck.playlistLoop && playableIndices.size() == 1) {
+          nextIndex = playableIndices.front();
+        }
+      } else {
+        nextIndex = adjacentCueIndexForOverlayRole(deck, deck.activeIndex, 1, false, deck.playlistLoop);
+      }
+    }
+    if (nextIndex >= 0 && shouldAdvance) {
+      int hops = 0;
+      const int hopLimit = static_cast<int>(deck.cues.size());
+      while (nextIndex >= 0 && hops < hopLimit &&
+             !cueMediaAvailableForTake(deck.cues[nextIndex])) {
+        triggerToast("skipped missing: " + deck.cues[nextIndex].name);
+        int following = adjacentCueIndexForOverlayRole(deck, nextIndex, 1, false, deck.playlistLoop);
+        nextIndex = (following == nextIndex) ? -1 : following;
+        ++hops;
+      }
+    }
+    return nextIndex;
+  }
+
+  // Manual SKIP: jump the focused deck to whatever it would naturally play
+  // next (honors goto targets, shuffle, playlist loop, and the missing-media
+  // walk) without waiting for the current cue to end. "." key / SKIP button /
+  // remote SKIP.
+  // asTake: the presenter clicker's Page Down. It takes the next cue the way
+  // TAKE does, WITH the deck's transition -- a clicker is how a presenter runs
+  // the show, not a quick skip. "." and the remote SKIP keep the cut.
+  void skipToNextCue(bool asTake = false) {
+    int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.cues.empty()) {
+      triggerToast("skip: playlist is empty");
+      return;
+    }
+    // THE CLICKER SPENDS THE BUILDS FIRST. A presenter set up this way expects
+    // the same thing every other deck gives them: one press reveals the next
+    // part of what they are saying, and only the press after the last part
+    // changes the slide. Off unless a presenter view asked for it, so a show
+    // that does not use notes sees no change at all.
+    if (presenterAdvanceSpendsBuild(deckIndex)) {
+      presenterNoteStepAdvance(deckIndex, 1);
+      return;
+    }
+    int nextIndex = -1;
+    bool useTransition = false;
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size())) {
+      const Cue& activeCue = deck.cues[deck.activeIndex];
+      nextIndex = resolveAutoAdvanceIndex(deck, activeCue, true);
+      useTransition = asTake || activeCue.transitionToNext;
+    } else {
+      // Nothing live: skip just takes whatever is queued next.
+      nextIndex = nextCueIndexForDeck(deckIndex);
+    }
+    if (nextIndex < 0 || nextIndex >= static_cast<int>(deck.cues.size())) {
+      triggerToast("skip: nothing queued");
+      return;
+    }
+    if (deck.selectedIndex != nextIndex) {
+      selectOnlyCue(deck, nextIndex);
+      onSelectionChanged();
+    }
+    markProjectDirty();
+    takeSelected(true, asTake || useTransition, false);
+    triggerToast((asTake ? "take: " : "skip: ") + deck.cues[nextIndex].name);
+  }
+
+  // Manual SKIP BACK: take the previous playable cue (playlist-loop aware,
+  // walks past missing media). Deliberately ignores goto/shuffle — "back"
+  // means the cue physically above this one. "," key / <| button / remote
+  // SKIPBACK.
+  void skipToPrevCue(bool asTake = false) {
+    int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.cues.empty()) {
+      triggerToast("skip back: playlist is empty");
+      return;
+    }
+    // Back through the builds before going back a slide, so the two directions
+    // are each other's opposite. Tested on the step rather than on
+    // presenterAdvanceSpendsBuild, which asks whether there is anything left
+    // to REVEAL -- here the question is whether there is anything to take back.
+    if (presenterNoteStepFor(deckIndex) > 0 &&
+        presenterAdvanceSpendsBuildBackwards(deckIndex)) {
+      presenterNoteStepAdvance(deckIndex, -1);
+      return;
+    }
+    int fromIndex = deck.activeIndex >= 0 ? deck.activeIndex : deck.selectedIndex;
+    int prevIndex = adjacentCueIndexForOverlayRole(deck, fromIndex, -1, false, deck.playlistLoop);
+    int hops = 0;
+    const int hopLimit = static_cast<int>(deck.cues.size());
+    while (prevIndex >= 0 && hops < hopLimit &&
+           !cueMediaAvailableForTake(deck.cues[prevIndex])) {
+      triggerToast("skipped missing: " + deck.cues[prevIndex].name);
+      int preceding = adjacentCueIndexForOverlayRole(deck, prevIndex, -1, false, deck.playlistLoop);
+      prevIndex = (preceding == prevIndex) ? -1 : preceding;
+      ++hops;
+    }
+    if (prevIndex < 0 || prevIndex >= static_cast<int>(deck.cues.size())) {
+      triggerToast("skip back: nothing previous");
+      return;
+    }
+    bool useTransition = false;
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size())) {
+      useTransition = asTake || deck.cues[deck.activeIndex].transitionToNext;
+    }
+    if (deck.selectedIndex != prevIndex) {
+      selectOnlyCue(deck, prevIndex);
+      onSelectionChanged();
+    }
+    markProjectDirty();
+    takeSelected(true, asTake || useTransition, false);
+    triggerToast((asTake ? "take: " : "skip back: ") + deck.cues[prevIndex].name);
+  }
+
+  std::string transportStatusLabel(int deckIndex) const {
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    const DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (activeCue && activeCue->kind == CueKind::Browser) {
+      return runtime && runtime->browserCueLive ? "Live Browser" : "Browser Ready";
+    }
+    if (activeCue && isSourceCueKind(activeCue->kind)) {
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      return (engine && engine->isSourceCapturing()) ? "Live Source" : "Source Ready";
+    }
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    return engine ? transportLabel(engine->state()) : transportLabel(TransportState::Stopped);
+  }
+
+  std::string browserCueStatusLabel(int deckIndex) const {
+    const DeckRuntime* runtime = runtimeForDeck(deckIndex);
+    if (!runtime) {
+      return "offline";
+    }
+    BrowserStartPhase phase = BrowserStartPhase::None;
+    std::string lastError;
+    bool live = runtime->browserCueLive;
+    if (runtime->browserRenderer) {
+      phase = runtime->browserRenderer->phase();
+      lastError = runtime->browserRenderer->lastError();
+      live = live || runtime->browserRenderer->isLive();
+    }
+    return browserCueStatusSummary(phase, live, lastError);
+  }
+
+  std::string transportStatusLabel() const {
+    return transportStatusLabel(project_.focusedDeckIndex);
+  }
+
+  void playTransport() {
+    MediaEngine* engine = focusedMediaEngine();
+    DeckRuntime* runtime = focusedRuntime();
+    const Cue* activeCue = activeCuePtr();
+    if (!activeCue && selectedCuePtr()) {
+      takeSelected(true);
+      return;
+    }
+    if (!activeCue || !engine || !runtime) {
+      return;
+    }
+    if (activeCue->kind == CueKind::Browser) {
+      // Don't restart if already loading/running — let initialization finish.
+      if (runtime->browserRenderer && runtime->browserRenderer->isRunning()) {
+        return;
+      }
+      if (startBrowserCue(project_.focusedDeckIndex, *activeCue)) {
+        playUiSound(UiSoundEffect::Toggle);
+      }
+      return;
+    }
+    engine->play();
+    triggerToast("rolling");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void pauseTransport() {
+    MediaEngine* engine = focusedMediaEngine();
+    DeckRuntime* runtime = focusedRuntime();
+    const Cue* activeCue = activeCuePtr();
+    if (activeCue && runtime && activeCue->kind == CueKind::Browser) {
+      stopBrowserCue();
+      triggerToast("browser parked");
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (!engine) {
+      return;
+    }
+    engine->pause();
+    triggerToast("paused");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void stopTransport() {
+    showLog("STOP", showLogCueRef(project_.focusedDeckIndex, focusedDeck().activeIndex));
+    // STOP is a decision. Anything this deck was about to take -- a pre-wait
+    // counting down, a continue waiting -- dies with it, or it fires seconds
+    // later on top of an operator who thought they had stopped the show.
+    cancelPendingTake(project_.focusedDeckIndex);
+    // And anything this deck was fading. A fade that lands seconds after the
+    // operator stopped the show is the same fault as a pending take that
+    // fires after it -- see cancelPendingTake, directly above.
+    cancelFadesForDeck(project_.focusedDeckIndex);
+    // And the audition, if this was the deck being auditioned. Stopping is how
+    // an operator finishes looking at something; leaving the deck held off the
+    // outputs after it would silently black their screen for the next cue.
+    if (deckIsAuditioning(project_.focusedDeckIndex)) {
+      endAudition(false);
+    }
+    clearPreload();
+    MediaEngine* engine = focusedMediaEngine();
+    DeckRuntime* runtime = focusedRuntime();
+    const Cue* activeCue = activeCuePtr();
+    if (!engine) {
+      return;
+    }
+    if (activeCue && runtime && activeCue->kind == CueKind::Browser) {
+      stopBrowserCue();
+      engine->stop(true);
+      triggerToast("browser stopped - deck dark");
+      playUiSound(UiSoundEffect::Stop);
+      return;
+    }
+    // A LIVE MIC FADES OUT over its fade-out time and then stops; a second
+    // STOP while it fades cuts it at once.
+    if (activeCue && activeCue->kind == CueKind::Mic && engine->micRunning() &&
+        engine->state() == TransportState::Playing && !engine->micReleasing()) {
+      const double fadeOut = activeCue->audioFadeOutSeconds >= 0.0f
+        ? static_cast<double>(activeCue->audioFadeOutSeconds) : activeCue->fadeOutSeconds;
+      if (fadeOut > 0.01) {
+        engine->releaseMic(fadeOut);
+        triggerToast("mic fading out");
+        playUiSound(UiSoundEffect::Stop);
+        return;
+      }
+    }
+    // STOP darkens the deck and reracks; RERACK holds the first frame;
+    // PAUSE freezes in place. Three distinct verbs (STOP used to be a
+    // duplicate of RERACK).
+    engine->stop(true);
+    triggerToast("stopped - deck dark, reracked");
+    playUiSound(UiSoundEffect::Stop);
+  }
+
+  // ── STANDBY ───────────────────────────────────────────────────────────
+  //
+  // The cue GO will fire, kept apart from the selection. See Deck::standbyIndex
+  // for why the two are different things.
+
+  // Clamp to something real. A standby can be orphaned by a delete, a reorder
+  // or a show that arrived with a stale index, and a pointer into nothing is
+  // worse than none -- GO would silently do nothing on a show day.
+  int standbyIndexFor(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return -1;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.standbyIndex < 0 ||
+        deck.standbyIndex >= static_cast<int>(deck.cues.size())) {
+      return -1;
+    }
+    return deck.standbyIndex;
+  }
+
+  void setStandbyIndex(int deckIndex, int cueIndex, bool announce = true) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      deck.standbyIndex = -1;
+      if (announce) {
+        triggerToast("standby cleared");
+      }
+      markProjectDirty();
+      return;
+    }
+    deck.standbyIndex = cueIndex;
+    scrollDeckToCueIndex(deckIndex, cueIndex, true);
+    if (announce) {
+      triggerToast("standby: " + cueDisplayToken(deck.cues[cueIndex], cueIndex) +
+                   "  " + deck.cues[cueIndex].name);
+    }
+    markProjectDirty();
+  }
+
+  // Arm the cue the operator is looking at.
+  void setStandbyToSelected() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0) {
+      triggerToast("standby: select a cue first");
+      return;
+    }
+    setStandbyIndex(deckIndex, deck.selectedIndex);
+  }
+
+  // After firing, the standby steps to the next cue -- that is the whole point
+  // of a running order. Off the end it clears rather than wrapping: a list that
+  // silently returns to the top is how a show restarts itself on the last GO.
+  void advanceStandby(int deckIndex) {
+    const int current = standbyIndexFor(deckIndex);
+    if (current < 0) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    // A DISARMED CUE IS STEPPED OVER, not stood by. That is the whole reason
+    // the flag exists: an operator disarms a cue so the running order flows
+    // past it without them having to remember it is there. Standing by on one
+    // would make every GO need a second GO.
+    int next = current + 1;
+    while (next < static_cast<int>(deck.cues.size()) && !deck.cues[next].armed) {
+      ++next;
+    }
+    deck.standbyIndex = (next < static_cast<int>(deck.cues.size())) ? next : -1;
+    if (deck.standbyIndex >= 0) {
+      scrollDeckToCueIndex(deckIndex, deck.standbyIndex, true);
+    }
+    markProjectDirty();
+  }
+
+  // ── GO IS NOT PAUSE, AND THEY WERE THE SAME FUNCTION ──────────────────
+  //
+  // GO walks the standby down the running order; TOGGLE is play/pause. Both
+  // were toggleTransport(), and the standby check sat at the top of it -- so
+  // the moment a standby was armed, SPACEBAR STOPPED PAUSING and started
+  // firing cues instead. James: "spacebar also does not seem to pause".
+  //
+  // Two verbs, two jobs. Spacebar and TOGGLE take the second one.
+  // True when this GO is the second half of an accidental double press on the
+  // same deck. Every GO path -- key, button, clicker, phone, OSC, MIDI --
+  // comes through goTransport, so it is guarded once, here.
+  bool goGuarded(int deckIndex) {
+    if (project_.goGuardMs <= 0 || deckIndex < 0) return false;
+    if (static_cast<int>(lastGoMsByDeck_.size()) <= deckIndex) lastGoMsByDeck_.resize(static_cast<std::size_t>(deckIndex) + 1, 0);
+    const Uint64 now = SDL_GetTicks();
+    Uint64& last = lastGoMsByDeck_[static_cast<std::size_t>(deckIndex)];
+    if (last != 0 && now - last < static_cast<Uint64>(project_.goGuardMs)) {
+      return true;   // the caller says so, once (failRemoteCommand toasts too)
+    }
+    last = now;
+    return false;
+  }
+
+  void goTransport() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (goGuarded(deckIndex)) {
+      failRemoteCommand("GO ignored: pressed again within " + std::to_string(project_.goGuardMs) +
+                        " ms (double-GO guard)");
+      return;
+    }
+    const int standby = standbyIndexFor(deckIndex);
+    if (standby >= 0) {
+      selectCueInDeck(deckIndex, standby, false, false);
+      takeSelected(true);
+      advanceStandby(deckIndex);
+      return;
+    }
+    if (!activeCuePtr() && selectedCuePtr()) {
+      takeSelected(true);
+      return;
+    }
+    // Nothing standing by and something already live: GO means play.
+    toggleTransport();
+  }
+
+  void toggleTransport() {
+    MediaEngine* engine = focusedMediaEngine();
+    DeckRuntime* runtime = focusedRuntime();
+    const Cue* activeCue = activeCuePtr();
+    if (!activeCue && selectedCuePtr()) {
+      takeSelected(true);
+      return;
+    }
+    if (!activeCue || !engine || !runtime) {
+      return;
+    }
+    if (activeCue->kind == CueKind::Browser) {
+      if (runtime->browserCueLive) {
+        pauseTransport();
+      } else if (!runtime->browserRenderer || !runtime->browserRenderer->isRunning()) {
+        // Only (re)start if not already loading — don't interrupt initialization.
+        playTransport();
+      }
+      return;
+    }
+    engine->toggle();
+    triggerToast(engine->state() == TransportState::Playing ? "playing" : "paused");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void clearOutput() {
+    finishClearOutput();
+    triggerToast("cleared: all decks stopped, outputs off");
+    playUiSound(UiSoundEffect::Clear);
+  }
+
+  void finishClearOutput() {
+    runPanicOutputsOff(false, 0, false);
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      Deck& deck = project_.decks[deckIndex];
+      deck.overlayActiveIndices.clear();
+      syncPipOverlayRuntimesForDeck(deckIndex, SDL_GetTicks());
+      deck.activeIndex = -1;
+      if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) engine->clear();
+    }
+    // All sources have gone; the next deliberately armed cue can start normally.
+    masterDimmerTarget_ = 1.0;
+    project_.masterDimmer = 1.0;
+    notifyTallyStateChange();
+    markProjectDirty();
+  }
+
+  void rerackTransport() {
+    showLog("RERACK", showLogCueRef(project_.focusedDeckIndex, focusedDeck().activeIndex));
+    MediaEngine* engine = focusedMediaEngine();
+    if (!engine) return;
+    engine->seek(0.0);
+    engine->pause();
+    triggerToast("reracked - holding first frame");
+    playUiSound(UiSoundEffect::Stop);
+  }
+
+  bool activateOverlayCueIndex(Deck& deck, int deckIndex, int cueIndex) {
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return false;
+    }
+    const Cue& overlayCue = deck.cues[cueIndex];
+    if (!cueIsOverlayOnly(overlayCue)) {
+      return false;
+    }
+    auto& liveOverlays = deck.overlayActiveIndices;
+    liveOverlays.erase(
+      std::remove_if(liveOverlays.begin(), liveOverlays.end(),
+                     [&](int liveIndex) {
+                       if (liveIndex < 0 || liveIndex >= static_cast<int>(deck.cues.size())) {
+                         return true;
+                       }
+                       return deck.cues[liveIndex].kind == overlayCue.kind || liveIndex == cueIndex;
+                     }),
+      liveOverlays.end());
+    if (liveOverlays.size() >= 4) {
+      liveOverlays.erase(liveOverlays.begin());
+    }
+    liveOverlays.push_back(cueIndex);
+    // STAMPED AS IT GOES UP, so the renderer can ask how far through its
+    // arrival it is. Any earlier departure for this slot is forgotten --
+    // re-firing a lower third on its way out brings it back rather than
+    // leaving it half gone.
+    overlayShownAtMs_[std::make_pair(deckIndex, cueIndex)] = SDL_GetTicks();
+    overlayLeavingAtMs_.erase(std::make_pair(deckIndex, cueIndex));
+    return true;
+  }
+
+  void activateAttachedOverlaysForCue(Deck& deck, int deckIndex, const Cue& cue) {
+    auto activateAttachedOverlay = [&](CueKind overlayKind, const std::string& token) {
+      std::string trimmedToken = trim(token);
+      if (trimmedToken.empty()) {
+        return;
+      }
+      auto overlayIndex = cueIndexByTokenInOverlayRole(deck, trimmedToken, true);
+      if (!overlayIndex || *overlayIndex < 0 || *overlayIndex >= static_cast<int>(deck.cues.size())) {
+        return;
+      }
+      if (deck.cues[*overlayIndex].kind != overlayKind) {
+        return;
+      }
+      activateOverlayCueIndex(deck, deckIndex, *overlayIndex);
+    };
+
+    activateAttachedOverlay(CueKind::LowerThird, cue.attachedLowerThirdCue);
+    activateAttachedOverlay(CueKind::Pip, cue.attachedPipCue);
+    syncPipOverlayRuntimesForDeck(deckIndex, SDL_GetTicks());
+  }
+
+  // Fresh disk check at take/advance time. Updates the cue's missing flag and
+  // the toolbar RELINK count in BOTH directions: a re-mounted drive clears the
+  // badge on the next take, a vanished one raises it without waiting for a
+  // project reload. Non-file cues (patterns, browsers, streams) always pass.
+  bool cueMediaAvailableForTake(Cue& cue) {
+    if (!cueUsesFilesystemMedia(cue)) {
+      return true;
+    }
+    auto resolved = resolveCueFilesystemPath(cue, currentProjectFile_);
+    if (!resolved || resolved->empty()) {
+      return true;  // nothing checkable (URI etc.) — let the engine try
+    }
+    std::error_code ec;
+    bool available = fs::exists(*resolved, ec);
+    if (cue.mediaMissing == available) {
+      cue.mediaMissing = !available;
+      missingMediaCount_ = std::max(0, missingMediaCount_ + (available ? -1 : 1));
+    }
+    return available;
+  }
+
+  // Scroll the focused deck's playlist so a cue is centred (or, when
+  // onlyIfOffscreen, only if it isn't already fully visible). Coordinates
+  // mirror the render loop: each primary row is (kRowHeight + 8) tall and the
+  // visible height is the list clip rect inset by 8 on each side.
+  void scrollDeckToCueIndex(int deckIndex, int cueIndex, bool onlyIfOffscreen) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) return;
+    if (deckIndex >= static_cast<int>(deckScrolls_.size())) return;
+    const Deck& deck = project_.decks[deckIndex];
+    auto primary = cueIndicesForOverlayRole(deck, false);
+    int pos = -1;
+    for (int i = 0; i < static_cast<int>(primary.size()); ++i) {
+      if (primary[i] == cueIndex) { pos = i; break; }
+    }
+    if (pos < 0) return;
+    int clipH = (deckIndex < static_cast<int>(deckListClipRects_.size()))
+      ? std::max(0, deckListClipRects_[deckIndex].h - 16) : 0;
+    if (clipH <= 0) return;  // list not laid out yet
+    int cueY = pos * (kRowHeight + 8);
+    int cur = deckScrolls_[deckIndex];
+    if (onlyIfOffscreen) {
+      int top = cueY - cur;
+      if (top >= 0 && top + kRowHeight <= clipH) return;  // already fully visible
+    }
+    int scrollMax = (deckIndex < static_cast<int>(deckScrollMax_.size())) ? deckScrollMax_[deckIndex] : 0;
+    deckScrolls_[deckIndex] = std::clamp(cueY - (clipH - kRowHeight) / 2, 0, scrollMax);
+  }
+
+  // Snap the playlist to the live cue (or the selection if nothing is live) and
+  // select it — the "where's the show right now?" action for long playlists.
+  void jumpToCurrentCue() {
+    int deckIndex = std::clamp(project_.focusedDeckIndex, 0,
+                               std::max(0, static_cast<int>(project_.decks.size()) - 1));
+    Deck& deck = focusedDeckMutable();
+    int target = deck.activeIndex >= 0 ? deck.activeIndex : deck.selectedIndex;
+    if (target < 0 || target >= static_cast<int>(deck.cues.size())) {
+      triggerToast("no cue to jump to");
+      return;
+    }
+    bool wasLive = deck.activeIndex >= 0;
+    if (deck.selectedIndex != target) {
+      selectOnlyCue(deck, target);
+      onSelectionChanged();
+    }
+    scrollDeckToCueIndex(deckIndex, target, false);
+    triggerToast(wasLive ? "jumped to live cue" : "jumped to selected cue");
+  }
+
+  // Auto-follow: when the focused deck's live cue changes (take, auto-advance,
+  // shuffle), reveal it — but only if it scrolled out of view, so the list
+  // never yanks while the operator is looking right at it.
+  void followLiveCueIfChanged() {
+    int deckIndex = std::clamp(project_.focusedDeckIndex, 0,
+                               std::max(0, static_cast<int>(project_.decks.size()) - 1));
+    if (deckIndex >= static_cast<int>(deckFollowedActive_.size())) {
+      deckFollowedActive_.resize(deckIndex + 1, -1);
+    }
+    int active = project_.decks[deckIndex].activeIndex;
+    if (active != deckFollowedActive_[deckIndex]) {
+      deckFollowedActive_[deckIndex] = active;
+      if (active >= 0) {
+        scrollDeckToCueIndex(deckIndex, active, /*onlyIfOffscreen=*/true);
+      }
+    }
+  }
+
+  // The next cue in the running order, by the same rules a manual skip uses --
+  // goto targets, shuffle, and walking past cues whose media has vanished.
+  int continueTargetIndex(Deck& deck, const Cue& from) {
+    return resolveAutoAdvanceIndex(deck, from, true);
+  }
+
+  // Arm the continue that counts from a cue STARTING. Does nothing unless the
+  // cue asked for AutoContinue, so a show with no continues behaves exactly as
+  // it always has.
+  void scheduleContinueAfterStart(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    const Cue cue = deck.cues[cueIndex];   // copied: resolve may reorder nothing,
+                                           // but the reference outliving a take
+                                           // is not worth risking
+    if (cue.continueMode != CueContinueMode::AutoContinue) {
+      return;
+    }
+    const int next = continueTargetIndex(deck, cue);
+    if (next < 0 || next == cueIndex) {
+      return;                            // nowhere to go, or it would re-fire itself
+    }
+    schedulePendingTake(deckIndex, next, cue.postWaitSeconds,
+                        cue.transitionToNext, "continue");
+  }
+
+  // Nudge a wait on the selected cue. Clamped at zero: a negative pre-wait
+  // would ask for a cue to start before its own GO.
+  void nudgeSelectedWait(bool preWait, double delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      triggerToast("select a cue first");
+      return;
+    }
+    double& field = preWait ? cue->preWaitSeconds : cue->postWaitSeconds;
+    field = std::max(0.0, field + delta);
+    markProjectDirty();
+    triggerToast(std::string(preWait ? "pre-wait " : "post-wait ") +
+                 formatSeconds(field));
+  }
+
+  void cycleSelectedContinueMode() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      triggerToast("select a cue first");
+      return;
+    }
+    switch (cue->continueMode) {
+      case CueContinueMode::DoNotContinue:
+        cue->continueMode = CueContinueMode::AutoContinue; break;
+      case CueContinueMode::AutoContinue:
+        cue->continueMode = CueContinueMode::AutoFollow; break;
+      case CueContinueMode::AutoFollow:
+      default:
+        cue->continueMode = CueContinueMode::DoNotContinue; break;
+    }
+    markProjectDirty();
+    triggerToast(std::string("continue: ") + cueContinueModeToken(cue->continueMode));
+  }
+
+  // ── THE SEQUENCING SPINE'S ONE PIECE OF RUNTIME STATE ──────────────────
+  //
+  // A cue that has been fired but has not started yet: a pre-wait counting
+  // down, or a continue waiting on its post-wait. One per deck, because a deck
+  // can only be about to play one thing.
+  //
+  // NOT saved. A show reopened must never come back mid-countdown with a cue
+  // about to fire on its own -- the operator did not press anything.
+  //
+  // Declared here rather than beside the other members because this file is
+  // included into the class body ABOVE them, and the type has to exist before
+  // the functions below name it.
+  struct PendingTake {
+    bool armed = false;
+    int cueIndex = -1;         // where the cue was when it was asked for
+    // WHICH cue was asked for. The row number alone is not enough: Undo puts
+    // back a whole cue list without re-mapping it, and a cue restored above
+    // the waiting one moved it down a row -- so a pre-wait asked for blue and
+    // the timer fired green, the cue now sitting in blue's old row.
+    std::string cueId;
+    double dueAtSeconds = 0.0;
+    bool useTransition = true;
+    std::string reason;        // "pre-wait" / "continue", for the toast
+  };
+
+  // ── PENDING TAKES: pre-waits and continues ────────────────────────────
+  //
+  // Everything in the sequencing spine that does not happen immediately goes
+  // through here. A cue with a pre-wait is fired, then waits. A cue with a
+  // continue schedules the NEXT one. Both are "a deck is about to take
+  // something", which is one fact per deck.
+  //
+  // ANY MANUAL ACTION ON A DECK CANCELS ITS PENDING TAKE. An operator who hits
+  // STOP has decided; a cue that fires two seconds later because a countdown
+  // nobody could see was still running is the exact failure that makes people
+  // distrust an auto-follow.
+  double nowSeconds() const {
+    return static_cast<double>(SDL_GetTicks()) / 1000.0;
+  }
+
+  PendingTake& pendingTakeFor(int deckIndex) {
+    if (static_cast<int>(deckPendingTakes_.size()) <= deckIndex) {
+      deckPendingTakes_.resize(deckIndex + 1);
+    }
+    return deckPendingTakes_[deckIndex];
+  }
+
+  void cancelPendingTake(int deckIndex, const char* why = nullptr) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckPendingTakes_.size())) {
+      return;
+    }
+    PendingTake& p = deckPendingTakes_[deckIndex];
+    if (!p.armed) {
+      return;
+    }
+    p = PendingTake {};
+    if (why) {
+      triggerToast(std::string("cancelled: ") + why);
+    }
+  }
+
+  void cancelAllPendingTakes() {
+    for (auto& p : deckPendingTakes_) {
+      p = PendingTake {};
+    }
+  }
+
+  void schedulePendingTake(int deckIndex, int cueIndex, double delaySeconds,
+                           bool useTransition, const char* reason) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(project_.decks[deckIndex].cues.size())) {
+      return;
+    }
+    PendingTake& p = pendingTakeFor(deckIndex);
+    p.armed = true;
+    p.cueIndex = cueIndex;
+    p.cueId = project_.decks[deckIndex].cues[cueIndex].id;
+    p.dueAtSeconds = nowSeconds() + std::max(0.0, delaySeconds);
+    p.useTransition = useTransition;
+    p.reason = reason ? reason : "";
+  }
+
+  // How long until a deck's pending take fires, or -1 when nothing is pending.
+  // The UI wants this for a countdown; the remote wants it to report.
+  double pendingTakeRemaining(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckPendingTakes_.size())) {
+      return -1.0;
+    }
+    const PendingTake& p = deckPendingTakes_[deckIndex];
+    return p.armed ? std::max(0.0, p.dueAtSeconds - nowSeconds()) : -1.0;
+  }
+
+  void servicePendingTakes() {
+    const double now = nowSeconds();
+    for (int deckIndex = 0; deckIndex < static_cast<int>(deckPendingTakes_.size()); ++deckIndex) {
+      PendingTake& p = deckPendingTakes_[deckIndex];
+      if (!p.armed || now < p.dueAtSeconds) {
+        continue;
+      }
+      if (deckIndex >= static_cast<int>(project_.decks.size())) {
+        p = PendingTake {};
+        continue;
+      }
+      // Find the cue it was asked for by identity, wherever it is now. If
+      // it has gone, nothing fires: never the neighbour that took its row.
+      const int cueIndex = p.cueId.empty() ? p.cueIndex
+                                           : findCueIndexById(deckIndex, p.cueId);
+      const bool useTransition = p.useTransition;
+      // Disarm BEFORE taking: takeSelected can schedule the next continue, and
+      // an armed slot underneath it would be overwritten or, worse, re-fire.
+      p = PendingTake {};
+      Deck& deck = project_.decks[deckIndex];
+      if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+        triggerToast("cancelled: the waiting cue is no longer in the playlist",
+                     ToastKind::Warning, kToastReadableMs);
+        continue;
+      }
+      const int savedFocus = project_.focusedDeckIndex;
+      project_.focusedDeckIndex = deckIndex;
+      selectCueInDeck(deckIndex, cueIndex, false, false);
+      // honourPreWait=false: the wait has already been served.
+      takeSelected(true, useTransition, false, false);
+      project_.focusedDeckIndex = savedFocus;
+    }
+  }
+
+  // ── MASTER CUES ───────────────────────────────────────────────────────
+  //
+  // A master cue is an Analog Way LiveCore MASTER MEMORY: it recalls one cue on
+  // each of several decks at once. It carries no media and is never taken on
+  // its own deck's engine -- firing it means taking OTHER decks.
+  //
+  // It stores assignments and nothing else. Whether a master "is live" is
+  // DERIVED by asking the decks it names, never remembered here: two sources of
+  // truth drift the first time somebody takes a cue on a target deck by hand,
+  // and then nothing can say which is right.
+  int findCueIndexById(int deckIndex, const std::string& cueId) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return -1;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    for (int i = 0; i < static_cast<int>(deck.cues.size()); ++i) {
+      if (deck.cues[i].id == cueId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Is every deck this master names currently holding the cue it assigned?
+  // Asked at render time; nothing caches it.
+  bool masterCueIsLive(const Cue& master) const {
+    bool any = false;
+    for (const auto& a : master.masterAssignments) {
+      if (a.bypassed) {
+        continue;
+      }
+      const int idx = findCueIndexById(a.deckIndex, a.cueId);
+      if (idx < 0) {
+        return false;                       // dangling: cannot be live
+      }
+      if (project_.decks[a.deckIndex].activeIndex != idx) {
+        return false;
+      }
+      any = true;
+    }
+    return any;
+  }
+
+  // Which cue of `targetDeck` this master currently assigns, or -1 for none.
+  int masterAssignedIndex(const Cue& master, int targetDeck) const {
+    for (const auto& a : master.masterAssignments) {
+      if (a.deckIndex == targetDeck) {
+        return findCueIndexById(targetDeck, a.cueId);
+      }
+    }
+    return -1;
+  }
+
+  // Does this master name that deck at all? Distinct from whether the cue it
+  // names still exists -- "none" and "UNRESOLVED" are different problems and
+  // the operator has to be able to tell them apart.
+  bool hasMasterAssignmentFor(const Cue& master, int targetDeck) const {
+    for (const auto& a : master.masterAssignments) {
+      if (a.deckIndex == targetDeck) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool masterAssignmentBypassed(const Cue& master, int targetDeck) const {
+    for (const auto& a : master.masterAssignments) {
+      if (a.deckIndex == targetDeck) {
+        return a.bypassed;
+      }
+    }
+    return false;
+  }
+
+  // Step which cue of a deck this master assigns. Walking off either end
+  // CLEARS the assignment rather than wrapping: "this master does not touch
+  // deck 3" has to be reachable with the same control that set it, or the only
+  // way to undo an assignment is to know a remote verb exists.
+  void stepMasterAssignment(int targetDeck, int delta) {
+    Cue* master = selectedCueMutable();
+    if (!master || master->kind != CueKind::Master) {
+      return;
+    }
+    if (targetDeck < 0 || targetDeck >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& target = project_.decks[targetDeck];
+    if (target.cues.empty()) {
+      triggerToast("deck " + std::to_string(targetDeck + 1) + " has no cues");
+      return;
+    }
+    const int current = masterAssignedIndex(*master, targetDeck);
+    const int next = current + delta;      // -1 + 1 == 0, so "none" steps to the first
+    if (next < 0 || next >= static_cast<int>(target.cues.size())) {
+      clearMasterAssignment(targetDeck);
+      return;
+    }
+    const std::string id = target.cues[next].id;
+    for (auto& a : master->masterAssignments) {
+      if (a.deckIndex == targetDeck) {
+        a.cueId = id;
+        markProjectDirty();
+        return;
+      }
+    }
+    MasterAssignment added;
+    added.deckIndex = targetDeck;
+    added.cueId = id;
+    master->masterAssignments.push_back(added);
+    markProjectDirty();
+  }
+
+  void clearMasterAssignment(int targetDeck) {
+    Cue* master = selectedCueMutable();
+    if (!master || master->kind != CueKind::Master) {
+      return;
+    }
+    auto& list = master->masterAssignments;
+    list.erase(std::remove_if(list.begin(), list.end(),
+                              [&](const MasterAssignment& a) {
+                                return a.deckIndex == targetDeck;
+                              }),
+               list.end());
+    markProjectDirty();
+  }
+
+  void toggleMasterBypass(int targetDeck) {
+    Cue* master = selectedCueMutable();
+    if (!master || master->kind != CueKind::Master) {
+      return;
+    }
+    for (auto& a : master->masterAssignments) {
+      if (a.deckIndex == targetDeck) {
+        a.bypassed = !a.bypassed;
+        markProjectDirty();
+        triggerToast("deck " + std::to_string(targetDeck + 1) +
+                     (a.bypassed ? ": bypassed" : ": active"));
+        return;
+      }
+    }
+    triggerToast("deck " + std::to_string(targetDeck + 1) + " is not assigned");
+  }
+
+  // A tracker column fires unless it is muted, or another column is soloed.
+  bool trackerColumnLive(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= 32) return true;
+    const std::uint32_t bit = 1u << deckIndex;
+    if (project_.trackerSoloDecks != 0u) return (project_.trackerSoloDecks & bit) != 0u;
+    return (project_.trackerMutedDecks & bit) == 0u;
+  }
+
+  // S / F / V / O from a tracker cell, on the whole deck. The fade rides the
+  // fade engine the FADE cue uses, so it shows up and stops like one.
+  void fireTrackerDeckAction(int deckIndex, char action, int value) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) return;
+    if (action == 'S') {
+      cancelFadesForDeck(deckIndex);
+      finishFadeStop(deckIndex);
+      return;
+    }
+    if (action == 'V' || action == 'O') {
+      const CueFadeWhat what = action == 'V' ? CueFadeWhat::DeckVolume : CueFadeWhat::DeckOpacity;
+      cancelFadesFor(deckIndex, what);
+      applyFadeValue(deckIndex, what, std::clamp(value, 0, 100) / 100.0);
+      return;
+    }
+    if (action == 'F') {
+      // Picture and sound out together over `value` tenths of a second, the
+      // deck stopped, and both put back for whatever it plays next.
+      const double seconds = std::max(0, value) / 10.0;
+      // Opacity first: the fades are walked backwards, so the volume run
+      // (added second) lands and restores BEFORE the opacity run stops the
+      // deck -- stopping cancels whatever is still fading on it.
+      for (const CueFadeWhat what : {CueFadeWhat::DeckOpacity, CueFadeWhat::DeckVolume}) {
+        cancelFadesFor(deckIndex, what);
+        FadeRun run;
+        run.deckIndex = deckIndex;
+        run.what = what;
+        run.from = currentFadeValue(deckIndex, what);
+        run.to = 0.0;
+        run.durationSeconds = seconds;
+        run.startMs = SDL_GetTicks();
+        run.stopWhenDone = what == CueFadeWhat::DeckOpacity;
+        run.restoreAtEnd = true;
+        run.label = "tracker fade";
+        if (seconds <= 0.0) {
+          applyFadeValue(deckIndex, what, 0.0);
+          if (run.stopWhenDone) finishFadeStop(deckIndex);
+          applyFadeValue(deckIndex, what, run.from);
+        } else {
+          fadeRuns_.push_back(run);
+        }
+      }
+    }
+  }
+
+  void fireMasterCue(int masterDeckIndex, int masterCueIndex) {
+    // A tracker step or a master cue in a playlist; both are the same thing
+    // to fire. Only the playlist one has a deck whose pointer moves.
+    const Cue* masterCue = masterTrackerCue(masterDeckIndex, masterCueIndex);
+    if (!masterCue) {
+      return;
+    }
+    const bool inPlaylist = masterDeckIndex != kTrackerStepsDeck;
+    // Copied, not referenced: taking on the target decks can reallocate any
+    // deck's cue vector, and a reference into it would dangle mid-loop.
+    const std::vector<MasterAssignment> plan = masterCue->masterAssignments;
+    const std::string masterName = masterCue->name;
+    const std::string masterId = masterCue->id;
+
+    const int savedFocus = project_.focusedDeckIndex;
+    int fired = 0;
+    int dangling = 0;
+    for (const auto& a : plan) {
+      if (a.bypassed) {
+        continue;
+      }
+      if (a.deckIndex == masterDeckIndex) {
+        continue;                           // a master deck does not fire itself
+      }
+      if (!trackerColumnLive(a.deckIndex)) {
+        continue;                           // muted, or another column is soloed
+      }
+      if (a.action != 'G') {
+        // The tracker's other actions act on the DECK, not on a cue.
+        fireTrackerDeckAction(a.deckIndex, a.action, a.value);
+        ++fired;
+        continue;
+      }
+      const int idx = findCueIndexById(a.deckIndex, a.cueId);
+      if (idx < 0) {
+        ++dangling;                         // deleted or reordered away
+        continue;
+      }
+      // A master may not fire another master. Nesting is not the model here,
+      // and without this a pair of masters pointing at each other recurses
+      // until the stack gives out.
+      if (project_.decks[a.deckIndex].cues[idx].kind == CueKind::Master) {
+        ++dangling;
+        continue;
+      }
+      // takeSelected acts on the FOCUSED deck, which is how every take in the
+      // app reaches its guards -- media checks, the motion driver, the
+      // feedback-loop reset. Borrowing focus per assignment runs the real take
+      // path rather than a parallel one that would drift from it.
+      project_.focusedDeckIndex = a.deckIndex;
+      selectCueInDeck(a.deckIndex, idx, false, false);
+      takeSelected(true);
+      ++fired;
+    }
+    project_.focusedDeckIndex = savedFocus;
+
+    // The master deck's own pointer, so the list shows which master was last
+    // fired. This is the master deck's state, not a copy of the targets'.
+    if (inPlaylist) {
+      project_.decks[masterDeckIndex].activeIndex = masterCueIndex;
+    }
+    // And the tracker's playhead, however this master was fired -- the
+    // tracker, its playlist, a dashboard tile, Companion. By id, so a step
+    // moved or inserted above it does not move the playhead with it.
+    trackerPlayheadDeck_ = masterDeckIndex;
+    trackerPlayheadCueId_ = masterId;
+    trackerCurrentStepId_ = masterId;
+
+    std::string msg = "master: " + masterName + " — " + std::to_string(fired) +
+                      (fired == 1 ? " deck" : " decks");
+    if (dangling > 0) {
+      msg += ", " + std::to_string(dangling) + " unresolved";
+    }
+    triggerToast(msg);
+    if (dangling > 0) {
+      playUiSound(UiSoundEffect::Error);
+    }
+    markProjectDirty();
+  }
+
+  // -- THE TRACKER'S TRANSPORT ---------------------------------------------
+  //
+  // A sequence of master cues, played. The steps are the tracker's rows, and
+  // a step's LENGTH is the sequencing spine every cue already carries:
+  // AUTO-CONTINUE with a post-wait is "hold this long, then the next step",
+  // AUTO-FOLLOW is "when the cues it fired have ended", and no continue is
+  // "wait for GO". So a step means the same thing in the tracker as it does
+  // fired from its own playlist, and nothing new is saved to say it.
+  //
+  // The tracker keeps its OWN clock rather than borrowing the deck's
+  // continue, because a sequence crosses playlists when masters live on more
+  // than one, and because STOP and LOOP belong to the sequence, not to a deck.
+  //
+  // GO and BACK step by hand and leave PLAY as it was; a slide clicker is
+  // GO and BACK. PLAY resumes from wherever the sequence is standing.
+
+  int trackerPlayheadRow() const {
+    if (trackerPlayheadDeck_ < 0 || trackerPlayheadCueId_.empty()) {
+      return -1;
+    }
+    const auto rows = masterTrackerRows();
+    for (int r = 0; r < static_cast<int>(rows.size()); ++r) {
+      const Cue* master = masterTrackerCue(rows[r].first, rows[r].second);
+      if (rows[r].first == trackerPlayheadDeck_ && master &&
+          master->id == trackerPlayheadCueId_) {
+        return r;
+      }
+    }
+    return -1;
+  }
+
+  // Whether a cue has an end a step can wait for. A loop, a live source or a
+  // still with no duration does not, and a "when its cues end" step ignores
+  // it rather than holding forever.
+  static bool trackerCueHasEnd(const Cue& cue) {
+    // What it WILL do: an explicit Loop end action with the flag off still
+    // loops, and a step waiting on it would wait for ever.
+    if (cueLoopsAtEnd(cue)) {
+      return false;
+    }
+    return cue.duration > 0.0 || cue.stillDurationSeconds > 0.0;
+  }
+
+  // -- "WHEN ITS CUES END" -------------------------------------------------
+  //
+  // A step set to follow its cues waits on the cues it actually fired, not
+  // on a clock. Predicting the end from the media's length was wrong as soon
+  // as anything else happened: a cue at half speed was cut off halfway, a
+  // paused one was cut off while it was paused. Watching the decks gets
+  // speed, live speed changes, pauses, trims and pre-waits right without
+  // knowing about any of them.
+  //
+  // A watched cue has ended when, having been seen live, it played to its
+  // end (held or stopped there), was stopped, or is no longer the deck's
+  // cue. One that never went live -- missing media, a take refused -- is
+  // let go after a moment, unless a pre-wait is still counting down for it.
+  struct TrackerWatch {
+    int deckIndex = -1;
+    std::string cueId;
+    bool seenLive = false;
+    double sinceSeconds = 0.0;   // when it was fired, or last seen pending
+  };
+
+  // The cues a "when its cues end" step waits for: the same ones
+  // fireMasterCue takes, less those with no end.
+  std::vector<TrackerWatch> trackerWatchesForRow(int row) const {
+    std::vector<TrackerWatch> out;
+    const auto rows = masterTrackerRows();
+    if (row < 0 || row >= static_cast<int>(rows.size())) {
+      return out;
+    }
+    const int masterDeck = rows[row].first;
+    const Cue* master = masterTrackerCue(masterDeck, rows[row].second);
+    if (!master) {
+      return out;
+    }
+    for (const MasterAssignment& a : master->masterAssignments) {
+      if (a.bypassed || a.action != 'G' || a.deckIndex == masterDeck ||
+          !trackerColumnLive(a.deckIndex)) {
+        continue;
+      }
+      const int idx = findCueIndexById(a.deckIndex, a.cueId);
+      if (idx < 0) {
+        continue;
+      }
+      const Cue& cue = project_.decks[a.deckIndex].cues[idx];
+      if (cue.kind == CueKind::Master || !trackerCueHasEnd(cue)) {
+        continue;
+      }
+      TrackerWatch w;
+      w.deckIndex = a.deckIndex;
+      w.cueId = a.cueId;
+      w.sinceSeconds = nowSeconds();
+      out.push_back(w);
+    }
+    return out;
+  }
+
+  bool trackerWatchEnded(TrackerWatch& w) const {
+    const double now = nowSeconds();
+    if (w.deckIndex >= 0 && w.deckIndex < static_cast<int>(deckPendingTakes_.size()) &&
+        deckPendingTakes_[w.deckIndex].armed) {
+      w.sinceSeconds = now;      // a pre-wait still counting down
+      return false;
+    }
+    const MediaEngine* engine = mediaEngineForDeck(w.deckIndex);
+    const Cue* live = engine ? engine->activeCue() : nullptr;
+    const bool isOurs = live && live->id == w.cueId;
+    if (isOurs && engine->state() != TransportState::Stopped && !engine->playedToEnd()) {
+      w.seenLive = true;
+      return false;              // playing, or paused part-way
+    }
+    if (w.seenLive || (isOurs && engine->playedToEnd())) {
+      return true;
+    }
+    // Never seen live: give a slow start a moment before letting it go.
+    constexpr double kNeverStartedSeconds = 1.5;
+    return now - w.sinceSeconds >= kNeverStartedSeconds;
+  }
+
+  // Start the post-wait once every watched cue has ended.
+  void serviceTrackerWatches() {
+    if (!trackerWaitingForEnd_) {
+      return;
+    }
+    bool allEnded = true;
+    for (TrackerWatch& w : trackerWatches_) {
+      if (!trackerWatchEnded(w)) {
+        allEnded = false;      // keep going: every watch updates its state
+      }
+    }
+    if (!allEnded) {
+      return;
+    }
+    const double post = trackerWaitPostSeconds_;
+    trackerWaitingForEnd_ = false;
+    trackerWatches_.clear();
+    trackerArmCountdown(post);
+  }
+
+  void trackerArmCountdown(double seconds) {
+    trackerNextDueSeconds_ = nowSeconds() + seconds;
+    trackerCountdownSpan_ = seconds;
+  }
+
+  void trackerClearCountdown() {
+    trackerNextDueSeconds_ = -1.0;
+    trackerCountdownSpan_ = -1.0;
+    trackerWaitingForEnd_ = false;
+    trackerWatches_.clear();
+  }
+
+  // Start a step's clock when the sequence is playing. False when the step
+  // waits for GO (or follows cues of which none has an end).
+  bool trackerArmStep(int row) {
+    trackerClearCountdown();
+    const auto rows = masterTrackerRows();
+    const Cue* master = row >= 0 && row < static_cast<int>(rows.size())
+      ? masterTrackerCue(rows[row].first, rows[row].second) : nullptr;
+    if (master && master->continueMode == CueContinueMode::AutoFollow) {
+      trackerWatches_ = trackerWatchesForRow(row);
+      if (trackerWatches_.empty()) {
+        // Nothing it fires has an end -- a loop, a camera -- so there is no
+        // "when they end" to wait for. Holding is the honest answer.
+        return false;
+      }
+      trackerWaitingForEnd_ = true;
+      trackerWaitPostSeconds_ = std::max(0.0, master->postWaitSeconds);
+      return true;
+    }
+    const double hold = trackerStepSeconds(row);
+    if (hold < 0.0) {
+      return false;
+    }
+    trackerArmCountdown(hold);
+    return true;
+  }
+
+  // How long a fixed-length step holds before PLAY moves on, or -1 for "wait
+  // for GO". A "when its cues end" step has no length: see trackerArmStep.
+  double trackerStepSeconds(int row) const {
+    const auto rows = masterTrackerRows();
+    if (row < 0 || row >= static_cast<int>(rows.size())) {
+      return -1.0;
+    }
+    const Cue* master = masterTrackerCue(rows[row].first, rows[row].second);
+    if (!master) {
+      return -1.0;
+    }
+    switch (master->continueMode) {
+      case CueContinueMode::AutoContinue:
+        return std::max(0.0, master->postWaitSeconds);
+      case CueContinueMode::AutoFollow:
+      case CueContinueMode::DoNotContinue:
+        break;
+    }
+    return -1.0;
+  }
+
+  // Short enough for a narrow cell: 4s, 0.5s, 1:30.
+  static std::string trackerSecondsLabel(double seconds) {
+    char out[32];
+    if (seconds >= 60.0) {
+      const int whole = static_cast<int>(std::lround(seconds));
+      std::snprintf(out, sizeof(out), "%d:%02d", whole / 60, whole % 60);
+    } else if (std::abs(seconds - std::round(seconds)) < 0.05) {
+      std::snprintf(out, sizeof(out), "%ds", static_cast<int>(std::lround(seconds)));
+    } else {
+      std::snprintf(out, sizeof(out), "%.1fs", seconds);
+    }
+    return out;
+  }
+
+  // What the LEN cell says: GO, a time, or END for "when the cues end".
+  std::string trackerStepLengthLabel(int row) const {
+    const auto rows = masterTrackerRows();
+    if (row < 0 || row >= static_cast<int>(rows.size())) {
+      return std::string();
+    }
+    const Cue* master = masterTrackerCue(rows[row].first, rows[row].second);
+    if (!master) {
+      return std::string();
+    }
+    if (master->continueMode == CueContinueMode::AutoFollow) {
+      return master->postWaitSeconds > 0.0
+        ? "END+" + trackerSecondsLabel(master->postWaitSeconds) : std::string("END");
+    }
+    if (master->continueMode == CueContinueMode::AutoContinue) {
+      return trackerSecondsLabel(master->postWaitSeconds);
+    }
+    return std::string("GO");
+  }
+
+  // Fire one step. When the sequence is playing, arm the clock for the next.
+  void fireTrackerRow(int row) {
+    const auto rows = masterTrackerRows();
+    if (row < 0 || row >= static_cast<int>(rows.size())) {
+      return;
+    }
+    const int masterDeck = rows[row].first;
+    // A continue armed on the master deck by an earlier GO from its playlist
+    // would fire a step of its own on top of the tracker's clock.
+    if (masterDeck != kTrackerStepsDeck) {
+      cancelPendingTake(masterDeck);
+    }
+    fireMasterCue(masterDeck, rows[row].second);
+    trackerSquishRow_ = row;
+    trackerSquishAtMs_ = SDL_GetTicks();
+    if (!trackerPlaying_) {
+      trackerClearCountdown();
+      return;
+    }
+    if (!trackerArmStep(row)) {
+      trackerPlaying_ = false;
+      triggerToast("holding at step " + std::to_string(row + 1) + " - GO to continue");
+    }
+  }
+
+  // The step after (or before) the playhead, walking past disarmed ones --
+  // a disarmed cue does nothing at all, however it is reached. -1 when the
+  // sequence has run out and is not looping.
+  int trackerNeighbourRow(int direction) const {
+    const auto rows = masterTrackerRows();
+    const int count = static_cast<int>(rows.size());
+    if (count == 0) {
+      return -1;
+    }
+    const int from = trackerPlayheadRow();
+    // BACK before anything has fired has nowhere to go back TO -- unless the
+    // sequence loops, where the step before the first is the last.
+    if (from < 0 && direction < 0 && !project_.trackerLoop) {
+      return -1;
+    }
+    // A step with a JUMP sends GO to that row instead of the next one.
+    if (direction > 0 && from >= 0) {
+      const Cue* here = masterTrackerCue(rows[from].first, rows[from].second);
+      const int to = here ? trackerRowOfStepId(here->trackerJumpStepId) : -1;
+      if (to >= 0) {
+        const Cue* there = masterTrackerCue(rows[to].first, rows[to].second);
+        if (there && there->armed) return to;
+      }
+    }
+    int row = from < 0 ? (direction > 0 ? 0 : count - 1) : from + direction;
+    for (int walked = 0; walked < count; ++walked) {
+      if (row >= count || row < 0) {
+        if (!project_.trackerLoop) {
+          return -1;
+        }
+        row = row >= count ? 0 : count - 1;
+      }
+      const Cue* master = masterTrackerCue(rows[row].first, rows[row].second);
+      if (master && master->armed) {
+        return row;
+      }
+      row += direction;
+    }
+    return -1;
+  }
+
+  void trackerGo() {
+    const int next = trackerNeighbourRow(+1);
+    if (next < 0) {
+      trackerPlaying_ = false;
+      trackerClearCountdown();
+      triggerToast(masterTrackerRows().empty() ? "the tracker has no steps"
+                                               : "end of the sequence");
+      return;
+    }
+    fireTrackerRow(next);
+  }
+
+  void trackerBack() {
+    const int previous = trackerNeighbourRow(-1);
+    if (previous < 0) {
+      triggerToast(masterTrackerRows().empty() ? "the tracker has no steps"
+                                               : "at the first step");
+      return;
+    }
+    fireTrackerRow(previous);
+  }
+
+  // Resume the sequence from where it stands: the current step's length is
+  // counted from now, and a step that waits for GO is treated as GO.
+  void trackerPlay() {
+    if (masterTrackerRows().empty()) {
+      triggerToast("the tracker has no steps");
+      return;
+    }
+    trackerPlaying_ = true;
+    const int current = trackerPlayheadRow();
+    if (current < 0 || !trackerArmStep(current)) {
+      trackerGo();
+      return;
+    }
+    triggerToast("playing from step " + std::to_string(current + 1));
+  }
+
+  void trackerStop() {
+    const bool was = trackerPlaying_;
+    trackerPlaying_ = false;
+    trackerClearCountdown();
+    if (was) {
+      triggerToast("sequence stopped");
+    }
+  }
+
+  // Once a frame, from update().
+  void tickTracker() {
+    if (trackerPlaying_) {
+      serviceTrackerWatches();
+    }
+    if (!trackerPlaying_ || trackerNextDueSeconds_ < 0.0 ||
+        nowSeconds() < trackerNextDueSeconds_) {
+      return;
+    }
+    // The step that was playing has been deleted. "Next" from nowhere is
+    // step 1, and jumping back to the top of a show is not what anybody
+    // deleting one step meant -- so the sequence stops and says so.
+    if (trackerPlayheadRow() < 0) {
+      trackerPlaying_ = false;
+      trackerClearCountdown();
+      triggerToast("the playing step was removed - sequence stopped");
+      return;
+    }
+    const int next = trackerNeighbourRow(+1);
+    if (next < 0) {
+      trackerPlaying_ = false;
+      trackerClearCountdown();
+      triggerToast("sequence ended");
+      return;
+    }
+    fireTrackerRow(next);
+  }
+
+  // Seconds until PLAY fires the next step, or -1 when it is not counting.
+  double trackerRemainingSeconds() const {
+    if (!trackerPlaying_ || trackerNextDueSeconds_ < 0.0) {
+      return -1.0;
+    }
+    return std::max(0.0, trackerNextDueSeconds_ - nowSeconds());
+  }
+
+  // ---------------------------------------------------------------------
+  // Target cues: a cue that acts on another cue.
+  //
+  // Every verb here borrows focus and calls the ordinary operator path, for
+  // the same reason fireMasterCue does. A Target cue must not be a second way
+  // of stopping a deck -- it must be the SAME way, reached from the cue list.
+  // ---------------------------------------------------------------------------
+
+  // The deck index on a Target cue is a HINT, not the truth. Cue ids are unique
+  // across the show, so a victim that was dragged to another deck is still
+  // found rather than reported broken. The hint is only there to make the
+  // common case a two-element scan instead of a whole-show one.
+  bool resolveTargetCue(const Cue& target, int& outDeck, int& outIndex) const {
+    if (target.targetCueId.empty()) {
+      return false;
+    }
+    const int hinted = findCueIndexById(target.targetDeckIndex, target.targetCueId);
+    if (hinted >= 0) {
+      outDeck = target.targetDeckIndex;
+      outIndex = hinted;
+      return true;
+    }
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const int idx = findCueIndexById(d, target.targetCueId);
+      if (idx >= 0) {
+        outDeck = d;
+        outIndex = idx;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // A PANEL MAP IS A STATIC PATTERN, built once when the cue is taken. So a
+  // tile-size edit has to ask for the rebuild itself: without this the control
+  // moves a number in the inspector and the wall carries on showing the old
+  // grid, which is the "control that does nothing" bug in its purest form.
+  // Asks about the deck's ACTIVE cue, not the selected one: with several cues
+  // selected the edit reaches them all, and the one on air may be any of them.
+  void redrawLivePanelMap() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    const Cue& live = deck.cues[deck.activeIndex];
+    if (live.kind != CueKind::Pattern || stripPatternMotionSuffix(normalizePatternTypeId(live.path)) != "panel-map") {
+      return;
+    }
+    MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (engine && engine->hasPictureToShow()) {   // editing must not relight a STOPped deck
+      engine->rebuildPatternFrame(live, static_cast<double>(SDL_GetTicks()) / 1000.0);
+    }
+  }
+
+  // ── Fade cue edits ────────────────────────────────────────────────────
+  //
+  // Every one of these guards on the KIND. A fade control that quietly edited
+  // a video cue's fields would be invisible until the show file came back
+  // carrying a ramp nobody put there.
+  Cue* selectedFadeCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Fade) ? cue : nullptr;
+  }
+
+  void cycleFadeWhat() {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    // The original three, then the four per-cue color targets added
+    // alongside CueFadeWhat::CueHue -- same cycle shape as cycleFadeCurve
+    // just below, extended rather than replaced with a picker, so a fade
+    // cue's row still behaves like every other cycled row in this file.
+    switch (cue->fadeWhat) {
+      case CueFadeWhat::DeckOpacity:   cue->fadeWhat = CueFadeWhat::DeckVolume; break;
+      case CueFadeWhat::DeckVolume:    cue->fadeWhat = CueFadeWhat::MasterDimmer; break;
+      case CueFadeWhat::MasterDimmer:  cue->fadeWhat = CueFadeWhat::CueBrightness; break;
+      case CueFadeWhat::CueBrightness: cue->fadeWhat = CueFadeWhat::CueContrast; break;
+      case CueFadeWhat::CueContrast:   cue->fadeWhat = CueFadeWhat::CueSaturation; break;
+      case CueFadeWhat::CueSaturation: cue->fadeWhat = CueFadeWhat::CueHue; break;
+      case CueFadeWhat::CueHue:        cue->fadeWhat = CueFadeWhat::CueEffectKnob; break;
+      case CueFadeWhat::CueEffectKnob: cue->fadeWhat = CueFadeWhat::CueAudioEffectKnob; break;
+      case CueFadeWhat::CueAudioEffectKnob: cue->fadeWhat = CueFadeWhat::CueSpeed; break;
+      case CueFadeWhat::CueSpeed:      cue->fadeWhat = CueFadeWhat::DeckOpacity; break;
+    }
+    markProjectDirty();
+    triggerToast(cueFadeWhatLabel(cue->fadeWhat));
+  }
+
+  // Which effect a knob fade moves, by its place in the stack (1 = first), and
+  // which of its knobs. Kept to the numbers a stack can hold; what is there is
+  // only known when the fade fires, on whatever cue the deck is playing.
+  void stepFadeEffectSlot(int delta) {
+    Cue* cue = selectedFadeCue();
+    if (!cue) return;
+    cue->fadeEffectSlot = std::clamp(cue->fadeEffectSlot + delta, 1, cueFadeEffectSlotMax(cue->fadeWhat));
+    markProjectDirty();
+  }
+  void cycleFadeEffectKnob() {
+    Cue* cue = selectedFadeCue();
+    if (!cue) return;
+    cue->fadeEffectKnob = (std::clamp(cue->fadeEffectKnob, 0, 4) + 1) % 5;
+    markProjectDirty();
+    triggerToast(std::string("knob ") + cueFadeKnobName(cue->fadeEffectKnob));
+  }
+
+  void cycleFadeCurve() {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    cue->fadeCurve = cue->fadeCurve == CueFadeCurve::Linear  ? CueFadeCurve::EaseIn
+                   : cue->fadeCurve == CueFadeCurve::EaseIn  ? CueFadeCurve::EaseOut
+                   : cue->fadeCurve == CueFadeCurve::EaseOut ? CueFadeCurve::SCurve
+                                                             : CueFadeCurve::Linear;
+    markProjectDirty();
+    triggerToast(cueFadeCurveLabel(cue->fadeCurve));
+  }
+
+  void nudgeFadeTo(double delta) {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    cue->fadeToValue = std::clamp(cue->fadeToValue + delta, 0.0, 1.0);
+    markProjectDirty();
+  }
+
+  void nudgeFadeOver(double delta) {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    // Floored at zero, not at some minimum: a zero-length fade is a SET, and
+    // turning the duration all the way down is how an operator asks for one.
+    cue->fadeOverSeconds = std::max(0.0, cue->fadeOverSeconds + delta);
+    markProjectDirty();
+  }
+
+  void stepFadeDeck(int delta) {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    const int count = static_cast<int>(project_.decks.size());
+    const int next = cue->targetDeckIndex + delta;
+    // Off either end means "the deck this cue lives on", which is what a
+    // single-deck show wants and should never have to set.
+    cue->targetDeckIndex = (next < 0 || next >= count) ? -1 : next;
+    markProjectDirty();
+  }
+
+  void toggleFadeRestoreAtEnd() {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    cue->fadeRestoreAtEnd = !cue->fadeRestoreAtEnd;
+    markProjectDirty();
+    triggerToast(cue->fadeRestoreAtEnd ? "put it back when the ramp lands" : "leave it where it lands");
+  }
+
+  void toggleFadeStopWhenDone() {
+    Cue* cue = selectedFadeCue();
+    if (!cue) {
+      return;
+    }
+    cue->fadeStopWhenDone = !cue->fadeStopWhenDone;
+    markProjectDirty();
+    triggerToast(cue->fadeStopWhenDone ? "stop when done" : "leave it running");
+  }
+
+  void fireSelectedFadeCue() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Fade) {
+      return;
+    }
+    (void)fireFadeCue(deckIndex, deck.selectedIndex);
+  }
+
+  // ── AUDITION ──────────────────────────────────────────────────────────
+  //
+  // Play a cue to the operator without sending it anywhere. Deckboy already
+  // had the two worlds it needs -- the output's composite and the control
+  // window's own preview -- so this is a ROUTE, not a renderer: the deck is
+  // skipped by the output compositor, and the preview stops tapping the
+  // output and draws the decoder frame instead.
+  bool deckIsAuditioning(int deckIndex) const {
+    return auditionDeckIndex_ >= 0 && auditionDeckIndex_ == deckIndex;
+  }
+
+  bool anyDeckAuditioning() const { return auditionDeckIndex_ >= 0; }
+
+  bool deckIsPreloading(int deckIndex) const {
+    return preloadDeckIndex_ >= 0 && preloadDeckIndex_ == deckIndex;
+  }
+
+  // The two reasons a deck's picture is deliberately not on its output. One
+  // predicate, because the compositor and the preview tap must never disagree
+  // about which of them is in force.
+  bool deckIsHeldOffOutput(int deckIndex) const {
+    return deckIsAuditioning(deckIndex) || deckIsPreloading(deckIndex);
+  }
+
+  void clearPreload(bool announce = false) {
+    if (preloadDeckIndex_ < 0) {
+      return;
+    }
+    preloadDeckIndex_ = -1;
+    preloadCueIndex_ = -1;
+    if (announce) {
+      triggerToast("preload cleared");
+    }
+  }
+
+  // Rack a cue paused at a position, decode warm, without the room seeing it.
+  //
+  // Deckboy could already load a cue paused -- takeSelected(false) does it --
+  // but that puts the paused frame straight on the output, so preparing the
+  // next cue meant showing it. Held off the output it becomes what it is for:
+  // the spin-up paid early so GO is instant.
+  std::string preloadSelected(double atSeconds) {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return "select a cue first";
+    }
+    // Held off the output BEFORE the rack, for the same reason audition is:
+    // set afterwards, one frame of it reaches the output first.
+    preloadDeckIndex_ = deckIndex;
+    preloadCueIndex_ = deck.selectedIndex;
+    preloadStarting_ = true;
+    // No transition and no autoplay: this is a rack, not a take. A transition
+    // here would animate a picture nobody can see and leave the outgoing cue
+    // mid-dissolve.
+    takeSelected(false, false);
+    preloadStarting_ = false;
+
+    const std::string name = deck.cues[deck.selectedIndex].name;
+    if (atSeconds > 0.0) {
+      if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+        engine->seek(atSeconds, false);
+      }
+      const std::string did = "preloaded " + name + " at " + formatSeconds(atSeconds);
+      triggerToast(did);
+      return did;
+    }
+    const std::string did = "preloaded " + name;
+    triggerToast(did);
+    return did;
+  }
+
+  // Let go of a preloaded cue: it is already racked and already at its
+  // position, so this is a play rather than a load. That is the whole point --
+  // no decoder spin-up between GO and the first frame.
+  bool releasePreloadIfTaking(int deckIndex, int cueIndex) {
+    if (!deckIsPreloading(deckIndex) || preloadCueIndex_ != cueIndex) {
+      return false;
+    }
+    clearPreload();
+    if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+      engine->play();
+    }
+    return true;
+  }
+
+
+  void endAudition(bool announce = true) {
+    if (auditionDeckIndex_ < 0) {
+      return;
+    }
+    const int was = auditionDeckIndex_;
+    auditionDeckIndex_ = -1;
+    if (announce) {
+      triggerToast("audition ended - deck " + std::to_string(was + 1) +
+                   " is live again");
+    }
+  }
+
+  // Take the selected cue with this deck held off the outputs.
+  std::string auditionSelected() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return "select a cue first";
+    }
+    // ONE AUDITION AT A TIME. Auditioning a second deck while the first is
+    // still held off would black two screens for one look, and the operator
+    // cannot see both anyway -- the preview shows the focused deck.
+    if (auditionDeckIndex_ >= 0 && auditionDeckIndex_ != deckIndex) {
+      endAudition(false);
+    }
+    // Set BEFORE the take, so the first composited frame is already
+    // suppressed. Setting it after let one frame of the cue reach the output,
+    // which on a show is the entire thing you were trying to avoid.
+    auditionDeckIndex_ = deckIndex;
+    auditionStarting_ = true;
+    takeSelected(true);
+    auditionStarting_ = false;
+    const std::string name = deck.cues[deck.selectedIndex].name;
+    triggerToast("audition: " + name);
+    return name;
+  }
+
+  // ── MIDI CUES ─────────────────────────────────────────────────────────
+  //
+  // Deckboy has listened to MIDI, MSC and MMC for a long time and has never
+  // said anything. This is the other direction: a cue that, on GO, tells the
+  // lighting desk or the sound rig or another Deckboy to do something.
+  //
+  // The bytes are built by a pure function in platform/midi.hpp, which is what
+  // lets them be tested with no hardware in the room -- and the encoder tests
+  // in --smoke are the only part of this a machine can check.
+
+  // Resolve the port a cue asks for, opening it only when it changes.
+  //
+  // A NAMED PORT THAT IS ABSENT IS REPORTED, NOT SWAPPED, the same rule the
+  // app already applies to a named MIDI input and a named audio device. A cue
+  // that quietly drove whatever port happened to enumerate first would be a
+  // show sending GOs to the wrong desk.
+  bool ensureMidiOutPort(const std::string& requested, std::string& reasonOut) {
+    const std::string want = trim(requested);
+    // A PORT THAT WILL NOT OPEN IS NOT RETRIED EVERY FRAME. A MIDI file cue
+    // asks for its port on every tick, and a port that exists but refuses to
+    // open (another program holding it) fails slowly -- so the interface
+    // stalled for as long as the cue ran. One retry every two seconds still
+    // picks the port up as soon as it is free.
+    //
+    // Two seconds of IDLE, counted from the END of the failed attempt.
+    // Counted from its start, an attempt that itself took two seconds (a CI
+    // runner's GS synth, with no audio device behind it) was due again on the
+    // very next tick, and the desk got barely a frame between attempts. One
+    // that slow waits thirty, since every retry costs the desk that long again.
+    const Uint64 nowMs = SDL_GetTicks();
+    if (!midiOut_.isOpen() && midiOutHasFailed_ && midiOutFailedKey_ == want &&
+        nowMs < midiOutRetryAtMs_) {
+      reasonOut = midiOutFailedReason_;
+      return false;
+    }
+    auto failed = [&](const std::string& reason) {
+      const Uint64 endedMs = SDL_GetTicks();
+      midiOutHasFailed_ = true;
+      midiOutFailedKey_ = want;
+      midiOutRetryAtMs_ = endedMs + (endedMs - nowMs > 250 ? 30000 : 2000);
+      midiOutFailedReason_ = reason;
+      reasonOut = reason;
+      return false;
+    };
+    if (want.empty()) {
+      // No port named: use the first one there is, which is what a rig with a
+      // single interface wants and never has to configure.
+      const auto ports = deckboy::platform::midi::MidiOutput::listDevices();
+      if (ports.empty()) {
+        reasonOut = "no MIDI output ports on this machine";
+        return false;
+      }
+      if (midiOut_.isOpen() && midiOutPortRequested_.empty()) {
+        return true;
+      }
+      midiOutPortRequested_.clear();
+      if (!midiOut_.open(ports.front().id)) {
+        return failed("could not open " + ports.front().name);
+      }
+      midiOutHasFailed_ = false;
+      return true;
+    }
+    if (midiOut_.isOpen() && midiOutPortRequested_ == want) {
+      return true;
+    }
+    if (!midiOut_.openByName(want)) {
+      midiOutPortRequested_.clear();
+      return failed("MIDI port not found: " + want);
+    }
+    midiOutHasFailed_ = false;
+    midiOutPortRequested_ = want;
+    return true;
+  }
+
+  deckboy::platform::midi::OutMessage midiMessageForCue(const Cue& cue) const {
+    deckboy::platform::midi::OutMessage message;
+    message.kind = deckboy::platform::midi::outMessageKindFromToken(cue.midiMessage);
+    message.channel = cue.midiChannel;
+    message.data1 = cue.midiData1;
+    message.data2 = cue.midiData2;
+    message.mscDevice = cue.mscDevice;
+    message.mscCue = cue.mscCue;
+    message.mscList = cue.mscList;
+    message.rawHex = cue.midiRawHex;
+    return message;
+  }
+
+  std::string fireMidiCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    const Cue& cue = deck.cues[cueIndex];
+    const auto message = midiMessageForCue(cue);
+    const auto bytes = deckboy::platform::midi::encodeOutMessage(message);
+    // AN UNBUILDABLE MESSAGE SENDS NOTHING AND SAYS SO. Half a MIDI message on
+    // a show network is worse than silence, and a cue that silently sent
+    // nothing would be indistinguishable from a cable fault.
+    if (bytes.empty()) {
+      const std::string why = cue.name + ": nothing to send (check the message)";
+      triggerToast(why);
+      return why;
+    }
+    std::string reason;
+    if (!ensureMidiOutPort(cue.midiPortName, reason)) {
+      triggerToast(cue.name + ": " + reason);
+      return reason;
+    }
+    if (!midiOut_.send(bytes)) {
+      const std::string why = cue.name + ": the port refused the message";
+      triggerToast(why);
+      return why;
+    }
+    const std::string did = deckboy::platform::midi::describeOutMessage(message) +
+                            " -> " + (midiOut_.portInUse().empty()
+                                        ? std::string("default port")
+                                        : midiOut_.portInUse());
+    showLog("MIDI OUT", did);
+    triggerToast(did);
+    return did;
+  }
+
+  // ── TIMECODE CUES ─────────────────────────────────────────────────────
+  //
+  // The LTC generator has existed for a while and could only be reached from a
+  // settings toggle, which is not something a show can cue. Three verbs cover
+  // what a running order needs: start the carrier, stop it, and jam it to a
+  // value at a known moment.
+  std::string fireTimecodeCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    const Cue& cue = deck.cues[cueIndex];
+    const std::string action = toLower(trim(cue.tcAction));
+
+    if (action == "stop") {
+      project_.ltcOutputEnabled = false;
+      stopLtcOutput();
+      markProjectDirty();
+      const std::string did = "timecode stopped";
+      showLog("TIMECODE", did);
+      triggerToast(did);
+      return did;
+    }
+
+    if (action == "jam") {
+      // The jam is the DIFFERENCE between where the clock is about to read and
+      // where the operator wants it to read, worked out now. Computed rather
+      // than stored so a jam means the same thing wherever the deck happens to
+      // be when it fires.
+      ltcJamOffsetSeconds_ = 0.0;
+      const double natural = ltcOutputTimecodeSeconds();
+      ltcJamOffsetSeconds_ = cue.tcJamSeconds - natural;
+      const std::string did = "timecode jammed to " +
+                              formatTimecode(cue.tcJamSeconds, deck.playlistTimebaseFps);
+      showLog("TIMECODE", did);
+      triggerToast(did);
+      return did;
+    }
+
+    // START, which is also what an unrecognised action does -- the safe
+    // reading of a cue somebody labelled "timecode" is that they want some.
+    if (!project_.ltcOutputEnabled) {
+      project_.ltcOutputEnabled = true;
+      markProjectDirty();
+    }
+    if (!startLtcOutput()) {
+      // startLtcOutput already said why -- no libltc, no encoder, no device.
+      project_.ltcOutputEnabled = false;
+      return "timecode could not start";
+    }
+    const std::string did = "timecode running @ " +
+                            fmtFloat(std::clamp(project_.ltcOutputFps, 23.0, 60.0), 2) + "fps";
+    showLog("TIMECODE", did);
+    triggerToast(did);
+    return did;
+  }
+
+  // ── SCRIPT CUES ───────────────────────────────────────────────────────
+  //
+  // A script cue runs Deckboy's OWN remote-protocol lines. That is deliberate
+  // and it is most of why this was worth building: every verb the socket
+  // accepts already exists, is already tested, and already answers honestly,
+  // so a script cue inherits all of it without the project taking on an
+  // embedded language and its security surface.
+  //
+  // It also composes with everything else: one cue that fires a master, sends
+  // MIDI, jams timecode and pings the media server is four lines.
+  static constexpr int kMaxScriptDepth = 4;
+
+  std::string runScriptCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    // A SCRIPT THAT RUNS A SCRIPT IS FINE. A script that runs ITSELF is not,
+    // and neither is a pair that run each other -- both hang the app with no
+    // way back. Depth is the guard because it catches every shape of it,
+    // including ones that are not literally a cycle.
+    if (scriptDepth_ >= kMaxScriptDepth) {
+      const std::string why = "script nesting stopped at " +
+                              std::to_string(kMaxScriptDepth) + " deep";
+      triggerToast(why);
+      showLog("SCRIPT", why);
+      return why;
+    }
+
+    // COPIED before anything runs: a line can delete the cue it is written on.
+    const std::string text = deck.cues[cueIndex].scriptText;
+    const std::string name = deck.cues[cueIndex].name;
+
+    // THE DISPATCHER'S REPLY STATE IS SAVED AND PUT BACK.
+    //
+    // handleRemoteCommand writes remoteCommandRecognized_, _Detail_ and
+    // _Error_, and this calls it in a loop -- so a script containing one bad
+    // line left those flags set to that line's failure, and whatever asked
+    // for the script (the socket, a TAKE) reported ITSELF as unknown. Caught
+    // by the test: `SCRIPTCUE RUN` on a script with a typo in it answered
+    // "ERR unknown command: SCRIPTCUE".
+    const bool savedRecognized = remoteCommandRecognized_;
+    const std::string savedDetail = remoteCommandDetail_;
+    const std::string savedError = remoteCommandError_;
+
+    ++scriptDepth_;
+    int ran = 0;
+    int failed = 0;
+    std::string firstError;
+    std::istringstream lines(text);
+    std::string line;
+    while (std::getline(lines, line)) {
+      // A trailing CR from a file that travelled through Windows, a blank
+      // line, and a comment are all "nothing to do" rather than errors.
+      if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+      }
+      const std::string trimmed = trim(line);
+      if (trimmed.empty() || trimmed.front() == '#' ||
+          trimmed.compare(0, 2, "//") == 0) {
+        continue;
+      }
+      ++ran;
+      // Straight into the dispatcher the socket uses, so a script line means
+      // exactly what the same line typed over the wire means. There is no
+      // second interpretation of the protocol to keep in step with this one.
+      remoteCommandRecognized_ = true;
+      remoteCommandDetail_.clear();
+      remoteCommandError_.clear();
+      handleRemoteCommand(trimmed);
+      if (!remoteCommandRecognized_ || !remoteCommandError_.empty()) {
+        ++failed;
+        if (firstError.empty()) {
+          firstError = trimmed + (remoteCommandError_.empty()
+                                    ? std::string(" - unknown command")
+                                    : (" - " + remoteCommandError_));
+        }
+      }
+    }
+    --scriptDepth_;
+    remoteCommandRecognized_ = savedRecognized;
+    remoteCommandDetail_ = savedDetail;
+    remoteCommandError_ = savedError;
+
+    std::string did = name + ": " + std::to_string(ran) + " line" +
+                      (ran == 1 ? "" : "s");
+    if (failed > 0) {
+      // THE FAILURES ARE NAMED, not counted silently. A script that half-ran
+      // and said "ok" is the worst outcome available here.
+      did += ", " + std::to_string(failed) + " failed - " + firstError;
+    }
+    showLog("SCRIPT", did);
+    triggerToast(did);
+    return did;
+  }
+
+  // ── DMX CUES ──────────────────────────────────────────────────────────
+  //
+  // A cue that sends channel levels over Art-Net, with a fade time. NOT a
+  // lighting console: "house lights to 20% on cue 14" is the case, and it is
+  // served at a fraction of the cost of patch, instruments, groups and
+  // submasters -- see the plan's Phase 5, which recommends exactly this and
+  // recommends against the console.
+  //
+  // The app already LISTENED to Art-Net and could not speak it, the same shape
+  // MIDI was in this morning.
+  struct DmxUniverse {
+    int universe = 0;
+    bool sacn = false;            // ANSI E1.31 instead of Art-Net
+    std::string host;
+    int port = 6454;
+    std::array<std::uint8_t, 512> level {};   // where the levels are now
+    std::array<std::uint8_t, 512> from {};    // where a fade started
+    std::array<std::uint8_t, 512> to {};      // where it is going
+    bool fading = false;
+    double fadeSeconds = 0.0;
+    Uint64 fadeStartMs = 0;
+    std::uint8_t sequence = 1;
+  };
+  std::vector<DmxUniverse> dmxUniverses_;
+  // A fixture a DMX cue left oscillating, by fixture name. Runs until a later
+  // cue sets that fixture, or a blackout.
+  struct DmxModulator {
+    CueFixtureLevel level;
+    deckboy::fixtures::Fixture fixture;
+    int universe = 0;
+    bool sacn = false;
+  };
+  std::map<std::string, DmxModulator> dmxModulators_;
+  // THE VIDEO-ROLL DIP: 0 = not dipped, 1 = fully dipped, ramped over the
+  // fade time. Applied to what is SENT, never to the levels themselves, so
+  // the lights come back to exactly where they were, LFOs and all.
+  double videoDipAmount_ = 0.0;
+  Uint64 videoDipTickMs_ = 0;
+
+  // A video cue playing on any deck Output 1 shows.
+  bool videoRolling() const {
+    if (project_.outputs.empty()) return false;
+    const int programme = std::max(0, primaryProgrammeOutputIndex(-1));
+    for (const auto& [deck, layer] : layeredDeckEntriesForOutput(programme)) {
+      (void)layer;
+      const Cue* cue = activeCuePtr(deck);
+      const MediaEngine* engine = mediaEngineForDeck(deck);
+      if (cue && engine && cue->kind == CueKind::Video &&
+          engine->state() == TransportState::Playing && engine->hasPictureToShow()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void serviceVideoDip(Uint64 now) {
+    const double dt = videoDipTickMs_ ? static_cast<double>(now - videoDipTickMs_) / 1000.0 : 0.0;
+    videoDipTickMs_ = now;
+    const bool any = std::any_of(project_.fixtures.begin(), project_.fixtures.end(),
+                                 [](const deckboy::fixtures::Fixture& f) { return f.videoDip >= 0; });
+    const double want = project_.videoDipEnabled && any && videoRolling() ? 1.0 : 0.0;
+    const double fade = std::clamp(project_.videoDipFadeSeconds, 0.0, 30.0);
+    const double step = fade <= 0.0 ? 1.0 : dt / fade;
+    if (want > videoDipAmount_) videoDipAmount_ = std::min(want, videoDipAmount_ + step);
+    else if (want < videoDipAmount_) videoDipAmount_ = std::max(want, videoDipAmount_ - step);
+  }
+
+  void applyVideoDip(const DmxUniverse& u, std::vector<std::uint8_t>& out) const {
+    if (videoDipAmount_ <= 0.0) return;
+    for (const auto& fixture : project_.fixtures) {
+      if (fixture.videoDip < 0) continue;
+      // A fixture's universe number, whichever network it went out on.
+      const int number = u.sacn ? std::max(1, fixture.universe) : fixture.universe;
+      if (number != u.universe) continue;
+      deckboy::fixtures::applyDip(out.data(), fixture, fixture.videoDip / 100.0, videoDipAmount_);
+    }
+  }
+
+  static std::string videoDipLabel(int dip) {
+    return dip < 0 ? std::string("LEAVE") : dip == 0 ? std::string("DIP OFF") : "DIP " + std::to_string(dip) + "%";
+  }
+
+  void cycleFixtureVideoDip(std::size_t index) {
+    if (index >= project_.fixtures.size()) return;
+    static const int kSteps[] = {-1, 0, 10, 20, 30, 50};
+    int& dip = project_.fixtures[index].videoDip;
+    std::size_t at = 0;
+    for (std::size_t i = 0; i < std::size(kSteps); ++i) if (kSteps[i] == dip) at = i;
+    dip = kSteps[(at + 1) % std::size(kSteps)];
+    markProjectDirty();
+  }
+  struct DmxFind {
+    bool active = false;
+    deckboy::fixtures::Fixture fixture;
+    int universe = 0;
+    bool sacn = false;
+    Uint64 untilMs = 0;
+    std::vector<std::pair<int, std::uint8_t>> saved;
+  } dmxFind_;
+
+  // The selected DMX cue's entry for the patch's fixture `row`, or null when
+  // the cue leaves that fixture alone.
+  CueFixtureLevel* selectedDmxFixtureLevel(int row) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Dmx || row < 0 || row >= static_cast<int>(project_.fixtures.size())) {
+      return nullptr;
+    }
+    const std::string& name = project_.fixtures[static_cast<std::size_t>(row)].name;
+    for (CueFixtureLevel& level : cue->dmxFixtures) {
+      if (level.fixture == name) return &level;
+    }
+    return nullptr;
+  }
+
+  void toggleDmxFixtureIncluded(int row) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Dmx || row < 0 || row >= static_cast<int>(project_.fixtures.size())) return;
+    const std::string& name = project_.fixtures[static_cast<std::size_t>(row)].name;
+    auto& list = cue->dmxFixtures;
+    auto it = std::find_if(list.begin(), list.end(), [&](const CueFixtureLevel& l) { return l.fixture == name; });
+    if (it != list.end()) {
+      list.erase(it);
+      triggerToast(name + ": left as it is");
+    } else {
+      CueFixtureLevel level;
+      level.fixture = name;
+      list.push_back(level);
+      triggerToast(name + ": sent by this cue");
+    }
+    markProjectDirty();
+  }
+
+  void nudgeDmxFixtureLevel(int row, float delta) {
+    CueFixtureLevel* level = selectedDmxFixtureLevel(row);
+    if (!level) {
+      toggleDmxFixtureIncluded(row);
+      level = selectedDmxFixtureLevel(row);
+      if (!level) return;
+      level->intensity = delta > 0.0f ? 0.05f : 0.0f;
+    } else {
+      level->intensity = std::clamp(std::round((level->intensity + delta) * 20.0f) / 20.0f, 0.0f, 1.0f);
+    }
+    markProjectDirty();
+  }
+
+  void cycleDmxFixtureColour(int row) {
+    CueFixtureLevel* level = selectedDmxFixtureLevel(row);
+    if (!level) return;
+    level->colour = level->colour + 1 >= deckboy::fixtures::kColourCount ? 0 : level->colour + 1;
+    markProjectDirty();
+  }
+
+  // ── THE PATCH, EDITED ─────────────────────────────────────────────────
+  std::string addFixture(const std::string& wantedName, deckboy::fixtures::FixtureType type,
+                         int universe, int address) {
+    std::string name = trim(wantedName);
+    if (name.empty()) {
+      for (int n = 1; n < 10000; ++n) {
+        name = "Fixture " + std::to_string(n);
+        if (!patchedFixture(name)) break;
+      }
+    }
+    if (patchedFixture(name)) return "ERR " + name + " is already in the patch";
+    deckboy::fixtures::Fixture fixture;
+    fixture.name = name;
+    fixture.type = type;
+    fixture.universe = std::clamp(universe, 0, 63999);
+    fixture.address = address > 0 ? std::clamp(address, 1, 512)
+                                   : deckboy::fixtures::nextFreeAddress(project_.fixtures, fixture.universe, type);
+    if (fixture.address < 1) return "ERR universe " + std::to_string(fixture.universe) + " is full";
+    project_.fixtures.push_back(fixture);
+    markProjectDirty();
+    return name + " at " + std::to_string(fixture.universe) + "/" + std::to_string(fixture.address);
+  }
+
+  void renameFixture(std::size_t index, const std::string& wanted) {
+    const std::string name = trim(wanted);
+    if (index >= project_.fixtures.size() || name.empty()) return;
+    if (patchedFixture(name)) {
+      triggerToast(name + " is already in the patch", ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    const std::string old = project_.fixtures[index].name;
+    project_.fixtures[index].name = name;
+    for (Deck& deck : project_.decks) {
+      for (Cue& cue : deck.cues) {
+        for (CueFixtureLevel& level : cue.dmxFixtures) {
+          if (level.fixture == old) level.fixture = name;
+        }
+      }
+    }
+    dmxModulators_.erase(old);
+    markProjectDirty();
+  }
+
+  void removeFixture(std::size_t index) {
+    if (index >= project_.fixtures.size()) return;
+    const std::string name = project_.fixtures[index].name;
+    int cues = 0;
+    for (Deck& deck : project_.decks) {
+      for (Cue& cue : deck.cues) {
+        const auto before = cue.dmxFixtures.size();
+        cue.dmxFixtures.erase(std::remove_if(cue.dmxFixtures.begin(), cue.dmxFixtures.end(),
+                                             [&](const CueFixtureLevel& l) { return l.fixture == name; }),
+                              cue.dmxFixtures.end());
+        if (cue.dmxFixtures.size() != before) ++cues;
+      }
+    }
+    dmxModulators_.erase(name);
+    project_.fixtures.erase(project_.fixtures.begin() + static_cast<std::ptrdiff_t>(index));
+    markProjectDirty();
+    triggerToast(name + " removed" + (cues ? " (and from " + std::to_string(cues) + " cue" +
+                                               (cues == 1 ? ")" : "s)") : std::string()));
+  }
+
+  bool handleFixtureSettingsClick(int action) {
+    if (action == kSettingsActionVideoDipToggle) {
+      project_.videoDipEnabled = !project_.videoDipEnabled;
+      markProjectDirty();
+      triggerToast(project_.videoDipEnabled ? "lights dip when a video rolls" : "video dip off");
+      return true;
+    }
+    if (action == kSettingsActionVideoDipFade) {
+      openInlineTextEditor("fixture.dipfade", "Video dip fade", "Seconds (0-30)",
+                           fmtFloat(static_cast<float>(project_.videoDipFadeSeconds), 1),
+                           [this](const std::string& value) {
+        const double s = std::atof(value.c_str());
+        if (trim(value).empty() || s < 0.0 || s > 30.0) {
+          triggerToast("video dip fade: 0-30 seconds", ToastKind::Warning, kToastReadableMs);
+          return;
+        }
+        project_.videoDipFadeSeconds = s;
+        markProjectDirty();
+      });
+      return true;
+    }
+    if (action == kSettingsActionFixtureAdd) {
+      const int universe = project_.fixtures.empty() ? 0 : project_.fixtures.back().universe;
+      const std::string did = addFixture("", deckboy::fixtures::FixtureType::Dimmer, universe, 0);
+      triggerToast(did.rfind("ERR ", 0) == 0 ? did.substr(4) : did + " added");
+      return true;
+    }
+    if (action < kSettingsActionFixtureRowBase || action >= kSettingsActionFixtureEnd) return false;
+    const int packed = action - kSettingsActionFixtureRowBase;
+    const std::size_t index = static_cast<std::size_t>(packed / kSettingsActionFixtureRowStride);
+    const int field = packed % kSettingsActionFixtureRowStride;
+    if (index >= project_.fixtures.size()) return true;
+    deckboy::fixtures::Fixture& fixture = project_.fixtures[index];
+    switch (field) {
+      case 0:
+        openInlineTextEditor("fixture.name", "Rename fixture", "Fixture name", fixture.name,
+                             [this, index](const std::string& value) { renameFixture(index, value); });
+        break;
+      case 1:
+        fixture.type = static_cast<deckboy::fixtures::FixtureType>(
+          (static_cast<int>(fixture.type) + 1) % static_cast<int>(deckboy::fixtures::FixtureType::Count));
+        markProjectDirty();
+        break;
+      case 2:
+        openInlineTextEditor("fixture.universe", "Fixture universe", "Universe (0-63999)",
+                             std::to_string(fixture.universe), [this, index](const std::string& value) {
+          if (index >= project_.fixtures.size()) return;
+          const int n = std::atoi(value.c_str());
+          if (trim(value).empty() || n < 0 || n > 63999) {
+            triggerToast("universe: 0-63999", ToastKind::Warning, kToastReadableMs);
+            return;
+          }
+          project_.fixtures[index].universe = n;
+          markProjectDirty();
+        });
+        break;
+      case 3:
+        openInlineTextEditor("fixture.address", "Fixture address", "First channel (1-512)",
+                             std::to_string(fixture.address), [this, index](const std::string& value) {
+          if (index >= project_.fixtures.size()) return;
+          const int n = std::atoi(value.c_str());
+          if (n < 1 || n > 512) {
+            triggerToast("address: 1-512", ToastKind::Warning, kToastReadableMs);
+            return;
+          }
+          project_.fixtures[index].address = n;
+          markProjectDirty();
+        });
+        break;
+      case 4:
+        triggerToast(findFixture(fixture.name));
+        break;
+      case 5:
+        removeFixture(index);
+        break;
+      case 6:
+        cycleFixtureVideoDip(index);
+        break;
+      default:
+        break;
+    }
+    return true;
+  }
+
+  const deckboy::fixtures::Fixture* patchedFixture(const std::string& name) const {
+    for (const auto& fixture : project_.fixtures) {
+      if (fixture.name == name) return &fixture;
+    }
+    return nullptr;
+  }
+
+  DmxUniverse* findDmxUniverse(int universe, bool sacn) {
+    for (DmxUniverse& u : dmxUniverses_) {
+      if (u.universe == universe && u.sacn == sacn) return &u;
+    }
+    return nullptr;
+  }
+
+  // FIND: flash one fixture to full white for two seconds on the universe it
+  // was last sent on (Art-Net broadcast when nothing has been sent yet).
+  std::string findFixture(const std::string& name) {
+    const deckboy::fixtures::Fixture* fixture = patchedFixture(name);
+    if (!fixture) return name + " is not in the patch";
+    if (dmxFind_.active) {
+      if (DmxUniverse* u = findDmxUniverse(dmxFind_.universe, dmxFind_.sacn)) {
+        for (const auto& [channel, value] : dmxFind_.saved) u->level[static_cast<std::size_t>(channel - 1)] = value;
+      }
+    }
+    DmxUniverse* u = findDmxUniverse(fixture->universe, false);
+    if (!u) u = findDmxUniverse(fixture->universe, true);
+    if (!u) u = &dmxUniverseFor(std::clamp(fixture->universe, 0, 32767), "255.255.255.255", 6454);
+    dmxFind_.active = true;
+    dmxFind_.fixture = *fixture;
+    dmxFind_.universe = u->universe;
+    dmxFind_.sacn = u->sacn;
+    dmxFind_.untilMs = SDL_GetTicks() + 2000;
+    dmxFind_.saved.clear();
+    for (const auto& [channel, value] : deckboy::fixtures::fixtureChannels(*fixture, 1.0, 0)) {
+      (void)value;
+      dmxFind_.saved.emplace_back(channel, u->level[static_cast<std::size_t>(channel - 1)]);
+    }
+    return "finding " + name;
+  }
+  std::uint8_t sacnCid_[16] {};
+  bool sacnCidReady_ = false;
+  Uint64 dmxLastSendMs_ = 0;
+
+  DmxUniverse& dmxUniverseFor(int universe, const std::string& host, int port, bool sacn = false) {
+    for (DmxUniverse& u : dmxUniverses_) {
+      if (u.universe == universe && u.sacn == sacn) {
+        u.host = host;
+        u.port = port;
+        return u;
+      }
+    }
+    DmxUniverse added;
+    added.universe = universe;
+    added.sacn = sacn;
+    added.host = host;
+    added.port = port;
+    dmxUniverses_.push_back(added);
+    return dmxUniverses_.back();
+  }
+
+  std::string fireDmxCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    const Cue& cue = deck.cues[cueIndex];
+
+    auto parsed = deckboy::platform::parseDmxChannelSpec(cue.dmxChannels);
+    // NOTHING, rather than as much as it could read. A DMX line that
+    // half-applies is a lighting state nobody asked for.
+    if (!cue.dmxChannels.empty() && (!parsed || parsed->empty())) {
+      const std::string why = cue.name + ": channel list is not readable";
+      triggerToast(why);
+      return why;
+    }
+    // Fixtures by name, from the patch. A name the patch no longer has stops
+    // the cue for the same reason: half a look is not the look.
+    std::vector<std::pair<const CueFixtureLevel*, const deckboy::fixtures::Fixture*>> fixtures;
+    for (const CueFixtureLevel& level : cue.dmxFixtures) {
+      const deckboy::fixtures::Fixture* found = patchedFixture(level.fixture);
+      if (!found) {
+        const std::string why = cue.name + ": " + level.fixture + " is not in the patch";
+        triggerToast(why);
+        return why;
+      }
+      fixtures.emplace_back(&level, found);
+    }
+    if (fixtures.empty() && (!parsed || parsed->empty())) {
+      const std::string why = cue.name + ": no fixtures or channels set";
+      triggerToast(why);
+      return why;
+    }
+
+    const bool sacn = cue.dmxProtocol == "sacn";
+    std::string host = trim(cue.dmxHost).empty() ? std::string("255.255.255.255")
+                                                 : trim(cue.dmxHost);
+    // sACN to "everybody" is its universe's multicast group, not a broadcast.
+    if (sacn && host == "255.255.255.255") host = deckboy::platform::sacnMulticastAddress(cue.dmxUniverse);
+    sockaddr_in probe {};
+    if (inet_pton(AF_INET, host.c_str(), &probe.sin_addr) != 1) {
+      const std::string why = cue.name + ": " + host + " is not an IPv4 address";
+      triggerToast(why);
+      return why;
+    }
+
+    const int port = sacn ? (cue.dmxPort == 6454 ? deckboy::platform::kSacnPort : std::clamp(cue.dmxPort, 1, 65535))
+                          : std::clamp(cue.dmxPort, 1, 65535);
+    auto universeFor = [&](int number) -> DmxUniverse& {
+      const int clamped = sacn ? std::clamp(number, 1, 63999) : std::clamp(number, 0, 32767);
+      std::string to = host;
+      if (sacn && trim(cue.dmxHost).empty()) to = deckboy::platform::sacnMulticastAddress(clamped);
+      return dmxUniverseFor(clamped, to, port, sacn);
+    };
+    // Every universe this cue touches starts its fade from WHERE THE LEVELS
+    // ARE, not from zero, so a cue that takes the house from 80% to 20% does
+    // not dip to black on the way.
+    std::vector<DmxUniverse*> touched;
+    auto begin = [&](DmxUniverse& u) {
+      if (std::find(touched.begin(), touched.end(), &u) == touched.end()) {
+        u.from = u.level;
+        u.to = u.level;
+        touched.push_back(&u);
+      }
+    };
+    int channelCount = 0;
+    for (const auto& [level, fixture] : fixtures) {
+      DmxUniverse& u = universeFor(fixture->universe);
+      begin(u);
+      for (const auto& [channel, value] : deckboy::fixtures::fixtureChannels(*fixture, level->intensity, level->colour)) {
+        u.to[static_cast<std::size_t>(channel - 1)] = value;
+        ++channelCount;
+      }
+      // A fixture this cue sets is this cue's now: an oscillator a previous
+      // cue left on it stops, and this cue's own (if any) takes over.
+      dmxModulators_.erase(fixture->name);
+      if (level->intensityLfo.on || level->colourLfo.on) {
+        DmxModulator mod;
+        mod.level = *level;
+        mod.fixture = *fixture;
+        mod.universe = u.universe;
+        mod.sacn = u.sacn;
+        dmxModulators_[fixture->name] = mod;
+      }
+    }
+    // The hand-written channels go last, so one can override a fixture.
+    if (parsed && !parsed->empty()) {
+      DmxUniverse& u = universeFor(cue.dmxUniverse);
+      begin(u);
+      for (const auto& [channel, value] : *parsed) {
+        u.to[static_cast<std::size_t>(channel - 1)] = value;
+        ++channelCount;
+      }
+    }
+    const double fade = std::max(0.0, cue.dmxFadeSeconds);
+    for (DmxUniverse* u : touched) {
+      u->fadeSeconds = fade;
+      if (fade <= 0.0) {
+        u->level = u->to;
+        u->fading = false;
+      } else {
+        u->fading = true;
+        u->fadeStartMs = SDL_GetTicks();
+      }
+    }
+
+    std::string universes;
+    for (DmxUniverse* u : touched) universes += (universes.empty() ? "" : ", ") + std::to_string(u->universe);
+    const std::string did = (fixtures.empty() ? std::string()
+                               : std::to_string(fixtures.size()) + " fixture" + (fixtures.size() == 1 ? "" : "s") + ", ") +
+      std::to_string(channelCount) + " channel" + (channelCount == 1 ? "" : "s") + " on universe " +
+      universes + (sacn ? " (sACN)" : "") +
+      (fade > 0.0 ? (" over " + formatSeconds(fade)) : std::string(" now"));
+    showLog("DMX", did);
+    triggerToast(did);
+    return did;
+  }
+
+  // Called every tick. Art-Net nodes expect a CONTINUOUS stream and hold their
+  // last value only briefly, so this keeps sending at about 30 Hz for as long
+  // as any universe has been touched -- which is what a lighting output does,
+  // and what stops a rig snapping back between cues.
+  void serviceDmx() {
+    if (dmxUniverses_.empty()) {
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    serviceVideoDip(now);
+
+    for (DmxUniverse& u : dmxUniverses_) {
+      if (!u.fading) {
+        continue;
+      }
+      const double elapsed = static_cast<double>(now - u.fadeStartMs) / 1000.0;
+      if (u.fadeSeconds <= 0.0 || elapsed >= u.fadeSeconds) {
+        // LANDS EXACTLY on the target, for the same reason the fade cue does:
+        // a house light that finishes at 19% instead of 20% is invisible in
+        // rehearsal and visible on the night.
+        u.level = u.to;
+        u.fading = false;
+        continue;
+      }
+      const double t = elapsed / u.fadeSeconds;
+      for (std::size_t i = 0; i < u.level.size(); ++i) {
+        const double a = static_cast<double>(u.from[i]);
+        const double b = static_cast<double>(u.to[i]);
+        u.level[i] = static_cast<std::uint8_t>(std::lround(a + (b - a) * t));
+      }
+    }
+
+    // FIXTURE OSCILLATORS, over whatever the fades left. A fixture's own fade
+    // lands first: an oscillator starts once its universe has arrived.
+    for (auto& [name, mod] : dmxModulators_) {
+      DmxUniverse* u = findDmxUniverse(mod.universe, mod.sacn);
+      if (!u || u->fading) continue;
+      const double audio01 = std::clamp(reactiveAudioLevel_, 0.0, 1.0);
+      const float intensity = deckboy::effects::lfoApply(mod.level.intensityLfo, mod.level.intensity,
+                                                         lfoSeconds_, lfoBeats_, audio01);
+      double hueTurn = 0.0;
+      if (mod.level.colourLfo.on) {
+        // Depth is how far round the colour wheel it travels, centred on the
+        // colour that was set.
+        const double unit = deckboy::effects::lfoUnitValue(mod.level.colourLfo, lfoSeconds_, lfoBeats_, audio01);
+        hueTurn = (unit - 0.5) * static_cast<double>(mod.level.colourLfo.depth);
+      }
+      const int colour = mod.level.colourLfo.on && mod.level.colour < 0 ? 0 : mod.level.colour;
+      for (const auto& [channel, value] : deckboy::fixtures::fixtureChannels(mod.fixture, intensity, colour, hueTurn)) {
+        u->level[static_cast<std::size_t>(channel - 1)] = value;
+      }
+    }
+    // FIND: a fixture at full white for two seconds, then back.
+    if (dmxFind_.active) {
+      DmxUniverse* u = findDmxUniverse(dmxFind_.universe, dmxFind_.sacn);
+      if (u) {
+        if (now >= dmxFind_.untilMs) {
+          for (const auto& [channel, value] : dmxFind_.saved) u->level[static_cast<std::size_t>(channel - 1)] = value;
+          dmxFind_.active = false;
+        } else {
+          for (const auto& [channel, value] : deckboy::fixtures::fixtureChannels(dmxFind_.fixture, 1.0, 0)) {
+            u->level[static_cast<std::size_t>(channel - 1)] = value;
+          }
+        }
+      } else {
+        dmxFind_.active = false;
+      }
+    }
+
+    // 30 Hz. Faster buys nothing a lighting rig can use and costs a packet per
+    // universe per frame on a network that is carrying a show.
+    if (now - dmxLastSendMs_ < 33) {
+      return;
+    }
+    dmxLastSendMs_ = now;
+    if (companionUdpSocket_ == deckboy::platform::kInvalidSocket) {
+      return;
+    }
+    for (DmxUniverse& u : dmxUniverses_) {
+      sockaddr_in target {};
+      target.sin_family = AF_INET;
+      target.sin_port = htons(static_cast<uint16_t>(u.port));
+      if (inet_pton(AF_INET, u.host.c_str(), &target.sin_addr) != 1) {
+        continue;
+      }
+      std::vector<std::uint8_t> channels(u.level.begin(), u.level.end());
+      applyVideoDip(u, channels);
+      if (u.sacn && !sacnCidReady_) {
+        // One source identity per run, as E1.31 asks of a sender.
+        std::random_device device;
+        for (auto& b : sacnCid_) b = static_cast<std::uint8_t>(device() & 0xFF);
+        sacnCidReady_ = true;
+      }
+      const auto packet = u.sacn
+        ? deckboy::platform::buildSacnPacket(u.universe, channels, u.sequence, sacnCid_, "Deckboy")
+        : deckboy::platform::buildArtDmxPacket(u.universe, channels, u.sequence);
+      // The sequence byte wraps 1..255; 0 means "sequencing disabled" and must
+      // not appear in a stream that is using it.
+      u.sequence = u.sequence == 255 ? 1 : static_cast<std::uint8_t>(u.sequence + 1);
+      sendto(companionUdpSocket_, reinterpret_cast<const char*>(packet.data()),
+             static_cast<int>(packet.size()), 0,
+             reinterpret_cast<const sockaddr*>(&target),
+             static_cast<socklen_t>(sizeof(target)));
+    }
+  }
+
+  // Everything to zero, on every universe this session has touched. The one
+  // thing a lighting output must always be able to do.
+  std::string dmxBlackout() {
+    dmxModulators_.clear();
+    videoDipAmount_ = 0.0;
+    dmxFind_.active = false;
+    if (dmxUniverses_.empty()) {
+      return "no DMX universes in use";
+    }
+    for (DmxUniverse& u : dmxUniverses_) {
+      u.level.fill(0);
+      u.to.fill(0);
+      u.from.fill(0);
+      u.fading = false;
+    }
+    const std::string did = "DMX blackout on " +
+      std::to_string(dmxUniverses_.size()) + " universe(s)";
+    showLog("DMX", did);
+    triggerToast(did);
+    return did;
+  }
+
+  // ── THE AUDIO CROSSPOINT MATRIX ───────────────────────────────────────
+  //
+  // How much of a cue's left and right reaches each channel of the deck's
+  // audio device. QLab's signature audio feature, and the thing that makes a
+  // 64-channel Dante or ASIO interface worth having.
+  static constexpr int kMatrixSources = 2;
+
+  // `output` names a named output (the playlist is in the patch), and `dest`
+  // is then its channel, 0 or 1; empty is a channel of the deck's device.
+  float cueMatrixGain(const Cue& cue, int source, int dest, const std::string& output = {}) const {
+    for (const AudioCrosspoint& p : cue.audioMatrix) {
+      if (p.source == source && p.dest == dest && p.output == output) {
+        return p.gain;
+      }
+    }
+    return 0.0f;
+  }
+
+  void setCueMatrixGain(Cue& cue, int source, int dest, float gain, const std::string& output = {}) {
+    auto& list = cue.audioMatrix;
+    for (auto it = list.begin(); it != list.end(); ++it) {
+      if (it->source == source && it->dest == dest && it->output == output) {
+        if (gain <= 0.0f) {
+          // A ZERO CELL IS THE ABSENCE OF A CELL. Keeping zeroes would grow
+          // the show file by a 2xN grid per cue and mean "silent" and "not
+          // routed" were two different things that look identical.
+          list.erase(it);
+        } else {
+          it->gain = gain;
+        }
+        markProjectDirty();
+        return;
+      }
+    }
+    if (gain > 0.0f) {
+      list.push_back(AudioCrosspoint {source, dest, gain, output});
+      markProjectDirty();
+    }
+  }
+
+  // The grid's columns on a playlist in the patch: each named output's
+  // channels in order, "FOH L", "FOH R", "SUB". A column is packed as
+  // output * 2 + its channel, which stays inside one row of the cell param.
+  struct MatrixNamedColumn {
+    std::string output;
+    int outputIndex = 0;
+    int channel = 0;
+    int width = 2;
+  };
+  std::vector<MatrixNamedColumn> matrixNamedColumns() const {
+    std::vector<MatrixNamedColumn> columns;
+    for (std::size_t i = 0; i < project_.namedAudioOutputs.size(); ++i) {
+      const NamedAudioOutput& named = project_.namedAudioOutputs[i];
+      for (int k = 0; k < std::max(1, named.width); ++k) {
+        MatrixNamedColumn column;
+        column.output = named.name;
+        column.outputIndex = static_cast<int>(i);
+        column.channel = k;
+        column.width = named.width;
+        columns.push_back(column);
+      }
+    }
+    return columns;
+  }
+
+  // Click a cell to walk it: off -> full -> -3 -> -6 -> -12 -> off.
+  //
+  // A cycle rather than a drag, because the grid is a grid of small squares
+  // and a drag in one would be a drag in all of them. The steps are the ones
+  // an operator actually reaches for; anything between them is a job for the
+  // remote verb, which takes a number.
+  void cycleCueMatrixCell(int packed) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    const int source = packed / MediaEngine::kMaxAudioMatrixOuts;
+    int dest = packed % MediaEngine::kMaxAudioMatrixOuts;
+    if (source < 0 || source >= kMatrixSources) {
+      return;
+    }
+    // In the patch the cell is a named output's channel, packed output * 2 + k.
+    std::string output;
+    if (deckInPatch(focusedDeck())) {
+      const int which = dest / 2;
+      if (which >= static_cast<int>(project_.namedAudioOutputs.size())) return;
+      output = project_.namedAudioOutputs[static_cast<std::size_t>(which)].name;
+      dest %= 2;
+    }
+    const float now = cueMatrixGain(*cue, source, dest, output);
+    float next = 0.0f;
+    if (now <= 0.0f)            next = 1.0f;     // off  -> full
+    else if (now > 0.85f)       next = 0.707f;   // full -> -3 dB
+    else if (now > 0.6f)        next = 0.5f;     // -3   -> -6 dB
+    else if (now > 0.35f)       next = 0.25f;    // -6   -> -12 dB
+    else                        next = 0.0f;     // -12  -> off
+    setCueMatrixGain(*cue, source, dest, next, output);
+    refreshLiveCueAudioMatrix();
+  }
+
+  // A matrix edit has to reach the engine NOW, not at the next cue change: an
+  // operator ringing out a PA is listening while they click.
+  void refreshLiveCueAudioMatrix() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex != deck.selectedIndex ||
+        deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+      // In the patch the engine works the gains out itself from the cue on
+      // its next sync (publishPatchGains); writing the channel matrix here
+      // would put the old meaning over the patch's gains for a tick.
+      if (engine->patchRoutingActive()) {
+        return;
+      }
+      const Cue& cue = deck.cues[deck.activeIndex];
+      if (cue.audioMatrix.empty()) {
+        engine->clearAudioMatrix();
+      } else {
+        engine->setAudioMatrix(cue.audioMatrix);
+      }
+    }
+  }
+
+  // Start from what the cue does today, so turning the matrix on never changes
+  // the sound. Without this the first click would silence a cue that was
+  // happily playing, which is the worst possible introduction to a feature.
+  void seedCueMatrixFromPair() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cue->audioMatrix.empty()) {
+      return;
+    }
+    const Deck& deck = focusedDeck();
+    if (deckInPatch(deck)) {
+      // IN THE PATCH, what the cue does today is the playlist's crosspoints,
+      // so the matrix opens as those, by name.
+      for (const NamedAudioOutput& named : project_.namedAudioOutputs) {
+        const AudioPatchPoint* point = audioPatchPoint(deck, named.name);
+        if (!point) continue;
+        const float gain = static_cast<float>(std::pow(10.0, point->gainDb / 20.0));
+        if (named.width >= 2) {
+          cue->audioMatrix.push_back(AudioCrosspoint {0, 0, gain, named.name});
+          cue->audioMatrix.push_back(AudioCrosspoint {1, 1, gain, named.name});
+        } else {
+          cue->audioMatrix.push_back(AudioCrosspoint {0, 0, gain * 0.5f, named.name});
+          cue->audioMatrix.push_back(AudioCrosspoint {1, 0, gain * 0.5f, named.name});
+        }
+      }
+      markProjectDirty();
+      refreshLiveCueAudioMatrix();
+      triggerToast("matrix on, routed as the patch had it");
+      return;
+    }
+    const int pair = std::clamp(cue->audioOutputPair, 0, 31);
+    cue->audioMatrix.push_back(AudioCrosspoint {0, pair * 2, 1.0f});
+    cue->audioMatrix.push_back(AudioCrosspoint {1, pair * 2 + 1, 1.0f});
+    markProjectDirty();
+    refreshLiveCueAudioMatrix();
+    triggerToast("matrix on, routed as it was");
+  }
+
+  void clearCueMatrix() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    cue->audioMatrix.clear();
+    markProjectDirty();
+    refreshLiveCueAudioMatrix();
+    triggerToast("matrix off - back to the output pair");
+  }
+
+  // A fireside edit must reach the picture NOW: it is an animated pattern, so
+  // the next frame rebuilds from the cue -- but the engine holds its own
+  // snapshot, and without marking dirty the hearth would not change until
+  // something else did.
+  void nudgeFireside(int which, int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || normalizePatternTypeId(cue->path) != "fireside") {
+      return;
+    }
+    if (which == 0) {
+      cue->firesideIntensity = std::clamp(cue->firesideIntensity + delta * 0.1, 0.2, 2.0);
+    } else if (which == 1) {
+      cue->firesideSparks = std::clamp(cue->firesideSparks + delta * 4, 0, 160);
+    } else {
+      // Wraps, so one row reaches all five views without a second button.
+      // The `+ kFiresideViewCount` is what keeps a step backwards positive --
+      // C++'s % would hand back -1 from view 0.
+      cue->firesideView = (cue->firesideView + kFiresideViewCount + delta) %
+                          kFiresideViewCount;
+      triggerToast(std::string("hearth window: ") +
+                   firesideViewLabel(cue->firesideView));
+    }
+    markProjectDirty();
+  }
+
+  // ── PLAYING A MIDI FILE ───────────────────────────────────────────────
+  //
+  // Parsed once and cached by path, because a file with ten thousand events
+  // is parsed in a millisecond but not sixty times a second.
+  // HELD BY POINTER so the parsed files never move. A vector of them by
+  // VALUE reallocates on push_back, which invalidates every pointer handed
+  // out by an earlier call -- and this function hands out pointers: the
+  // inspector holds one while it draws, and the player holds one while it
+  // walks the events. It had not crashed yet because no caller kept one
+  // across a second call, which is not a property anybody can rely on.
+  struct LoadedMidiFile {
+    std::unique_ptr<deckboy::platform::midi::File> file;
+    std::string path;
+  };
+  std::vector<LoadedMidiFile> midiFileCache_;
+
+  const deckboy::platform::midi::File* loadedMidiFile(const std::string& path) {
+    for (const LoadedMidiFile& entry : midiFileCache_) {
+      if (entry.path == path) {
+        return entry.file.get();
+      }
+    }
+    if (path.empty()) {
+      return nullptr;
+    }
+    LoadedMidiFile entry;
+    entry.path = path;
+    entry.file = std::make_unique<deckboy::platform::midi::File>(
+      deckboy::platform::midi::readMidiFile(path));
+    // CACHED EVEN WHEN IT FAILED. Otherwise a file that cannot be parsed is
+    // re-read from disk every frame for as long as the cue is selected.
+    const deckboy::platform::midi::File* result = entry.file.get();
+    midiFileCache_.push_back(std::move(entry));
+    if (midiFileCache_.size() > 32) {
+      midiFileCache_.erase(midiFileCache_.begin());
+    }
+    return result;
+  }
+
+  // Where each deck's MIDI file playhead had got to, so the next tick knows
+  // which events it has already sent. Negative means "nothing sent yet".
+  std::vector<double> midiFileSentUpTo_;
+  // AND WHICH PORT IT WAS SENDING TO. Needed because the cue may be GONE by
+  // the time we have to silence it -- re-racked, deleted, or replaced -- and
+  // an all-notes-off sent to "the first available port" goes to the wrong
+  // instrument while the notes it was meant to stop ring on for ever.
+  std::vector<std::string> midiFilePortInUse_;
+
+  std::string& midiFilePortForDeck(int deckIndex) {
+    if (midiFilePortInUse_.size() <= static_cast<std::size_t>(deckIndex)) {
+      midiFilePortInUse_.resize(deckIndex + 1);
+    }
+    return midiFilePortInUse_[deckIndex];
+  }
+
+  double& midiFileCursorForDeck(int deckIndex) {
+    if (midiFileSentUpTo_.size() <= static_cast<std::size_t>(deckIndex)) {
+      midiFileSentUpTo_.resize(deckIndex + 1, -1.0);
+    }
+    return midiFileSentUpTo_[deckIndex];
+  }
+
+  // EVERY NOTE OFF ON EVERY CHANNEL. Sent whenever a MIDI file stops, is
+  // re-racked or is scrubbed backwards, because a note-on whose note-off was
+  // never reached is a note that plays until the instrument is power-cycled.
+  // Two messages per channel: all-notes-off, then all-sound-off, because
+  // plenty of instruments honour only one of them.
+  void silenceMidiFile(const std::string& portName) {
+    std::string reason;
+    if (!ensureMidiOutPort(portName, reason)) {
+      return;
+    }
+    auto& out = midiOut_;
+    for (int channel = 0; channel < 16; ++channel) {
+      const std::uint8_t status = static_cast<std::uint8_t>(0xB0 | channel);
+      out.send({status, 0x7B, 0x00});   // all notes off
+      out.send({status, 0x78, 0x00});   // all sound off
+    }
+  }
+
+  // Called once a tick per deck. Sends everything between where the playhead
+  // was and where it is now.
+  void serviceMidiFileCues() {
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      double& cursor = midiFileCursorForDeck(deckIndex);
+      const Cue* cue = activeCuePtr(deckIndex);
+      if (!cue || cue->kind != CueKind::MidiFile) {
+        if (cursor >= 0.0) {
+          // The cue has gone, so its port is remembered rather than asked
+          // for -- see midiFilePortInUse_.
+          silenceMidiFile(midiFilePortForDeck(deckIndex));
+          cursor = -1.0;
+        }
+        continue;
+      }
+      midiFilePortForDeck(deckIndex) = cue->midiPortName;
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      if (!engine) {
+        continue;
+      }
+      if (engine->state() != TransportState::Playing) {
+        if (cursor >= 0.0) {
+          silenceMidiFile(cue->midiPortName);
+          cursor = -1.0;
+        }
+        continue;
+      }
+      const deckboy::platform::midi::File* file =
+        loadedMidiFile(resolvedCueFilesystemPathString(*cue, currentProjectFile_));
+      if (!file || !file->ok || file->events.empty()) {
+        continue;
+      }
+      const double now = engine->position();
+      // A JUMP BACKWARDS is a scrub or a loop, not a gap to fill in. Sending
+      // everything between the old position and the new one would replay the
+      // whole file at once.
+      if (now < cursor) {
+        silenceMidiFile(cue->midiPortName);
+        cursor = -1.0;
+      }
+      std::string reason;
+      if (!ensureMidiOutPort(cue->midiPortName, reason)) {
+        continue;
+      }
+      for (const auto& event : file->events) {
+        if (event.seconds <= cursor) {
+          continue;
+        }
+        if (event.seconds > now) {
+          break;   // sorted, so nothing after this is due either
+        }
+        midiOut_.send(event.bytes);
+      }
+      cursor = now;
+    }
+  }
+
+  // Steps through the ports this machine actually has, ending on "first
+  // available" -- which is what a rig with one interface wants and never has
+  // to configure. Shared by the MIDI cue and the MIDI file cue, because a
+  // port is a port.
+  void cycleMidiPortForSelectedCue() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    const auto ports = deckboy::platform::midi::MidiOutput::listDevices();
+    if (ports.empty()) {
+      triggerToast("no MIDI output ports on this machine");
+      return;
+    }
+    int at = -1;   // -1 is "first available"
+    for (int i = 0; i < static_cast<int>(ports.size()); ++i) {
+      if (ports[i].name == cue->midiPortName) {
+        at = i;
+        break;
+      }
+    }
+    ++at;
+    cue->midiPortName = (at >= static_cast<int>(ports.size()))
+      ? std::string() : ports[at].name;
+    markProjectDirty();
+    triggerToast(cue->midiPortName.empty() ? "first available" : cue->midiPortName);
+  }
+
+  Cue* selectedTextCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Text) ? cue : nullptr;
+  }
+
+  void cycleTextAnimation() {
+    Cue* cue = selectedTextCue();
+    if (!cue) {
+      return;
+    }
+    static const CueTextAnimation kOrder[] = {
+      CueTextAnimation::None, CueTextAnimation::FadeIn,
+      CueTextAnimation::Typewriter, CueTextAnimation::ScrollUp,
+      CueTextAnimation::Crawl, CueTextAnimation::Pulse,
+      CueTextAnimation::Wobble,
+    };
+    const int count = static_cast<int>(sizeof(kOrder) / sizeof(kOrder[0]));
+    int at = 0;
+    for (int i = 0; i < count; ++i) {
+      if (kOrder[i] == cue->textAnimation) {
+        at = i;
+        break;
+      }
+    }
+    cue->textAnimation = kOrder[(at + 1) % count];
+    markProjectDirty();
+    triggerToast(cueTextAnimationLabel(cue->textAnimation));
+  }
+
+  void cycleTextAlign() {
+    Cue* cue = selectedTextCue();
+    if (!cue) {
+      return;
+    }
+    cue->textAlign = (cue->textAlign + 1) % 3;
+    markProjectDirty();
+  }
+
+  // 0 size, 1 speed, 2 background
+  void nudgeTextField(int which, int delta) {
+    Cue* cue = selectedTextCue();
+    if (!cue) {
+      return;
+    }
+    if (which == 0) {
+      cue->textSizePct = std::clamp(cue->textSizePct + delta * 1.0, 1.0, 100.0);
+    } else if (which == 1) {
+      cue->textSpeed = std::clamp(cue->textSpeed + delta * 0.1, 0.05, 20.0);
+    } else {
+      cue->textBgAlpha = std::clamp(cue->textBgAlpha + delta * 16, 0, 255);
+    }
+    markProjectDirty();
+  }
+
+  void editTextBody() {
+    if (!selectedTextCue()) {
+      return;
+    }
+    // The CODE editor, because it is the only multi-line one there is and a
+    // title card with two lines is the normal case, not the exception.
+    openCodeEditor();
+  }
+
+  // ── PRESETS ───────────────────────────────────────────────────────────
+  //
+  // See ShowPreset. Capture takes everything; recall puts back only what the
+  // preset's scope says. A preset that recalls POSITION without CUES puts the
+  // captured geometry on whatever each playlist is showing NOW -- which is
+  // what "a preset for just positions" means to an operator.
+
+  bool deckIsOnAir(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size()) ||
+        deckIndex >= static_cast<int>(deckRuntimes_.size())) {
+      return false;
+    }
+    const Deck& deck = project_.decks[static_cast<std::size_t>(deckIndex)];
+    const auto& engine = deckRuntimes_[static_cast<std::size_t>(deckIndex)].mediaEngine;
+    return deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+           engine && engine->state() != TransportState::Stopped;
+  }
+
+  // By 1-based number, id, or name -- whichever the caller has.
+  ShowPreset* findPreset(const std::string& key) {
+    if (key.empty()) {
+      return nullptr;
+    }
+    if (key.find_first_not_of("0123456789") == std::string::npos) {
+      const int n = std::atoi(key.c_str());
+      if (n >= 1 && n <= static_cast<int>(project_.presets.size())) {
+        return &project_.presets[static_cast<std::size_t>(n - 1)];
+      }
+    }
+    for (ShowPreset& p : project_.presets) {
+      if (p.id == key) return &p;
+    }
+    const std::string wanted = toLower(key);
+    for (ShowPreset& p : project_.presets) {
+      if (toLower(p.name) == wanted) return &p;
+    }
+    return nullptr;
+  }
+
+  // Everything, as it is now, into `into` (keeping its id, name and scope).
+  void capturePresetState(ShowPreset& into) const {
+    into.decks.clear();
+    into.outputs.clear();
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[static_cast<std::size_t>(d)];
+      PresetDeckState s;
+      s.deckIndex = d;
+      s.live = deckIsOnAir(d);
+      s.opacity = deck.playlistOpacity;
+      // The live cue's parameters; with nothing live, the selected one's, so
+      // a preset captured with a playlist parked still knows its geometry.
+      int source = s.live ? deck.activeIndex : deck.selectedIndex;
+      if (source >= 0 && source < static_cast<int>(deck.cues.size())) {
+        const Cue& cue = deck.cues[static_cast<std::size_t>(source)];
+        s.cueId = cue.id;
+        s.scaleMode = static_cast<int>(cue.scaleMode);
+        s.scaleX = cue.outputScaleX;
+        s.scaleY = cue.outputScaleY;
+        s.offsetX = cue.outputOffsetX;
+        s.offsetY = cue.outputOffsetY;
+        s.rotation = cue.outputRotationDegrees;
+        s.cropLeft = cue.cropLeft;
+        s.cropRight = cue.cropRight;
+        s.cropTop = cue.cropTop;
+        s.cropBottom = cue.cropBottom;
+        s.geometryLfo = serializeGeometryLfos(cue.geometryLfo);
+        s.brightness = cue.brightness;
+        s.contrast = cue.contrast;
+        s.saturation = cue.saturation;
+        s.hueShift = cue.hueShift;
+        s.keyOn = cue.chromaKeyEnabled;
+        s.keyColor = cue.chromaKeyColor;
+        s.keyTolerance = cue.chromaKeyTolerance;
+        s.keySoftness = cue.chromaKeySoftness;
+        s.effects = serializeCueEffects(cue.effects);
+      }
+      into.decks.push_back(s);
+    }
+    for (int o = 0; o < static_cast<int>(project_.outputs.size()); ++o) {
+      const OutputTarget& output = project_.outputs[static_cast<std::size_t>(o)];
+      PresetOutputState s;
+      s.outputIndex = o;
+      s.hostDeckIndex = output.hostDeckIndex;
+      s.layers = joinLayerList(output.layerDecks);
+      s.crossfadeEnabled = output.crossfadeEnabled;
+      s.crossfadeFrom = output.crossfadeFrom;
+      s.crossfadeTo = output.crossfadeTo;
+      s.crossfadeMix = output.crossfadeMix;
+      into.outputs.push_back(s);
+    }
+    into.masterDimmer = masterDimmerTarget_;
+    into.masterVolume = project_.masterVolume;
+  }
+
+  ShowPreset& savePresetFromNow(const std::string& name) {
+    ShowPreset preset;
+    // Unique for the life of the show: a dashboard button holds the id, so it
+    // must not be reused by a preset made after this one is deleted.
+    preset.id = "preset-" + std::to_string(SDL_GetTicks()) + "-" +
+                std::to_string(project_.presets.size() + 1);
+    preset.name = name.empty() ? "Preset " + std::to_string(project_.presets.size() + 1)
+                               : name;
+    capturePresetState(preset);
+    project_.presets.push_back(preset);
+    markProjectDirty();
+    return project_.presets.back();
+  }
+
+  std::string presetScopeSummary(unsigned scope) const {
+    if ((scope & kPresetScopeAll) == kPresetScopeAll) {
+      return "everything";
+    }
+    std::string out;
+    for (int bit = 0; bit < kPresetScopeCount; ++bit) {
+      if (scope & (1u << bit)) {
+        if (!out.empty()) out += ", ";
+        out += presetScopeToken(bit);
+      }
+    }
+    return out.empty() ? std::string("nothing") : out;
+  }
+
+  void recallPreset(const ShowPreset& preset) {
+    const unsigned scope = preset.scope;
+    const int savedFocus = project_.focusedDeckIndex;
+    for (const PresetDeckState& s : preset.decks) {
+      if (s.deckIndex < 0 || s.deckIndex >= static_cast<int>(project_.decks.size())) {
+        continue;
+      }
+      const int d = s.deckIndex;
+      // CUES first, so the parameters below land on the cue that is now live.
+      if (scope & kPresetCues) {
+        const int idx = s.cueId.empty() ? -1 : findCueIndexById(d, s.cueId);
+        if (s.live && idx >= 0) {
+          if (!(project_.decks[static_cast<std::size_t>(d)].activeIndex == idx && deckIsOnAir(d))) {
+            // The real take path, borrowing focus the way a master cue does.
+            project_.focusedDeckIndex = d;
+            selectCueInDeck(d, idx, false, false);
+            takeSelected(true);
+          }
+        } else if (!s.live && deckIsOnAir(d)) {
+          project_.focusedDeckIndex = d;
+          stopTransport();
+        }
+      }
+      Deck& deck = project_.decks[static_cast<std::size_t>(d)];
+      if (scope & (kPresetPosition | kPresetLook | kPresetEffects)) {
+        int target = -1;
+        if (scope & kPresetCues) {
+          target = s.cueId.empty() ? -1 : findCueIndexById(d, s.cueId);
+        } else if (deckIsOnAir(d)) {
+          target = deck.activeIndex;
+        } else if (!s.cueId.empty()) {
+          target = findCueIndexById(d, s.cueId);
+        }
+        if (target >= 0 && target < static_cast<int>(deck.cues.size())) {
+          Cue& cue = deck.cues[static_cast<std::size_t>(target)];
+          const bool neededCpu = cueNeedsCpuPixelPath(cue);
+          if (scope & kPresetPosition) {
+            cue.scaleMode = static_cast<ScaleMode>(s.scaleMode);
+            cue.outputScaleX = s.scaleX;
+            cue.outputScaleY = s.scaleY;
+            cue.outputOffsetX = s.offsetX;
+            cue.outputOffsetY = s.offsetY;
+            cue.outputRotationDegrees = s.rotation;
+            cue.cropLeft = s.cropLeft;
+            cue.cropRight = s.cropRight;
+            cue.cropTop = s.cropTop;
+            cue.cropBottom = s.cropBottom;
+            cue.geometryLfo = parseGeometryLfos(s.geometryLfo);
+          }
+          if (scope & kPresetLook) {
+            cue.brightness = s.brightness;
+            cue.contrast = s.contrast;
+            cue.saturation = s.saturation;
+            cue.hueShift = s.hueShift;
+            cue.chromaKeyEnabled = s.keyOn;
+            cue.chromaKeyColor = s.keyColor;
+            cue.chromaKeyTolerance = s.keyTolerance;
+            cue.chromaKeySoftness = s.keySoftness;
+          }
+          if (scope & kPresetEffects) {
+            cue.effects = parseCueEffects(s.effects);
+          }
+          // The decode format is chosen at take. A recalled grade or effect
+          // on a live cue that was decoding for the fast path would otherwise
+          // do nothing until the next take -- the "control that does nothing"
+          // this codebase keeps meeting.
+          if (target == deck.activeIndex && cueNeedsCpuPixelPath(cue) != neededCpu) {
+            if (MediaEngine* engine = mediaEngineForDeck(d)) {
+              if (!engine->adoptLookWithoutRestart(cue)) {
+                engine->refreshActiveCueRuntime(&cue);
+              }
+            }
+          }
+        }
+      }
+      if (scope & kPresetLevels) {
+        setDeckPlaylistOpacity(d, s.opacity, true);
+      }
+    }
+    project_.focusedDeckIndex = savedFocus;
+
+    if (scope & kPresetRouting) {
+      const int deckCount = static_cast<int>(project_.decks.size());
+      for (const PresetOutputState& o : preset.outputs) {
+        if (o.outputIndex < 0 || o.outputIndex >= static_cast<int>(project_.outputs.size())) {
+          continue;
+        }
+        OutputTarget& output = project_.outputs[static_cast<std::size_t>(o.outputIndex)];
+        output.hostDeckIndex = std::clamp(o.hostDeckIndex, 0, std::max(0, deckCount - 1));
+        std::vector<OutputLayer> layers;
+        for (const OutputLayer& layer : parseLayerList(o.layers)) {
+          // A playlist removed since the capture is left out rather than
+          // repointed at whichever deck now has its number.
+          if (layer.deckIndex >= 0 && layer.deckIndex < deckCount &&
+              layer.deckIndex != output.hostDeckIndex) {
+            layers.push_back(layer);
+          }
+        }
+        output.layerDecks.swap(layers);
+        output.crossfadeEnabled = o.crossfadeEnabled;
+        output.crossfadeFrom = o.crossfadeFrom;
+        output.crossfadeTo = o.crossfadeTo;
+        output.crossfadeMix = o.crossfadeMix;
+      }
+    }
+    if (scope & kPresetMaster) {
+      masterDimmerTarget_ = std::clamp(preset.masterDimmer, 0.0, 1.0);
+      project_.masterVolume = std::clamp(preset.masterVolume, 0.0, 2.0);
+    }
+    markProjectDirty();
+    triggerToast("preset: " + preset.name + " (" + presetScopeSummary(scope) + ")");
+  }
+
+  // The dashboard tile that recalls a preset carries this command.
+  static std::string presetRecallCommand(const ShowPreset& preset) {
+    return "PRESET RECALL " + preset.id;
+  }
+
+  // Tick groups on and off; the menu comes back after each so several can be
+  // changed in one visit.
+  void openPresetScopeMenu(const std::string& presetId, const SDL_Rect& anchor) {
+    ShowPreset* preset = findPreset(presetId);
+    if (!preset) {
+      return;
+    }
+    std::vector<std::pair<std::string, std::string>> choices;
+    choices.emplace_back("all", "everything");
+    for (int bit = 0; bit < kPresetScopeCount; ++bit) {
+      choices.emplace_back(std::to_string(bit),
+                           std::string((preset->scope & (1u << bit)) ? "[x] " : "[  ] ") +
+                             presetScopeLabel(bit));
+    }
+    choices.emplace_back("done", "done");
+    openDropdown("preset.scope." + presetId, anchor, choices, "done",
+                 [this, presetId, anchor](const std::string& chosen) {
+      ShowPreset* p = findPreset(presetId);
+      if (!p || chosen == "done") {
+        return;
+      }
+      if (chosen == "all") {
+        p->scope = kPresetScopeAll;
+      } else {
+        const int bit = std::atoi(chosen.c_str());
+        if (bit >= 0 && bit < kPresetScopeCount) {
+          p->scope ^= (1u << bit);
+        }
+      }
+      markProjectDirty();
+      triggerToast(p->name + " recalls " + presetScopeSummary(p->scope));
+      openPresetScopeMenu(presetId, anchor);
+    });
+  }
+
+  // ── LOWER THIRDS ──────────────────────────────────────────────────────
+  //
+  // The layout lives on the text cue (see LowerThirdDesign); what lives here
+  // is its exit. OUT marks the moment on the deck's transport clock, the
+  // renderer plays the out move from there, and once it has finished the
+  // playlist takes the cue off -- so OUT is never a cut unless the out move
+  // is one.
+
+  double lowerThirdOutAtFor(int deckIndex) const {
+    return (deckIndex >= 0 && deckIndex < static_cast<int>(lowerThirdOutAt_.size()))
+      ? lowerThirdOutAt_[static_cast<std::size_t>(deckIndex)] : -1.0;
+  }
+
+  // ON AIR, not merely the deck's last cue: a stopped deck still remembers
+  // its active index, and OUT on a lower third that has already gone must say
+  // there is nothing to send out rather than claim it sent one.
+  const Cue* liveLowerThird(int deckIndex) const {
+    const Cue* cue = activeCuePtr(deckIndex);
+    if (!cue || cue->kind != CueKind::Text || !cue->lowerThird.on) {
+      return nullptr;
+    }
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckRuntimes_.size()) ||
+        !deckRuntimes_[static_cast<std::size_t>(deckIndex)].mediaEngine ||
+        deckRuntimes_[static_cast<std::size_t>(deckIndex)].mediaEngine->state() ==
+          TransportState::Stopped) {
+      return nullptr;
+    }
+    return cue;
+  }
+
+  // Start the out move on one playlist. False when nothing there is a lower
+  // third on air.
+  bool lowerThirdTakeOut(int deckIndex) {
+    if (!liveLowerThird(deckIndex)) {
+      return false;
+    }
+    MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (!engine) {
+      return false;
+    }
+    if (static_cast<int>(lowerThirdOutAt_.size()) <= deckIndex) {
+      lowerThirdOutAt_.resize(static_cast<std::size_t>(deckIndex) + 1, -1.0);
+    }
+    double& at = lowerThirdOutAt_[static_cast<std::size_t>(deckIndex)];
+    if (at < 0.0) {
+      at = engine->position();
+    }
+    return true;
+  }
+
+  // OUT from a button that does not say which playlist: the focused one if
+  // its live cue is a lower third, otherwise every playlist that has one up.
+  // Returns how many were sent out.
+  int lowerThirdTakeOutAnywhere() {
+    if (lowerThirdTakeOut(project_.focusedDeckIndex)) {
+      return 1;
+    }
+    int sent = 0;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      if (lowerThirdTakeOut(d)) {
+        ++sent;
+      }
+    }
+    return sent;
+  }
+
+  // Once a frame: finish the exits that have played out.
+  void tickLowerThirds() {
+    const int decks = static_cast<int>(project_.decks.size());
+    if (static_cast<int>(lowerThirdOutAt_.size()) < decks) {
+      lowerThirdOutAt_.resize(static_cast<std::size_t>(decks), -1.0);
+    }
+    for (int d = 0; d < decks; ++d) {
+      double& manual = lowerThirdOutAt_[static_cast<std::size_t>(d)];
+      const Cue* cue = liveLowerThird(d);
+      MediaEngine* engine = cue ? mediaEngineForDeck(d) : nullptr;
+      if (!cue || !engine) {
+        manual = -1.0;
+        continue;
+      }
+      const double position = engine->position();
+      // Taken again: the clock has gone back past the moment OUT was pressed,
+      // so that OUT belonged to the last time it was on.
+      if (manual >= 0.0 && position + 0.001 < manual) {
+        manual = -1.0;
+      }
+      const LowerThirdDesign& design = cue->lowerThird;
+      const double outAt = manual >= 0.0 ? manual
+        : (design.holdSeconds > 0.0 ? std::max(0.0, design.inSeconds) + design.holdSeconds
+                                    : -1.0);
+      if (outAt < 0.0 || position < outAt + std::max(0.0, design.outSeconds)) {
+        continue;
+      }
+      manual = -1.0;
+      // Off, the ordinary way: STOP on that playlist, borrowing focus the way
+      // a master cue does, so it runs every guard a STOP runs.
+      const int savedFocus = project_.focusedDeckIndex;
+      project_.focusedDeckIndex = d;
+      stopTransport();
+      project_.focusedDeckIndex = savedFocus;
+    }
+  }
+
+  // Replace one line of a text cue's body, making the lines up to it.
+  static void setTextBodyLine(std::string& body, int line, const std::string& value) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (true) {
+      const std::size_t nl = body.find('\n', start);
+      lines.push_back(body.substr(start, nl == std::string::npos ? std::string::npos
+                                                                  : nl - start));
+      if (nl == std::string::npos) break;
+      start = nl + 1;
+    }
+    while (static_cast<int>(lines.size()) <= line) {
+      lines.emplace_back();
+    }
+    lines[static_cast<std::size_t>(line)] = value;
+    // Trailing empty lines are dropped, so clearing the subtitle does not
+    // leave a dangling newline on a one-line title.
+    while (lines.size() > 1 && lines.back().empty()) {
+      lines.pop_back();
+    }
+    body.clear();
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+      if (i) body += '\n';
+      body += lines[i];
+    }
+  }
+
+  static std::string textBodyLine(const std::string& body, int line) {
+    std::size_t start = 0;
+    for (int i = 0; i < line; ++i) {
+      const std::size_t nl = body.find('\n', start);
+      if (nl == std::string::npos) return std::string();
+      start = nl + 1;
+    }
+    const std::size_t nl = body.find('\n', start);
+    return body.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+  }
+
+  void editLowerThirdLine(int line) {
+    Cue* cue = selectedTextCue();
+    if (!cue) {
+      return;
+    }
+    const std::string id = cue->id;
+    openInlineTextEditor(line == 0 ? "lowerthird.title" : "lowerthird.sub",
+                         line == 0 ? "Lower Third - title" : "Lower Third - subtitle",
+                         line == 0 ? "the name" : "the role, or leave it empty",
+                         textBodyLine(cue->textBody, line),
+                         [this, id, line](const std::string& value) {
+      for (Deck& deck : project_.decks) {
+        for (Cue& each : deck.cues) {
+          if (each.id == id) {
+            setTextBodyLine(each.textBody, line, value);
+            markProjectDirty();
+            return;
+          }
+        }
+      }
+    });
+  }
+
+  void cycleLowerThird(int which) {
+    Cue* cue = selectedTextCue();
+    if (!cue || !cue->lowerThird.on) {
+      return;
+    }
+    LowerThirdDesign& d = cue->lowerThird;
+    auto step = [](int value, int count) { return (value + 1) % count; };
+    switch (which) {
+      case 0: {
+        // A LIST, not a cycle: reaching the previous look should not take a
+        // lap of the catalogue. Grouped, so "clean" and "magical" read as the
+        // two kinds of thing on offer; the dropdown can search either.
+        std::vector<std::pair<std::string, std::string>> choices;
+        for (int pass = 0; pass < 2; ++pass) {
+          for (int i = 0; i < static_cast<int>(LowerThirdLook::Count); ++i) {
+            const auto look = static_cast<LowerThirdLook>(i);
+            if (lowerThirdLookIsPlayful(look) != (pass == 1)) {
+              continue;
+            }
+            choices.emplace_back(lowerThirdLookLabel(look),
+                                 std::string(pass == 0 ? "clean    " : "magical  ") +
+                                   lowerThirdLookLabel(look));
+          }
+        }
+        SDL_Rect anchor {};
+        for (const auto& button : quickButtons_) {
+          if (button.action == QuickAction::LowerThirdCycle && button.param == 0) {
+            anchor = button.rect;
+          }
+        }
+        const std::string cueId = cue->id;
+        openDropdown("l3.look", anchor, choices, lowerThirdLookLabel(d.look),
+                     [this, cueId](const std::string& chosen) {
+          Cue* now = selectedTextCue();
+          if (!now || now->id != cueId) {
+            return;
+          }
+          for (int i = 0; i < static_cast<int>(LowerThirdLook::Count); ++i) {
+            if (chosen == lowerThirdLookLabel(static_cast<LowerThirdLook>(i))) {
+              pushUndoSnapshot();
+              now->lowerThird.look = static_cast<LowerThirdLook>(i);
+              // EACH ARRIVES IN ITS OWN COLOURS, from the desk: a comic panel
+              // on the default ink is a black box with black words in it, and
+              // a card is not a card until it is pale. Indices into the fixed
+              // list (ink, paper, red, orange, yellow, green, blue, violet,
+              // deckboy, forest). Both stay one press away from changing.
+              struct Pair { LowerThirdLook look; int bar; int accent; };
+              static const Pair kPairs[] = {
+                {LowerThirdLook::Split, 0, 2},   {LowerThirdLook::Card, 1, 6},
+                {LowerThirdLook::Comic, 4, 2},   {LowerThirdLook::Neon, 0, 7},
+                {LowerThirdLook::Sparkle, 7, 4}, {LowerThirdLook::Scroll, 1, 2},
+                {LowerThirdLook::Arcade, 9, 4},
+                {LowerThirdLook::Bulletin, 0, 2},
+                {LowerThirdLook::Dateline, 0, 6},
+                {LowerThirdLook::Sideline, 0, 5},
+                {LowerThirdLook::Scoreboard, 0, 4},
+                {LowerThirdLook::Podium, 0, 6},
+                {LowerThirdLook::Pennant, 0, 2},
+                {LowerThirdLook::Ribbon, 6, 4},
+                {LowerThirdLook::Ledger, 1, 6},
+                {LowerThirdLook::Dossier, 1, 3},
+                {LowerThirdLook::Index, 1, 2},
+                {LowerThirdLook::Bracket, 0, 6},
+                {LowerThirdLook::Crosshair, 0, 4},
+                {LowerThirdLook::Caption, 0, 4},
+                {LowerThirdLook::Credit, 0, 1},
+                {LowerThirdLook::Theatre, 0, 4},
+                {LowerThirdLook::Placard, 1, 2},
+                {LowerThirdLook::Rail, 0, 6},
+                {LowerThirdLook::Survey, 0, 3},
+                {LowerThirdLook::Tab, 0, 6},
+                {LowerThirdLook::Ticket, 1, 2},
+                {LowerThirdLook::Capsule, 0, 6},
+                {LowerThirdLook::Film, 0, 1},
+                {LowerThirdLook::Stacked, 1, 6},
+                {LowerThirdLook::Flag, 0, 2},
+                {LowerThirdLook::Terminal, 0, 5},
+                {LowerThirdLook::Window, 1, 6},
+                {LowerThirdLook::Diskette, 0, 6},
+                {LowerThirdLook::Cassette, 0, 3},
+                {LowerThirdLook::Cartridge, 0, 4},
+                {LowerThirdLook::Blueprint, 6, 1},
+                {LowerThirdLook::Circuit, 0, 5},
+                {LowerThirdLook::Equalizer, 0, 5},
+                {LowerThirdLook::Dotmatrix, 0, 4},
+                {LowerThirdLook::Stamp, 1, 2},
+                {LowerThirdLook::Sticky, 4, 3},
+                {LowerThirdLook::Notebook, 1, 2},
+                {LowerThirdLook::Sketch, 0, 4},
+                {LowerThirdLook::Confetti, 7, 4},
+                {LowerThirdLook::Marquee, 0, 4},
+              };
+              for (const Pair& pair : kPairs) {
+                if (pair.look == now->lowerThird.look) {
+                  now->lowerThird.bar = pair.bar;
+                  now->lowerThird.accent = pair.accent;
+                }
+              }
+              markProjectDirty();
+              triggerToast("look: " + chosen);
+              return;
+            }
+          }
+        });
+        return;
+      }
+      case 1:
+        d.side = step(d.side, 3);
+        triggerToast(d.side == 0 ? "left" : d.side == 2 ? "right" : "centre");
+        break;
+      case 2:
+        d.bar = step(d.bar, kLowerThirdColourCount);
+        triggerToast(std::string("bar: ") + lowerThirdColourName(d.bar));
+        break;
+      case 3:
+        d.accent = step(d.accent, kLowerThirdColourCount);
+        triggerToast(std::string("accent: ") + lowerThirdColourName(d.accent));
+        break;
+      case 4:
+        d.moveIn = static_cast<LowerThirdMove>(
+          step(static_cast<int>(d.moveIn), static_cast<int>(LowerThirdMove::Count)));
+        triggerToast(std::string("in: ") + lowerThirdMoveLabel(d.moveIn));
+        break;
+      case 5:
+        d.moveOut = static_cast<LowerThirdMove>(
+          step(static_cast<int>(d.moveOut), static_cast<int>(LowerThirdMove::Count)));
+        triggerToast(std::string("out: ") + lowerThirdMoveLabel(d.moveOut));
+        break;
+      case 6:
+        pushUndoSnapshot();
+        d.wiggle = !d.wiggle;
+        triggerToast(d.look == LowerThirdLook::Arcade ? "arcade always wiggles"
+                     : d.wiggle ? "wiggle on" : "wiggle off");
+        break;
+      default:
+        return;
+    }
+    markProjectDirty();
+  }
+
+  void toggleLowerThirdLayout() {
+    Cue* cue = selectedTextCue();
+    if (!cue) {
+      return;
+    }
+    cue->lowerThird.on = !cue->lowerThird.on;
+    if (cue->lowerThird.on && cue->textBody.empty()) {
+      cue->textBody = "Name Surname\nTitle or role";
+    }
+    markProjectDirty();
+    triggerToast(cue->lowerThird.on ? "layout: Lower Third" : "layout: card");
+  }
+
+  Cue* selectedDmxCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Dmx) ? cue : nullptr;
+  }
+
+  void nudgeDmxField(int which, int delta) {
+    Cue* cue = selectedDmxCue();
+    if (!cue) {
+      return;
+    }
+    if (which == 0) {
+      cue->dmxUniverse = std::clamp(cue->dmxUniverse + delta, 0, 32767);
+    } else {
+      cue->dmxFadeSeconds = std::max(0.0, cue->dmxFadeSeconds + delta * 0.5);
+    }
+    markProjectDirty();
+  }
+
+  void editDmxChannels() {
+    if (!selectedDmxCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.dmx_channels", "DMX Channels",
+                         "e.g. 1=255, 10-14=64", selectedDmxCue()->dmxChannels,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedDmxCue()) {
+                             c->dmxChannels = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void editDmxHost() {
+    if (!selectedDmxCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.dmx_host", "Art-Net Destination",
+                         "an IPv4 address, or 255.255.255.255 to broadcast",
+                         selectedDmxCue()->dmxHost,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedDmxCue()) {
+                             c->dmxHost = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void fireSelectedDmxCue() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Dmx) {
+      return;
+    }
+    (void)fireDmxCue(deckIndex, deck.selectedIndex);
+  }
+
+  Cue* selectedScriptCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Script) ? cue : nullptr;
+  }
+
+  void runSelectedScriptCue() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Script) {
+      return;
+    }
+    (void)runScriptCue(deckIndex, deck.selectedIndex);
+  }
+
+  // How many lines will actually run, for the inspector and the problem scan.
+  static int scriptLineCount(const std::string& text) {
+    int count = 0;
+    std::istringstream lines(text);
+    std::string line;
+    while (std::getline(lines, line)) {
+      if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+      }
+      const std::string trimmed = trim(line);
+      if (trimmed.empty() || trimmed.front() == '#' ||
+          trimmed.compare(0, 2, "//") == 0) {
+        continue;
+      }
+      ++count;
+    }
+    return count;
+  }
+
+  Cue* selectedTimecodeCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Timecode) ? cue : nullptr;
+  }
+
+  void cycleTimecodeAction() {
+    Cue* cue = selectedTimecodeCue();
+    if (!cue) {
+      return;
+    }
+    const std::string now = toLower(trim(cue->tcAction));
+    cue->tcAction = now == "start" ? "stop" : (now == "stop" ? "jam" : "start");
+    markProjectDirty();
+    triggerToast(toUpper(cue->tcAction));
+  }
+
+  void nudgeTimecodeJam(double delta) {
+    Cue* cue = selectedTimecodeCue();
+    if (!cue) {
+      return;
+    }
+    cue->tcJamSeconds = std::max(0.0, cue->tcJamSeconds + delta);
+    markProjectDirty();
+  }
+
+  void editTimecodeJam() {
+    if (!selectedTimecodeCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.tc_jam", "Jam To",
+                         "hh:mm:ss or seconds",
+                         formatTimecode(selectedTimecodeCue()->tcJamSeconds,
+                                        focusedDeck().playlistTimebaseFps),
+                         [this](const std::string& value) {
+                           Cue* c = selectedTimecodeCue();
+                           if (!c) {
+                             return;
+                           }
+                           // Accepts a timecode or a bare number of seconds,
+                           // because both are things people type.
+                           const std::string text = trim(value);
+                           double seconds = 0.0;
+                           if (text.find(':') != std::string::npos) {
+                             // The existing parser, which returns nullopt on
+                             // rubbish rather than a plausible wrong time.
+                             auto parsed = parseTimecodeSeconds(
+                               text, focusedDeck().playlistTimebaseFps);
+                             if (!parsed) {
+                               triggerToast("jam: not a timecode");
+                               return;
+                             }
+                             seconds = *parsed;
+                           } else {
+                             try {
+                               seconds = std::stod(text);
+                             } catch (...) {
+                               triggerToast("jam: not a time");
+                               return;
+                             }
+                           }
+                           c->tcJamSeconds = std::max(0.0, seconds);
+                           markProjectDirty();
+                         });
+  }
+
+  void fireSelectedTimecodeCue() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Timecode) {
+      return;
+    }
+    (void)fireTimecodeCue(deckIndex, deck.selectedIndex);
+  }
+
+  Cue* selectedNetworkCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Network) ? cue : nullptr;
+  }
+
+  void cycleNetworkProtocol() {
+    Cue* cue = selectedNetworkCue();
+    if (!cue) {
+      return;
+    }
+    const std::string now = toLower(trim(cue->netProtocol));
+    cue->netProtocol = now == "osc" ? "udp" : (now == "udp" ? "tcp" : "osc");
+    markProjectDirty();
+    triggerToast(toUpper(cue->netProtocol));
+  }
+
+  void nudgeNetworkPort(int delta) {
+    Cue* cue = selectedNetworkCue();
+    if (!cue) {
+      return;
+    }
+    cue->netPort = std::clamp(cue->netPort + delta, 1, 65535);
+    markProjectDirty();
+  }
+
+  void editNetworkHost() {
+    if (!selectedNetworkCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.net_host", "Destination Address",
+                         "e.g. 192.168.1.50", selectedNetworkCue()->netHost,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedNetworkCue()) {
+                             c->netHost = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void editNetworkAddress() {
+    if (!selectedNetworkCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.net_address", "OSC Address",
+                         "e.g. /cue/1/start", selectedNetworkCue()->netAddress,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedNetworkCue()) {
+                             c->netAddress = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void editNetworkPayload() {
+    if (!selectedNetworkCue()) {
+      return;
+    }
+    openInlineTextEditor("cue.net_payload", "Payload",
+                         "text to send", selectedNetworkCue()->netPayload,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedNetworkCue()) {
+                             // NOT trimmed: a trailing newline is often the
+                             // whole point of a TCP line, and trimming it here
+                             // would silently break every line-based protocol.
+                             c->netPayload = value;
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void sendSelectedNetworkCueNow() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Network) {
+      return;
+    }
+    (void)fireNetworkCue(deckIndex, deck.selectedIndex);
+  }
+
+  Cue* selectedMidiCue() {
+    Cue* cue = selectedCueMutable();
+    return (cue && cue->kind == CueKind::Midi) ? cue : nullptr;
+  }
+
+  void cycleMidiCueKind() {
+    Cue* cue = selectedMidiCue();
+    if (!cue) {
+      return;
+    }
+    static const char* kOrder[] = {"note-on", "note-off", "cc", "program",
+                                   "msc-go", "msc-stop", "msc-resume", "raw"};
+    const int count = static_cast<int>(sizeof(kOrder) / sizeof(kOrder[0]));
+    int at = 0;
+    for (int i = 0; i < count; ++i) {
+      if (cue->midiMessage == kOrder[i]) {
+        at = i;
+        break;
+      }
+    }
+    cue->midiMessage = kOrder[(at + 1) % count];
+    markProjectDirty();
+    triggerToast(deckboy::platform::midi::outMessageKindLabel(
+      deckboy::platform::midi::outMessageKindFromToken(cue->midiMessage)));
+  }
+
+  // Steps through the ports that exist RIGHT NOW, plus an empty entry meaning
+  // "the first one there is". Enumerated at every press rather than cached:
+  // interfaces get plugged in during setup, and a list from boot would be a
+  // list of what used to be there.
+  void cycleMidiCuePort() {
+    Cue* cue = selectedMidiCue();
+    if (!cue) {
+      return;
+    }
+    const auto ports = deckboy::platform::midi::MidiOutput::listDevices();
+    if (ports.empty()) {
+      triggerToast("no MIDI output ports on this machine");
+      return;
+    }
+    int at = -1;
+    for (int i = 0; i < static_cast<int>(ports.size()); ++i) {
+      if (ports[i].name == cue->midiPortName) {
+        at = i;
+        break;
+      }
+    }
+    const int next = at + 1;
+    cue->midiPortName = next >= static_cast<int>(ports.size())
+                          ? std::string() : ports[next].name;
+    markProjectDirty();
+    triggerToast(cue->midiPortName.empty() ? "first port available"
+                                           : cue->midiPortName);
+  }
+
+  // 0 channel, 1 data1, 2 data2, 3 MSC device.
+  void nudgeMidiCueField(int which, int delta) {
+    Cue* cue = selectedMidiCue();
+    if (!cue) {
+      return;
+    }
+    switch (which) {
+      case 0: cue->midiChannel = std::clamp(cue->midiChannel + delta, 1, 16); break;
+      case 1: cue->midiData1 = std::clamp(cue->midiData1 + delta, 0, 127); break;
+      case 2: cue->midiData2 = std::clamp(cue->midiData2 + delta, 0, 127); break;
+      default: cue->mscDevice = std::clamp(cue->mscDevice + delta, 0, 127); break;
+    }
+    markProjectDirty();
+  }
+
+  void editMidiCueNumber() {
+    Cue* cue = selectedMidiCue();
+    if (!cue) {
+      return;
+    }
+    openInlineTextEditor("cue.msc_number", "MSC Cue Number",
+                         "e.g. 12.5", cue->mscCue,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedMidiCue()) {
+                             c->mscCue = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void editMidiCueRawHex() {
+    Cue* cue = selectedMidiCue();
+    if (!cue) {
+      return;
+    }
+    openInlineTextEditor("cue.midi_raw", "Raw MIDI Bytes",
+                         "e.g. 90 3C 7F", cue->midiRawHex,
+                         [this](const std::string& value) {
+                           if (Cue* c = selectedMidiCue()) {
+                             c->midiRawHex = trim(value);
+                             markProjectDirty();
+                           }
+                         });
+  }
+
+  void sendSelectedMidiCueNow() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size()) ||
+        deck.cues[deck.selectedIndex].kind != CueKind::Midi) {
+      return;
+    }
+    (void)fireMidiCue(deckIndex, deck.selectedIndex);
+  }
+
+  // ── NETWORK CUES ──────────────────────────────────────────────────────
+  //
+  // Deckboy listens on OSC, UDP and TCP and has never spoken on any of them
+  // except as feedback. A network cue is the other direction: on GO, tell the
+  // media server or the desk or the other Deckboy to do something.
+  //
+  // UDP AND OSC ARE FIRE AND FORGET and cost nothing on the main thread. TCP
+  // is not: a connect to a machine that is off can block for the operating
+  // system's timeout, and a GO that stalls for even a second is unusable. So
+  // TCP runs on a detached thread and reports back through a queue.
+
+  // The payload an operator typed, with the escapes they would expect. Kept
+  // small deliberately: this is a show-control line, not a scripting language.
+  static std::string expandNetworkEscapes(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+      if (text[i] != '\\' || i + 1 >= text.size()) {
+        out.push_back(text[i]);
+        continue;
+      }
+      switch (text[++i]) {
+        case 'n': out.push_back('\n'); break;
+        case 'r': out.push_back('\r'); break;
+        case 't': out.push_back('\t'); break;
+        case '0': out.push_back('\0'); break;
+        case '\\': out.push_back('\\'); break;
+        // An unknown escape keeps BOTH characters rather than eating the
+        // backslash: a Windows path in a payload should survive being typed.
+        default: out.push_back('\\'); out.push_back(text[i]); break;
+      }
+    }
+    return out;
+  }
+
+  void drainNetworkResults() {
+    std::vector<std::string> results;
+    {
+      std::lock_guard<std::mutex> lock(networkResultMutex_);
+      if (networkResults_.empty()) {
+        return;
+      }
+      results.swap(networkResults_);
+    }
+    for (const std::string& line : results) {
+      triggerToast(line);
+      showLog("NETWORK", line);
+    }
+  }
+
+  std::string fireNetworkCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    const Cue& cue = deck.cues[cueIndex];
+    const std::string host = trim(cue.netHost);
+    const int port = std::clamp(cue.netPort, 1, 65535);
+    const std::string protocol = toLower(trim(cue.netProtocol));
+    if (host.empty()) {
+      const std::string why = cue.name + ": no host";
+      triggerToast(why);
+      return why;
+    }
+
+    sockaddr_in target {};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(static_cast<uint16_t>(port));
+    // NUMERIC ADDRESSES ONLY, and said so rather than guessed at. Resolving a
+    // name means a DNS lookup, which is a blocking call with no bound on a
+    // show network -- exactly what a GO must not do.
+    if (inet_pton(AF_INET, host.c_str(), &target.sin_addr) != 1) {
+      const std::string why = cue.name + ": " + host +
+                              " is not an IPv4 address";
+      triggerToast(why);
+      return why;
+    }
+
+    const std::string payload = expandNetworkEscapes(cue.netPayload);
+    const std::string where = host + ":" + std::to_string(port);
+
+    if (protocol == "osc") {
+      const std::string address = trim(cue.netAddress);
+      if (address.empty() || address.front() != '/') {
+        const std::string why = cue.name + ": an OSC address must start with /";
+        triggerToast(why);
+        return why;
+      }
+      sendOscStringTo(target, address, payload);
+      const std::string did = "OSC " + address + " -> " + where;
+      showLog("NETWORK", did);
+      triggerToast(did);
+      return did;
+    }
+
+    if (protocol == "udp") {
+      if (companionUdpSocket_ == deckboy::platform::kInvalidSocket) {
+        const std::string why = cue.name + ": no UDP socket";
+        triggerToast(why);
+        return why;
+      }
+      sendto(companionUdpSocket_, payload.data(),
+             static_cast<int>(payload.size()), 0,
+             reinterpret_cast<const sockaddr*>(&target),
+             static_cast<socklen_t>(sizeof(target)));
+      const std::string did = "UDP " + std::to_string(payload.size()) +
+                              " bytes -> " + where;
+      showLog("NETWORK", did);
+      triggerToast(did);
+      return did;
+    }
+
+    if (protocol == "tcp") {
+      // OFF THE MAIN THREAD, always. Everything it needs is copied in: the cue
+      // can be edited or deleted while this is in flight.
+      std::thread([this, target, payload, where, name = cue.name]() {
+        std::string result;
+        deckboy::platform::SocketHandle fd =
+          socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (fd == deckboy::platform::kInvalidSocket) {
+          result = name + ": could not open a socket";
+        } else {
+          if (connect(fd, reinterpret_cast<const sockaddr*>(&target),
+                      static_cast<socklen_t>(sizeof(target))) == 0) {
+            const int sent = static_cast<int>(
+              ::send(fd, payload.data(), static_cast<int>(payload.size()), 0));
+            result = sent >= 0
+              ? ("TCP " + std::to_string(sent) + " bytes -> " + where)
+              : (name + ": TCP send failed to " + where);
+          } else {
+            result = name + ": nothing answered at " + where;
+          }
+          deckboy::platform::closeSocket(fd);
+        }
+        std::lock_guard<std::mutex> lock(networkResultMutex_);
+        networkResults_.push_back(result);
+      }).detach();
+      const std::string did = "TCP -> " + where + " (sending)";
+      return did;
+    }
+
+    const std::string why = cue.name + ": unknown protocol " + protocol;
+    triggerToast(why);
+    return why;
+  }
+
+  void toggleSelectedCueArmed() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      return;
+    }
+    cue->armed = !cue->armed;
+    markProjectDirty();
+    triggerToast((cue->armed ? "armed: " : "disarmed: ") + cue->name);
+  }
+
+  // Step which DECK a target points at. Walking off either end clears the
+  // target, the same way stepping a master assignment off the end does -- the
+  // control that sets a thing has to be able to unset it.
+  void stepTargetDeck(int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Target) {
+      return;
+    }
+    const int count = static_cast<int>(project_.decks.size());
+    const int next = cue->targetDeckIndex + delta;
+    if (next < 0 || next >= count) {
+      cue->targetDeckIndex = -1;
+      cue->targetCueId.clear();
+      markProjectDirty();
+      return;
+    }
+    cue->targetDeckIndex = next;
+    // Changing deck invalidates the cue: an id from the old deck would resolve
+    // through the whole-show fallback and point back where it came from, so
+    // the row would read as if the deck had not changed at all.
+    cue->targetCueId.clear();
+    if (!project_.decks[next].cues.empty()) {
+      cue->targetCueId = project_.decks[next].cues[0].id;
+    }
+    markProjectDirty();
+  }
+
+  void stepTargetCue(int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Target) {
+      return;
+    }
+    const int d = cue->targetDeckIndex;
+    if (d < 0 || d >= static_cast<int>(project_.decks.size())) {
+      triggerToast("pick a deck first");
+      return;
+    }
+    const Deck& deck = project_.decks[d];
+    if (deck.cues.empty()) {
+      triggerToast("deck " + std::to_string(d + 1) + " has no cues");
+      return;
+    }
+    const int current = findCueIndexById(d, cue->targetCueId);
+    const int next = current + delta;        // -1 + 1 == 0, so "none" steps to the first
+    if (next < 0 || next >= static_cast<int>(deck.cues.size())) {
+      cue->targetCueId.clear();
+      markProjectDirty();
+      return;
+    }
+    cue->targetCueId = deck.cues[next].id;
+    markProjectDirty();
+  }
+
+  void cycleTargetVerb() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Target) {
+      return;
+    }
+    static const CueTargetVerb kOrder[] = {
+      CueTargetVerb::Start, CueTargetVerb::Stop, CueTargetVerb::Pause,
+      CueTargetVerb::Resume, CueTargetVerb::Load, CueTargetVerb::Arm,
+      CueTargetVerb::Disarm, CueTargetVerb::Devamp,
+      CueTargetVerb::StopAll, CueTargetVerb::PauseAll, CueTargetVerb::ResumeAll,
+    };
+    const int count = static_cast<int>(sizeof(kOrder) / sizeof(kOrder[0]));
+    int at = 0;
+    for (int i = 0; i < count; ++i) {
+      if (kOrder[i] == cue->targetVerb) {
+        at = i;
+        break;
+      }
+    }
+    cue->targetVerb = kOrder[(at + 1) % count];
+    markProjectDirty();
+  }
+
+  void fireSelectedTargetCue() {
+    const int deckIndex = project_.focusedDeckIndex;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    if (deck.cues[deck.selectedIndex].kind != CueKind::Target) {
+      return;
+    }
+    (void)fireTargetCue(deckIndex, deck.selectedIndex);
+  }
+
+  // ── FADE CUES ─────────────────────────────────────────────────────────
+  //
+  // A fade is a RUN, not a setting: it has a start, a shape and an end, and it
+  // has to be able to be interrupted by the next one without either of them
+  // getting stuck halfway. So each firing pushes one of these and the update
+  // loop walks them, rather than a per-deck "currently fading" flag that two
+  // cues would fight over.
+  //
+  // What a fade moves is deliberately never a field the show file keeps. Deck
+  // opacity has a target the app already ramps toward, and deck volume is the
+  // engine's runtime level -- so a fade can never leave a saved show quieter
+  // or darker than the operator left it.
+  struct FadeRun {
+    int deckIndex = -1;                     // -1 for master-scope fades
+    CueFadeWhat what = CueFadeWhat::DeckOpacity;
+    CueFadeCurve curve = CueFadeCurve::Linear;
+    double from = 0.0;
+    double to = 0.0;
+    double durationSeconds = 0.0;
+    Uint64 startMs = 0;
+    bool stopWhenDone = false;
+    // Put the value back to `from` once it has landed (and stopped): a
+    // tracker FADE takes a deck out without leaving it silent and invisible
+    // for the next cue it plays.
+    bool restoreAtEnd = false;
+    std::string label;                      // for the toast when it lands
+    int effectSlot = 1;                     // knob targets: which effect (1 = first)...
+    int effectKnob = 0;                     // ...and which knob (0 amount, 1-4 A-D)
+  };
+  std::vector<FadeRun> fadeRuns_;
+
+  // THE KNOB a knob fade moves, on the deck's ACTIVE cue: the effect at that
+  // position in its picture or audio stack, its amount or A-D. Null when the
+  // deck plays nothing or the cue has no effect there -- the fade then says
+  // so and does nothing, rather than guessing at another effect.
+  float* activeCueEffectKnob(int deckIndex, CueFadeWhat what, int slot, int knob) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) return nullptr;
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) return nullptr;
+    Cue& cue = deck.cues[deck.activeIndex];
+    const auto pick = [knob](auto& fx) -> float* {
+      return knob == 1 ? &fx.paramA : knob == 2 ? &fx.paramB : knob == 3 ? &fx.paramC
+           : knob == 4 ? &fx.paramD : &fx.amount;
+    };
+    const auto index = static_cast<std::size_t>(slot - 1);
+    if (slot < 1) return nullptr;
+    if (what == CueFadeWhat::CueEffectKnob) {
+      return index < cue.effects.size() ? pick(cue.effects[index]) : nullptr;
+    }
+    if (what == CueFadeWhat::CueAudioEffectKnob) {
+      return index < cue.audioEffects.size() ? pick(cue.audioEffects[index]) : nullptr;
+    }
+    return nullptr;
+  }
+  // The same knob, read: a const pair rather than one const_cast, as with
+  // activeCueColorField.
+  std::optional<double> activeCueEffectKnobValue(int deckIndex, CueFadeWhat what, int slot, int knob) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size()) || slot < 1) return std::nullopt;
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) return std::nullopt;
+    const Cue& cue = deck.cues[deck.activeIndex];
+    const auto read = [knob](const auto& fx) {
+      return static_cast<double>(knob == 1 ? fx.paramA : knob == 2 ? fx.paramB : knob == 3 ? fx.paramC
+                                 : knob == 4 ? fx.paramD : fx.amount);
+    };
+    const auto index = static_cast<std::size_t>(slot - 1);
+    if (what == CueFadeWhat::CueEffectKnob && index < cue.effects.size()) return read(cue.effects[index]);
+    if (what == CueFadeWhat::CueAudioEffectKnob && index < cue.audioEffects.size()) {
+      return read(cue.audioEffects[index]);
+    }
+    return std::nullopt;
+  }
+
+  // The real-world span a per-cue color fade target moves across. Shared by
+  // both directions below (normalize on read, denormalize on write) so they
+  // cannot drift into disagreeing about what "0.5" means.
+  static std::pair<double, double> cueFadeColorRange(CueFadeWhat what) {
+    if (what == CueFadeWhat::CueHue) {
+      return {-180.0, 180.0};
+    }
+    return {0.0, 2.0};  // brightness, contrast, saturation all share this one
+  }
+
+  // The deck's ACTIVE cue's color field a fade target writes -- there is no
+  // live engine setter for these the way DeckVolume has engine->setVolume();
+  // syncPixelEffectsFromCue() re-reads the cue every tick and pushes it into
+  // the engine, the same path the inspector's own +/- buttons ride, so
+  // writing here is enough. Null when the deck has no active cue (nothing to
+  // fade) or isn't a valid index. Const/non-const pair rather than one
+  // const_cast: each body is three lines, which is not worth the idiom.
+  const float* activeCueColorField(int deckIndex, CueFadeWhat what) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    const Cue& cue = deck.cues[deck.activeIndex];
+    switch (what) {
+      case CueFadeWhat::CueBrightness: return &cue.brightness;
+      case CueFadeWhat::CueContrast:   return &cue.contrast;
+      case CueFadeWhat::CueSaturation: return &cue.saturation;
+      case CueFadeWhat::CueHue:        return &cue.hueShift;
+      default: return nullptr;
+    }
+  }
+  float* activeCueColorField(int deckIndex, CueFadeWhat what) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return nullptr;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    Cue& cue = deck.cues[deck.activeIndex];
+    switch (what) {
+      case CueFadeWhat::CueBrightness: return &cue.brightness;
+      case CueFadeWhat::CueContrast:   return &cue.contrast;
+      case CueFadeWhat::CueSaturation: return &cue.saturation;
+      case CueFadeWhat::CueHue:        return &cue.hueShift;
+      default: return nullptr;
+    }
+  }
+
+  // Where a fade would start from RIGHT NOW. Read at fire time rather than
+  // stored on the cue: a fade that always started from 100% would jump the
+  // level up before taking it down, which is the single most visible way to
+  // get a fade wrong.
+  double currentFadeValue(int deckIndex, CueFadeWhat what, int slot = 1, int knob = 0) const {
+    switch (what) {
+      case CueFadeWhat::CueSpeed: {
+        const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+        return fadeValueFromSpeed(engine ? engine->tapeSpeed() : 1.0);
+      }
+      case CueFadeWhat::CueEffectKnob:
+      case CueFadeWhat::CueAudioEffectKnob:
+        return std::clamp(activeCueEffectKnobValue(deckIndex, what, slot, knob).value_or(0.0), 0.0, 1.0);
+      case CueFadeWhat::MasterDimmer:
+        return std::clamp(project_.masterDimmer, 0.0, 1.0);
+      case CueFadeWhat::DeckVolume: {
+        const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+        return engine ? std::clamp(static_cast<double>(engine->volume()), 0.0, 1.0) : 0.0;
+      }
+      case CueFadeWhat::CueBrightness:
+      case CueFadeWhat::CueContrast:
+      case CueFadeWhat::CueSaturation:
+      case CueFadeWhat::CueHue: {
+        const auto [lo, hi] = cueFadeColorRange(what);
+        const float* field = activeCueColorField(deckIndex, what);
+        // No active cue to read from: the default every one of these fields
+        // already arrives at (1.0 for the first three, 0.0 for hue), not 0 —
+        // a fade with nothing to act on should not report black/no-grade.
+        const double v = field ? static_cast<double>(*field)
+                               : (what == CueFadeWhat::CueHue ? 0.0 : 1.0);
+        return std::clamp((v - lo) / (hi - lo), 0.0, 1.0);
+      }
+      case CueFadeWhat::DeckOpacity:
+        break;
+    }
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return 0.0;
+    }
+    return std::clamp(static_cast<double>(project_.decks[deckIndex].playlistOpacity), 0.0, 1.0);
+  }
+
+  // SPEED's normalized value and the speed itself: 0.25x at 0, 1x at the
+  // middle, 4x at 1, an octave a quarter of the way.
+  static double fadeSpeedFromValue(double value) {
+    return std::pow(2.0, 4.0 * std::clamp(value, 0.0, 1.0) - 2.0);
+  }
+  static double fadeValueFromSpeed(double speed) {
+    return std::clamp((std::log2(std::clamp(speed, 0.25, 4.0)) + 2.0) / 4.0, 0.0, 1.0);
+  }
+
+  void applyFadeValue(int deckIndex, CueFadeWhat what, double value, int slot = 1, int knob = 0) {
+    value = std::clamp(value, 0.0, 1.0);
+    switch (what) {
+      case CueFadeWhat::CueSpeed:
+        if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+          engine->setTapeSpeed(fadeSpeedFromValue(value));
+        }
+        return;
+      case CueFadeWhat::CueEffectKnob:
+      case CueFadeWhat::CueAudioEffectKnob:
+        // The cue's own field, as the inspector's knob writes it: the picture
+        // path and the audio thread both pick it up from the next sync.
+        if (float* field = activeCueEffectKnob(deckIndex, what, slot, knob)) {
+          *field = static_cast<float>(value);
+          markProjectDirty();
+        }
+        return;
+      case CueFadeWhat::MasterDimmer:
+        project_.masterDimmer = value;
+        return;
+      case CueFadeWhat::DeckVolume:
+        if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
+          engine->setVolume(static_cast<float>(value));
+        }
+        return;
+      case CueFadeWhat::CueBrightness:
+      case CueFadeWhat::CueContrast:
+      case CueFadeWhat::CueSaturation:
+      case CueFadeWhat::CueHue: {
+        const auto [lo, hi] = cueFadeColorRange(what);
+        if (float* field = activeCueColorField(deckIndex, what)) {
+          *field = static_cast<float>(lo + value * (hi - lo));
+          markProjectDirty();
+        }
+        return;
+      }
+      case CueFadeWhat::DeckOpacity:
+        break;
+    }
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    project_.decks[deckIndex].playlistOpacity = static_cast<float>(value);
+    // AND THE TARGET, every tick. The app already ramps playlistOpacity toward
+    // deckPlaylistOpacityTargets_ at the DECK's fade rate; leaving that target
+    // where it was would have the two pulling in opposite directions and the
+    // fade would never arrive. Writing both means the old ramp sees no error
+    // and stands down while this one owns the value.
+    setDeckPlaylistOpacityTarget(deckIndex, static_cast<float>(value));
+  }
+
+  // One fade per deck per thing. A new fade on the same pair replaces the old
+  // one from wherever it had got to, which is what an operator means when they
+  // fire a fade up in the middle of a fade down.
+  // A knob is its own thing: a fade on effect 1's amount leaves one on
+  // effect 2's A running.
+  void cancelFadesFor(int deckIndex, CueFadeWhat what, int slot = 1, int knob = 0) {
+    fadeRuns_.erase(std::remove_if(fadeRuns_.begin(), fadeRuns_.end(),
+                                   [&](const FadeRun& f) {
+                                     return f.deckIndex == deckIndex && f.what == what &&
+                                            (!cueFadeWhatIsKnob(what) ||
+                                             (f.effectSlot == slot && f.effectKnob == knob));
+                                   }),
+                    fadeRuns_.end());
+  }
+
+  // STOP means stop. Anything this deck was fading dies with it, for the same
+  // reason a pending take does -- otherwise a fade lands seconds later on an
+  // operator who thought they had stopped the show.
+  void cancelFadesForDeck(int deckIndex) {
+    fadeRuns_.erase(std::remove_if(fadeRuns_.begin(), fadeRuns_.end(),
+                                   [&](const FadeRun& f) {
+                                     return f.deckIndex == deckIndex;
+                                   }),
+                    fadeRuns_.end());
+  }
+
+  // Returns what it did, or why it did nothing (and sets *refused, so the
+  // wire can answer ERR rather than OK).
+  std::string fireFadeCue(int deckIndex, int cueIndex, bool* refused = nullptr) {
+    if (refused) *refused = true;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    const Cue fading = deck.cues[cueIndex];
+
+    // A fade with no deck named acts on the deck it lives on, which is what a
+    // single-deck show wants and never has to be set.
+    int victimDeck = fading.targetDeckIndex;
+    if (victimDeck < 0 || victimDeck >= static_cast<int>(project_.decks.size())) {
+      victimDeck = deckIndex;
+    }
+    if (fading.fadeWhat == CueFadeWhat::MasterDimmer) {
+      victimDeck = -1;                      // master scope: no deck owns it
+    }
+
+    FadeRun run;
+    run.deckIndex = victimDeck;
+    run.what = fading.fadeWhat;
+    run.curve = fading.fadeCurve;
+    run.effectSlot = std::max(1, fading.fadeEffectSlot);
+    run.effectKnob = std::clamp(fading.fadeEffectKnob, 0, 4);
+    // A KNOB NOBODY HAS. The effect is looked for on the cue that deck is
+    // playing NOW; if there is none at that position the fade says so and
+    // does nothing, rather than moving some other effect's knob.
+    if (cueFadeWhatIsKnob(run.what) &&
+        !activeCueEffectKnob(victimDeck, run.what, run.effectSlot, run.effectKnob)) {
+      const std::string why = std::string("nothing to fade: the cue deck ") + std::to_string(victimDeck + 1) +
+                              " is playing has no " +
+                              (run.what == CueFadeWhat::CueAudioEffectKnob ? "audio effect " : "effect ") +
+                              std::to_string(run.effectSlot);
+      triggerToast(why, ToastKind::Warning, kToastReadableMs);
+      return why;
+    }
+    if (refused) *refused = false;
+    run.from = currentFadeValue(victimDeck, fading.fadeWhat, run.effectSlot, run.effectKnob);
+    run.to = std::clamp(fading.fadeToValue, 0.0, 1.0);
+    run.durationSeconds = std::max(0.0, fading.fadeOverSeconds);
+    run.startMs = SDL_GetTicks();
+    run.stopWhenDone = fading.fadeStopWhenDone;
+    run.restoreAtEnd = fading.fadeRestoreAtEnd;
+    run.label = fading.name;
+
+    cancelFadesFor(victimDeck, fading.fadeWhat, run.effectSlot, run.effectKnob);
+
+    char pct[16];
+    if (run.what == CueFadeWhat::CueSpeed) {
+      std::snprintf(pct, sizeof(pct), "%.2fx", fadeSpeedFromValue(run.to));
+    } else {
+      std::snprintf(pct, sizeof(pct), "%d%%", static_cast<int>(std::lround(run.to * 100.0)));
+    }
+    std::string target = run.what == CueFadeWhat::CueSpeed ? std::string("speed") : cueFadeWhatLabel(run.what);
+    if (cueFadeWhatIsKnob(run.what)) {
+      target = std::string(run.what == CueFadeWhat::CueAudioEffectKnob ? "audio effect " : "effect ") +
+               std::to_string(run.effectSlot) + " " + cueFadeKnobName(run.effectKnob);
+    }
+    const std::string did = target + " -> " + pct + " over " + formatSeconds(run.durationSeconds);
+
+    // A ZERO-LENGTH FADE IS A SET, and must land on this tick rather than
+    // waiting for the next one -- a fade cue with the duration turned all the
+    // way down is how an operator asks for a snap.
+    if (run.durationSeconds <= 0.0) {
+      applyFadeValue(run.deckIndex, run.what, run.to, run.effectSlot, run.effectKnob);
+      if (run.stopWhenDone) {
+        finishFadeStop(run.deckIndex);
+      }
+      // A snap that restores is a stop that leaves the deck ready, as the
+      // tracker's FADE with no time.
+      if (run.restoreAtEnd) {
+        applyFadeValue(run.deckIndex, run.what, run.from, run.effectSlot, run.effectKnob);
+      }
+      triggerToast(did);
+      return did;
+    }
+    fadeRuns_.push_back(run);
+    triggerToast(did);
+    return did;
+  }
+
+  void finishFadeStop(int deckIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const int savedFocus = project_.focusedDeckIndex;
+    project_.focusedDeckIndex = deckIndex;
+    stopTransport();
+    project_.focusedDeckIndex = savedFocus;
+  }
+
+  // Called once a tick. Walks backwards so a run can be erased in place.
+  void serviceFades() {
+    if (fadeRuns_.empty()) {
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    for (int i = static_cast<int>(fadeRuns_.size()) - 1; i >= 0; --i) {
+      FadeRun& run = fadeRuns_[static_cast<std::size_t>(i)];
+      const double elapsed = static_cast<double>(now - run.startMs) / 1000.0;
+      const double raw = run.durationSeconds > 0.0 ? elapsed / run.durationSeconds : 1.0;
+      if (raw >= 1.0) {
+        // LANDS EXACTLY ON THE TARGET. Interpolating one last time would leave
+        // it a fraction short, and "the fade ends at 0.3% instead of black" is
+        // the kind of thing nobody sees in rehearsal and everybody sees on the
+        // night.
+        applyFadeValue(run.deckIndex, run.what, run.to, run.effectSlot, run.effectKnob);
+        const bool stop = run.stopWhenDone;
+        const int deckIndex = run.deckIndex;
+        const std::string label = run.label;
+        const bool restore = run.restoreAtEnd;
+        const CueFadeWhat what = run.what;
+        const double from = run.from;
+        const int slot = run.effectSlot, knob = run.effectKnob;
+        fadeRuns_.erase(fadeRuns_.begin() + i);
+        if (stop) {
+          finishFadeStop(deckIndex);
+        }
+        if (restore) {
+          applyFadeValue(deckIndex, what, from, slot, knob);
+        }
+        // Stopping a deck cancels its other fades (cancelFadesForDeck), so
+        // the list can be shorter than where this backwards walk stands.
+        // Without this the next pass read past its end: a heap corruption the
+        // tracker's FADE found, the first thing to run two fades on one deck
+        // that end together.
+        i = std::min(i, static_cast<int>(fadeRuns_.size()));
+        showLog("FADE DONE", label);
+        continue;
+      }
+      const double shaped = applyCueFadeCurve(run.curve, raw);
+      applyFadeValue(run.deckIndex, run.what, run.from + (run.to - run.from) * shaped,
+                     run.effectSlot, run.effectKnob);
+    }
+  }
+
+  // What is fading, for the operator and for a remote caller. Derived, like
+  // everything else that answers a question about now.
+  std::string fadeRunSummary() const {
+    if (fadeRuns_.empty()) {
+      return "nothing fading";
+    }
+    const Uint64 now = SDL_GetTicks();
+    std::ostringstream out;
+    bool first = true;
+    for (const FadeRun& run : fadeRuns_) {
+      if (!first) {
+        out << " | ";
+      }
+      first = false;
+      const double elapsed = static_cast<double>(now - run.startMs) / 1000.0;
+      const double left = std::max(0.0, run.durationSeconds - elapsed);
+      if (run.deckIndex >= 0) {
+        out << "deck " << (run.deckIndex + 1) << " ";
+      }
+      out << cueFadeWhatLabel(run.what) << " " << formatSeconds(left) << " left";
+    }
+    return out.str();
+  }
+
+  // STOP / PAUSE / RESUME EVERY DECK. Each deck is stopped the way its own
+  // STOP stops it (a cue with a fade-out fades), so "all" is nothing more
+  // than the per-deck action applied to every deck that has something on.
+  // Returns how many decks it acted on.
+  int transportAllDecks(CueTargetVerb verb) {
+    const int savedFocus = project_.focusedDeckIndex;
+    int acted = 0;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const MediaEngine* engine = mediaEngineForDeck(d);
+      if (!engine || project_.decks[static_cast<std::size_t>(d)].activeIndex < 0) continue;
+      const TransportState state = engine->state();
+      const bool playing = state == TransportState::Playing;
+      const bool paused = state == TransportState::Paused;
+      if (verb == CueTargetVerb::PauseAll && !playing) continue;
+      if (verb == CueTargetVerb::ResumeAll && !paused) continue;
+      if (verb == CueTargetVerb::StopAll && !playing && !paused) continue;
+      project_.focusedDeckIndex = d;
+      if (verb == CueTargetVerb::StopAll) stopTransport();
+      else if (verb == CueTargetVerb::PauseAll) pauseTransport();
+      else playTransport();
+      ++acted;
+    }
+    project_.focusedDeckIndex = savedFocus;
+    return acted;
+  }
+
+  std::string fireTargetCue(int deckIndex, int cueIndex) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "no deck";
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "no cue";
+    }
+    // Copied for the same reason a master copies its plan: acting on the
+    // victim's deck can reallocate any cue vector under a reference.
+    const Cue targeting = deck.cues[cueIndex];
+
+    if (cueTargetVerbIsAll(targeting.targetVerb)) {
+      const int acted = transportAllDecks(targeting.targetVerb);
+      const std::string did = std::string(cueTargetVerbLabel(targeting.targetVerb)) + ": " +
+                              std::to_string(acted) + (acted == 1 ? " deck" : " decks");
+      triggerToast(did);
+      return did;
+    }
+
+    int victimDeck = -1;
+    int victimIndex = -1;
+    if (!resolveTargetCue(targeting, victimDeck, victimIndex)) {
+      const std::string why = targeting.targetCueId.empty()
+                                ? "targets nothing"
+                                : "target cue is gone";
+      triggerToast(targeting.name + ": " + why);
+      return why;
+    }
+    // A TARGET MAY NOT TARGET A TARGET. Two pointing at each other would
+    // recurse until the stack gave out, which is the same reason a master
+    // refuses to fire a master.
+    if (project_.decks[victimDeck].cues[victimIndex].kind == CueKind::Target) {
+      const std::string why = "a target cannot target another target";
+      triggerToast(targeting.name + ": " + why);
+      return why;
+    }
+    const std::string victimName = project_.decks[victimDeck].cues[victimIndex].name;
+    const char* verbLabel = cueTargetVerbLabel(targeting.targetVerb);
+
+    // Arm and disarm are edits, not transport: they change the victim and stop.
+    if (targeting.targetVerb == CueTargetVerb::Arm ||
+        targeting.targetVerb == CueTargetVerb::Disarm) {
+      const bool arm = targeting.targetVerb == CueTargetVerb::Arm;
+      project_.decks[victimDeck].cues[victimIndex].armed = arm;
+      markProjectDirty();
+      const std::string did = std::string(verbLabel) + ": " + victimName;
+      triggerToast(did);
+      return did;
+    }
+
+    // STOP, PAUSE AND RESUME ACT ON A DECK, and the named cue is the only
+    // thing that makes them mean anything. If something else has since been
+    // taken on that deck, a Stop target would stop THAT -- a cue labelled
+    // "stop the walk-in music" killing the keynote. Refuse instead: a target
+    // whose victim is not on air has nothing to do.
+    const bool needsVictimLive = targeting.targetVerb == CueTargetVerb::Stop ||
+                                 targeting.targetVerb == CueTargetVerb::Pause ||
+                                 targeting.targetVerb == CueTargetVerb::Resume;
+    if (needsVictimLive && project_.decks[victimDeck].activeIndex != victimIndex) {
+      const std::string why = std::string(verbLabel) + ": " + victimName +
+                              " is not on air";
+      triggerToast(why);
+      return why;
+    }
+
+    const int savedFocus = project_.focusedDeckIndex;
+    project_.focusedDeckIndex = victimDeck;
+    switch (targeting.targetVerb) {
+      case CueTargetVerb::Start:
+        selectCueInDeck(victimDeck, victimIndex, false, false);
+        takeSelected(true);
+        break;
+      case CueTargetVerb::Load:
+        // Selects and stands by without taking: the next GO on that deck
+        // fires it. This is the verb that lets one list drive another's
+        // running order without also firing it.
+        selectCueInDeck(victimDeck, victimIndex, false, false);
+        setStandbyIndex(victimDeck, victimIndex, false);
+        break;
+      case CueTargetVerb::Stop:
+        stopTransport();
+        break;
+      case CueTargetVerb::Pause:
+        pauseTransport();
+        break;
+      case CueTargetVerb::Resume:
+        playTransport();
+        break;
+      case CueTargetVerb::Devamp:
+        // Only the cue that is playing can be let out of its loop; devamping
+        // one that is merely in the list would arm a surprise for later.
+        if (project_.decks[victimDeck].activeIndex == victimIndex) {
+          devampDeck(victimDeck);
+        }
+        break;
+      case CueTargetVerb::Arm:
+      case CueTargetVerb::Disarm:
+      case CueTargetVerb::StopAll:
+      case CueTargetVerb::PauseAll:
+      case CueTargetVerb::ResumeAll:
+        break;                                // handled above
+    }
+    project_.focusedDeckIndex = savedFocus;
+    const std::string did = std::string(verbLabel) + ": " + victimName;
+    triggerToast(did);
+    return did;
+  }
+
+  // ── THE OUTGOING TAIL: A PLAYING CUE KEEPS PLAYING THROUGH THE TRANSITION ─
+  //
+  // A cue that is PLAYING when the next one is taken with a transition keeps
+  // playing under it, picture and sound, and its sound fades out over the
+  // transition. A cue that has already ended, or is paused, holds its last
+  // picture as it always has -- that is the hold, not a freeze. (James,
+  // 2026-10-21. Before this, every crossfade out of a playing video froze it
+  // and cut its sound at GO.) See DeckRuntime::OutgoingTail and
+  // MediaEngine::beginLiveOutgoing for the mechanism.
+  //
+  // Only where the hand-off is clean, and the old hold everywhere else:
+  //   - video and audio FILES. A camera, capture card or stream would stay
+  //     open under the tail while the incoming cue may want the same device,
+  //     port or source;
+  //   - an outgoing cue with no grade or picture effects. The deck's own layer
+  //     applies a cue's look to every frame; the transition draws the tail's
+  //     picture as it was decoded, which would drop the look mid-fade;
+  //   (ASIO is fine: each engine has its own source in the ASIO mix, so the
+  //   tail keeps its own and fades in it -- see makeAsioSink.)
+  //   - not while the deck's named device is missing, where opening a second
+  //     set of streams would announce the fallback again at every take.
+  bool outgoingCueShouldKeepPlaying(int deckIndex, double transitionSeconds,
+                                    TransitionStyle style) {
+    if (transitionSeconds <= 0.0001 || style == TransitionStyle::Cut) {
+      return false;
+    }
+    DeckRuntime* rt = runtimeForDeck(deckIndex);
+    if (!rt || !rt->mediaEngine ||
+        rt->audioDeviceInUse != trim(project_.decks[deckIndex].audioOutputDeviceName)) {
+      return false;
+    }
+    const MediaEngine& engine = *rt->mediaEngine;
+    const Cue* cue = engine.activeCue();
+    if (!cue || (cue->kind != CueKind::Video && cue->kind != CueKind::Audio) ||
+        cue->path.find("://") != std::string::npos) {
+      return false;
+    }
+    if (engine.state() != TransportState::Playing || engine.reachedEndPending()) {
+      return false;
+    }
+    return !cueHasPixelEffects(*cue) && cue->effects.empty();
+  }
+
+  // ── SEQUENCES ─────────────────────────────────────────────────────────
+  //
+  // One button, several commands, with waits between them:
+  //
+  //   SEQ DMXCUE FIRE wash ; DECK 1 TAKE 1 ; WAIT 2.5 ; DECK 3 TAKE 1 ; WAIT GO ; DECK 2 TAKE 2
+  //
+  // Each step is any command the remote takes. WAIT <seconds> pauses; WAIT GO
+  // holds until the same button is pressed again. On a DASH tile the tile
+  // shows which step it is on and fills as it goes; pressing it while it runs
+  // stops it, and pressing it while it waits for GO carries on. A step that is
+  // itself a SEQ is refused, so a sequence cannot start itself forever.
+  // One run per owner: a DASH tile index, or -1 for one started directly.
+  struct SequenceRun {
+    int owner = -1;
+    std::vector<std::string> steps;
+    std::size_t next = 0;        // the step to run next
+    double dueAtSeconds = 0.0;   // nowSeconds() when the next step may run
+    bool waitingForGo = false;   // held at a WAIT GO until pressed again
+  };
+
+  static std::vector<std::string> splitSequenceSteps(const std::string& text) {
+    std::vector<std::string> steps;
+    std::size_t from = 0;
+    for (;;) {
+      const std::size_t semi = text.find(';', from);
+      std::string step = trim(text.substr(from, semi == std::string::npos ? std::string::npos : semi - from));
+      if (!step.empty()) steps.push_back(step);
+      if (semi == std::string::npos) break;
+      from = semi + 1;
+    }
+    return steps;
+  }
+
+  static std::string sequenceStepVerb(const std::string& step) {
+    return toUpper(step.substr(0, step.find(' ')));
+  }
+
+  static std::string sequenceWaitArg(const std::string& step) {
+    return toUpper(trim(step.substr(std::min(step.size(), std::size_t {4}))));
+  }
+
+  const SequenceRun* sequenceRunFor(int owner) const {
+    if (owner < 0) return nullptr;
+    for (const SequenceRun& run : sequenceRuns_) {
+      if (run.owner == owner) return &run;
+    }
+    return nullptr;
+  }
+
+  // Start a sequence, or -- pressed again on the button that owns one --
+  // carry on from a WAIT GO, or stop it.
+  bool startSequence(int owner, const std::string& text, std::string& reply) {
+    for (std::size_t r = 0; owner >= 0 && r < sequenceRuns_.size(); ++r) {
+      SequenceRun& running = sequenceRuns_[r];
+      if (running.owner != owner) continue;
+      if (running.waitingForGo) {
+        running.waitingForGo = false;
+        running.dueAtSeconds = nowSeconds();
+        reply = "GO";
+        serviceSequences();
+        return true;
+      }
+      sequenceRuns_.erase(sequenceRuns_.begin() + static_cast<std::ptrdiff_t>(r));
+      triggerToast("sequence stopped");
+      reply = "stopped";
+      return true;
+    }
+    std::vector<std::string> steps = splitSequenceSteps(text);
+    if (steps.empty()) {
+      reply = "a sequence needs at least one step";
+      return false;
+    }
+    for (const std::string& step : steps) {
+      const std::string verb = sequenceStepVerb(step);
+      if (verb == "SEQ" || verb == "SEQUENCE") {
+        reply = "a sequence cannot start another sequence";
+        return false;
+      }
+      if (verb == "WAIT") {
+        const std::string arg = sequenceWaitArg(step);
+        if (arg != "GO" && (arg.empty() || arg.find_first_not_of("0123456789.") != std::string::npos)) {
+          reply = "WAIT takes seconds or GO: " + step;
+          return false;
+        }
+      }
+    }
+    SequenceRun run;
+    run.owner = owner;
+    run.steps = std::move(steps);
+    run.dueAtSeconds = nowSeconds();
+    reply = std::to_string(run.steps.size()) + " steps";
+    sequenceRuns_.push_back(std::move(run));
+    serviceSequences();            // the first steps go now, not next frame
+    return true;
+  }
+
+  void stopAllSequences() {
+    sequenceRuns_.clear();
+  }
+
+  // Once a frame, from update(). Indices, not references: a step can start
+  // or stop sequences while it runs.
+  void serviceSequences() {
+    const double now = nowSeconds();
+    std::size_t r = 0;
+    while (r < sequenceRuns_.size()) {
+      bool done = false;
+      for (int guard = 0; guard < 64 && r < sequenceRuns_.size(); ++guard) {
+        SequenceRun& run = sequenceRuns_[r];
+        if (run.waitingForGo || now < run.dueAtSeconds) break;
+        if (run.next >= run.steps.size()) {
+          done = true;
+          break;
+        }
+        const std::string step = run.steps[run.next++];
+        if (sequenceStepVerb(step) == "WAIT") {
+          const std::string arg = sequenceWaitArg(step);
+          if (arg == "GO") {
+            run.waitingForGo = true;
+            triggerToast("sequence waiting - press it again for GO");
+          } else {
+            run.dueAtSeconds = now + std::atof(arg.c_str());
+          }
+          continue;
+        }
+        const int keepOwner = sequenceOwnerHint_;
+        sequenceOwnerHint_ = -1;
+        const std::size_t before = sequenceRuns_.size();
+        handleRemoteCommand(step);
+        sequenceOwnerHint_ = keepOwner;
+        if (sequenceRuns_.size() != before) break;   // the step changed the list
+      }
+      if (done && r < sequenceRuns_.size()) {
+        sequenceRuns_.erase(sequenceRuns_.begin() + static_cast<std::ptrdiff_t>(r));
+        continue;
+      }
+      ++r;
+    }
+  }
+
+  // ── A TAKE DURING A TRANSITION STARTS FROM WHAT IS ON SCREEN ───────────
+  //
+  // Each deck blends two pictures: the one it is leaving and the one it is
+  // taking. A take that lands while A is still dissolving into B used to end
+  // A's fade on the spot and start B -> C, so the picture snapped to B before
+  // fading to C (edges audit F11). Instead the deck's mix, A and B as they
+  // stand, is drawn once off-screen by the same compositor the output uses,
+  // read back, and the new transition starts from exactly that picture.
+  //
+  // Only where that copy is the picture the audience sees: a deck that is an
+  // output's host at full opacity. Elsewhere (a pinned layer, a faded deck),
+  // the old behaviour holds rather than a copy that would be warped or faded
+  // twice. The picture freezes for the length of the new fade; B's sound
+  // still fades out live.
+  bool captureDeckMixFrame(int deckIndex, DecodedFrame& out) {
+    DeckRuntime* rt = runtimeForDeck(deckIndex);
+    if (!rt || !rt->mediaEngine) return false;
+    const MediaEngine& engine = *rt->mediaEngine;
+    if (engine.outgoingSeconds() <= 0.0001 || !engine.outgoingFrame() ||
+        engine.outgoingProgress01() >= 1.0) {
+      return false;
+    }
+    if (project_.decks[static_cast<std::size_t>(deckIndex)].playlistOpacity < 0.999f) {
+      return false;
+    }
+    for (int o = 0; o < static_cast<int>(project_.outputs.size()); ++o) {
+      if (project_.outputs[static_cast<std::size_t>(o)].hostDeckIndex != deckIndex) continue;
+      OutputRuntime* output = runtimeForOutput(o);
+      if (!output || !output->outputRenderer) continue;
+      const int w = output->compositorWidth, h = output->compositorHeight;
+      if (w <= 0 || h <= 0) continue;
+      SDL_Renderer* renderer = output->outputRenderer;
+      SDL_Texture* canvas = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                              SDL_TEXTUREACCESS_TARGET, w, h);
+      if (!canvas) continue;
+      SDL_Texture* previous = SDL_GetRenderTarget(renderer);
+      SDL_Rect previousClip {};
+      const bool hadClip = SDL_RenderClipEnabled(renderer);
+      if (hadClip) SDL_GetRenderClipRect(renderer, &previousClip);
+      SDL_SetRenderTarget(renderer, canvas);
+      SDL_SetRenderClipRect(renderer, nullptr);
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+      SDL_RenderClear(renderer);
+      renderDeckWithTransitionIntoOutput(o, deckIndex, SDL_Rect {0, 0, w, h});
+      SDL_Surface* read = SDL_RenderReadPixels(renderer, nullptr);
+      SDL_SetRenderTarget(renderer, previous);
+      SDL_SetRenderClipRect(renderer, hadClip ? &previousClip : nullptr);
+      SDL_DestroyTexture(canvas);
+      if (!read) return false;
+      SDL_Surface* rgba = SDL_ConvertSurface(read, SDL_PIXELFORMAT_RGBA32);
+      SDL_DestroySurface(read);
+      if (!rgba) return false;
+      out = DecodedFrame {};
+      out.width = rgba->w;
+      out.height = rgba->h;
+      out.format = FramePixelFormat::RGBA32;
+      out.colorspace = SDL_COLORSPACE_SRGB;
+      static std::uint64_t frozenSerial = 0;
+      out.index = (std::uint64_t {1} << 62) + ++frozenSerial;
+      out.pixels.resize(static_cast<std::size_t>(rgba->w) * static_cast<std::size_t>(rgba->h) * 4u);
+      for (int y = 0; y < rgba->h; ++y) {
+        std::memcpy(out.pixels.data() + static_cast<std::size_t>(y) * rgba->w * 4u,
+                    static_cast<const std::uint8_t*>(rgba->pixels) + static_cast<std::size_t>(y) * rgba->pitch,
+                    static_cast<std::size_t>(rgba->w) * 4u);
+      }
+      SDL_DestroySurface(rgba);
+      return true;
+    }
+    return false;
+  }
+
+  // Called by takeSelected just before the incoming cue is loaded. When the
+  // cue on air should keep playing, its engine and the streams it writes to
+  // become the deck's outgoing tail, the deck gets a fresh engine on fresh
+  // streams, and the tail is returned; otherwise nullptr and nothing changed.
+  // Any tail still fading from an earlier take ends here either way.
+  MediaEngine* handOffToOutgoingTail(int deckIndex, double transitionSeconds,
+                                     TransitionStyle style) {
+    finishOutgoingTail(deckIndex);
+    if (!outgoingCueShouldKeepPlaying(deckIndex, transitionSeconds, style)) {
+      return nullptr;
+    }
+    DeckRuntime* rt = runtimeForDeck(deckIndex);
+    DeckRuntime::OutgoingTail& tail = rt->outgoingTail;
+    tail.engine = std::move(rt->mediaEngine);
+    tail.audioStream = std::exchange(rt->audioStream, nullptr);
+    tail.extraAudioStreams.swap(rt->extraAudioStreams);
+    tail.monitorAudioStream = std::exchange(rt->monitorAudioStream, nullptr);
+    // The fresh engine and its streams come from the one function that builds
+    // a deck's audio, which with the old streams handed over above has nothing
+    // of the tail's to close.
+    reopenDeckAudioOutput(deckIndex, project_.decks[deckIndex].audioOutputDeviceName);
+    if (!rt->mediaEngine) {
+      // Cannot happen -- that function always leaves an engine -- but a deck
+      // must never be left without one, so put the old one back.
+      rt->mediaEngine = std::move(tail.engine);
+      finishOutgoingTail(*rt);
+      return nullptr;
+    }
+    MediaEngine& fresh = *rt->mediaEngine;
+    fresh.inheritDeckSettingsFrom(*tail.engine);
+    // Building an engine hands it the main stream only; the extras and the
+    // monitor are installed by the hot-swap path, which a fresh engine skips.
+    fresh.setExtraAudioStreams(rt->extraAudioStreams);
+    fresh.setMonitorStream(rt->monitorAudioStream);
+    applyAudioMonitorSelection();
+    tail.engine->beginTailFade(transitionSeconds);
+    // A little past the end of the fade, so its last chunk has played out.
+    tail.endsAtMs = SDL_GetTicks() + static_cast<Uint64>(transitionSeconds * 1000.0) + 100;
+    tail.lastFedIndex = ~std::uint64_t{0};
+    return tail.engine.get();
+  }
+
+  // Every tick, after the deck's own engine: keep the tail decoding, hand its
+  // newest picture to the transition, and end it when its time is up or the
+  // deck was stopped under it.
+  void serviceOutgoingTail(int deckIndex) {
+    DeckRuntime* rt = runtimeForDeck(deckIndex);
+    if (!rt || !rt->outgoingTail.engine) {
+      return;
+    }
+    DeckRuntime::OutgoingTail& tail = rt->outgoingTail;
+    MediaEngine* deckEngine = rt->mediaEngine.get();
+    if (!deckEngine || SDL_GetTicks() >= tail.endsAtMs ||
+        deckEngine->state() == TransportState::Stopped) {
+      finishOutgoingTail(*rt);
+      return;
+    }
+    // The tail is still this deck's sound, so it follows the deck's own
+    // settings every tick, not just the copy taken at the hand-off: VOLUME 0
+    // or a deck fade during a long crossfade silenced only the incoming cue,
+    // and a monitor/room mute change left the tail on its old routing (Codex
+    // audit 2026-10-22, #2). One place covers every control that sets them.
+    tail.engine->setMasterGain(static_cast<float>(project_.masterVolume));
+    tail.engine->setVolume(deckEngine->volume());
+    tail.engine->setMonitorMuted(deckEngine->monitorMuted());
+    tail.engine->setMainDeviceMuted(deckEngine->mainDeviceMuted());
+    tail.engine->update();
+    if (const DecodedFrame* frame = tail.engine->currentFrame();
+        frame && frame->index != tail.lastFedIndex) {
+      deckEngine->feedLiveOutgoingFrame(*frame);
+      tail.lastFedIndex = frame->index;
+    }
+  }
+
+  void finishOutgoingTail(int deckIndex) {
+    if (DeckRuntime* rt = runtimeForDeck(deckIndex)) {
+      finishOutgoingTail(*rt);
+    }
+  }
+
+  void finishOutgoingTail(DeckRuntime& rt) {
+    DeckRuntime::OutgoingTail& tail = rt.outgoingTail;
+    if (tail.engine) {
+      // The device back BEFORE the engine goes, for the reason
+      // destroyDeckRuntime gives: no audio thread may still hold a stream
+      // that is about to be freed.
+      tail.engine->detachAudioDevice();
+      tail.engine->stopAll();
+      tail.engine.reset();
+    }
+    for (SDL_AudioStream* stream : tail.extraAudioStreams) {
+      if (stream) SDL_DestroyAudioStream(stream);
+    }
+    tail.extraAudioStreams.clear();
+    if (tail.monitorAudioStream) {
+      SDL_DestroyAudioStream(tail.monitorAudioStream);
+      tail.monitorAudioStream = nullptr;
+    }
+    if (tail.audioStream) {
+      SDL_DestroyAudioStream(tail.audioStream);
+      tail.audioStream = nullptr;
+    }
+    tail.endsAtMs = 0;
+    tail.lastFedIndex = ~std::uint64_t{0};
+  }
+
+  void takeSelected(bool autoplay, bool useTransition = true, bool suppressIncomingFadeIn = false,
+                    bool honourPreWait = true) {
+    Deck& deck = focusedDeckMutable();
+    int deckIndex = std::clamp(project_.focusedDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
+    MediaEngine* engine = focusedMediaEngine();
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    // Taking anything cancels whatever this deck was about to take. The
+    // operator has just made a decision; an older countdown must not survive
+    // it and fire on top.
+    cancelPendingTake(deckIndex);
+
+    // AN ORDINARY TAKE ENDS AN AUDITION. auditionSelected sets the flag and
+    // then calls straight through to here, so this must not undo its own take
+    // -- the check is for a take arriving from anywhere else, which is the
+    // operator deciding to put something on air.
+    if (deckIsAuditioning(deckIndex) && !auditionStarting_) {
+      endAudition(false);
+    }
+    // TAKING THE PRELOADED CUE IS A PLAY, NOT A LOAD. The cue is already
+    // racked at its position, so re-loading it here would throw away the very
+    // spin-up the preload paid for and put a decoder stall between GO and the
+    // first frame -- the opposite of the feature.
+    if (!preloadStarting_ && releasePreloadIfTaking(deckIndex, deck.selectedIndex)) {
+      return;
+    }
+    // Taking anything ELSE abandons the preload; it is no longer what is next.
+    if (!preloadStarting_ && deckIsPreloading(deckIndex)) {
+      clearPreload();
+    }
+
+    // A DISARMED CUE DOES NOTHING AT ALL -- not its pre-wait, not its media,
+    // not its continue. Checked first so that is true however it was fired:
+    // by hand, by a continue, or by a master.
+    if (!deck.cues[deck.selectedIndex].armed) {
+      triggerToast("disarmed: " + deck.cues[deck.selectedIndex].name);
+      return;
+    }
+
+    // PRE-WAIT: fired now, starts later. Applies however the cue was fired --
+    // by GO, by a continue, or by a master -- because the wait belongs to the
+    // cue, not to whoever pressed something. honourPreWait is false only when
+    // the pending service is calling back, having already served it.
+    if (honourPreWait && deck.cues[deck.selectedIndex].preWaitSeconds > 0.0) {
+      const Cue& waiting = deck.cues[deck.selectedIndex];
+      schedulePendingTake(deckIndex, deck.selectedIndex, waiting.preWaitSeconds,
+                          useTransition, "pre-wait");
+      triggerToast("pre-wait " + formatSeconds(waiting.preWaitSeconds) + ": " +
+                   waiting.name);
+      return;
+    }
+
+    // A MASTER FIRES OTHER DECKS and is never handed to this deck's engine --
+    // it has no media. Intercepted before the engine check below, because a
+    // master deck legitimately has no engine of its own to speak of.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Master) {
+      fireMasterCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A TARGET acts on another cue and is likewise never handed to an engine.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Target) {
+      (void)fireTargetCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A DMX CUE SETS LEVELS AND IS DONE; the fade outlives the take.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Dmx) {
+      (void)fireDmxCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A SCRIPT CUE RUNS ITS LINES AND IS DONE.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Script) {
+      (void)runScriptCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A TIMECODE CUE ACTS ON THE GENERATOR AND IS DONE.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Timecode) {
+      (void)fireTimecodeCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A NETWORK CUE SENDS AND IS DONE, for the same reasons as a MIDI one.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Network) {
+      (void)fireNetworkCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A MIDI CUE SENDS AND IS DONE. Never handed to an engine: it has no
+    // media, and it must not disturb whatever picture the deck is carrying.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Midi) {
+      (void)fireMidiCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A MEMO DOES NOTHING TO THE SHOW. It says its piece -- the notes, or its
+    // name when there are none -- and lets a continue carry on past it. The
+    // picture and sound stay exactly as they were.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Memo) {
+      const Cue& memo = deck.cues[deck.selectedIndex];
+      const std::string said = trim(memo.notes).empty() ? memo.name : trim(memo.notes);
+      triggerToast("MEMO: " + said, ToastKind::Help, kToastReadableMs);
+      showLog("MEMO", showLogCueRef(deckIndex, deck.selectedIndex) + " " + said);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    // A FADE starts a ramp and is done; the ramp outlives the take.
+    if (deck.cues[deck.selectedIndex].kind == CueKind::Fade) {
+      (void)fireFadeCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    if (!engine) {
+      return;
+    }
+    // A cue whose file has vanished must not be taken: the decode would fail
+    // to black in ~100 ms and (on auto-advance) cascade through the playlist.
+    // Flag it, tell the operator, keep whatever is on the output.
+    // The motion driver is not a cue and does not get taken, so it needs
+    // telling. Without this a rehearsed puppet look depended on how long the
+    // app had been open, which is not something a show can rely on.
+    if (deck.cues[deck.selectedIndex].motionDriverRestartOnTake &&
+        !deck.cues[deck.selectedIndex].motionDriverPath.empty()) {
+      restartMotionDriver(deckIndex);
+    }
+    if (!cueMediaAvailableForTake(deck.cues[deck.selectedIndex])) {
+      showLog("TAKE-BLOCKED", showLogCueRef(deckIndex, deck.selectedIndex) + " media missing");
+      triggerToast("MEDIA MISSING: " + deck.cues[deck.selectedIndex].name + " — take blocked");
+      playUiSound(UiSoundEffect::Error);
+      return;
+    }
+    // The feedback loop belongs to what was on this deck, not to the deck. Left
+    // alone, the first frame of a new cue would echo the last frame of the old
+    // one -- a ghost of the previous clip, on the output, at the take.
+    resetDeckFeedback(deckIndex);
+    const Cue& cue = deck.cues[deck.selectedIndex];
+    // Overlay cues go to the overlay slot, not the main slot.
+    if (cue.kind == CueKind::LowerThird || cue.kind == CueKind::Pip) {
+      activateOverlayCueIndex(deck, deckIndex, deck.selectedIndex);
+      syncPipOverlayRuntimesForDeck(deckIndex, SDL_GetTicks());
+      triggerToast(cue.kind == CueKind::Pip ? ("pip live: " + cue.name) : ("overlay live: " + cue.name));
+      playUiSound(UiSoundEffect::Take);
+      markProjectDirty();
+      return;
+    }
+
+    bool cueProducesAudio = (cue.kind == CueKind::Video || cue.kind == CueKind::Audio)
+                         && cue.hasAudio
+                         && cue.audioEnabled;
+    if (!cueProducesAudio) {
+      clearVuMeterState(false);
+    }
+
+    showLog("TAKE", showLogCueRef(deckIndex, deck.selectedIndex));
+    // Before it moves: the cue leaving the screen is what the presenter view
+    // shows as PREVIOUS, and the incoming one starts at the top of its notes.
+    presenterOnCueTaken(deckIndex, deck.activeIndex);
+    deck.activeIndex = deck.selectedIndex;
+    // If refreshOnTake is set and a browser renderer is already running for this
+    // cue, reload the page instead of tearing down and restarting.
+    DeckRuntime* browserRuntime = runtimeForDeck(deckIndex);
+    bool browserRefreshInstead = (cue.kind == CueKind::Browser)
+      && cue.refreshOnTake
+      && browserRuntime && browserRuntime->browserRenderer
+      && browserRuntime->browserRenderer->isRunning();
+    // Same deck as everything else in this function. The no-argument overload
+    // stops the FOCUSED deck, so taking a cue on deck 2 tore down deck 1's
+    // browser and left deck 2's running -- one deck went dark, the other
+    // kept a page nobody asked for.
+    if (!browserRefreshInstead) stopBrowserCue(deckIndex);
+    bool effectiveAutoplay = autoplay && !cue.pauseAtBeginning;
+    if (deck.playlistAutoFade && autoplay) {
+      deck.playlistOpacity = 0.0f;
+      setDeckPlaylistOpacityTarget(deckIndex, 1.0f);
+    }
+    // Use per-cue transition override if set, else deck default
+    double transSecs = 0.0;
+    std::string transStyleStr = "cut";
+    if (useTransition) {
+      transSecs = (cue.cueTransitionSeconds >= 0.0)
+        ? cue.cueTransitionSeconds : deck.transitionSeconds;
+      transStyleStr = !cue.cueTransitionStyle.empty()
+        ? cue.cueTransitionStyle : deck.transitionStyle;
+    }
+    const TransitionStyle transStyle = parseTransitionStyleToken(transStyleStr);
+    // A cue that is PLAYING keeps playing through the transition out of it;
+    // see handOffToOutgoingTail. When it does, this deck's engine is a fresh
+    // one from here on.
+    // Taken before the hand-off ends the fade that is running: see
+    // captureDeckMixFrame.
+    DecodedFrame frozenMix;
+    const bool interrupted = transSecs > 0.0001 && transStyle != TransitionStyle::Cut &&
+                             captureDeckMixFrame(deckIndex, frozenMix);
+    MediaEngine* outgoingTail = handOffToOutgoingTail(deckIndex, transSecs, transStyle);
+    if (outgoingTail) {
+      engine = runtimeForDeck(deckIndex)->mediaEngine.get();
+    }
+    engine->loadCue(
+      &cue,
+      effectiveAutoplay,
+      transSecs,
+      transStyle,
+      suppressIncomingFadeIn
+    );
+    if (interrupted) {
+      engine->beginFrozenOutgoing(std::move(frozenMix), transSecs, transStyle);
+    } else if (outgoingTail) {
+      engine->beginLiveOutgoing(*outgoingTail, transSecs, transStyle);
+    }
+    // Load subtitle track if the cue has one
+    if (cue.subtitleEnabled && (!cue.subtitlePath.empty() || !cue.subtitleStreamId.empty())) {
+      std::string subtitleKey = cue.subtitlePath.empty() ? (cue.path + "::" + cue.subtitleStreamId) : cue.subtitlePath;
+      if (subtitleCache_.find(subtitleKey) == subtitleCache_.end()) {
+        subtitleCache_[subtitleKey] = loadSubtitleTrack(cue);
+      }
+    }
+    if (cue.kind == CueKind::Browser) {
+      if (browserRefreshInstead) {
+        browserRuntime->browserRenderer->reload();
+        triggerToast("browser refreshed");
+      } else {
+        // THE DECK THIS CUE IS ON, not whichever deck happens to be focused.
+        // Everything around it already uses deckIndex -- browserRuntime is
+        // resolved from it, and the refresh branch above reloads that deck --
+        // so a browser cue taken on an unfocused deck started the browser on
+        // the focused one instead: the wrong deck went live, and the deck the
+        // operator was cueing got nothing.
+        startBrowserCue(deckIndex, cue);
+        triggerToast("browser jumped live");
+      }
+    } else if (cue.kind == CueKind::Composite) {
+      triggerToast(effectiveAutoplay ? "scene live" : "scene loaded");
+    } else if (isSourceCueKind(cue.kind)) {
+      bool live = engine->isSourceCapturing();
+      if (effectiveAutoplay && live) {
+        triggerToast("source live");
+      } else if (effectiveAutoplay && !live) {
+        triggerToast("source unavailable");
+      } else {
+        triggerToast("source loaded");
+      }
+    } else {
+      triggerToast(effectiveAutoplay ? "cue jumped live" : "cue loaded");
+    }
+    activateAttachedOverlaysForCue(deck, deckIndex, cue);
+    playUiSound(UiSoundEffect::Take);
+    notifyTallyStateChange();
+    // AUTO-CONTINUE is counted from HERE -- the moment the cue starts -- which
+    // is the whole difference between it and auto-follow. The next cue can
+    // therefore begin while this one is still playing, which is what makes a
+    // sting land over the top of a video rather than after it.
+    scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+    markProjectDirty();
+  }
+
+  void jumpSelectedCue() {
+    // QUANTISED TAKES. The point of tempo in a video mixer is not that
+    // anything moves by itself -- it is that what the OPERATOR does lands on
+    // the music instead of a moment after it. So the take is held until the
+    // next beat rather than being fired by a metronome.
+    //
+    // Held only when the wait is worth having: past nine tenths of the way to
+    // the beat a human already hit it, and delaying would push the cue a whole
+    // beat late, which is the opposite of the intent.
+    if (project_.vjModeEnabled && project_.vjQuantiseTakes && !vjTakeFiring_) {
+      const double wait = vjSecondsToNextBeat();
+      const double beatSeconds = 60.0 / std::clamp(project_.vjTempoBpm, 20.0, 300.0);
+      if (wait > beatSeconds * 0.1) {
+        vjTakePending_ = true;
+        vjTakeDueAt_ = static_cast<double>(SDL_GetTicks()) / 1000.0 + wait;
+        vjTakeDeck_ = project_.focusedDeckIndex;
+        return;
+      }
+    }
+    takeSelected(jumpTriggersPlayback(), project_.jumpTransitionEnabled);
+  }
+
+  // Called every update: fire a held take when its beat arrives.
+  void serviceVjQuantisedTake() {
+    if (!vjTakePending_) {
+      return;
+    }
+    if (!project_.vjModeEnabled || !project_.vjQuantiseTakes) {
+      vjTakePending_ = false;   // the mode went away under it
+      return;
+    }
+    if (static_cast<double>(SDL_GetTicks()) / 1000.0 < vjTakeDueAt_) {
+      return;
+    }
+    vjTakePending_ = false;
+    // The deck the operator was on when they asked, not whichever one has
+    // focus a beat later.
+    const int restore = project_.focusedDeckIndex;
+    if (vjTakeDeck_ >= 0 && vjTakeDeck_ < static_cast<int>(project_.decks.size())) {
+      project_.focusedDeckIndex = vjTakeDeck_;
+    }
+    vjTakeFiring_ = true;      // so the take does not queue itself again
+    jumpSelectedCue();
+    vjTakeFiring_ = false;
+    project_.focusedDeckIndex = restore;
+  }
+
+  // Fire the selected cue on every deck simultaneously.
+  // Useful for synced multi-layer playback (e.g. video + audio on separate decks).
+  void takeAllDecks(bool autoplay) {
+    int savedFocus = project_.focusedDeckIndex;
+    for (int di = 0; di < static_cast<int>(project_.decks.size()); ++di) {
+      Deck& deck = project_.decks[di];
+      if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      project_.focusedDeckIndex = di;
+      takeSelected(autoplay);
+    }
+    project_.focusedDeckIndex = savedFocus;
+    triggerToast("all decks fired");
+  }
+
+  // Toggle play/pause on every deck simultaneously.
+  void goAllDecks() {
+    int savedFocus = project_.focusedDeckIndex;
+    for (int di = 0; di < static_cast<int>(project_.decks.size()); ++di) {
+      project_.focusedDeckIndex = di;
+      MediaEngine* engine = focusedMediaEngine();
+      const Cue* activeCue = activeCuePtr();
+      if (engine && activeCue) {
+        if (engine->state() == TransportState::Playing) {
+          engine->pause();
+        } else {
+          engine->play();
+        }
+      } else {
+        takeSelected(true);
+      }
+    }
+    project_.focusedDeckIndex = savedFocus;
+    triggerToast("all decks go");
+  }
+
+  // STOP EVERY DECK (Ctrl+Shift+Space). It stopped each deck's engine and
+  // nothing else: no fade-out, the deck still thought its cue was live, and
+  // anything waiting to start one -- a pre-wait counting down, a continue, a
+  // sequence, the dashboard's tracker -- started it again seconds later. So
+  // "stop every deck" did not leave every deck stopped (reported against
+  // 0.99.422). Now nothing waits to restart a deck, and each deck that has
+  // something on stops exactly the way its own STOP stops it, as STOPALL does.
+  void allStop() {
+    stopAllSequences();
+    trackerStop();
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      cancelPendingTake(d);
+      cancelFadesForDeck(d);
+    }
+    transportAllDecks(CueTargetVerb::StopAll);
+    triggerToast("all decks stopped");
+  }
+
+  void selectRelative(int direction, bool reorder) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      return;
+    }
+
+    bool overlayGroup = false;
+    if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+      overlayGroup = cueIsOverlayOnly(deck.cues[deck.selectedIndex]);
+    } else if (firstCueIndexForOverlayRole(deck, false) < 0) {
+      overlayGroup = true;
+    }
+
+    if (deck.selectedIndex < 0) {
+      int firstIndex = direction >= 0
+        ? firstCueIndexForOverlayRole(deck, overlayGroup)
+        : lastCueIndexForOverlayRole(deck, overlayGroup);
+      if (firstIndex < 0 && !overlayGroup) {
+        firstIndex = direction >= 0
+          ? firstCueIndexForOverlayRole(deck, true)
+          : lastCueIndexForOverlayRole(deck, true);
+      }
+      if (firstIndex >= 0) {
+        selectOnlyCue(deck, firstIndex);
+        onSelectionChanged();
+        markProjectDirty();
+      }
+      return;
+    }
+
+    int nextIndex = adjacentCueIndexForOverlayRole(deck, deck.selectedIndex, direction, overlayGroup, false);
+    if (nextIndex < 0) {
+      return;
+    }
+    if (reorder && nextIndex != deck.selectedIndex) {
+      // Through the shared rule, so standby and a waiting take move too; the
+      // selection is set just below.
+      const int a = deck.selectedIndex;
+      std::swap(deck.cues[a], deck.cues[nextIndex]);
+      const int keepSelected = deck.selectedIndex;
+      remapDeckCueIndices(project_.focusedDeckIndex, [a, nextIndex](int index) {
+        return index == a ? nextIndex : index == nextIndex ? a : index;
+      });
+      deck.selectedIndex = keepSelected;
+      triggerToast("cue reordered");
+      playUiSound(UiSoundEffect::Toggle);
+    }
+    if (deck.selectedIndex != nextIndex) {
+      deck.selectedIndex = nextIndex;
+      deck.selectedIndices.clear();
+      deck.selectedIndices.push_back(nextIndex);
+      onSelectionChanged();
+    }
+    markProjectDirty();
+  }
+
+  Cue* selectedCueMutable() {
+    Deck& deck = focusedDeckMutable();
+    if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    return &deck.cues[deck.selectedIndex];
+  }
+
+  void refreshSelectedCuePreviewCaches() {
+    selectionChangedAt_ = SDL_GetTicks();
+    const Cue* cue = selectedCuePtr();
+    if (!cue) {
+      clearSelectedThumbnail();
+      return;
+    }
+    if (cue->kind == CueKind::Composite) {
+      clearSelectedThumbnail();
+      return;
+    }
+    if (cue->kind == CueKind::Pip) {
+      Cue resolvedCue;
+      if (buildResolvedPipSourceCue(focusedDeck(), *cue, resolvedCue, nullptr)) {
+        requestThumbnail(resolvedCue);
+      } else {
+        clearSelectedThumbnail();
+      }
+      return;
+    }
+    requestThumbnail(*cue);
+  }
+
+  void applyCopiedCueSettings(Cue& target, const Cue& source) {
+    target.audioEnabled = target.hasAudio ? source.audioEnabled : false;
+    target.fadeInSeconds = std::clamp(source.fadeInSeconds, 0.0, 10.0);
+    target.fadeOutSeconds = std::clamp(source.fadeOutSeconds, 0.0, 10.0);
+    target.loop = source.loop;
+    target.pauseAtBeginning = source.pauseAtBeginning;
+    target.pauseOnLastFrame = source.pauseOnLastFrame;
+    target.transitionToNext = source.transitionToNext;
+    target.gotoTarget = source.gotoTarget;
+    double cueDuration = target.duration > 0.0 ? target.duration : 3600.0;
+    target.inPointSeconds = std::clamp(source.inPointSeconds, 0.0, cueDuration);
+    target.outPointSeconds = source.outPointSeconds > 0.0
+      ? std::clamp(source.outPointSeconds, target.inPointSeconds, cueDuration)
+      : 0.0;
+    target.stillDurationSeconds = std::max(0.0, source.stillDurationSeconds);
+    target.cueTransitionSeconds = source.cueTransitionSeconds < 0.0
+      ? -1.0
+      : std::clamp(source.cueTransitionSeconds, 0.0, 10.0);
+    target.cueTransitionStyle = source.cueTransitionStyle;
+    target.lowerThirdBgAlpha = std::clamp(source.lowerThirdBgAlpha, 0, 255);
+    target.attachedLowerThirdCue = source.attachedLowerThirdCue;
+    target.attachedPipCue = source.attachedPipCue;
+    target.compositeLayoutPreset = source.compositeLayoutPreset;
+    target.compositeAudioSlotId = source.compositeAudioSlotId;
+    target.compositeBackgroundColor = source.compositeBackgroundColor;
+    target.compositeSlots = source.compositeSlots;
+    target.loopCount = std::max(0, source.loopCount);
+    target.playbackSpeed = std::clamp(source.playbackSpeed, 0.25, 4.0);
+    target.colorTag = source.colorTag;
+    target.outputScaleX = std::clamp(source.outputScaleX, 0.25f, 4.0f);
+    target.outputScaleY = std::clamp(source.outputScaleY, 0.25f, 4.0f);
+    target.scaleMode = source.scaleMode;
+    target.outputOffsetX = std::clamp(source.outputOffsetX, -4096.0f, 4096.0f);
+    target.outputOffsetY = std::clamp(source.outputOffsetY, -4096.0f, 4096.0f);
+    target.outputRotationDegrees = std::clamp(source.outputRotationDegrees, -180.0f, 180.0f);
+    target.cropLeft = std::clamp(source.cropLeft, 0.0f, 0.95f);
+    target.cropRight = std::clamp(source.cropRight, 0.0f, 0.95f);
+    target.cropTop = std::clamp(source.cropTop, 0.0f, 0.95f);
+    target.cropBottom = std::clamp(source.cropBottom, 0.0f, 0.95f);
+    target.chromaKeyEnabled = source.chromaKeyEnabled;
+    target.chromaKeyColor = source.chromaKeyColor;
+    target.chromaKeyTolerance = std::clamp(source.chromaKeyTolerance, 0.0f, 441.0f);
+    target.chromaKeySoftness = std::clamp(source.chromaKeySoftness, 0.0f, 200.0f);
+    target.brightness = std::clamp(source.brightness, 0.0f, 2.0f);
+    target.contrast = std::clamp(source.contrast, 0.0f, 2.0f);
+    target.saturation = std::clamp(source.saturation, 0.0f, 2.0f);
+    target.hueShift = std::clamp(source.hueShift, -180.0f, 180.0f);
+    target.endAction = source.endAction;
+    target.pausePoints = source.pausePoints;
+    // The effect stack is an inspector setting like any other, and it was the
+    // one thing COPY silently dropped -- so copying a cue you had spent time
+    // grading gave you back everything except the look.
+    target.effects = source.effects;
+    target.motionDriverPath = source.motionDriverPath;
+    target.motionDriverSpeed = source.motionDriverSpeed;
+    target.motionDriverPaused = source.motionDriverPaused;
+    target.motionDriverRestartOnTake = source.motionDriverRestartOnTake;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The effect chain on its own.
+  //
+  // Separate from the whole-cue clipboard on purpose. Copying a cue brings its
+  // geometry, fades, crop and colour with it, which is not what is wanted when
+  // the only thing worth keeping is the look that took twenty minutes to dial
+  // in. This moves the chain and nothing else.
+  // ---------------------------------------------------------------------------
+  void copySelectedEffectChain() {
+    const Cue* cue = selectedCueMutable();
+    if (!cue) {
+      triggerToast("effects copy: select a cue");
+      return;
+    }
+    if (cue->effects.empty()) {
+      triggerToast("effects copy: this cue has no effects");
+      return;
+    }
+    effectChainClipboard_ = cue->effects;
+    effectChainClipboardDriver_ = cue->motionDriverPath;
+    triggerToast("copied " + std::to_string(effectChainClipboard_.size()) +
+                 (effectChainClipboard_.size() == 1 ? " effect" : " effects"));
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void pasteSelectedEffectChain() {
+    if (effectChainClipboard_.empty()) {
+      triggerToast("effects paste: copy a chain first");
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    if (indices.empty()) {
+      triggerToast("effects paste: select a cue");
+      return;
+    }
+    pushUndoSnapshot();
+    int applied = 0;
+    for (int index : indices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      Cue& target = deck.cues[index];
+      target.effects = effectChainClipboard_;
+      // The driver travels with the chain when there is one, because a motion
+      // puppet pasted without its driver is an effect that does nothing and
+      // gives no reason why.
+      if (!effectChainClipboardDriver_.empty()) {
+        target.motionDriverPath = effectChainClipboardDriver_;
+      }
+      // And a chain with no puppet in it leaves no driver behind on the cue
+      // it landed on, the same as removing the last puppet by hand.
+      if (!deckboy::effects::cueEffectStackNeedsDriver(target.effects)) {
+        target.motionDriverPath.clear();
+      }
+      ++applied;
+    }
+    if (applied <= 0) {
+      triggerToast("effects paste: no targets");
+      return;
+    }
+    // Datamosh is a decode behaviour rather than a pixel one, so a pasted
+    // chain containing it has to be reconciled with the cue's own flag, and
+    // the decoder has to be reopened in a format the new chain can act on.
+    syncDatamoshFromStack();
+    refreshFocusedLiveCueRuntimeIfSelected();
+    triggerToast(applied == 1
+                   ? "effect chain pasted"
+                   : ("effect chain pasted x" + std::to_string(applied)));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // ── VJ mixer + tempo ─────────────────────────────────────────────────────
+
+  // ── WHAT IS WRONG WITH THIS SHOW ──────────────────────────────────────
+  //
+  // Deckboy has always validated a cue -- at TAKE, which is during the show.
+  // "MEDIA MISSING, take blocked" at 20:01 is the correct refusal at the worst
+  // possible moment. The same checks, run across the whole show BEFORE doors,
+  // are the difference between a surprise and a to-do list.
+  //
+  // Everything here is derived. Nothing is cached and nothing is stored on the
+  // cue, so the list cannot go stale: fix the problem and it leaves.
+  struct ShowProblem {
+    int deckIndex = -1;
+    int cueIndex = -1;
+    std::string what;                  // short, operator-facing
+  };
+
+  std::vector<ShowProblem> scanShowForProblems() {
+    std::vector<ShowProblem> out;
+    // A master (a playlist master, or one of the tracker's own steps) firing
+    // nothing, naming a deck that has gone, or naming a cue that has.
+    auto checkMaster = [&](const Cue& cue, int d, int c) {
+      if (cue.masterAssignments.empty()) {
+        out.push_back({d, c, "master fires nothing"});
+      }
+      for (const auto& a : cue.masterAssignments) {
+        if (a.deckIndex < 0 || a.deckIndex >= static_cast<int>(project_.decks.size())) {
+          out.push_back({d, c, "master names deck " +
+                               std::to_string(a.deckIndex + 1) +
+                               ", which does not exist"});
+        } else if (findCueIndexById(a.deckIndex, a.cueId) < 0) {
+          out.push_back({d, c, "master target on deck " +
+                               std::to_string(a.deckIndex + 1) + " is gone"});
+        }
+      }
+    };
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        Cue& cue = deck.cues[c];
+
+        // The file is gone. The check TAKE already does, asked early.
+        if (cueUsesFilesystemMedia(cue)) {
+          auto resolved = resolveCueFilesystemPath(cue, currentProjectFile_);
+          if (resolved && !resolved->empty()) {
+            std::error_code ec;
+            if (!fs::exists(*resolved, ec)) {
+              out.push_back({d, c, "media missing"});
+            }
+          }
+        }
+
+        // A goto that points at nothing. The cue plays and then the show stops
+        // where nobody expected it to, which is the hardest kind to find later.
+        const std::string goto_ = trim(cue.gotoTarget);
+        if (!goto_.empty() && !cueIndexByTokenInOverlayRole(deck, goto_, false)) {
+          out.push_back({d, c, "goto \"" + goto_ + "\" matches no cue"});
+        }
+
+        // A master pointing at a cue that has been deleted or moved to another
+        // deck. This class of fault did not exist until master cues did, and
+        // it is invisible until the master is fired.
+        if (cue.kind == CueKind::Master) {
+          checkMaster(cue, d, c);
+        }
+
+        // A DMX cue whose channel list cannot be read. The whole point of
+        // checking it here is that a typo is silent on the night.
+        if (cue.kind == CueKind::Dmx) {
+          auto spec = deckboy::platform::parseDmxChannelSpec(cue.dmxChannels);
+          if (cue.dmxChannels.empty()) {
+            out.push_back({d, c, "DMX cue has no channels"});
+          } else if (!spec || spec->empty()) {
+            out.push_back({d, c, "DMX channel list is not readable"});
+          }
+        }
+
+        // A script with no lines in it. Not a fault anybody would notice
+        // until the cue did nothing on the night.
+        if (cue.kind == CueKind::Script && scriptLineCount(cue.scriptText) == 0) {
+          out.push_back({d, c, "script has no lines"});
+        }
+
+        // A network cue with nowhere to send. The host is checked as an
+        // address here rather than at GO for the same reason as everything
+        // else on this list: a typo is silent on the night.
+        if (cue.kind == CueKind::Network) {
+          sockaddr_in probe {};
+          const std::string host = trim(cue.netHost);
+          if (host.empty()) {
+            out.push_back({d, c, "network cue has no host"});
+          } else if (inet_pton(AF_INET, host.c_str(), &probe.sin_addr) != 1) {
+            out.push_back({d, c, "network cue host \"" + host +
+                                 "\" is not an IPv4 address"});
+          } else if (toLower(trim(cue.netProtocol)) == "osc" &&
+                     (trim(cue.netAddress).empty() ||
+                      trim(cue.netAddress).front() != '/')) {
+            out.push_back({d, c, "OSC address must start with /"});
+          }
+        }
+
+        // A MIDI cue whose message cannot be built. Checked here rather than
+        // at GO, which is the whole point of the panel: a raw string with a
+        // typo in it is silent on the night and obvious before doors.
+        if (cue.kind == CueKind::Midi &&
+            deckboy::platform::midi::encodeOutMessage(midiMessageForCue(cue)).empty()) {
+          out.push_back({d, c, "MIDI cue has nothing to send"});
+        }
+
+        // A fade that does nothing: zero length AND already at its value is
+        // fine (it is a set), but a fade naming a deck that has gone is not.
+        if (cue.kind == CueKind::Fade && cue.fadeWhat != CueFadeWhat::MasterDimmer &&
+            cue.targetDeckIndex >= 0 &&
+            cue.targetDeckIndex >= static_cast<int>(project_.decks.size())) {
+          out.push_back({d, c, "fade names deck " +
+                               std::to_string(cue.targetDeckIndex + 1) +
+                               ", which does not exist"});
+        }
+
+        // A target with nobody to act on, for the same reason.
+        if (cue.kind == CueKind::Target && !cueTargetVerbIsAll(cue.targetVerb)) {
+          int vd = -1;
+          int vi = -1;
+          if (cue.targetCueId.empty()) {
+            out.push_back({d, c, "target acts on nothing"});
+          } else if (!resolveTargetCue(cue, vd, vi)) {
+            out.push_back({d, c, std::string(cueTargetVerbLabel(cue.targetVerb)) +
+                                 " target is gone"});
+          }
+        }
+
+        // A DISARMED CUE IS NOT A FAULT -- somebody meant it -- but a whole
+        // deck of them is: GO would walk the list and never fire anything.
+        // Reported once, on the first cue, rather than once per cue.
+      }
+      const bool anyArmed = std::any_of(deck.cues.begin(), deck.cues.end(),
+                                        [](const Cue& c) { return c.armed; });
+      if (!deck.cues.empty() && !anyArmed) {
+        out.push_back({d, 0, "every cue on this deck is disarmed"});
+      }
+    }
+    // THE MACHINE, not the show: a sound device a playlist is set to that is
+    // not plugged in, and a plugin a cue uses that is not installed here. Both
+    // play on (the default device; a silent slot) and both are what a touring
+    // show meets in a strange room -- better on this list than at the cue.
+    {
+      std::vector<std::string> present;
+      int count = 0;
+      if (SDL_AudioDeviceID* ids = SDL_GetAudioPlaybackDevices(&count)) {
+        for (int i = 0; i < count; ++i) {
+          if (const char* name = SDL_GetAudioDeviceName(ids[i])) present.emplace_back(name);
+        }
+        SDL_free(ids);
+      }
+      // An empty list is a driver mid-restart as often as no devices at all.
+      for (int d = 0; !present.empty() && d < static_cast<int>(project_.decks.size()); ++d) {
+        const std::string& wanted = project_.decks[d].audioOutputDeviceName;
+        if (!wanted.empty() && std::find(present.begin(), present.end(), wanted) == present.end()) {
+          out.push_back({d, -1, "sound device \"" + wanted + "\" is not connected"});
+        }
+      }
+    }
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        for (const auto& fx : deck.cues[c].audioEffects) {
+          if (fx.pluginId.empty()) continue;
+          // Scanned once, then read as cached: this runs every few seconds,
+          // and the accessor rescans whenever the catalogue is empty.
+          if (!audioPluginCatalogScanned_) audioPluginCatalog();
+          const bool installed = std::any_of(
+            audioPluginCatalog_.begin(), audioPluginCatalog_.end(),
+            [&](const auto& p) { return p.id == fx.pluginId; });
+          if (!installed) {
+            const std::size_t slash = fx.pluginId.find_last_of("/\\");
+            out.push_back({d, c, "plugin " +
+                                 (slash == std::string::npos ? fx.pluginId : fx.pluginId.substr(slash + 1)) +
+                                 " is not installed here"});
+          }
+        }
+      }
+    }
+    // THE TRACKER'S OWN STEPS. Masters moved out of the playlists into these,
+    // and a scan that only walked playlists stopped seeing every one of them.
+    for (int s = 0; s < static_cast<int>(project_.trackerSteps.size()); ++s) {
+      checkMaster(project_.trackerSteps[s], kTrackerStepsDeck, s);
+    }
+    return out;
+  }
+
+  // Where a problem lives, for the operator: "deck 2 cue 5" or "tracker step 3".
+  static std::string showProblemPlace(const ShowProblem& p) {
+    if (p.deckIndex == kTrackerStepsDeck) {
+      return "tracker step " + std::to_string(p.cueIndex + 1);
+    }
+    if (p.cueIndex < 0) {
+      return "deck " + std::to_string(p.deckIndex + 1);   // the playlist itself
+    }
+    return "deck " + std::to_string(p.deckIndex + 1) + " cue " + std::to_string(p.cueIndex + 1);
+  }
+
+  // Take the operator to it: the cue in its playlist, or the dashboard for a
+  // tracker step (which lives in no playlist).
+  void revealShowProblem(const ShowProblem& p) {
+    if (p.deckIndex == kTrackerStepsDeck) {
+      dashboardOverlayOpen_ = true;
+      return;
+    }
+    setFocusedDeckIndex(p.deckIndex);
+    if (p.cueIndex < 0) {
+      return;
+    }
+    selectCueInDeck(p.deckIndex, p.cueIndex, false, false);
+    scrollDeckToCueIndex(p.deckIndex, p.cueIndex, false);
+  }
+
+  // EVERYTHING WRONG, AS ONE LIST. The button used to walk the problems one
+  // toast at a time, so "how much is left to fix before doors" meant clicking
+  // until the count came round again. The list shows the lot; picking a line
+  // takes the operator to that cue (or the tracker, for a step).
+  int showProblemListOpens_ = 0;   // CHECK pressed, this session
+
+  void openShowProblemList() {
+    ++showProblemListOpens_;   // the lessons watch this
+    const std::vector<ShowProblem> problems = scanShowForProblems();
+    showProblemCount_ = static_cast<int>(problems.size());
+    if (problems.empty()) {
+      triggerToast("nothing broken");
+      return;
+    }
+    std::vector<std::pair<std::string, std::string>> choices;
+    for (std::size_t i = 0; i < problems.size(); ++i) {
+      choices.emplace_back(std::to_string(i), showProblemPlace(problems[i]) + ": " + problems[i].what);
+    }
+    openDropdown("show.problems", fileCheckBtnRect_, choices, std::string(),
+                 [this](const std::string& id) {
+                   // Scanned again on the pick: a fix made with the list open
+                   // must not send the operator to the wrong cue.
+                   const std::vector<ShowProblem> now = scanShowForProblems();
+                   const std::size_t i = static_cast<std::size_t>(std::atoi(id.c_str()));
+                   if (i < now.size()) {
+                     revealShowProblem(now[i]);
+                     triggerToast(showProblemPlace(now[i]) + ": " + now[i].what);
+                   }
+                 });
+  }
+
+  // ADD A DECK. The app has always carried up to kMaxDecks and only VJ mode
+  // could ever create one -- as a side effect, capped at two, so a show that
+  // wanted three destinations could not have them unless a file already said
+  // so. Master cues made that gap load-bearing: you cannot assign a master to
+  // deck 3 if deck 3 cannot exist.
+  //
+  // This is VJ mode's recipe, generalised rather than copied: name it for its
+  // POSITION (Deck's default name is "Deck 1", so a second one added naively is
+  // another "Deck 1" in STATUS and in anything a controller labels from it),
+  // then rebuild the runtimes so the new deck has an engine.
+  //
+  // APPEND ONLY, deliberately. Outputs address their source by hostDeckIndex
+  // and master cues address their targets by deck index, so removing a deck
+  // from the middle would silently repoint both at their neighbours. Removal
+  // needs those references remapped and is not in here.
+  bool addDeck(bool announce = true) {
+    if (static_cast<int>(project_.decks.size()) >= kMaxDecks) {
+      if (announce) {
+        failRemoteCommand("deck limit is " + std::to_string(kMaxDecks));
+      }
+      return false;
+    }
+    Deck added;
+    added.name = deckDefaultName(static_cast<int>(project_.decks.size()));
+    const bool becomingSuper = project_.decks.size() == 1;
+    project_.decks.push_back(added);
+    // THE SECOND DECK IS THE EVOLUTION. Only the step from one to two: a
+    // third or fourth deck is more of Super Deckboy, not another evolution,
+    // and a jingle on every one would stop being a moment and start being a
+    // noise.
+    if (becomingSuper) {
+      evolveIntoSuperDeckboy();
+    }
+    // Only the new playlist's engine is made: what is on air stays on air
+    // (see growDeckRuntimes).
+    growDeckRuntimes();
+    markProjectDirty();
+    if (announce) {
+      // ITS OWN SOUND, and not on the second deck -- that one already gets
+      // the power-up, and two jingles at once is a mess rather than a moment.
+      if (!becomingSuper) {
+        playUiSound(UiSoundEffect::DeckAdded);
+      }
+      triggerToast(deckboy::core::i18n::format(
+        "added {1}", {deckboy::core::i18n::translate(added.name)}));
+    }
+    return true;
+  }
+
+  // ── REMOVING A PLAYLIST ───────────────────────────────────────────────
+  //
+  // addDeck() is append-only and said so, because everything that points at a
+  // deck points at it BY INDEX: an output's host, an output's layer stack, a
+  // master cue's assignments, a target cue's deck, each deck's own route, and
+  // VJ mode's A and B. Removing one from the middle shifts every index above
+  // it, and a reference that is not remapped does not break -- it silently
+  // starts meaning the NEIGHBOUR, which is the worst way for this to fail.
+  //
+  // So the remap is one function and every holder goes through it. A reference
+  // TO the removed deck is cleared where that is meaningful and repointed
+  // where it is not (an output must have a host).
+  void remapDeckReferencesAfterRemoval(int removed) {
+    auto shift = [removed](int index) {
+      if (index == removed) return -1;          // gone
+      return index > removed ? index - 1 : index;
+    };
+    const int deckCount = static_cast<int>(project_.decks.size());
+
+    for (OutputTarget& output : project_.outputs) {
+      // THE HOST CANNOT BE NOTHING. If the removed deck was this output's
+      // base, the first layer above it takes over; if there was none, it
+      // falls to deck 0 -- an output with no source shows black and there is
+      // nothing on screen to tell anyone why.
+      std::vector<OutputLayer> layers;
+      for (const OutputLayer& layer : output.layerDecks) {
+        const int moved = shift(layer.deckIndex);
+        if (moved >= 0 && moved < deckCount) {
+          OutputLayer kept = layer;   // keeps its geometry and its blend
+          kept.deckIndex = moved;
+          layers.push_back(kept);
+        }
+      }
+      const int host = shift(output.hostDeckIndex);
+      if (host >= 0 && host < deckCount) {
+        output.hostDeckIndex = host;
+      } else if (!layers.empty()) {
+        output.hostDeckIndex = layers.front().deckIndex;
+        layers.erase(layers.begin());
+      } else {
+        output.hostDeckIndex = 0;
+      }
+      output.layerDecks.swap(layers);
+    }
+
+    // The tracker's own steps name playlists exactly as a master cue does.
+    for (Cue& step : project_.trackerSteps) {
+      std::vector<MasterAssignment> kept;
+      for (const MasterAssignment& a : step.masterAssignments) {
+        MasterAssignment moved = a;
+        moved.deckIndex = shift(a.deckIndex);
+        if (moved.deckIndex >= 0 && moved.deckIndex < deckCount) {
+          kept.push_back(moved);
+        }
+      }
+      step.masterAssignments.swap(kept);
+    }
+
+    for (int d = 0; d < deckCount; ++d) {
+      Deck& deck = project_.decks[d];
+      const int route = shift(deck.outputRouteDeckIndex);
+      deck.outputRouteDeckIndex = (route >= 0 && route < deckCount) ? route : d;
+      for (Cue& cue : deck.cues) {
+        // A MASTER LOSES THE ASSIGNMENT, rather than keeping one that now
+        // names a different playlist. An assignment that quietly moved would
+        // fire the wrong cue on the wrong deck at the worst moment.
+        std::vector<MasterAssignment> kept;
+        for (const MasterAssignment& a : cue.masterAssignments) {
+          MasterAssignment moved = a;
+          moved.deckIndex = shift(a.deckIndex);
+          if (moved.deckIndex >= 0 && moved.deckIndex < deckCount) {
+            kept.push_back(moved);
+          }
+        }
+        cue.masterAssignments.swap(kept);
+        const int target = shift(cue.targetDeckIndex);
+        cue.targetDeckIndex = target;
+        if (target < 0 || target >= deckCount) {
+          // The target is unresolvable now, and the inspector already draws
+          // that state honestly as "nothing targeted yet".
+          cue.targetCueId.clear();
+          cue.targetDeckIndex = 0;
+        }
+      }
+    }
+
+    const int a = shift(project_.vjDeckA);
+    const int b = shift(project_.vjDeckB);
+    project_.vjDeckA = std::clamp(a < 0 ? 0 : a, 0, std::max(0, deckCount - 1));
+    project_.vjDeckB = std::clamp(b < 0 ? 0 : b, 0, std::max(0, deckCount - 1));
+    project_.focusedDeckIndex =
+      std::clamp(project_.focusedDeckIndex > removed ? project_.focusedDeckIndex - 1
+                                                     : project_.focusedDeckIndex,
+                 0, std::max(0, deckCount - 1));
+
+    // ── AND THE DEFAULT NAMES FOLLOW THE POSITIONS ──────────────────────
+    //
+    // A playlist called "Deck 3" sitting in slot 2 is a playlist whose label
+    // disagrees with the tab it is under, the chip that routes it and the
+    // number every remote verb takes -- and it stays wrong for the rest of
+    // the show. Removing the middle of four left exactly that.
+    //
+    // ONLY THE DEFAULT ONES. A playlist somebody has named "Lower thirds"
+    // keeps that name: renumbering it would throw away the one piece of
+    // information in this that a person put there.
+    for (int d = 0; d < deckCount; ++d) {
+      Deck& deck = project_.decks[d];
+      bool isDefaultName = deck.name.empty();
+      for (int was = 0; was <= deckCount && !isDefaultName; ++was) {
+        isDefaultName = deck.name == deckDefaultName(was);
+      }
+      if (isDefaultName) {
+        deck.name = deckDefaultName(d);
+      }
+    }
+  }
+
+  bool removeDeck(int deckIndex, bool announce = true) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return false;
+    }
+    if (project_.decks.size() <= 1) {
+      // THE LAST ONE STAYS. A show with no playlist has no cues, no
+      // inspector and no way back to one.
+      if (announce) {
+        failRemoteCommand("a show needs at least one playlist");
+      }
+      return false;
+    }
+    const std::string name = deckLabel(deckIndex);
+    const std::size_t cueCount = project_.decks[deckIndex].cues.size();
+    // UNDOABLE. This took a playlist and every cue in it with no way back --
+    // and it once took a 2000-cue deck when the one beside it was meant.
+    // undo() resizes the engines when the deck count changes.
+    // FORCED: the snapshot's debounce compares cue counts and selections, and
+    // a removal straight after routing an output matched the step before it
+    // -- so no step was taken, and undoing the removal put the output back on
+    // the playlist it showed before the routing.
+    pushUndoSnapshot(true);
+    // The inspector's thumbnail and the row caches are keyed by deck index,
+    // so after an erase they describe a playlist that is gone (or a
+    // different one now at that index) -- the removed deck's picture stayed
+    // in the inspector preview.
+    resetTransientPreviewState();
+    cueRowDisplayCache_.clear();
+    project_.decks.erase(project_.decks.begin() + deckIndex);
+    remapDeckReferencesAfterRemoval(deckIndex);
+    normalizeProject(project_);
+    // ONLY THIS PLAYLIST STOPS. Every other one keeps playing and moves into
+    // its new place (reconcileDeckRuntimes); this used to rebuild them all,
+    // which stopped the whole show to tidy one playlist away.
+    reconcileDeckRuntimes();
+    refreshWindowTitle();
+    markProjectDirty();
+    if (announce) {
+      playUiSound(UiSoundEffect::DeckRemoved);
+      triggerToast("removed " + name + " (" + std::to_string(cueCount) +
+                   (cueCount == 1 ? " cue" : " cues") +
+                   ") - the others play on; ctrl+z brings it back");
+    }
+    return true;
+  }
+
+  // ── SUPER DECKBOY ─────────────────────────────────────────────────────
+  //
+  // "Super Deckboy" was the name for the future where Deckboy could run more
+  // than one deck to more than one output. That future is this release, so
+  // the second deck gets the moment it earned: a power-up, a flash, and the
+  // app wearing its new name.
+  void evolveIntoSuperDeckboy() {
+    // NEVER DURING A SHOW. Adding a deck is a setup action, and the jingle
+    // goes to the operator's system audio,
+    // and on plenty of rigs that IS the PA. A fanfare through the house
+    // because somebody added a deck at the wrong moment is exactly the kind
+    // of thing the app must never do to a room.
+    if (!showIsLive()) {
+      playUiSound(UiSoundEffect::PowerUp);
+    }
+    superDeckboyEvolveAt_ = SDL_GetTicks();
+    refreshWindowTitle();
+    triggerToast("Deckboy evolved into SUPER DECKBOY!");
+  }
+
+  // THE WINDOW SAYS WHICH SHOW THIS IS. It said only "Deckboy", and the
+  // show's name appeared for a moment in a toast: Save and Save As were
+  // guesswork, and two shows in two windows could not be told apart on the
+  // taskbar (first-time walkthrough, 2026-10-26). The tour runs in its own
+  // practice show (tutorialPracticeFile), and says so, so nobody thinks their
+  // own show is being changed. A show never given a name autosaves to
+  // defaultProjectFile(), and is a "New show", not "default".
+  //
+  // "not saved" is NOT "dirty": every change is written 300 ms later by
+  // flushDirtyProject, so a dirty flag in the title would flash on each edit.
+  // It means changes that are not reaching the file -- a save that failed, a
+  // show that did not load cleanly (never autosaved), a recovery waiting on
+  // the operator -- which is the case worth reading off the title bar.
+  //
+  // The app's name still follows the deck count both ways, so removing back
+  // to one deck is plain Deckboy again. Checked every frame because decks, the
+  // file and the dirty flag all change from many paths -- a show file, VJ
+  // mode, the network -- and every one should agree rather than each
+  // remembering to set it.
+  std::string showDisplayName() const {
+    if (tutorial_.active) return "Practice show";
+    if (currentProjectFile_.empty() || currentProjectFile_ == Paths::defaultProjectFile()) {
+      return "New show";
+    }
+    return currentProjectFile_.stem().string();
+  }
+
+  bool showChangesNotSaved() const {
+    if (tutorial_.active) return false;
+    if (projectSaveFailed_) return true;
+    return projectDirty_ &&
+           std::chrono::steady_clock::now() - projectDirtyAt_ > std::chrono::seconds(2);
+  }
+
+  void refreshWindowTitle() {
+    if (!controlWindow_) {
+      return;
+    }
+    const bool super = project_.decks.size() > 1;
+    std::string title = showDisplayName();
+    if (showChangesNotSaved()) {
+      title += " \xC2\xB7 not saved";   // a middle dot
+    }
+    title += " \xE2\x80\x94 ";          // an em dash
+    title += super ? std::string("Super Deckboy") : std::string(kAppTitle);
+    if (title == windowTitle_) {
+      return;
+    }
+    windowTitle_ = title;
+    SDL_SetWindowTitle(controlWindow_, title.c_str());
+  }
+
+  // The evolution itself: a white flash that fades, a burst of stars, and the
+  // name in the middle -- about a second and a half, then gone. Drawn over
+  // everything but it is NOT modal and takes no input: a showpiece, not a
+  // dialog anybody has to dismiss.
+  void renderSuperDeckboyEvolution() {
+    if (superDeckboyEvolveAt_ == 0) {
+      return;
+    }
+    const Uint64 kDurationMs = 1600;
+    const Uint64 elapsed = SDL_GetTicks() - superDeckboyEvolveAt_;
+    if (elapsed >= kDurationMs) {
+      superDeckboyEvolveAt_ = 0;
+      return;
+    }
+    int winW = 0;
+    int winH = 0;
+    SDL_GetCurrentRenderOutputSize(controlRenderer_, &winW, &winH);
+    const double t = static_cast<double>(elapsed) / static_cast<double>(kDurationMs);
+    const int cx = winW / 2;
+    const int cy = winH / 2;
+
+    // The flash: three quick pulses, the way an evolution flickers between
+    // the old form and the new one before it settles.
+    const double flicker = (elapsed < 600)
+      ? (std::sin(static_cast<double>(elapsed) * 0.035) * 0.5 + 0.5)
+      : 0.0;
+    const double fade = 1.0 - t;
+    const Uint8 flashA = static_cast<Uint8>(
+      std::clamp(flicker * 150.0 + fade * 60.0, 0.0, 200.0));
+    Primitives::fillRect(controlRenderer_, SDL_Rect {0, 0, winW, winH},
+                         SDL_Color {255, 255, 240, flashA});
+
+    // The stars: twelve of them flying outward from the middle, in the
+    // theme's own light colour so it belongs to whatever colourway is on.
+    const double reach = std::min(winW, winH) * 0.45 * t;
+    for (int i = 0; i < 12; ++i) {
+      const double a = (static_cast<double>(i) / 12.0) * 6.2831853 + t * 1.5;
+      const int sx = cx + static_cast<int>(std::cos(a) * reach);
+      const int sy = cy + static_cast<int>(std::sin(a) * reach);
+      const int r = std::max(2, uiScaled(6) - static_cast<int>(t * uiScaled(4)));
+      SDL_Color star = pal.light;
+      star.a = static_cast<Uint8>(255.0 * fade);
+      Primitives::fillRect(controlRenderer_, SDL_Rect {sx - r, sy, r * 2 + 1, 1}, star);
+      Primitives::fillRect(controlRenderer_, SDL_Rect {sx, sy - r, 1, r * 2 + 1}, star);
+    }
+
+    // The name, on a plate so it reads over any picture behind it.
+    const std::string name = "SUPER DECKBOY!";
+    const int textW = measuredTextWidth(fontLarge_, name);
+    const int textH = textLineHeight(fontLarge_);
+    const int pad = uiScaled(14);
+    SDL_Rect plate {cx - textW / 2 - pad, cy - textH / 2 - pad / 2,
+                    textW + pad * 2, textH + pad};
+    SDL_Color plateCol = pal.dark;
+    plateCol.a = static_cast<Uint8>(230.0 * std::min(1.0, fade * 2.0));
+    drawUIPanel(plate, plateCol, pal.deep, pal.light);
+    SDL_Color ink = pal.light;
+    ink.a = static_cast<Uint8>(255.0 * std::min(1.0, fade * 2.0));
+    drawCenteredTextSafe(controlRenderer_, fontLarge_, plate, name, ink);
+  }
+
+  void setVjMode(bool on) {
+    if (project_.vjModeEnabled == on) {
+      return;
+    }
+    project_.vjModeEnabled = on;
+    // Start the drop-in. Set on both edges so leaving the mode is as visible
+    // as entering it.
+    vjBarRevealAt_ = animationNow_;
+    if (on && project_.decks.size() < 2) {
+      // A mixer needs something to mix. Adding the deck here rather than
+      // refusing means turning the mode on does what it says on a show file
+      // that has only ever had one deck, which is most of them.
+      //
+      // rebuildDeckRuntimes tears down every engine, so this stops playback --
+      // acceptable for a mode switch during setup, and said out loud below so
+      // it is not a surprise if someone flips it mid-show.
+      // Named for its POSITION. Deck's default name is "Deck 1", so the deck
+      // VJ mode added was a second "Deck 1" -- visible in STATUS JSON and in
+      // anything a controller labels from it.
+      // One deck-creating path, so the naming and the runtime rebuild cannot
+      // drift between here and DECKADD.
+      addDeck(false);
+    }
+    const int deckCount = static_cast<int>(project_.decks.size());
+    project_.vjDeckA = std::clamp(project_.vjDeckA, 0, std::max(0, deckCount - 1));
+    project_.vjDeckB = std::clamp(project_.vjDeckB, 0, std::max(0, deckCount - 1));
+    if (on && project_.vjDeckB == project_.vjDeckA && deckCount > 1) {
+      project_.vjDeckB = (project_.vjDeckA + 1) % deckCount;
+    }
+    // Ask every deck for CPU-side pixels while the mixer is up, then re-take
+    // the live cues so the change actually reaches the decoders -- the format
+    // is chosen when a cue is taken, not per frame.
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (DeckRuntime* runtime = runtimeForDeck(deckIndex)) {
+        if (runtime->mediaEngine) {
+          runtime->mediaEngine->setForcePixelFrames(on);
+        }
+      }
+    }
+    refreshAllLiveCueRuntimes();
+    triggerToast(on ? "VJ mode on" : "VJ mode off");
+    markProjectDirty();
+  }
+
+  void setVjMix(double position) {
+    // THE OUTPUT'S FADER, not the old global. The widget is unchanged --
+    // this is the one place that decides what it is moving.
+    if (!project_.outputs.empty()) {
+      OutputTarget& out = focusedOutputMutable();
+      out.crossfadeMix = std::clamp(position, 0.0, 1.0);
+      // Armed on first move, so dragging it does something rather than
+      // storing a number nothing composites.
+      if (!out.layerDecks.empty()) {
+        out.crossfadeEnabled = true;
+      }
+    }
+    markProjectDirty();
+  }
+
+  void setVjBlend(const std::string& mode) {
+    // AGAINST THE SHARED LIST. This carried its own copy of the modes -- the
+    // fourth place they were written out -- so a mode the renderer, the cycle
+    // and the remote verb all knew about arrived here, failed an `== "add" ||
+    // == "multiply"` test written before it existed, and became dissolve. The
+    // command still answered OK, so it looked like a mode that does nothing.
+    project_.vjBlendMode = isVjBlendMode(mode) ? mode : "dissolve";
+    // THE OUTPUT DRAWS WITH THE LAYER'S BLEND, so this sets the layer the
+    // focused output's crossfader brings in (or its top layer, before the
+    // fader is set up). Before 0.99.426 it set only this label.
+    if (!project_.outputs.empty()) {
+      const int focusedOut = std::clamp(project_.focusedOutputIndex, 0,
+                                        static_cast<int>(project_.outputs.size()) - 1);
+      const OutputTarget& out = project_.outputs[focusedOut];
+      const int top = static_cast<int>(out.layerDecks.size());
+      const int to = out.crossfadeEnabled ? std::clamp(out.crossfadeTo, 0, top) : top;
+      if (to > 0) {
+        setLayerBlend(out.layerDecks[to - 1].deckIndex, focusedOut,
+                      project_.vjBlendMode, false);
+      }
+    }
+    triggerToast("mix: " + project_.vjBlendMode);
+    markProjectDirty();
+  }
+
+  // One layer's blend on one output. False when the deck is not a layer there.
+  bool setLayerBlend(int deckIndex, int outputIndex, const std::string& mode,
+                     bool toast = true) {
+    if (outputIndex < 0 || outputIndex >= static_cast<int>(project_.outputs.size()) ||
+        !isVjBlendMode(mode)) {
+      return false;
+    }
+    for (OutputLayer& layer : project_.outputs[outputIndex].layerDecks) {
+      if (layer.deckIndex == deckIndex) {
+        layer.blendMode = mode;
+        if (toast) {
+          triggerToast(deckLabel(deckIndex) + " on " + outputLabel(outputIndex) +
+                       ": blend " + mode);
+        }
+        markProjectDirty();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // TAP TEMPO.
+  //
+  // Averaged over the recent taps rather than taken from the last interval,
+  // because no one taps evenly and a single interval makes the tempo jump
+  // around on every beat. Taps more than two seconds apart start a new
+  // measurement: that is a person starting again, not a 25bpm track.
+  double tapVjTempo() {
+    const double now = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    if (!vjTapTimes_.empty() && now - vjTapTimes_.back() > 2.0) {
+      vjTapTimes_.clear();
+    }
+    vjTapTimes_.push_back(now);
+    if (vjTapTimes_.size() > 8) {
+      vjTapTimes_.erase(vjTapTimes_.begin());
+    }
+    if (vjTapTimes_.size() >= 2) {
+      const double span = vjTapTimes_.back() - vjTapTimes_.front();
+      const double intervals = static_cast<double>(vjTapTimes_.size() - 1);
+      if (span > 0.05) {
+        project_.vjTempoBpm = std::clamp(60.0 * intervals / span, 20.0, 300.0);
+        // The downbeat is the tap that set the tempo, so the beat grid lines up
+        // with the hand that tapped it rather than with when the app started.
+        vjBeatOrigin_ = vjTapTimes_.back();
+        markProjectDirty();
+      }
+    }
+    return project_.vjTempoBpm;
+  }
+
+  void setVjTempo(double bpm) {
+    project_.vjTempoBpm = std::clamp(bpm, 20.0, 300.0);
+    vjBeatOrigin_ = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    markProjectDirty();
+  }
+
+  // Where we are between beats, 0 at the beat and approaching 1 just before the
+  // next. Derived from a wall clock rather than counted per frame, so it cannot
+  // drift when a frame is late.
+  // Beats since the tempo origin, FRACTIONAL and running.
+  //
+  // vjBeatPhase wraps inside one beat, which is what a flashing badge wants and
+  // useless to an LFO with a four-beat cycle -- that needs to know which beat
+  // it is on, not just where it sits inside the current one.
+  double vjBeatCount() const {
+    const double bpm = std::clamp(project_.vjTempoBpm, 20.0, 300.0);
+    const double beatSeconds = 60.0 / bpm;
+    const double now = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    return (now - vjBeatOrigin_) / beatSeconds;
+  }
+
+  // ONE clock for every LFO in the show.
+  //
+  // The preview and the output both modulate the stack, and if each read its
+  // own clock the operator's monitor would show a slightly different moment of
+  // the same oscillator than the audience saw. Sampled once per frame and
+  // handed to both.
+  void sampleLfoClock() {
+    lfoSeconds_ = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    lfoBeats_ = vjBeatCount();
+    // The same sample, for the generators drawn on engine threads.
+    deckboy::effects::publishLfoClock(lfoSeconds_, lfoBeats_,
+                                      std::clamp(reactiveAudioLevel_, 0.0, 1.0));
+  }
+
+  double vjBeatPhase() const {
+    const double bpm = std::clamp(project_.vjTempoBpm, 20.0, 300.0);
+    const double beatSeconds = 60.0 / bpm;
+    const double now = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    const double since = now - vjBeatOrigin_;
+    const double phase = std::fmod(since, beatSeconds) / beatSeconds;
+    return phase < 0.0 ? phase + 1.0 : phase;
+  }
+
+  double vjSecondsToNextBeat() const {
+    const double bpm = std::clamp(project_.vjTempoBpm, 20.0, 300.0);
+    const double beatSeconds = 60.0 / bpm;
+    return beatSeconds * (1.0 - vjBeatPhase());
+  }
+
+  std::vector<double> vjTapTimes_;
+  double vjBeatOrigin_ = 0.0;
+  // A take waiting for the downbeat. Quantising is the whole point of tempo in
+  // a video mixer: not that anything moves by itself, but that what the
+  // operator does lands ON the music instead of a moment after it.
+  bool vjTakePending_ = false;
+  double vjTakeDueAt_ = 0.0;
+
+  void copySelectedCueSettings() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      triggerToast("cue copy: select cue");
+      return;
+    }
+    cueSettingsClipboard_ = *cue;
+    triggerToast("cue settings copied");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void pasteSelectedCueSettings() {
+    if (!cueSettingsClipboard_) {
+      triggerToast("cue paste: copy first");
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    if (indices.empty()) {
+      triggerToast("cue paste: select cue");
+      return;
+    }
+    pushUndoSnapshot();
+    const Cue source = *cueSettingsClipboard_;
+    int appliedCount = 0;
+    for (int index : indices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      applyCopiedCueSettings(deck.cues[index], source);
+      ++appliedCount;
+    }
+    if (appliedCount <= 0) {
+      triggerToast("cue paste: no targets");
+      return;
+    }
+    refreshFocusedLiveCueRuntimeIfSelected();
+    syncPipOverlayRuntimesForDeck(project_.focusedDeckIndex, SDL_GetTicks());
+    refreshSelectedCuePreviewCaches();
+    triggerToast(appliedCount == 1 ? "cue settings pasted"
+                                   : ("cue settings pasted x" + std::to_string(appliedCount)));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // Reset every selected cue's inspector settings (geometry, color, fades,
+  // crop, chroma, etc.) back to deck defaults, leaving media path/name/id and
+  // probed metadata intact. Applies to the whole selection like paste.
+  void resetSelectedCueSettings() {
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    if (indices.empty()) {
+      triggerToast("cue reset: select cue");
+      return;
+    }
+    pushUndoSnapshot();
+    int appliedCount = 0;
+    for (int index : indices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      Cue& cue = deck.cues[index];
+      // Match the target's kind so kind-specific defaults (still duration, fade
+      // defaults) reset correctly; hasAudio/duration keep audio + trim sane.
+      Cue defaults;
+      defaults.kind = cue.kind;
+      defaults.hasAudio = cue.hasAudio;
+      defaults.duration = cue.duration;
+      applyDeckDefaultsToCue(defaults, deck);
+      applyCopiedCueSettings(cue, defaults);
+      ++appliedCount;
+    }
+    if (appliedCount <= 0) {
+      triggerToast("cue reset: no targets");
+      return;
+    }
+    refreshFocusedLiveCueRuntimeIfSelected();
+    syncPipOverlayRuntimesForDeck(project_.focusedDeckIndex, SDL_GetTicks());
+    refreshSelectedCuePreviewCaches();
+    triggerToast(appliedCount == 1 ? "cue settings reset"
+                                   : ("cue settings reset x" + std::to_string(appliedCount)));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // COPY AND PASTE THE OUTPUT'S MAPPING, not the deck's. These took Decks
+  // and so kept working on the fields the 0.99.374 migration left behind --
+  // copy read zeroes and paste wrote them to a struct nothing renders.
+  void applyCopiedWarpSettings(OutputTarget& target, const OutputTarget& source) {
+    target.warpEnabled = source.warpEnabled;
+    target.warpMode = normalizeWarpMode(source.warpMode);
+    target.warpTopLeftX = source.warpTopLeftX;
+    target.warpTopLeftY = source.warpTopLeftY;
+    target.warpTopRightX = source.warpTopRightX;
+    target.warpTopRightY = source.warpTopRightY;
+    target.warpBottomRightX = source.warpBottomRightX;
+    target.warpBottomRightY = source.warpBottomRightY;
+    target.warpBottomLeftX = source.warpBottomLeftX;
+    target.warpBottomLeftY = source.warpBottomLeftY;
+    target.edgeBlendLeft = source.edgeBlendLeft;
+    target.edgeBlendRight = source.edgeBlendRight;
+    target.edgeBlendTop = source.edgeBlendTop;
+    target.edgeBlendBottom = source.edgeBlendBottom;
+    target.edgeBlendProjectorCurve = source.edgeBlendProjectorCurve;
+    target.edgeBlendGamma = source.edgeBlendGamma;
+    target.edgeBlendBlackLift = source.edgeBlendBlackLift;
+    target.warpGridCols = source.warpGridCols;
+    target.warpGridRows = source.warpGridRows;
+    target.warpGridSmooth = source.warpGridSmooth;
+    target.warpGridOffsets = source.warpGridOffsets;
+    // No normalize call: OutputTarget's own normalisation runs from
+    // normalizeProject, and the values copied here are already valid.
+  }
+
+  void copyFocusedWarpSettings() {
+    warpSettingsClipboard_ = focusedOutput();
+    triggerToast("warp settings copied");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void pasteFocusedWarpSettings() {
+    if (!warpSettingsClipboard_) {
+      triggerToast("warp paste: copy first");
+      return;
+    }
+    pushUndoSnapshot();
+    OutputTarget& out = focusedOutputMutable();
+    applyCopiedWarpSettings(out, *warpSettingsClipboard_);
+    triggerToast("warp settings pasted");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  std::optional<int> cueIndexById(const Deck& deck, const std::string& cueId) const {
+    std::string needle = toUpper(trim(cueId));
+    if (needle.empty()) {
+      return std::nullopt;
+    }
+    for (int index = 0; index < static_cast<int>(deck.cues.size()); ++index) {
+      if (toUpper(deck.cues[index].id) == needle) {
+        return index;
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<int> cueIndexByTokenInOverlayRole(const Deck& deck, const std::string& token,
+                                                  bool overlayGroup) const {
+    std::string trimmed = trim(token);
+    if (trimmed.empty()) {
+      return std::nullopt;
+    }
+
+    std::string upperToken = toUpper(trimmed);
+    if (upperToken == "FIRST") {
+      int firstIndex = firstCueIndexForOverlayRole(deck, overlayGroup);
+      if (firstIndex < 0 && !overlayGroup) {
+        firstIndex = firstCueIndexForOverlayRole(deck, true);
+      }
+      return firstIndex >= 0 ? std::optional<int> {firstIndex} : std::nullopt;
+    }
+    if (upperToken == "LAST") {
+      int lastIndex = lastCueIndexForOverlayRole(deck, overlayGroup);
+      if (lastIndex < 0 && !overlayGroup) {
+        lastIndex = lastCueIndexForOverlayRole(deck, true);
+      }
+      return lastIndex >= 0 ? std::optional<int> {lastIndex} : std::nullopt;
+    }
+    if (upperToken == "NEXT") {
+      int nextIndex = adjacentCueIndexForOverlayRole(deck, deck.selectedIndex, 1, overlayGroup, false);
+      if (nextIndex < 0 && !overlayGroup) {
+        nextIndex = firstCueIndexForOverlayRole(deck, false);
+      }
+      return nextIndex >= 0 ? std::optional<int> {nextIndex} : std::nullopt;
+    }
+    if (upperToken == "PREV" || upperToken == "PREVIOUS") {
+      int prevIndex = adjacentCueIndexForOverlayRole(deck, deck.selectedIndex, -1, overlayGroup, false);
+      if (prevIndex < 0 && !overlayGroup) {
+        prevIndex = firstCueIndexForOverlayRole(deck, false);
+      }
+      return prevIndex >= 0 ? std::optional<int> {prevIndex} : std::nullopt;
+    }
+    if (upperToken == "SEL" || upperToken == "SELECTED") {
+      if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+        return deck.selectedIndex;
+      }
+      return std::nullopt;
+    }
+    if (upperToken == "ACT" || upperToken == "ACTIVE") {
+      if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size())) {
+        return deck.activeIndex;
+      }
+      return std::nullopt;
+    }
+    if ((trimmed[0] == '+' || trimmed[0] == '-') && deck.selectedIndex >= 0) {
+      try {
+        int delta = std::stoi(trimmed);
+        return std::clamp(deck.selectedIndex + delta, 0, static_cast<int>(deck.cues.size()) - 1);
+      } catch (...) {
+      }
+    }
+
+    try {
+      int index = std::stoi(trimmed);
+      if (index >= 1 && index <= static_cast<int>(deck.cues.size())) {
+        return index - 1;
+      }
+    } catch (...) {
+    }
+
+    if (auto byId = cueIndexById(deck, trimmed); byId) {
+      return byId;
+    }
+
+    // Exact match on operator-facing short cue id / cue number
+    std::string needle = toUpper(trimmed);
+    for (int index = 0; index < static_cast<int>(deck.cues.size()); ++index) {
+      if (!deck.cues[index].cueId.empty() && toUpper(deck.cues[index].cueId) == needle) {
+        return index;
+      }
+      if (!deck.cues[index].cueNumber.empty() && toUpper(deck.cues[index].cueNumber) == needle) {
+        return index;
+      }
+    }
+
+    // Prefix match on short cue id / cue number (operator-friendly shorthand)
+    for (int index = 0; index < static_cast<int>(deck.cues.size()); ++index) {
+      if (!deck.cues[index].cueId.empty()) {
+        std::string cueIdShort = toUpper(deck.cues[index].cueId);
+        if (cueIdShort.rfind(needle, 0) == 0) {
+          return index;
+        }
+      }
+      if (!deck.cues[index].cueNumber.empty()) {
+        std::string cueNum = toUpper(deck.cues[index].cueNumber);
+        if (cueNum.rfind(needle, 0) == 0) {
+          return index;
+        }
+      }
+    }
+
+    // Partial match on name
+    for (int index = 0; index < static_cast<int>(deck.cues.size()); ++index) {
+      if (toUpper(deck.cues[index].name).find(needle) != std::string::npos) {
+        return index;
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<int> cueIndexByToken(const Deck& deck, const std::string& token) const {
+    bool overlayGroup = deck.selectedIndex >= 0 &&
+                        deck.selectedIndex < static_cast<int>(deck.cues.size()) &&
+                        cueIsOverlayOnly(deck.cues[deck.selectedIndex]);
+    return cueIndexByTokenInOverlayRole(deck, token, overlayGroup);
+  }
+
+  std::vector<int> cueFindMatches(const Deck& deck, const std::string& token) const {
+    std::string needle = toUpper(trim(token));
+    if (needle.empty()) {
+      return {};
+    }
+
+    std::vector<int> matches;
+    std::unordered_set<int> seen;
+    auto pushMatch = [&](int cueIndex) {
+      if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+        return;
+      }
+      if (seen.insert(cueIndex).second) {
+        matches.push_back(cueIndex);
+      }
+    };
+
+    auto isExact = [&](const Cue& cue) {
+      return toUpper(cue.id) == needle
+        || toUpper(cue.cueId) == needle
+        || toUpper(cue.cueNumber) == needle
+        || toUpper(cue.name) == needle;
+    };
+    auto isPrefix = [&](const Cue& cue) {
+      std::string cueId = toUpper(cue.id);
+      std::string cueIdShort = toUpper(cue.cueId);
+      std::string cueNum = toUpper(cue.cueNumber);
+      std::string cueName = toUpper(cue.name);
+      return cueId.rfind(needle, 0) == 0
+        || cueIdShort.rfind(needle, 0) == 0
+        || cueNum.rfind(needle, 0) == 0
+        || cueName.rfind(needle, 0) == 0;
+    };
+    auto isContains = [&](const Cue& cue) {
+      std::string cueId = toUpper(cue.id);
+      std::string cueIdShort = toUpper(cue.cueId);
+      std::string cueNum = toUpper(cue.cueNumber);
+      std::string cueName = toUpper(cue.name);
+      return cueId.find(needle) != std::string::npos ||
+        cueIdShort.find(needle) != std::string::npos ||
+        cueNum.find(needle) != std::string::npos ||
+        cueName.find(needle) != std::string::npos;
+    };
+
+    if (auto direct = cueIndexByToken(deck, token); direct) {
+      pushMatch(*direct);
+    }
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      if (isExact(deck.cues[cueIndex])) {
+        pushMatch(cueIndex);
+      }
+    }
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      if (isPrefix(deck.cues[cueIndex])) {
+        pushMatch(cueIndex);
+      }
+    }
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      if (isContains(deck.cues[cueIndex])) {
+        pushMatch(cueIndex);
+      }
+    }
+
+    return matches;
+  }
+
+  const Cue* resolvePipTargetCue(const Deck& deck, const Cue& pipCue, int* targetCueIndexOut = nullptr) const {
+    if (pipCue.kind != CueKind::Pip) {
+      return nullptr;
+    }
+    std::string token = pipCueTargetDisplayToken(pipCue);
+    if (token.empty()) {
+      return nullptr;
+    }
+    auto targetIndex = cueIndexByToken(deck, token);
+    if (!targetIndex || *targetIndex < 0 || *targetIndex >= static_cast<int>(deck.cues.size())) {
+      return nullptr;
+    }
+    const Cue& targetCue = deck.cues[*targetIndex];
+    if (&targetCue == &pipCue || !cueCanBePipSource(targetCue)) {
+      return nullptr;
+    }
+    if (targetCueIndexOut) {
+      *targetCueIndexOut = *targetIndex;
+    }
+    return &targetCue;
+  }
+
+  std::string pipTargetSummaryLabel(const Deck& deck, const Cue& pipCue) const {
+    std::string token = pipCueTargetDisplayToken(pipCue);
+    if (token.empty()) {
+      return "(choose cue)";
+    }
+    int targetCueIndex = -1;
+    if (const Cue* targetCue = resolvePipTargetCue(deck, pipCue, &targetCueIndex)) {
+      return cueDisplayToken(*targetCue, targetCueIndex) + "  " + targetCue->name;
+    }
+    return token + "  (missing)";
+  }
+
+  std::string pipSourceDisplayLabel(const Cue& pipCue) const {
+    std::string sourceType = pipSourceTypeTokenFromCue(pipCue);
+    if (sourceType == "legacy") {
+      return std::string("legacy  ") + pipCueTargetDisplayToken(pipCue);
+    }
+    if (sourceType == "browser") {
+      return pipCue.path.empty() ? std::string("(set url)") : pipCue.path;
+    }
+    if (pipSourceTypeUsesSourceRef(sourceType)) {
+      Cue tempCue;
+      tempCue.kind = sourceCueKindFromToken(sourceType);
+      tempCue.path = pipCue.path;
+      std::string sourceRef = sourceCueRefFromCue(tempCue);
+      if (sourceRef.empty()) {
+        sourceRef = defaultSourceRefForKind(tempCue.kind);
+      }
+      return sourceCueRefFriendlyLabel(tempCue.kind, sourceRef);
+    }
+    if (pipCue.path.empty() || pipCue.path == "graphic://pip") {
+      return "(set media file)";
+    }
+    return pipCue.path;
+  }
+
+  bool buildResolvedPipSourceCue(const Deck& deck, const Cue& pipCue, Cue& resolvedCue,
+                                 int* legacyTargetCueIndexOut = nullptr) const {
+    if (legacyTargetCueIndexOut) {
+      *legacyTargetCueIndexOut = -1;
+    }
+    std::string sourceType = pipSourceTypeTokenFromCue(pipCue);
+    if (sourceType == "legacy") {
+      int targetCueIndex = -1;
+      if (const Cue* targetCue = resolvePipTargetCue(deck, pipCue, &targetCueIndex)) {
+        resolvedCue = *targetCue;
+        if (legacyTargetCueIndexOut) {
+          *legacyTargetCueIndexOut = targetCueIndex;
+        }
+        return true;
+      }
+      return false;
+    }
+
+    resolvedCue = pipCue;
+    resolvedCue.id = pipCue.id + "|pipsrc";
+    resolvedCue.cueId.clear();
+    resolvedCue.cueNumber.clear();
+    resolvedCue.colorTag.clear();
+    resolvedCue.notes.clear();
+    resolvedCue.gotoTarget.clear();
+    resolvedCue.pausePoints.clear();
+    resolvedCue.lowerThirdText.clear();
+    resolvedCue.lowerThirdSubtext.clear();
+    resolvedCue.lowerThirdBgAlpha = 180;
+    resolvedCue.pipTargetCue.clear();
+    resolvedCue.attachedLowerThirdCue.clear();
+    resolvedCue.attachedPipCue.clear();
+    resolvedCue.fadeInSeconds = 0.0;
+    resolvedCue.fadeOutSeconds = 0.0;
+    resolvedCue.transitionToNext = false;
+    resolvedCue.pauseAtBeginning = false;
+    resolvedCue.pauseOnLastFrame = true;
+    resolvedCue.loop = false;
+    resolvedCue.loopCount = 0;
+    resolvedCue.audioEnabled = false;
+
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0,
+                                 std::max(0, static_cast<int>(project_.outputs.size()) - 1));
+    auto [defaultW, defaultH] = outputRenderSizeForOutput(outputIndex);
+
+    if (sourceType == "browser") {
+      std::string url = normalizeBrowserUrl(pipCue.path);
+      if (url.empty()) {
+        return false;
+      }
+      resolvedCue.kind = CueKind::Browser;
+      resolvedCue.path = url;
+      resolvedCue.width = std::max(1, pipCue.width > 0 ? pipCue.width : defaultW);
+      resolvedCue.height = std::max(1, pipCue.height > 0 ? pipCue.height : defaultH);
+      resolvedCue.duration = 0.0;
+      resolvedCue.stillDurationSeconds = 0.0;
+      resolvedCue.fps = 30.0;
+      resolvedCue.formatName = "browser";
+      resolvedCue.videoCodec = "browser";
+      resolvedCue.audioCodec.clear();
+      resolvedCue.hasAudio = false;
+      resolvedCue.audioChannels = 0;
+      resolvedCue.audioSampleRate = 0;
+      return true;
+    }
+
+    if (pipSourceTypeUsesSourceRef(sourceType)) {
+      CueKind sourceKind = sourceCueKindFromToken(sourceType);
+      std::string sourceRef = trim(pipCue.path);
+      if (sourceRef.rfind("source://", 0) == 0) {
+        Cue tempCue;
+        tempCue.kind = sourceKind;
+        tempCue.path = sourceRef;
+        sourceRef = sourceCueRefFromCue(tempCue);
+      }
+      sourceRef = sourceCueRefFromAlias(sourceKind, sourceRef);
+      resolvedCue.kind = sourceKind;
+      resolvedCue.path = "source://" + sourceCueTokenForKind(sourceKind) + "/" + sourceRef;
+      resolvedCue.width = std::max(1, pipCue.width > 0 ? pipCue.width : defaultW);
+      resolvedCue.height = std::max(1, pipCue.height > 0 ? pipCue.height : defaultH);
+      resolvedCue.duration = 0.0;
+      resolvedCue.stillDurationSeconds = 0.0;
+      resolvedCue.fps = 30.0;
+      resolvedCue.formatName = "source";
+      resolvedCue.videoCodec = sourceCueTokenForKind(sourceKind);
+      resolvedCue.hasAudio = sourceKind == CueKind::Camera;
+      resolvedCue.audioCodec = resolvedCue.hasAudio ? "source" : "";
+      resolvedCue.audioChannels = resolvedCue.hasAudio ? std::max(2, pipCue.audioChannels) : 0;
+      resolvedCue.audioSampleRate = resolvedCue.hasAudio ? std::max(48000, pipCue.audioSampleRate) : 0;
+      return true;
+    }
+
+    std::string mediaPath = resolvedCueFilesystemPathString(pipCue, currentProjectFile_);
+    if (trim(mediaPath).empty() || mediaPath == "graphic://pip") {
+      return false;
+    }
+    resolvedCue.path = mediaPath;
+    resolvedCue.kind = isImagePath(fs::path(mediaPath)) ? CueKind::Image : CueKind::Video;
+    resolvedCue.width = std::max(1, pipCue.width > 0 ? pipCue.width : defaultW);
+    resolvedCue.height = std::max(1, pipCue.height > 0 ? pipCue.height : defaultH);
+    return true;
+  }
+
+  bool applyPipSourceToCue(Cue& cue, const std::string& rawType, const std::string& rawValue,
+                           std::string* errorOut = nullptr) {
+    auto setError = [&](const std::string& message) {
+      if (errorOut) {
+        *errorOut = message;
+      }
+      return false;
+    };
+    auto refreshAutoName = [&](const std::string& sourceType) {
+      if (cue.name.empty() || cue.name == "PIP" || cue.name.rfind("PIP · ", 0) == 0) {
+        cue.name = "PIP · " + pipSourceTypeLabel(sourceType);
+      }
+    };
+    std::string sourceType = toLower(trim(rawType));
+    if (sourceType.empty()) {
+      sourceType = "media";
+    }
+
+    if (sourceType == "browser") {
+      std::string url = normalizeBrowserUrl(rawValue);
+      if (url.empty()) {
+        return setError("pip url required");
+      }
+      auto [defaultW, defaultH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+      cue.pipSourceType = sourceType;
+      cue.path = url;
+      cue.duration = 0.0;
+      cue.stillDurationSeconds = 0.0;
+      cue.width = std::max(1, cue.width > 0 ? cue.width : defaultW);
+      cue.height = std::max(1, cue.height > 0 ? cue.height : defaultH);
+      cue.fps = 30.0;
+      cue.formatName = "browser";
+      cue.videoCodec = "browser";
+      cue.audioCodec.clear();
+      cue.hasAudio = false;
+      cue.audioEnabled = false;
+      cue.audioChannels = 0;
+      cue.audioSampleRate = 0;
+      cue.sizeBytes = 0;
+      cue.pipTargetCue.clear();
+      refreshAutoName(sourceType);
+      return true;
+    }
+
+    if (pipSourceTypeUsesSourceRef(sourceType)) {
+      CueKind sourceKind = sourceCueKindFromToken(sourceType);
+      std::string sourceRef = sourceCueRefFromAlias(sourceKind, rawValue);
+      auto [defaultW, defaultH] = outputRenderSizeForOutput(project_.focusedOutputIndex);
+      cue.pipSourceType = sourceType;
+      cue.path = "source://" + sourceCueTokenForKind(sourceKind) + "/" + sourceRef;
+      cue.duration = 0.0;
+      cue.stillDurationSeconds = 0.0;
+      cue.width = std::max(1, cue.width > 0 ? cue.width : defaultW);
+      cue.height = std::max(1, cue.height > 0 ? cue.height : defaultH);
+      cue.fps = 30.0;
+      cue.formatName = "source";
+      cue.videoCodec = sourceCueTokenForKind(sourceKind);
+      cue.hasAudio = sourceKind == CueKind::Camera;
+      cue.audioEnabled = false;
+      cue.audioCodec = cue.hasAudio ? "source" : "";
+      cue.audioChannels = cue.hasAudio ? 2 : 0;
+      cue.audioSampleRate = cue.hasAudio ? 48000 : 0;
+      cue.sizeBytes = 0;
+      cue.pipTargetCue.clear();
+      refreshAutoName(sourceType);
+      return true;
+    }
+
+    std::string mediaValue = trim(rawValue);
+    if (mediaValue.empty() || mediaValue == "graphic://pip") {
+      cue.pipSourceType = "media";
+      cue.path = "graphic://pip";
+      cue.duration = 0.0;
+      cue.sizeBytes = 0;
+      cue.width = 0;
+      cue.height = 0;
+      cue.fps = 0.0;
+      cue.formatName = "overlay";
+      cue.videoCodec.clear();
+      cue.audioCodec.clear();
+      cue.hasAudio = false;
+      cue.audioEnabled = false;
+      cue.audioChannels = 0;
+      cue.audioSampleRate = 0;
+      cue.pipTargetCue.clear();
+      refreshAutoName("media");
+      return true;
+    }
+
+    std::error_code ec;
+    fs::path inputPath(mediaValue);
+    if (!inputPath.is_absolute() && !fs::exists(inputPath, ec)) {
+      fs::path base = currentProjectFile_.has_parent_path() ? currentProjectFile_.parent_path() : fs::path(".");
+      inputPath = base / inputPath;
+    }
+    inputPath = fs::absolute(inputPath, ec);
+    auto probed = probeCue(inputPath);
+    if (!probed) {
+      return setError("pip media unavailable");
+    }
+    if (probed->kind != CueKind::Video && probed->kind != CueKind::Image) {
+      return setError("pip needs video or still");
+    }
+    cue.pipSourceType = "media";
+    cue.path = inputPath.string();
+    cue.duration = probed->duration;
+    cue.width = probed->width;
+    cue.height = probed->height;
+    cue.fps = probed->fps;
+    cue.formatName = probed->formatName;
+    cue.videoCodec = probed->videoCodec;
+    cue.sourceHasAlpha = probed->sourceHasAlpha;
+    cue.audioCodec = probed->audioCodec;
+    cue.hasAudio = probed->hasAudio;
+    cue.audioEnabled = false;
+    cue.sizeBytes = probed->sizeBytes;
+    cue.audioChannels = probed->audioChannels;
+    cue.audioSampleRate = probed->audioSampleRate;
+    cue.audioTrack = 0;   // a new file: its own first track
+    cue.audioTrackCount = probed->audioTrackCount;
+    cue.subtitleTrackCount = probed->subtitleTrackCount;
+    cue.pipTargetCue.clear();
+    refreshAutoName("media");
+    return true;
+  }
+
+  void setSelectedPipSourceType(const std::string& rawType) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Pip) {
+      return;
+    }
+    std::string sourceType = toLower(trim(rawType));
+    if (sourceType.empty()) {
+      sourceType = "media";
+    }
+    std::string currentValue = selected->path;
+    if (pipSourceTypeUsesSourceRef(sourceType)) {
+      if (currentValue.rfind("source://", 0) == 0) {
+        Cue tempCue;
+        tempCue.kind = sourceCueKindFromToken(sourceType);
+        tempCue.path = currentValue;
+        currentValue = sourceCueRefFromCue(tempCue);
+      } else {
+        currentValue = defaultSourceRefForKind(sourceCueKindFromToken(sourceType));
+      }
+    } else if (sourceType == "browser") {
+      // Deckboy's own card rather than someone else's website: a PiP just
+      // switched to a browser source should show something that says what it
+      // is, and it works with no network.
+      if (currentValue == "graphic://pip") {
+        currentValue = defaultBrowserPageUrl();
+        if (currentValue.empty()) {
+          currentValue = "https://example.com";
+        }
+      }
+    } else if (currentValue == "graphic://pip") {
+      currentValue.clear();
+    }
+
+    std::string error;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Pip) {
+        return;
+      }
+      if (applyPipSourceToCue(cue, sourceType, currentValue, &error)) {
+        changed = true;
+      }
+    });
+    if (!changed) {
+      if (!error.empty()) {
+        triggerToast(error);
+      }
+      return;
+    }
+    syncPipOverlayRuntimesForDeck(project_.focusedDeckIndex, SDL_GetTicks());
+    onSelectionChanged();
+    triggerToast("pip source type: " + pipSourceTypeLabel(sourceType));
+    markProjectDirty();
+  }
+
+  void setSelectedPipSourceValue(const std::string& rawValue) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Pip) {
+      return;
+    }
+    std::string sourceType = pipSourceTypeTokenFromCue(*selected);
+    std::string error;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Pip) {
+        return;
+      }
+      if (applyPipSourceToCue(cue, sourceType, rawValue, &error)) {
+        changed = true;
+      }
+    });
+    if (!changed) {
+      if (!error.empty()) {
+        triggerToast(error);
+      }
+      return;
+    }
+    syncPipOverlayRuntimesForDeck(project_.focusedDeckIndex, SDL_GetTicks());
+    onSelectionChanged();
+    triggerToast("pip source set");
+    markProjectDirty();
+  }
+
+  std::string attachedOverlaySummaryLabel(const Deck& deck, const Cue& cue, CueKind overlayKind) const {
+    std::string token = trim(overlayKind == CueKind::LowerThird ? cue.attachedLowerThirdCue : cue.attachedPipCue);
+    if (token.empty()) {
+      return "(none)";
+    }
+    if (auto cueIndex = cueIndexByTokenInOverlayRole(deck, token, true); cueIndex) {
+      const Cue& targetCue = deck.cues[*cueIndex];
+      if (targetCue.kind == overlayKind) {
+        return cueDisplayToken(targetCue, *cueIndex) + "  " + targetCue.name;
+      }
+    }
+    return token + "  (missing)";
+  }
+
+  void setSelectedAttachedOverlayCue(CueKind overlayKind, const std::string& rawToken) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || cueIsOverlayOnly(*selected)) {
+      return;
+    }
+    std::string token = trim(rawToken);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cueIsOverlayOnly(cue)) {
+        return;
+      }
+      if (overlayKind == CueKind::LowerThird) {
+        cue.attachedLowerThirdCue = token;
+      } else if (overlayKind == CueKind::Pip) {
+        cue.attachedPipCue = token;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast(token.empty()
+      ? (overlayKind == CueKind::LowerThird ? "Lower Third cleared" : "pip cleared")
+      : (overlayKind == CueKind::LowerThird ? "Lower Third attached" : "pip attached"));
+    markProjectDirty();
+  }
+
+  void anchorPipCueToCorner(Cue& cue, int horizontalDir, int verticalDir) {
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0,
+                                 std::max(0, static_cast<int>(project_.outputs.size()) - 1));
+    auto [outW, outH] = outputRenderSizeForOutput(outputIndex);
+    float marginX = std::max(32.0f, static_cast<float>(outW) * 0.04f);
+    float marginY = std::max(28.0f, static_cast<float>(outH) * 0.05f);
+    float freeX = std::max(0.0f, static_cast<float>(outW) * std::max(0.0f, 1.0f - cue.outputScaleX) * 0.5f - marginX);
+    float freeY = std::max(0.0f, static_cast<float>(outH) * std::max(0.0f, 1.0f - cue.outputScaleY) * 0.5f - marginY);
+    cue.outputOffsetX = static_cast<float>(horizontalDir) * freeX * 0.72f;
+    cue.outputOffsetY = static_cast<float>(verticalDir) * freeY * 0.72f;
+  }
+
+  std::pair<int, int> pipCueCornerDirections(const Cue& cue) const {
+    int xDir = cue.outputOffsetX < -1.0f ? -1 : 1;
+    int yDir = cue.outputOffsetY > 1.0f ? 1 : -1;
+    return {xDir, yDir};
+  }
+
+  void applySelectedPipCornerPreset(int horizontalDir, int verticalDir, const std::string& label) {
+    if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+          if (cue.kind == CueKind::Pip) {
+            anchorPipCueToCorner(cue, horizontalDir, verticalDir);
+          }
+        })) {
+      triggerToast("pip corner: " + label);
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+    }
+  }
+
+  void applySelectedPipSizePreset(float scale, const std::string& label) {
+    if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+          if (cue.kind == CueKind::Pip) {
+            cue.outputScaleX = std::clamp(scale, 0.18f, 0.90f);
+            cue.outputScaleY = std::clamp(scale, 0.18f, 0.90f);
+            auto [xDir, yDir] = pipCueCornerDirections(cue);
+            anchorPipCueToCorner(cue, xDir, yDir);
+          }
+        })) {
+      triggerToast("pip size: " + label);
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+    }
+  }
+
+  void setSelectedPipCueTarget(const std::string& rawTarget) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Pip) {
+      return;
+    }
+    std::string normalized = trim(rawTarget);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Pip) {
+        return;
+      }
+      cue.pipSourceType.clear();
+      cue.pipTargetCue = normalized;
+      std::string prefix = "PIP";
+      if (!normalized.empty()) {
+        prefix += " · " + normalized;
+      }
+      if (cue.name.empty() || cue.name == "PIP" || cue.name.rfind("PIP · ", 0) == 0) {
+        cue.name = prefix;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    if (const Cue* current = selectedCuePtr()) {
+      if (current->kind == CueKind::Pip) {
+        const Deck& deck = focusedDeck();
+        int targetCueIndex = -1;
+        if (const Cue* targetCue = resolvePipTargetCue(deck, *current, &targetCueIndex)) {
+          (void) targetCueIndex;
+          requestThumbnail(*targetCue);
+        } else {
+          clearSelectedThumbnail();
+        }
+        syncPipOverlayRuntimesForDeck(project_.focusedDeckIndex, SDL_GetTicks());
+      }
+    }
+    triggerToast(normalized.empty() ? "pip target cleared" : ("pip target: " + normalized));
+    markProjectDirty();
+  }
+
+  void syncPipOverlayRuntimesForDeck(int deckIndex, Uint64 now) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    std::unordered_set<std::string> keepKeys;
+    for (int overlayCueIndex : deck.overlayActiveIndices) {
+      if (overlayCueIndex < 0 || overlayCueIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      const Cue& overlayCue = deck.cues[overlayCueIndex];
+      if (overlayCue.kind != CueKind::Pip) {
+        continue;
+      }
+      std::string runtimeKey = pipOverlayRuntimeKey(deckIndex, overlayCueIndex);
+      keepKeys.insert(runtimeKey);
+      Cue resolvedCue;
+      int targetCueIndex = -1;
+      if (!buildResolvedPipSourceCue(deck, overlayCue, resolvedCue, &targetCueIndex)) {
+        auto stale = pipOverlayRuntimes_.find(runtimeKey);
+        if (stale != pipOverlayRuntimes_.end()) {
+          if (stale->second.mediaEngine) {
+            stale->second.mediaEngine->stopAll();
+          }
+          pipOverlayRuntimes_.erase(stale);
+        }
+        continue;
+      }
+
+      PipOverlayRuntime& runtime = pipOverlayRuntimes_[runtimeKey];
+      if (!runtime.mediaEngine) {
+        runtime.mediaEngine = std::make_unique<MediaEngine>(
+          controlRenderer_,
+          nullptr,
+          MediaEngine::AudioTapCallback {},
+          [this](const Cue& cue) {
+            return resolvedCueFilesystemPathString(cue, currentProjectFile_);
+          }
+        );
+      }
+
+      std::string targetCueKey = cueRuntimeCacheKey(resolvedCue);
+      if (runtime.loadedCueKey != targetCueKey ||
+          runtime.targetCueIndex != targetCueIndex ||
+          !runtime.resolvedCueValid ||
+          !runtime.mediaEngine->activeCue()) {
+        runtime.mediaEngine->stopAll();
+        runtime.resolvedCue = resolvedCue;
+        runtime.resolvedCueValid = true;
+        runtime.mediaEngine->loadCue(&runtime.resolvedCue, !runtime.resolvedCue.pauseAtBeginning);
+        runtime.loadedCueKey = targetCueKey;
+        runtime.targetCueIndex = targetCueIndex;
+      } else {
+        runtime.resolvedCue = resolvedCue;
+        runtime.resolvedCueValid = true;
+      }
+
+      runtime.mediaEngine->update();
+      if (runtime.resolvedCue.kind == CueKind::Pattern && patternTypeIsAnimated(runtime.resolvedCue.path) &&
+          runtime.mediaEngine->hasPictureToShow()) {   // a STOPped deck stays dark
+        runtime.mediaEngine->rebuildPatternFrame(runtime.resolvedCue, static_cast<double>(now) / 1000.0);
+      }
+      if (runtime.mediaEngine->reachedEnd()) {
+        runtime.mediaEngine->finalizeReachedEnd(runtime.resolvedCue.pauseOnLastFrame);
+      }
+    }
+
+    std::vector<std::string> staleKeys;
+    staleKeys.reserve(pipOverlayRuntimes_.size());
+    for (const auto& [runtimeKey, runtime] : pipOverlayRuntimes_) {
+      (void) runtime;
+      if (runtimeKey.rfind(std::to_string(deckIndex) + ":", 0) == 0 &&
+          keepKeys.find(runtimeKey) == keepKeys.end()) {
+        staleKeys.push_back(runtimeKey);
+      }
+    }
+    for (const std::string& runtimeKey : staleKeys) {
+      auto it = pipOverlayRuntimes_.find(runtimeKey);
+      if (it == pipOverlayRuntimes_.end()) {
+        continue;
+      }
+      if (it->second.mediaEngine) {
+        it->second.mediaEngine->stopAll();
+      }
+      pipOverlayRuntimes_.erase(it);
+    }
+  }
+
+  PipOverlayRuntime* pipOverlayRuntimeForCue(int deckIndex, int cueIndex) {
+    auto it = pipOverlayRuntimes_.find(pipOverlayRuntimeKey(deckIndex, cueIndex));
+    return it == pipOverlayRuntimes_.end() ? nullptr : &it->second;
+  }
+
+  std::string compositeAudioSummaryLabel(const Cue& cue) const {
+    if (cue.compositeSlots.empty()) {
+      return "(no slots)";
+    }
+    if (trim(cue.compositeAudioSlotId).empty()) {
+      return "none";
+    }
+    for (const CompositeSlot& slot : cue.compositeSlots) {
+      if (slot.id == cue.compositeAudioSlotId) {
+        return slot.name + "  " + compositeSourceDisplayLabel(slot);
+      }
+    }
+    return "(missing)";
+  }
+
+  void applySelectedCompositePreset(const std::string& presetToken, const std::string& label) {
+    if (forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+          if (cue.kind == CueKind::Composite) {
+            applyCompositePresetToCue(cue, presetToken);
+          }
+        })) {
+      refreshSelectedCuePreviewCaches();
+      triggerToast("scene preset: " + label);
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+    }
+  }
+
+  void setSelectedCompositeSlotSource(int slotIndex, const std::string& rawSpec) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Composite) {
+      return;
+    }
+    std::string spec = trim(rawSpec);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Composite) {
+        return;
+      }
+      if (slotIndex < 0 || slotIndex >= static_cast<int>(cue.compositeSlots.size())) {
+        return;
+      }
+      CompositeSlot& slot = cue.compositeSlots[slotIndex];
+      auto [sourceType, sourceValue] = parseCompositeSourceSpec(spec);
+      slot.sourceType = sourceType;
+      slot.source = sourceValue;
+      ensureCompositeSlotIdentity(slot, slotIndex);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    refreshSelectedCuePreviewCaches();
+    triggerToast("scene slot source set");
+    markProjectDirty();
+  }
+
+  void cycleSelectedCompositeAudioSlot() {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Composite) {
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Composite) {
+        return;
+      }
+      std::vector<std::string> choices;
+      choices.push_back("");
+      for (const CompositeSlot& slot : cue.compositeSlots) {
+        choices.push_back(slot.id);
+      }
+      if (choices.empty()) {
+        return;
+      }
+      auto it = std::find(choices.begin(), choices.end(), cue.compositeAudioSlotId);
+      size_t index = it == choices.end() ? 0u : static_cast<size_t>(std::distance(choices.begin(), it));
+      cue.compositeAudioSlotId = choices[(index + 1) % choices.size()];
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("scene audio: " + compositeAudioSummaryLabel(*selectedCuePtr()));
+    markProjectDirty();
+  }
+
+  bool findCueToken(const std::string& token, int direction = 1, bool triggerJump = false) {
+    normalizeProject(project_);
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      triggerToast("find: empty deck");
+      return false;
+    }
+    std::string trimmed = trim(token);
+    if (trimmed.empty()) {
+      triggerToast("find: enter cue id/number/name");
+      return false;
+    }
+
+    bool tokenChanged = toUpper(trimmed) != toUpper(lastCueFindToken_) ||
+      lastCueFindDeckIndex_ != project_.focusedDeckIndex || lastCueFindMatches_.empty();
+    if (tokenChanged) {
+      lastCueFindToken_ = trimmed;
+      lastCueFindDeckIndex_ = project_.focusedDeckIndex;
+      lastCueFindMatches_ = cueFindMatches(deck, trimmed);
+      lastCueFindCursor_ = -1;
+    }
+    if (lastCueFindMatches_.empty()) {
+      triggerToast("find: none");
+      return false;
+    }
+
+    if (lastCueFindCursor_ < 0 || tokenChanged) {
+      lastCueFindCursor_ = direction < 0
+        ? static_cast<int>(lastCueFindMatches_.size()) - 1
+        : 0;
+    } else if (direction != 0) {
+      int count = static_cast<int>(lastCueFindMatches_.size());
+      lastCueFindCursor_ = (lastCueFindCursor_ + (direction > 0 ? 1 : -1) + count) % count;
+    }
+
+    int cueIndex = lastCueFindMatches_[lastCueFindCursor_];
+    if (deck.selectedIndex != cueIndex) {
+      selectOnlyCue(deck, cueIndex);
+      onSelectionChanged();
+      markProjectDirty();
+    }
+
+    std::string cueNum = cueDisplayToken(deck.cues[cueIndex], cueIndex);
+    triggerToast("find " + std::to_string(lastCueFindCursor_ + 1) + "/" +
+      std::to_string(lastCueFindMatches_.size()) + " -> " + cueNum + " " + deck.cues[cueIndex].name);
+    if (triggerJump) {
+      jumpSelectedCue();
+    }
+    return true;
+  }
+
+  void clearCueFindState() {
+    lastCueFindToken_.clear();
+    lastCueFindMatches_.clear();
+    lastCueFindCursor_ = -1;
+    lastCueFindDeckIndex_ = -1;
+  }
+
+  bool handleCueTypeAheadKey(SDL_Keycode key, Uint16 mod) {
+    if ((mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0) {
+      return false;
+    }
+    auto toSearchChar = [&](SDL_Keycode code) -> char {
+      if (code >= SDLK_0 && code <= SDLK_9) {
+        return static_cast<char>('0' + (code - SDLK_0));
+      }
+      if (code >= SDLK_A && code <= SDLK_Z) {
+        return static_cast<char>('A' + (code - SDLK_A));
+      }
+      if (code == SDLK_MINUS) return '-';
+      if (code == SDLK_UNDERSCORE) return '_';
+      return '\0';
+    };
+
+    Uint64 now = SDL_GetTicks();
+    if (now > typedCueSearchLastKeyAtMs_ + 1200) {
+      typedCueSearchBuffer_.clear();
+    }
+    typedCueSearchLastKeyAtMs_ = now;
+
+    if (key == SDLK_BACKSPACE) {
+      if (!typedCueSearchBuffer_.empty()) {
+        typedCueSearchBuffer_.pop_back();
+        if (!typedCueSearchBuffer_.empty()) {
+          findCueToken(typedCueSearchBuffer_, 1, false);
+          triggerToast("id: " + typedCueSearchBuffer_);
+        } else {
+          triggerToast("id: cleared");
+        }
+      }
+      return true;
+    }
+
+    char ch = toSearchChar(key);
+    if (ch == '\0') {
+      return false;
+    }
+    typedCueSearchBuffer_.push_back(ch);
+    if (typedCueSearchBuffer_.size() > 6) {
+      typedCueSearchBuffer_.erase(typedCueSearchBuffer_.begin());
+    }
+    findCueToken(typedCueSearchBuffer_, 1, false);
+    triggerToast("id: " + typedCueSearchBuffer_);
+    // 4-2-0, with no cue of that number to jump to, finds something.
+    if (!hiddenSourcesFound_ && typedCueSearchBuffer_.size() >= 3 &&
+        typedCueSearchBuffer_.compare(typedCueSearchBuffer_.size() - 3, 3, "420") == 0 &&
+        !cueIndexByToken(focusedDeck(), "420")) {
+      hiddenSourcesFound_ = true;
+      std::error_code ec;
+      fs::create_directories(Paths::stateDir(), ec);
+      std::ofstream(Paths::stateDir() / "found-sources") << "lava-lamp" << std::endl;
+      triggerToast("something mellow appeared in SOURCE > MADE BY DECKBOY");
+    }
+    return true;
+  }
+
+  void renumberFocusedDeckCueNumbers(const std::string& prefix = "", int startAt = 1) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      triggerToast("renumber: empty deck");
+      return;
+    }
+    int start = std::max(1, startAt);
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      std::string token = prefix + std::to_string(start + cueIndex);
+      deck.cues[cueIndex].cueNumber = token;
+      deck.cues[cueIndex].cueId = normalizeCueIdShort(token);
+    }
+    clearCueFindState();
+    triggerToast("renumbered " + std::to_string(deck.cues.size()) + " cues");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void clearFocusedDeckCueNumbers() {
+    Deck& deck = focusedDeckMutable();
+    if (deck.cues.empty()) {
+      return;
+    }
+    for (auto& cue : deck.cues) {
+      cue.cueNumber.clear();
+      cue.cueId.clear();
+    }
+    clearCueFindState();
+    triggerToast("cue numbers cleared");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  bool selectCueById(const std::string& cueId) {
+    Deck& deck = focusedDeckMutable();
+    auto index = cueIndexById(deck, cueId);
+    if (!index) {
+      return false;
+    }
+    selectCueInDeck(project_.focusedDeckIndex, *index, false, false);
+    triggerToast("cue " + std::to_string(*index + 1) + " armed");
+    return true;
+  }
+
+  bool takeCueById(const std::string& cueId, bool autoplay) {
+    Deck& deck = focusedDeckMutable();
+    auto index = cueIndexById(deck, cueId);
+    if (!index) {
+      return false;
+    }
+    selectCueInDeck(project_.focusedDeckIndex, *index, false, false);
+    takeSelected(autoplay);
+    return true;
+  }
+
+  double snapToCueFrame(const Cue& cue, double seconds) const {
+    double duration = std::max(0.0, cue.duration);
+    double clamped = std::clamp(seconds, 0.0, duration);
+    double fps = cue.fps;
+    if (!std::isfinite(fps) || fps <= 0.0) {
+      return clamped;
+    }
+    double frameIndex = std::round(clamped * fps);
+    double snapped = frameIndex / fps;
+    return std::clamp(snapped, 0.0, duration);
+  }
+
+  bool setSelectedTrimIn(double seconds) {
+    if (!firstFocusedSelectedCueMutable([&](const Cue& cue) {
+      return cueSupportsTrimPoints(cue.kind);
+    })) {
+      return false;
+    }
+    double sampleNext = 0.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsTrimPoints(cue.kind)) {
+        return;
+      }
+      double duration = std::max(0.0, cue.duration);
+      double next = snapToCueFrame(cue, seconds);
+      double out = cue.outPointSeconds > 0.0 ? cue.outPointSeconds : duration;
+      out = std::clamp(snapToCueFrame(cue, out), next, duration);
+      cue.inPointSeconds = next;
+      cue.outPointSeconds = out;
+      if (!changed) {
+        sampleNext = next;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return false;
+    }
+    triggerToast("in " + formatSeconds(sampleNext));
+    markProjectDirty();
+    return true;
+  }
+
+  bool setSelectedTrimOut(double seconds) {
+    if (!firstFocusedSelectedCueMutable([&](const Cue& cue) {
+      return cueSupportsTrimPoints(cue.kind);
+    })) {
+      return false;
+    }
+    double sampleNext = 0.0;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsTrimPoints(cue.kind)) {
+        return;
+      }
+      double duration = std::max(0.0, cue.duration);
+      double next = std::clamp(snapToCueFrame(cue, seconds), cue.inPointSeconds, duration);
+      cue.outPointSeconds = next;
+      if (!changed) {
+        sampleNext = next;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return false;
+    }
+    triggerToast("out " + formatSeconds(sampleNext));
+    markProjectDirty();
+    return true;
+  }
+
+  void clearSelectedTrim() {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsTrimPoints(cue.kind)) {
+        return;
+      }
+      cue.inPointSeconds = 0.0;
+      cue.outPointSeconds = cue.duration;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("trim reset");
+    markProjectDirty();
+  }
+
+  bool setActiveTrimFromPlayhead(bool setInPoint) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.activeIndex < 0 || deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      return false;
+    }
+    Cue& cue = deck.cues[deck.activeIndex];
+    if (!cueSupportsTrimPoints(cue.kind)) {
+      return false;
+    }
+    MediaEngine* engine = focusedMediaEngine();
+    if (!engine) {
+      return false;
+    }
+    double duration = std::max(0.0, cue.duration);
+    double playhead = snapToCueFrame(cue, cueAbsolutePlayheadSeconds(cue, *engine));
+    if (setInPoint) {
+      double out = cue.outPointSeconds > 0.0 ? cue.outPointSeconds : duration;
+      cue.inPointSeconds = playhead;
+      cue.outPointSeconds = std::clamp(snapToCueFrame(cue, out), cue.inPointSeconds, duration);
+      triggerToast("in " + formatSeconds(cue.inPointSeconds));
+    } else {
+      cue.outPointSeconds = std::clamp(playhead, cue.inPointSeconds, duration);
+      triggerToast("out " + formatSeconds(cue.outPointSeconds));
+    }
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    return true;
+  }
+
+  bool nudgeFocusedPausedPlayback(int direction, Uint16 mod) {
+    if (direction == 0) {
+      return false;
+    }
+    MediaEngine* engine = focusedMediaEngine();
+    const Cue* cue = activeCuePtr();
+    if (!engine || !cue || cue->kind != CueKind::Video) {
+      return false;
+    }
+    if (engine->state() != TransportState::Paused) {
+      return false;
+    }
+    double fps = (std::isfinite(cue->fps) && cue->fps > 1.0) ? cue->fps : 30.0;
+    double stepSeconds = 1.0 / fps;
+    std::string stepLabel = "1f";
+    if ((mod & SDL_KMOD_ALT) != 0) {
+      stepSeconds = 1.0;
+      stepLabel = "1s";
+    } else if (deckboyShortcutHeld(mod)) {
+      stepSeconds = 10.0 / fps;
+      stepLabel = "10f";
+    } else if ((mod & SDL_KMOD_SHIFT) != 0) {
+      stepSeconds = 5.0 / fps;
+      stepLabel = "5f";
+    }
+    double target = snapToCueFrame(*cue, engine->position() + static_cast<double>(direction) * stepSeconds);
+    engine->seek(target);
+    triggerToast((direction > 0 ? ">> " : "<< ") + stepLabel + "  " + formatTimecode(target, fps));
+    playUiSound(UiSoundEffect::Toggle);
+    return true;
+  }
+
+  void setTimeOverlayEnabled(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.timeOverlayEnabled == enabled) {
+      return;
+    }
+    deck.timeOverlayEnabled = enabled;
+    triggerToast(deck.timeOverlayEnabled ? "time overlay on" : "time overlay off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleTimeOverlayEnabled() {
+    setTimeOverlayEnabled(!focusedDeck().timeOverlayEnabled);
+  }
+
+  // Exactly 4.20 seconds. (Not in the changelog, on purpose.)
+  static bool isMellowTransitionSeconds(double seconds) {
+    return std::abs(seconds - 4.2) < 0.005;
+  }
+
+  static std::string mellowTransitionToast(const std::string& style) {
+    const std::string word = (style.empty() || style == "crossfade" || style == "dissolve")
+                               ? std::string("crossfade") : style;
+    return "a very relaxed 4.20 s " + word;
+  }
+
+  void setTransitionSeconds(double seconds) {
+    Deck& deck = focusedDeckMutable();
+    double next = std::clamp(seconds, 0.0, 10.0);
+    if (std::abs(deck.transitionSeconds - next) < 0.001) {
+      return;
+    }
+    deck.transitionSeconds = next;
+    triggerToast(isMellowTransitionSeconds(deck.transitionSeconds)
+                   ? mellowTransitionToast(deck.transitionStyle)
+                   : "transition " + formatSeconds(deck.transitionSeconds));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setTransitionStyle(TransitionStyle style) {
+    Deck& deck = focusedDeckMutable();
+    std::string token = transitionStyleToken(style);
+    if (deck.transitionStyle == token) {
+      return;
+    }
+    deck.transitionStyle = token;
+    triggerToast("style " + deck.transitionStyle);
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // ── CAPTIONS MADE HERE ────────────────────────────────────────────────
+  //
+  // Opt-in twice over: nothing is fetched until asked, and the first time it
+  // is asked it says what it is about to download and waits for a second
+  // press. Then one background job: download the model if needed, listen,
+  // write <name>.auto.srt beside the media, and attach it to the cue.
+  // Is the captioning engine here at all? Asked once and remembered: finding
+  // it can mean starting a process (a PATH lookup), which the inspector must
+  // not do every frame. Asked again whenever the operator presses the row, so
+  // whisper-cli put in place while Deckboy runs is found without a restart.
+  bool captioningInstalled(bool recheck = false) {
+    if (captioningInstalled_ < 0 || recheck) {
+      captioningInstalled_ = deckboy::captioning::whisperCliPath().empty() ? 0 : 1;
+    }
+    return captioningInstalled_ == 1;
+  }
+
+  // The next speech model in the CAPTIONS section's list, saved with the show.
+  void cycleCaptionsModel() {
+    const auto& choices = deckboy::captioning::kModelChoices;
+    const std::size_t n = sizeof(choices) / sizeof(choices[0]);
+    std::size_t at = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+      if (project_.captionsModel == choices[i].token) at = (i + 1) % n;
+    }
+    project_.captionsModel = choices[at].token;
+    captionDownloadArmedAtMs_ = 0;   // a new model asks again before downloading
+    markProjectDirty();
+    triggerToast(std::string("captions: ") + choices[at].label +
+                 (deckboy::captioning::modelPresent(choices[at].token)
+                    ? std::string(" (downloaded)")
+                    : " (" + std::to_string(choices[at].megabytes) + " MB the first time)"));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void generateCaptionsForSelected(std::string model = std::string()) {
+    if (model.empty()) {
+      model = project_.captionsModel.empty() ? std::string(deckboy::captioning::kDefaultModel)
+                                             : project_.captionsModel;
+    }
+    const Cue* cue = selectedCuePtr();
+    if (!cue || !cue->hasAudio || !cueUsesFilesystemMedia(*cue)) {
+      failRemoteCommand("captions: select a cue with sound from a file");
+      return;
+    }
+    if (captionJob_.valid()) {
+      failRemoteCommand(captionJobDownloading_ ? "captions: still downloading the model"
+                                                : "captions: already listening to a cue");
+      return;
+    }
+    if (const char* why = deckboy::captioning::captionsNeedNewerSystem()) {
+      failRemoteCommand(std::string("captions: ") + why);
+      return;
+    }
+    if (!captioningInstalled(true)) {
+      failRemoteCommand("captions: the captioning engine (whisper-cli) is not beside Deckboy - "
+                        "see the manual, Captions made on this computer");
+      return;
+    }
+    const bool needDownload = !deckboy::captioning::modelPresent(model);
+    if (needDownload) {
+      const Uint64 now = SDL_GetTicks();
+      if (captionDownloadArmedAtMs_ == 0 || now - captionDownloadArmedAtMs_ > 8000) {
+        captionDownloadArmedAtMs_ = now;
+        triggerToast("captions need a one-time " +
+                       std::to_string(deckboy::captioning::modelChoice(model).megabytes) +
+                       " MB download (stays on this computer) - press again to fetch it",
+                     ToastKind::Help, kToastReadableMs);
+        remoteCommandDetail_ = "needs the model: ask again to download it";
+        return;
+      }
+      captionDownloadArmedAtMs_ = 0;
+    }
+    const auto resolved = resolveCueFilesystemPath(*cue, currentProjectFile_);
+    if (!resolved || resolved->empty()) {
+      failRemoteCommand("captions: the cue's file is missing");
+      return;
+    }
+    const fs::path media = *resolved;
+    captionJobCueId_ = cue->id;
+    captionJobDownloading_ = needDownload;
+    captionJob_ = std::async(std::launch::async, [media, model, needDownload]() {
+      if (needDownload) {
+        auto got = deckboy::captioning::downloadModel(model);
+        if (!got.ok) return got;
+      }
+      return deckboy::captioning::transcribe(media, model);
+    });
+    triggerToast(needDownload ? "downloading the caption model, then listening..." : "listening for captions...");
+    remoteCommandDetail_ = "started";
+  }
+
+  // From update(): when the job is done, attach what it made.
+  void collectCaptionJob() {
+    if (!captionJob_.valid() ||
+        captionJob_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+      return;
+    }
+    const deckboy::captioning::Result result = captionJob_.get();
+    captionJobDownloading_ = false;
+    if (!result.ok) {
+      triggerToast(result.message, ToastKind::Warning, kToastReadableMs);
+      return;
+    }
+    for (Deck& deck : project_.decks) {
+      for (Cue& cue : deck.cues) {
+        if (cue.id != captionJobCueId_) continue;
+        cue.subtitlePath = result.srt.string();
+        cue.subtitleEnabled = true;
+        subtitleCache_.erase(cue.subtitlePath);
+        markProjectDirty();
+      }
+    }
+    triggerToast(result.message);
+  }
+
+  bool captionJobRunning() const { return captionJob_.valid(); }
+
+  // DEVAMP: the looping cue on this deck plays out the pass it is on and then
+  // ends as if it had never looped. False when nothing is playing there.
+  bool devampDeck(int deckIndex) {
+    MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (!engine || deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size()) ||
+        project_.decks[deckIndex].activeIndex < 0) {
+      return false;
+    }
+    engine->devamp();
+    triggerToast("devamp: " + deckLabel(deckIndex) + " ends after this pass");
+    return true;
+  }
+
+  // ── TRIGGERS ────────────────────────────────────────────────────────────
+  //
+  // A cue fired by a key, a MIDI note or an OSC address goes through the
+  // same take every GO does, on its own deck, with focus borrowed and given
+  // back -- the fireMasterCue pattern -- so a trigger can never be a second,
+  // drifting way of starting a cue.
+  void fireCueFromTrigger(int deckIndex, int cueIndex, const std::string& why) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size()) ||
+        cueIndex < 0 || cueIndex >= static_cast<int>(project_.decks[deckIndex].cues.size())) {
+      return;
+    }
+    if (!project_.decks[deckIndex].cues[cueIndex].armed) {
+      return;   // a disarmed cue does nothing however it is reached
+    }
+    const int savedFocus = project_.focusedDeckIndex;
+    project_.focusedDeckIndex = deckIndex;
+    selectCueInDeck(deckIndex, cueIndex, false, false);
+    takeSelected(true);
+    project_.focusedDeckIndex = savedFocus;
+    triggerToast(why + ": " + project_.decks[deckIndex].cues[cueIndex].name);
+  }
+
+  // Every cue the predicate claims, on every deck. Returns how many fired.
+  template <typename Pred>
+  int fireCuesWhere(Pred&& pred, const std::string& why) {
+    std::vector<std::pair<int, int>> hits;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      const Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        if (pred(deck.cues[c])) {
+          hits.emplace_back(d, c);
+        }
+      }
+    }
+    for (const auto& [d, c] : hits) {
+      fireCueFromTrigger(d, c, why);
+    }
+    return static_cast<int>(hits.size());
+  }
+
+  // The keys a cue may claim: the ones the desk does not already use. F11 is
+  // fullscreen; letters, digits, arrows and Space all drive the playlist.
+  static std::string triggerKeyName(SDL_Keycode key) {
+    if (key >= SDLK_F1 && key <= SDLK_F10) return "F" + std::to_string(key - SDLK_F1 + 1);
+    if (key == SDLK_F12) return "F12";
+    if (key >= SDLK_KP_1 && key <= SDLK_KP_9) return "NUM" + std::to_string(key - SDLK_KP_1 + 1);
+    if (key == SDLK_KP_0) return "NUM0";
+    return std::string();
+  }
+
+  void beginTriggerKeyLearn() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue) {
+      return;
+    }
+    if (!cue->triggerHotkey.empty() && triggerLearnKeyCueId_.empty()) {
+      // A second press on a set hotkey clears it: learn and clear are one
+      // control, so "how do I take the key off" has an answer on the row.
+      Cue* mutableCue = selectedCueMutable();
+      mutableCue->triggerHotkey.clear();
+      markProjectDirty();
+      triggerToast("hotkey cleared");
+      return;
+    }
+    triggerLearnKeyCueId_ = cue->id;
+    triggerToast("press F1-F10, F12 or a number-pad key for this cue (Esc cancels)",
+                 ToastKind::Help, kToastReadableMs);
+  }
+
+  // From handleKeyDown, first thing. True when the key was a trigger's.
+  bool handleTriggerKey(SDL_Keycode key, bool keyRepeat) {
+    if (!triggerLearnKeyCueId_.empty()) {
+      const std::string learning = triggerLearnKeyCueId_;
+      if (key == SDLK_ESCAPE) {
+        triggerLearnKeyCueId_.clear();
+        triggerToast("hotkey: cancelled");
+        return true;
+      }
+      const std::string name = triggerKeyName(key);
+      if (name.empty()) {
+        triggerToast("that key drives the desk - use F1-F10, F12 or the number pad");
+        return true;
+      }
+      triggerLearnKeyCueId_.clear();
+      for (Deck& deck : project_.decks) {
+        for (Cue& cue : deck.cues) {
+          if (cue.id == learning) {
+            pushUndoSnapshot();
+            cue.triggerHotkey = name;
+            markProjectDirty();
+            triggerToast("hotkey " + name + ": " + cue.name);
+            return true;
+          }
+        }
+      }
+      return true;
+    }
+    if (keyRepeat) {
+      return false;
+    }
+    const std::string name = triggerKeyName(key);
+    if (name.empty()) {
+      return false;
+    }
+    return fireCuesWhere([&](const Cue& cue) { return cue.triggerHotkey == name; },
+                         "key " + name) > 0;
+  }
+
+  // MIDI: a note any cue claims fires those cues; a note none claims keeps
+  // the old meaning, "note N goes to cue N+1" on the focused deck.
+  void handleMidiTriggerNote(int note) {
+    if (!triggerLearnMidiCueId_.empty()) {
+      const std::string learning = triggerLearnMidiCueId_;
+      triggerLearnMidiCueId_.clear();
+      for (Deck& deck : project_.decks) {
+        for (Cue& cue : deck.cues) {
+          if (cue.id == learning) {
+            pushUndoSnapshot();
+            cue.triggerMidiNote = std::clamp(note, 0, 127);
+            markProjectDirty();
+            triggerToast("MIDI note " + std::to_string(note) + ": " + cue.name);
+            return;
+          }
+        }
+      }
+      return;
+    }
+    const int fired = fireCuesWhere(
+      [&](const Cue& cue) { return cue.triggerMidiNote == note; },
+      "MIDI " + std::to_string(note));
+    if (fired == 0) {
+      // The old rule: note N goes to cue N+1 -- when there is one. A miss is
+      // told to the MIDI monitor, not in a toast: a keyboard sends plenty of
+      // notes nobody meant for a cue.
+      const std::string number = std::to_string(note + 1);
+      if (!cueIndexByToken(focusedDeck(), number)) {
+        remoteCommandError_ = "no cue claims note " + std::to_string(note) +
+                              ", and there is no cue " + number;
+        return;
+      }
+      handleRemoteCommand("GOTO " + number);
+      remoteCommandDetail_ = "no cue claims note " + std::to_string(note) + ", so cue " + number;
+    } else {
+      // Said, so the MIDI monitor's row reads what the note did.
+      remoteCommandDetail_ = "took " + std::to_string(fired) +
+                             (fired == 1 ? " cue that claims note " : " cues that claim note ") +
+                             std::to_string(note);
+    }
+  }
+
+  // OSC: an address no built-in verb answers, matched against every cue's.
+  // Case-insensitive and with or without the leading slash, because the
+  // controller sending it was set up by a different person on a different day.
+  static std::string normalizedOscAddress(std::string address) {
+    address = toUpper(trim(address));
+    if (!address.empty() && address[0] != '/') {
+      address.insert(address.begin(), '/');
+    }
+    return address;
+  }
+
+  int handleOscTrigger(const std::string& address) {
+    const std::string wanted = normalizedOscAddress(address);
+    if (wanted.size() <= 1) {
+      return 0;
+    }
+    return fireCuesWhere(
+      [&](const Cue& cue) {
+        return !cue.triggerOscAddress.empty() &&
+               normalizedOscAddress(cue.triggerOscAddress) == wanted;
+      },
+      "OSC " + address);
+  }
+
+  static std::string formatTimeOfDay(double seconds) {
+    const int whole = static_cast<int>(std::lround(std::max(0.0, seconds)));
+    char out[16];
+    std::snprintf(out, sizeof(out), "%02d:%02d:%02d", whole / 3600, (whole / 60) % 60, whole % 60);
+    return out;
+  }
+
+  void editSelectedTriggerTime() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue) return;
+    openInlineTextEditor(
+      "trigger.time", "Fire at a time of day",
+      "HH:MM or HH:MM:SS on this computer's clock; empty for none",
+      cue->scheduledStartSeconds >= 0.0 ? formatTimeOfDay(cue->scheduledStartSeconds) : "",
+      [this](const std::string& value) {
+        const std::string v = trim(value);
+        pushUndoSnapshot();
+        if (v.empty() || toUpper(v) == "OFF") {
+          forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+            each.scheduledStartSeconds = -1.0;
+            each.scheduledStartFired = false;
+          });
+          markProjectDirty();
+          triggerToast("time trigger cleared");
+          return;
+        }
+        int hh = 0, mm = 0, ss = 0;
+        if (std::sscanf(v.c_str(), "%d:%d:%d", &hh, &mm, &ss) < 2 ||
+            hh < 0 || hh > 23 || mm < 0 || mm > 59 || ss < 0 || ss > 59) {
+          triggerToast("time: type it as HH:MM or HH:MM:SS");
+          return;
+        }
+        const double at = hh * 3600.0 + mm * 60.0 + ss;
+        forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+          each.scheduledStartSeconds = at;
+          each.scheduledStartFired = false;
+        });
+        markProjectDirty();
+        triggerToast("fires at " + formatTimeOfDay(at));
+      });
+  }
+
+  void editSelectedTriggerTimecode() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue) return;
+    const double fps = focusedDeck().timecodeFps;
+    openInlineTextEditor(
+      "trigger.tc", "Fire at incoming timecode",
+      "HH:MM:SS:FF of the timecode Deckboy is chasing; empty for none",
+      cue->triggerTimecodeSeconds >= 0.0 ? formatTimecode(cue->triggerTimecodeSeconds, fps) : "",
+      [this, fps](const std::string& value) {
+        const std::string v = trim(value);
+        if (v.empty() || toUpper(v) == "OFF") {
+          pushUndoSnapshot();
+          clearSelectedCueTimecodeTrigger();
+          return;
+        }
+        auto seconds = parseTimecodeSeconds(v, fps);
+        if (!seconds) {
+          triggerToast("timecode: type it as HH:MM:SS:FF");
+          return;
+        }
+        pushUndoSnapshot();
+        setSelectedCueTimecodeTrigger(*seconds);
+      });
+  }
+
+  void editSelectedTriggerMidi() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue) return;
+    openInlineTextEditor(
+      "trigger.midi", "Fire on a MIDI note",
+      "a note number 0-127, LEARN to take the next note played, or empty for none",
+      cue->triggerMidiNote >= 0 ? std::to_string(cue->triggerMidiNote) : "",
+      [this](const std::string& value) {
+        const std::string v = toUpper(trim(value));
+        const Cue* now = selectedCuePtr();
+        if (!now) return;
+        if (v == "LEARN") {
+          triggerLearnMidiCueId_ = now->id;
+          triggerToast("play the note that should fire this cue", ToastKind::Help, kToastReadableMs);
+          return;
+        }
+        int note = -1;
+        if (!v.empty() && v != "OFF") {
+          char* end = nullptr;
+          note = static_cast<int>(std::strtol(v.c_str(), &end, 10));
+          if (end == v.c_str() || note < 0 || note > 127) {
+            triggerToast("MIDI: a note number 0-127, or LEARN");
+            return;
+          }
+        }
+        pushUndoSnapshot();
+        selectedCueMutable()->triggerMidiNote = note;
+        markProjectDirty();
+        triggerToast(note < 0 ? std::string("MIDI trigger cleared")
+                              : "fires on MIDI note " + std::to_string(note));
+      });
+  }
+
+  void editSelectedTriggerOsc() {
+    const Cue* cue = selectedCuePtr();
+    if (!cue) return;
+    openInlineTextEditor(
+      "trigger.osc", "Fire on an OSC address",
+      "e.g. /stage/doors -- sent to Deckboy's OSC port; empty for none",
+      cue->triggerOscAddress,
+      [this](const std::string& value) {
+        pushUndoSnapshot();
+        std::string v = trim(value);
+        if (!v.empty() && v[0] != '/') v.insert(v.begin(), '/');
+        selectedCueMutable()->triggerOscAddress = v;
+        markProjectDirty();
+        triggerToast(v.empty() ? std::string("OSC trigger cleared") : "fires on OSC " + v);
+      });
+  }
+
+  bool setSelectedCueTimecodeTrigger(double seconds) {
+    double clamped = std::max(0.0, seconds);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      cue.triggerTimecodeSeconds = clamped;
+      changed = true;
+    });
+    if (!changed) {
+      return false;
+    }
+    triggerToast("tc mark " + formatTimecode(clamped, focusedDeck().timecodeFps));
+    markProjectDirty();
+    return true;
+  }
+
+  void clearSelectedCueTimecodeTrigger() {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      cue.triggerTimecodeSeconds = -1.0;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("tc mark cleared");
+    markProjectDirty();
+  }
+
+  void ensureTimecodeFollowerStateSize() {
+    size_t deckCount = project_.decks.size();
+    if (deckTimecodeLastExternalMs_.size() != deckCount) {
+      deckTimecodeLastExternalMs_.resize(deckCount, 0);
+    }
+    if (deckTimecodeLastExternalSeconds_.size() != deckCount) {
+      deckTimecodeLastExternalSeconds_.resize(deckCount, 0.0);
+    }
+    if (deckTimecodeHasExternal_.size() != deckCount) {
+      deckTimecodeHasExternal_.resize(deckCount, false);
+    }
+  }
+
+  void resetTimecodeFollowerState() {
+    ensureTimecodeFollowerStateSize();
+    std::fill(deckTimecodeLastExternalMs_.begin(), deckTimecodeLastExternalMs_.end(), 0);
+    std::fill(deckTimecodeLastExternalSeconds_.begin(), deckTimecodeLastExternalSeconds_.end(), 0.0);
+    std::fill(deckTimecodeHasExternal_.begin(), deckTimecodeHasExternal_.end(), false);
+  }
+
+  void setTimecodeFps(double fps) {
+    Deck& deck = focusedDeckMutable();
+    double next = std::clamp(fps, 1.0, 120.0);
+    if (std::abs(deck.timecodeFps - next) < 0.001) {
+      return;
+    }
+    deck.timecodeFps = next;
+    triggerToast("tc fps " + std::to_string(static_cast<int>(std::round(deck.timecodeFps))));
+    markProjectDirty();
+  }
+
+  void setTimecodeChaseEnabled(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.timecodeChaseEnabled == enabled) {
+      return;
+    }
+    deck.timecodeChaseEnabled = enabled;
+    triggerToast(deck.timecodeChaseEnabled ? "tc chase on" : "tc chase off");
+    markProjectDirty();
+  }
+
+  void setTimecodeRunEnabled(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.timecodeRunEnabled == enabled) {
+      return;
+    }
+    deck.timecodeRunEnabled = enabled;
+    triggerToast(deck.timecodeRunEnabled ? "tc run on" : "tc run off");
+    markProjectDirty();
+  }
+
+  void setTimecodeJamSyncEnabled(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.timecodeJamSyncEnabled == enabled) {
+      triggerToast(enabled ? "tc jam on" : "tc jam off");
+      return;
+    }
+    deck.timecodeJamSyncEnabled = enabled;
+    triggerToast(deck.timecodeJamSyncEnabled ? "tc jam on" : "tc jam off");
+    markProjectDirty();
+  }
+
+  void setTimecodeFreewheelSeconds(double seconds) {
+    Deck& deck = focusedDeckMutable();
+    double next = std::clamp(std::isfinite(seconds) ? seconds : 1.0, 0.0, 10.0);
+    if (std::abs(deck.timecodeFreewheelSeconds - next) < 0.001) {
+      std::ostringstream label;
+      label << std::fixed << std::setprecision(1) << next;
+      triggerToast("tc freewheel " + label.str() + "s");
+      return;
+    }
+    deck.timecodeFreewheelSeconds = next;
+    std::ostringstream label;
+    label << std::fixed << std::setprecision(1) << deck.timecodeFreewheelSeconds;
+    triggerToast("tc freewheel " + label.str() + "s");
+    markProjectDirty();
+  }
+
+  void setDeckTimecode(int deckIndex, double seconds, bool forceApply = false) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    ensureTimecodeFollowerStateSize();
+    Deck& deck = project_.decks[deckIndex];
+    double normalized = std::max(0.0, std::isfinite(seconds) ? seconds : 0.0);
+    Uint64 now = SDL_GetTicks();
+    bool hadExternal = deckTimecodeHasExternal_[deckIndex];
+    Uint64 previousExternalMs = deckTimecodeLastExternalMs_[deckIndex];
+    Uint64 freewheelMs = static_cast<Uint64>(
+      std::llround(std::max(0.0, deck.timecodeFreewheelSeconds) * 1000.0));
+    bool withinFreewheel = hadExternal && now >= previousExternalMs && (now - previousExternalMs) <= freewheelMs;
+    bool suppressJam = !forceApply
+      && !deck.timecodeJamSyncEnabled
+      && deck.timecodeChaseEnabled
+      && deck.timecodeRunEnabled
+      && withinFreewheel;
+
+    deckTimecodeHasExternal_[deckIndex] = true;
+    deckTimecodeLastExternalMs_[deckIndex] = now;
+    deckTimecodeLastExternalSeconds_[deckIndex] = normalized;
+    if (suppressJam) {
+      return;
+    }
+
+    if (normalized + 0.0001 < deck.timecodeCurrentSeconds) {
+      timecodeTriggeredCueIds_.erase(deckIndex);
+    }
+    deck.timecodeLastSeconds = deck.timecodeCurrentSeconds;
+    deck.timecodeCurrentSeconds = normalized;
+    deck.timecodeDirty = true;
+  }
+
+  void ingestIntegrationTimecode(double seconds, double fpsHint) {
+    if (project_.decks.empty()) {
+      return;
+    }
+    double normalizedSeconds = std::max(0.0, std::isfinite(seconds) ? seconds : 0.0);
+    double normalizedFps = std::isfinite(fpsHint) && fpsHint > 1.0 ? fpsHint : focusedDeck().timecodeFps;
+    bool shouldSkip = std::fabs(normalizedSeconds - lastMtcIngestSeconds_) < 0.0005
+                   && std::fabs(normalizedFps - lastMtcIngestFps_) < 0.01;
+    if (shouldSkip) {
+      return;
+    }
+    lastMtcIngestSeconds_ = normalizedSeconds;
+    lastMtcIngestFps_ = normalizedFps;
+
+    bool applied = false;
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (!project_.decks[deckIndex].timecodeChaseEnabled) {
+        continue;
+      }
+      setDeckTimecode(deckIndex, normalizedSeconds, false);
+      applied = true;
+    }
+    if (!applied) {
+      setDeckTimecode(project_.focusedDeckIndex, normalizedSeconds, false);
+    }
+  }
+
+  // Integration trigger commands are restricted to a safe subset to prevent
+  // malicious NDI/ATEM/NMC sources from executing destructive operations.
+  bool isIntegrationSafeCommand(const std::string& upperCmd) const {
+    // Safe: transport and navigation commands only
+    static const std::array<const char*, 20> kSafe {{
+      "TAKE", "GO", "PLAY", "PAUSE", "STOP", "TOGGLE",
+      "NEXT", "PREV", "PREVIOUS", "SKIP", "SKIPBACK",
+      "RERACK", "LOOP", "FADE",
+      "DECK", "SELECT", "GOTO", "FIND", "JUMP",
+      "STATUS"
+    }};
+    // Extract the first word (the verb)
+    std::string verb = upperCmd;
+    auto sp = verb.find(' ');
+    if (sp != std::string::npos) verb = verb.substr(0, sp);
+    for (const char* safe : kSafe) {
+      if (verb == safe) return true;
+    }
+    return false;
+  }
+
+  void handleAtemEventPayload(const std::string& payloadRaw) {
+    if (!project_.atemTriggerEnabled) {
+      return;
+    }
+    std::string payload = toUpper(trim(payloadRaw));
+    if (payload.empty()) {
+      return;
+    }
+    if (payload.rfind("DECKBOY ", 0) == 0) {
+      std::string inner = payload.substr(8);
+      if (!isIntegrationSafeCommand(inner)) return;  // block unsafe commands from integrations
+      handleRemoteCommand(inner);
+      return;
+    }
+    if (payload == "CUT" || payload == "AUTO" || payload == "TAKE") {
+      handleRemoteCommand("TAKE");
+      return;
+    }
+    if (payload == "BLACK" || payload == "FTB") {
+      handleRemoteCommand("CLEAR");
+      return;
+    }
+    if (payload == "PLAY" || payload == "PAUSE" || payload == "STOP"
+        || payload == "NEXT" || payload == "PREV" || payload == "GO"
+        || payload == "CLEAR" || payload == "PANIC") {
+      handleRemoteCommand(payload);
+      return;
+    }
+    if (payload.rfind("SCENE ", 0) == 0) {
+      std::string token = trim(payload.substr(6));
+      if (!token.empty()) {
+        handleRemoteCommand("GROUP " + token + " FIRE");
+      }
+      return;
+    }
+
+    // Only forward integration-safe prefixed commands (no MASTER, VIDEO, PANIC, CLEAR)
+    static const std::array<const char*, 5> kSafeIntegrationPrefixes {{
+      "DECK ", "TAKE ", "GOTO ", "SELECT ", "FIND "
+    }};
+    for (const char* prefix : kSafeIntegrationPrefixes) {
+      if (payload.rfind(prefix, 0) == 0) {
+        handleRemoteCommand(payload);
+        return;
+      }
+    }
+  }
+
+  void dispatchIntegrationTriggerCandidate(const std::string& candidateRaw) {
+    std::string candidate = trim(candidateRaw);
+    if (candidate.empty()) {
+      return;
+    }
+    std::string upper = toUpper(candidate);
+    if (upper.rfind("DECKBOY:", 0) == 0) {
+      upper = trim(upper.substr(8));
+    } else if (upper.rfind("CMD:", 0) == 0) {
+      upper = trim(upper.substr(4));
+    } else if (upper.rfind("COMMAND:", 0) == 0) {
+      upper = trim(upper.substr(8));
+    }
+    if (upper.empty()) {
+      return;
+    }
+    handleAtemEventPayload(upper);
+  }
+
+  void handleNdiTriggerPayload(const std::string& payloadRaw) {
+    if (!project_.ndiTriggerEnabled) {
+      return;
+    }
+    std::string payload = trim(payloadRaw);
+    if (payload.empty()) {
+      return;
+    }
+
+    std::vector<std::string> candidates;
+    auto pushCandidate = [&](const std::string& value) {
+      std::string normalized = trim(value);
+      if (normalized.empty()) {
+        return;
+      }
+      if (std::find(candidates.begin(), candidates.end(), normalized) == candidates.end()) {
+        candidates.push_back(normalized);
+      }
+    };
+
+    if (payload.find('<') == std::string::npos) {
+      pushCandidate(payload);
+    } else {
+#ifndef _WIN32
+      for (const char* attr : {"command", "cmd", "action", "event", "payload"}) {
+        if (auto value = xmlAttributeValueCaseInsensitive(payload, attr)) {
+          pushCandidate(*value);
+        }
+      }
+      if (auto cue = xmlAttributeValueCaseInsensitive(payload, "cue")) {
+        pushCandidate("GOTO " + *cue);
+      }
+      if (auto cue = xmlAttributeValueCaseInsensitive(payload, "goto")) {
+        pushCandidate("GOTO " + *cue);
+      }
+      if (auto group = xmlAttributeValueCaseInsensitive(payload, "group")) {
+        pushCandidate("GROUP " + *group + " FIRE");
+      }
+      for (const char* element : {"command", "cmd", "action", "event", "payload", "deckboy"}) {
+        if (auto value = xmlElementTextCaseInsensitive(payload, element)) {
+          pushCandidate(*value);
+        }
+      }
+#endif
+    }
+
+    for (const auto& candidate : candidates) {
+      dispatchIntegrationTriggerCandidate(candidate);
+    }
+  }
+
+  void handleNmcSyncPayload(const std::string& payloadRaw) {
+    if (!project_.nmcSyncEnabled) {
+      return;
+    }
+    if (focusedDeck().timecodeChaseEnabled) {
+      return;
+    }
+
+    auto packet = parseNmcSyncPacket(payloadRaw);
+    if (!packet) {
+      return;
+    }
+
+    auto ensureCueLoaded = [&]() -> bool {
+      if (activeCuePtr()) {
+        return true;
+      }
+      if (!selectedCuePtr()) {
+        return false;
+      }
+      takeSelected(false, false, true);
+      return activeCuePtr() != nullptr;
+    };
+
+    std::string command = toUpper(packet->command);
+    if (command == "LOCATE") {
+      if (!packet->seconds || !ensureCueLoaded()) {
+        return;
+      }
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        engine->seek(*packet->seconds, false);
+      }
+      return;
+    }
+    if (command == "PLAY") {
+      if (!ensureCueLoaded()) {
+        return;
+      }
+      if (packet->seconds) {
+        if (MediaEngine* engine = focusedMediaEngine()) {
+          engine->seek(*packet->seconds, false);
+        }
+      }
+      playTransport();
+      return;
+    }
+    if (command == "PAUSE") {
+      if (!ensureCueLoaded()) {
+        return;
+      }
+      if (packet->seconds) {
+        if (MediaEngine* engine = focusedMediaEngine()) {
+          engine->seek(*packet->seconds, false);
+        }
+      }
+      pauseTransport();
+      return;
+    }
+    if (command == "STOP") {
+      if (!ensureCueLoaded()) {
+        stopTransport();
+        return;
+      }
+      stopTransport();
+      if (packet->seconds) {
+        if (MediaEngine* engine = focusedMediaEngine()) {
+          engine->seek(*packet->seconds, false);
+        }
+      }
+      return;
+    }
+  }
+
+  void handleArtNetEvent(int channel, int value) {
+    if (!project_.dmxArtNetEnabled) {
+      return;
+    }
+    switch (channel) {
+      case 1: handleRemoteCommand("TAKE"); break;
+      case 2: handleRemoteCommand("PLAY"); break;
+      case 3: handleRemoteCommand("STOP"); break;
+      case 4: handleRemoteCommand("GO"); break;
+      case 5: handleRemoteCommand("NEXT"); break;
+      case 6: handleRemoteCommand("PREV"); break;
+      case 7: handleRemoteCommand("CLEAR"); break;
+      case 8: handleRemoteCommand("PANIC"); break;
+      case 9:
+        if (value > 0) {
+          handleRemoteCommand("TAKE " + std::to_string(std::clamp(value, 1, 255)));
+        }
+        break;
+      case 10:
+        if (value > 0) {
+          handleRemoteCommand("GROUP " + std::to_string(std::clamp(value, 1, 255)) + " FIRE");
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  void processTimecodeTriggersForDeck(int deckIndex, double fromSeconds, double toSeconds) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (deck.cues.empty()) {
+      return;
+    }
+
+    auto& fired = timecodeTriggeredCueIds_[deckIndex];
+    if (toSeconds + 0.0001 < fromSeconds) {
+      fired.clear();
+      return;
+    }
+
+    std::optional<int> bestIndex;
+    double bestTc = 0.0;
+    for (int cueIndex = 0; cueIndex < static_cast<int>(deck.cues.size()); ++cueIndex) {
+      const Cue& cue = deck.cues[cueIndex];
+      if (cue.triggerTimecodeSeconds < 0.0) {
+        continue;
+      }
+      if (cue.triggerTimecodeSeconds <= toSeconds + 0.0001 && cue.triggerTimecodeSeconds > fromSeconds + 0.0001) {
+        if (fired.find(cue.id) != fired.end()) {
+          continue;
+        }
+        if (!bestIndex || cue.triggerTimecodeSeconds < bestTc) {
+          bestIndex = cueIndex;
+          bestTc = cue.triggerTimecodeSeconds;
+        }
+      }
+    }
+
+    if (!bestIndex) {
+      return;
+    }
+
+    fired.insert(deck.cues[*bestIndex].id);
+    selectOnlyCue(deck, *bestIndex);
+    int previousFocus = project_.focusedDeckIndex;
+    project_.focusedDeckIndex = deckIndex;
+    takeSelected(true);
+    project_.focusedDeckIndex = previousFocus;
+  }
+
+  void setFocusedDeckTimecode(double seconds, bool forceApply = false) {
+    setDeckTimecode(project_.focusedDeckIndex, seconds, forceApply);
+    triggerToast("tc " + formatTimecode(focusedDeck().timecodeCurrentSeconds, focusedDeck().timecodeFps));
+  }
+
+  void cycleSelectedEndAction() {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return each.kind == CueKind::Video || each.kind == CueKind::Audio;
+    });
+    if (!cue) {
+      return;
+    }
+    CueEndAction next = cue->endAction;
+    // Cycle: Inherit → Stop → Loop → PauseOnLast → AutoNext → Inherit
+    switch (next) {
+      case CueEndAction::Inherit:     next = CueEndAction::Stop;       break;
+      case CueEndAction::Stop:        next = CueEndAction::Loop;       break;
+      case CueEndAction::Loop:        next = CueEndAction::PauseOnLast; break;
+      case CueEndAction::PauseOnLast: next = CueEndAction::AutoNext;   break;
+      case CueEndAction::AutoNext:    next = CueEndAction::Inherit;    break;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.kind != CueKind::Video && each.kind != CueKind::Audio) {
+        return;
+      }
+      setCueEndActionKeepingSwitches(each, next);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("end: " + cueEndActionLabel(next));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setSelectedEndAction(CueEndAction action) {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return each.kind == CueKind::Video || each.kind == CueKind::Audio;
+    });
+    if (!cue || cue->endAction == action) {
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (each.kind != CueKind::Video && each.kind != CueKind::Audio) {
+        return;
+      }
+      setCueEndActionKeepingSwitches(each, action);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast("end: " + cueEndActionLabel(action));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  bool cueSupportsGeometry(const Cue* cue) const {
+    return cue && (cue->kind == CueKind::Video
+      || cue->kind == CueKind::Image
+      || cue->kind == CueKind::Pattern
+      || cue->kind == CueKind::Browser
+      || cue->kind == CueKind::Pip
+      // A stage clock is placed like any picture (cuePlacementFor does not
+      // ask the kind), and with a transparent backdrop it is a layer that
+      // wants putting in a corner -- it only lacked the controls.
+      || cue->kind == CueKind::Timer
+      || isSourceCueKind(cue->kind));
+  }
+
+  bool cueSupportsKeying(const Cue* cue) const {
+    return cue && (cue->kind == CueKind::Video
+      || cue->kind == CueKind::Image
+      || cue->kind == CueKind::Pattern
+      || cue->kind == CueKind::Browser
+      || cue->kind == CueKind::Pip
+      || isSourceCueKind(cue->kind));
+  }
+
+  // NOT the same list as keying, on purpose. VideoSynth has real pixels --
+  // MediaEngine::rebuildVideoSynthFrame writes into displayFrame_, the same
+  // held-CPU-buffer path Pattern uses, which uploadFrame() already grades
+  // through applyCueVisualEffectsToPixels with zero awareness of what kind
+  // of cue produced the frame. So this was a UI gate away from working, not
+  // an engine feature away from it. Chroma KEY stays off VideoSynth (keying
+  // a generated picture against a colour makes little sense; color grading
+  // it does), which is why this isn't just cueSupportsKeying() with one more
+  // kind folded in.
+  //
+  // Composite and LowerThird were also asked for and are NOT here: Composite
+  // composites its slots as textures in the output renderer rather than
+  // producing a CPU frame, so it never reaches uploadFrame() at all -- adding
+  // the row would be a control that visibly does nothing until that path is
+  // given its own grading step. Didn't add a control ahead of the plumbing
+  // for it.
+  bool cueSupportsColorControls(const Cue* cue) const {
+    return cueSupportsKeying(cue) || (cue && cue->kind == CueKind::VideoSynth);
+  }
+
+  bool setSelectedKeyColor(SDL_Color color) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (!cueSupportsKeying(&each)) {
+        return;
+      }
+      each.chromaKeyColor = color;
+      changed = true;
+    });
+    if (!changed) {
+      return false;
+    }
+    triggerToast("key color " + colorToHex(color));
+    markProjectDirty();
+    return true;
+  }
+
+  void openInlineNumericExpressionEditor(const std::string& owner,
+                                         const std::string& title,
+                                         const std::string& prompt,
+                                         const std::string& currentValue,
+                                         std::function<void(double)> onParsed) {
+    openInlineTextEditor(owner, title, prompt, currentValue,
+                         [this, onParsed = std::move(onParsed)](const std::string& value) {
+      auto parsed = parseNumericExpression(value);
+      if (!parsed) {
+        triggerToast("invalid number");
+        return;
+      }
+      onParsed(*parsed);
+    });
+  }
+
+  void openInlineKeyColorEditor() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsKeying(cue)) {
+      return;
+    }
+    openInlineTextEditor("cue.key_color", "Key Color",
+                         "Hex color (#RRGGBB or #RRGGBBAA):", colorToHex(cue->chromaKeyColor),
+                         [this](const std::string& value) {
+      auto color = tryParseColor(value);
+      if (!color) {
+        triggerToast("invalid key color");
+        return;
+      }
+      setSelectedKeyColor(*color);
+    });
+  }
+
+  void armSelectedKeyColorPicker() {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return cueSupportsKeying(&each);
+    });
+    if (!cue) {
+      return;
+    }
+    keyColorPickerArmed_ = true;
+    triggerToast("click program or preview monitor to sample key color");
+  }
+
+  std::optional<SDL_Color> sampleControlWindowColor(int x, int y) {
+    if (!controlRenderer_) {
+      return std::nullopt;
+    }
+    // SDL3: SDL_RenderReadPixels returns a freshly allocated surface.
+    SDL_Rect sampleRect {x, y, 1, 1};
+    SDL_Surface* sampled = SDL_RenderReadPixels(controlRenderer_, &sampleRect);
+    if (!sampled) {
+      return std::nullopt;
+    }
+    Uint8 r = 0, g = 0, b = 0, a = 0;
+    bool ok = SDL_ReadSurfacePixel(sampled, 0, 0, &r, &g, &b, &a);
+    SDL_DestroySurface(sampled);
+    if (!ok) {
+      return std::nullopt;
+    }
+    return SDL_Color {r, g, b, a};
+  }
+
+  bool handleKeyColorPickerMouseDown(int x, int y) {
+    if (!keyColorPickerArmed_) {
+      return false;
+    }
+    bool hitMonitor = pointInRect(x, y, warpMonitorInner_) ||
+                      pointInRect(x, y, previewMonitorInner_);
+    keyColorPickerArmed_ = false;
+    if (!hitMonitor) {
+      triggerToast("key color picker canceled");
+      return true;
+    }
+    auto color = sampleControlWindowColor(x, y);
+    if (!color) {
+      triggerToast("key color sample failed");
+      return true;
+    }
+    setSelectedKeyColor(*color);
+    playUiSound(UiSoundEffect::Take);
+    return true;
+  }
+
+  // Geometry size editing is pixel-first: the operator types the target
+  // rendered width/height in output pixels; the stored outputScaleX/Y
+  // multiplier is derived per cue from its base rendered size. When the
+  // aspect link is on (Project::geometryAspectLinked, the default), the
+  // other axis scales by the same relative factor. These two setters are the
+  // inspector write path. Remote WIDTH/HEIGHT use the same base-size and
+  // aspect-link calculation, validating the whole selection before writing
+  // instead of clamping values that the caller would not know had changed.
+  bool setSelectedWidthPx(double px) {
+    bool link = project_.geometryAspectLinked;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (!cueSupportsGeometry(&each)) {
+        return;
+      }
+      auto [bw, bh] = cueBaseRenderSize(each);
+      if (bw <= 0.0) {
+        return;
+      }
+      float oldX = each.outputScaleX;
+      float next = std::clamp(static_cast<float>(px / bw), 0.25f, 4.0f);
+      each.outputScaleX = next;
+      if (link && oldX > 0.0001f) {
+        each.outputScaleY = std::clamp(each.outputScaleY * (next / oldX), 0.25f, 4.0f);
+      }
+      changed = true;
+    });
+    if (changed) {
+      markProjectDirty();
+    }
+    return changed;
+  }
+
+  bool setSelectedHeightPx(double px) {
+    bool link = project_.geometryAspectLinked;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (!cueSupportsGeometry(&each)) {
+        return;
+      }
+      auto [bw, bh] = cueBaseRenderSize(each);
+      if (bh <= 0.0) {
+        return;
+      }
+      float oldY = each.outputScaleY;
+      float next = std::clamp(static_cast<float>(px / bh), 0.25f, 4.0f);
+      each.outputScaleY = next;
+      if (link && oldY > 0.0001f) {
+        each.outputScaleX = std::clamp(each.outputScaleX * (next / oldY), 0.25f, 4.0f);
+      }
+      changed = true;
+    });
+    if (changed) {
+      markProjectDirty();
+    }
+    return changed;
+  }
+
+  void editSelectedScaleX() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsGeometry(cue)) {
+      return;
+    }
+    auto [baseW, baseH] = cueBaseRenderSize(*cue);
+    if (baseW <= 0.0) {
+      return;
+    }
+    std::string current = std::to_string(
+      std::max(1, static_cast<int>(std::lround(baseW * cue->outputScaleX))));
+    openInlineNumericExpressionEditor("cue.scale_x", "Width (px)",
+                                      "Output width in px - math ok: 1920x2, 3840/2, 960+64", current,
+                                      [this](double value) {
+      if (!setSelectedWidthPx(value)) {
+        return;
+      }
+      triggerToast("width " + std::to_string(static_cast<int>(std::lround(value))) + "px"
+                   + (project_.geometryAspectLinked ? "  (aspect linked)" : ""));
+    });
+  }
+
+  void editSelectedScaleY() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsGeometry(cue)) {
+      return;
+    }
+    auto [baseW, baseH] = cueBaseRenderSize(*cue);
+    if (baseH <= 0.0) {
+      return;
+    }
+    std::string current = std::to_string(
+      std::max(1, static_cast<int>(std::lround(baseH * cue->outputScaleY))));
+    openInlineNumericExpressionEditor("cue.scale_y", "Height (px)",
+                                      "Output height in px - math ok: 1080x2, 2160/2, 540+30", current,
+                                      [this](double value) {
+      if (!setSelectedHeightPx(value)) {
+        return;
+      }
+      triggerToast("height " + std::to_string(static_cast<int>(std::lround(value))) + "px"
+                   + (project_.geometryAspectLinked ? "  (aspect linked)" : ""));
+    });
+  }
+
+  void editSelectedOffsetX() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsGeometry(cue)) {
+      return;
+    }
+    int current = static_cast<int>(std::lround(cue->outputOffsetX));
+    openInlineNumericExpressionEditor("cue.offset_x", "Offset X",
+                                      "Pixels (supports + - * / and ())", std::to_string(current),
+                                      [this](double value) {
+      float next = static_cast<float>(std::lround(value));
+      bool changed = false;
+      forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+        if (!cueSupportsGeometry(&each)) {
+          return;
+        }
+        each.outputOffsetX = next;
+        changed = true;
+      });
+      if (!changed) {
+        return;
+      }
+      triggerToast("off X " + std::to_string(static_cast<int>(std::lround(next))) + "px");
+      markProjectDirty();
+    });
+  }
+
+  void editSelectedOffsetY() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsGeometry(cue)) {
+      return;
+    }
+    int current = static_cast<int>(std::lround(cue->outputOffsetY));
+    openInlineNumericExpressionEditor("cue.offset_y", "Offset Y",
+                                      "Pixels (supports + - * / and ())", std::to_string(current),
+                                      [this](double value) {
+      float next = static_cast<float>(std::lround(value));
+      bool changed = false;
+      forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+        if (!cueSupportsGeometry(&each)) {
+          return;
+        }
+        each.outputOffsetY = next;
+        changed = true;
+      });
+      if (!changed) {
+        return;
+      }
+      triggerToast("off Y " + std::to_string(static_cast<int>(std::lround(next))) + "px");
+      markProjectDirty();
+    });
+  }
+
+  void editSelectedRotation() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || !cueSupportsGeometry(cue)) {
+      return;
+    }
+    std::ostringstream current;
+    current << std::fixed << std::setprecision(1) << cue->outputRotationDegrees;
+    openInlineNumericExpressionEditor("cue.rotation", "Rotation",
+                                      "Degrees -180..180 (supports + - * / and ())", current.str(),
+                                      [this](double value) {
+      float next = std::clamp(static_cast<float>(value), -180.0f, 180.0f);
+      bool changed = false;
+      forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+        if (!cueSupportsGeometry(&each)) {
+          return;
+        }
+        each.outputRotationDegrees = next;
+        changed = true;
+      });
+      if (!changed) {
+        return;
+      }
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(1) << next;
+      triggerToast("rot " + ss.str() + " deg");
+      markProjectDirty();
+    });
+  }
+
+  void normalizeCueCrop(Cue& cue) {
+    cue.cropLeft = std::clamp(cue.cropLeft, 0.0f, 0.90f);
+    cue.cropRight = std::clamp(cue.cropRight, 0.0f, 0.90f);
+    cue.cropTop = std::clamp(cue.cropTop, 0.0f, 0.90f);
+    cue.cropBottom = std::clamp(cue.cropBottom, 0.0f, 0.90f);
+    cue.cropRight = std::min(cue.cropRight, std::max(0.0f, 0.95f - cue.cropLeft));
+    cue.cropBottom = std::min(cue.cropBottom, std::max(0.0f, 0.95f - cue.cropTop));
+  }
+
+  void adjustSelectedRotation(float deltaDegrees) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      cue.outputRotationDegrees = std::clamp(cue.outputRotationDegrees + deltaDegrees, -180.0f, 180.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedCrop(char edge, float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      switch (edge) {
+        case 'L': cue.cropLeft += delta; break;
+        case 'R': cue.cropRight += delta; break;
+        case 'T': cue.cropTop += delta; break;
+        case 'B': cue.cropBottom += delta; break;
+        default: return;
+      }
+      normalizeCueCrop(cue);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void setSelectedChromaKeyEnabled(bool enabled) {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return cueSupportsKeying(&each);
+    });
+    if (!cue) {
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (!cueSupportsKeying(&each)) {
+        return;
+      }
+      if (each.chromaKeyEnabled == enabled) {
+        return;
+      }
+      each.chromaKeyEnabled = enabled;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    triggerToast(enabled ? "key on" : "key off");
+    markProjectDirty();
+  }
+
+  // Datamosh needs a PREPARED copy (Encoder tab -> Datamosh preset): a normal
+  // H.264 file with B-frames smears badly and an all-intra one cannot smear at
+  // all. Rather than silently doing nothing, say which state the cue is in.
+  // Toggling ON prepares the cue automatically (the owner, 2026-08-20). It does NOT
+  // block: datamoshEnabled is set immediately, and datamoshActiveForCue()
+  // additionally requires the prepared file to exist -- so the cue keeps playing
+  // the original until the transcode lands, then picks up the moshed copy on the
+  // next load. No half-written file is ever taken.
+  // ---- Cue markers ---------------------------------------------------------
+  // Named jump marks inside a clip. Distinct from pause points, which stop
+  // playback; a marker is somewhere you jump TO. For a long clip an operator
+  // wants "verse 2", not a scrub bar.
+
+  // Drop a marker at the live position. Named by index unless the operator
+  // renames it, because being made to type mid-show is worse than a dull name.
+  void addMarkerAtPlayhead() {
+    Cue* cue = selectedCueMutable();
+    MediaEngine* engine = focusedMediaEngine();
+    if (!cue || !engine) {
+      failRemoteCommand("marker: select a cue");
+      return;
+    }
+    const double at = std::max(0.0, engine->position());
+    // Keep sorted on insert so nextMarker/prevMarker stay a linear scan.
+    auto it = std::lower_bound(cue->markerSeconds.begin(), cue->markerSeconds.end(), at);
+    const std::size_t idx = static_cast<std::size_t>(it - cue->markerSeconds.begin());
+    cue->markerSeconds.insert(it, at);
+    cue->markerNames.insert(cue->markerNames.begin() + static_cast<std::ptrdiff_t>(idx),
+                            "mark " + std::to_string(cue->markerSeconds.size()));
+    triggerToast("marker at " + formatSeconds(at));
+    playUiSound(UiSoundEffect::Toggle);
+    showLog("MARKER-ADD", showLogCueRef(project_.focusedDeckIndex,
+                                        focusedDeck().selectedIndex) +
+                          " @" + formatSeconds(at));
+    markProjectDirty();
+  }
+
+  void clearMarkers() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) { failRemoteCommand("marker: select a cue"); return; }
+    cue->markerSeconds.clear();
+    cue->markerNames.clear();
+    triggerToast("markers cleared");
+    markProjectDirty();
+  }
+
+  // Jump to the next/previous marker on the LIVE cue. Seeks rather than takes,
+  // so the cue stays on air and the picture does not blink.
+  void jumpToMarker(int direction) {
+    Deck& deck = focusedDeckMutable();
+    MediaEngine* engine = focusedMediaEngine();
+    if (!engine || deck.activeIndex < 0 ||
+        deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+      failRemoteCommand("marker: nothing live");
+      return;
+    }
+    const Cue& cue = deck.cues[deck.activeIndex];
+    if (cue.markerSeconds.empty()) {
+      failRemoteCommand("marker: none on this cue");
+      return;
+    }
+    const double now = engine->position();
+    // 0.75s of slack going backwards, so pressing prev just after a marker
+    // returns to THAT marker rather than skipping to the one before it -- the
+    // same convention as track-skip on a CD player, and what a hand expects.
+    double target = -1.0;
+    if (direction > 0) {
+      for (double m : cue.markerSeconds) {
+        if (m > now + 0.05) { target = m; break; }
+      }
+    } else {
+      for (auto it = cue.markerSeconds.rbegin(); it != cue.markerSeconds.rend(); ++it) {
+        if (*it < now - 0.75) { target = *it; break; }
+      }
+      if (target < 0.0 && !cue.markerSeconds.empty()) {
+        target = cue.markerSeconds.front();
+      }
+    }
+    if (target < 0.0) {
+      triggerToast(direction > 0 ? "no marker ahead" : "no marker behind");
+      return;
+    }
+    engine->seek(target);
+    triggerToast("marker " + formatSeconds(target));
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  // ---- Scheduled start -----------------------------------------------------
+  // Fires a cue at a wall-clock time, with no external timecode source. That
+  // is the difference from the existing trigger-timecode path and the whole
+  // point: it makes unattended playback possible.
+  void processScheduledStarts() {
+    const std::time_t now = std::time(nullptr);
+    std::tm lt {};
+#ifdef _WIN32
+    localtime_s(&lt, &now);
+#else
+    localtime_r(&now, &lt);
+#endif
+    const double secondsToday = lt.tm_hour * 3600.0 + lt.tm_min * 60.0 + lt.tm_sec;
+
+    // ARM FROM NOW, never from the beginning of time. lastScheduleCheckSeconds_
+    // starts at -1, and the crossing test below is "was it before, is it now
+    // after" -- so on the first tick after launch EVERY cue scheduled earlier
+    // today satisfied both halves and went STRAIGHT TO AIR. Open a show at 2pm
+    // and the morning's schedule fired at once, unbidden. A schedule is a
+    // promise about the future; a time that has already passed is not one.
+    if (lastScheduleCheckSeconds_ < 0.0) {
+      lastScheduleCheckSeconds_ = secondsToday;
+      return;
+    }
+
+    // Midnight rollover: clear the fired latches so a daily schedule repeats.
+    if (secondsToday < lastScheduleCheckSeconds_) {
+      for (Deck& deck : project_.decks) {
+        for (Cue& cue : deck.cues) {
+          cue.scheduledStartFired = false;
+        }
+      }
+      showLog("SCHEDULE", "midnight rollover, daily schedule re-armed");
+    }
+
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      Deck& deck = project_.decks[d];
+      for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+        Cue& cue = deck.cues[c];
+        if (cue.scheduledStartSeconds < 0.0 || cue.scheduledStartFired) {
+          continue;
+        }
+        // Edge-triggered on crossing the time, not "is it now": a tick can be
+        // late, and a schedule that only fires on an exact match would be
+        // skipped entirely by one long frame.
+        if (lastScheduleCheckSeconds_ < cue.scheduledStartSeconds &&
+            secondsToday >= cue.scheduledStartSeconds) {
+          cue.scheduledStartFired = true;
+          showLog("SCHEDULED-TAKE", showLogCueRef(d, c));
+          const int savedDeck = project_.focusedDeckIndex;
+          project_.focusedDeckIndex = d;
+          selectOnlyCue(deck, c);
+          takeSelected(true);
+          project_.focusedDeckIndex = savedDeck;
+        }
+      }
+    }
+    lastScheduleCheckSeconds_ = secondsToday;
+  }
+
+  // ---- Stage timer controls -----------------------------------------------
+  // These drive the timer WITHOUT touching transport, so the clock can be
+  // started, held, reset or nudged while the cue stays live on the stage
+  // screen. Anything that takes the cue off air to change the time is wrong.
+
+  TimerRuntime& timerRuntimeFor(const Cue& cue) {
+    return timerRuntimes_[cue.id];
+  }
+
+  // Runtimes are keyed by cue id, so anything driven off a runtime needs the
+  // reverse lookup. Linear over the show: cue counts are in the hundreds and
+  // this runs once per running timer per frame.
+  const Cue* findCueById(const std::string& cueId) const {
+    if (cueId.empty()) return nullptr;
+    for (const Deck& deck : project_.decks) {
+      for (const Cue& cue : deck.cues) {
+        if (cue.id == cueId) return &cue;
+      }
+    }
+    return nullptr;
+  }
+
+  // The timer the operator means: the LIVE one if a timer is on air, otherwise
+  // the selected one. Mid-show the live clock is almost always the intent.
+  Cue* activeTimerCue() {
+    Deck& deck = focusedDeckMutable();
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+        deck.cues[deck.activeIndex].kind == CueKind::Timer) {
+      return &deck.cues[deck.activeIndex];
+    }
+    Cue* sel = selectedCueMutable();
+    return (sel && sel->kind == CueKind::Timer) ? sel : nullptr;
+  }
+
+  // Drop runtime state for timer cues that no longer exist. Without this the
+  // map grows for the life of the session as cues are added and deleted, and a
+  // recreated cue could inherit a dead clock. Cheap: only runs when the count
+  // looks stale, and shows have tens of cues, not thousands.
+  void pruneTimerRuntimes() {
+    if (timerRuntimes_.empty()) {
+      return;
+    }
+    std::set<std::string> live;
+    for (const Deck& deck : project_.decks) {
+      for (const Cue& cue : deck.cues) {
+        if (cue.kind == CueKind::Timer) {
+          live.insert(cue.id);
+        }
+      }
+    }
+    for (auto it = timerRuntimes_.begin(); it != timerRuntimes_.end();) {
+      it = live.count(it->first) ? std::next(it) : timerRuntimes_.erase(it);
+    }
+  }
+
+  void advanceTimerRuntimes(Uint64 nowMs) {
+    for (auto& [id, rt] : timerRuntimes_) {
+      if (!rt.running) {
+        rt.lastTickMs = nowMs;
+        continue;
+      }
+      if (rt.lastTickMs == 0) {
+        rt.lastTickMs = nowMs;
+        continue;
+      }
+      // Wall-clock delta, not a fixed per-frame increment: a dropped frame or a
+      // busy render loop must not make the countdown drift slow.
+      rt.elapsedSeconds += static_cast<double>(nowMs - rt.lastTickMs) / 1000.0;
+      rt.lastTickMs = nowMs;
+      fireTimerChimes(id, rt);
+    }
+  }
+
+  // A speaker looking at the audience is not looking at the clock, which is
+  // the whole reason stage timers chime. Latched per stage so a crossing
+  // sounds ONCE, and wound back if the clock is reset or nudged forward again.
+  void fireTimerChimes(const std::string& cueId, TimerRuntime& rt) {
+    const Cue* cue = findCueById(cueId);
+    if (!cue || cue->kind != CueKind::Timer) return;
+    const TimerSettings& t = cue->timer;
+    if (t.mode == TimerMode::TimeOfDay || t.durationSeconds <= 0) return;
+    const double remaining = static_cast<double>(t.durationSeconds) - rt.elapsedSeconds;
+    int stage = 0;
+    if (remaining <= 0.0)                                    stage = 3;
+    else if (remaining <= static_cast<double>(t.redSeconds))   stage = 2;
+    else if (remaining <= static_cast<double>(t.amberSeconds)) stage = 1;
+    if (stage < rt.chimedStage) {
+      rt.chimedStage = stage;   // wound back: re-arm the chimes above it
+      return;
+    }
+    if (stage == rt.chimedStage) return;
+    rt.chimedStage = stage;
+    const bool wanted = (stage == 1 && t.chimeAtAmber)
+                     || (stage == 2 && t.chimeAtRed)
+                     || (stage == 3 && t.chimeAtZero);
+    if (!wanted) return;
+    playTimerChime(t.chimeSound, stage);
+    showLog("TIMER CHIME", cue->name + (stage == 3 ? " time up" :
+                                        stage == 2 ? " red" : " amber"));
+  }
+
+  // Edit a timer setting on the SELECTED cue (not the live one): these are
+  // authoring changes, unlike the run/reset/nudge controls which target
+  // whatever clock is on air.
+  void toggleTimerFlag(bool TimerSettings::*field, const char* label) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    bool& v = cue->timer.*field;
+    v = !v;
+    markProjectDirty();
+    triggerToast(std::string(label) + (v ? ": on" : ": off"));
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void pickTimerLogo() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) {
+      failRemoteCommand("logo: select a timer cue");
+      return;
+    }
+    // Static so the filter list outlives the call: SDL requires it stay valid
+    // until the callback fires, which is on another thread and later.
+    // Static: SDL requires the filter array stay valid until the callback
+    // fires, which happens later and on another thread.
+    static const std::vector<SDL_DialogFileFilter> kLogoFilters {
+      {"Images", "png;jpg;jpeg;bmp;gif;webp"},
+      {"All files", "*"},
+    };
+    showOpenFileDialog(kLogoFilters, /*allowMany=*/false,
+                       [this](std::vector<std::string> chosen) {
+      if (chosen.empty() || chosen.front().empty()) return;
+      Cue* c = selectedCueMutable();
+      if (!c || c->kind != CueKind::Timer) return;
+      c->timer.logoPath = chosen.front();
+      markProjectDirty();
+      triggerToast("timer logo set");
+    });
+  }
+
+  void nudgeTimerLogoSize(int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    cue->timer.logoHeightPercent = std::clamp(cue->timer.logoHeightPercent + delta, 2, 40);
+    markProjectDirty();
+  }
+
+  void clearTimerLogo() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    if (cue->timer.logoPath.empty()) return;
+    cue->timer.logoPath.clear();
+    markProjectDirty();
+    triggerToast("timer logo cleared");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void cycleTimerChimeSound() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    cue->timer.chimeSound = (cue->timer.chimeSound + 1) % 6;
+    markProjectDirty();
+    triggerToast(std::string("chime: ") + timerChimeName(cue->timer.chimeSound));
+    // PLAY it. Choosing a chime by name is guesswork; the operator needs to
+    // hear the one that will fire in the room.
+    playTimerChime(cue->timer.chimeSound, 1);
+  }
+
+  // Named swatches rather than a colour picker: a stage clock wants a handful
+  // of high-contrast choices, and cycling is faster than a picker mid-show.
+  static const std::array<std::pair<int, const char*>, 8>& timerColorSwatches() {
+    static const std::array<std::pair<int, const char*>, 8> kSwatches {{
+      {-1,       "default"},
+      {0xFFFFFF, "white"},
+      {0x00FF66, "green"},
+      {0xFFC400, "amber"},
+      {0xFF4040, "red"},
+      {0x40A0FF, "blue"},
+      {0xFF40C0, "pink"},
+      {0x000000, "black"},
+    }};
+    return kSwatches;
+  }
+
+  std::string timerColorLabel(int packed) const {
+    if (packed == kTimerBackdropTransparent) return "transparent";
+    for (const auto& s : timerColorSwatches()) {
+      if (s.first == packed) return s.second;
+    }
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "#%06X", packed & 0xFFFFFF);
+    return buf;
+  }
+
+  void cycleTimerColor(int TimerSettings::*field, const char* label) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    // The BACKDROP alone can also be nothing, so the clock can be layered over
+    // the programme. Last in its cycle, after black.
+    std::vector<std::pair<int, const char*>> sw(timerColorSwatches().begin(),
+                                                timerColorSwatches().end());
+    if (field == &TimerSettings::colorBackground) {
+      sw.push_back({kTimerBackdropTransparent, "transparent"});
+    }
+    int idx = 0;
+    for (std::size_t i = 0; i < sw.size(); ++i) {
+      if (sw[i].first == cue->timer.*field) { idx = static_cast<int>(i); break; }
+    }
+    idx = (idx + 1) % static_cast<int>(sw.size());
+    cue->timer.*field = sw[idx].first;
+    markProjectDirty();
+    triggerToast(std::string(label) + ": " + sw[idx].second);
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void adjustTimerField(int TimerSettings::*field, int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) {
+      return;
+    }
+    int& v = cue->timer.*field;
+    v = std::clamp(v + delta, 0, 24 * 3600);
+    // Thresholds must stay ordered or the colour logic silently never fires.
+    cue->timer.amberSeconds = std::min(cue->timer.amberSeconds, cue->timer.durationSeconds);
+    cue->timer.redSeconds = std::min(cue->timer.redSeconds, cue->timer.amberSeconds);
+    markProjectDirty();
+  }
+
+  void cycleTimerMode() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    cue->timer.mode = cue->timer.mode == TimerMode::Countdown ? TimerMode::CountUp
+                    : cue->timer.mode == TimerMode::CountUp   ? TimerMode::TimeOfDay
+                                                              : TimerMode::Countdown;
+    triggerToast(cue->timer.mode == TimerMode::CountUp ? "timer: count up"
+                 : cue->timer.mode == TimerMode::TimeOfDay ? "timer: time of day"
+                                                           : "timer: countdown");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // The clock's face, from anywhere on the machine. Clearing it goes back to
+  // the app's own bundled sans, which is what makes the typeface mode work
+  // before anybody has picked anything -- and keeps a show looking the same on
+  // all three platforms, the same argument that had Liberation bundled at all.
+  // The computer's fonts, read once a session (core/system_fonts.hpp).
+  const std::vector<deckboy::fonts::SystemFont>& systemFonts() {
+    if (!systemFontsRead_) {
+      systemFontsRead_ = true;
+      const auto started = SDL_GetTicks();
+      systemFonts_ = deckboy::fonts::listSystemFonts(deckboy::fonts::systemFontFolders());
+      showLog("FONTS", std::to_string(systemFonts_.size()) + " families read in " +
+                         std::to_string(SDL_GetTicks() - started) + " ms");
+    }
+    return systemFonts_;
+  }
+
+  // The family a saved path belongs to, for the inspector row; the file's
+  // name when it is not one of this computer's (a font file picked by hand,
+  // or a show from another machine).
+  std::string timerFontLabel(const std::string& path) {
+    if (path.empty()) return "Deckboy (built in)";
+    for (const auto& font : systemFonts()) {
+      if (font.path == path) return font.family;
+    }
+    return fs::path(path).filename().string();
+  }
+
+  // The font list (board H856G24w): Deckboy's own face first, the same on
+  // every machine; then every family on this computer, each drawn in itself
+  // with the clock's own digits; then a font file, for one not installed.
+  void pickTimerFont() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    static const std::string kFromFile = "\x01" "file";
+    const std::string builtIn = (Paths::dataDir() / "fonts" / "LiberationSans-Regular.ttf").string();
+    std::vector<std::pair<std::string, std::string>> choices;
+    choices.emplace_back(std::string(), "Deckboy (built in)");
+    for (const auto& font : systemFonts()) choices.emplace_back(font.path, font.family);
+    choices.emplace_back(kFromFile, "From a font file...");
+    SDL_Rect anchor {};
+    for (const auto& button : quickButtons_) {
+      if (button.action == QuickAction::TimerPickFont) anchor = button.rect;
+    }
+    const std::string cueId = cue->id;
+    openDropdown("timer.font", anchor, choices, cue->timer.fontPath, [this, cueId](const std::string& chosen) {
+      Cue* target = selectedCueMutable();
+      if (!target || target->id != cueId || target->kind != CueKind::Timer) return;
+      if (chosen == kFromFile) {
+        pickTimerFontFile();
+        return;
+      }
+      pushUndoSnapshot();
+      target->timer.fontPath = chosen;
+      // Picking a font is asking for it to be USED. Leaving the face on
+      // seven-segment would store the choice and show none of it.
+      target->timer.face = TimerFace::Typeface;
+      markProjectDirty();
+      triggerToast("timer font: " + timerFontLabel(chosen));
+    });
+    if (!dropdown_.open || dropdown_.owner != "timer.font") return;
+    dropdown_.searchHint = "type to search " + std::to_string(systemFonts().size()) + " fonts  -  End: a font file";
+    dropdown_.sample = "4:32  -0:15";
+    dropdown_.rowHeight = uiScaled(40);
+    dropdown_.maxVisibleRows = 9;
+    dropdown_.fixedWidth = uiScaled(460);
+    for (auto& option : dropdown_.options) {
+      if (option.id == kFromFile) continue;
+      option.fontPath = option.id.empty() ? builtIn : option.id;
+    }
+    rebuildDropdownFilteredIndices();
+    refreshDropdownPopoverRect();
+  }
+
+  void pickTimerFontFile() {
+    // Static, because SDL needs the filter array to outlive the callback --
+    // the trap the file-dialog notes warn about.
+    static const std::vector<SDL_DialogFileFilter> kTimerFontFilters {
+      {"Fonts", "ttf;otf;ttc;otc"},
+      {"All files", "*"},
+    };
+    showOpenFileDialog(kTimerFontFilters, /*allowMany=*/false,
+                       [this](std::vector<std::string> picked) {
+      if (picked.empty()) return;
+      Cue* target = selectedCueMutable();
+      if (!target || target->kind != CueKind::Timer) return;
+      pushUndoSnapshot();
+      target->timer.fontPath = picked.front();
+      target->timer.face = TimerFace::Typeface;
+      markProjectDirty();
+      triggerToast("timer font: " + fs::path(picked.front()).filename().string());
+    });
+  }
+
+  void cycleTimerFace() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    cue->timer.face = cue->timer.face == TimerFace::SevenSegment ? TimerFace::Blocky
+                    : cue->timer.face == TimerFace::Blocky        ? TimerFace::Typeface
+                                                                  : TimerFace::SevenSegment;
+    triggerToast(cue->timer.face == TimerFace::Blocky ? "timer face: blocky"
+                 : cue->timer.face == TimerFace::Typeface
+                     ? ("timer face: " + (cue->timer.fontPath.empty()
+                          ? std::string("typeface (the app's own)")
+                          : fs::path(cue->timer.fontPath).filename().string()))
+                     : std::string("timer face: 7-segment"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleTimerCountUp() {
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Timer) return;
+    cue->timer.countUpAfterZero = !cue->timer.countUpAfterZero;
+    triggerToast(cue->timer.countUpAfterZero ? "overtime: counts up" : "overtime: stops at 0");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void timerToggleRun() {
+    Cue* cue = activeTimerCue();
+    if (!cue) { failRemoteCommand("timer: no timer cue"); return; }
+    TimerRuntime& rt = timerRuntimeFor(*cue);
+    rt.running = !rt.running;
+    rt.lastTickMs = SDL_GetTicks();
+    triggerToast(rt.running ? "timer running" : "timer held");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void timerReset() {
+    Cue* cue = activeTimerCue();
+    if (!cue) { failRemoteCommand("timer: no timer cue"); return; }
+    TimerRuntime& rt = timerRuntimeFor(*cue);
+    rt.elapsedSeconds = 0.0;
+    rt.lastTickMs = SDL_GetTicks();
+    rt.chimedStage = 0;   // re-arm: a restarted talk must chime again
+    triggerToast("timer reset");
+    playUiSound(UiSoundEffect::Stop);
+  }
+
+  // Nudge the clock. Positive adds TIME REMAINING (so it counts elapsed DOWN),
+  // which is what an operator means by "+1 minute" -- they are giving the
+  // speaker another minute, not aging the clock.
+  void timerNudge(double seconds) {
+    Cue* cue = activeTimerCue();
+    if (!cue) { failRemoteCommand("timer: no timer cue"); return; }
+    TimerRuntime& rt = timerRuntimeFor(*cue);
+    rt.elapsedSeconds = std::max(0.0, rt.elapsedSeconds - seconds);
+    const int mins = static_cast<int>(std::abs(seconds)) / 60;
+    triggerToast(std::string(seconds >= 0 ? "+" : "-") +
+                 (mins > 0 ? std::to_string(mins) + " min" : std::to_string(static_cast<int>(std::abs(seconds))) + " sec"));
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  // Jump to a specific REMAINING time.
+  void timerSetRemaining(double remainingSeconds) {
+    Cue* cue = activeTimerCue();
+    if (!cue) { failRemoteCommand("timer: no timer cue"); return; }
+    TimerRuntime& rt = timerRuntimeFor(*cue);
+    rt.elapsedSeconds =
+      std::max(0.0, static_cast<double>(cue->timer.durationSeconds) - remainingSeconds);
+    rt.lastTickMs = SDL_GetTicks();
+    triggerToast("timer set");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void toggleSelectedDatamosh() {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      failRemoteCommand("datamosh: select a cue");
+      return;
+    }
+    if (cue->kind != CueKind::Video || cue->path.empty()) {
+      failRemoteCommand("datamosh: file-backed video cues only");
+      playUiSound(UiSoundEffect::Error);
+      return;
+    }
+    if (cue->datamoshEnabled) {
+      cue->datamoshEnabled = false;
+      triggerToast("datamosh off");
+      playUiSound(UiSoundEffect::Toggle);
+      refreshFocusedLiveCueRuntimeIfSelected();  // swaps back to the original
+      markProjectDirty();
+      return;
+    }
+
+    std::error_code ec;
+    const bool prepared =
+      !cue->moshPath.empty() && fs::exists(fs::path(cue->moshPath), ec);
+    cue->datamoshEnabled = true;
+    markProjectDirty();
+
+    if (prepared) {
+      triggerToast("DATAMOSH on");
+      playUiSound(UiSoundEffect::Toggle);
+      refreshFocusedLiveCueRuntimeIfSelected();
+      return;
+    }
+    if (datamoshPrepInFlight(cue->path)) {
+      triggerToast("datamosh: already preparing");
+      return;
+    }
+    // A long source is minutes of encoding. Say so rather than appear to hang;
+    // the operator can watch it in Settings > Encoder.
+    const int deckIndex = project_.focusedDeckIndex;
+    const int cueIndex = focusedDeck().selectedIndex;
+    queueDatamoshPrepForCue(deckIndex, cueIndex);
+    triggerToast(cue->duration > 120.0
+                   ? "DATAMOSH on - preparing (long clip, watch Encoder tab)"
+                   : "DATAMOSH on - preparing...");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+  // Change which mosh recipe this cue uses. The prepared file was encoded with
+  // the OLD recipe, so it is stale the moment the look changes: drop it and
+  // re-prepare, otherwise the label would claim EXTREME while the cue kept
+  // playing the gentle version -- a control that reads as wired but is not.
+  void cycleSelectedDatamoshLook(int delta) {
+    Cue* cue = selectedCueMutable();
+    if (!cue) {
+      failRemoteCommand("datamosh look: select a cue");
+      return;
+    }
+    if (cue->kind != CueKind::Video || cue->path.empty()) {
+      failRemoteCommand("datamosh look: file-backed video cues only");
+      playUiSound(UiSoundEffect::Error);
+      return;
+    }
+    const int previous = cue->datamoshLook;
+    int next = previous + delta;
+    while (next < 0) next += kDatamoshLookCount;
+    next %= kDatamoshLookCount;
+    if (next == previous) return;
+    cue->datamoshLook = next;
+    cue->moshPath.clear();
+    markProjectDirty();
+    playUiSound(UiSoundEffect::Toggle);
+
+    if (!cue->datamoshEnabled) {
+      // Not on yet, so nothing to re-encode: the new look is simply what the
+      // toggle will prepare when it is switched on.
+      triggerToast(std::string("datamosh look: ") + moshLookLabelFor(next));
+      return;
+    }
+    // Live cue is now playing the original again until the new prep lands.
+    refreshFocusedLiveCueRuntimeIfSelected();
+    if (datamoshPrepInFlight(cue->path)) {
+      triggerToast(std::string("datamosh look: ") + moshLookLabelFor(next) +
+                   " - already preparing");
+      return;
+    }
+    queueDatamoshPrepForCue(project_.focusedDeckIndex, focusedDeck().selectedIndex);
+    triggerToast(std::string("datamosh look: ") + moshLookLabelFor(next) +
+                 " - re-preparing...");
+  }
+
+  void toggleSelectedChromaKey() {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return cueSupportsKeying(&each);
+    });
+    if (!cue) {
+      return;
+    }
+    setSelectedChromaKeyEnabled(!cue->chromaKeyEnabled);
+  }
+
+  void adjustSelectedKeyTolerance(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsKeying(&cue)) {
+        return;
+      }
+      cue.chromaKeyTolerance = std::clamp(cue.chromaKeyTolerance + delta, 0.0f, 441.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedKeySoftness(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsKeying(&cue)) {
+        return;
+      }
+      cue.chromaKeySoftness = std::clamp(cue.chromaKeySoftness + delta, 0.0f, 200.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void editSelectedKeyColor() {
+    openInlineKeyColorEditor();
+  }
+
+  void adjustSelectedBrightness(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsColorControls(&cue)) {
+        return;
+      }
+      cue.brightness = std::clamp(cue.brightness + delta, 0.0f, 2.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedContrast(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsColorControls(&cue)) {
+        return;
+      }
+      cue.contrast = std::clamp(cue.contrast + delta, 0.0f, 2.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedSaturation(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsColorControls(&cue)) {
+        return;
+      }
+      cue.saturation = std::clamp(cue.saturation + delta, 0.0f, 2.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedHueShift(float deltaDegrees) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsColorControls(&cue)) {
+        return;
+      }
+      cue.hueShift = std::clamp(cue.hueShift + deltaDegrees, -180.0f, 180.0f);
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedScaleX(float delta) {
+    bool link = project_.geometryAspectLinked;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      float oldX = cue.outputScaleX;
+      cue.outputScaleX = std::clamp(oldX + delta, 0.25f, 4.0f);
+      if (link && oldX > 0.0001f) {
+        cue.outputScaleY = std::clamp(cue.outputScaleY * (cue.outputScaleX / oldX), 0.25f, 4.0f);
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedScaleY(float delta) {
+    bool link = project_.geometryAspectLinked;
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      float oldY = cue.outputScaleY;
+      cue.outputScaleY = std::clamp(oldY + delta, 0.25f, 4.0f);
+      if (link && oldY > 0.0001f) {
+        cue.outputScaleX = std::clamp(cue.outputScaleX * (cue.outputScaleY / oldY), 0.25f, 4.0f);
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedOffsetX(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      cue.outputOffsetX += delta;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void adjustSelectedOffsetY(float delta) {
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!cueSupportsGeometry(&cue)) {
+        return;
+      }
+      cue.outputOffsetY += delta;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void cycleSelectedScaleMode(int direction = 1) {
+    Cue* cue = firstFocusedSelectedCueMutable([&](const Cue& each) {
+      return cueSupportsGeometry(&each);
+    });
+    if (!cue) {
+      return;
+    }
+    ScaleMode next = static_cast<ScaleMode>((static_cast<int>(cue->scaleMode) + (direction < 0 ? 3 : 1)) % 4);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+      if (!cueSupportsGeometry(&each)) {
+        return;
+      }
+      each.scaleMode = next;
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    markProjectDirty();
+  }
+
+  void setSelectedSourceCueRef(const std::string& rawRef) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || !isSourceCueKind(selected->kind)) {
+      return;
+    }
+    std::string typedRef = trim(rawRef);
+    std::string selectedSourceRef = sourceCueRefFromAlias(selected->kind, typedRef);
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!isSourceCueKind(cue.kind)) {
+        return;
+      }
+      std::string sourceRef = sourceCueRefFromAlias(cue.kind, typedRef);
+      cue.path = "source://" + sourceCueTokenForKind(cue.kind) + "/" + sourceRef;
+      std::string prefix = cueKindLabel(cue.kind) + " · ";
+      if (cue.name.empty() || cue.name.rfind(prefix, 0) == 0) {
+        cue.name = prefix + sourceRef;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    if (deck.activeIndex >= 0 && deck.activeIndex == deck.selectedIndex) {
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        bool autoplay = engine->state() == TransportState::Playing;
+        Cue& activeCue = deck.cues[deck.activeIndex];
+        engine->loadCue(&activeCue, autoplay);
+      }
+    }
+    triggerToast("source: " + sourceCueRefFriendlyLabel(selected->kind, selectedSourceRef));
+    markProjectDirty();
+  }
+
+  void setSelectedSourceCueKind(CueKind nextKind) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || !isSourceCueKind(selected->kind) || !isSourceCueKind(nextKind)) {
+      return;
+    }
+    CueKind previousKind = selected->kind;
+    if (previousKind == nextKind) {
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (!isSourceCueKind(cue.kind)) {
+        return;
+      }
+      std::string currentRef = sourceCueRefFromCue(cue);
+      std::string nextRef = sourceCueRefFromAlias(nextKind,
+        currentRef.empty() ? defaultSourceRefForKind(nextKind) : currentRef);
+      std::string oldPrefix = cueKindLabel(cue.kind) + " · ";
+      cue.kind = nextKind;
+      cue.path = "source://" + sourceCueTokenForKind(nextKind) + "/" + nextRef;
+      cue.videoCodec = sourceCueTokenForKind(nextKind);
+      if (cue.name.empty() || cue.name.rfind(oldPrefix, 0) == 0) {
+        cue.name = cueKindLabel(nextKind) + " · " + nextRef;
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+    Deck& deck = focusedDeckMutable();
+    if (deck.activeIndex >= 0 && deck.activeIndex == deck.selectedIndex) {
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        bool autoplay = engine->state() == TransportState::Playing;
+        Cue& activeCue = deck.cues[deck.activeIndex];
+        engine->loadCue(&activeCue, autoplay);
+      }
+    }
+    triggerToast("source type: " + sourceCueLabelForType(sourceCueTokenForKind(nextKind)));
+    markProjectDirty();
+  }
+
+  void setSelectedBrowserCueUrl(const std::string& rawUrl) {
+    Cue* selected = selectedCueMutable();
+    if (!selected || selected->kind != CueKind::Browser) {
+      return;
+    }
+    std::string normalizedUrl = normalizeBrowserUrl(rawUrl);
+    if (normalizedUrl.empty()) {
+      triggerToast("browser url required");
+      return;
+    }
+    bool changed = false;
+    forEachFocusedSelectedCueMutable([&](Cue& cue, int) {
+      if (cue.kind != CueKind::Browser) {
+        return;
+      }
+      cue.path = normalizedUrl;
+      if (cue.name.empty() || cue.name == "Browser Cue" || cue.name.rfind("Browser:", 0) == 0) {
+        cue.name = browserCueNameForUrl(normalizedUrl);
+      }
+      changed = true;
+    });
+    if (!changed) {
+      return;
+    }
+
+    Deck& deck = focusedDeckMutable();
+    bool selectedIsActiveBrowser =
+      deck.activeIndex >= 0 &&
+      deck.activeIndex == deck.selectedIndex &&
+      deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+      deck.cues[deck.activeIndex].kind == CueKind::Browser;
+    if (selectedIsActiveBrowser) {
+      bool shouldAutoplay = false;
+      if (const DeckRuntime* runtime = focusedRuntime()) {
+        shouldAutoplay = runtime->browserCueLive;
+      }
+      if (const MediaEngine* engine = focusedMediaEngine()) {
+        shouldAutoplay = shouldAutoplay || engine->state() == TransportState::Playing;
+      }
+      takeSelected(shouldAutoplay);
+    }
+    triggerToast("browser url updated");
+    markProjectDirty();
+  }

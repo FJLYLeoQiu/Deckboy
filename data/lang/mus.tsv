@@ -1,0 +1,120 @@
+#name Mvskoke
+#english Muscogee
+#unverified
+# UNREVIEWED. No speaker of this language has read this file.
+#
+# The entries below were produced without a speaker's review, and some of
+# them are wrong in ways only a speaker would catch -- a real word used for
+# the wrong thing reads as confidently as a right one. The rest of the
+# interface is deliberately NOT filled in: a line left out falls through to
+# English, and English is better than invented technical vocabulary put into
+# the mouth of a living language.
+#
+# So this is a starting point for a speaker to correct, not a translation.
+# The picker says so, so that choosing it is an informed choice.
+#
+# To help: each line is english<TAB>translation, and tools/add_translations.py
+# checks the file every way it can be broken silently.
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	MVCVSE
+OPEN	HVLWE
+SAVE	ESYVHIKV
+SAVE AS	
+BUNDLE	
+IMPORT	ETEHOYVNKV
+SOURCE	EMPONVKV
+PATTERN	
+SETTINGS	VHAKV
+TAKE	TAKE
+STOP	TVLKE
+REBOOT	
+BLACKOUT	LVSTE
+CLEAR	HVSSE
+RECORD	HOCEFKV
+PLAYLIST	NAKCOKV
+TIMELINE	
+MEDIA	NAKETV
+TRANSPORT	
+OUTPUT	OSSETV
+PROGRAM	PROGRAM
+WARP	
+LIVE	HESAKETV
+DECODE	
+STREAM	
+System	Vhakv
+Audio	Pohetv
+Network	Etemvhakv
+Video Outputs	
+About	Momen
+Encoder	
+Screen	Hecetv
+Geometry	
+Devices	Nakcokv
+Streaming	
+APPEARANCE	HECKV
+REMOTE CONTROL	
+INTEGRATION ADAPTERS	
+DISCOVERY / NOTES	
+DISPLAY & RASTER	
+CONNECTED DISPLAYS	
+EDGE FEATHERING	
+MATTE & OVERLAY	
+AREA OF INTEREST	
+DEFAULT TRANSITION	
+NMC IN & OUT	
+OSC QUERY / FEEDBACK	
+CUE INSPECTOR	
+SELECTED CUE	
+PLAYBACK	POHKV
+COPY	HOCEFKV
+PASTE	
+RESET	MVCVSE
+Theme	Heckv
+Language	Opunvkv
+Resolution	
+Orientation	
+Toggle Fullscreen	
+IDENTIFY	
+REGION SIZE	
+POSITION	
+CENTRE	NOKOSE
+FULL	ESKERRETV
+duration	
+transition	
+fade in	
+fade out	
+ON	OMES
+OFF	TVLKE
+Stopped	TVLKES
+Playing	POHKES
+Paused	
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Hesci!
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	HESCI
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Hesci! I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me. Sofkee after.
+*shakes head* That means yes. Bravo.	*shakes head* That means ehi. Mvto.
+Wonderful! Lovely signal flow.	Mvto! Lovely signal flow.
+Yes! Have a gold star. It's a dot.	Ehi! Have a gold star. It's a dot.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson. Then sofkee.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Every show deserves one. Mvto.
+Same time next week. Bring a bigger pen. And a turducken.	Same time next week. Bring a bigger pen. And grape dumplings.
+Welcome to the show! Let's spin that wheel!	Hesci, welcome to the show! Let's spin that wheel!
+And the number is... three!	And the number is... tuccenen!
+Buzz! We have a winner!	Buzz! Ehi! We have a winner!
+Ten... nine... ooh, I do love a countdown.	Palen... ostvpaken... ooh, I do love a countdown.
+A grand day out, Grommet! Pass the crackers.	A grand day out, Grommet! Pass the frybread.
+Thank you! I'm here all week! The chicken is here forever.	Mvto! I'm here all week! The chicken is here forever.
+Hi! I'm the one doing all of this, by the way.	Hesci! I'm the one doing all of this, by the way.
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Now go and fix real bugs. Mvto.
+# --- end of tutorials ---

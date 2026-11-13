@@ -1,0 +1,2505 @@
+// ============================================================================
+// app_input.ipp — Keyboard and mouse input handling for the App class.
+//
+// Processes SDL events and dispatches them to the appropriate handlers:
+//
+//   Keyboard:
+//     - Global hotkeys (Space=play/stop, Esc=stop, Enter=go-next, etc.)
+//     - Modifier-aware shortcuts (Ctrl+S=save, Ctrl+Z=undo, Ctrl+K=quick action)
+//     - Settings modal keyboard navigation
+//     - Inline text editor input forwarding
+//
+//   Mouse:
+//     - Timeline scrubbing (seekFocusedTimelineFraction)
+//     - Button click dispatch (transport controls, cue list, settings)
+//     - Drag operations (panel resize, slider adjustment)
+//     - Right-click context menus
+//
+//   Other:
+//     - Window focus/resize events
+//     - Drag-and-drop file import
+//     - SDL_EVENT_QUIT handling with unsaved-changes confirmation
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Seek the focused deck's timeline to a fractional position (0.0–1.0).
+  // Handles in/out point zoom: when trim points are set, the fraction maps
+  // to the visible (trimmed) range, not the full media duration.
+  bool seekFocusedTimelineFraction(double clampedFraction, bool audioScrub = false) {
+    MediaEngine* engine = focusedMediaEngine();
+    if (!engine) {
+      return false;
+    }
+    if (const Cue* cue = activeCuePtr()) {
+      if ((cue->kind == CueKind::Video || cue->kind == CueKind::Audio) && cue->duration > 0.0) {
+        double cueIn = std::clamp(cue->inPointSeconds, 0.0, cue->duration);
+        double cueOut = cue->outPointSeconds > 0.0
+          ? std::clamp(cue->outPointSeconds, cueIn, cue->duration)
+          : cue->duration;
+        bool zoomedToTrim = cueIn > 0.001 || cueOut < cue->duration - 0.001;
+        double visibleDuration = zoomedToTrim ? std::max(0.01, cueOut - cueIn) : cue->duration;
+        double mediaTargetSeconds = zoomedToTrim
+          ? cueIn + (visibleDuration * clampedFraction)
+          : cue->duration * clampedFraction;
+        double relativeSeekSeconds = std::clamp(mediaTargetSeconds - cueIn, 0.0, std::max(0.0, engine->duration()));
+        engine->seek(relativeSeekSeconds);
+        if (audioScrub) {
+          if (auto* runtime = focusedRuntime(); runtime && runtime->audioStream) {
+            deckboySetAudioPaused(runtime->audioStream, false);
+          }
+        }
+        return true;
+      }
+    }
+    if (engine->duration() <= 0.0) {
+      return false;
+    }
+    engine->seek(engine->duration() * clampedFraction);
+    if (audioScrub) {
+      if (auto* runtime = focusedRuntime(); runtime && runtime->audioStream) {
+        deckboySetAudioPaused(runtime->audioStream, false);
+      }
+    }
+    return true;
+  }
+
+  bool seekFocusedTimelineAtX(int x, bool audioScrub = false) {
+    if (progressBarRect_.w <= 0) {
+      return false;
+    }
+    double fraction = static_cast<double>(x - progressBarRect_.x) / static_cast<double>(progressBarRect_.w);
+    return seekFocusedTimelineFraction(std::clamp(fraction, 0.0, 1.0), audioScrub);
+  }
+
+  void handleMouseDown(int x, int y, Uint8 button) {
+    tabletopCodeIndex_ = 0;
+    // Before anything else: the middle button has its own meaning now, and must
+    // never fall through to the left-button paths below.
+    if (beginAutoScrollIfMiddle(x, y, button)) {
+      return;
+    }
+    // Any other press cancels a latched autoscroll.
+    if (autoScrollDeck_ >= 0) {
+      endAutoScroll();
+    }
+
+    if (showSplashOverlay_) {
+      showSplashOverlay_ = false;
+      return;
+    }
+    // The QR overlay covers the window; any click puts it away.
+    if (webMonitorQrOpen_) {
+      webMonitorQrOpen_ = false;
+      return;
+    }
+    // The code editor is modal over everything but the splash: it covers the
+    // window, so a click that reached the controls underneath would act on
+    // something the operator cannot see.
+    if (handleCodeEditorClick(x, y)) {
+      return;
+    }
+    // Bug Swat's handheld takes every click while it is up.
+    if (handleBugSwatClick(x, y)) {
+      return;
+    }
+    if (handleLessonsListClick(x, y)) {
+      return;
+    }
+    // The tour's card buttons; every other click goes on to the desk.
+    if (handleTutorialClick(x, y)) {
+      return;
+    }
+    if (showStartupDialog_) {
+      bool hasSavedFile = startupProjectAvailable();
+      if (pointInRect(x, y, startupNewBtn_)) {
+        startNewShow(false);
+        showStartupDialog_ = false;
+      } else if (pointInRect(x, y, startupLoadBtn_) && hasSavedFile) {
+        // Open previous show file already loaded from startup path.
+        showStartupDialog_ = false;
+      } else if (pointInRect(x, y, startupOpenSavedBtn_)) {
+        openProjectFromPicker();
+        showStartupDialog_ = false;
+      } else if (pointInRect(x, y, startupExamplesBtn_)) {
+        openExampleShows();
+      } else if (pointInRect(x, y, startupLearnBtn_)) {
+        beginTutorial();
+      } else if (pointInRect(x, y, startupUpdateRect_)) {
+        // Newer: go and get it (Settings > System > Updates, over the show
+        // already open). Otherwise check now -- the operator asked to.
+        bool newer = false;
+        {
+          std::lock_guard<std::mutex> lock(updateMutex_);
+          newer = !updateFound_.version.empty();
+        }
+        if (newer) {
+          showStartupDialog_ = false;
+          settingsOpen_ = true;
+          settingsTab_ = 0;
+        } else {
+          checkForUpdateAsync(/*quiet=*/false);
+        }
+      } else {
+        // The recent rows. Read the list again rather than caching it beside
+        // the rects: the rects were built during the last render and this is
+        // the click that follows, so re-reading is the cheap way to be sure
+        // the row that was drawn is the file that opens.
+        const std::vector<fs::path> recents = startupRecentShows();
+        for (std::size_t i = 0; i < startupRecentBtns_.size(); ++i) {
+          if (pointInRect(x, y, startupRecentBtns_[i]) && i < recents.size()) {
+            openProjectFromPath(recents[i]);
+            showStartupDialog_ = false;
+            break;
+          }
+        }
+      }
+      return;
+    }
+    if (confirmQuit_) {
+      if (pointInRect(x, y, quitYesBtn_)) {
+        gShouldQuit.store(true);
+      } else {
+        confirmQuit_ = false;
+      }
+      return;
+    }
+    if (depPrompt_.active) {
+      // Recovery changes which copy the next autosave may replace. Require a
+      // button (or Enter/Escape), not an incidental click on the backdrop.
+      if (projectRecoveryPromptShown_ &&
+          (button != SDL_BUTTON_LEFT ||
+           (!pointInRect(x, y, depPrompt_.ctaRect) &&
+            !pointInRect(x, y, depPrompt_.closeRect)))) return;
+      // CTA opens the vendor's download page. Either way, dismiss the prompt
+      // so the operator can return to whatever they were doing.
+      if (pointInRect(x, y, depPrompt_.ctaRect)) {
+        if (depPrompt_.onCta) {
+          auto action = depPrompt_.onCta;   // copy: the action clears the prompt
+          depPrompt_ = DependencyPromptState{};
+          action();
+          return;
+        }
+        deckboy::platform::openExternalUrl(depPrompt_.url);
+      }
+      dismissDependencyPrompt();
+      return;
+    }
+
+    if (handleInlineTextEditorMouseDown(x, y)) {
+      return;
+    }
+
+    if (handleDropdownMouseDown(x, y)) {
+      return;
+    }
+    if (handleColourPickerMouseDown(x, y)) {
+      return;
+    }
+    if (handleRatDadMouseDown(x, y)) {
+      return;
+    }
+    if (handleKeyColorPickerMouseDown(x, y)) {
+      return;
+    }
+    // The MIDI and OSC monitor is a page over the desk too: its own buttons
+    // and rows, and a click away puts it down.
+    if (inputMonitorOpen_) {
+      handleInputMonitorClick(x, y);
+      return;
+    }
+    // THE SHORTCUTS SHEET IS A PAGE OVER THE DESK: a click puts it away and
+    // goes no further. It did not block the mouse at all, so a click on the
+    // sheet fired TAKE, BLACK or a cue row hidden underneath.
+    if (shortcutsOverlayOpen_) {
+      shortcutsOverlayOpen_ = false;
+      return;
+    }
+    // THE SETTINGS MODAL TAKES EVERY CLICK, and is tested above everything
+    // that lives under it. It sat below the live-browser click-forward, the
+    // splitters and the shuffle button, so a click on a setting over the
+    // monitor clicked the on-air web page instead.
+    if (settingsOpen_) {
+      // A patch crosspoint is pressed, not clicked: drag sets it, a press that
+      // never moves cycles it on release (beginPatchScrub / endPatchScrub).
+      if (beginPatchScrub(x, y)) {
+        return;
+      }
+      if (beginMotionZoneDrag(x, y)) {
+        return;
+      }
+      handleSettingsClick(x, y);
+      return;
+    }
+
+    // THE DASHBOARD IS MODAL. Tested before anything underneath it, and a
+    // click anywhere inside its panel is consumed either way -- a modal that
+    // lets clicks through to the controls it covers fires the wrong thing.
+    if (dashboardOverlayOpen_) {
+      if (pointInRect(x, y, dashCloseRect_)) {
+        dashboardOverlayOpen_ = false;
+        return;
+      }
+      // LAST DRAWN WINS. A tile's edit, colour and delete controls sit INSIDE
+      // the tile and are pushed after it, so a first-match walk handed every
+      // press on them to the tile underneath: the pencil and the x fired the
+      // button instead, and a button could be neither changed nor removed.
+      for (auto it = dashButtons_.rbegin(); it != dashButtons_.rend(); ++it) {
+        const auto& db = *it;
+        if (pointInRect(x, y, db.rect)) {
+          lastInlineEditorAnchorRect_ = db.rect;
+          dispatchQuickAction(db.action, db.param);
+          return;
+        }
+      }
+      if (pointInRect(x, y, dashModalRect_)) {
+        return;
+      }
+      // Outside the panel: close it, the way clicking off a modal should.
+      dashboardOverlayOpen_ = false;
+      return;
+    }
+
+    // CLICKING THE PREVIEW CLICKS THE PAGE.
+    //
+    // Reported as "there is no way to click through a prompt on a page" --
+    // cookie walls, consent dialogs, anything modal the site puts up. The
+    // click is forwarded as a fraction of the frame, so it lands where the
+    // operator aimed whatever the raster is.
+    //
+    // Gated on a browser cue actually being live, so the monitor keeps every
+    // other behaviour it has; and warp edit mode wins, because dragging a
+    // corner is a deliberate mode you are already in.
+    if (!warpEditMode_ && warpMonitorInner_.w > 0 &&
+        pointInRect(x, y, warpMonitorInner_) &&
+        activeCueIsBrowser(project_.focusedDeckIndex)) {
+      if (auto* page = liveBrowserRenderer()) {
+        const double fx = static_cast<double>(x - warpMonitorInner_.x)
+                        / std::max(1, warpMonitorInner_.w);
+        const double fy = static_cast<double>(y - warpMonitorInner_.y)
+                        / std::max(1, warpMonitorInner_.h);
+        // Same rule as the wheel: only swallow the click if it was delivered.
+        if (page->clickAtFraction(std::clamp(fx, 0.0, 1.0), std::clamp(fy, 0.0, 1.0))) {
+          return;
+        }
+      }
+    }
+
+    // POKING THE MASCOT -- the face itself, not the monitor it floats in.
+    //
+    // Hit tested against where the renderer last drew it, because it hovers and
+    // rocks and drifts; anything else would count a click a foot away as a
+    // poke, and having to actually hit the thing is most of the fun. It does
+    // not return: the click still does whatever it would have done, because an
+    // easter egg must not take anything away.
+    if (!mascotHidden_ && !warpEditMode_ && mascotFaceRadius_ > 0 &&
+        mascotFleeStartedMs_ == 0) {
+      const double dx = static_cast<double>(x - mascotFaceCx_);
+      const double dy = static_cast<double>(y - mascotFaceCy_);
+      const double r = static_cast<double>(mascotFaceRadius_);
+      if (dx * dx + dy * dy <= r * r) {
+        const Uint64 now = SDL_GetTicks();
+        // IN A ROW means in a row: a poke long after the last one starts over,
+        // so somebody who clicks the monitor twice a day never triggers it.
+        if (mascotLastPokeMs_ != 0 && now - mascotLastPokeMs_ > 4000) {
+          mascotPokes_ = 0;
+        }
+        mascotLastPokeMs_ = now;
+        // Normalised against the face's own size, so the reaction is the same
+        // whether the monitor is a postage stamp or half a 4K screen.
+        mascotPokeDx_ = dx / r;
+        mascotPokeDy_ = dy / r;
+        mascotPokeAtMs_ = now;
+        ++mascotPokes_;
+        if (mascotPokes_ >= kMascotFleeAfterPokes) {
+          mascotFleeStartedMs_ = now;
+        }
+      }
+    }
+
+    // The presenter arranger covers the whole program monitor while it is up,
+    // so it is asked first -- otherwise a drag inside it would reach whatever
+    // the monitor normally does with a click.
+    if (presenterLayoutBtnRect_.w > 0 && pointInRect(x, y, presenterLayoutBtnRect_)) {
+      presenterLayoutEditMode_ = !presenterLayoutEditMode_;
+      if (presenterLayoutEditMode_) {
+        warpEditMode_ = false;      // they share the monitor; only one at a time
+      }
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (presenterLayoutEditMode_ && beginPresenterLayoutDrag(x, y)) {
+      return;
+    }
+    if (playlistSplitterRect_.w > 0 && pointInRect(x, y, playlistSplitterRect_)) {
+      layoutDragMode_ = LayoutDragMode::Playlist;
+      return;
+    }
+    if (inspectorSplitterRect_.w > 0 && pointInRect(x, y, inspectorSplitterRect_)) {
+      layoutDragMode_ = LayoutDragMode::Inspector;
+      return;
+    }
+    if (timelineSplitterRect_.w > 0 && pointInRect(x, y, timelineSplitterRect_)) {
+      layoutDragMode_ = LayoutDragMode::Timeline;
+      return;
+    }
+
+    // Shuffle footer button
+    if (shuffleBtnRect_.w > 0 && pointInRect(x, y, shuffleBtnRect_)) {
+      Deck& d = focusedDeckMutable();
+      d.shuffle = !d.shuffle;
+      triggerToast(d.shuffle ? "shuffle on" : "shuffle off");
+      playUiSound(d.shuffle ? UiSoundEffect::Shuffle : UiSoundEffect::Toggle);
+      markProjectDirty();
+      return;
+    }
+
+
+    // The cue-inspector dropdown triggers live inside the inspector's SCROLLING
+    // region, and their rects are recorded in unclipped screen coordinates. Once
+    // a row scrolls past the viewport its rect sits over whatever is underneath
+    // — for a tall selection that is the bottom bar, so clicking SETTINGS opened
+    // the transition-style dropdown instead and the modal could never be reached.
+    // Gate them on the viewport exactly as quickButtons_/valueScrubZones_ do.
+    auto hitCueInspector = [&](const SDL_Rect& rect) {
+      return pointInRect(x, y, rect) && pointInRect(x, y, cueSettingsViewportRect_);
+    };
+
+    if (hitCueInspector(cueSourceTypeDropdownRect_)) {
+      const Cue* cue = selectedCuePtr();
+      if (cue && isSourceCueKind(cue->kind)) {
+        openDropdown(
+          "cue.source_type",
+          cueSourceTypeDropdownRect_,
+          sourceCueTypeChoices(),
+          sourceCueTokenForKind(cue->kind),
+          [this](const std::string& nextType) {
+            setSelectedSourceCueKind(sourceCueKindFromToken(nextType));
+          });
+        return;
+      }
+      if (cue && cue->kind == CueKind::Pip) {
+        std::string currentType = pipSourceTypeTokenFromCue(*cue);
+        if (currentType == "legacy") {
+          currentType = "media";
+        }
+        openDropdown(
+          "cue.pip_source_type",
+          cueSourceTypeDropdownRect_,
+          pipSourceTypeChoices(),
+          currentType,
+          [this](const std::string& nextType) {
+            setSelectedPipSourceType(nextType);
+          });
+        return;
+      }
+    }
+    if (hitCueInspector(cueWindowSourceDropdownRect_)) {
+      const Cue* cue = selectedCuePtr();
+      if (cue && cue->kind == CueKind::WindowSource) {
+        // Enumerate available windows and build dropdown choices
+        auto windows = deckboy::platform::listCaptureWindows();
+        std::vector<std::pair<std::string, std::string>> choices;
+        for (const auto& w : windows) {
+          choices.push_back({w.id, w.displayName});
+        }
+        // Determine currently selected source ref for highlighting
+        std::string currentRef = sourceCueRefFromCue(*cue);
+        if (currentRef.empty()) currentRef = defaultSourceRefForKind(cue->kind);
+        // Map active-window to desktop for dropdown matching (closest equivalent)
+        if (currentRef == "active-window") currentRef = "desktop";
+        openDropdown(
+          "cue.window_source",
+          cueWindowSourceDropdownRect_,
+          choices,
+          currentRef,
+          [this](const std::string& selectedId) {
+            setSelectedSourceCueRef(selectedId);
+          });
+        return;
+      }
+    }
+    if (hitCueInspector(cuePatternTypeDropdownRect_)) {
+      const Cue* cue = selectedCuePtr();
+      if (cue && cue->kind == CueKind::Pattern) {
+        openDropdown(
+          "cue.pattern",
+          cuePatternTypeDropdownRect_,
+          patternPickerTypes(),  // base types (+ Terrarium once unlocked) — motion is the row toggle's job
+          normalizePatternTypeId(cue->path),
+          [this](const std::string& nextType) {
+            applyPatternTypeToSelectedCue(nextType, true);
+          });
+        return;
+      }
+    }
+    if (hitCueInspector(cueTransitionStyleDropdownRect_)) {
+      const Cue* cue = selectedCuePtr();
+      std::string currentStyle = cue
+        ? (cue->cueTransitionStyle.empty() ? focusedDeck().transitionStyle : cue->cueTransitionStyle)
+        : focusedDeck().transitionStyle;
+      openDropdown(
+        "cue.transition_style",
+        cueTransitionStyleDropdownRect_,
+        transitionStyleChoices(),
+        toLower(trim(currentStyle)),
+        [this](const std::string& nextStyle) {
+          setSelectedCueTransitionStyle(nextStyle);
+        });
+      return;
+    }
+    // THE MONITORS WINDOW'S BUTTONS ARE NOT TESTED HERE. outputMenuButtons_ is
+    // filled only by the Monitors window, in ITS coordinates, and is handled by
+    // handleMonitorsMouseDown. Testing it in the control window made a click on
+    // a cue row or TAKE land on whichever monitor tile shared its x,y -- it was
+    // swallowed, or disarmed an output if it fell on that tile's OFF.
+    for (const auto& hit : cueRowActionHits_) {
+      if (!hit.enabled || !pointInRect(x, y, hit.rect)) {
+        continue;
+      }
+      setFocusedDeckIndex(hit.deckIndex);
+      Deck& hitDeck = project_.decks[hit.deckIndex];
+      bool inSelection = (hitDeck.selectedIndex == hit.cueIndex) ||
+        std::find(hitDeck.selectedIndices.begin(), hitDeck.selectedIndices.end(), hit.cueIndex)
+          != hitDeck.selectedIndices.end();
+      if (inSelection) {
+        // Row toggle on a multi-selected cue applies to the whole selection;
+        // the clicked cue drives the on/off direction.
+        hitDeck.selectedIndex = hit.cueIndex;
+      } else {
+        selectCueInDeck(hit.deckIndex, hit.cueIndex, false, false);
+      }
+      dispatchQuickAction(hit.action);
+      return;
+    }
+    if (multiviewBtnRect_.w > 0 && pointInRect(x, y, multiviewBtnRect_)) {
+      dispatchQuickAction(QuickAction::MultiviewToggle);
+      return;
+    }
+    if (outputBadgeRect_.w > 0 && pointInRect(x, y, outputBadgeRect_)) {
+      handleOutputBadgeClick();
+      return;
+    }
+
+    // ── THE MULTIVIEW ───────────────────────────────────────────────────
+    //
+    // The fader first: it sits inside its tile, and testing the tile first
+    // would mean a press on the fader only ever focused the deck.
+    for (std::size_t i = 0; i < multiviewFaderRects_.size(); ++i) {
+      const SDL_Rect& rail = multiviewFaderRects_[i];
+      if (rail.w <= 0 || !pointInRect(x, y, rail)) {
+        continue;
+      }
+      const int deckIndex = multiviewTileDecks_[i];
+      if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+        continue;
+      }
+      const bool altHeld = (SDL_GetModState() & SDL_KMOD_ALT) != 0;
+      float value = static_cast<float>(faderValueFromX(x, rail));
+      if (altHeld) {
+        value = value >= 0.5f ? 1.0f : 0.0f;
+      }
+      setFocusedDeckIndex(deckIndex);
+      deckOpacityDragIndex_ = deckIndex;
+      deckOpacityDragRail_ = rail;
+      deckOpacityGrabX_ = x;
+      deckOpacityGrabValue_ = project_.decks[deckIndex].playlistOpacity;
+      // Alt snaps to off/full, deliberately; a plain press takes hold of the
+      // fader and moves nothing until it is dragged.
+      if (altHeld) {
+        setDeckPlaylistOpacity(deckIndex, value, true);
+        deckOpacityGrabValue_ = value;
+      }
+      return;
+    }
+    // A window's "..." chip opens its menu, whatever the window shows.
+    // Chip i belongs to window i: the add tile, which has none, comes last.
+    for (std::size_t i = 0; i < multiviewChipRects_.size(); ++i) {
+      if (multiviewChipRects_[i].w > 0 && pointInRect(x, y, multiviewChipRects_[i])) {
+        openMultiviewTileMenu(static_cast<int>(i), x, y);
+        return;
+      }
+    }
+    for (std::size_t i = 0; i < multiviewTileRects_.size(); ++i) {
+      if (!pointInRect(x, y, multiviewTileRects_[i])) {
+        continue;
+      }
+      const int deckIndex = multiviewTileDecks_[i];
+      if (deckIndex == -3) {
+        // The + tile. It used to add a PLAYLIST, which is a different thing
+        // entirely -- the multiview is where you arrange windows, and adding
+        // a playlist from it created a window you did not ask for as a side
+        // effect. It adds a window now, empty, for you to assign.
+        if (project_.multiviewTiles.empty()) {
+          project_.multiviewTiles = multiviewTilePlan();
+        }
+        if (static_cast<int>(project_.multiviewTiles.size()) < kMaxMultiviewTiles) {
+          MultiviewTile fresh;
+          fresh.source = "";
+          project_.multiviewTiles.push_back(fresh);
+          markProjectDirty();
+          playUiSound(UiSoundEffect::Navigate);
+        }
+        return;
+      }
+      // FOCUS WITH THE LEFT BUTTON, ARRANGE WITH THE RIGHT -- or with a
+      // click on a window that has nothing in it, since focusing an empty
+      // window is not an action anybody wants.
+      if (deckIndex >= 0 && deckIndex < static_cast<int>(project_.decks.size())) {
+        setFocusedDeckIndex(deckIndex);
+        playUiSound(UiSoundEffect::Navigate);
+      } else {
+        openMultiviewTileMenu(static_cast<int>(i), x, y);
+      }
+      return;
+    }
+
+    if (deckAddTabRect_.w > 0 && pointInRect(x, y, deckAddTabRect_)) {
+      addDeck();
+      return;
+    }
+
+    // THE - BESIDE IT. Armed, then done: the first press turns it red and
+    // says so, the second inside four seconds removes the focused playlist.
+    // It discards that playlist's cues and stops playback, and it sits one
+    // press away from the +, which is exactly the mis-tap worth a second
+    // press to prevent.
+    //
+    // The renderer had drawn both the armed and unarmed states since the
+    // button was added, and `deckRemoveArmedIndex_` was read there every
+    // frame -- but NOTHING ever read this rect or set that index, so the
+    // button was a picture of a control. Pressing it did nothing at all.
+    if (deckRemoveTabRect_.w > 0 && pointInRect(x, y, deckRemoveTabRect_)) {
+      const int victim = project_.focusedDeckIndex;
+      if (deckRemoveArmedIndex_ == victim &&
+          animationNow_ - deckRemoveArmedAtMs_ <= 4000) {
+        deckRemoveArmedIndex_ = -1;
+        removeDeck(victim);
+      } else {
+        // THE WARNING NAMES THE DECK AND WHAT IS IN IT, and its tab turns red
+        // with the button. With two playlists side by side the focused one is
+        // whichever was last touched, not whichever the operator is looking
+        // at -- so "press - again" alone let a 2000-cue deck go when the
+        // nearly empty one beside it was meant.
+        deckRemoveArmedIndex_ = victim;
+        deckRemoveArmedAtMs_ = animationNow_;
+        playUiSound(UiSoundEffect::Navigate);
+        const std::size_t cues = project_.decks[victim].cues.size();
+        triggerToast("press - again to remove " + std::to_string(victim + 1) + " " +
+                     deckLabel(victim) + " (" + std::to_string(cues) +
+                     (cues == 1 ? " cue)" : " cues)"));
+      }
+      return;
+    }
+
+    // THE PLAYLIST TABS, above the column loop -- the tabs sit inside the
+    // playlist area, and that loop claims every press landing in a column.
+    for (int di = 0; di < static_cast<int>(deckTabRects_.size()); ++di) {
+      if (deckTabRects_[di].w > 0 && pointInRect(x, y, deckTabRects_[di])) {
+        setFocusedDeckIndex(di);
+        playUiSound(UiSoundEffect::Navigate);
+        return;
+      }
+    }
+
+    // THE ROUTING CHIP, and like the scrollbar below it this has to be tested
+    // ABOVE the deck-column loop: that loop claims every press landing in a
+    // column and returns on all of them, and the header is inside the column.
+    for (int di = 0; di < static_cast<int>(deckRoutingChipRects_.size()); ++di) {
+      if (deckRoutingChipRects_[di].w > 0 && pointInRect(x, y, deckRoutingChipRects_[di])) {
+        setFocusedDeckIndex(di);
+        openPlaylistRoutingMenu(di, x, y);
+        return;
+      }
+    }
+
+    // THE PLAYLIST'S SCROLLBAR, and it has to be HERE -- above the deck column
+    // loop below, not merely above the cue rows inside it.
+    //
+    // The rail is drawn over the right edge of the list, so it is inside the
+    // deck column. That loop handles every click that lands in a column and
+    // returns on all of them, so this test sat 200 lines below code that could
+    // never fall through to it: pressing the rail selected whatever cue was
+    // underneath and the list did not move. The target was widened once to fix
+    // "I cannot click the playlist scrollbar" and that was never the problem --
+    // the hit test was unreachable, not too small.
+    //
+    // Only claims the press when the list can actually scroll; a rail with
+    // nothing to scroll is zeroed by the renderer, so short decks are
+    // unaffected and the rows keep the whole width.
+    for (int di = 0; di < static_cast<int>(deckListScrollRails_.size()); ++di) {
+      const int scrollMax = (di < static_cast<int>(deckScrollMax_.size()))
+        ? deckScrollMax_[di] : 0;
+      if (deckListScrollRails_[di].w > 0 && scrollMax > 0 &&
+          pointInRect(x, y, deckListScrollRails_[di])) {
+        setFocusedDeckIndex(di);
+        deckListScrollDragDeck_ = di;
+        scrollDeckListToPointer(di, y);
+        return;
+      }
+    }
+
+    // >LIVE, ABOVE THE COLUMN LOOP for the same reason as the scrollbar: it
+    // sits in the playlist header, which is inside the column, and that loop
+    // returns on every press it sees. Tested below it, the button selected
+    // nothing and scrolled nowhere -- "hitting the live button does not
+    // select the active cue and navigate to it".
+    if (playlistJumpBtnRect_.w > 0 && pointInRect(x, y, playlistJumpBtnRect_)) {
+      jumpToCurrentCue();
+      return;
+    }
+
+    for (int deckIndex = 0; deckIndex < static_cast<int>(deckColumnRects_.size()); ++deckIndex) {
+      if (!pointInRect(x, y, deckColumnRects_[deckIndex])) {
+        continue;
+      }
+      setFocusedDeckIndex(deckIndex);
+      if (deckIndex < static_cast<int>(deckOpacityFaderRects_.size()) &&
+          pointInRect(x, y, deckOpacityFaderRects_[deckIndex]) &&
+          deckOpacityFaderRects_[deckIndex].w > 0) {
+        bool altHeld = (SDL_GetModState() & SDL_KMOD_ALT) != 0;
+        const SDL_Rect& rail = deckOpacityFaderRects_[deckIndex];
+        float value = static_cast<float>(faderValueFromX(x, rail));
+        if (altHeld) {
+          value = value >= 0.5f ? 1.0f : 0.0f;
+        }
+        // Held, so the fader can be TRIMMED rather than only placed. It was
+        // click-only: every adjustment meant guessing a pixel and clicking
+        // again, with no way to slide up to the value you wanted.
+        deckOpacityDragIndex_ = deckIndex;
+        deckOpacityDragRail_ = rail;
+        deckOpacityGrabX_ = x;
+        deckOpacityGrabValue_ = project_.decks[deckIndex].playlistOpacity;
+        // GRABBED, NOT JUMPED TO: a click on a layer's fader used to set it to
+        // wherever the pointer landed, so a click near the left end made the
+        // whole layer vanish. Alt still snaps to off/full on purpose.
+        if (altHeld) {
+          setDeckPlaylistOpacity(deckIndex, value, true);
+          deckOpacityGrabValue_ = value;
+        }
+        return;
+      }
+      Deck& deck = project_.decks[deckIndex];
+      const SDL_Rect& primaryFrame = deckListClipRects_[deckIndex];
+      SDL_Rect primaryClip {primaryFrame.x + 8, primaryFrame.y + 30, primaryFrame.w - 16, primaryFrame.h - 38};
+      const SDL_Rect& overlayFrame = deckOverlayClipRects_[deckIndex];
+      SDL_Rect overlayClip {overlayFrame.x + 8, overlayFrame.y + 42, overlayFrame.w - 16, overlayFrame.h - 50};
+      if (pointInRect(x, y, overlayClip)) {
+        int overlayY = overlayClip.y - deckOverlayScrolls_[deckIndex];
+        for (int cueIndex : cueIndicesForOverlayRole(deck, true)) {
+          SDL_Rect row {overlayClip.x, overlayY, overlayClip.w, kRowHeight};
+          if (pointInRect(x, y, row)) {
+            selectCueInDeck(deckIndex, cueIndex, false, false);
+            drag_.active = false;
+            drag_.deckIndex = deckIndex;
+            drag_.cueIndex = -1;
+            return;
+          }
+          overlayY += kRowHeight + 8;
+        }
+        return;
+      }
+      if (!pointInRect(x, y, primaryClip)) {
+        return;
+      }
+      int listY = primaryClip.y - deckScrolls_[deckIndex];
+      for (int cueIndex : cueIndicesForOverlayRole(deck, false)) {
+        SDL_Rect row {primaryClip.x, listY, primaryClip.w, kRowHeight};
+        if (pointInRect(x, y, row)) {
+          bool shiftHeld = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+          bool ctrlHeld = deckboyShortcutHeld(SDL_GetModState());
+          selectCueInDeck(deckIndex, cueIndex, shiftHeld, ctrlHeld);
+          drag_.active = true;
+          drag_.deckIndex = deckIndex;
+          drag_.cueIndex = cueIndex;
+          drag_.pressX = x;
+          drag_.pressY = y;
+          drag_.moving = false;
+          return;
+        }
+        listY += kRowHeight + 8;
+      }
+      return;
+    }
+    if (pointInRect(x, y, fileNewBtnRect_)) {
+      requestNewShow(true);
+      return;
+    }
+    if (pointInRect(x, y, fileOpenBtnRect_)) {
+      openProjectFromPicker();
+      return;
+    }
+    if (pointInRect(x, y, fileSaveBtnRect_)) {
+      saveProjectInPlace();
+      return;
+    }
+    if (pointInRect(x, y, fileBundleBtnRect_)) {
+      exportProjectBundleFromPicker();
+      return;
+    }
+    if (fileCheckBtnRect_.w > 0 && pointInRect(x, y, fileCheckBtnRect_)) {
+      openShowProblemList();
+      return;
+    }
+    if (fileRelinkBtnRect_.w > 0 && pointInRect(x, y, fileRelinkBtnRect_)) {
+      // Re-check first: if the drive came back on its own, clear the state
+      // without making the operator pick a folder.
+      if (scanProjectMediaPresence() == 0) {
+        triggerToast("media found - nothing to relink");
+      } else {
+        relinkMediaFromPicker();
+      }
+      return;
+    }
+    if (pointInRect(x, y, fileSaveAsBtnRect_)) {
+      saveProjectAsFromPicker();
+      return;
+    }
+    if (pointInRect(x, y, deckSidebarToggleRect_)) {
+      // Sidebar is fixed-visible; keep click handler as a no-op safety.
+      return;
+    }
+    // Master cue sidebar buttons / program hits / tracker cells / sidebar rows removed
+    // Settings gear button
+    if (pointInRect(x, y, settingsGearRect_)) {
+      settingsOpen_ = !settingsOpen_;
+      uiWatchdogPopupEvent("settings_modal", settingsOpen_);
+      return;
+    }
+    // BLK (blackout) button
+    if (pointInRect(x, y, blackoutBtnRect_)) {
+      masterDimmerTarget_ = (masterDimmerTarget_ < 0.5) ? 1.0 : 0.0;
+      triggerToast(masterDimmerTarget_ < 0.5 ? "blackout ON" : "blackout off");
+      return;
+    }
+    if (pointInRect(x, y, deckLoopBtnRect_)) {
+      togglePlaylistLoop();
+      return;
+    }
+    if (pointInRect(x, y, deckShuffleBtnRect_)) {
+      toggleShuffle();
+      return;
+    }
+    if (pointInRect(x, y, fullscreenBtnRect_)) {
+      toggleOutputFullscreen();
+      return;
+    }
+    // The monitor's view switch, and the scopes drawn over the monitor.
+    if (scopesViewBtnRect_.w > 0 && pointInRect(x, y, scopesViewBtnRect_)) {
+      dispatchQuickAction(QuickAction::ScopesCycleView);
+      return;
+    }
+    if (handleScopesClick(x, y)) {
+      return;
+    }
+    if (drawEditBtnRect_.w > 0 && pointInRect(x, y, drawEditBtnRect_)) {
+      openDrawEditor(!drawEditor_.open);
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (motionLampRect_.w > 0 && pointInRect(x, y, motionLampRect_)) {
+      debugOpenSettings(1);   // the Audio tab, where MOTION CONTROL is
+      playUiSound(UiSoundEffect::Navigate);
+      return;
+    }
+    if (maskEditBtnRect_.w > 0 && pointInRect(x, y, maskEditBtnRect_)) {
+      openMaskEditor(!maskEditor_.open);
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    // Warp editor buttons
+    if (warpEditBtnRect_.w > 0 && pointInRect(x, y, warpEditBtnRect_)) {
+      openMaskEditor(false);   // they share the monitor; one at a time
+      // THE OUTPUT, not the deck. Warp belongs to the screen the picture
+      // lands on; Deck still carries the old fields for migration and
+      // nothing renders them.
+      // A LAYER opens onto its own pin: that is what someone mapping a layer
+      // is reaching for, and arming the whole output's warp would not be.
+      if (!warpEditMode_ && focusedLayerPin()) {
+        warpEditLayer_ = true;
+        warpEditMode_ = true;
+      } else if (!warpEditMode_ && !focusedOutput().warpEnabled) {
+        warpEditLayer_ = false;
+        setFocusedDeckWarpEnabled(true);
+        warpEditMode_ = true;
+      } else {
+        warpEditMode_ = !warpEditMode_;
+      }
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (warpTargetBtnRect_.w > 0 && pointInRect(x, y, warpTargetBtnRect_)) {
+      warpEditLayer_ = !warpEditLayer_;
+      if (!warpEditLayer_ && !focusedOutput().warpEnabled) {
+        setFocusedDeckWarpEnabled(true);   // the output's handles need its warp armed
+      }
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (warpModeBtnRect_.w > 0 && pointInRect(x, y, warpModeBtnRect_)) {
+      if (OutputLayer* pin = warpEditLayer_ ? focusedLayerPin() : nullptr) {
+        pushUndoSnapshot();
+        pin->warpPerspective = !pin->warpPerspective;
+        markProjectDirty();
+        triggerToast(std::string("pin: ") + (pin->warpPerspective ? "perspective" : "linear"));
+      } else {
+        cycleFocusedDeckWarpMode(1);
+      }
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    // GRID: off -> 3x3 -> 4x4 -> 5x5 -> 7x7 -> 9x9 -> off. Each step keeps
+    // the shape the grid already has.
+    if (warpGridBtnRect_.w > 0 && pointInRect(x, y, warpGridBtnRect_)) {
+      pushUndoSnapshot();
+      OutputTarget& out = focusedOutputMutable();
+      static constexpr int kSizes[] = {0, 3, 4, 5, 7, 9};
+      int next = 3;
+      if (warpGridActive(out)) {
+        next = 0;
+        for (std::size_t i = 0; i + 1 < std::size(kSizes); ++i) {
+          if (kSizes[i] == out.warpGridCols) { next = kSizes[i + 1]; break; }
+        }
+      }
+      resizeWarpGrid(out, next, next);
+      markProjectDirty();
+      triggerToast(next ? "warp grid " + std::to_string(next) + "x" + std::to_string(next)
+                        : std::string("warp grid off"));
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (warpGridSmoothBtnRect_.w > 0 && pointInRect(x, y, warpGridSmoothBtnRect_)) {
+      OutputTarget& out = focusedOutputMutable();
+      out.warpGridSmooth = !out.warpGridSmooth;
+      markProjectDirty();
+      triggerToast(out.warpGridSmooth ? "grid: smooth" : "grid: straight");
+      playUiSound(UiSoundEffect::Toggle);
+      return;
+    }
+    if (warpResetBtnRect_.w > 0 && pointInRect(x, y, warpResetBtnRect_)) {
+      pushUndoSnapshot();
+      const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+      for (int i = 0; i < 4; ++i) {
+        *wt.x[i] = 0.0f;
+        *wt.y[i] = 0.0f;
+      }
+      if (wt.pin) {
+        wt.pin->warpEnabled = false;
+      } else {
+        OutputTarget& flat = focusedOutputMutable();
+        std::fill(flat.warpGridOffsets.begin(), flat.warpGridOffsets.end(), 0.0f);
+      }
+      markProjectDirty();
+      triggerToast(wt.pin ? "pin reset" : "warp reset");
+      playUiSound(UiSoundEffect::Clear);
+      return;
+    }
+    if (warpSaveBtnRect_.w > 0 && pointInRect(x, y, warpSaveBtnRect_)) {
+      openInlineTextEditor("warp.preset", "Save Warp Preset",
+                           "Preset name:", "Preset " + std::to_string(warpPresets_.size() + 1),
+                           [this](const std::string& value) {
+        std::string name = trim(value);
+        if (name.empty()) {
+          triggerToast("warp preset: name required");
+          return;
+        }
+        const OutputTarget& wd = focusedOutput();
+        WarpPreset p;
+        p.name = name;
+        p.tlx = wd.warpTopLeftX; p.tly = wd.warpTopLeftY;
+        p.trx = wd.warpTopRightX; p.try_ = wd.warpTopRightY;
+        p.brx = wd.warpBottomRightX; p.bry = wd.warpBottomRightY;
+        p.blx = wd.warpBottomLeftX; p.bly = wd.warpBottomLeftY;
+        p.mode = wd.warpMode;
+        p.gridCols = wd.warpGridCols;
+        p.gridRows = wd.warpGridRows;
+        p.gridSmooth = wd.warpGridSmooth;
+        p.gridOffsets = wd.warpGridOffsets;
+        warpPresets_.push_back(p);
+        triggerToast("warp preset saved");
+      });
+      return;
+    }
+    if (warpCopyBtnRect_.w > 0 && pointInRect(x, y, warpCopyBtnRect_)) {
+      copyFocusedWarpSettings();
+      return;
+    }
+    if (warpPasteBtnRect_.w > 0 && pointInRect(x, y, warpPasteBtnRect_)) {
+      pasteFocusedWarpSettings();
+      return;
+    }
+    if (warpRecallBtnRect_.w > 0 && pointInRect(x, y, warpRecallBtnRect_)) {
+      if (!warpPresets_.empty()) {
+        static int lastRecalled = -1;
+        lastRecalled = (lastRecalled + 1) % static_cast<int>(warpPresets_.size());
+        const WarpPreset& p = warpPresets_[lastRecalled];
+        OutputTarget& wd = focusedOutputMutable();
+        wd.warpTopLeftX = p.tlx; wd.warpTopLeftY = p.tly;
+        wd.warpTopRightX = p.trx; wd.warpTopRightY = p.try_;
+        wd.warpBottomRightX = p.brx; wd.warpBottomRightY = p.bry;
+        wd.warpBottomLeftX = p.blx; wd.warpBottomLeftY = p.bly;
+        wd.warpMode = p.mode;
+        wd.warpGridCols = p.gridCols;
+        wd.warpGridRows = p.gridRows;
+        wd.warpGridSmooth = p.gridSmooth;
+        wd.warpGridOffsets = p.gridOffsets;
+        markProjectDirty();
+        triggerToast("recalled: " + p.name);
+        playUiSound(UiSoundEffect::Navigate);
+      }
+      return;
+    }
+    // THE SELECTED POINT'S X AND Y, typed. Tested before the handles: the
+    // readout sits over the monitor, and a press on it must not grab a point.
+    if (warpEditMode_ && (pointInRect(x, y, warpSelXRect_) || pointInRect(x, y, warpSelYRect_))) {
+      float vx = 0.0f;
+      float vy = 0.0f;
+      std::string name;
+      bool percent = false;
+      if (warpSelectedPointValue(vx, vy, &name, &percent)) {
+        const bool editX = pointInRect(x, y, warpSelXRect_);
+        char now[32];
+        std::snprintf(now, sizeof(now), percent ? "%.2f" : "%.1f", editX ? vx : vy);
+        const int selected = warpSelPoint_;
+        openInlineTextEditor(
+          "warp.point", name + (editX ? "  X" : "  Y"),
+          percent ? "offset in percent of the picture"
+                  : "position on the output raster, in pixels",
+          now,
+          [this, editX, selected](const std::string& value) {
+            if (warpSelPoint_ != selected) {
+              return;   // the selection moved while the editor was open
+            }
+            float cx = 0.0f;
+            float cy = 0.0f;
+            char* end = nullptr;
+            const float typed = std::strtof(value.c_str(), &end);
+            if (end == value.c_str() || !warpSelectedPointValue(cx, cy)) {
+              triggerToast("warp: type a number");
+              return;
+            }
+            pushUndoSnapshot();
+            setWarpSelectedPointValue(editX ? typed : cx, editX ? cy : typed);
+          });
+      }
+      return;
+    }
+    // The mask editor's points, before the warp's: only one is open at once,
+    // and the mask editor takes every press on the monitor while it is.
+    if (handleDrawEditorMouseDown(x, y)) {
+      return;
+    }
+    if (handleMaskEditorMouseDown(x, y)) {
+      return;
+    }
+    // Warp corner drag start
+    if (warpEditorVisible() && warpMonitorInner_.w > 0) {
+      const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+      const int grabR = uiScaled(14);
+      for (int i = 0; i < 4; ++i) {
+        int dx = x - static_cast<int>(wt.baseX[i] + *wt.x[i] * wt.unitX);
+        int dy = y - static_cast<int>(wt.baseY[i] + *wt.y[i] * wt.unitY);
+        if (dx * dx + dy * dy <= grabR * grabR) {
+          warpDragCorner_ = i;
+          warpSelPoint_ = i;
+          return;
+        }
+      }
+      // Then the grid's own points. Corners are the pins above and are never
+      // grid handles, so an overlap always grabs the pin.
+      const OutputTarget& gridOut = focusedOutput();
+      if (!wt.pin && warpGridActive(gridOut)) {
+        const int gridGrab = uiScaled(10);
+        for (int r = 0; r < gridOut.warpGridRows; ++r) {
+          for (int c = 0; c < gridOut.warpGridCols; ++c) {
+            const bool corner = (c == 0 || c == gridOut.warpGridCols - 1) &&
+                                (r == 0 || r == gridOut.warpGridRows - 1);
+            if (corner) continue;
+            const SDL_FPoint p = warpGridPointOnMonitor(wt, gridOut, c, r);
+            const float dx = static_cast<float>(x) - p.x;
+            const float dy = static_cast<float>(y) - p.y;
+            if (dx * dx + dy * dy <= static_cast<float>(gridGrab * gridGrab)) {
+              pushUndoSnapshot();
+              warpDragGridPoint_ = r * gridOut.warpGridCols + c;
+              warpSelPoint_ = 100 + warpDragGridPoint_;
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Value scrub zones claim the press before quickButtons_: holding and
+    // dragging horizontally scrubs the value; releasing without crossing the
+    // drag threshold fires the exact-entry popup on mouse-up instead.
+    for (size_t i = 0; i < valueScrubZones_.size(); ++i) {
+      const auto& zone = valueScrubZones_[i];
+      bool isCueSettingsZone = i >= cueSettingsScrubZoneStartIndex_;
+      if (isCueSettingsZone && !pointInRect(x, y, cueSettingsViewportRect_)) {
+        continue;
+      }
+      if (pointInRect(x, y, zone.rect)) {
+        valueScrubPending_ = true;
+        valueScrubEngaged_ = false;
+        activeValueScrub_ = zone;
+        valueScrubStartX_ = x;
+        valueScrubLastStepX_ = x;
+        return;
+      }
+    }
+
+    // The driver scrub bar, before the quick buttons: where along it you
+    // pressed IS the value, and a quick button only knows that it was hit.
+    // Clipped to the inspector viewport like the cue-settings buttons are, so
+    // a bar scrolled out of sight cannot be grabbed through the panel edge.
+    if (motionDriverScrubRect_.w > 0 && motionDriverScrubDuration_ > 0.0 &&
+        pointInRect(x, y, motionDriverScrubRect_) &&
+        pointInRect(x, y, cueSettingsViewportRect_)) {
+      const double frac = std::clamp(
+        static_cast<double>(x - motionDriverScrubRect_.x) /
+          static_cast<double>(motionDriverScrubRect_.w), 0.0, 1.0);
+      seekMotionDriver(motionDriverScrubDeck_, frac * motionDriverScrubDuration_);
+      motionDriverScrubActive_ = true;   // keep tracking: it is a scrub, not a button
+      return;
+    }
+
+    // THE INSPECTOR'S SCROLLBAR. Before the quick buttons, because it overlaps
+    // the panel's right edge and a control underneath it would otherwise steal
+    // the press.
+    //
+    // Clicking anywhere on the rail jumps there and starts a drag, which is
+    // what every scrollbar does and what an operator will try first on a panel
+    // this long.
+    if (cueSettingsScrollRailRect_.w > 0 && cueSettingsScrollMax_ > 0 &&
+        pointInRect(x, y, cueSettingsScrollRailRect_)) {
+      cueSettingsScrollDragActive_ = true;
+      scrollInspectorToPointer(y);
+      return;
+    }
+
+    // The LFO scribble pad, for the same reason as the driver bar above: WHERE
+    // you pressed is the value, and a quick button only knows that it was hit.
+    // Claimed before the button list so the first touch already draws.
+    for (size_t i = 0; i < quickButtons_.size(); ++i) {
+      const auto& qb = quickButtons_[i];
+      if (qb.action != QuickAction::EffectLfoDraw) continue;
+      if (!pointInRect(x, y, qb.rect)) continue;
+      if (i >= cueSettingsQuickButtonStartIndex_ &&
+          !pointInRect(x, y, cueSettingsViewportRect_)) {
+        continue;
+      }
+      lfoDrawRect_ = qb.rect;
+      lfoDrawPacked_ = qb.param;
+      lfoDrawActive_ = true;
+      lfoDrawInto(x, y);
+      return;
+    }
+
+    for (size_t i = 0; i < quickButtons_.size(); ++i) {
+      const auto& qb = quickButtons_[i];
+      bool isCueSettingsButton = i >= cueSettingsQuickButtonStartIndex_;
+      if (isCueSettingsButton && !pointInRect(x, y, cueSettingsViewportRect_)) {
+        continue;
+      }
+      if (pointInRect(x, y, qb.rect)) {
+        lastInlineEditorAnchorRect_ = qb.rect;
+        dispatchQuickAction(qb.action, qb.param);
+        return;
+      }
+    }
+
+    for (const auto& entry : buttons_) {
+      if (pointInRect(x, y, entry.rect)) {
+        triggerButton(entry.label);
+        return;
+      }
+    }
+
+    // The crossfader, before the quick buttons: where along it you press IS
+    // the value, which a quick button cannot express.
+    if (project_.vjModeEnabled && vjCrossfaderRect_.w > 0 &&
+        pointInRect(x, y, vjCrossfaderRect_)) {
+      setVjMix(static_cast<double>(x - vjCrossfaderRect_.x) /
+               static_cast<double>(vjCrossfaderRect_.w));
+      vjCrossfaderDragActive_ = true;   // a fader, not a button
+      return;
+    }
+    // GRABBED, NOT JUMPED TO. A press used to set the level wherever it
+    // landed, so a click near the right end sent the programme to 200%. Now the
+    // press takes hold of the fader and the drag moves it from where it was.
+    if (pointInRect(x, y, masterFaderRect_) && masterFaderRect_.w > 0) {
+      masterFaderGrabX_ = x;
+      masterFaderGrabValue_ = project_.masterVolume;
+      masterFaderDragActive_ = true;  // keep tracking until release — it's a fader, not a button
+      return;
+    }
+    // Check trim handles before progress bar seek
+    // A trim drag is an edit to the live cue: it can be taken back.
+    if (trimInHandleRect_.w > 0 && pointInRect(x, y, trimInHandleRect_)) {
+      pushUndoSnapshot(/*force=*/true);
+      trimDragMode_ = TrimDragMode::In;
+      return;
+    }
+    if (trimOutHandleRect_.w > 0 && pointInRect(x, y, trimOutHandleRect_)) {
+      pushUndoSnapshot(/*force=*/true);
+      trimDragMode_ = TrimDragMode::Out;
+      return;
+    }
+    if (button == SDL_BUTTON_LEFT &&
+        (pointInRect(x, y, progressBarRect_) || pointInRect(x, y, audioProgressBarRect_))) {
+      if (MediaEngine* engine = focusedMediaEngine()) {
+        scrubWasPlaying_ = (engine->state() == TransportState::Playing);
+        if (scrubWasPlaying_) {
+          engine->pause();
+        }
+      }
+      timelineScrubActive_ = seekFocusedTimelineAtX(x, true);
+      return;
+    }
+  }
+
+  // THE WHEEL, lifted out of the event loop so it can be driven and tested the
+  // way handleMouseDown already can. Priority order is the hit test: dropdown,
+  // a live browser cue, the settings panes, the inspector, then the deck lists.
+  // MIDDLE-BUTTON AUTOSCROLL on the cue list.
+  //
+  // Pressing the wheel is what somebody does when a long list will not move,
+  // and until now it did nothing of its own: the middle button fell through to
+  // the same code as the left one, so it SELECTED the cue under the pointer and
+  // armed a drag. Middle-click-and-move could quietly reorder a rundown.
+  //
+  // Latched rather than held, which is the Windows behaviour: one press anchors
+  // it, moving away from the anchor scrolls at a speed set by the distance, and
+  // the next press anywhere stops it.
+  bool beginAutoScrollIfMiddle(int x, int y, Uint8 button) {
+    if (button != SDL_BUTTON_MIDDLE) {
+      return false;
+    }
+    if (autoScrollDeck_ >= 0) {       // already running: this press stops it
+      endAutoScroll();
+      return true;
+    }
+    for (int di = 0; di < static_cast<int>(deckListClipRects_.size()); ++di) {
+      const int scrollMax = (di < static_cast<int>(deckScrollMax_.size()))
+        ? deckScrollMax_[di] : 0;
+      if (scrollMax > 0 && deckListClipRects_[di].w > 0 &&
+          pointInRect(x, y, deckListClipRects_[di])) {
+        setFocusedDeckIndex(di);
+        autoScrollDeck_ = di;
+        autoScrollAnchorY_ = y;
+        autoScrollRemainder_ = 0.0;
+        return true;
+      }
+    }
+    // Middle-pressed somewhere with nothing to scroll. Still swallowed: acting
+    // as a left click is not something the middle button should ever do.
+    return true;
+  }
+
+  void endAutoScroll() {
+    autoScrollDeck_ = -1;
+    autoScrollRemainder_ = 0.0;
+  }
+
+  // Called every frame while it is latched. Speed comes from the distance
+  // between the pointer and the anchor, with a dead zone around the anchor so
+  // it can be parked; the fractional remainder carries between frames so slow
+  // speeds move smoothly rather than stalling at zero.
+  void serviceAutoScroll(double frameSeconds) {
+    if (autoScrollDeck_ < 0) {
+      return;
+    }
+    const int di = autoScrollDeck_;
+    if (di >= static_cast<int>(deckScrolls_.size()) ||
+        di >= static_cast<int>(deckScrollMax_.size()) || deckScrollMax_[di] <= 0) {
+      endAutoScroll();
+      return;
+    }
+    const int deadZone = uiScaled(12);
+    const double offset = static_cast<double>(mouseY_ - autoScrollAnchorY_);
+    const double past = std::abs(offset) - deadZone;
+    if (past <= 0.0) {
+      autoScrollRemainder_ = 0.0;
+      return;
+    }
+    // Rows per second, rising with distance. Scaled by the row pitch so the
+    // feel is the same at every UI scale.
+    const double rowsPerSecond = std::min(40.0, past / std::max(1, uiScaled(10)));
+    const double pixels = rowsPerSecond * (kRowHeight + 8) * frameSeconds *
+                          (offset < 0.0 ? -1.0 : 1.0);
+    autoScrollRemainder_ += pixels;
+    const int whole = static_cast<int>(autoScrollRemainder_);
+    if (whole == 0) {
+      return;
+    }
+    autoScrollRemainder_ -= whole;
+    deckScrolls_[di] = std::clamp(deckScrolls_[di] + whole, 0, deckScrollMax_[di]);
+    lastDeckScrollMs_ = SDL_GetTicks();
+  }
+
+  // How far one notch of the wheel moves a list.
+  //
+  // This was a flat, UNSCALED 36px everywhere. A cue row is kRowHeight, which
+  // IS scaled -- 80px at 1x and 120px on the 150% desktop that is the Windows
+  // default on a 4K panel. So a notch moved 0.45 of a row, or 0.28 of one at
+  // 150%, and on a long rundown the list barely twitched. It was reported as
+  // the wheel not working, and from the operator's side that is what it is.
+  //
+  // Three rows a notch, the platform convention, measured in the row pitch the
+  // list is actually drawn with so it stays right at every UI scale.
+  int wheelStepForRowList() const {
+    return 3 * (kRowHeight + 8);
+  }
+
+  // Panels that scroll pixels rather than rows keep their old feel, but the
+  // step now scales with the rest of the interface instead of staying 36 raw
+  // pixels while everything around it grew.
+  int wheelStepForPanel() const {
+    return uiScaled(36);
+  }
+
+  // Whether the presenter clicker's two keys belong to the tracker right now.
+  bool clickerDrivesTrackerNow() const {
+    return project_.clickerDrivesTracker ||
+           (dashboardOverlayOpen_ && project_.dashboardMode == 1);
+  }
+
+  // Whether the pattern tracker has the keyboard: open, and nothing on top
+  // of it that is typing.
+  bool trackerPatternHasKeys() const {
+    return dashboardOverlayOpen_ && project_.dashboardMode == 1 && !project_.trackerClassicView &&
+           !inlineEditor_.open && !settingsOpen_ && !dropdown_.open && !codeEditor_.open &&
+           !shortcutsOverlayOpen_;
+  }
+
+  // THE PATTERN TRACKER'S KEYS (the KEYS panel lists them). Moving, firing,
+  // play/stop and mute/solo always work; anything that changes a cell needs
+  // EDIT on, so a stray key during a show cannot restage it. Before the cue
+  // hotkeys: while the tracker is open, F9 / F10 and the digits are its.
+  bool handleTrackerPatternKey(SDL_Keycode key, Uint16 mod, bool keyRepeat) {
+    if ((mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0) {
+      return false;   // Ctrl+Z and friends still reach the desk
+    }
+    const auto rows = masterTrackerRows();
+    const int rowCount = static_cast<int>(rows.size());
+    const std::vector<int> shown = trackerShownDecks();
+    const int shownCount = static_cast<int>(shown.size());
+    const auto moveRow = [&](int by) {
+      trackerCursorRow_ = std::clamp(trackerCursorRow_ + by, 0, std::max(0, rowCount - 1));
+    };
+    switch (key) {
+      case SDLK_UP: moveRow(-1); return true;
+      case SDLK_DOWN: moveRow(1); return true;
+      case SDLK_HOME: trackerCursorRow_ = 0; return true;
+      case SDLK_END: trackerCursorRow_ = std::max(0, rowCount - 1); return true;
+      case SDLK_LEFT:
+        trackerCursorCol_ = std::max(0, trackerCursorCol_ - 1);
+        return true;
+      case SDLK_RIGHT:
+        trackerCursorCol_ = std::clamp(trackerCursorCol_ + 1, 0, std::max(0, shownCount - 1));
+        return true;
+      case SDLK_PAGEDOWN:
+        if (!keyRepeat) trackerGo();
+        return true;
+      case SDLK_PAGEUP:
+        if (!keyRepeat) trackerBack();
+        return true;
+      case SDLK_RETURN:
+      case SDLK_KP_ENTER:
+        if (!keyRepeat && trackerCursorRow_ < rowCount) fireTrackerRow(trackerCursorRow_);
+        return true;
+      case SDLK_SPACE:
+        if (!keyRepeat) {
+          if (trackerPlaying_) trackerStop(); else trackerPlay();
+        }
+        return true;
+      case SDLK_F9:
+      case SDLK_F10:
+        if (!keyRepeat && trackerCursorCol_ < shownCount) {
+          toggleTrackerColumn(shown[static_cast<std::size_t>(trackerCursorCol_)], key == SDLK_F10);
+        }
+        return true;
+      default:
+        break;
+    }
+
+    int digit = -1;
+    if (key >= SDLK_0 && key <= SDLK_9) digit = static_cast<int>(key - SDLK_0);
+    if (key >= SDLK_KP_1 && key <= SDLK_KP_9) digit = static_cast<int>(key - SDLK_KP_1) + 1;
+    if (key == SDLK_KP_0) digit = 0;
+    char act = 0;
+    if (key == SDLK_S) act = 'S';
+    if (key == SDLK_F) act = 'F';
+    if (key == SDLK_V) act = 'V';
+    if (key == SDLK_O) act = 'O';
+    const bool edits = digit >= 0 || act != 0 || key == SDLK_DELETE || key == SDLK_BACKSPACE ||
+                       key == SDLK_INSERT;
+    if (!edits) {
+      return false;
+    }
+    if (keyRepeat) {
+      return true;
+    }
+    if (!trackerEditMode_) {
+      triggerToast("EDIT is off - press EDIT to type into the tracker");
+      return true;
+    }
+    if (key == SDLK_INSERT) {
+      pushUndoSnapshot();
+      insertTrackerStepAt(rowCount == 0 ? 0 : trackerCursorRow_ + 1);
+      trackerCursorRow_ = rowCount == 0 ? 0 : trackerCursorRow_ + 1;
+      return true;
+    }
+    if (trackerCursorRow_ >= rowCount || trackerCursorCol_ >= shownCount) {
+      triggerToast(rowCount == 0 ? "no steps yet - Ins makes one" : "no playlist column here");
+      return true;
+    }
+    const int masterDeck = rows[static_cast<std::size_t>(trackerCursorRow_)].first;
+    const int masterCue = rows[static_cast<std::size_t>(trackerCursorRow_)].second;
+    const int deck = shown[static_cast<std::size_t>(trackerCursorCol_)];
+    if (deck == masterDeck) {
+      triggerToast("a step cannot fire the playlist it lives on");
+      return true;
+    }
+    if (key == SDLK_DELETE || key == SDLK_BACKSPACE) {
+      pushUndoSnapshot();
+      setMasterTrackerCell(masterDeck, masterCue, deck, -1);
+      trackerDigits_.clear();
+      return true;
+    }
+    if (act != 0) {
+      pushUndoSnapshot();
+      setMasterTrackerCellAction(masterDeck, masterCue, deck, act, act == 'F' ? 20 : 100);
+      trackerDigits_.clear();
+      triggerToast(deckLabel(deck) + ": " + masterTrackerCellLabel(masterDeck, masterCue, deck));
+      return true;
+    }
+
+    // DIGITS. Typed quickly they build one number ("1" "2" is 12); after a
+    // pause, or on another cell, they start again. On a cell that fades or
+    // sets a level they are its value; otherwise they name a cue.
+    const int cellId = trackerCursorRow_ * kMaxDecks + deck;
+    const Uint64 now = SDL_GetTicks();
+    if (cellId != trackerDigitsCell_ || now - trackerDigitsAtMs_ > 1500 || trackerDigits_.size() >= 4) {
+      trackerDigits_.clear();
+      pushUndoSnapshot();
+    }
+    trackerDigitsCell_ = cellId;
+    trackerDigitsAtMs_ = now;
+    trackerDigits_ += static_cast<char>('0' + digit);
+    const int number = std::atoi(trackerDigits_.c_str());
+    char action = 'G';
+    if (const Cue* master = masterTrackerCue(masterDeck, masterCue)) {
+      for (const MasterAssignment& a : master->masterAssignments) {
+        if (a.deckIndex == deck) action = a.action;
+      }
+    }
+    if (action == 'F' || action == 'V' || action == 'O') {
+      setMasterTrackerCellAction(masterDeck, masterCue, deck, action, number);
+    } else if (number < 1 || !setMasterTrackerCell(masterDeck, masterCue, deck, number - 1)) {
+      triggerToast(deckLabel(deck) + " has no cue " + std::to_string(number) + " a step can take");
+      trackerDigits_.clear();
+      return true;
+    }
+    triggerToast(deckLabel(deck) + ": " + masterTrackerCellLabel(masterDeck, masterCue, deck));
+    return true;
+  }
+
+  void handleMouseWheel(int wheelY) {
+    if (handleDropdownMouseWheel(wheelY)) {
+      return;
+    }
+    if (inputMonitorOpen_) {
+      handleInputMonitorWheel(wheelY);
+      return;
+    }
+    // THE DASHBOARD IS MODAL for the wheel as well. In the tracker it
+    // scrolls the steps; on the tiles there is nothing to scroll, and it must
+    // not reach the playlist underneath either way.
+    if (dashboardOverlayOpen_) {
+      if (project_.dashboardMode == 1 && !project_.trackerClassicView) {
+        // The pattern scrolls under its centre bar: the wheel moves the cursor.
+        trackerCursorRow_ = std::max(0, trackerCursorRow_ - wheelY);
+      } else if (project_.dashboardMode == 1) {
+        trackerScrollRow_ = std::max(0, trackerScrollRow_ - wheelY);
+      }
+      return;
+    }
+    // THE WHEEL OVER A LIVE BROWSER CUE SCROLLS THE PAGE.
+    //
+    // The scrollbars are hidden -- deliberately, they are chrome an
+    // audience should not see -- so this is how the page moves. Only
+    // while a browser cue is actually live in the monitor, so it never
+    // takes the wheel away from anything else.
+    if (warpMonitorInner_.w > 0 &&
+        pointInRect(mouseX_, mouseY_, warpMonitorInner_) &&
+        activeCueIsBrowser(project_.focusedDeckIndex)) {
+      // Only consume the wheel if the page actually took it. On a
+      // backend that cannot drive the page, the event must fall
+      // through to whatever would otherwise have handled it rather
+      // than vanishing into a browser cue that ignored it.
+      if (auto* page = liveBrowserRenderer()) {
+        if (page->scrollBy(0, -wheelY * 90)) {
+          return;
+        }
+      }
+    }
+    if (settingsOpen_ && settingsTab_ == 0 &&
+        settingsSystemViewport_.w > 0 && settingsSystemViewport_.h > 0 &&
+        pointInRect(mouseX_, mouseY_, settingsSystemViewport_) &&
+        settingsSystemScrollMax_ > 0) {
+      settingsSystemScroll_ = std::clamp(
+        settingsSystemScroll_ - wheelY * wheelStepForPanel(),
+        0, settingsSystemScrollMax_);
+      return;
+    }
+    if (settingsOpen_ && settingsTab_ == 1 &&
+        settingsAudioViewport_.w > 0 && settingsAudioViewport_.h > 0 &&
+        pointInRect(mouseX_, mouseY_, settingsAudioViewport_) &&
+        settingsAudioScrollMax_ > 0) {
+      settingsAudioScroll_ = std::clamp(
+        settingsAudioScroll_ - wheelY * wheelStepForPanel(),
+        0, settingsAudioScrollMax_);
+      return;
+    }
+    if (settingsOpen_ && settingsTab_ == 2 &&
+        settingsNetworkViewport_.w > 0 && settingsNetworkViewport_.h > 0 &&
+        pointInRect(mouseX_, mouseY_, settingsNetworkViewport_) &&
+        settingsNetworkScrollMax_ > 0) {
+      settingsNetworkScroll_ = std::clamp(
+        settingsNetworkScroll_ - wheelY * wheelStepForPanel(),
+        0, settingsNetworkScrollMax_);
+      return;
+    }
+    if (settingsOpen_ && settingsTab_ == 3 &&
+        settingsVideoViewport_.w > 0 && settingsVideoViewport_.h > 0 &&
+        pointInRect(mouseX_, mouseY_, settingsVideoViewport_) &&
+        settingsVideoScrollMax_ > 0) {
+      settingsVideoScroll_ = std::clamp(
+        settingsVideoScroll_ - wheelY * wheelStepForPanel(),
+        0, settingsVideoScrollMax_);
+      return;
+    }
+    if (cueSettingsViewportRect_.w > 0 && cueSettingsViewportRect_.h > 0 &&
+        pointInRect(mouseX_, mouseY_, cueSettingsViewportRect_) &&
+        cueSettingsScrollMax_ > 0) {
+      cueSettingsScroll_ = std::clamp(
+        cueSettingsScroll_ - wheelY * wheelStepForPanel(),
+        0,
+        cueSettingsScrollMax_);
+      return;
+    }
+    for (int di = 0; di < static_cast<int>(deckColumnRects_.size()); ++di) {
+      if (di < static_cast<int>(deckOverlayClipRects_.size()) &&
+          pointInRect(mouseX_, mouseY_, deckOverlayClipRects_[di])) {
+        if (di < static_cast<int>(deckOverlayScrolls_.size())) {
+          deckOverlayScrolls_[di] = std::max(0, deckOverlayScrolls_[di] - wheelY * wheelStepForRowList());
+        }
+        break;
+      }
+      if (di < static_cast<int>(deckListClipRects_.size()) &&
+          pointInRect(mouseX_, mouseY_, deckListClipRects_[di])) {
+        if (di < static_cast<int>(deckScrolls_.size())) {
+          int maxS = (di < static_cast<int>(deckScrollMax_.size())) ? deckScrollMax_[di] : 0;
+          int over = maxS > 0 ? kDeckScrollOverscroll : 0;
+          // Bottom-only overscroll: top stays hard-clamped at 0.
+          deckScrolls_[di] = std::clamp(deckScrolls_[di] - wheelY * wheelStepForRowList(), 0, maxS + over);
+          lastDeckScrollMs_ = SDL_GetTicks();
+        }
+        break;
+      }
+    }
+  }
+
+  void handleMouseMotion(int x, int y) {
+    if (patchScrub_.active) {
+      updatePatchScrub(x, y);
+      return;
+    }
+    if (motionZoneDrag_.active) {
+      motionZoneDrag_.x1 = x;
+      motionZoneDrag_.y1 = y;
+      return;
+    }
+    if (cueSettingsScrollDragActive_) {
+      scrollInspectorToPointer(y);
+      return;
+    }
+    if (deckListScrollDragDeck_ >= 0) {
+      scrollDeckListToPointer(deckListScrollDragDeck_, y);
+      return;
+    }
+    if (lfoDrawActive_) {
+      lfoDrawInto(x, y);
+      return;
+    }
+    // Where the cursor is, for the mascot to look at. Recorded before every
+    // early return below, because the face has to keep tracking while the
+    // operator is doing something else entirely -- that is the whole charm of
+    // it. Two ints; it costs nothing.
+    mascotPointerX_ = x;
+    mascotPointerY_ = y;
+    if (vjCrossfaderDragActive_ && vjCrossfaderRect_.w > 0) {
+      // Through the same helper as every other fader, so the crossfader's own
+      // ends -- full A and full B, the two positions a VJ actually holds -- are
+      // reachable without hitting a single pixel.
+      setVjMix(faderValueFromX(x, vjCrossfaderRect_));
+      return;
+    }
+    if (deckOpacityDragIndex_ >= 0 &&
+        deckOpacityDragIndex_ < static_cast<int>(project_.decks.size())) {
+      const SDL_Rect& rail = deckOpacityDragRail_;
+      if (rail.w > 0) {
+        const double moved = static_cast<double>(x - deckOpacityGrabX_) / static_cast<double>(rail.w);
+        setDeckPlaylistOpacity(deckOpacityDragIndex_,
+                               static_cast<float>(std::clamp(deckOpacityGrabValue_ + moved, 0.0, 1.0)), true);
+      }
+      return;
+    }
+    if (motionDriverScrubActive_ && motionDriverScrubRect_.w > 0 &&
+        motionDriverScrubDuration_ > 0.0) {
+      const double frac = std::clamp(
+        static_cast<double>(x - motionDriverScrubRect_.x) /
+          static_cast<double>(motionDriverScrubRect_.w), 0.0, 1.0);
+      seekMotionDriver(motionDriverScrubDeck_, frac * motionDriverScrubDuration_);
+      return;
+    }
+    if (masterFaderDragActive_ && masterFaderRect_.w > 0) {
+      const double moved = static_cast<double>(x - masterFaderGrabX_) / static_cast<double>(masterFaderRect_.w);
+      double level = std::clamp(masterFaderGrabValue_ + moved * 2.0, 0.0, 2.0);
+      // A NOTCH AT 100%. Dragged within a few pixels of unity, the fader
+      // settles on exactly 100% rather than 98 or 103, the way a desk fader
+      // has a detent there. Measured in pixels, so it feels the same at any
+      // UI scale; typed and remote levels are never snapped.
+      const double notch = static_cast<double>(uiScaled(6)) / masterFaderRect_.w * 2.0;
+      if (std::abs(level - 1.0) <= notch) level = 1.0;
+      project_.masterVolume = level;
+      markProjectDirty();
+      return;
+    }
+    if (valueScrubPending_ || valueScrubEngaged_) {
+      constexpr int kScrubEngagePx = 5;   // dead zone so a click stays a click
+      // FINE ADJUST: hold shift and the same drag moves the value a quarter as
+      // far. The step itself belongs to the dec/inc action and is the same
+      // whichever way the value is changed, so the only honest way to make a
+      // control finer is to demand more travel per step.
+      const bool fineScrub = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+      const int kScrubPxPerStep = fineScrub ? 16 : 4;  // mouse px per dec/inc step
+      if (!valueScrubEngaged_ && std::abs(x - valueScrubStartX_) >= kScrubEngagePx) {
+        valueScrubEngaged_ = true;
+        valueScrubPending_ = false;
+        valueScrubLastStepX_ = x;
+      }
+      if (valueScrubEngaged_) {
+        int steps = (x - valueScrubLastStepX_) / kScrubPxPerStep;
+        if (steps != 0) {
+          valueScrubLastStepX_ += steps * kScrubPxPerStep;
+          QuickAction stepAction = steps > 0 ? activeValueScrub_.incAction
+                                             : activeValueScrub_.decAction;
+          int count = std::min(std::abs(steps), 40);  // sanity cap per motion event
+          for (int s = 0; s < count; ++s) {
+            dispatchQuickAction(stepAction, activeValueScrub_.param);
+          }
+        }
+      }
+      return;  // the scrub owns the pointer until release
+    }
+    if (presenterDragPanel_ > 0) {
+      updatePresenterLayoutDrag(x, y);
+      return;   // the arranger owns the pointer until release
+    }
+    if (layoutDragMode_ == LayoutDragMode::Playlist && contentAreaRect_.w > 0) {
+      constexpr int kPlaylistMinW = 236;
+      int maxW = std::max(kPlaylistMinW, contentAreaRect_.w - 520);
+      playlistPaneWidth_ = std::clamp(x - contentAreaRect_.x, kPlaylistMinW, maxW);
+      playlistDraggedAtDecks_ = static_cast<int>(project_.decks.size());
+      return;
+    }
+    if (layoutDragMode_ == LayoutDragMode::Inspector && mainPanelLayoutRect_.w > 0) {
+      constexpr int kInspectorMinW = 360;
+      constexpr int kProgramMinW = 420;
+      int maxW = std::max(kInspectorMinW, mainPanelLayoutRect_.w - kProgramMinW);
+      inspectorPaneWidth_ = std::clamp(mainPanelLayoutRect_.x + mainPanelLayoutRect_.w - x,
+                                       kInspectorMinW, maxW);
+      return;
+    }
+    if (layoutDragMode_ == LayoutDragMode::Timeline && programAreaRect_.h > 0) {
+      // Drag the monitor/timeline divider: the desired monitor height is the
+      // pointer's offset from the program-area top (clamped to a usable
+      // preview), and whatever height we shave off the preview becomes the
+      // extra the timeline lanes get.
+      const int floorH = std::min(programMonitorFloorH_, programFullMonitorH_);
+      int desiredMonitorH = std::clamp(y - programAreaRect_.y,
+                                       floorH, programFullMonitorH_);
+      int maxExtra = std::max(0, programFullMonitorH_ - floorH);
+      timelineExtraH_ = std::clamp(programFullMonitorH_ - desiredMonitorH, 0, maxExtra);
+      return;
+    }
+    if (handleDrawEditorMouseMotion(x, y)) {
+      return;
+    }
+    if (handleMaskEditorMouseMotion(x, y)) {
+      return;
+    }
+    // Warp corner dragging — convert mouse delta in monitor-space to output-pixel warp offsets
+    if (warpDragCorner_ >= 0 && warpDragCorner_ < 4 && warpEditMode_ && warpMonitorInner_.w > 0) {
+      // Monitor position back to the target's own units: output pixels for
+      // the output's warp, fractions of the picture for a layer's pin.
+      const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+      const int c = warpDragCorner_;
+      float newX = (static_cast<float>(x) - wt.baseX[c]) / std::max(1.0e-3f, wt.unitX);
+      float newY = (static_cast<float>(y) - wt.baseY[c]) / std::max(1.0e-3f, wt.unitY);
+      if (SDL_GetModState() & SDL_KMOD_SHIFT) {   // snap: 10 px, or 1% of a layer
+        newX = std::round(newX / wt.snap) * wt.snap;
+        newY = std::round(newY / wt.snap) * wt.snap;
+      }
+      if (wt.pin) {
+        // The same bound the network verb keeps: past it the quad turns
+        // inside out or leaves the raster.
+        newX = std::clamp(newX, -2.0f, 2.0f);
+        newY = std::clamp(newY, -2.0f, 2.0f);
+        wt.pin->warpEnabled = true;             // the first drag arms the pin
+      }
+      *wt.x[c] = newX;
+      *wt.y[c] = newY;
+      markProjectDirty();
+      return;
+    }
+    // Grid point dragging: the nudge is the distance from where the corner
+    // pin alone would put the point, in output pixels.
+    if (warpDragGridPoint_ >= 0 && warpEditMode_ && warpMonitorInner_.w > 0) {
+      OutputTarget& out = focusedOutputMutable();
+      if (!warpGridActive(out) ||
+          warpDragGridPoint_ >= out.warpGridCols * out.warpGridRows) {
+        warpDragGridPoint_ = -1;
+        return;
+      }
+      const WarpEditTarget wt = warpEditTarget(warpMonitorInner_);
+      const int col = warpDragGridPoint_ % out.warpGridCols;
+      const int row = warpDragGridPoint_ / out.warpGridCols;
+      const SDL_FPoint base = warpGridPointOnMonitor(wt, out, col, row, false);
+      float nx = (static_cast<float>(x) - base.x) / std::max(1.0e-3f, wt.unitX);
+      float ny = (static_cast<float>(y) - base.y) / std::max(1.0e-3f, wt.unitY);
+      if (SDL_GetModState() & SDL_KMOD_SHIFT) {
+        nx = std::round(nx / wt.snap) * wt.snap;
+        ny = std::round(ny / wt.snap) * wt.snap;
+      }
+      const std::size_t i = static_cast<std::size_t>(warpDragGridPoint_) * 2;
+      out.warpGridOffsets[i] = nx;
+      out.warpGridOffsets[i + 1] = ny;
+      markProjectDirty();
+      return;
+    }
+    // Trim handle dragging
+    if (trimDragMode_ != TrimDragMode::None && progressBarRect_.w > 0) {
+      Cue* cue = activeCueMutable();
+      MediaEngine* engine = focusedMediaEngine();
+      if (cue && engine && cue->duration > 0.0) {
+        double fraction = static_cast<double>(x - progressBarRect_.x) / static_cast<double>(progressBarRect_.w);
+        double cueIn = std::clamp(cue->inPointSeconds, 0.0, cue->duration);
+        double cueOut = cue->outPointSeconds > 0.0
+          ? std::clamp(cue->outPointSeconds, cueIn, cue->duration)
+          : cue->duration;
+        bool zoomedToTrim = cueIn > 0.001 || cueOut < cue->duration - 0.001;
+        double visibleDuration = zoomedToTrim ? std::max(0.01, cueOut - cueIn) : cue->duration;
+        double seconds = zoomedToTrim
+          ? cueIn + (visibleDuration * std::clamp(fraction, 0.0, 1.0))
+          : cue->duration * std::clamp(fraction, 0.0, 1.0);
+        if (trimDragMode_ == TrimDragMode::In) {
+          cue->inPointSeconds = std::clamp(snapToCueFrame(*cue, seconds), 0.0, cue->duration);
+          double out = cue->outPointSeconds > 0.0 ? cue->outPointSeconds : cue->duration;
+          cue->outPointSeconds = std::clamp(snapToCueFrame(*cue, out), cue->inPointSeconds, cue->duration);
+          triggerToast("in: " + formatSeconds(cue->inPointSeconds));
+        } else {
+          cue->outPointSeconds = std::clamp(snapToCueFrame(*cue, seconds), cue->inPointSeconds, cue->duration);
+          triggerToast("out: " + formatSeconds(cue->outPointSeconds));
+        }
+        markProjectDirty();
+      }
+      return;
+    }
+    if (timelineScrubActive_) {
+      seekFocusedTimelineAtX(x, true);
+      return;
+    }
+    if (!drag_.active || drag_.cueIndex < 0) {
+      return;
+    }
+    int di = drag_.deckIndex;
+    if (di < 0 || di >= static_cast<int>(deckListClipRects_.size())) {
+      return;
+    }
+    const SDL_Rect& clipFrame = deckListClipRects_[di];
+    SDL_Rect clipRect {clipFrame.x + 8, clipFrame.y + 30, clipFrame.w - 16, clipFrame.h - 38};
+    // A CLICK IS NOT A DRAG until the pointer has really moved: a press that
+    // wobbled across a row boundary used to reorder the list mid-show.
+    if (!drag_.moving) {
+      const int dx = x - drag_.pressX;
+      const int dy = y - drag_.pressY;
+      if (dx * dx + dy * dy < uiScaled(6) * uiScaled(6)) {
+        return;
+      }
+      drag_.moving = true;
+    }
+    // And only onto rows the operator can SEE: the row rects run on past the
+    // list, so dragging above or below it dropped the cue somewhere scrolled
+    // out of view.
+    if (!pointInRect(x, y, clipRect)) {
+      return;
+    }
+    Deck& deck = project_.decks[di];
+    int listY = clipRect.y - deckScrolls_[di];
+    for (int index : cueIndicesForOverlayRole(deck, false)) {
+      SDL_Rect row {clipRect.x, listY, clipRect.w, kRowHeight};
+      if (pointInRect(x, y, row) && index != drag_.cueIndex) {
+        pushUndoSnapshot();
+        auto cue = deck.cues[drag_.cueIndex];
+        deck.cues.erase(deck.cues.begin() + drag_.cueIndex);
+        deck.cues.insert(deck.cues.begin() + index, cue);
+        const int from = drag_.cueIndex;
+        remapDeckCueIndices(di, [from, index](int i) { return movedCueIndex(i, from, index); });
+        deck.selectedIndex = index;
+        deck.selectedIndices.clear();
+        deck.selectedIndices.push_back(index);
+        drag_.cueIndex = index;
+        triggerToast("cue reordered");
+        markProjectDirty();
+        return;
+      }
+      listY += kRowHeight + 8;
+    }
+  }
+
+  // Musical keys go to the synth BEFORE anything else looks at them, but only
+  // while the mode is armed. Returns true when the key was consumed as a note,
+  // so the normal shortcut handling never sees it.
+  bool handleSynthKey(SDL_Keycode key, bool keyRepeat, bool down) {
+    if (!project_.synthKeyboardEnabled) return false;
+    // Octave shift. Z and X because that is where every tracker and DAW put
+    // them, so it needs no learning.
+    // Only with a synth cue live to play: otherwise Z and X are the desk's.
+    if (down && !keyRepeat && (key == SDLK_Z || key == SDLK_X) && liveSynthCue()) {
+      project_.synthKeyboardOctave = std::clamp(
+        project_.synthKeyboardOctave + (key == SDLK_X ? 1 : -1), 0, 8);
+      triggerToast("octave " + std::to_string(project_.synthKeyboardOctave));
+      return true;
+    }
+    const int semi = synthKeyToSemitone(key);
+    if (semi < 0) return false;
+    // A held key repeats; retriggering the envelope on every repeat would
+    // machine-gun the note instead of sustaining it.
+    if (keyRepeat) return true;
+
+    Cue* cue = liveSynthCue();
+    if (!cue) return false;
+    const int midiNote = 12 * (project_.synthKeyboardOctave + 1) + semi;
+    const double hz = synthNoteToHz(midiNote, cue->tone.synth.tuning,
+                                    cue->tone.synth.referenceHz);
+    if (MediaEngine* engine = liveSynthEngine()) {
+      if (down) engine->synthNoteOn(hz, 100);
+      else engine->synthNoteOff(hz);
+    }
+    return true;
+  }
+
+  void handleKeyUp(SDL_Keycode key) {
+    handleSynthKey(key, /*keyRepeat=*/false, /*down=*/false);
+  }
+
+  // True when the key may act now: always when nothing is live, and while a
+  // show is live only on the second press of the same key within 2.5s.
+  bool confirmLiveKey(SDL_Keycode key, const std::string& warning) {
+    if (!showIsLive()) {
+      liveKeyArmed_ = 0;
+      return true;
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (liveKeyArmed_ == key && now - liveKeyArmedAtMs_ <= 2500) {
+      liveKeyArmed_ = 0;
+      return true;
+    }
+    liveKeyArmed_ = key;
+    liveKeyArmedAtMs_ = now;
+    triggerToast(warning, ToastKind::Warning, kToastReadableMs);
+    return false;
+  }
+
+  void escapeEscalation(Uint32 sourceWindowId) {
+    // Generous window: this is a deliberate escalation the operator walks
+    // up, not a panic double-tap. Anything slower starts over.
+    constexpr Uint64 kEscSequenceMs = 2500;
+    Uint64 now = SDL_GetTicks();
+    bool continuing = lastEscapeKeyMs_ > 0 && (now - lastEscapeKeyMs_) <= kEscSequenceMs;
+    escapePressStreak_ = continuing ? (escapePressStreak_ + 1) : 1;
+    lastEscapeKeyMs_ = now;
+
+    if (escapePressStreak_ <= 1) {
+      confirmQuit_ = false;
+      // Stage 1 — come back to the desk. Un-fullscreen the output if it is
+      // covering things; either way put the control window in front.
+      escapeOutputFullscreen(sourceWindowId);
+      if (controlWindow_) {
+        SDL_RaiseWindow(controlWindow_);
+      }
+      triggerToast("esc: control window - again to clear output");
+    } else if (escapePressStreak_ == 2) {
+      confirmQuit_ = false;
+      // Stage 2 — back to the beginning state: outputs disarmed, playback
+      // stopped, audio killed (runPanicOutputsOff handles all three).
+      emergencyDisarmOutputsFromEsc(sourceWindowId);
+      triggerToast("esc: output cleared - again to quit");
+    } else {
+      // Stage 3 — now, and only now, offer to quit.
+      confirmQuit_ = true;
+      escapePressStreak_ = 0;
+      lastEscapeKeyMs_ = 0;
+    }
+  }
+
+  void handleKeyDown(SDL_Keycode key, Uint16 mod, Uint32 sourceWindowId = 0, bool keyRepeat = false) {
+    bool ctrl = deckboyShortcutHeld(mod);
+    bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+
+    // STOP EVERY DECK ALWAYS REACHES THE SHOW. It sat in the shortcut table
+    // below, after Settings, the shortcuts sheet, the input monitor, a text
+    // field, the code editor, a dropdown and the colour picker had each taken
+    // every key for themselves -- so with any of them open Ctrl+Shift+Space did
+    // nothing at all (reported against 0.99.422). None of them uses the chord.
+    // Held down, it stops once.
+    if (deckboyStopAllShortcut(key, mod)) {
+      if (!keyRepeat) {
+        allStop();
+      }
+      return;
+    }
+
+    if (projectRecoveryPromptShown_) {
+      if (!keyRepeat && key == SDLK_ESCAPE) {
+        dismissDependencyPrompt();
+      } else if (!keyRepeat && (key == SDLK_RETURN || key == SDLK_KP_ENTER)) {
+        auto action = depPrompt_.onCta;
+        depPrompt_ = DependencyPromptState{};
+        if (action) action();
+      }
+      return;
+    }
+
+    if (!settingsOpen_ || settingsTab_ != 4 || inlineEditor_.open || codeEditor_.open || dropdown_.open) {
+      tabletopCodeIndex_ = 0;
+    }
+
+    if (showSplashOverlay_) {
+      if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) {
+        showSplashOverlay_ = false;
+      }
+      return;
+    }
+
+    if (handleBugSwatKey(key, keyRepeat)) {
+      return;
+    }
+    if (handleLessonsListKey(key)) {
+      return;
+    }
+    if (handleTutorialKey(key, keyRepeat)) {
+      return;
+    }
+
+    if (trackerPatternHasKeys() && handleTrackerPatternKey(key, mod, keyRepeat)) {
+      return;
+    }
+
+    // A CUE'S HOTKEY, and hotkey learning, before anything else claims the
+    // key -- but only keys the desk does not use (F1-F10, F12, number pad),
+    // so a trigger can never take a shortcut away.
+    if (!inlineEditor_.open && !settingsOpen_ && !codeEditor_.open &&
+        handleTriggerKey(key, keyRepeat)) {
+      return;
+    }
+
+    // Before shortcuts: while the musical keyboard is armed, letter keys make
+    // notes. It is off by default precisely because this steals them.
+    // THE CLICKER ALWAYS REACHES THE SHOW. A presentation remote sends Page
+    // Down / Page Up, and every modal -- settings, the shortcuts sheet, a text
+    // field -- used to swallow them, so a dialog left open on the desk froze
+    // the presenter's slides. Nothing in those modals uses the two keys.
+    if ((key == SDLK_PAGEDOWN || key == SDLK_PAGEUP) && !keyRepeat &&
+        (settingsOpen_ || shortcutsOverlayOpen_ || inlineEditor_.open)) {
+      const bool forward = key == SDLK_PAGEDOWN;
+      if (clickerDrivesTrackerNow()) {
+        if (forward) trackerGo(); else trackerBack();
+      } else if (forward) {
+        skipToNextCue(/*asTake=*/true);
+      } else {
+        skipToPrevCue(/*asTake=*/true);
+      }
+      return;
+    }
+
+    // NOT while typing, and never with Ctrl or Alt held: the synth used to run
+    // ahead of the text editor and every shortcut, so renaming a cue played
+    // notes on the programme and Ctrl+Z / Ctrl+X became octave shifts.
+    if (!inlineEditor_.open && !settingsOpen_ && !codeEditor_.open &&
+        (mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0 &&
+        handleSynthKey(key, keyRepeat, /*down=*/true)) {
+      return;
+    }
+
+    // F11 — toggle borderless fullscreen on the control window. The renderer's
+    // logical size scales the fixed-grid UI to fill the screen automatically.
+    if (key == SDLK_F11 && !keyRepeat && controlWindow_) {
+      SDL_WindowFlags winFlags = SDL_GetWindowFlags(controlWindow_);
+      bool isFullscreen =
+        (winFlags & SDL_WINDOW_FULLSCREEN) != 0;
+      SDL_SetWindowFullscreenMode(controlWindow_, nullptr);  // borderless desktop
+      SDL_SetWindowFullscreen(controlWindow_, !isFullscreen);
+      triggerToast(isFullscreen ? "windowed" : "fullscreen");
+      return;
+    }
+
+    // ARROWS NUDGE THE SELECTED WARP POINT while the editor is up: a pixel a
+    // press, ten with Shift (a tenth / one percent on a layer's pin).
+    if (warpEditMode_ && warpSelPoint_ >= 0 && !settingsOpen_ && !inlineEditor_.open &&
+        (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP || key == SDLK_DOWN)) {
+      float vx = 0.0f;
+      float vy = 0.0f;
+      bool percent = false;
+      if (warpSelectedPointValue(vx, vy, nullptr, &percent)) {
+        const float step = (percent ? 0.1f : 1.0f) * (shift ? 10.0f : 1.0f);
+        if (!keyRepeat) {
+          pushUndoSnapshot();
+        }
+        setWarpSelectedPointValue(
+          vx + (key == SDLK_LEFT ? -step : key == SDLK_RIGHT ? step : 0.0f),
+          vy + (key == SDLK_UP ? -step : key == SDLK_DOWN ? step : 0.0f));
+        return;
+      }
+    }
+
+    if (showStartupDialog_) {
+      bool hasSavedFile = startupProjectAvailable();
+      if (key == SDLK_N) {
+        startNewShow(false);
+        showStartupDialog_ = false;
+      } else if (key == SDLK_O) {
+        openProjectFromPicker();
+        showStartupDialog_ = false;
+      } else if (key == SDLK_P && hasSavedFile) {
+        showStartupDialog_ = false;
+      } else if (key == SDLK_E) {
+        openExampleShows();
+      } else if (key == SDLK_L) {
+        beginTutorial();
+      } else if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+        if (hasSavedFile) {
+          showStartupDialog_ = false;
+        } else {
+          openProjectFromPicker();
+          showStartupDialog_ = false;
+        }
+      } else if (key >= SDLK_1 && key <= SDLK_5) {
+        // The digits match the numbers printed on the rows.
+        const int wanted = static_cast<int>(key - SDLK_1);
+        const std::vector<fs::path> recents = startupRecentShows();
+        if (wanted < static_cast<int>(recents.size())) {
+          openProjectFromPath(recents[wanted]);
+          showStartupDialog_ = false;
+        }
+      } else if (key == SDLK_ESCAPE) {
+        showStartupDialog_ = false;
+      }
+      return;
+    }
+
+    // Before the inline editor: both cannot be open at once, and the code
+    // editor takes the whole keyboard while it is.
+    if (handleCodeEditorKey(key, mod)) {
+      return;
+    }
+
+    if (handleInlineTextEditorKey(key, mod)) {
+      return;
+    }
+
+    if (handleDropdownKey(key, mod)) {
+      return;
+    }
+
+    if (handleColourPickerKey(key, keyRepeat)) {
+      return;
+    }
+
+    if (handleDrawEditorKey(key)) {
+      return;
+    }
+    if (handleMaskEditorKey(key, keyRepeat)) {
+      return;
+    }
+
+    // ↑ ↑ ↓ ↓ ← → ← → B A Start. The directional prefix rides along with
+    // normal navigation (harmless selection moves); once it's complete, the
+    // B/A/Enter tail is swallowed so their hotkeys don't fire mid-code.
+    if (!keyRepeat) {
+      static const SDL_Keycode kKonami[] = {
+        SDLK_UP, SDLK_UP, SDLK_DOWN, SDLK_DOWN,
+        SDLK_LEFT, SDLK_RIGHT, SDLK_LEFT, SDLK_RIGHT,
+        SDLK_B, SDLK_A, SDLK_RETURN
+      };
+      constexpr int kKonamiLen = static_cast<int>(sizeof(kKonami) / sizeof(kKonami[0]));
+      if (key == kKonami[konamiIndex_]) {
+        ++konamiIndex_;
+        if (konamiIndex_ >= kKonamiLen) {
+          konamiIndex_ = 0;
+          unlockTerrariumSource();
+          return;
+        }
+        if (konamiIndex_ > 8) {
+          return;  // swallow B/A while the tail is in progress
+        }
+      } else {
+        konamiIndex_ = (key == kKonami[0]) ? 1 : 0;
+      }
+    }
+    if (keyColorPickerArmed_ && key == SDLK_ESCAPE) {
+      keyColorPickerArmed_ = false;
+      triggerToast("key color picker canceled");
+      return;
+    }
+
+    if (dashboardOverlayOpen_ && key == SDLK_ESCAPE) {
+      dashboardOverlayOpen_ = false;
+      return;
+    }
+    if (webMonitorQrOpen_ && key == SDLK_ESCAPE) {
+      webMonitorQrOpen_ = false;
+      return;
+    }
+    if (shortcutsOverlayOpen_) {
+      if (key == SDLK_ESCAPE || key == SDLK_SLASH) {
+        shortcutsOverlayOpen_ = false;
+      }
+      return;
+    }
+    if (inputMonitorOpen_) {
+      if (key == SDLK_ESCAPE) {
+        inputMonitorOpen_ = false;
+      }
+      return;
+    }
+
+    if (settingsOpen_) {
+      // The letters overlap live desk shortcuts, so the whole sequence lives
+      // in About, where letters are otherwise inert. No partial entry may
+      // change audio routing, blackout, or the selected cue.
+      if (settingsTab_ == 4 && !keyRepeat &&
+          (mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0) {
+        static constexpr SDL_Keycode code[] = {SDLK_A, SDLK_B, SDLK_A, SDLK_C, SDLK_A, SDLK_B, SDLK_B};
+        static constexpr int fallback[] = {0, 0, 1, 0, 1, 2, 0};
+        const Uint64 now = SDL_GetTicks();
+        if (now - tabletopCodeLastKeyMs_ > 2000) tabletopCodeIndex_ = 0;
+        tabletopCodeLastKeyMs_ = now;
+        while (tabletopCodeIndex_ > 0 && key != code[tabletopCodeIndex_]) {
+          tabletopCodeIndex_ = fallback[tabletopCodeIndex_ - 1];
+        }
+        if (key == code[tabletopCodeIndex_]) ++tabletopCodeIndex_;
+        if (tabletopCodeIndex_ == 7) {
+          tabletopCodeIndex_ = 0;
+          unlockTabletopSource();
+          return;
+        }
+      } else if (!keyRepeat) {
+        tabletopCodeIndex_ = 0;
+      }
+      // Ctrl+, (Cmd+, on macOS) closes as well as opens, the way every other
+      // application's preferences shortcut does. Escape still closes too.
+      if (key == SDLK_ESCAPE || (ctrl && key == SDLK_COMMA)) {
+        settingsOpen_ = false;
+        uiWatchdogPopupEvent("settings_modal", false);
+      }
+      return;
+    }
+
+    if (confirmQuit_) {
+      if (key == SDLK_Y || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+        gShouldQuit.store(true);
+      } else {
+        confirmQuit_ = false;
+      }
+      return;
+    }
+
+    if (ctrl && key == SDLK_Q) {
+      confirmQuit_ = true;
+      return;
+    }
+
+    // Ctrl+Enter / Ctrl+Return — simultaneous all-deck take
+    if (ctrl && (key == SDLK_RETURN || key == SDLK_KP_ENTER)) {
+      takeAllDecks(true);
+      return;
+    }
+    // Ctrl+Z — undo, Ctrl+Shift+Z — redo
+    if (ctrl && !shift && key == SDLK_Z) {
+      undo();
+      return;
+    }
+    if (ctrl && shift && key == SDLK_Z) {
+      redo();
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_C) {
+      copySelectedCueSettings();
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_V) {
+      pasteSelectedCueSettings();
+      return;
+    }
+    if (ctrl && shift && key == SDLK_C) {
+      copyFocusedWarpSettings();
+      return;
+    }
+    if (ctrl && shift && key == SDLK_V) {
+      pasteFocusedWarpSettings();
+      return;
+    }
+    // Ctrl+D — the dashboard
+    if (ctrl && key == SDLK_D) {
+      // NOT OVER THE STARTUP DIALOG. That dialog consumes every click before
+      // the dashboard branch is reached, so a dashboard opened on top of it
+      // draws normally and answers nothing at all.
+      if (showStartupDialog_ || showSplashOverlay_) {
+        triggerToast("choose a show first");
+        return;
+      }
+      dashboardOverlayOpen_ = !dashboardOverlayOpen_;
+      return;
+    }
+    // Ctrl+/ — keyboard shortcuts overlay
+    if (ctrl && key == SDLK_SLASH) {
+      shortcutsOverlayOpen_ = !shortcutsOverlayOpen_;
+      return;
+    }
+    // Ctrl+, / Cmd+, — preferences, which is where every other application
+    // puts them. Bare comma is the previous-cue transport key, so the two do
+    // not collide. Opens on SYSTEM, the same tab the SETTINGS button uses.
+    if (ctrl && key == SDLK_COMMA) {
+      settingsOpen_ = true;
+      settingsTab_ = 0;
+      uiWatchdogPopupEvent("settings_modal", true);
+      return;
+    }
+    // Ctrl+Shift+Space (stop every deck) is handled first of all, above.
+    // Group preset keyboard shortcuts removed
+    // Ctrl+Space — all-deck go (play/pause toggle)
+    if (ctrl && key == SDLK_SPACE) {
+      goAllDecks();
+      return;
+    }
+    // Ctrl+G — GOTO cue
+    if (ctrl && key == SDLK_G) {
+      openInlineGotoCueEditor();
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_F) {
+      if (settingsOpen_) {
+        settingsOpen_ = false;
+      }
+      openInlineCueFindEditor(false);
+      return;
+    }
+    if (ctrl && shift && key == SDLK_F) {
+      if (!lastCueFindToken_.empty()) {
+        findCueToken(lastCueFindToken_, 1, false);
+      } else {
+        triggerToast("find: press Ctrl+F first");
+      }
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_R) {
+      rerackTransport();
+      return;
+    }
+    if (ctrl && shift && key == SDLK_R) {
+      openInlineCueRenumberEditor(false);
+      return;
+    }
+
+    if (ctrl && key == SDLK_O) {
+      setActiveTrimFromPlayhead(false);
+      return;
+    }
+    if (ctrl && key == SDLK_I) {
+      setActiveTrimFromPlayhead(true);
+      return;
+    }
+    if (ctrl && key == SDLK_N) {
+      requestNewShow(true);
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_A) {
+      selectAllCuesInFocusedDeck();
+      return;
+    }
+    if (ctrl && !shift && key == SDLK_S) {
+      saveProjectInPlace();   // Ctrl+S keeps the file you have open
+      return;
+    }
+    if (ctrl && shift && key == SDLK_S) {
+      saveProjectAsFromPicker();
+      return;
+    }
+    if (ctrl && shift && key == SDLK_E) {
+      exportProjectBundleFromPicker();
+      return;
+    }
+
+    // A CUE NUMBER BEING TYPED KEEPS EVERY DIGIT. 1, 2, 4, 5 and 6 are toggles
+    // and only the other digits start a search, so typing "31" picked cue 3
+    // and then toggled UI sounds -- and Enter took the wrong cue. Once a number
+    // has started (within the search's own 1.2s window) the rest are its.
+    if (key >= SDLK_0 && key <= SDLK_9 && !typedCueSearchBuffer_.empty() &&
+        SDL_GetTicks() <= typedCueSearchLastKeyAtMs_ + 1200 &&
+        handleCueTypeAheadKey(key, mod)) {
+      return;
+    }
+    switch (key) {
+      // ── Escape: a three-stage escalation, never a shortcut to quitting ──
+      //
+      // 1st press — get back to the desk: drop any fullscreen output that is
+      //             covering the screen and raise the control window.
+      // 2nd press — clear the show: outputs off, engines stopped (panic).
+      // 3rd press — ask about quitting.
+      //
+      // The old logic jumped STRAIGHT to the quit prompt on the first press
+      // whenever `escapeOutputFullscreen` returned false — which is the normal
+      // case (no fullscreen output, or output disabled). Hitting Esc once on an
+      // ordinary setup offered to quit the app mid-show. The escalation also ran
+      // backwards: the panic disarm was on press 3 and the quit prompt on
+      // press 1.
+      //
+      // Each stage announces the next one, so the sequence is discoverable
+      // instead of something the operator has to know.
+      case SDLK_ESCAPE: {
+        if (!keyRepeat && !tutorialTakesEscape()) {
+          escapeEscalation(sourceWindowId);
+        }
+        break;
+      }
+      case SDLK_TAB:
+        cycleFocusedDeck(shift ? -1 : 1);
+        break;
+      case SDLK_UP:
+        selectRelative(-1, shift);
+        break;
+      case SDLK_DOWN:
+        selectRelative(1, shift);
+        break;
+      case SDLK_LEFT:
+        nudgeFocusedPausedPlayback(-1, mod);
+        break;
+      case SDLK_RIGHT:
+        nudgeFocusedPausedPlayback(1, mod);
+        break;
+      case SDLK_1:
+        toggleUiSounds();
+        break;
+      case SDLK_2:
+        toggleUiTransitions();
+        break;
+      case SDLK_4:
+        togglePlaylistLoop();
+        break;
+      case SDLK_RETURN:
+      case SDLK_KP_ENTER:
+        jumpSelectedCue();
+        break;
+      case SDLK_SPACE:
+        toggleTransport();
+        break;
+      case SDLK_S:
+        stopTransport();
+        break;
+      case SDLK_C:
+        if (confirmLiveKey(key, "press C again to stop everything and clear the output")) {
+          clearOutput();
+        }
+        break;
+      case SDLK_F:
+        // Un-fullscreening the projector mid-show puts window chrome on it, and
+        // re-fullscreening raises the output and takes the keyboard with it.
+        if (confirmLiveKey(key, "press F again to switch the output's fullscreen")) {
+          toggleOutputFullscreen();
+        }
+        break;
+      case SDLK_I:
+        importWithPicker();
+        break;
+      case SDLK_B:
+        // B is BLACKOUT. Every lighting desk in the world puts blackout on B,
+        // and it is the one control an operator reaches for without looking.
+        // Adding a browser cue — an authoring action, also available from the
+        // SOURCE menu — moves to Shift+B.
+        if (shift) {
+          addBrowserCueFromPrompt();
+        } else {
+          const bool dark = masterDimmerTarget_ < 0.5;
+          masterDimmerTarget_ = dark ? 1.0 : 0.0;
+          triggerToast(dark ? "blackout off" : "BLACKOUT");
+          playUiSound(dark ? UiSoundEffect::Toggle : UiSoundEffect::Clear);
+        }
+        break;
+      case SDLK_G:
+        triggerParkedCueCreationToast("Lower Third");
+        break;
+      case SDLK_M:
+        triggerParkedCueCreationToast("scene");
+        break;
+      case SDLK_P:
+        if (shift) {
+          // Not "parked for cleanup" like G/M beside it -- that says "not
+          // built yet", and PIP was built, reachable via the ADD A CUE menu,
+          // and retired on purpose 2026-09-30 (scale a second deck over the
+          // first instead). Different message for a different reason.
+          triggerToast("pip: retired -- scale a second deck over this one instead");
+        } else {
+          addKawaiiPatternCue();
+        }
+        break;
+      case SDLK_L:
+        toggleSelectedLoop();
+        break;
+      case SDLK_E:
+        toggleSelectedPauseOnLastFrame();
+        break;
+      case SDLK_X:
+        cycleSelectedEndAction();
+        break;
+      case SDLK_6:
+        toggleShuffle();
+        break;
+      case SDLK_K:
+        cycleSelectedColorTag();
+        break;
+      case SDLK_J:
+        jumpToCurrentCue();
+        break;
+      // PAGE DOWN AND PAGE UP ARE THE PRESENTER REMOTE.
+      //
+      // Every presentation clicker -- D'San Perfect Cue, Logitech, Kensington,
+      // the cheap ones -- appears as a USB keyboard sending Page Down to
+      // advance and Page Up to go back, because that is what PowerPoint and
+      // Keynote listen for. Deckboy listened for neither, so plugging one in
+      // did nothing at all and there was no way to tell from the app why.
+      //
+      // Advancing a slide is taking the next cue, which is what these already
+      // do, so the remote works by pointing the two keys at them.
+      //
+      // With the tracker open -- or CLICKER on in it -- they step the MASTER
+      // SEQUENCE instead, which moves every playlist at once. Period and
+      // comma stay on the playlist either way: they are keyboard keys, not
+      // what a clicker sends.
+      case SDLK_PAGEDOWN:
+        if (clickerDrivesTrackerNow()) {
+          trackerGo();
+        } else {
+          skipToNextCue(/*asTake=*/true);
+        }
+        break;
+      case SDLK_PERIOD:
+        skipToNextCue();
+        break;
+      case SDLK_PAGEUP:
+        if (clickerDrivesTrackerNow()) {
+          trackerBack();
+        } else {
+          skipToPrevCue(/*asTake=*/true);
+        }
+        break;
+      case SDLK_COMMA:
+        skipToPrevCue();
+        break;
+      case SDLK_LEFTBRACKET:
+        adjustSelectedFade(!shift, -0.25);
+        break;
+      case SDLK_RIGHTBRACKET:
+        adjustSelectedFade(!shift, 0.25);
+        break;
+      // ROUTING ON ONE LETTER IS ONE STRAY KEY FROM THE WRONG SCREEN. While a
+      // show is live, A (sound device), D (output display) and N (NDI) need a
+      // second press, the way NEW does; the first says what the second will do.
+      case SDLK_A:
+        if (confirmLiveKey(key, "press A again to move this deck's sound to the next device")) {
+          cycleAudioOutputDevice(1);
+        }
+        break;
+      case SDLK_D:
+        if (confirmLiveKey(key, "press D again to move the output to the next display")) {
+          cycleOutputDisplay(1);
+        }
+        break;
+      case SDLK_N:
+        // toggleFocusedOutputNdi → setFocusedOutputNdiEnabled, which gates on
+        // ndiRuntimeAvailable() and shows the prompt internally.
+        if (confirmLiveKey(key, "press N again to switch this output's NDI")) {
+          toggleFocusedOutputNdi();
+        }
+        break;
+      case SDLK_O:
+        if (shift) {
+          toggleTimeOverlayEnabled();
+        } else {
+          openProjectFromPicker();
+        }
+        break;
+      case SDLK_T:
+        if (confirmLiveKey(key, "press T again to switch the timecode clock")) {
+          setTimecodeRunEnabled(!focusedDeck().timecodeRunEnabled);
+        }
+        break;
+      case SDLK_5:
+        if (confirmLiveKey(key, "press 5 again to switch timecode chase")) {
+          setTimecodeChaseEnabled(!focusedDeck().timecodeChaseEnabled);
+        }
+        break;
+      case SDLK_DELETE:
+        deleteSelected();
+        break;
+      case SDLK_BACKSPACE:
+        // Backspace DELETES. It used to mean "clear overlays, unless there are
+        // none, in which case delete the selected cue" — two unrelated actions
+        // on one key, one of them destructive, chosen by state the operator
+        // cannot see. The shortcuts overlay only documented the harmless half,
+        // so anyone who read it and pressed Backspace on a clean show silently
+        // lost a cue. Overlay clearing now lives on its own key.
+        deleteSelected();
+        break;
+      case SDLK_U:
+        // Overlay clear, on its own non-destructive key.
+        if (!focusedDeck().overlayActiveIndices.empty()) {
+          clearOverlay();
+        } else {
+          triggerToast("no overlays to clear");
+        }
+        break;
+      case SDLK_EQUALS:
+      case SDLK_PLUS:
+        if (MediaEngine* engine = focusedMediaEngine()) {
+          engine->setVolume(engine->volume() + 0.05f);
+          triggerToast("speaker up");
+        }
+        break;
+      case SDLK_MINUS:
+        if (MediaEngine* engine = focusedMediaEngine()) {
+          engine->setVolume(engine->volume() - 0.05f);
+          triggerToast("speaker down");
+        }
+        break;
+      default:
+        if (handleCueTypeAheadKey(key, mod)) {
+          return;
+        }
+        break;
+    }
+  }

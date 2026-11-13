@@ -1,0 +1,21 @@
+# Deckboy Theme: Zelda
+# Family: moulded case. Parchment-cream shell with an amber LCD.
+# All color values are RRGGBBAA hex.
+
+shell_outer	CFC4A6FF
+shell_inner	BAAE90FF
+shell_shadow	554C34FF
+screen_light	FFD24AFF
+screen_mid	B8901EFF
+screen_dark	6B5210FF
+screen_deep	1F1806FF
+screen_ink_soft	8A6A16FF
+button_bezel	7A6C4EFF
+delete_bezel	8B3A3AFF
+scanline_alpha	18
+# hide themselves the moment an output goes live.
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	firefly	3
+creature	frog	1

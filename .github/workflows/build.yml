@@ -1,0 +1,2309 @@
+name: Deckboy CI
+
+# Triggers used to name `deckboy-0.75`, a branch that no longer exists, so
+# push/PR builds silently never ran and only tag builds did — which is how the
+# workflow drifted a whole SDL major version behind without anyone noticing.
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  version-check:
+    name: Version Guard
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "VERSION must use SemVer: MAJOR.MINOR.PATCH[-prerelease]" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            expected="v$version"
+            if [[ "${GITHUB_REF_NAME}" != "$expected" ]]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${expected}" >&2
+              exit 1
+            fi
+
+            # The release notes come out of CHANGES.md, and that extraction ran
+            # in the publish job -- LAST, after six platform builds. A missing
+            # section is a thirty-second omission that cost a full matrix to
+            # discover, twice. It is knowable now, so it is checked now.
+            if ! grep -qE "^## .*v${version}([^0-9]|$)" CHANGES.md; then
+              echo "No CHANGES.md section for v${version}." >&2
+              echo "Add a '## <date> - v${version} (...)' heading; the publish" >&2
+              echo "job takes the release notes from everything under it." >&2
+              exit 1
+            fi
+          fi
+
+  # The Companion module is plain Node with no native deps, so it is by far the
+  # cheapest signal in the matrix — run it first.
+  companion-module:
+    # Named for what it actually runs. Ten source checks live in this job, so a
+    # red cross on "Companion Module Tests" was most often an audit failing and
+    # nothing to do with Companion at all.
+    name: Source Checks + Companion Module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # 26, the runtime the module's manifest declares (node26, per
+          # Bitfocus's template v2.1). @companion-module/base 2.x accepts
+          # ^22.20 || ^26.5, so test on the one Companion will actually run.
+          node-version: '26'
+      - name: Install and test
+        working-directory: companion-module-utopianacademy-deckboy
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
+      # docs/manual.html is GENERATED from MANUAL.md. Edit the manual, forget
+      # the generator, and the site keeps serving the old text to everyone who
+      # arrives from a search -- silently, because the page still loads.
+      - name: The manual page matches the manual
+        run: |
+          python3 tools/build_manual_page.py
+          if ! git diff --quiet -- docs/manual.html; then
+            echo "docs/manual.html is out of date with MANUAL.md."
+            echo "Run: python tools/build_manual_page.py  and commit the result."
+            git --no-pager diff --stat -- docs/manual.html
+            exit 1
+          fi
+          echo "manual page is current"
+
+      # Six pages that link to each other and to anchors inside the manual.
+      # A dead link on a landing page loses the visitor after the expensive
+      # part -- getting them there -- has already been paid for.
+      - name: The site has no dead links
+        run: python3 tools/check_site_links.py
+
+      - name: The press kit matches its copy and images
+        run: python3 tools/build_press_kit.py --check
+
+      # The Stream Deck plugin has no dependencies at all, so there is nothing
+      # to install -- the build assembles the .sdPlugin folder and checks every
+      # path the manifest names, which is the failure Stream Deck reports worst.
+      - name: Stream Deck plugin
+        working-directory: streamdeck-plugin-deckboy
+        run: |
+          node tools/build.js
+          npm test
+          node tools/pack.js
+
+      # The module Companion actually installs, rather than the source tree:
+      # Bitfocus's own packager, on a clean install. It refused the module
+      # while its source was GPL-3.0-or-later (Bitfocus require MIT source);
+      # the module was relicensed MIT on 2026-09-23 (James's call) and is
+      # published at bitfocus/companion-module-utopianacademy-deckboy, so a
+      # build that fails here would fail their submission too.
+      - name: Companion module package
+        working-directory: companion-module-utopianacademy-deckboy
+        run: npx companion-module-build
+
+      # And the route that needs no store at all: the developer modules
+      # folder. The zip carries the module and its production dependencies,
+      # so it unpacks and runs -- three steps for a Companion user.
+      - name: Companion module, for the developer modules folder
+        run: python3 tools/pack_companion_module.py
+
+      # Attached to the release below. Without this the plugins exist only for
+      # someone who clones and builds, which is not how an operator gets one.
+      - name: Upload plugin packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deckboy-plugins
+          path: |
+            streamdeck-plugin-deckboy/dist/*.streamDeckPlugin
+            companion-module-utopianacademy-deckboy/dist/Deckboy-companion-module-*.zip
+          if-no-files-found: error
+
+      # Source-level checks, so they need no toolchain and fail before any of
+      # the three platform builds start.
+      #
+      # The show file is POSITIONAL: a field inserted into the middle of the
+      # writer shifts every column after it, and the reader goes on addressing
+      # the old positions. That skew does not crash -- the wrong values clamp
+      # back into range and look plausible, which is how one of them survived
+      # years of round-trip smoke tests -- so only comparing the two orders
+      # directly will find it.
+      - name: The show writer and reader must agree on every column
+        run: python3 tools/audit_record_layout.py
+
+      # A QuickAction with no handler, or one nothing can fire, is a control
+      # that looks real and does nothing.
+      - name: No dead controls
+        run: python3 tools/audit_actions.py --strict
+
+      # And the other half of that, which the check above cannot see: a
+      # function whose whole body is `return false;` while its callers are
+      # written as though it works. Six of the deck-to-output routing
+      # functions were exactly this in v0.99.373, with the whole routing UI
+      # wired to them, and every gate reported clean.
+      - name: No stubs that lie to their callers
+        run: python3 tools/audit_reachable.py
+
+      # Two verbs sharing one implementation is fine when they are synonyms
+      # and a trap when they are not: GO and TOGGLE were aliases, the standby
+      # walker went in at the top of the shared function, and the SPACEBAR
+      # stopped pausing. Every wiring audit passed.
+      - name: Aliased verbs mean the same thing
+        run: python3 tools/audit_verb_aliases.py
+
+      # stateDir() is the only place the app writes, so anything it creates
+      # there describes the PACKAGING machine. That list has drifted three
+      # times -- a shipped show file, then recent_projects.txt, then
+      # _converted/ and recordings/ -- each time fixed with a comment saying
+      # "keep these in sync". Comments do not fail builds.
+      - name: Packagers strip everything the app writes
+        run: python3 tools/audit_packager_strip.py
+
+      # An enum that grew past the bound its loader clamps to loses its newest
+      # members on reload -- the cue works all session and comes back as a
+      # different thing. Two shipped that way: the 2A03 synth reopened as a
+      # test tone, and four of the video synth's palettes reopened as Mono.
+      - name: Int-to-enum conversions keep up with their enums
+        run: python3 tools/audit_enum_bounds.py
+
+      # The six below were all written after a real fault and then run by hand,
+      # which means they were run when somebody remembered. Each passed on the
+      # tree the day it was added and there is no reason any of them should
+      # ever start failing quietly.
+
+      # A show file is a document people send each other, and the paths in it
+      # used to reach std::system() inside double quotes -- which disarm
+      # nothing. Opening somebody else's show is meant to be safe.
+      - name: Nothing hands a runtime string to a shell
+        run: python3 tools/audit_shell_safety.py
+
+      # CHANGES.md becomes the GitHub release body verbatim, and has given away
+      # a hidden feature twice -- once key by key.
+      - name: Nothing published gives away a secret
+        run: python3 tools/audit_spoilers.py
+
+      # And the other way that file can embarrass a release. The v0.99.374
+      # section was nearly published opening on "reported the new work as
+      # broadly broken", because it had been used as a working log through the
+      # day and then a release was cut from it.
+      - name: Release notes say what the release does
+        run: python3 tools/audit_release_tone.py
+
+      # HELP is the only description of the remote protocol anybody sees. It
+      # has advertised verbs that answer "unknown command", and hidden twelve
+      # working ones that could only be found by reading the source.
+      - name: HELP describes the protocol that exists
+        run: python3 tools/audit_remote_help.py
+
+      # Text that went into the source encoded twice draws as mojibake, and no
+      # compiler, test or screenshot review has ever caught one.
+      - name: No double-encoded text
+        run: python3 tools/audit_encoding.py
+
+      # SDL_ttf called directly draws Arabic unjoined and backwards, a Japanese
+      # cue name as boxes on an English desk, and the numbers in a right-to-left
+      # label reversed. Every measure and draw goes through the shaper.
+      - name: Every string goes through the shaper
+        run: python3 tools/audit_text_shaping.py
+
+      # A word built from two alphabets -- a Cyrillic a inside a Latin
+      # word -- draws correctly and matches nothing. In a catalogue KEY it
+      # makes that string untranslatable forever, silently.
+      - name: No catalogue word mixes two alphabets
+        run: python3 tools/audit_i18n.py
+
+      # New interface text is translated by tools/hooks/pre-commit as it is
+      # committed. A commit that went round the hook is caught here: any drawn
+      # string a full catalogue lacks that is not kept English on purpose
+      # (tools/i18n_keep_english.txt) and not in tools/i18n_baseline.txt fails.
+      - name: New interface text is translated in every full language
+        run: python3 tools/audit_i18n.py --gate
+
+      - name: Face speech covers every full catalogue and keeps command names
+        run: python3 tools/check_face_translations.py
+
+      # The shortcut overlay is the only list of keys an operator sees, and
+      # it has drifted both ways: keys that do nothing, and -- worse -- nine
+      # working keys it never mentioned, including the only way into the
+      # dashboard and the master tracker.
+      - name: The shortcut list matches the keys that work
+        run: python3 tools/audit_shortcuts.py
+
+      # Both of these are RATCHETS against a recorded baseline rather than a
+      # verdict: the counts may be non-zero for good reasons, but they must not
+      # grow. Tighten the baseline when the number falls.
+      - name: No new UI geometry written in 1x pixels
+        run: python3 tools/audit_scaled_layout.py --strict
+
+      # The reachable count is at zero: every setting the show file persists
+      # can be changed by a person. Keeping it there is the point.
+      - name: Every saved setting can still be reached
+        run: python3 tools/audit_reachable.py --strict
+
+  linux-build:
+    name: Linux Build (Ubuntu)
+    needs: version-check
+    # 22.04, NOT ubuntu-latest, and it is the glibc floor that decides it.
+    #
+    # An AppImage cannot run on an older glibc than the highest version
+    # anything inside it needs, and that is set by the binary as much as by
+    # the bundled libraries -- which are copied from THIS runner. Built on
+    # 24.04 the floor was 2.39, so the download refused to start on 22.04,
+    # which is still supported and is what a lot of venue machines run.
+    # Nothing of ours caught it: our CI runs the same new image it built on,
+    # so the test machine cannot show the fault. The AppImageHub catalogue
+    # rig found it in ten minutes.
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - features: none
+            cmake_args: "-DENABLE_DECKLINK=OFF -DDECKBOY_ENABLE_NDI=OFF -DENABLE_ASIO=OFF -DDECKBOY_INPROC_DECODE=OFF"
+          # ENABLE_DECKLINK is ON by default now that the SDK headers are
+          # vendored in native/extras/decklink-sdk, so the `all` leg compiles
+          # the real capture and playout code on every push. The `none` leg
+          # turns it off explicitly, which keeps the no-SDK stub path covered
+          # too -- both halves of that file are built, which is what stopped
+          # being true when the SDK was a manual download.
+          - features: all
+            cmake_args: "-DENABLE_MIDI=ON"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install base dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config git \
+            libfreetype-dev libharfbuzz-dev \
+            libavcodec-dev libavformat-dev libavutil-dev \
+            libavfilter-dev libswscale-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev \
+            libasound2-dev libpulse-dev libudev-dev libdrm-dev libgbm-dev \
+            libxss-dev libxfixes-dev libxinerama-dev libxtst-dev \
+            libdbus-1-dev libibus-1.0-dev libgles2-mesa-dev libdecor-0-dev xvfb \
+            poppler-utils
+
+      # 22.04 defaults to gcc-11, which is short of C++20. gcc-12 is in the
+      # distro's own archive, so the C++ runtime stays the one 22.04 ships --
+      # a newer compiler from a PPA would move the GLIBCXX floor instead of
+      # the glibc one and land us back where we started.
+      - name: Install a C++20 compiler
+        run: |
+          sudo apt-get install -y gcc-12 g++-12
+          echo "CC=gcc-12"  >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
+      # 22.04's ffmpeg is 4.4, and Deckboy is written against a modern libav:
+      # av_find_best_stream took a non-const AVCodec** until 5.0, and
+      # ch_layout replaced channel_layout in 5.1. Guarding those would get a
+      # Linux build compiling while quietly dropping decode capability that
+      # Windows and macOS have, which is not the same product.
+      #
+      # So the runner gets a current ffmpeg instead, headers and libraries
+      # and binaries together. These builds are made against an old glibc on
+      # purpose, which is why they do not undo the floor this job exists to
+      # lower -- and the floor check below reads the shipped AppImage rather
+      # than taking that on trust.
+      #
+      # It lands in /usr/local, so: pkg-config finds the libraries here,
+      # cmake links them, and package_linux.sh -- which takes ffmpeg and
+      # ffprobe from PATH -- bundles THESE binaries rather than 4.4.
+      - name: Install a current FFmpeg
+        run: |
+          set -e
+          url=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-shared-8.1.tar.xz
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 15 "$url" -o /tmp/ffmpeg.tar.xz
+          mkdir -p /tmp/ffmpeg && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1
+          sudo cp -a /tmp/ffmpeg/bin/. /usr/local/bin/
+          sudo cp -a /tmp/ffmpeg/lib/. /usr/local/lib/
+          sudo cp -a /tmp/ffmpeg/include/. /usr/local/include/
+          # Keep the build's licence: the packagers carry it as LICENSE-ffmpeg.txt
+          # and refuse to bundle FFmpeg without it.
+          found=0
+          for f in LICENSE.txt LICENSE COPYING.GPLv3 COPYING.LGPLv2.1; do
+            if [ -f "/tmp/ffmpeg/$f" ]; then sudo install -Dm644 "/tmp/ffmpeg/$f" "/usr/local/share/doc/ffmpeg/$f"; found=1; fi
+          done
+          [ "$found" = 1 ] || { echo "no licence file in the FFmpeg build"; ls /tmp/ffmpeg; exit 1; }
+          sudo ldconfig
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
+          ffmpeg -version | head -1
+          pkg-config --modversion libavcodec libavformat libavutil
+
+      - name: Install RtMidi (feature builds)
+        if: matrix.features == 'all'
+        run: sudo apt-get install -y librtmidi-dev
+
+      # SDL3 is not in every Ubuntu image's archive yet, so try the packages
+      # and fall back to building the stable branch from source. Whichever path
+      # runs, the result is a normal system install that find_package picks up.
+      - name: Install SDL3
+        run: |
+          set -e
+          # 3.4 is the floor, not a preference: the recording readback uses the
+          # SDL_GPU renderer's texture property, which does not exist in 3.2.
+          # Taking whatever apt happens to ship meant Linux built against 3.2
+          # while Windows built against 3.4, and the difference only showed up
+          # as a compile error on one of the three.
+          if sudo apt-get install -y libsdl3-dev libsdl3-ttf-dev && pkg-config --atleast-version=3.4.0 sdl3; then
+            echo "SDL3 $(pkg-config --modversion sdl3) installed from apt"
+            exit 0
+          fi
+          echo "SDL3 >= 3.4 not packaged on this image — building from source"
+          # A RELEASE, not the release-3.4.x branch: on 2026-10-09 a commit to that
+          # branch stopped it compiling and took both Linux builds of a release tag
+          # with it. Matches the Mac build (tools/macos_build_deps.sh).
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch release-3.4.18 https://github.com/libsdl-org/SDL.git /tmp/SDL
+          # 3.4 HARD-FAILS on a missing X11 dev package where 3.2 quietly turned
+          # the feature off, so the dependency list above is now load-bearing --
+          # it is SDL's documented Linux set rather than the minimum that
+          # happened to work, because discovering them one CI run at a time
+          # (XScreenSaver, then XTEST, then...) is not a method.
+          cmake -S /tmp/SDL -B /tmp/SDL/build -DCMAKE_BUILD_TYPE=Release -DSDL_STATIC=OFF
+          cmake --build /tmp/SDL/build -j"$(nproc)"
+          sudo cmake --install /tmp/SDL/build
+          # SDL_ttf has no 3.4 line; 3.2 builds against SDL 3.4 unchanged. A release,
+          # not the branch, for the same reason as SDL above.
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch release-3.2.2 --recurse-submodules \
+            https://github.com/libsdl-org/SDL_ttf.git /tmp/SDL_ttf
+          # HARFBUZZ ON. Without it SDL_ttf cannot shape or reorder, so a
+          # right-to-left script draws as unjoined letters in the wrong order --
+          # and Deckboy, which checks, refuses to offer those languages at all.
+          # Vendored, so this needs nothing from the runner's package list.
+          cmake -S /tmp/SDL_ttf -B /tmp/SDL_ttf/build -DCMAKE_BUILD_TYPE=Release             -DSDLTTF_VENDORED=ON -DSDLTTF_HARFBUZZ=ON
+          cmake --build /tmp/SDL_ttf/build -j"$(nproc)"
+          sudo cmake --install /tmp/SDL_ttf/build
+          sudo ldconfig
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDECKBOY_SANITIZE_BROADCAST_CHECK=ON ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cmake --build build -j"$(nproc)" 2>&1 | tee build.log
+
+      # See the Windows job for why these two are worth a gate of their own.
+      - name: No hidden names, no unread locals
+        run: python3 tools/audit_warnings.py build.log
+
+      # The feature build must have NDI compiled in. The headers are vendored,
+      # so this is a guard against the define not reaching the binary: every
+      # release until now shipped without NDI while CI stayed green.
+      - name: Self-check
+        run: |
+          ./build/Deckboy --self-check > self-check.txt
+          cat self-check.txt
+          if grep -q 'right-to-left hidden' self-check.txt; then
+            echo "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz." >&2
+            exit 1
+          fi
+          if [ '${{ matrix.features }}' = 'all' ] && ! grep -q '^ndi-sdk: headers detected' self-check.txt; then
+            echo "NDI is not compiled into this build." >&2
+            exit 1
+          fi
+
+      # ASK THE BINARY, not the build system. The vendored headers prove the
+      # SDK was THERE; this proves the define reached the executable. Those
+      # are different facts -- the distinction that mattered for NDI above,
+      # and exactly how v0.99.370 was first published with a plugin host
+      # that could not host anything.
+      - name: Plugin host is in the binary
+        run: |
+          ./build/Deckboy --plugins > plugins.txt 2>&1 || true
+          head -3 plugins.txt
+          if ! grep -q 'this build can load them' plugins.txt; then
+            echo "This build cannot load plugins -- it must not be released." >&2
+            exit 1
+          fi
+
+      - name: Smoke tests
+        run: ./build/Deckboy --smoke
+
+      # Typed colours, the hue maths, and an effect's colour through a save.
+      - name: Effect colours
+        run: ./build/Deckboy --colour-check
+
+      - name: Broadcast transport and audio regressions
+        run: ctest --test-dir build --output-on-failure
+
+      # The GPU scopes analyser against the CPU one, bin for bin. Vulkan needs
+      # the SPIR-V embed, which a dxc with SPIR-V output has to make, so until
+      # then this reports that the CPU measures here. The embed itself must
+      # match its sources whatever this machine can run.
+      - name: Scopes on the GPU
+        run: |
+          python3 tools/build_scopes_shaders.py --check
+          xvfb-run -a ./build/deckboy-scopes-gpu-check
+
+      # Slide import renders through pdftoppm here, CoreGraphics on a Mac and
+      # Windows.Data.Pdf on Windows. Nothing looked at the pages any of them
+      # made, and the Mac's came out a quarter of the width for two months.
+      # Its first run here found pdftoppm drawing the media box, not the crop
+      # box, and sizing a rotated page before turning it.
+      - name: Slides and PDFs render at full size
+        run: python3 tools/check_pdf_render.py --exe ./build/Deckboy
+
+      # The bidi algorithm against Unicode's own conformance files, for the
+      # Unicode version its tables were generated from: about 860,000 cases,
+      # every one of which must pass. Fetched rather than kept in the repo --
+      # they are 15 MB of text that only this step reads.
+      - name: Unicode bidi conformance
+        run: |
+          set -e
+          v=$(sed -n 's/.*kUnicodeVersion = "\(.*\)";/\1/p' native/core/bidi_data.inc)
+          echo "Unicode $v"
+          for f in BidiTest.txt BidiCharacterTest.txt; do
+            curl -fsSL --retry 4 --retry-all-errors --retry-delay 15 -o "/tmp/$f" "https://www.unicode.org/Public/$v/ucd/$f"
+          done
+          ./build/deckboy-bidi-check /tmp/BidiTest.txt /tmp/BidiCharacterTest.txt
+
+      # A named parameter that moves nothing is a knob the operator turns for
+      # no reason. Shatter shipped with its drift and rotation hanging off
+      # parameters that arrive at zero, so ADDING the effect did nothing at
+      # all, and it sat in a released build for twelve days because this check
+      # existed and nothing ran it. It costs about half a minute.
+      - name: Every effect, and every knob on it, changes the picture
+        if: matrix.features == 'all'
+        run: |
+          python3 tools/check_effects_offline.py --exe ./build/Deckboy
+          python3 tools/check_effects_offline.py --exe ./build/Deckboy --params
+          python3 tools/check_effects_offline.py --exe ./build/Deckboy --animation
+
+      # A transition gets half a second in front of an audience and nobody
+      # sees it twice. The two ways it fails are both invisible in a
+      # screenshot: it twitches on the first frame, or it finishes still
+      # holding a piece of the old cue. Both were real -- one new style was
+      # inverted end to end, and the Portal that had already shipped kept its
+      # corners at a third opacity on the very last frame.
+      - name: Every transition starts clean, finishes clean and repeats
+        if: matrix.features == 'all'
+        run: python3 tools/check_transitions.py --exe ./build/Deckboy
+
+      # A tracker step on "when its cues end" waits for the cues it fired: at
+      # half speed, through a pause, across two playlists. It once ran on a
+      # clock predicted from the media length and cut cues off.
+      - name: Tracker steps wait for their cues to end
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_tracker_follow.py --exe ./build/Deckboy --late 1.5
+
+      # Undo restores edits, never the live show: a waiting cue keeps its
+      # identity, a recording keeps running, a routed layer stays put.
+      - name: Undo leaves the live show alone
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_undo_live.py --exe ./build/Deckboy
+
+      # Auto-next, SKIP and PREV select the cue they take, alone; an output
+      # turned off stops reporting a rate (human-workflow audit H01, H02).
+      - name: Playback selects one cue; an off output reports no rate
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_selection_follow.py --exe ./build/Deckboy
+
+      # Removing an output beside a recording, STOP mid-dissolve, and what
+      # an insert leaves selected (edges audit F14-F16).
+      - name: Outputs, selection and STOP at the edges
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_output_edges.py --exe ./build/Deckboy
+
+      - name: Sequences on a dashboard tile
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_sequences.py --exe ./build/Deckboy
+
+      # Every MIDI, OSC and remote message, and what Deckboy did with it. MIDI
+      # goes in through MIDIIN, to the handlers both MIDI paths now share; the
+      # ALSA event loop in front of them needs a real port and is not run here.
+      - name: The MIDI and OSC monitor
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_input_monitor.py --exe ./build/Deckboy
+
+      # A tone cue read through the playlist's audio tap: correlation +1, the
+      # 1k band at -18 dB, -18 LUFS; PAUSE and STOP silence it.
+      - name: The sound scopes
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_sound_scopes.py --exe ./build/Deckboy
+
+      # Two playlists whose SUM passes the ceiling and neither alone does: the
+      # captured device feed must not pass it.
+      - name: The output limiter
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_output_limiter.py --exe ./build/Deckboy
+
+      # Fade cues on a playing cue's picture-effect and audio-effect knobs, a
+      # fade at an effect the cue does not have, and the fields with the show.
+      - name: Fades on effect knobs
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_fade_knobs.py --exe ./build/Deckboy
+
+      # Removing playlist 2 of 4 while all play: only it stops, the others
+      # carry on (playheads, names, the output on playlist 4, a recording's
+      # sound with no gap), and UNDO/REDO do the same.
+      - name: Removing one playlist of four
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_deck_remove.py --exe ./build/Deckboy
+
+      # INSTALL & RESTART with a stand-in AppImage: the card is up from the
+      # frame after the press, Deckboy closes by itself and the helper puts
+      # the new file in place; a deck going live calls it off.
+      - name: Install and restart
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_update_install.py --exe ./build/Deckboy
+
+      # The window title, the OUTPUT chip, Esc on a full-screen output with
+      # Settings open, and ST 2110 on and off 25 times without a hang.
+      - name: The desk's small promises
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_desk_basics.py --exe ./build/Deckboy
+
+      # The effect colour picker: the chips, the panel, typed and picked
+      # colours, and pick-from-screen arming, taking and cancelling.
+      - name: The effect colour picker
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_colour_picker.py --exe ./build/Deckboy
+
+      # The stage timer's font list: this computer's fonts, searched and picked.
+      - name: The timer's font list
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_timer_fonts.py --exe ./build/Deckboy
+
+      # A solid backdrop behind a Lower Third, read off the output's frame.
+      - name: Backdrops behind overlay cues
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_backdrop.py --exe ./build/Deckboy
+
+      # The MIDI map, through MIDIIN: no MIDI port needed.
+      - name: MIDI map
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_midi_map.py --exe ./build/Deckboy
+
+      # A panel map's tile size, typed and stepped, read off the output's frame.
+      - name: Panel map tile size
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_panel_map_size.py --exe ./build/Deckboy
+
+      # Masks on the output, the matte, a layer, a cue and the base, read off the frame.
+      - name: Masks
+        if: matrix.features == 'all'
+        run: |
+          xvfb-run -a python3 tools/check_masks.py --exe ./build/Deckboy
+          # SDL's software renderer has no custom blends: the processor cuts there.
+          xvfb-run -a python3 tools/check_masks.py --exe ./build/Deckboy --renderer software
+
+      # The mask editor through the desk's own input: button, rows, drags, pen.
+      - name: Mask editor
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_mask_editor.py --exe ./build/Deckboy
+
+      # Motion: a moving box read through a playlist drives an effect and a tone.
+      - name: Motion
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_motion.py --exe ./build/Deckboy
+
+      # Bug Swat, the Motion lesson's game: each briefing's control, the paw, the hand-back.
+      - name: Bug Swat
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_bugswat.py --exe ./build/Deckboy
+
+      # Part two of learning: the lesson list, and every lesson walked with SHOW ME.
+      - name: Lessons
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_lessons.py --exe ./build/Deckboy
+
+      # The Draw source: strokes, frames, replay and saves, read off the frame.
+      - name: Draw
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_draw.py --exe ./build/Deckboy
+
+      # Slices on an output, and the Screens window that arranges them.
+      - name: Slices and Screens
+        if: matrix.features == 'all'
+        run: |
+          xvfb-run -a python3 tools/check_slices.py --exe ./build/Deckboy
+          xvfb-run -a python3 tools/check_screens.py --exe ./build/Deckboy
+
+      # The multiview's layouts and feeds (an output, the clock, tally), off the frame.
+      - name: Multiview feeds
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_multiview_feeds.py --exe ./build/Deckboy
+
+      # A fade cue's SPEED, like tape: a 1 kHz tone at 0.5x is 500 Hz in what
+      # the device is given, a ramp to 2x ends at 2 kHz, a new take starts at
+      # 1x, and a video's playhead moves one second in two at 0.5x.
+      - name: Speed like tape
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_tape_speed.py --exe ./build/Deckboy
+
+      # Named outputs and the patch: three playlists of tones onto FOH, SUB,
+      # MON and PRESS FEED on one eight-channel interface, each channel taken
+      # apart per playlist; a missing interface, a cue's matrix by name, a
+      # playlist leaving the patch, and the grid's click and drag.
+      - name: Named outputs and the patch
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_audio_patch.py --exe ./build/Deckboy
+
+      # The Web Monitor keeps two minutes for its player's PAUSE and BACK 10 S
+      # (dvr.m3u8) while OPEN STREAM stays the live window. The browser half
+      # (--browser) needs Edge or Chrome and websocket-client, so it runs locally.
+      - name: The Web Monitor's rewind
+        if: matrix.features == 'all'
+        run: xvfb-run -a python3 tools/check_web_rewind.py --exe ./build/Deckboy
+
+      # The programme's colours against independently decoded references, on
+      # the renderers a Linux desktop uses: Mesa's OpenGL and SDL's software
+      # one. Windows CI checked only Direct3D 11, so 8/10-bit and limited/full
+      # range were proven on one platform of three.
+      - name: Programme colour on OpenGL and software
+        if: matrix.features == 'all'
+        run: |
+          for r in opengl software; do
+            xvfb-run -a python3 tools/check_programme_colour.py --exe ./build/Deckboy --renderer "$r"
+          done
+
+      - name: Programme capture cadence and Main 10 picture
+        if: matrix.features == 'all'
+        run: |
+          xvfb-run -a python3 tools/record_rate_check.py --exe ./build/Deckboy \
+            --fixture main10 --renderer software --readback sync \
+            --standard 640x360@25 --seconds 8
+          DECKBOY_OUTPUT_RENDERER=software DECKBOY_EGRESS_READBACK=sync \
+            xvfb-run -a python3 tools/check_transitions.py --exe ./build/Deckboy --playout
+
+      - name: Upload artifact
+        if: matrix.features == 'none'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deckboy-linux-${{ needs.version-check.outputs.version }}
+          path: build/Deckboy
+
+      - uses: actions/setup-node@v4
+        if: matrix.features == 'all'
+        with:
+          node-version: '22'
+
+      # REPORTS, DOES NOT BLOCK (James, 2026-10-09). On these virtual machines
+      # the audio clock is a dummy driver running about 0.4% off true time, so
+      # the A/V figure measures the VM more than Deckboy; it failed on its own
+      # about one run in two. The real measurement is the hour-long drift run
+      # on a real sound card (check_web_monitor_av.mjs --real-audio). Its
+      # numbers still print here, and a step failure still shows in the run.
+      - name: Web Monitor HLS and audio/video timing
+        if: matrix.features == 'all'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: xvfb-run -a node tools/check_web_monitor_av.mjs --exe ./build/Deckboy --seconds 60 --raster 960x540
+
+      # The evidence a failed timing run leaves, minus the large source clip:
+      # CI keeps no screen, so these files are the only way to see why.
+      - name: Upload Web Monitor evidence
+        if: failure() && matrix.features == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-monitor-evidence-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/deckboy-web-av-*/metrics.json
+            ${{ runner.temp }}/deckboy-web-av-*/telemetry.json
+            ${{ runner.temp }}/deckboy-web-av-*/app.log
+            ${{ runner.temp }}/deckboy-web-av-*/index.m3u8
+            ${{ runner.temp }}/deckboy-web-av-*/web.mp4
+            ${{ runner.temp }}/deckboy-web-av-*/ffreport-*.log
+          if-no-files-found: ignore
+
+      # The shippable Linux artefacts. Both packagers default to build/, which
+      # is where this job already built, so they need nothing but ffmpeg —
+      # which they BUNDLE, so the tarball runs on a machine that has none.
+      # CAPTIONS MADE ON THIS COMPUTER need whisper-cli in the package. A
+      # STATIC build (one executable, no libraries of its own) of a pinned
+      # whisper.cpp, GGML_NATIVE=OFF so it runs on any CPU of the platform and
+      # GGML_OPENMP=OFF so it needs no OpenMP runtime (vcomp140, libgomp) --
+      # ggml's own thread pool instead. DECKBOY_REQUIRE_WHISPER makes
+      # the packager FAIL without it: a captions button that cannot run must
+      # not ship looking like one that can.
+      - name: Build whisper-cli (captions)
+        if: matrix.features == 'all'
+        run: |
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          cmake --build "$RUNNER_TEMP/whisper-build" --target whisper-cli -j"$(nproc)"
+          "$RUNNER_TEMP/whisper-build/bin/whisper-cli" --help > /dev/null
+          echo "DECKBOY_WHISPER_CLI=$RUNNER_TEMP/whisper-build/bin/whisper-cli" >> "$GITHUB_ENV"
+          # LIVE CAPTIONS: deckboy-listen, against the same whisper.cpp.
+          cmake -S tools/listen -B "$RUNNER_TEMP/listen-build" -DWHISPER_SOURCE="$RUNNER_TEMP/whisper.cpp" \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF
+          cmake --build "$RUNNER_TEMP/listen-build" --target deckboy-listen -j"$(nproc)"
+          test -x "$RUNNER_TEMP/listen-build/deckboy-listen"
+          echo "DECKBOY_LISTEN_BIN=$RUNNER_TEMP/listen-build/deckboy-listen" >> "$GITHUB_ENV"
+          echo "DECKBOY_REQUIRE_WHISPER=1" >> "$GITHUB_ENV"
+
+      - name: Package portable tarball and AppImage
+        if: matrix.features == 'all'
+        run: |
+          sudo apt-get install -y file desktop-file-utils
+          ./tools/package_linux.sh
+          ./tools/package_linux_appimage.sh
+          # Deckboy Mini on its own, SMALL: a decode-only ffmpeg built for it
+          # (tools/build_mini_ffmpeg.sh), then a clip played from the download.
+          chmod +x tools/build_mini_ffmpeg.sh tools/package_mini_linux.sh
+          ./tools/build_mini_ffmpeg.sh /opt/ffmpeg-mini
+          LD_LIBRARY_PATH=/opt/ffmpeg-mini/lib DECKBOY_FFMPEG=/opt/ffmpeg-mini/bin/ffmpeg DECKBOY_FFPROBE=/opt/ffmpeg-mini/bin/ffprobe ./tools/package_mini_linux.sh build dist
+          python3 tools/check_mini_package.py dist/Deckboy-Mini-*-linux-x86_64.tar.gz
+
+      # PROVE the floor rather than trusting the runner label. An AppImage
+      # will not start on an older glibc than the highest version anything
+      # inside it needs, and that is a SILENT failure: the file downloads,
+      # the loader refuses it, and nothing in a build goes red. This reads
+      # the symbols out of every ELF in the AppImage that was just built,
+      # which also catches a dependency dragging the floor back up.
+      - name: The AppImage must run on 22.04 (glibc 2.35)
+        if: matrix.features == 'all'
+        run: |
+          set -e
+          cd dist
+          chmod +x Deckboy-*.AppImage
+          ./Deckboy-*.AppImage --appimage-extract > /dev/null
+          worst=2.0
+          where=""
+          for f in $(find squashfs-root -type f); do
+            case "$(file -b "$f")" in *ELF*) ;; *) continue ;; esac
+            v=$(objdump -T "$f" 2>/dev/null | grep -o "GLIBC_[0-9.]*" | sed "s/GLIBC_//" | sort -V | tail -1)
+            [ -n "$v" ] || continue
+            highest=$(printf "%s\n%s\n" "$worst" "$v" | sort -V | tail -1)
+            if [ "$highest" = "$v" ] && [ "$v" != "$worst" ]; then
+              worst="$v"
+              where="$f"
+            fi
+          done
+          echo "highest glibc required: $worst  ($where)"
+          if [ "$(printf "2.35\n%s\n" "$worst" | sort -V | tail -1)" != "2.35" ]; then
+            echo "::error::The AppImage needs glibc $worst, so it cannot start on Ubuntu 22.04 (2.35). Raised by: $where"
+            exit 1
+          fi
+          rm -rf squashfs-root
+
+      # A tarball that unpacks to nothing, or an AppImage that will not start,
+      # is worse than no artefact: it looks like a release. Both are exercised
+      # here rather than trusted.
+      - name: The packaged builds must actually run
+        if: matrix.features == 'all'
+        run: |
+          set -e
+          mkdir -p /tmp/unpack
+          tar -xzf dist/Deckboy-[0-9]*.tar.gz -C /tmp/unpack
+          BIN="$(find /tmp/unpack -name Deckboy -type f | head -1)"
+          "$BIN" --self-check
+          "$BIN" --smoke
+          # Deckboy-* explicitly: appimagetool is also a .AppImage and lives in
+          # the same directory, and which one a bare glob picks first
+          # depends on the locale.
+          APPIMAGE="$(ls dist/Deckboy-*.AppImage | head -1)"
+          chmod +x "$APPIMAGE"
+          # --appimage-extract-and-run: the runners have no FUSE.
+          "$APPIMAGE" --appimage-extract-and-run --self-check
+
+      - name: Upload Linux packages
+        if: matrix.features == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-linux-packages
+          path: |
+            dist/Deckboy-*.tar.gz
+            dist/Deckboy-*.AppImage
+          if-no-files-found: error
+
+  # DECKBOY MINI FOR A RASPBERRY PI (and any 64-bit ARM Linux). Mini only: it
+  # needs nothing of the desk, so this builds one target. Ubuntu 22.04 for the
+  # same glibc floor as the x86_64 build, so it runs on the older Raspberry Pi
+  # OS as well as the current one. The setup mirrors linux-build.
+  mini-linux-arm64:
+    name: Deckboy Mini (Linux ARM64, Raspberry Pi)
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install base dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config git patchelf gcc-12 g++-12 \
+            libfreetype-dev libharfbuzz-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev \
+            libasound2-dev libpulse-dev libudev-dev libdrm-dev libgbm-dev \
+            libxss-dev libxfixes-dev libxinerama-dev libxtst-dev \
+            libdbus-1-dev libibus-1.0-dev libgles2-mesa-dev libdecor-0-dev
+          echo "CC=gcc-12"  >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
+      - name: Install a current FFmpeg (arm64)
+        run: |
+          set -e
+          url=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linuxarm64-gpl-shared-8.1.tar.xz
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 15 "$url" -o /tmp/ffmpeg.tar.xz
+          mkdir -p /tmp/ffmpeg && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1
+          sudo cp -a /tmp/ffmpeg/bin/. /usr/local/bin/
+          sudo cp -a /tmp/ffmpeg/lib/. /usr/local/lib/
+          sudo cp -a /tmp/ffmpeg/include/. /usr/local/include/
+          # Keep the build's licence: the packagers carry it as LICENSE-ffmpeg.txt
+          # and refuse to bundle FFmpeg without it.
+          found=0
+          for f in LICENSE.txt LICENSE COPYING.GPLv3 COPYING.LGPLv2.1; do
+            if [ -f "/tmp/ffmpeg/$f" ]; then sudo install -Dm644 "/tmp/ffmpeg/$f" "/usr/local/share/doc/ffmpeg/$f"; found=1; fi
+          done
+          [ "$found" = 1 ] || { echo "no licence file in the FFmpeg build"; ls /tmp/ffmpeg; exit 1; }
+          sudo ldconfig
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
+          ffmpeg -version | head -1
+
+      - name: Install SDL3 and SDL_ttf (releases, from source)
+        run: |
+          set -e
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch release-3.4.18 https://github.com/libsdl-org/SDL.git /tmp/SDL
+          cmake -S /tmp/SDL -B /tmp/SDL/build -DCMAKE_BUILD_TYPE=Release -DSDL_STATIC=OFF
+          cmake --build /tmp/SDL/build -j"$(nproc)"
+          sudo cmake --install /tmp/SDL/build
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch release-3.2.2 --recurse-submodules \
+            https://github.com/libsdl-org/SDL_ttf.git /tmp/SDL_ttf
+          cmake -S /tmp/SDL_ttf -B /tmp/SDL_ttf/build -DCMAKE_BUILD_TYPE=Release -DSDLTTF_VENDORED=ON -DSDLTTF_HARFBUZZ=ON
+          cmake --build /tmp/SDL_ttf/build -j"$(nproc)"
+          sudo cmake --install /tmp/SDL_ttf/build
+          sudo ldconfig
+
+      - name: Build Deckboy Mini
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_DECKLINK=OFF -DDECKBOY_ENABLE_NDI=OFF -DENABLE_ASIO=OFF
+          cmake --build build --target deckboy-mini -j"$(nproc)"
+
+      - name: Package Deckboy Mini (small) and play a clip from it
+        run: |
+          chmod +x tools/build_mini_ffmpeg.sh tools/package_mini_linux.sh
+          ./tools/build_mini_ffmpeg.sh /opt/ffmpeg-mini
+          LD_LIBRARY_PATH=/opt/ffmpeg-mini/lib DECKBOY_FFMPEG=/opt/ffmpeg-mini/bin/ffmpeg DECKBOY_FFPROBE=/opt/ffmpeg-mini/bin/ffprobe ./tools/package_mini_linux.sh build dist
+          python3 tools/check_mini_package.py dist/Deckboy-Mini-*-linux-arm64.tar.gz
+
+      - name: Upload Deckboy Mini (ARM64)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-mini-linux-arm64
+          path: dist/Deckboy-Mini-*.tar.gz
+          if-no-files-found: error
+
+  macos-build:
+    name: macOS Build (Apple Silicon/Intel)
+    needs: version-check
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - features: none
+            cmake_args: "-DENABLE_DECKLINK=OFF -DDECKBOY_ENABLE_NDI=OFF -DENABLE_ASIO=OFF -DDECKBOY_INPROC_DECODE=OFF"
+          - features: all
+            cmake_args: "-DENABLE_MIDI=ON"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake pkg-config sdl3 sdl3_ttf ffmpeg libltc
+
+      - name: Install RtMidi (feature builds)
+        if: matrix.features == 'all'
+        run: brew install rtmidi
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build -j"$(sysctl -n hw.ncpu)"
+
+      # The feature build must have NDI compiled in. The headers are vendored,
+      # so this is a guard against the define not reaching the binary: every
+      # release until now shipped without NDI while CI stayed green.
+      - name: Self-check
+        run: |
+          ./build/Deckboy --self-check > self-check.txt
+          cat self-check.txt
+          if grep -q 'right-to-left hidden' self-check.txt; then
+            echo "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz." >&2
+            exit 1
+          fi
+          if [ '${{ matrix.features }}' = 'all' ] && ! grep -q '^ndi-sdk: headers detected' self-check.txt; then
+            echo "NDI is not compiled into this build." >&2
+            exit 1
+          fi
+
+      # ASK THE BINARY, not the build system. The vendored headers prove the
+      # SDK was THERE; this proves the define reached the executable. Those
+      # are different facts -- the distinction that mattered for NDI above,
+      # and exactly how v0.99.370 was first published with a plugin host
+      # that could not host anything.
+      - name: Plugin host is in the binary
+        run: |
+          ./build/Deckboy --plugins > plugins.txt 2>&1 || true
+          head -3 plugins.txt
+          if ! grep -q 'this build can load them' plugins.txt; then
+            echo "This build cannot load plugins -- it must not be released." >&2
+            exit 1
+          fi
+
+      - name: Smoke tests
+        run: ./build/Deckboy --smoke
+
+      # Typed colours, the hue maths, and an effect's colour through a save.
+      - name: Effect colours
+        run: ./build/Deckboy --colour-check
+
+      - name: Broadcast transport and audio regressions
+        run: ctest --test-dir build --output-on-failure
+
+      # The scopes' Metal shader is compiled from source at run time, where a
+      # typo would only fall back to the CPU; compile it here so it fails the
+      # build instead. Then the GPU analyser against the CPU one, bin for bin,
+      # if this runner has a Metal device that runs it.
+      - name: Scopes on the GPU
+        run: |
+          xcrun -sdk macosx metal -c native/engine/gpu_scopes.metal -o "$RUNNER_TEMP/gpu_scopes.air"
+          SCOPES_GPU_DEBUG=1 ./build/deckboy-scopes-gpu-check
+
+      # CoreGraphics only ever scales a PDF page down; every slide imported on
+      # a Mac from v0.89.0 came out at its own size in a white frame.
+      - name: Slides and PDFs render at full size
+        run: python3 tools/check_pdf_render.py --exe ./build/Deckboy
+
+      # The settings menus, photographed on a real Mac.
+
+      - uses: actions/setup-node@v4
+        if: matrix.features == 'all'
+        with:
+          node-version: '22'
+
+      # The programme's colours on Metal, against independently decoded
+      # references: 8/10-bit, limited and full range.
+      - name: Programme colour on Metal
+        if: matrix.features == 'all'
+        timeout-minutes: 10
+        run: python3 tools/check_programme_colour.py --exe ./build/Deckboy --renderer metal
+
+      # Fullscreen switches fast and mid-animation, which is when AppKit
+      # ended the app (0.99.406, about one CI run in six). After every
+      # switch Deckboy must still be running and answering.
+      - name: Fullscreen switching under stress
+        if: matrix.features == 'all'
+        timeout-minutes: 10
+        env:
+          DECKBOY_STRESS_LAUNCHES: "25"
+          DECKBOY_STRESS_ROUNDS: "60"
+        run: python3 tools/check_fullscreen_stress.py --exe ./build/Deckboy
+
+      # REPORTS, DOES NOT BLOCK (James, 2026-10-09). On these virtual machines
+      # the audio clock is a dummy driver running about 0.4% off true time, so
+      # the A/V figure measures the VM more than Deckboy; it failed on its own
+      # about one run in two. The real measurement is the hour-long drift run
+      # on a real sound card (check_web_monitor_av.mjs --real-audio). Its
+      # numbers still print here, and a step failure still shows in the run.
+      - name: Web Monitor HLS and audio/video timing
+        if: matrix.features == 'all'
+        continue-on-error: true
+        timeout-minutes: 10
+        # Any frame slower than 200 ms is logged with where its time went
+        # (events / update / layout / render), into the app.log the failure
+        # evidence keeps -- a stall that throws one marker out is otherwise
+        # just a number.
+        env:
+          DECKBOY_UI_PROFILE: "200"
+        run: node tools/check_web_monitor_av.mjs --exe ./build/Deckboy --seconds 60 --raster 960x540
+
+      # The evidence a failed timing run leaves, minus the large source clip:
+      # CI keeps no screen, so these files are the only way to see why.
+      - name: Upload Web Monitor evidence
+        if: failure() && matrix.features == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-monitor-evidence-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/deckboy-web-av-*/metrics.json
+            ${{ runner.temp }}/deckboy-web-av-*/telemetry.json
+            ${{ runner.temp }}/deckboy-web-av-*/app.log
+            ${{ runner.temp }}/deckboy-web-av-*/index.m3u8
+            ${{ runner.temp }}/deckboy-web-av-*/web.mp4
+            ${{ runner.temp }}/deckboy-web-av-*/ffreport-*.log
+          if-no-files-found: ignore
+      #
+      # macOS is the one platform whose UI cannot be checked by hand from here:
+      # a GUI app will not render from an ssh session, `screencapture` over ssh
+      # has no Screen Recording grant, and granting one needs somebody at the
+      # keyboard. --ui-dump reads back our own renderer, so the runner can take
+      # the picture for us. Never fails the build -- it is evidence, not a gate.
+      - name: Settings menu screenshots
+        if: matrix.features == 'all'
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p ui-shots
+          export DECKBOY_ROOT="$RUNNER_TEMP/deckboy-uiroot"
+          mkdir -p "$DECKBOY_ROOT/data"
+          for d in themes ui sprites fonts; do
+            [ -d "data/$d" ] && cp -R "data/$d" "$DECKBOY_ROOT/data/$d"
+          done
+          cp data/*.ttf "$DECKBOY_ROOT/data/" 2>/dev/null
+          for tab in 0 1 2 3.1 3.2 5; do
+            name=$(echo "$tab" | tr '.' '_')
+            ./build/Deckboy --settings "$tab" --ui-dump "ui-shots/macos_tab${name}.bmp" 150
+            echo "tab $tab -> rc=$?"
+          done
+          # The splash, with a seeded recents list -- it is the first thing an
+          # operator sees and the one screen that is different on a fresh
+          # install, so it is worth a picture of its own.
+          mkdir -p "$RUNNER_TEMP/shows/Playhouse" "$RUNNER_TEMP/shows/Gigs"
+          printf 'ui_scale\t1.0\n' > "$RUNNER_TEMP/shows/Playhouse/house-rig.deckboy"
+          printf 'ui_scale\t1.0\n' > "$RUNNER_TEMP/shows/Gigs/gig-night.deckboy"
+          {
+            echo "$RUNNER_TEMP/shows/Playhouse/house-rig.deckboy"
+            echo "$RUNNER_TEMP/shows/Gigs/gig-night.deckboy"
+          } > "$DECKBOY_ROOT/data/recent_projects.txt"
+          ./build/Deckboy --ui-dump "ui-shots/macos_splash.bmp" 400
+          echo "splash -> rc=$?"
+          ls -la ui-shots || true
+
+      - name: Upload settings screenshots
+        if: matrix.features == 'all'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-macos-ui-shots
+          path: ui-shots/
+          if-no-files-found: warn
+
+  # EVERY macOS GITHUB OFFERS, not just the newest. A Mac bug can belong to
+  # one release (a deprecated API, a changed default) and nobody owns a Mac on
+  # each. This builds once per image and asks each one the questions a user's
+  # Mac would: does it start, do the smoke tests pass, does the text path draw
+  # (deckboy-render.log), and what does the window look like. Runners have no
+  # real GPU or displays, so this catches OS-version faults, not hardware
+  # ones. NOT a dependency of any release job: a new macOS going red is news,
+  # not a reason to hold a release that runs on every other one.
+  macos-versions:
+    name: macOS ${{ matrix.os }}
+    needs: version-check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14 retires on 2026-11-02 (brownouts cancelled its jobs from
+        # late October); 15 and 26 remain.
+        os: [macos-15, macos-26]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake pkg-config sdl3 sdl3_ttf ffmpeg libltc
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_DECKLINK=OFF -DDECKBOY_ENABLE_NDI=OFF -DENABLE_ASIO=OFF
+
+      - name: Build
+        run: cmake --build build -j"$(sysctl -n hw.ncpu)"
+
+      - name: macOS version
+        run: sw_vers; sysctl -n machdep.cpu.brand_string
+
+      - name: Smoke tests
+        run: ./build/Deckboy --smoke
+
+      # Typed colours, the hue maths, and an effect's colour through a save.
+      - name: Effect colours
+        run: ./build/Deckboy --colour-check
+
+      # On every macOS this tests, since the renderer is the system's own.
+      - name: Slides and PDFs render at full size
+        run: python3 tools/check_pdf_render.py --exe ./build/Deckboy
+
+      # The main window as this macOS draws it, and the render log with the
+      # startup text probes in it -- the two things a Mac text report needs.
+      - name: Window screenshot and render log
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p evidence
+          export DECKBOY_ROOT="$RUNNER_TEMP/deckboy-root"
+          mkdir -p "$DECKBOY_ROOT/data"
+          for d in themes ui sprites fonts; do
+            [ -d "data/$d" ] && cp -R "data/$d" "$DECKBOY_ROOT/data/$d"
+          done
+          cp data/*.ttf "$DECKBOY_ROOT/data/" 2>/dev/null
+          printf 'ui_scale\t1.0\n' > "$RUNNER_TEMP/show.deckboy"
+          ./build/Deckboy "$RUNNER_TEMP/show.deckboy" --ui-dump "evidence/${{ matrix.os }}_main.bmp" 300
+          echo "main window -> rc=$?"
+          find "$DECKBOY_ROOT" "$HOME/Library/Application Support/Deckboy" -name 'deckboy-render.log' \
+            -exec cp {} "evidence/${{ matrix.os }}_deckboy-render.log" \; 2>/dev/null
+          cat evidence/*_deckboy-render.log 2>/dev/null
+          ls -la evidence
+
+      # Text in REAL frames, not only the startup probes, which passed on the
+      # Mac that showed no labels (issue #6/#7). Evidence, not a gate: a runner
+      # has no real display.
+      - name: Live text probe
+        if: always()
+        continue-on-error: true
+        run: python3 tools/check_live_text_probe.py --exe ./build/Deckboy
+
+      - name: Upload evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-${{ matrix.os }}-evidence
+          path: evidence/
+          if-no-files-found: warn
+
+  macos-icons:
+    name: macOS layered icon
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile icon with Xcode 26 or newer
+        run: |
+          xcodebuild -version
+          bash tools/build_macos_icons.sh build/macos-icons --modern-only
+          test -s build/macos-icons/Assets.car
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-macos-icons
+          path: build/macos-icons/Assets.car
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-package:
+    name: macOS Portable Bundle
+    needs: [macos-build, macos-icons]
+    # PINNED, NOT macos-latest. The bundle carries Homebrew's dylibs, and a
+    # bottle is built for the runner's own macOS -- so whatever image this job
+    # lands on becomes the oldest macOS the release can open on. On
+    # macos-latest that silently tracked GitHub's newest image, and the build
+    # stopped opening on Sonoma.
+    #
+    # There is no universal binary (see tools/package_macos.sh), so both
+    # architectures are built and the packager names each zip after its own.
+    #
+    # macos-13 WAS the Intel slot, until GitHub retired that image. A retired
+    # label does not fail -- the job simply queues for a runner that will never
+    # come. macos-package needs both matrix entries, and publish needs
+    # macos-package, so every release after that sat "queued" forever and
+    # NOTHING published. v0.99.317 was tagged, built green on all six other
+    # jobs, and never produced a release; the same would have happened to every
+    # tag after it, silently, because a queued job looks like a slow one.
+    #
+    # macos-15-intel is GitHub's Intel image now. If that is ever retired too,
+    # the symptom will be identical -- a job stuck in "queued" -- so check the
+    # runner label before suspecting the build.
+    strategy:
+      fail-fast: false
+      # floor: the oldest macOS the bundle claims, and what every library and
+      # Deckboy itself are built for. INTEL goes back to 10.13 High Sierra:
+      # Intel Macs are the ones held on old systems (a 2015 MacBook Pro at a
+      # show was), while every Apple Silicon Mac shipped with 11 or later.
+      # captions_floor: whisper.cpp uses std::filesystem, which a Mac only has
+      # from 10.15, so whisper-cli and deckboy-listen are built for that, and
+      # the app does not start them on anything older (core/captioning.hpp).
+      matrix:
+        include:
+          - image: macos-15-intel  # x86_64
+            floor: "10.13"
+            captions_floor: "10.15"
+          # arm64. Was macos-14 until GitHub retired it (2026-11-02; its
+          # brownouts cancelled this job). Safe to move: the libraries are
+          # built for `floor` by macos_build_deps.sh, not taken from the
+          # runner, and audit_macos_minos.py checks every binary's floor.
+          - image: macos-15        # arm64
+            floor: "12.0"
+            captions_floor: "12.0"
+    runs-on: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: deckboy-macos-icons
+          path: build/macos-icons
+      - name: Disk image tools and icon catalog
+        run: |
+          python3 -m venv "$RUNNER_TEMP/deckboy-dmg-tools"
+          "$RUNNER_TEMP/deckboy-dmg-tools/bin/pip" install dmgbuild==1.6.7
+          echo "$RUNNER_TEMP/deckboy-dmg-tools/bin" >> "$GITHUB_PATH"
+          echo "DECKBOY_MACOS_ASSETS_CAR=$GITHUB_WORKSPACE/build/macos-icons/Assets.car" >> "$GITHUB_ENV"
+          echo "DECKBOY_REQUIRE_MODERN_ICON=1" >> "$GITHUB_ENV"
+
+      # THE LIBRARIES ARE BUILT HERE, FOR THE macOS THE BUNDLE CLAIMS. Homebrew's
+      # are built for the runner's macOS: v0.99.405 claimed 11 and carried 32
+      # libraries built for 14 (15 on Intel), and on Ventura its ffmpeg could
+      # not even start. tools/macos_build_deps.sh builds SDL, the text stack,
+      # ffmpeg and its codecs (plus snappy for HAP and libsrt for SRT, which
+      # Homebrew's ffmpeg lacked), libltc and RtMidi for MACOS_MIN, cached on
+      # the script itself so it costs its ~30 minutes once per change.
+      # Homebrew provides BUILD TOOLS only; none of it reaches the bundle.
+      - name: Build tools
+        run: brew install cmake pkg-config nasm meson ninja
+
+      - name: Cached libraries for the claimed macOS
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/deckboy-deps
+          key: macos-deps-${{ matrix.image }}-${{ matrix.floor }}-${{ hashFiles('tools/macos_build_deps.sh') }}
+
+      - name: Build libraries for the claimed macOS
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: |
+          chmod +x tools/macos_build_deps.sh
+          DEPS_SRC_DIR="$RUNNER_TEMP/deps-src" ./tools/macos_build_deps.sh "$HOME/deckboy-deps" "${{ matrix.floor }}"
+
+      # Saved HERE, not at the end of the job. actions/cache saves only when the
+      # whole job succeeds, so any later failure threw away a library build of
+      # 6 (arm64) to 23 (Intel) minutes and the next run started it again.
+      - name: Save the libraries
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/deckboy-deps
+          key: macos-deps-${{ matrix.image }}-${{ matrix.floor }}-${{ hashFiles('tools/macos_build_deps.sh') }}
+
+      # rtmidi is what the RELEASE needs for MIDI, MIDI Show Control and MIDI
+      # cues. Through v0.99.372 only the macos-build test leg installed it, so
+      # every published Mac app had no MIDI while CI stayed green.
+      - name: Configure and build
+        run: |
+          export PKG_CONFIG_PATH="$HOME/deckboy-deps/lib/pkgconfig"
+          export PKG_CONFIG_LIBDIR="$HOME/deckboy-deps/lib/pkgconfig"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_MIDI=ON \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.floor }}" -DCMAKE_PREFIX_PATH="$HOME/deckboy-deps"
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+          echo "DECKBOY_DEPS_PREFIX=$HOME/deckboy-deps" >> "$GITHUB_ENV"
+          echo "DECKBOY_MACOS_MIN=${{ matrix.floor }}" >> "$GITHUB_ENV"
+
+      # CAPTIONS MADE ON THIS COMPUTER need whisper-cli in the package. A
+      # STATIC build (one executable, no libraries of its own) of a pinned
+      # whisper.cpp, GGML_NATIVE=OFF so it runs on any CPU of the platform and
+      # GGML_OPENMP=OFF so it needs no OpenMP runtime (vcomp140, libgomp) --
+      # ggml's own thread pool instead. DECKBOY_REQUIRE_WHISPER makes
+      # the packager FAIL without it: a captions button that cannot run must
+      # not ship looking like one that can.
+      - name: Build whisper-cli (captions)
+        run: |
+          bash "$GITHUB_WORKSPACE/tools/ci_retry.sh" git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.captions_floor }}"
+          cmake --build "$RUNNER_TEMP/whisper-build" --target whisper-cli -j"$(sysctl -n hw.ncpu)"
+          "$RUNNER_TEMP/whisper-build/bin/whisper-cli" --help > /dev/null
+          otool -L "$RUNNER_TEMP/whisper-build/bin/whisper-cli"
+          echo "DECKBOY_WHISPER_CLI=$RUNNER_TEMP/whisper-build/bin/whisper-cli" >> "$GITHUB_ENV"
+          # LIVE CAPTIONS: deckboy-listen, against the same whisper.cpp.
+          cmake -S tools/listen -B "$RUNNER_TEMP/listen-build" -DWHISPER_SOURCE="$RUNNER_TEMP/whisper.cpp" \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.captions_floor }}"
+          cmake --build "$RUNNER_TEMP/listen-build" --target deckboy-listen -j"$(sysctl -n hw.ncpu)"
+          otool -L "$RUNNER_TEMP/listen-build/deckboy-listen"
+          echo "DECKBOY_LISTEN_BIN=$RUNNER_TEMP/listen-build/deckboy-listen" >> "$GITHUB_ENV"
+          echo "DECKBOY_REQUIRE_WHISPER=1" >> "$GITHUB_ENV"
+
+      - name: Package
+        # The signing/notarisation env is passed through from repo secrets. When
+        # the secrets are unset (forks, the default free path) these expand to
+        # empty and the packager stays ad-hoc — nothing here requires an Apple
+        # account. Wiring the .p8 from a secret needs a file, so it is only
+        # materialised when the secret exists.
+        env:
+          DECKBOY_MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          DECKBOY_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          DECKBOY_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          chmod +x tools/package_macos.sh
+          if [ -n "$MACOS_NOTARY_KEY_P8_BASE64" ]; then
+            printf '%s' "$MACOS_NOTARY_KEY_P8_BASE64" | base64 -d > "$RUNNER_TEMP/notary.p8"
+            export DECKBOY_NOTARY_KEY_P8="$RUNNER_TEMP/notary.p8"
+          fi
+          ./tools/package_macos.sh
+          rm -f "$RUNNER_TEMP/notary.p8"
+          # Deckboy Mini on its own has to PLAY, not only start.
+          python3 tools/check_mini_package.py dist/Deckboy-Mini-*-macos-*.zip --ffmpeg "$DECKBOY_DEPS_PREFIX/bin/ffmpeg"
+
+      # The whole point of the bundle is that it runs on a machine with no
+      # Homebrew. A leftover /opt/homebrew or /usr/local reference in ANY
+      # binary means it does not — and that failure only shows up on the
+      # target machine, which is exactly where it is most expensive.
+      - name: Verify no Homebrew paths leak into the bundle
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          echo "Bundle: $APP"
+          leaked=0
+          while IFS= read -r bin; do
+            refs=$(otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' \
+                   | grep -E '^(/opt/homebrew|/usr/local)' || true)
+            if [ -n "$refs" ]; then
+              echo "::error::$bin still references:"; echo "$refs"; leaked=1
+            fi
+          done < <(find "$APP" -type f \( -perm +111 -o -name '*.dylib' \))
+          if [ "$leaked" -ne 0 ]; then
+            exit 1
+          fi
+          echo "clean - every dependency is bundled"
+
+      # Ask the PACKAGED app whether MIDI is in it, not the configure flag. A
+      # flag can be ON while the library never lands, and a missing optional
+      # dependency looks exactly like one switched off on purpose (WebView2,
+      # NDI and VST3 each shipped missing that way). Both halves are checked:
+      # the binary links RtMidi, and the dylib it links is inside the bundle.
+      - name: Verify MIDI is in the bundle
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          BIN="$APP/Contents/MacOS/Deckboy"
+          link=$(otool -L "$BIN" | awk '{print $1}' | grep -i 'rtmidi' || true)
+          if [ -z "$link" ]; then
+            echo "::error::the packaged Deckboy does not link RtMidi - this Mac release would have no MIDI"
+            exit 1
+          fi
+          echo "links: $link"
+          if ! ls "$APP/Contents/Frameworks/" | grep -qi 'rtmidi'; then
+            echo "::error::RtMidi is linked but not bundled in Contents/Frameworks"
+            exit 1
+          fi
+          echo "MIDI is in the bundle"
+
+      # install_name_tool invalidates signatures, and an unsigned/broken-signed
+      # binary is killed on sight by Apple Silicon. This proves the re-sign step
+      # actually took.
+      # EVERY FILE RUNS ON THE macOS THE BUNDLE CLAIMS -- read from each file's
+      # own minimum, not assumed from how it was built.
+      - name: Every file runs on the claimed macOS
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          python3 tools/audit_macos_minos.py "$APP"
+
+      # THE FULLSCREEN FIX IS IN THE BINARY THAT SHIPS. 0.99.407 put the
+      # no-Spaces hint inside a Windows-only block, so the Mac app went out
+      # without it while every check passed. Ask the artifact.
+      - name: The Mac app carries its fullscreen setting
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          if ! grep -a -q SDL_VIDEO_MAC_FULLSCREEN_SPACES "$APP/Contents/MacOS/Deckboy"; then
+            echo "::error::Deckboy.app does not set SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES"; exit 1
+          fi
+          echo "fullscreen without Spaces: set in the shipped binary"
+
+      # And the Mac ffmpeg can do what the Windows one is checked for: HAP and
+      # the codecs Deckboy records with, and SRT for stream cues.
+      - name: Bundled ffmpeg encodes and streams what Deckboy offers
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          FF="$APP/Contents/MacOS/ffmpeg"
+          # Say WHY when it cannot even start: a bare `enc=$(...)` under -e
+          # failed with nothing but "exit code 134" (a dyld abort).
+          if ! enc=$("$FF" -hide_banner -encoders 2>&1); then
+            echo "::error::the bundled ffmpeg does not start"; echo "$enc" | head -20; exit 1
+          fi
+          missing=""
+          for e in hap libx264 libx265 libvpx-vp9 libmp3lame libopus prores_ks aac; do
+            echo "$enc" | grep -qE "^\s*\S+\s+$e\s" || missing="$missing $e"
+          done
+          "$FF" -hide_banner -protocols 2>&1 | grep -qE '^[[:space:]]+srt$' || missing="$missing srt-protocol"
+          if [ -n "$missing" ]; then echo "::error::bundled ffmpeg lacks:$missing"; exit 1; fi
+          echo "ffmpeg has every encoder Deckboy offers, and SRT"
+
+      - name: Verify code signature
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      # Run the app FROM INSIDE THE BUNDLE, so this exercises the rewritten
+      # @rpath resolution and the bundled data/ directory, not the build tree.
+      - name: Run self-check and smoke from the bundle
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          "$APP/Contents/MacOS/Deckboy" --self-check | tee self-check.txt
+          if grep -q 'right-to-left hidden' self-check.txt; then
+            echo "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz." >&2
+            exit 1
+          fi
+          "$APP/Contents/MacOS/Deckboy" --smoke
+          "$APP/Contents/MacOS/ffmpeg" -version | head -1
+
+      # THE test this job was missing. The earlier version ran --self-check with
+      # the runner's normal PATH, which has Homebrew ffmpeg on it — so it
+      # reported "ffmpeg: ok" and could not have detected that the BUNDLED
+      # ffmpeg was unreachable. It didn't: the app spawns helpers by bare name
+      # through execvp, which searches PATH only, and nothing put the bundle on
+      # PATH. Clearing PATH is what makes this check mean anything.
+      #
+      # The control case runs first, so a silently-passing test can't masquerade
+      # as a real one.
+      - name: Bundled ffmpeg must be reachable with PATH cleared
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          cp -R "$APP" "$RUNNER_TEMP/Relocated.app"   # also proves relocatability
+
+          echo "--- control: PATH cleared, bundled ffmpeg moved aside (expect missing) ---"
+          mv "$RUNNER_TEMP/Relocated.app/Contents/MacOS/ffmpeg" "$RUNNER_TEMP/ff.hidden"
+          control=$(env -i HOME="$HOME" PATH=/nonexistent \
+            "$RUNNER_TEMP/Relocated.app/Contents/MacOS/Deckboy" --self-check 2>&1 | grep '^ffmpeg:' || true)
+          echo "$control"
+          case "$control" in
+            *missing*) echo "control ok - the test can detect failure" ;;
+            *) echo "::error::control did not report missing; this check proves nothing"; exit 1 ;;
+          esac
+
+          echo "--- real: PATH cleared, bundled ffmpeg present (expect ok) ---"
+          mv "$RUNNER_TEMP/ff.hidden" "$RUNNER_TEMP/Relocated.app/Contents/MacOS/ffmpeg"
+          real=$(env -i HOME="$HOME" PATH=/nonexistent \
+            "$RUNNER_TEMP/Relocated.app/Contents/MacOS/Deckboy" --self-check 2>&1 | grep '^ffmpeg:' || true)
+          echo "$real"
+          case "$real" in
+            *ok*) echo "bundled ffmpeg is genuinely reachable" ;;
+            *) echo "::error::bundled ffmpeg NOT reachable with PATH cleared"; exit 1 ;;
+          esac
+
+      - name: Confirm build-machine state was stripped
+        run: |
+          APP=$(find dist/staging -maxdepth 2 -name 'Deckboy.app' | head -1)
+          for stale in last_project.txt default.deckboy; do
+            if [ -e "$APP/Contents/Resources/data/$stale" ]; then
+              echo "::error::data/$stale shipped in the bundle"; exit 1
+            fi
+          done
+          echo "no per-machine state in the bundle"
+
+      # The .dmg must exist, mount, and contain both the app and the
+      # /Applications drag target. A dmg that will not mount is worse than none.
+      - name: Verify the .dmg mounts and is a real installer
+        run: |
+          DMG=$(ls dist/*.dmg | head -1)
+          echo "dmg: $DMG"
+          MNT=$(mktemp -d)
+          hdiutil attach "$DMG" -mountpoint "$MNT" -nobrowse -quiet
+          test -d "$MNT/Deckboy.app" || { echo "::error::no Deckboy.app in dmg"; exit 1; }
+          test -L "$MNT/Applications" || { echo "::error::no /Applications drag target"; exit 1; }
+          echo "dmg mounts, contains Deckboy.app + Applications shortcut"
+          hdiutil detach "$MNT" -quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-macos-portable-${{ matrix.image }}
+          path: |
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+
+  windows-build:
+    name: Windows Build (MSVC)
+    needs: version-check
+    # Pinned rather than windows-latest: CMake needs a concrete Visual Studio,
+    # and "latest" moving to a newer image is what broke this job before.
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - features: none
+            cmake_args: "-DENABLE_DECKLINK=OFF -DDECKBOY_ENABLE_NDI=OFF -DENABLE_ASIO=OFF -DDECKBOY_INPROC_DECODE=OFF"
+          - features: all
+            cmake_args: "-DENABLE_MIDI=ON -DENABLE_SPOUT=ON -DENABLE_WEBVIEW=ON -DDECKBOY_REQUIRE_INPROC_DECODE=ON"
+    steps:
+      - uses: actions/checkout@v4
+
+      # No explicit -G: the runner image's newest Visual Studio is whatever
+      # CMake defaults to. Pinning "Visual Studio 17 2022" is what broke these
+      # builds when the hosted image moved on ("could not find any instance of
+      # Visual Studio").
+      - name: Install vcpkg
+        id: vcpkg-setup
+        run: |
+          foreach ($try in 1..4) { git clone --depth 1 https://github.com/microsoft/vcpkg.git; if ($LASTEXITCODE -eq 0) { break }; if ($try -eq 4) { throw "git clone failed 4 times" }; Start-Sleep -Seconds (15 * $try) }
+          .\vcpkg\bootstrap-vcpkg.bat
+          git -C vcpkg rev-parse HEAD | ForEach-Object { "revision=$_" >> $env:GITHUB_OUTPUT }
+
+      - name: Cache vcpkg binaries
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ matrix.features }}-${{ steps.vcpkg-setup.outputs.revision }}-sdl3-webview2-ffmpeg
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.features }}-
+            vcpkg-${{ runner.os }}-
+
+      - name: Install dependencies
+      # SDL_TTF WITH HARFBUZZ. The plain port cannot shape, so Deckboy hides
+      # Arabic, Persian and Sorani rather than draw them unjoined -- and
+      # 0.99.409 shipped for Windows with all three missing from the picker
+      # while every check stayed green. The self-check step below now fails
+      # the build if any right-to-left language is hidden.
+        run: .\vcpkg\vcpkg install sdl3:x64-windows sdl3-ttf[harfbuzz]:x64-windows
+
+      # LIBLTC IS BUILT FROM SOURCE, because vcpkg has no port for it --
+      # 2761 ports and not one of them. macOS and Linux install it from brew
+      # and apt; Windows had nothing, so every Windows release up to
+      # v0.99.379 shipped without ltc.dll and LTC generation, LTC chase and
+      # timecode cues were dead in the zip while working perfectly in the
+      # development tree, which had one put there by hand months earlier.
+      #
+      # Not conditional on matrix.features. LTC is not an optional extra that
+      # the "none" build exists to test the absence of -- it is timecode, and
+      # a desk that cannot read timecode is a different product. The packager
+      # now refuses to build a zip whose binary cannot load it.
+      - name: Build libltc
+        shell: pwsh
+        run: pwsh tools/build_libltc_windows.ps1 -OutDir build/Release
+
+      # ENABLE_SPOUT hard-fails without the SDK, so the feature build needs
+      # spout2 as well as rtmidi.
+      #
+      # WEBVIEW2 IS REQUIRED HERE, NOT DETECTED. CMake looks for it QUIETLY
+      # when ENABLE_WEBVIEW is off, and nothing here ever installed it -- so
+      # every release was built without browser cues, and they fell back to
+      # launching Edge full screen and grabbing it. The build stayed green
+      # throughout, because a quiet search that finds nothing is not an
+      # error. The feature build now passes -DENABLE_WEBVIEW=ON, which makes
+      # the search REQUIRED: if webview2 ever stops installing, this fails.
+      #
+      # Deliberately NOT in the shared install step above. The features=none
+      # build exists to prove Deckboy works without the optional pieces, and
+      # the quiet auto-detect would pick webview2 up there too and leave
+      # nothing exercising the fallback.
+      - name: Install feature dependencies
+        if: matrix.features == 'all'
+        run: .\vcpkg\vcpkg install rtmidi:x64-windows spout2:x64-windows webview2:x64-windows "ffmpeg[avcodec,avformat,avfilter,swscale,swresample]:x64-windows"
+
+      # Save completed SDK packages before app checks, so a later failure
+      # does not make the next build compile every dependency again.
+      - name: Save completed vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      # FFMPEG IS INSTALLED ON THE FEATURE BUILD, and REQUIRED there
+      # (-DDECKBOY_REQUIRE_INPROC_DECODE=ON in the matrix). It used to be left
+      # out because the vcpkg port builds from source and dominated CI time --
+      # so every Windows release up to v0.99.398 shipped with the ffmpeg-CLI
+      # decode path only: no GPU zero-copy decode, and no SRT sound, while
+      # macOS and Linux had both. The binary cache above pays the build once.
+      # The packager also asks the staged exe (--self-check inproc-decode).
+      # bash + an absolute, quoted toolchain path. The folded-scalar form under
+      # PowerShell split the argument and dropped the ".cmake" suffix
+      # ("Could not find toolchain file: .../vcpkg" + "Ignoring extra path .cmake").
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            ${{ matrix.cmake_args }}
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release 2>&1 | tee build.log
+
+      # A name that hides another, or a local nothing reads. Both have cost
+      # real time here: a duplicated block whose second copy shadowed the first
+      # meant a fix applied to half the cases, and an unread local gave a later
+      # loop something to shadow. CMakeLists promotes exactly these two out of
+      # warning level 4, where they sat among several hundred int-to-float
+      # conversions into SDL's float APIs and nobody was ever going to see them.
+      - name: No hidden names, no unread locals
+        shell: bash
+        run: python tools/audit_warnings.py build.log
+
+      # Start-Process -Wait, NOT the call operator.
+      #
+      # Deckboy is a GUI-subsystem binary and PowerShell does not wait for
+      # those: the call returns immediately, $LASTEXITCODE is never set from it,
+      # and the step passes whatever the app actually did. Both of these gates
+      # had been vacuous on Windows for exactly that reason — the tell is that
+      # the app's output arrives in the log AFTER the step that supposedly ran
+      # it. Linux and macOS were never affected; their binaries are console
+      # subsystem and the shell waits.
+      - name: Self-check
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--self-check" -Wait -NoNewWindow -PassThru `
+                 -RedirectStandardOutput self-check.txt
+          Get-Content self-check.txt
+          if ($p.ExitCode -ne 0) { throw "self-check failed ($($p.ExitCode))" }
+          if (Select-String -Path self-check.txt -Pattern 'right-to-left hidden' -Quiet) {
+            throw "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz."
+          }
+          if ('${{ matrix.features }}' -eq 'all' -and
+              -not (Select-String -Path self-check.txt -Pattern '^ndi-sdk: headers detected' -Quiet)) {
+            throw "NDI is not compiled into this build."
+          }
+
+      - name: Smoke tests
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--smoke" -Wait -NoNewWindow -PassThru
+          if ($p.ExitCode -ne 0) { throw "smoke tests failed ($($p.ExitCode))" }
+          # Typed colours, the hue maths, and an effect's colour through a save.
+          $p = Start-Process -FilePath .\build\Release\Deckboy.exe `
+                 -ArgumentList "--colour-check" -Wait -NoNewWindow -PassThru
+          if ($p.ExitCode -ne 0) { throw "effect colours failed ($($p.ExitCode))" }
+
+      - name: Broadcast transport and audio regressions
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # The GPU scopes analyser against the CPU one, bin for bin, on every
+      # 8-bit colour, odd rasters and all four orientations. This runner's
+      # Direct3D 11 is Microsoft's software renderer, and it runs it.
+      - name: Scopes on the GPU match the CPU
+        shell: pwsh
+        run: |
+          .\build\Release\deckboy-scopes-gpu-check.exe --require
+          if ($LASTEXITCODE -ne 0) { throw "the GPU scopes differ from the CPU's" }
+          # SDL_GPU's path (Metal and Vulkan elsewhere) on Direct3D 12, if this runner has it.
+          $env:SDL_GPU_DRIVER = "direct3d12"
+          .\build\Release\deckboy-scopes-gpu-check.exe --renderer gpu
+          if ($LASTEXITCODE -ne 0) { throw "the GPU scopes on SDL_GPU differ from the CPU's" }
+
+      - name: Slides and PDFs render at full size
+        shell: pwsh
+        run: |
+          python tools/check_pdf_render.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "slides and PDFs did not render at full size" }
+
+      # The shippable Windows artefacts. The installer script stages the
+      # portable payload itself, so one call produces BOTH the zip and the
+      # setup.exe — they cannot drift apart because they are the same staging
+      # directory.
+      #
+      # ffmpeg is bundled into the payload rather than required on the operator's
+      # machine, so it has to be present here to be copied.
+      # ffmpeg-FULL, not ffmpeg. Chocolatey's `ffmpeg` is gyan's "essentials"
+      # build, which is not compiled with --enable-libsnappy and therefore has
+      # hap as a DECODER only. Every published Windows zip up to v0.99.392
+      # offered HAP in the encoder list on a developer machine, where the
+      # local full build was picked up, and silently dropped it on an
+      # operator's. The packager gate below will not let that recur, but the
+      # right binary has to be here for the gate to pass.
+      - name: Install ffmpeg and Inno Setup
+        if: matrix.features == 'all'
+        run: choco install ffmpeg-full innosetup -y --no-progress
+
+      - name: Programme capture cadence and Main 10 picture
+        if: matrix.features == 'all'
+        shell: pwsh
+        run: |
+          # CreateProcess must launch the real tools, not Chocolatey's shims.
+          $real = Get-ChildItem -Path 'C:\ProgramData\chocolatey\lib\ffmpeg-full' -Recurse `
+                    -Filter ffmpeg.exe -ErrorAction Stop |
+                  Where-Object { Test-Path (Join-Path $_.DirectoryName 'ffprobe.exe') } |
+                  Select-Object -First 1
+          if (-not $real) { throw 'no ffmpeg-full binary pair found for capture checks' }
+          $env:PATH = "$($real.DirectoryName);$env:PATH"
+          $env:DECKBOY_FFMPEG = $real.FullName
+          $env:DECKBOY_FFPROBE = Join-Path $real.DirectoryName 'ffprobe.exe'
+          python tools/check_programme_colour.py --exe build\Release\Deckboy.exe `
+            --ffmpeg $real.FullName --renderer direct3d11 --web-player
+          if ($LASTEXITCODE -ne 0) { throw "primary programme colour or web audio failed" }
+          python tools/record_rate_check.py --exe build\Release\Deckboy.exe `
+            --fixture main10 --renderer software --readback sync `
+            --standard 640x360@25 --seconds 8
+          if ($LASTEXITCODE -ne 0) { throw "programme capture failed" }
+          $env:DECKBOY_OUTPUT_RENDERER = 'software'
+          $env:DECKBOY_EGRESS_READBACK = 'sync'
+          python tools/check_transitions.py --exe build\Release\Deckboy.exe --playout
+          if ($LASTEXITCODE -ne 0) { throw "transition placement failed" }
+          # Loops: picture and sound read back from a recording at every seam,
+          # and repeats stopping after the count (tools/check_loop_seam.py).
+          # The PICTURE is judged; the sound is reported, as for the A/V timing
+          # checks (James, 2026-10-09): this runner's stand-in sound device runs
+          # about 1% off true time, and even in PCM a take picked up the odd
+          # break away from the seams on one run in three. On a machine with a
+          # steady clock the check judges the sound too.
+          $env:SDL_AUDIODRIVER = 'dummy'
+          python tools/check_loop_seam.py --exe build\Release\Deckboy.exe --rate 30 --report-sound
+          if ($LASTEXITCODE -ne 0) { throw "a looping clip is not seamless" }
+          python tools/check_loop_seam.py --exe build\Release\Deckboy.exe --rate 30 --loop-count 3
+          if ($LASTEXITCODE -ne 0) { throw "repeats did not stop after three passes" }
+          Remove-Item Env:SDL_AUDIODRIVER
+          python tools/check_tracker_follow.py --exe build\Release\Deckboy.exe --late 1.5
+          if ($LASTEXITCODE -ne 0) { throw "tracker follow failed" }
+          python tools/check_undo_live.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "undo and the live show failed" }
+          python tools/check_selection_follow.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "selection follow failed" }
+          python tools/check_output_edges.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "output edges failed" }
+          python tools/check_sequences.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "sequences failed" }
+          python tools/check_input_monitor.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the MIDI and OSC monitor failed" }
+          python tools/check_sound_scopes.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the sound scopes failed" }
+          python tools/check_output_limiter.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the output limiter failed" }
+          python tools/check_web_rewind.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the Web Monitor rewind failed" }
+          python tools/check_fade_knobs.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "fades on effect knobs failed" }
+          python tools/check_audio_patch.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "named outputs and the patch failed" }
+          python tools/check_tape_speed.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "speed like tape failed" }
+          # Report-only continuity here: this runner's virtual sound device plays
+          # about 15% slow, so recordings pad to keep sync with or without a removal.
+          python tools/check_deck_remove.py --exe build\Release\Deckboy.exe --report-continuity
+          if ($LASTEXITCODE -ne 0) { throw "removing one playlist failed" }
+          python tools/check_update_install.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "install and restart failed" }
+          python tools/check_desk_basics.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the desk's small promises failed" }
+          python tools/check_colour_picker.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the effect colour picker failed" }
+          python tools/check_timer_fonts.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the timer's font list failed" }
+          python tools/check_backdrop.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "backdrops behind overlay cues failed" }
+          python tools/check_midi_map.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the MIDI map failed" }
+          python tools/check_panel_map_size.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the panel map's tile size failed" }
+          python tools/check_masks.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "masks failed" }
+          python tools/check_masks.py --exe build\Release\Deckboy.exe --renderer software
+          if ($LASTEXITCODE -ne 0) { throw "masks on the software renderer failed" }
+          python tools/check_mask_editor.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the mask editor failed" }
+          python tools/check_multiview_feeds.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the multiview's layouts and feeds failed" }
+          python tools/check_motion.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "motion failed" }
+          python tools/check_bugswat.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "bug swat failed" }
+          python tools/check_lessons.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the lessons failed" }
+          python tools/check_draw.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the Draw source failed" }
+          python tools/check_slices.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "slices failed" }
+          python tools/check_screens.py --exe build\Release\Deckboy.exe
+          if ($LASTEXITCODE -ne 0) { throw "the Screens window failed" }
+
+      - uses: actions/setup-node@v4
+        if: matrix.features == 'all'
+        with:
+          node-version: '22'
+
+      # REPORTS, DOES NOT BLOCK (James, 2026-10-09). On these virtual machines
+      # the audio clock is a dummy driver running about 0.4% off true time, so
+      # the A/V figure measures the VM more than Deckboy; it failed on its own
+      # about one run in two. The real measurement is the hour-long drift run
+      # on a real sound card (check_web_monitor_av.mjs --real-audio). Its
+      # numbers still print here, and a step failure still shows in the run.
+      - name: Web Monitor HLS and audio/video timing
+        if: matrix.features == 'all'
+        continue-on-error: true
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $real = Get-ChildItem -Path 'C:\ProgramData\chocolatey\lib\ffmpeg-full' -Recurse -Filter ffmpeg.exe |
+            Where-Object { Test-Path (Join-Path $_.DirectoryName 'ffprobe.exe') } | Select-Object -First 1
+          if (-not $real) { throw 'ffmpeg pair missing' }
+          $env:PATH = "$($real.DirectoryName);$env:PATH"
+          # Deckboy does not search PATH for its media tools on Windows (it
+          # looks beside itself, where installs bundle them, and at the
+          # DECKBOY_FFMPEG pins), so without these it could not start the
+          # encoder at all: "stream process failed".
+          $env:DECKBOY_FFMPEG = $real.FullName
+          $env:DECKBOY_FFPROBE = Join-Path $real.DirectoryName 'ffprobe.exe'
+          node tools/check_web_monitor_av.mjs --exe build\Release\Deckboy.exe --seconds 60 --raster 960x540
+          if ($LASTEXITCODE -ne 0) { throw 'Web Monitor timing or HLS failed' }
+
+      # The evidence a failed timing run leaves, minus the large source clip:
+      # CI keeps no screen, so these files are the only way to see why.
+      - name: Upload Web Monitor evidence
+        if: failure() && matrix.features == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-monitor-evidence-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/deckboy-web-av-*/metrics.json
+            ${{ runner.temp }}/deckboy-web-av-*/telemetry.json
+            ${{ runner.temp }}/deckboy-web-av-*/app.log
+            ${{ runner.temp }}/deckboy-web-av-*/index.m3u8
+            ${{ runner.temp }}/deckboy-web-av-*/web.mp4
+            ${{ runner.temp }}/deckboy-web-av-*/ffreport-*.log
+          if-no-files-found: ignore
+
+      # What only exists when playlists meet an output. Each harness launches
+      # the real app in an isolated root and MEASURES -- fields in the saved
+      # show, pixels in a recording -- because a setter answering OK proves
+      # only that a setter ran. Windows only: they need a desktop session.
+      #
+      # A GATE: a playlist removed from the MIDDLE with every reference
+      # remapped, and a MIDI file becoming a cue that plays. Both read the
+      # socket and the saved show, and both have passed on this runner.
+      - name: Playlists and MIDI files, measured in the app
+        if: matrix.features == 'all'
+        shell: pwsh
+        run: |
+          $failed = @()
+          foreach ($t in 'manydecks', 'midifile') {
+            Write-Host "--- check_$t"
+            python tools/check_$t.py --exe build\Release\Deckboy.exe
+            if ($LASTEXITCODE -ne 0) { $failed += $t }
+          }
+          if ($failed) { throw "failed: $($failed -join ', ')" }
+
+      # ADVISORY: a second playlist composited on top, and a multiview. These
+      # are measured in a RECORDING, and this runner answers OK to RECORD and
+      # writes no file -- with the real ffmpeg first on PATH (not the shim),
+      # without an audio device being the cause (reproduced locally: records
+      # fine with none), and with nothing landing anywhere else. The likeliest
+      # remaining cause is that a runner session never presents the output
+      # window, so the egress never gets a first frame. Unproven. They pass on
+      # a desktop machine: python tools/check_superdeck.py / check_multiview_out.py
+      - name: Layers and multiview, measured in a recording (advisory)
+        if: matrix.features == 'all'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $real = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib" -Recurse `
+                    -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+                  Where-Object { Test-Path (Join-Path $_.DirectoryName "ffprobe.exe") } |
+                  Select-Object -First 1
+          if ($real) { $env:PATH = "$($real.DirectoryName);$env:PATH" }
+          $failed = @()
+          foreach ($t in 'superdeck', 'multiview_out') {
+            Write-Host "--- check_$t"
+            python tools/check_$t.py --exe build\Release\Deckboy.exe
+            if ($LASTEXITCODE -ne 0) { $failed += $t }
+          }
+          if ($failed) { throw "failed: $($failed -join ', ')" }
+
+      # CAPTIONS MADE ON THIS COMPUTER need whisper-cli in the package: a
+      # STATIC build of a pinned whisper.cpp, GGML_NATIVE=OFF so it runs on any
+      # x64 CPU, GGML_OPENMP=OFF so it needs no vcomp140.dll (which the package
+      # does not carry), and DECKBOY_REQUIRE_WHISPER so the packager fails
+      # without it.
+      - name: Build whisper-cli (captions)
+        if: matrix.features == 'all'
+        shell: pwsh
+        run: |
+          foreach ($try in 1..4) { git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp "$env:RUNNER_TEMP\whisper.cpp"; if ($LASTEXITCODE -eq 0) { break }; if ($try -eq 4) { throw "git clone failed 4 times" }; Start-Sleep -Seconds (15 * $try) }
+          cmake -S "$env:RUNNER_TEMP\whisper.cpp" -B "$env:RUNNER_TEMP\whisper-build" -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          if ($LASTEXITCODE -ne 0) { throw "whisper.cpp configure failed" }
+          cmake --build "$env:RUNNER_TEMP\whisper-build" --config Release --target whisper-cli -j 4
+          if ($LASTEXITCODE -ne 0) { throw "whisper-cli build failed" }
+          $cli = "$env:RUNNER_TEMP\whisper-build\bin\Release\whisper-cli.exe"
+          if (-not (Test-Path $cli)) { throw "whisper-cli.exe was not built" }
+          "DECKBOY_WHISPER_CLI=$cli" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # LIVE CAPTIONS: deckboy-listen, against the same whisper.cpp.
+          cmake -S tools/listen -B "$env:RUNNER_TEMP\listen-build" "-DWHISPER_SOURCE=$env:RUNNER_TEMP\whisper.cpp" -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF
+          if ($LASTEXITCODE -ne 0) { throw "deckboy-listen configure failed" }
+          cmake --build "$env:RUNNER_TEMP\listen-build" --config Release --target deckboy-listen -j 4
+          if ($LASTEXITCODE -ne 0) { throw "deckboy-listen build failed" }
+          $listen = "$env:RUNNER_TEMP\listen-build\Release\deckboy-listen.exe"
+          if (-not (Test-Path $listen)) { throw "deckboy-listen.exe was not built" }
+          "DECKBOY_LISTEN_BIN=$listen" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "DECKBOY_REQUIRE_WHISPER=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Package portable zip and installer
+        if: matrix.features == 'all'
+        shell: pwsh
+        run: |
+          # The REAL binaries, not Chocolatey's shims.
+          #
+          # `Get-Command ffmpeg` resolves to a shim in chocolatey\bin, and a shim
+          # copied into the package is a stub that looks for a binary the
+          # operator's machine has never had. The package must carry the actual
+          # ffmpeg.exe and ffprobe.exe, so find them in choco's library.
+          #
+          # CHOSEN BY WHAT IT CAN DO. There can be more than one pair on the
+          # image -- ffmpeg-full is what this job installs, but a runner that
+          # also carries the plain `ffmpeg` package has the "essentials" build
+          # too, and that one has hap as a DECODER only. Taking whichever is
+          # found first is a coin toss, and losing it bundles an ffmpeg that
+          # cannot encode HAP; the packager gate then fails the job with a
+          # message about HAP rather than about having picked the wrong one.
+          $pairs = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib" -Recurse `
+                     -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+                   Where-Object { Test-Path (Join-Path $_.DirectoryName "ffprobe.exe") }
+          if (-not $pairs) { throw "no real ffmpeg.exe/ffprobe.exe pair found to bundle" }
+          $real = $null
+          foreach ($candidate in $pairs) {
+            $encoders = & $candidate.FullName -hide_banner -encoders 2>&1 | Out-String
+            if ($encoders -match "(?m)^\s*\S+\s+hap\s") {
+              $real = $candidate
+              Write-Host "  $($candidate.DirectoryName) has the hap encoder"
+              break
+            }
+            Write-Host "  $($candidate.DirectoryName) cannot encode hap; looking further"
+          }
+          # None of them can. Bundle the first anyway so the packager gate is
+          # the thing that reports it, with the full list of what is missing.
+          if (-not $real) { $real = $pairs | Select-Object -First 1 }
+          $ffmpeg = $real.DirectoryName
+          Write-Host "bundling ffmpeg from $ffmpeg"
+          # -BuildDir because CI builds to build\Release, while the script's
+          # default is the build\windows\Release a local build uses.
+          .\tools\package_windows_installer.ps1 -FfmpegDir $ffmpeg -BuildDir "build\Release"
+          # Deckboy Mini on its own has to PLAY, not only start.
+          $mini = Get-ChildItem dist\Deckboy-Mini-*-windows-x64.zip | Select-Object -First 1
+          python tools/check_mini_package.py $mini.FullName --ffmpeg (Join-Path $ffmpeg "ffmpeg.exe")
+          if ($LASTEXITCODE -ne 0) { throw "the Mini download did not play a clip" }
+
+      # An installer nobody has run is a guess. This unpacks the portable zip
+      # and starts the binary out of it, which is the same payload the setup.exe
+      # installs.
+      - name: The packaged build must actually run
+        if: matrix.features == 'all'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\Deckboy-[0-9]*.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath dist\unpack -Force
+          $exe = Get-ChildItem dist\unpack -Recurse -Filter Deckboy.exe | Select-Object -First 1
+          # Start-Process for the same reason as the gates above: the call
+          # operator does not wait for a GUI binary and leaves $LASTEXITCODE
+          # unset, which is how this step first reported a failure with no exit
+          # code in it at all.
+          $selfCheck = (Start-Process -FilePath $exe.FullName `
+                          -ArgumentList "--self-check" `
+                          -Wait -NoNewWindow -PassThru `
+                          -RedirectStandardOutput dist\packaged-self-check.txt).ExitCode
+          Get-Content dist\packaged-self-check.txt
+          $smoke = (Start-Process -FilePath $exe.FullName `
+                      -ArgumentList "--smoke" `
+                      -Wait -NoNewWindow -PassThru).ExitCode
+          # Reported as NUMBERS before anything is thrown. A bare "it failed"
+          # cannot tell a deliberate non-zero apart from a crash on the way out,
+          # and the difference is the whole diagnosis: 1 is the app saying no,
+          # -1073741819 is an access violation.
+          Write-Host "self-check exit: $selfCheck   smoke exit: $smoke"
+          if ($selfCheck -ne 0 -or $smoke -ne 0) {
+            Write-Host "--- what the package actually contains ---"
+            Get-ChildItem $exe.DirectoryName | Select-Object Name, Length |
+              Format-Table -AutoSize | Out-String | Write-Host
+            throw "the packaged build did not run (self-check $selfCheck, smoke $smoke)"
+          }
+          # What the product page claims about window cues -- full resolution
+          # whatever the display scaling, follows the window, unaffected by
+          # anything in front of it -- rests on the BUNDLED ffmpeg carrying
+          # the graphics-capture source, which arrived in 8.0. Move that pin
+          # backwards and the behaviour goes away silently: window cues still
+          # work, on the old screen-grab path, and nothing fails. The claim
+          # would simply stop being true with nobody having written a word.
+          # Checked on the unpacked package, because the bundle is what an
+          # operator downloads -- the build tree borrows whatever ffmpeg the
+          # runner happens to have.
+          if (-not (Select-String -Path dist\packaged-self-check.txt -Pattern '^window-capture: exact' -Quiet)) {
+            Write-Host "--- what the package says ---"
+            Get-Content dist\packaged-self-check.txt | Write-Host
+            throw "The packaged build falls back to screen-grab window capture: its bundled ffmpeg has no graphics-capture source."
+          }
+          # And the same question for plugins, asked of the ZIP an operator
+          # downloads rather than of the build tree. v0.99.370 shipped every
+          # platform advertising VST3 hosting with the host compiled out: the
+          # binaries listed the operator's plugins and refused to load them,
+          # and nothing anywhere went red. A claim on the product page needs a
+          # gate on the package, not on the source.
+          $plugins = (Start-Process -FilePath $exe.FullName `
+                       -ArgumentList "--plugins" `
+                       -Wait -NoNewWindow -PassThru `
+                       -RedirectStandardOutput dist\packaged-plugins.txt).ExitCode
+          Get-Content dist\packaged-plugins.txt | Select-Object -First 3 | Write-Host
+          if (-not (Select-String -Path dist\packaged-plugins.txt -Pattern 'this build can load them' -Quiet)) {
+            throw "The packaged build cannot host plugins. It must not be released claiming it can."
+          }
+
+
+      - name: Upload Windows packages
+        if: matrix.features == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deckboy-windows-packages
+          path: |
+            dist/Deckboy-*.zip
+            dist/Deckboy-*-setup.exe
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Publish, on a tag only.
+  #
+  # Before this, every artefact was built and then thrown away: the macOS .dmg
+  # was made on every run and attached to nothing, the Windows zip was built by
+  # hand on a developer's machine, and Linux shipped nothing at all. The README
+  # promised an installer and a portable build for all three, and only the macOS
+  # half of that was ever true.
+  #
+  # Nothing is BUILT here. Everything is downloaded from the jobs that already
+  # tested it, so the file published is the same file that ran --smoke.
+  # ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Publish Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version-check, companion-module, linux-build, macos-package, windows-build, mini-linux-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect the shippable files
+        run: |
+          set -e
+          mkdir -p release
+          # Deckboy-* only. The AppImage packager downloads appimagetool INTO
+          # dist/, and it is itself a .AppImage -- so a bare extension match
+          # publishes the build tool as though it were the product.
+          find artifacts -type f \( \
+            -name 'Deckboy-*.zip' -o -name 'Deckboy-*.dmg' \
+            -o -name 'Deckboy-*-setup.exe' -o -name 'Deckboy-*.tar.gz' \
+            -o -name 'Deckboy-*.AppImage' \
+            -o -name '*.streamDeckPlugin' \
+            -o -name 'Deckboy-companion-module-*.zip' \) \
+            -exec cp -v {} release/ \;
+          ls -la release
+
+      # Eight files: an installer and a portable build for each of the three
+      # platforms, plus the Stream Deck plugin and the Companion module.
+      # Anything missing means a packaging job
+      # silently produced nothing, and a half-empty release is worse than a
+      # failed build.
+      - name: Every platform must have shipped something
+        run: |
+          set -e
+          cd release
+          for pattern in '*-windows-x64.zip' '*-windows-x64-setup.exe' \
+                         '*-macos-*.zip' '*.dmg' '*.tar.gz' '*.AppImage' \
+                         '*.streamDeckPlugin' \
+                         'Deckboy-companion-module-*.zip' \
+                         'Deckboy-Mini-*-windows-x64.zip' 'Deckboy-Mini-*-macos-arm64.zip' \
+                         'Deckboy-Mini-*-macos-x86_64.zip' 'Deckboy-Mini-*-linux-x86_64.tar.gz' \
+                         'Deckboy-Mini-*-linux-arm64.tar.gz'; do
+            count=$(ls $pattern 2>/dev/null | wc -l)
+            if [ "$count" -eq 0 ]; then
+              echo "MISSING: nothing matched $pattern" >&2
+              exit 1
+            fi
+          done
+          echo "every artefact present, Deckboy Mini's five included"
+
+      # A CHANGELOG ENTRY IS NOT A RELEASE PAGE.
+      #
+      # This step used to paste the changelog section into the release body and
+      # stop, which is why the pages read as fragments: no heading, no downloads,
+      # nothing telling a first-time visitor which of seven files to click or
+      # what to do about the unsigned-build warning. VLC keeps the two separate
+      # for exactly this reason -- NEWS is a terse engineering changelog, the
+      # release announcement is a product page -- and Deckboy had one file doing
+      # both jobs and therefore neither.
+      #
+      # The changelog section stays the source of WHAT CHANGED, so the release
+      # page and CHANGES.md still cannot disagree. Everything around it is built
+      # here from the artefacts that actually got published.
+      - name: Build the release page
+        run: |
+          python3 - <<'PY'
+          import io, os, re
+          version = os.environ["VERSION"]
+          text = io.open("CHANGES.md", encoding="utf-8").read()
+          start = re.search(r"^## .*v%s\b.*$" % re.escape(version), text, re.M)
+          if not start:
+              raise SystemExit("no CHANGES.md section for v%s" % version)
+          # The changelog heading already carries a summary -- "(the audio chain
+          # reaches Companion)" -- and none of it reached the release title, which
+          # was "Deckboy v0.99.357" and said nothing at all. A release page is the
+          # best-ranking thing this project has: searching for Deckboy returns one
+          # ABOVE the repository. The title is what somebody decides to click, so
+          # it should say what the release actually does.
+          summary = re.search(r"\(([^)]+)\)\s*$", start.group(0))
+          title = "Deckboy v%s" % version
+          if summary:
+              title += " \u2014 " + summary.group(1).strip()
+          io.open("release-title.txt", "w", encoding="utf-8").write(title)
+          print("release title: " + title)
+
+          # The title is GENERATED from the changelog heading, and a heading may
+          # legitimately name something the release pages must not. "(vivid
+          # Terrarium)" is a fine changelog line and was a terrible release title,
+          # which is exactly what shipped before this check existed. Fall back to
+          # the bare version rather than failing the release over a summary.
+          import subprocess, sys
+          # sys.executable, not "python3" -- the interpreter already running this
+          # is by definition present, and hardcoding a name meant the gate could
+          # not RUN on a machine without it. That failure looked identical to a
+          # rejection and silently degraded a perfectly good title.
+          gate = subprocess.run(
+              [sys.executable, "tools/audit_spoilers.py", "--text", title],
+              capture_output=True, text=True)
+          if gate.returncode == 1 and gate.stdout.strip():
+              print("title rejected: " + gate.stdout.strip())
+              title = "Deckboy v%s" % version
+              io.open("release-title.txt", "w", encoding="utf-8").write(title)
+              print("release title: " + title)
+          elif gate.returncode != 0:
+              raise SystemExit("the spoiler audit could not run: "
+                               + (gate.stderr or gate.stdout).strip()[:300])
+
+          rest = text[start.end():]
+          nxt = re.search(r"^## \d{4}-", rest, re.M)
+          body = (rest[: nxt.start()] if nxt else rest).strip()
+
+          # Name the files from what is actually in release/, so a renamed or
+          # missing artefact shows up as a gap in the table rather than as a
+          # dead link. The artefact check above has already refused to publish
+          # if any of the seven are absent.
+          have = sorted(os.listdir("release"))
+          def find(*fragments):
+              for name in have:
+                  if all(f in name for f in fragments):
+                      return "`%s`" % name
+              return "—"
+
+          rows = [
+              ("**Windows**",              find("windows-x64-setup.exe"), find("windows-x64.zip")),
+              ("**macOS** (Apple Silicon)", find("macos-arm64.dmg"),       find("macos-arm64.zip")),
+              ("**macOS** (Intel)",         find("macos-x86_64.dmg"),      find("macos-x86_64.zip")),
+              ("**Linux** (x86_64)",        find(".AppImage"),             find("linux-x86_64.tar.gz")),
+          ]
+
+          page = []
+          page.append(body)
+          page.append("")
+          page.append("## Downloads")
+          page.append("")
+          page.append("| Platform | Installer | Portable |")
+          page.append("|---|---|---|")
+          for row in rows:
+              page.append("| %s | %s | %s |" % row)
+          page.append("")
+          page.append("Every build carries what it needs — the binary, ffmpeg and "
+                      "its runtime libraries. Nothing else to install.")
+          page.append("")
+          page.append("### Deckboy Mini on its own")
+          page.append("")
+          page.append("Mini also comes inside every download above. On its own, for a "
+                      "screen that only needs to play:")
+          page.append("")
+          page.append("| Platform | File |")
+          page.append("|---|---|")
+          for label, frag in (("Windows", "Mini-%s-windows-x64.zip"), ("macOS (Apple Silicon)", "Mini-%s-macos-arm64.zip"),
+                              ("macOS (Intel)", "Mini-%s-macos-x86_64.zip"), ("Linux (x86_64)", "Mini-%s-linux-x86_64.tar.gz"),
+                              ("Raspberry Pi (64-bit) and ARM64 Linux", "Mini-%s-linux-arm64.tar.gz")):
+              page.append("| **%s** | %s |" % (label, find(frag % version)))
+          page.append("")
+          page.append("### Control surfaces")
+          page.append("")
+          page.append("| Surface | File | How |")
+          page.append("|---|---|---|")
+          page.append("| **Stream Deck** | %s | Double-click it. |" % find(".streamDeckPlugin"))
+          page.append("| **Bitfocus Companion** | %s | Unzip it somewhere permanent, then point "
+                      "Companion's *developer modules path* at the folder containing it. "
+                      "INSTALL.txt inside has the three steps. |"
+                      % find("Deckboy-companion-module-", ".zip"))
+          page.append("")
+          page.append("### First run")
+          page.append("")
+          page.append("Deckboy is free software and is not code-signed, so the OS "
+                      "does not recognise the publisher. One time only:")
+          page.append("")
+          page.append("- **macOS** — if it says the app is damaged: "
+                      "`xattr -dr com.apple.quarantine /Applications/Deckboy.app`")
+          page.append("- **Windows** — SmartScreen may appear: **More info → Run anyway**")
+          page.append("")
+          page.append("---")
+          page.append("")
+          # A release page is where most strangers arrive: a search lands on
+          # a version tag, not on the front page, and until now the only way
+          # out of one was the changelog. Somebody who has never heard of
+          # Deckboy should be able to tell what it is and where to read more
+          # without leaving GitHub first.
+          site = "https://utopian-academy.github.io/Deckboy/"
+          repo = os.environ.get("GITHUB_REPOSITORY", "Utopian-Academy/Deckboy")
+          # Only what the download itself does. NDI is named because the
+          # feature build now refuses to pass Self-check without the NDI SDK
+          # compiled in, so every release carries it. Outputs are joined with "or": simultaneity is claimed only for what
+          # was tested on a release -- a stream and a recording of the same
+          # picture, and presenter view beside the programme.
+          page.append("**Deckboy** is free, open-source cue-based media playback "
+                      "and show control for live video — clips, slides and live "
+                      "sources on one cue list, out to a screen, NDI, SRT or Blackmagic "
+                      "SDI, with a stream and a recording running at the same time "
+                      "and presenter view on its own display, driven from a Stream "
+                      "Deck, Bitfocus Companion, OSC, MIDI or LTC timecode.")
+          page.append("")
+          page.append("[What it does](%s) · [Manual](%smanual.html) · "
+                      "[How it compares](%scompare.html) · [FAQ](%sfaq.html) · "
+                      "[Full history](https://github.com/%s/blob/main/CHANGES.md)"
+                      % (site, site, site, site, repo))
+          page.append("")
+          # Most people who reach a release page never visit the front page,
+          # so the one ask that helps the next operator find it goes here too.
+          page.append("If Deckboy runs part of your show, a ⭐ on "
+                      "[the repository](https://github.com/%s) is how the next "
+                      "operator finds it." % repo)
+
+          out = "\n".join(page).rstrip() + "\n"
+          io.open("release-notes.md", "w", encoding="utf-8").write(out)
+          print("release page: %d characters, %d artefacts listed"
+                % (len(out), sum(1 for r in rows for c in r[1:] if c != "—")))
+          PY
+        env:
+          VERSION: ${{ needs.version-check.outputs.version }}
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version-check.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --title "$(cat release-title.txt)" \
+            --notes-file release-notes.md \
+            release/*
+
+          # The release this one replaces now says so. Search engines keep old
+          # release pages, and people arrive on them and download whatever is
+          # in front of them -- a page two weeks stale gave no hint that anything
+          # newer existed. A release cannot carry this when it is created,
+          # because at that moment it IS the newest, so it is added to the
+          # previous one here. releases/latest always redirects, so the line
+          # never needs updating. Guarded on its own text so it cannot stack.
+          previous=$(gh release list --exclude-drafts --limit 2 --json tagName --jq ".[1].tagName // empty")
+          if [ -n "$previous" ] && [ "$previous" != "v$VERSION" ]; then
+            gh release view "$previous" --json body --jq .body > previous-body.md
+            if ! grep -q "This is an older release" previous-body.md; then
+              {
+                echo "> **This is an older release.** The current version is always at [releases/latest](https://github.com/${{ github.repository }}/releases/latest)."
+                echo
+                cat previous-body.md
+              } > previous-notes.md
+              gh release edit "$previous" --notes-file previous-notes.md
+              echo "marked $previous as superseded"
+            fi
+          fi

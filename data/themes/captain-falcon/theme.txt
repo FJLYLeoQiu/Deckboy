@@ -1,0 +1,24 @@
+# Deckboy Theme: Captain Falcon
+# Azure-phosphor OLED terminal — F-Zero HUD on true black.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	05080CFF
+shell_inner	080B10FF
+shell_shadow	000000FF
+screen_light	3AB8FFFF
+screen_mid	1E7AC0FF
+screen_dark	124A78FF
+screen_deep	04080FFF
+screen_ink_soft	5AA8E0FF
+screen_fg	6AC8FFFF
+screen_fg_soft	3E88C8FF
+screen_tile	0C141FFF
+button_bezel	235A8BFF
+delete_bezel	E89830FF
+scanline_alpha	14
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	bird	2
+creature	mouse	1

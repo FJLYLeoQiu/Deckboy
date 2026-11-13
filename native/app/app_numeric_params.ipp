@@ -1,0 +1,1910 @@
+// app_numeric_params.ipp — typed entry for the inspector's numeric rows.
+//
+// Every dec/inc row in the cue inspector can be dragged to scrub, but only the
+// geometry rows could be CLICKED to type an exact number, because each of those
+// carried its own QuickAction (EditScaleX, EditRotation, ...). Adding that to
+// the timer, tone, chip synth and video synth rows one action at a time would
+// have meant twenty more enum values and twenty more near-identical handlers.
+//
+// So the row carries a parameter id instead (QuickButton::param) and there is
+// one action, one handler, and one table. A new numeric control needs a line
+// here and a paramId on its row.
+//
+// Ranges below MUST match the clamps the dec/inc actions and the generator
+// apply. Where they disagree the operator can type a value the buttons cannot
+// reach, which reads as the field being broken.
+
+enum class NumericParam : int {
+  None = -1,
+
+  // Video synth
+  VsSpeed = 0,
+  VsScale,
+  VsFeedback,
+  VsZoom,
+  VsReact,
+  VsResolution,
+  VsPixelSort,
+  VsGlitch,
+  VsCrt,
+  VsFreeAngle,
+
+  // Tone generator
+  ToneLevel,
+  ToneFreq,
+
+  // Motion driver
+  MotionDriverSpeed,
+
+  // Chip synth
+  SynthNote,
+  SynthAttack,
+  SynthRelease,
+  FdsDepth,
+  FdsRatio,
+  FdsRetrig,
+
+  // Portal source
+  PortalBlobs,
+  PortalSize,
+  PortalBlend,
+  PortalOutline,
+  PortalSpeed,
+  PortalHue,
+
+  // Lower third (a text cue's layout)
+  L3Height,
+  L3Size,
+  L3InSeconds,
+  L3OutSeconds,
+  L3HoldSeconds,
+  CodeWidth,
+  CodeHeight,
+  SwirlSpeed,
+  SwirlTwist,
+  SwirlCells,
+  SwirlHue,
+  SwirlZoom,
+  SwirlFlow,
+  SwirlCentreX,
+  SwirlCentreY,
+  SwirlBands,
+  SwirlPalette,
+  // Moire source. Stored 0-1 (an oscillator swings 0-1); typed and shown in
+  // the operator's units -- percent, degrees -- mapped in read/write below.
+  MoireShape,
+  MoirePalette,
+  MoireDensity,
+  MoireSpeed,
+  MoireWarp,
+  MoireTurn,
+  MoireCentreX,
+  MoireCentreY,
+  MoireGrey,
+  MoireHue,
+  // Panel Map: one LED tile, in pixels.
+  LedPanelWidth,
+  LedPanelHeight,
+  // The mask in hand (app_mask_editor.ipp, maskFocus), in operator units:
+  // percent of the frame, percent, degrees.
+  MaskX,
+  MaskY,
+  MaskScale,
+  MaskRotation,
+  MaskFeather,
+  MaskGrow,
+  MaskOpacity,
+  // The draw brush (the show's) and a Draw cue's playback.
+  DrawSize,
+  DrawOpacity,
+  DrawFps,
+  DrawHold,
+};
+
+// Which oscillator slot a Moire row's ~ drives, or -1 for the two pickers.
+inline int moireLfoSlotFor(NumericParam id) {
+  switch (id) {
+    case NumericParam::MoireDensity: return kMoireLfoDensity;
+    case NumericParam::MoireSpeed: return kMoireLfoSpeed;
+    case NumericParam::MoireWarp: return kMoireLfoWarp;
+    case NumericParam::MoireTurn: return kMoireLfoTurn;
+    case NumericParam::MoireCentreX: return kMoireLfoCentreX;
+    case NumericParam::MoireCentreY: return kMoireLfoCentreY;
+    case NumericParam::MoireGrey: return kMoireLfoGrey;
+    case NumericParam::MoireHue: return kMoireLfoHue;
+    default: return -1;
+  }
+}
+
+struct NumericParamSpec {
+  const char* token;      // inline editor identity, so it can restore position
+  const char* label;      // shown in the editor
+  const char* hint;       // range, in the operator's words
+  double lo = 0.0;
+  double hi = 1.0;
+  int precision = 2;
+  bool integral = false;
+  // One press of - or +. Zero means a fiftieth of the range, which suits a
+  // row that only ever had typed entry; a count wants 1.
+  double step = 0.0;
+};
+
+const NumericParamSpec* numericParamSpec(NumericParam id) {
+  switch (id) {
+    case NumericParam::SwirlSpeed: {
+      static const NumericParamSpec s {"swirl.speed", "Speed", "-3 to 3: 0 holds, negative runs backwards", -3, 3, 2, false, 0.1};
+      return &s;
+    }
+    case NumericParam::SwirlTwist: {
+      static const NumericParamSpec s {"swirl.twist", "Twist", "Spiral strength, 0-4", 0, 4, 2, false, 0.1};
+      return &s;
+    }
+    case NumericParam::SwirlCells: {
+      static const NumericParamSpec s {"swirl.cells", "Pixel density", "Horizontal cells, 64-960", 64, 960, 0, true, 16};
+      return &s;
+    }
+    case NumericParam::SwirlHue: {
+      static const NumericParamSpec s {"swirl.hue", "Colour", "Palette turn, 0-1", 0, 1, 2, false, 0.02};
+      return &s;
+    }
+    case NumericParam::SwirlZoom: {
+      static const NumericParamSpec s {"swirl.zoom", "Zoom", "Spiral size, 0.25-4", 0.25, 4, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::SwirlFlow: {
+      static const NumericParamSpec s {"swirl.flow", "Flow", "Turbulence, 0 still to 3 boiling", 0, 3, 2, false, 0.1};
+      return &s;
+    }
+    case NumericParam::SwirlCentreX: {
+      static const NumericParamSpec s {"swirl.cx", "Centre X", "Where the eye sits, 0 left to 1 right", 0, 1, 2, false, 0.02};
+      return &s;
+    }
+    case NumericParam::SwirlCentreY: {
+      static const NumericParamSpec s {"swirl.cy", "Centre Y", "Where the eye sits, 0 top to 1 bottom", 0, 1, 2, false, 0.02};
+      return &s;
+    }
+    case NumericParam::SwirlBands: {
+      static const NumericParamSpec s {"swirl.bands", "Bands", "Colour steps, 2-8", 2, 8, 0, true, 1};
+      return &s;
+    }
+    case NumericParam::SwirlPalette: {
+      static const NumericParamSpec s {"swirl.palette", "Palette", "0 classic, 1 fire, 2 ice, 3 neon, 4 mono", 0, 4, 0, true, 1};
+      return &s;
+    }
+    case NumericParam::MoireShape: {
+      static const NumericParamSpec s {"moire.shape", "Shape", "0 zone, 1 twin, 2 flow, 3 saddle, 4 ripple, 5 shear", 0, 5, 0, true, 1};
+      return &s;
+    }
+    case NumericParam::MoirePalette: {
+      static const NumericParamSpec s {"moire.palette", "Palette", "0 rainbow + grey, 1 rainbow, 2 theme, 3 mono", 0, 3, 0, true, 1};
+      return &s;
+    }
+    case NumericParam::MoireDensity: {
+      static const NumericParamSpec s {"moire.density", "Density", "0-100%: 50 is 1x, 0 a quarter, 100 four times", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireSpeed: {
+      static const NumericParamSpec s {"moire.speed", "Speed", "0-100%: 0 holds the field still", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireWarp: {
+      static const NumericParamSpec s {"moire.warp", "Warp", "0-100%: how far the field bends", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireTurn: {
+      static const NumericParamSpec s {"moire.turn", "Turn", "Degrees, 0-360", 0, 360, 0, false, 5};
+      return &s;
+    }
+    case NumericParam::MoireCentreX: {
+      static const NumericParamSpec s {"moire.cx", "Centre X", "0-100%, left to right", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireCentreY: {
+      static const NumericParamSpec s {"moire.cy", "Centre Y", "0-100%, top to bottom", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireGrey: {
+      static const NumericParamSpec s {"moire.grey", "Grey", "0-100%: the share of each band drawn as grey stripes", 0, 100, 0, false, 2};
+      return &s;
+    }
+    case NumericParam::MoireHue: {
+      static const NumericParamSpec s {"moire.hue", "Hue", "Degrees round the colour wheel, 0-360", 0, 360, 0, false, 5};
+      return &s;
+    }
+    case NumericParam::CodeWidth:
+    case NumericParam::CodeHeight: {
+      static const NumericParamSpec w {"code.width", "Render width", "Pixels, 64-3840", 64, 3840, 0, true, 64};
+      static const NumericParamSpec h {"code.height", "Render height", "Pixels, 64-2160", 64, 2160, 0, true, 36};
+      return id == NumericParam::CodeWidth ? &w : &h;
+    }
+    case NumericParam::VsSpeed: {
+      static const NumericParamSpec s {"vs.speed", "Speed",
+                                       "Master oscillator rate, 0.01-8", 0.01, 8.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsScale: {
+      static const NumericParamSpec s {"vs.scale", "Scale",
+                                       "Feature size, 0.1-8", 0.1, 8.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsFeedback: {
+      static const NumericParamSpec s {"vs.feedback", "Feedback",
+                                       "How much of each frame feeds the next, 0-0.95",
+                                       0.0, 0.95, 2, false};
+      return &s;
+    }
+    case NumericParam::VsZoom: {
+      static const NumericParamSpec s {"vs.zoom", "Feedback zoom",
+                                       "Per-frame zoom of the feedback path, 0.90-1.15",
+                                       0.90, 1.15, 3, false};
+      return &s;
+    }
+    case NumericParam::VsReact: {
+      static const NumericParamSpec s {"vs.react", "Audio reactivity",
+                                       "How hard the audio drives it, 0-1", 0.0, 1.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsResolution: {
+      static const NumericParamSpec s {"vs.resolution", "Detail",
+                                       "Internal resolution, 1 (chunky) to 5 (fine)",
+                                       1.0, 5.0, 0, true};
+      return &s;
+    }
+    case NumericParam::VsPixelSort: {
+      static const NumericParamSpec s {"vs.smear", "Smear",
+                                       "Pixel sort amount, 0-1", 0.0, 1.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsGlitch: {
+      static const NumericParamSpec s {"vs.glitch", "Glitch",
+                                       "Block displacement and channel tearing, 0-1",
+                                       0.0, 1.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsCrt: {
+      static const NumericParamSpec s {"vs.crt", "CRT",
+                                       "Scanlines, bloom and gun misalignment, 0-1",
+                                       0.0, 1.0, 2, false};
+      return &s;
+    }
+    case NumericParam::VsFreeAngle: {
+      static const NumericParamSpec s {"vs.spin", "Sprite spin",
+                                       "Degrees per second, -720 to 720",
+                                       -720.0, 720.0, 0, false};
+      return &s;
+    }
+    case NumericParam::ToneLevel: {
+      static const NumericParamSpec s {"tone.level", "Level",
+                                       "dBFS, -60 to 0 (-18 is EBU alignment)",
+                                       -60.0, 0.0, 1, false};
+      return &s;
+    }
+    case NumericParam::ToneFreq: {
+      static const NumericParamSpec s {"tone.freq", "Frequency",
+                                       "Hertz, 20-20000", 20.0, 20000.0, 1, false};
+      return &s;
+    }
+    case NumericParam::MotionDriverSpeed: {
+      static const NumericParamSpec s {"motion.speed", "Driver speed",
+                                       "Fields per frame, 0-4 (1 = one field "
+                                       "per rendered frame)", 0.0, 4.0, 2, false};
+      return &s;
+    }
+    case NumericParam::SynthNote: {
+      static const NumericParamSpec s {"synth.note", "Note",
+                                       "Pitch in hertz, 20-8000", 20.0, 8000.0, 2, false};
+      return &s;
+    }
+    case NumericParam::SynthAttack: {
+      static const NumericParamSpec s {"synth.attack", "Attack",
+                                       "Seconds, 0-4", 0.0, 4.0, 3, false};
+      return &s;
+    }
+    case NumericParam::SynthRelease: {
+      static const NumericParamSpec s {"synth.release", "Release",
+                                       "Seconds, 0-8", 0.0, 8.0, 3, false};
+      return &s;
+    }
+    case NumericParam::FdsDepth: {
+      static const NumericParamSpec s {"fds.depth", "Mod depth",
+                                       "FDS hardware gain range, 0-63", 0.0, 63.0, 0, true};
+      return &s;
+    }
+    case NumericParam::FdsRatio: {
+      static const NumericParamSpec s {"fds.ratio", "Mod ratio",
+                                       "Modulator as a ratio of the note, 0.05-16",
+                                       0.05, 16.0, 2, false};
+      return &s;
+    }
+    case NumericParam::FdsRetrig: {
+      static const NumericParamSpec s {"fds.retrig", "Retrigger",
+                                       "Seconds between retriggers, 0-8", 0.0, 8.0, 2, false};
+      return &s;
+    }
+    case NumericParam::PortalBlobs: {
+      static const NumericParamSpec s {"portal.blobs", "Blobs",
+                                       "How many are alive at once, 3-48", 3.0, 48.0, 0, true, 1.0};
+      return &s;
+    }
+    case NumericParam::PortalSize: {
+      static const NumericParamSpec s {"portal.size", "Size",
+                                       "How big a blob grows, 0-1", 0.0, 1.0, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::PortalBlend: {
+      static const NumericParamSpec s {"portal.melt", "Melt",
+                                       "How readily neighbours merge, 0 (never) to 1",
+                                       0.0, 1.0, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::PortalOutline: {
+      static const NumericParamSpec s {"portal.rim", "Rim",
+                                       "Thickness of the glowing edge, 0-1", 0.0, 1.0, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::PortalSpeed: {
+      static const NumericParamSpec s {"portal.speed", "Speed",
+                                       "Birth, drift and fade rate, 0.1-3", 0.1, 3.0, 2, false, 0.1};
+      return &s;
+    }
+    case NumericParam::PortalHue: {
+      static const NumericParamSpec s {"portal.hue", "Colour",
+                                       "Turns the rim's colours round the wheel, 0-1",
+                                       0.0, 1.0, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::MaskX: {
+      static const NumericParamSpec s {"mask.x", "Mask X", "Across, % of the width, -100 to 100", -100, 100, 0, false, 1};
+      return &s;
+    }
+    case NumericParam::MaskY: {
+      static const NumericParamSpec s {"mask.y", "Mask Y", "Down, % of the height, -100 to 100", -100, 100, 0, false, 1};
+      return &s;
+    }
+    case NumericParam::MaskScale: {
+      static const NumericParamSpec s {"mask.scale", "Mask scale", "Size, %, 5 to 400", 5, 400, 0, false, 5};
+      return &s;
+    }
+    case NumericParam::MaskRotation: {
+      static const NumericParamSpec s {"mask.rotation", "Mask rotation", "Degrees, -360 to 360", -360, 360, 0, false,
+                                       5};
+      return &s;
+    }
+    case NumericParam::MaskFeather: {
+      static const NumericParamSpec s {"mask.feather", "Feather", "Edge softness, % of the height, 0 to 25", 0, 25, 1,
+                                       false, 0.5};
+      return &s;
+    }
+    case NumericParam::MaskGrow: {
+      static const NumericParamSpec s {"mask.grow", "Grow", "Edge out (+) or in (-), % of the height, -25 to 25", -25,
+                                       25, 1, false, 0.5};
+      return &s;
+    }
+    case NumericParam::DrawSize: {
+      static const NumericParamSpec s {"draw.size", "Brush size", "% of the picture's height, 0.1 to 20", 0.1, 20, 1,
+                                       false, 0.2};
+      return &s;
+    }
+    case NumericParam::DrawOpacity: {
+      static const NumericParamSpec s {"draw.opacity", "Brush opacity", "%, 1 to 100", 1, 100, 0, false, 5};
+      return &s;
+    }
+    case NumericParam::DrawFps: {
+      static const NumericParamSpec s {"draw.fps", "Flipbook rate", "Frames a second, 1 to 60", 1, 60, 0, true, 1};
+      return &s;
+    }
+    case NumericParam::DrawHold: {
+      static const NumericParamSpec s {"draw.hold", "Replay hold", "Seconds the finished drawing stays, 0 to 60", 0,
+                                       60, 1, false, 0.5};
+      return &s;
+    }
+    case NumericParam::MaskOpacity: {
+      static const NumericParamSpec s {"mask.opacity", "Mask opacity", "How hard it cuts, %, 0 to 100", 0, 100, 0,
+                                       false, 5};
+      return &s;
+    }
+    case NumericParam::LedPanelWidth: {
+      static const NumericParamSpec s {"panel.w", "Tile width",
+                                       "One LED tile's width in pixels, 8-8192",
+                                       8.0, 8192.0, 0, true, 1.0};
+      return &s;
+    }
+    case NumericParam::LedPanelHeight: {
+      static const NumericParamSpec s {"panel.h", "Tile height",
+                                       "One LED tile's height in pixels, 8-8192",
+                                       8.0, 8192.0, 0, true, 1.0};
+      return &s;
+    }
+    case NumericParam::L3Height: {
+      static const NumericParamSpec s {"l3.height", "Height",
+                                       "Space under it, as a fraction of the frame, 0-0.8",
+                                       0.0, 0.8, 2, false, 0.01};
+      return &s;
+    }
+    case NumericParam::L3Size: {
+      static const NumericParamSpec s {"l3.size", "Size",
+                                       "Scale of the whole graphic, 0.5-2", 0.5, 2.0, 2, false, 0.05};
+      return &s;
+    }
+    case NumericParam::L3InSeconds: {
+      static const NumericParamSpec s {"l3.in", "In time",
+                                       "Seconds the in move takes, 0-5", 0.0, 5.0, 1, false, 0.1};
+      return &s;
+    }
+    case NumericParam::L3OutSeconds: {
+      static const NumericParamSpec s {"l3.out", "Out time",
+                                       "Seconds the out move takes, 0-5", 0.0, 5.0, 1, false, 0.1};
+      return &s;
+    }
+    case NumericParam::L3HoldSeconds: {
+      static const NumericParamSpec s {"l3.hold", "On screen",
+                                       "Seconds before it leaves by itself; 0 waits for OUT",
+                                       0.0, 600.0, 0, false, 1.0};
+      return &s;
+    }
+    default:
+      return nullptr;
+  }
+}
+
+// Read the live value. Returns false when the selected cue does not carry it,
+// which is how a stale row (the selection changed mid-click) is refused rather
+// than writing into the wrong cue.
+bool readNumericParam(const Cue& cue, NumericParam id, double& out) {
+  const VideoSynthSettings& v = cue.videoSynth;
+  switch (id) {
+    case NumericParam::SwirlSpeed:
+    case NumericParam::SwirlTwist:
+    case NumericParam::SwirlCells:
+    case NumericParam::SwirlHue:
+    case NumericParam::SwirlZoom:
+    case NumericParam::SwirlFlow:
+    case NumericParam::SwirlCentreX:
+    case NumericParam::SwirlCentreY:
+    case NumericParam::SwirlBands:
+    case NumericParam::SwirlPalette:
+      if (cue.kind != CueKind::Pattern || normalizePatternTypeId(cue.path) != "swirl") return false;
+      out = id == NumericParam::SwirlSpeed ? cue.swirl.speed
+          : id == NumericParam::SwirlTwist ? cue.swirl.twist
+          : id == NumericParam::SwirlCells ? cue.swirl.cells
+          : id == NumericParam::SwirlHue ? cue.swirl.hue
+          : id == NumericParam::SwirlZoom ? cue.swirl.zoom
+          : id == NumericParam::SwirlFlow ? cue.swirl.flow
+          : id == NumericParam::SwirlCentreX ? cue.swirl.centreX
+          : id == NumericParam::SwirlCentreY ? cue.swirl.centreY
+          : id == NumericParam::SwirlBands ? cue.swirl.bands : cue.swirl.palette;
+      return true;
+    case NumericParam::MoireShape:
+    case NumericParam::MoirePalette:
+    case NumericParam::MoireDensity:
+    case NumericParam::MoireSpeed:
+    case NumericParam::MoireWarp:
+    case NumericParam::MoireTurn:
+    case NumericParam::MoireCentreX:
+    case NumericParam::MoireCentreY:
+    case NumericParam::MoireGrey:
+    case NumericParam::MoireHue: {
+      if (cue.kind != CueKind::Pattern || normalizePatternTypeId(cue.path) != "moire-field") return false;
+      const MoireSettings& m = cue.moire;
+      out = id == NumericParam::MoireShape ? m.shape
+          : id == NumericParam::MoirePalette ? m.palette
+          : id == NumericParam::MoireDensity ? m.density * 100.0
+          : id == NumericParam::MoireSpeed ? m.speed * 100.0
+          : id == NumericParam::MoireWarp ? m.warp * 100.0
+          : id == NumericParam::MoireTurn ? m.turn * 360.0
+          : id == NumericParam::MoireCentreX ? m.centreX * 100.0
+          : id == NumericParam::MoireCentreY ? m.centreY * 100.0
+          : id == NumericParam::MoireGrey ? m.grey * 100.0
+          : m.hue * 360.0;
+      return true;
+    }
+    case NumericParam::CodeWidth:
+    case NumericParam::CodeHeight:
+      if (!cueIsCodeSource(cue)) return false;
+      out = id == NumericParam::CodeWidth ? cue.width : cue.height;
+      return true;
+    case NumericParam::VsSpeed:      out = v.speed; return true;
+    case NumericParam::VsScale:      out = v.scale; return true;
+    case NumericParam::VsFeedback:   out = v.feedbackAmount; return true;
+    case NumericParam::VsZoom:       out = v.feedbackZoom; return true;
+    case NumericParam::VsReact:      out = v.audioReactivity; return true;
+    case NumericParam::VsResolution: out = v.resolution; return true;
+    case NumericParam::VsPixelSort:  out = v.pixelSort; return true;
+    case NumericParam::VsGlitch:     out = v.glitch; return true;
+    case NumericParam::VsCrt:        out = v.crt; return true;
+    case NumericParam::VsFreeAngle:  out = v.spriteFreeAngle; return true;
+    case NumericParam::ToneLevel:    out = cue.tone.levelDbfs; return true;
+    case NumericParam::ToneFreq:     out = cue.tone.frequencyHz; return true;
+    case NumericParam::DrawFps:      out = cue.drawing.fps; return true;
+    case NumericParam::DrawHold:     out = cue.drawing.holdSeconds; return true;
+    case NumericParam::MotionDriverSpeed: out = cue.motionDriverSpeed; return true;
+    case NumericParam::SynthNote:    out = cue.tone.synth.noteHz; return true;
+    case NumericParam::SynthAttack:  out = cue.tone.synth.attackSeconds; return true;
+    case NumericParam::SynthRelease: out = cue.tone.synth.releaseSeconds; return true;
+    case NumericParam::FdsDepth:     out = cue.tone.synth.modDepth; return true;
+    case NumericParam::FdsRatio:     out = cue.tone.synth.modRatio; return true;
+    case NumericParam::FdsRetrig:    out = cue.tone.synth.retriggerSeconds; return true;
+    // Only on a portal: the other pattern cues carry these fields too (every
+    // Cue does), and a stale row must not write into a colour-bars cue.
+    case NumericParam::PortalBlobs:
+    case NumericParam::PortalSize:
+    case NumericParam::PortalBlend:
+    case NumericParam::PortalOutline:
+    case NumericParam::PortalSpeed:
+    case NumericParam::PortalHue: {
+      if (cue.kind != CueKind::Pattern || normalizePatternTypeId(cue.path) != "portal") {
+        return false;
+      }
+      const PortalSettings& p = cue.portal;
+      out = id == NumericParam::PortalBlobs ? p.blobs
+          : id == NumericParam::PortalSize ? p.size
+          : id == NumericParam::PortalBlend ? p.blend
+          : id == NumericParam::PortalOutline ? p.outline
+          : id == NumericParam::PortalSpeed ? p.speed
+          : p.hue;
+      return true;
+    }
+    // Only on a panel map, for the same reason as the portal's rows above.
+    case NumericParam::LedPanelWidth:
+    case NumericParam::LedPanelHeight: {
+      if (cue.kind != CueKind::Pattern || stripPatternMotionSuffix(normalizePatternTypeId(cue.path)) != "panel-map") {
+        return false;
+      }
+      out = id == NumericParam::LedPanelWidth ? cue.ledPanelWidth : cue.ledPanelHeight;
+      return true;
+    }
+    case NumericParam::L3Height:
+    case NumericParam::L3Size:
+    case NumericParam::L3InSeconds:
+    case NumericParam::L3OutSeconds:
+    case NumericParam::L3HoldSeconds: {
+      if (cue.kind != CueKind::Text || !cue.lowerThird.on) {
+        return false;
+      }
+      const LowerThirdDesign& l = cue.lowerThird;
+      out = id == NumericParam::L3Height ? l.height
+          : id == NumericParam::L3Size ? l.size
+          : id == NumericParam::L3InSeconds ? l.inSeconds
+          : id == NumericParam::L3OutSeconds ? l.outSeconds
+          : l.holdSeconds;
+      return true;
+    }
+    default: return false;
+  }
+}
+
+void writeNumericParam(Cue& cue, NumericParam id, double value) {
+  VideoSynthSettings& v = cue.videoSynth;
+  switch (id) {
+    case NumericParam::DrawFps: cue.drawing.fps = static_cast<float>(value); ++cue.drawing.revision; break;
+    case NumericParam::DrawHold: cue.drawing.holdSeconds = static_cast<float>(value); ++cue.drawing.revision; break;
+    case NumericParam::SwirlSpeed: cue.swirl.speed = value; break;
+    case NumericParam::SwirlTwist: cue.swirl.twist = value; break;
+    case NumericParam::SwirlCells: cue.swirl.cells = static_cast<int>(std::lround(value)); break;
+    case NumericParam::SwirlHue: cue.swirl.hue = value; break;
+    case NumericParam::SwirlZoom: cue.swirl.zoom = value; break;
+    case NumericParam::SwirlFlow: cue.swirl.flow = value; break;
+    case NumericParam::SwirlCentreX: cue.swirl.centreX = value; break;
+    case NumericParam::SwirlCentreY: cue.swirl.centreY = value; break;
+    case NumericParam::SwirlBands: cue.swirl.bands = static_cast<int>(std::lround(value)); break;
+    case NumericParam::SwirlPalette: cue.swirl.palette = static_cast<int>(std::lround(value)); break;
+    case NumericParam::MoireShape:
+      cue.moire.shape = std::clamp(static_cast<int>(std::lround(value)), 0, kMoireShapeCount - 1);
+      break;
+    case NumericParam::MoirePalette:
+      cue.moire.palette = std::clamp(static_cast<int>(std::lround(value)), 0, kMoirePaletteCount - 1);
+      // THE THEME PALETTE IS CAPTURED WHEN IT IS PICKED, so the cue keeps the
+      // colours it was made with on a desk wearing another theme.
+      if (cue.moire.palette == 2) {
+        const SDL_Color inks[4] = {pal.deep, pal.mid, pal.tile, pal.light};
+        for (std::size_t i = 0; i < 4; ++i) {
+          cue.moire.themeInks[i] = (static_cast<std::uint32_t>(inks[i].r) << 16) |
+                                   (static_cast<std::uint32_t>(inks[i].g) << 8) | inks[i].b;
+        }
+      }
+      break;
+    case NumericParam::MoireDensity: cue.moire.density = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireSpeed: cue.moire.speed = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireWarp: cue.moire.warp = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireTurn: cue.moire.turn = std::clamp(value / 360.0, 0.0, 1.0); break;
+    case NumericParam::MoireCentreX: cue.moire.centreX = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireCentreY: cue.moire.centreY = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireGrey: cue.moire.grey = std::clamp(value / 100.0, 0.0, 1.0); break;
+    case NumericParam::MoireHue: cue.moire.hue = std::clamp(value / 360.0, 0.0, 1.0); break;
+    case NumericParam::CodeWidth: cue.width = static_cast<int>(std::lround(value)); break;
+    case NumericParam::CodeHeight: cue.height = static_cast<int>(std::lround(value)); break;
+    case NumericParam::VsSpeed:      v.speed = value; break;
+    case NumericParam::VsScale:      v.scale = value; break;
+    case NumericParam::VsFeedback:   v.feedbackAmount = value; break;
+    case NumericParam::VsZoom:       v.feedbackZoom = value; break;
+    case NumericParam::VsReact:      v.audioReactivity = value; break;
+    case NumericParam::VsResolution: v.resolution = static_cast<int>(std::lround(value)); break;
+    case NumericParam::VsPixelSort:  v.pixelSort = value; break;
+    case NumericParam::VsGlitch:     v.glitch = value; break;
+    case NumericParam::VsCrt:        v.crt = value; break;
+    case NumericParam::VsFreeAngle:  v.spriteFreeAngle = value; break;
+    case NumericParam::ToneLevel:    cue.tone.levelDbfs = value; break;
+    case NumericParam::ToneFreq:     cue.tone.frequencyHz = value; break;
+    case NumericParam::MotionDriverSpeed:
+      cue.motionDriverSpeed = static_cast<float>(value); break;
+    case NumericParam::SynthNote:    cue.tone.synth.noteHz = value; break;
+    case NumericParam::SynthAttack:  cue.tone.synth.attackSeconds = value; break;
+    case NumericParam::SynthRelease: cue.tone.synth.releaseSeconds = value; break;
+    case NumericParam::FdsDepth:     cue.tone.synth.modDepth = static_cast<int>(std::lround(value)); break;
+    case NumericParam::FdsRatio:     cue.tone.synth.modRatio = value; break;
+    case NumericParam::FdsRetrig:    cue.tone.synth.retriggerSeconds = value; break;
+    case NumericParam::PortalBlobs:  cue.portal.blobs = static_cast<int>(std::lround(value)); break;
+    case NumericParam::PortalSize:   cue.portal.size = value; break;
+    case NumericParam::PortalBlend:  cue.portal.blend = value; break;
+    case NumericParam::PortalOutline: cue.portal.outline = value; break;
+    case NumericParam::PortalSpeed:  cue.portal.speed = value; break;
+    case NumericParam::PortalHue:    cue.portal.hue = value; break;
+    case NumericParam::L3Height:      cue.lowerThird.height = value; break;
+    case NumericParam::L3Size:        cue.lowerThird.size = value; break;
+    case NumericParam::L3InSeconds:   cue.lowerThird.inSeconds = value; break;
+    case NumericParam::L3OutSeconds:  cue.lowerThird.outSeconds = value; break;
+    case NumericParam::L3HoldSeconds: cue.lowerThird.holdSeconds = value; break;
+    case NumericParam::LedPanelWidth:  cue.ledPanelWidth = static_cast<int>(std::lround(value)); break;
+    case NumericParam::LedPanelHeight: cue.ledPanelHeight = static_cast<int>(std::lround(value)); break;
+    default: break;
+  }
+}
+
+// The - and + of any row in the table: one step, clamped to the same range
+// typed entry uses. Every selected cue that carries the value moves together,
+// the way typed entry already does.
+// THE MASK'S ROWS edit ONE mask -- the one in hand -- however many cues are
+// selected, so they skip the per-cue loops below, which would step a shared
+// mask once for every selected cue.
+static int maskSlotForParam(NumericParam id) {
+  switch (id) {
+    case NumericParam::MaskX:        return deckboy::masks::kMaskLfoX;
+    case NumericParam::MaskY:        return deckboy::masks::kMaskLfoY;
+    case NumericParam::MaskScale:    return deckboy::masks::kMaskLfoScale;
+    case NumericParam::MaskRotation: return deckboy::masks::kMaskLfoRotation;
+    case NumericParam::MaskFeather:  return deckboy::masks::kMaskLfoFeather;
+    case NumericParam::MaskGrow:     return deckboy::masks::kMaskLfoGrow;
+    case NumericParam::MaskOpacity:  return deckboy::masks::kMaskLfoOpacity;
+    default:                         return -1;
+  }
+}
+
+static double maskParamUnit(NumericParam id) {
+  return id == NumericParam::MaskRotation ? 1.0 : 100.0;   // stored -> shown
+}
+
+double maskParamInOperatorUnits(const deckboy::masks::Mask& m, NumericParam id) {
+  const int slot = maskSlotForParam(id);
+  return slot < 0 ? 0.0 : deckboy::masks::maskParam(m, slot) * maskParamUnit(id);
+}
+
+void setMaskParamFromOperatorUnits(NumericParam id, double shown, const NumericParamSpec& spec) {
+  deckboy::masks::Mask* m = maskFocus();
+  const int slot = maskSlotForParam(id);
+  if (!m || slot < 0) return;
+  const double next = std::clamp(shown, spec.lo, spec.hi);
+  deckboy::masks::maskParam(*m, slot) = static_cast<float>(next / maskParamUnit(id));
+  deckboy::masks::clampMaskParams(*m);
+  std::ostringstream ss;
+  ss << std::fixed << std::setprecision(spec.precision) << next;
+  triggerToast(std::string(spec.label) + " " + ss.str());
+  markProjectDirty();
+}
+
+void nudgeNumericParam(int rawId, int direction) {
+  const NumericParam id = static_cast<NumericParam>(rawId);
+  const NumericParamSpec* spec = numericParamSpec(id);
+  if (!spec) {
+    return;
+  }
+  if (drawBrushParam(id)) {
+    const double step = spec->step > 0.0 ? spec->step : (spec->hi - spec->lo) / 50.0;
+    setDrawBrushShown(id, drawBrushShown(id) + step * direction, *spec);
+    return;
+  }
+  if (maskSlotForParam(id) >= 0) {
+    if (const deckboy::masks::Mask* m = maskFocus()) {
+      const double step = spec->step > 0.0 ? spec->step : (spec->hi - spec->lo) / 50.0;
+      setMaskParamFromOperatorUnits(id, maskParamInOperatorUnits(*m, id) + step * direction, *spec);
+    }
+    return;
+  }
+  const double step = spec->step > 0.0 ? spec->step : (spec->hi - spec->lo) / 50.0;
+  bool changed = false;
+  double shown = 0.0;
+  forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+    double current = 0.0;
+    if (!readNumericParam(each, id, current)) {
+      return;
+    }
+    const double next = std::clamp(current + step * direction, spec->lo, spec->hi);
+    writeNumericParam(each, id, next);
+    shown = next;
+    changed = true;
+  });
+  if (!changed) {
+    return;
+  }
+  std::ostringstream ss;
+  ss << std::fixed << std::setprecision(spec->precision) << shown;
+  triggerToast(std::string(spec->label) + " " + ss.str());
+  markProjectDirty();
+  if (id == NumericParam::LedPanelWidth || id == NumericParam::LedPanelHeight) {
+    redrawLivePanelMap();
+  }
+}
+
+// The one handler behind QuickAction::EditNumericParam.
+void editNumericParam(int rawId) {
+  const NumericParam id = static_cast<NumericParam>(rawId);
+  const NumericParamSpec* spec = numericParamSpec(id);
+  if (!spec) {
+    return;
+  }
+  if (drawBrushParam(id)) {
+    std::ostringstream shown;
+    shown << std::fixed << std::setprecision(spec->precision) << drawBrushShown(id);
+    openInlineNumericExpressionEditor(spec->token, spec->label,
+                                      std::string(spec->hint) + " (supports + - * / and ())", shown.str(),
+                                      [this, id, spec](double value) { setDrawBrushShown(id, value, *spec); });
+    return;
+  }
+  if (maskSlotForParam(id) >= 0) {
+    const deckboy::masks::Mask* m = maskFocus();
+    if (!m) return;
+    std::ostringstream shown;
+    shown << std::fixed << std::setprecision(spec->precision) << maskParamInOperatorUnits(*m, id);
+    openInlineNumericExpressionEditor(spec->token, spec->label,
+                                      std::string(spec->hint) + " (supports + - * / and ())", shown.str(),
+                                      [this, id, spec](double value) {
+                                        pushUndoSnapshot();
+                                        setMaskParamFromOperatorUnits(id, value, *spec);
+                                      });
+    return;
+  }
+  Cue* cue = selectedCueMutable();
+  double current = 0.0;
+  if (!cue || !readNumericParam(*cue, id, current)) {
+    return;
+  }
+  std::ostringstream shown;
+  shown << std::fixed << std::setprecision(spec->precision) << current;
+  openInlineNumericExpressionEditor(
+    spec->token, spec->label,
+    std::string(spec->hint) + " (supports + - * / and ())", shown.str(),
+    [this, id, spec](double value) {
+      const double next = std::clamp(value, spec->lo, spec->hi);
+      bool changed = false;
+      forEachFocusedSelectedCueMutable([&](Cue& each, int) {
+        double ignored = 0.0;
+        if (!readNumericParam(each, id, ignored)) {
+          return;   // a cue of another kind in the selection: leave it alone
+        }
+        writeNumericParam(each, id, next);
+        changed = true;
+      });
+      if (!changed) {
+        return;
+      }
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(spec->precision) << next;
+      triggerToast(std::string(spec->label) + " " + ss.str());
+      markProjectDirty();
+      if (id == NumericParam::LedPanelWidth || id == NumericParam::LedPanelHeight) {
+        redrawLivePanelMap();
+      }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Effect stack editing. Every one of these takes the effect's INDEX, which the
+// row supplied through QuickButton::param -- that is what lets eight actions
+// serve a list of any length rather than needing eight per slot.
+// ---------------------------------------------------------------------------
+
+
+// Whether this cue currently needs the CPU pixel path at all. The decode
+// format is chosen at TAKE and FROZEN there, so a cue taken with an empty
+// stack is decoding NV12 -- on Windows, zero-copy on the GPU -- and there are
+// no CPU pixels for an effect to run on. Adding an effect to a LIVE cue
+// therefore did nothing at all until the next take, which looks exactly like a
+// broken effect and is how it was reported.
+bool cueNeedsCpuPixelPath(const Cue& cue) {
+  return cue.chromaKeyEnabled ||
+         cueHasColorControls(cue) ||
+         deckboy::effects::cueEffectStackActive(cue.effects) ||
+         // AN AUDIO EFFECT CAN NEED THE PICTURE TOO. The Picture effect reads
+         // the frame's brightness, and on the zero-copy path there is no frame
+         // in system memory to read -- that is what makes it fast. So a cue
+         // whose audio chain follows the picture asks for CPU frames, the same
+         // way one with a colour grade does. It is the operator's trade and
+         // the inspector says so; the alternative was an effect that silently
+         // did nothing on the fast path, which is the failure this codebase
+         // keeps having.
+         cueAudioChainNeedsPicture(cue);
+}
+
+// Whether anything in the cue's audio chain follows the picture.
+bool cueAudioChainNeedsPicture(const Cue& cue) {
+  return deckboy::audiofx::audioChainNeedsPicture(cue.audioEffects);
+}
+
+// Hand the live cue its new look when that answer CHANGES, so the effects get
+// pixels they can act on. Only on a change: nothing needs doing on every amount
+// nudge. This used to re-take the cue, which froze the picture for the length
+// of a decoder reopen on every such edit -- see adoptLookWithoutRestart.
+void refreshLiveCueIfPixelPathChanged(bool wasNeeded) {
+  const Cue* cue = selectedCueMutable();
+  if (!cue) {
+    return;
+  }
+  if (cueNeedsCpuPixelPath(*cue) != wasNeeded) {
+    adoptFocusedLiveCueLook();
+  }
+}
+
+std::vector<deckboy::effects::CueEffect>* selectedEffectStack() {
+  Cue* cue = selectedCueMutable();
+  return cue ? &cue->effects : nullptr;
+}
+
+// Every effect, as dropdown choices. One list, built once, used both for
+// adding and for changing an existing entry -- so the operator always picks
+// from a visible list and never cycles blind through options they cannot see.
+std::vector<std::pair<std::string, std::string>> cueEffectChoices() {
+  std::vector<std::pair<std::string, std::string>> choices;
+  // THE BASICS FIRST. The list is otherwise in the order effects were added,
+  // which put levels and curves -- what an operator reaches for most -- under
+  // forty-odd effects nobody has heard of.
+  using deckboy::effects::CueEffectKind;
+  const CueEffectKind basics[] = {
+    CueEffectKind::Levels, CueEffectKind::Curves, CueEffectKind::Colour,
+    CueEffectKind::ColourReplace, CueEffectKind::Blur, CueEffectKind::Sharpen,
+    CueEffectKind::Glow, CueEffectKind::Mirror, CueEffectKind::Mosaic,
+    CueEffectKind::Edges, CueEffectKind::LumaKey, CueEffectKind::Strobe};
+  for (CueEffectKind kind : basics) {
+    choices.push_back({deckboy::effects::cueEffectToken(kind),
+                       deckboy::effects::cueEffectLabel(kind)});
+  }
+  for (int i = 1; i < static_cast<int>(CueEffectKind::Count); ++i) {
+    const auto kind = static_cast<CueEffectKind>(i);
+    if (std::find(std::begin(basics), std::end(basics), kind) != std::end(basics)) {
+      continue;
+    }
+    choices.push_back({deckboy::effects::cueEffectToken(kind),
+                       deckboy::effects::cueEffectLabel(kind)});
+  }
+  return choices;
+}
+
+// ── Code source ─────────────────────────────────────────────────────────────
+
+void effectStackAdd() {
+  auto* stack = selectedEffectStack();
+  if (!stack) {
+    return;
+  }
+  if (stack->size() >= 12) {
+    // A cap, because the stack runs per pixel per frame and an operator who
+    // stacks thirty of them at 4K will blame the app rather than the stack.
+    triggerToast("effect stack full (12)");
+    return;
+  }
+  // PICK from the list rather than appending a default and making the operator
+  // cycle to what they wanted. Adding "invert" to everyone who asked for an
+  // effect was the worst part of the first version of this.
+  const auto choices = cueEffectChoices();
+  openDropdown("cue.effect.add", lastInlineEditorAnchorRect_, choices,
+               choices.front().first,
+               [this](const std::string& token) {
+    auto* live = selectedEffectStack();
+    if (!live || live->size() >= 12) {
+      return;
+    }
+    deckboy::effects::CueEffect fx;
+    fx.kind = deckboy::effects::cueEffectFromToken(token);
+    if (fx.kind == deckboy::effects::CueEffectKind::None) {
+      return;
+    }
+    fx.amount = 1.0f;
+    fx.paramA = 0.5f;
+    Cue* liveCue = selectedCueMutable();
+    const bool wasNeeded = liveCue ? cueNeedsCpuPixelPath(*liveCue) : false;
+    live->push_back(fx);
+    triggerToast(std::string("added ") + deckboy::effects::cueEffectLabel(fx.kind));
+    markProjectDirty();
+    syncDatamoshFromStack();
+    refreshLiveCueIfPixelPathChanged(wasNeeded);
+  });
+}
+
+bool effectIndexValid(const std::vector<deckboy::effects::CueEffect>* stack, int index) {
+  return stack && index >= 0 && index < static_cast<int>(stack->size());
+}
+
+void effectStackRemove(int index) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  const std::string gone = deckboy::effects::cueEffectLabel((*stack)[index].kind);
+  stack->erase(stack->begin() + index);
+  triggerToast("effect removed: " + gone);
+  markProjectDirty();
+  syncDatamoshFromStack();
+  pruneUnusedMotionDriver();
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+void effectStackCycleKind(int index) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  // Named "cycle" for historical reasons; it opens the PICKER. Cycling through
+  // ten effects with a button, unable to see what the options are or what you
+  // have, is not a way to choose anything.
+  const auto choices = cueEffectChoices();
+  openDropdown("cue.effect.kind", lastInlineEditorAnchorRect_, choices,
+               deckboy::effects::cueEffectToken((*stack)[index].kind),
+               [this, index](const std::string& token) {
+    auto* live = selectedEffectStack();
+    if (!effectIndexValid(live, index)) {
+      return;
+    }
+    const auto kind = deckboy::effects::cueEffectFromToken(token);
+    if (kind == deckboy::effects::CueEffectKind::None) {
+      return;
+    }
+    (*live)[index].kind = kind;
+    markProjectDirty();
+    syncDatamoshFromStack();
+    // Changing the last puppet into something else leaves the driver with
+    // nothing to drive, exactly as removing it would.
+    pruneUnusedMotionDriver();
+  });
+}
+
+void effectStackToggleBypass(int index) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  auto& fx = (*stack)[index];
+  fx.bypassed = !fx.bypassed;
+  // Bypass RETURNS the setting; turning the amount to zero throws it away.
+  triggerToast(std::string(deckboy::effects::cueEffectLabel(fx.kind)) +
+               (fx.bypassed ? " bypassed" : " active"));
+  markProjectDirty();
+  syncDatamoshFromStack();
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+void effectStackNudge(int index, float delta) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  auto& fx = (*stack)[index];
+  fx.amount = std::clamp(fx.amount + delta, 0.0f, 1.0f);
+  markProjectDirty();
+  // An amount crossing zero flips whether the CPU path is needed at all.
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+// paramA and paramB, by index rather than by name: the two are handled
+// identically and the only thing that differs is which float is touched.
+// Neither changes whether the CPU pixel path is needed -- only amount does
+// that -- so there is no refresh here.
+// ── Parameter LFOs ─────────────────────────────────────────────────────────
+//
+// Every one of these takes the PACKED id described on the QuickAction enum:
+// effectIndex * 8 + slot, slot 0-3 for paramA-D and 4 for the amount.
+deckboy::effects::ParamLfo* effectLfoAt(int packed) {
+  // The draw brush's size and opacity: the highest range, tested first.
+  if (packed >= kDrawLfoPackBase) {
+    const int slot = packed - kDrawLfoPackBase;
+    if (slot < 0 || slot > 1) return nullptr;
+    return &project_.drawBrushLfo[static_cast<std::size_t>(slot)];
+  }
+  // A tone cue's pitch and level: the next range down.
+  if (packed >= kToneLfoPackBase) {
+    const int slot = packed - kToneLfoPackBase;
+    Cue* cue = selectedCueMutable();
+    if (!cue || cue->kind != CueKind::Tone || slot < 0 || slot >= kToneLfoCount) return nullptr;
+    return &cue->toneLfo[static_cast<std::size_t>(slot)];
+  }
+  // The mask in hand: the next range down.
+  if (packed >= kMaskLfoPackBase) {
+    const int slot = packed - kMaskLfoPackBase;
+    deckboy::masks::Mask* m = maskFocus();
+    if (!m || slot < 0 || slot >= deckboy::masks::kMaskLfoCount) return nullptr;
+    return &m->lfo[static_cast<std::size_t>(slot)];
+  }
+  // A Moire cue's oscillators: the highest range, so it is tested first.
+  if (packed >= kMoireLfoPackBase) {
+    const int slot = packed - kMoireLfoPackBase;
+    Cue* cue = selectedCueMutable();
+    if (!cue || slot < 0 || slot >= kMoireLfoCount) return nullptr;
+    return &cue->moire.lfo[static_cast<std::size_t>(slot)];
+  }
+  // A DMX cue's fixture oscillators: their own range, the same controls.
+  if (packed >= kFixtureLfoPackBase) {
+    const int row = (packed - kFixtureLfoPackBase) / 2;
+    const int which = (packed - kFixtureLfoPackBase) % 2;
+    CueFixtureLevel* level = selectedDmxFixtureLevel(row);
+    if (!level) return nullptr;
+    return which == 0 ? &level->intensityLfo : &level->colourLfo;
+  }
+  // The GEOMETRY oscillators share every LFO control -- shape, rate, depth,
+  // sync, the scribble pad -- by living in their own range of the same packed
+  // number. One set of handlers rather than a second set that could drift.
+  if (packed >= kGeometryLfoPackBase) {
+    const int slot = packed - kGeometryLfoPackBase;
+    Cue* cue = selectedCueMutable();
+    if (!cue || slot < 0 || slot >= kGeoLfoCount) {
+      return nullptr;
+    }
+    return &cue->geometryLfo[static_cast<std::size_t>(slot)];
+  }
+  auto* stack = selectedEffectStack();
+  const int index = packed / 8;
+  const int slot = packed % 8;
+  if (!effectIndexValid(stack, index) || slot < 0 || slot > 4) {
+    return nullptr;
+  }
+  return &(*stack)[index].lfo[slot];
+}
+
+void effectLfoToggle(int packed) {
+  if (auto* lfo = effectLfoAt(packed)) {
+    lfo->on = !lfo->on;
+    // Said out loud, because an LFO is the one control whose effect you might
+    // not notice for several seconds -- a slow one at low depth looks exactly
+    // like nothing happening until it has had time to move.
+    triggerToast(lfo->on ? "lfo on" : "lfo off");
+    markProjectDirty();
+  }
+}
+
+void effectLfoCycleShape(int packed) {
+  if (auto* lfo = effectLfoAt(packed)) {
+    const int count = static_cast<int>(deckboy::effects::LfoShape::Count);
+    lfo->shape = static_cast<deckboy::effects::LfoShape>(
+      (static_cast<int>(lfo->shape) + 1) % count);
+    triggerToast(deckboy::effects::lfoShapeToken(lfo->shape));
+    markProjectDirty();
+  }
+}
+
+void effectLfoNudgeRate(int packed, int direction) {
+  if (auto* lfo = effectLfoAt(packed)) nudgeParamLfoRate(*lfo, direction);
+}
+
+// What the rate cell steps, for any oscillator: the CC or channel a MIDI
+// shape listens to, the zone a Motion shape follows, beats when synced, or
+// hertz. Shared by the inspector's ~ rows and the Screens window's.
+void nudgeParamLfoRate(deckboy::effects::ParamLfo& lfoRef, int direction) {
+  deckboy::effects::ParamLfo* lfo = &lfoRef;
+  if (lfo->shape == deckboy::effects::LfoShape::MidiCc) {
+    lfo->midiNumber = ((lfo->midiNumber + direction) % 128 + 128) % 128;
+    triggerToast("follows CC " + std::to_string(lfo->midiNumber));
+    markProjectDirty();
+    return;
+  }
+  if (deckboy::effects::lfoShapeIsMidi(lfo->shape)) {
+    lfo->midiChannel = ((lfo->midiChannel + direction) % 17 + 17) % 17;
+    triggerToast(lfo->midiChannel == 0 ? std::string("listens to any channel")
+                                       : "listens to channel " + std::to_string(lfo->midiChannel));
+    markProjectDirty();
+    return;
+  }
+  if (deckboy::effects::lfoShapeIsMotion(lfo->shape)) {
+    // The zone it follows: the whole picture, then each zone drawn. Wraps,
+    // so one button reaches them all.
+    const int zones = static_cast<int>(project_.motion.zones.size());
+    lfo->motionZone = ((lfo->motionZone + direction) % (zones + 1) + zones + 1) % (zones + 1);
+    triggerToast(lfo->motionZone == 0 ? std::string("follows the whole picture")
+                                      : "follows zone " + std::to_string(lfo->motionZone));
+    markProjectDirty();
+    return;
+  }
+  if (lfo->beatSync) {
+    // In beats, the useful values are musical ones. Stepping through the list
+    // rather than by a fixed amount means every stop is a length someone would
+    // actually choose, and half a beat is reachable without twenty clicks.
+    static const float kBeats[] = {0.25f, 0.5f, 1.0f, 2.0f, 3.0f, 4.0f,
+                                   6.0f, 8.0f, 12.0f, 16.0f, 32.0f};
+    const int n = static_cast<int>(sizeof(kBeats) / sizeof(kBeats[0]));
+    int at = 0;
+    for (int i = 0; i < n; ++i) {
+      if (std::fabs(kBeats[i] - lfo->beats) < 0.01f) { at = i; break; }
+      if (kBeats[i] < lfo->beats) at = i;
+    }
+    lfo->beats = kBeats[std::clamp(at + direction, 0, n - 1)];
+  } else {
+    // Multiplied, not added: the interesting range runs from one cycle a
+    // minute to several a second, and a fixed step would take a hundred
+    // clicks at one end and skip the whole useful part at the other.
+    lfo->rateHz = std::clamp(lfo->rateHz * (direction > 0 ? 1.25f : 0.8f),
+                             0.01f, 20.0f);
+  }
+  markProjectDirty();
+}
+
+void effectLfoNudgeDepth(int packed, float delta) {
+  if (auto* lfo = effectLfoAt(packed)) {
+    lfo->depth = std::clamp(lfo->depth + delta, 0.0f, 1.0f);
+    markProjectDirty();
+  }
+}
+
+// CHLADNI THAT LISTENS (James, 2026-11-06). One switch: the mode's ~ on,
+// following the sound's pitch at full depth from the middle, so the figure
+// walks through every mode as the music climbs. Off puts the mode back.
+void effectChladniListen(int index) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) return;
+  auto& fx = (*stack)[static_cast<std::size_t>(index)];
+  auto& lfo = fx.lfo[0];
+  const bool listening = lfo.on && lfo.shape == deckboy::effects::LfoShape::AudioPitch;
+  pushUndoSnapshot();
+  if (listening) {
+    lfo.on = false;
+    triggerToast("Chladni stops listening");
+  } else {
+    lfo.on = true;
+    lfo.shape = deckboy::effects::LfoShape::AudioPitch;
+    lfo.depth = 1.0f;
+    fx.paramA = 0.5f;
+    triggerToast("Chladni listens: the figure follows the pitch of the sound");
+  }
+  markProjectDirty();
+}
+
+void effectLfoToggleSync(int packed) {
+  if (auto* lfo = effectLfoAt(packed)) {
+    // On MIDI CC this row is the channel (the cell above is the CC).
+    if (lfo->shape == deckboy::effects::LfoShape::MidiCc) {
+      lfo->midiChannel = (lfo->midiChannel + 1) % 17;
+      triggerToast(lfo->midiChannel == 0 ? std::string("listens to any channel")
+                                         : "listens to channel " + std::to_string(lfo->midiChannel));
+      markProjectDirty();
+      return;
+    }
+    lfo->beatSync = !lfo->beatSync;
+    triggerToast(lfo->beatSync ? "lfo follows the tempo" : "lfo runs free");
+    markProjectDirty();
+  }
+}
+
+void effectStackNudgeParam(int index, int which, float delta) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  auto& fx = (*stack)[index];
+  float& value = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+               : which == 2 ? fx.paramC : fx.paramD;
+  value = std::clamp(value + delta, 0.0f, 1.0f);
+  markProjectDirty();
+}
+
+void effectStackEditParam(int index, int which) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  const auto& fx = (*stack)[index];
+  const char* label = deckboy::effects::cueEffectParamLabel(fx.kind, which);
+  if (!label) {
+    return;   // this effect has no such parameter; nothing to type into
+  }
+  // SAME UNITS THE ROW IS SHOWING. inspEffectParamValueText draws every
+  // parameter as a percentage except text mode's three selector slots, which
+  // read as "100 cols", a glyph set name and an ink name. Opening a 0-1 editor
+  // over a row that says 40% is how someone types 45, means 45%, and gets the
+  // parameter pinned to its maximum.
+  const bool percentUnits =
+    !(fx.kind == deckboy::effects::CueEffectKind::TextMode &&
+      (which == 0 || which == 2 || which == 3));
+  const float raw = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+                  : which == 2 ? fx.paramC : fx.paramD;
+  std::ostringstream current;
+  if (percentUnits) {
+    current << static_cast<int>(std::lround(raw * 100.0f));
+  } else {
+    current << std::fixed << std::setprecision(2) << raw;
+  }
+  openInlineNumericExpressionEditor(
+    which == 0 ? "cue.effect.paramA" : which == 1 ? "cue.effect.paramB"
+    : which == 2 ? "cue.effect.paramC" : "cue.effect.paramD", label,
+    percentUnits ? "0-100% (supports + - * / and ())"
+                 : "0-1 (supports + - * / and ())",
+    current.str(),
+    [this, index, which, percentUnits](double value) {
+      auto* live = selectedEffectStack();
+      if (!effectIndexValid(live, index)) {
+        return;   // the selection moved while the editor was open
+      }
+      auto& target = (*live)[index];
+      (which == 0 ? target.paramA : which == 1 ? target.paramB
+       : which == 2 ? target.paramC : target.paramD) =
+        std::clamp(static_cast<float>(percentUnits ? value / 100.0 : value),
+                   0.0f, 1.0f);
+      markProjectDirty();
+    });
+}
+
+void effectStackMove(int index, int direction) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  const int target = index + direction;
+  if (target < 0 || target >= static_cast<int>(stack->size())) {
+    return;
+  }
+  // ORDER IS THE EFFECT. Posterise then invert is not invert then posterise,
+  // so moving an entry is a real edit and not a cosmetic reshuffle.
+  std::swap((*stack)[index], (*stack)[target]);
+  markProjectDirty();
+}
+
+void effectStackEditAmount(int index) {
+  auto* stack = selectedEffectStack();
+  if (!effectIndexValid(stack, index)) {
+    return;
+  }
+  // PERCENT, BECAUSE THAT IS WHAT THE ROW SAYS.
+  //
+  // The row reads "35%" and this editor used to open on "0.35" and ask for a
+  // number between 0 and 1. So the operator who saw 35%, wanted 37, and typed
+  // 37 got the value clamped to 1.0 -- the effect jumped to FULL. Two notations
+  // for one quantity, a keystroke apart, and the failure looks exactly like a
+  // control that refuses to take a specific value.
+  //
+  // The nudge buttons and the scrub step in fives, which is right for a thumb
+  // on a fader; typing is how an exact value is set, so it has to accept the
+  // units it is showing.
+  std::ostringstream current;
+  current << static_cast<int>(std::lround((*stack)[index].amount * 100.0f));
+  openInlineNumericExpressionEditor(
+    "cue.effect.amount", deckboy::effects::cueEffectLabel((*stack)[index].kind),
+    "Amount 0-100% (supports + - * / and ())", current.str(),
+    [this, index](double value) {
+      auto* live = selectedEffectStack();
+      if (!effectIndexValid(live, index)) {
+        return;   // the selection moved while the editor was open
+      }
+      (*live)[index].amount =
+        std::clamp(static_cast<float>(value / 100.0), 0.0f, 1.0f);
+      markProjectDirty();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The audio effect stack.
+// ---------------------------------------------------------------------------
+//
+// The same shape as the picture stack above, and deliberately so: an operator
+// who has learned one has learned the other. The differences are all about
+// what audio is:
+//
+//   - NO CPU-PATH REFRESH. A picture effect can require the decoder to be
+//     reopened in a format the effect can act on, which is why every edit up
+//     there checks. Audio is always decoded to PCM, so an edit here reaches
+//     the very next chunk with nothing to restart.
+//   - THE EDIT REACHES EVERY SELECTED CUE, the way gain, pan and mono already
+//     do. Same reason: levels and room want to agree across a set of cues, and
+//     doing that one cue at a time is how they end up not agreeing.
+//   - A CAP OF EIGHT. The chain runs per sample on the audio thread, where
+//     overrunning does not drop a frame -- it clicks.
+
+std::vector<deckboy::audiofx::AudioEffect>* selectedAudioEffectStack() {
+  Cue* cue = selectedCueMutable();
+  return cue ? &cue->audioEffects : nullptr;
+}
+
+bool audioEffectIndexValid(const std::vector<deckboy::audiofx::AudioEffect>* stack,
+                           int index) {
+  return stack && index >= 0 && index < static_cast<int>(stack->size());
+}
+
+// Apply an edit to the same set of cues every other audio edit reaches, and
+// report whether it landed anywhere. The callback is handed one stack at a
+// time. A cue whose chain is SHORTER than the edited position is skipped
+// rather than grown: inventing an effect in somebody else's cue so it has
+// somewhere to receive an edit is not what "apply to the selection" means.
+bool forEachSelectedAudioStack(
+    const std::function<void(std::vector<deckboy::audiofx::AudioEffect>&)>& edit) {
+  // COUNT THE CUES EDITED, not the decks visited.
+  //
+  // forEachSelectedCueEverywhere returns how many DECKS it reached a selected
+  // cue in, which is the right number for the "(2 decks)" toast suffix and the
+  // wrong one for "did this do anything". Every cue in the selection can be
+  // skipped for having no audio and the deck count is still 1 -- so the
+  // "no cue with audio selected" message below could never appear, and adding
+  // an effect to a silent cue would have reported success.
+  int edited = 0;
+  lastAudioEditDeckCount_ = forEachSelectedCueEverywhere([&](Cue& each, int) {
+    if (cueCarriesAudio(each)) {
+      edit(each.audioEffects);
+      ++edited;
+    }
+  });
+  if (edited > 0) {
+    markProjectDirty();
+  }
+  return edited > 0;
+}
+
+// Every audio effect, as dropdown choices, built FROM the enum rather than
+// from a second list beside it that can fall behind.
+std::vector<std::pair<std::string, std::string>> audioEffectChoices() {
+  std::vector<std::pair<std::string, std::string>> choices;
+  for (int i = 1; i < static_cast<int>(deckboy::audiofx::AudioEffectKind::Count); ++i) {
+    const auto kind = static_cast<deckboy::audiofx::AudioEffectKind>(i);
+    choices.push_back({deckboy::audiofx::audioEffectToken(kind),
+                       deckboy::audiofx::audioEffectLabel(kind)});
+  }
+  return choices;
+}
+
+void audioEffectStackAdd() {
+  auto* stack = selectedAudioEffectStack();
+  if (!stack) {
+    return;
+  }
+  if (stack->size() >= 8) {
+    triggerToast("audio chain full (8)");
+    return;
+  }
+  // PICK from the list, like the picture stack does. Appending a default and
+  // making the operator cycle to what they wanted was the worst part of the
+  // first version of that one.
+  const auto choices = audioEffectChoices();
+  openDropdown("cue.audiofx.add", lastInlineEditorAnchorRect_, choices,
+               choices.front().first,
+               [this](const std::string& token) {
+    const auto kind = deckboy::audiofx::audioEffectKindFromToken(token);
+    if (kind == deckboy::audiofx::AudioEffectKind::None) {
+      return;
+    }
+    // audioEffectDefaults, NOT the struct's own: those are the neutral values
+    // an old show carries, and for half of these that means a compressor at
+    // 1:1 and a tilt that is flat. An effect that arrives doing nothing at all
+    // looks exactly like an effect that is broken.
+    const deckboy::audiofx::AudioEffect fx =
+      deckboy::audiofx::audioEffectDefaults(kind);
+    const Cue* before = selectedCueMutable();
+    const bool wasNeeded = before ? cueNeedsCpuPixelPath(*before) : false;
+    const bool any = forEachSelectedAudioStack(
+      [&fx](std::vector<deckboy::audiofx::AudioEffect>& s) {
+        if (s.size() < 8) {
+          s.push_back(fx);
+        }
+      });
+    // Adding a Picture effect to a LIVE cue changes which format the decoder
+    // has to be open in, and the decode format is chosen at TAKE. Without this
+    // the effect would do nothing at all until the next one -- which looks
+    // exactly like a broken effect and is how the picture stack's version of
+    // this was reported.
+    refreshLiveCueIfPixelPathChanged(wasNeeded);
+    if (any) {
+      triggerToast(deckboy::core::i18n::format(
+                     "added {1}",
+                     {deckboy::core::i18n::translate(deckboy::audiofx::audioEffectLabel(kind))}) +
+                   deckboy::core::i18n::translate(audioEditScopeSuffix()));
+    } else {
+      triggerToast("no cue with audio selected");
+    }
+  });
+}
+
+// ── THE OPERATOR'S OWN PLUGINS ──────────────────────────────────────────────
+//
+// Scanned once and kept: the scan is filesystem work rather than module
+// loading, but a machine with a hundred and twenty plugins across two folders
+// on a slow drive should still only pay for it once. Refreshed when the
+// operator asks for the list and it came back empty, because the usual reason
+// for that is a plugin installed while Deckboy was already running.
+std::vector<deckboy::platform::audioplugin::PluginDescriptor> audioPluginCatalog_;
+bool audioPluginCatalogScanned_ = false;
+
+const std::vector<deckboy::platform::audioplugin::PluginDescriptor>&
+audioPluginCatalog(bool rescan = false) {
+  if (!audioPluginCatalogScanned_ || rescan || audioPluginCatalog_.empty()) {
+    audioPluginCatalog_ = deckboy::platform::audioplugin::scanAudioPlugins();
+    audioPluginCatalogScanned_ = true;
+  }
+  return audioPluginCatalog_;
+}
+
+// What a plugin slot calls itself in the UI: the plugin's name where there is
+// one, the id where the plugin is not installed on this machine (so a touring
+// show says WHICH plugin it is missing rather than "none"), and an invitation
+// where nothing has been chosen yet.
+std::string audioPluginSlotLabel(const deckboy::audiofx::AudioEffect& fx) {
+  if (fx.pluginId.empty()) {
+    return "choose...";
+  }
+  for (const auto& d : audioPluginCatalog_) {
+    if (d.id == fx.pluginId) {
+      return d.vendor.empty() ? d.name : (d.vendor + " " + d.name);
+    }
+  }
+  // Not in the catalog: show the tail of the id, which is the plugin's own
+  // file name and the thing an operator would recognise.
+  const std::size_t slash = fx.pluginId.find_last_of("/\\");
+  const std::string tail = slash == std::string::npos
+                             ? fx.pluginId : fx.pluginId.substr(slash + 1);
+  return tail + "  (not installed)";
+}
+
+// The plugin actually LOADED in a chain position, or null. Only the live cue
+// on the focused deck has instances -- a cue sitting in the playlist has an id
+// and some saved state and nothing running -- so this answers null unless the
+// cue the inspector is showing is the one playing. The rows then fall back to
+// the generic control names, which is the honest answer: nothing is loaded, so
+// nothing can be asked what its knobs are called.
+std::shared_ptr<deckboy::platform::audioplugin::AudioPluginInstance>
+audioPluginInstanceForRow(int index) {
+  if (project_.focusedDeckIndex < 0 ||
+      project_.focusedDeckIndex >= static_cast<int>(project_.decks.size())) {
+    return nullptr;
+  }
+  const Deck& deck = focusedDeck();
+  if (deck.activeIndex < 0 ||
+      deck.activeIndex >= static_cast<int>(deck.cues.size()) ||
+      !cueIndexSelected(deck, deck.activeIndex)) {
+    return nullptr;
+  }
+  MediaEngine* engine = focusedMediaEngine();
+  return engine ? engine->audioPluginForSlot(index) : nullptr;
+}
+
+void audioEffectStackChoosePlugin(int index) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  if (!deckboy::platform::audioplugin::audioPluginsSupported()) {
+    // Never an empty list: "you own none" and "this build cannot load them"
+    // look identical to an operator, and only one of them is fixable by them.
+    triggerToast("this build has no plugin support");
+    return;
+  }
+  const auto& catalog = audioPluginCatalog(true);
+  if (catalog.empty()) {
+    const auto paths = deckboy::platform::audioplugin::audioPluginSearchPaths();
+    triggerToast(paths.empty() ? "no plugins found"
+                               : ("no plugins found in " + paths.front()));
+    return;
+  }
+  std::vector<std::pair<std::string, std::string>> choices;
+  choices.reserve(catalog.size() + 1);
+  choices.push_back({"", "(none)"});
+  for (const auto& d : catalog) {
+    choices.push_back({d.id, d.vendor.empty() ? d.name : (d.vendor + " " + d.name)});
+  }
+  openDropdown("cue.audiofx.plugin", lastInlineEditorAnchorRect_, choices,
+               (*stack)[index].pluginId,
+               [this, index](const std::string& id) {
+    // THE PARAMETERS COME FROM THE PLUGIN. Deckboy's own effects arrive at
+    // audioEffectDefaults, but a plugin's idea of neutral is its own -- a
+    // compressor at 50% threshold is not the same claim as a filter at 50%.
+    // So the four mapped controls are seeded by opening the plugin once, here,
+    // on the main thread, and reading what it says its defaults are.
+    float seeded[4] = {0.5f, 0.5f, 0.5f, 0.5f};
+    std::string name = "none";
+    if (!id.empty()) {
+      auto probe = deckboy::platform::audioplugin::openAudioPlugin(id, 48000.0, 2048);
+      if (!probe) {
+        triggerToast("could not load that plugin");
+        return;
+      }
+      int taken = 0;
+      for (const auto& p : probe->parameters()) {
+        if (!p.automatable) {
+          continue;
+        }
+        if (taken >= 4) {
+          break;
+        }
+        seeded[taken++] = static_cast<float>(
+          std::clamp(p.defaultValue, 0.0, 1.0));
+      }
+      name = probe->descriptor().name;
+    }
+    forEachSelectedAudioStack(
+      [index, &id, &seeded](std::vector<deckboy::audiofx::AudioEffect>& s) {
+        if (index >= static_cast<int>(s.size()) ||
+            s[index].kind != deckboy::audiofx::AudioEffectKind::Plugin) {
+          return;
+        }
+        s[index].pluginId = id;
+        // A different plugin's state means nothing to this one, and handing it
+        // over is how a plugin ends up in a state its own author never saw.
+        s[index].pluginState.clear();
+        s[index].paramA = seeded[0];
+        s[index].paramB = seeded[1];
+        s[index].paramC = seeded[2];
+        s[index].paramD = seeded[3];
+      });
+    triggerToast(id.empty() ? "plugin slot cleared" : ("loaded " + name));
+  });
+}
+
+void audioEffectStackRemove(int index) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  const std::string gone =
+    deckboy::audiofx::audioEffectLabel((*stack)[index].kind);
+  forEachSelectedAudioStack([index](std::vector<deckboy::audiofx::AudioEffect>& s) {
+    if (index < static_cast<int>(s.size())) {
+      s.erase(s.begin() + index);
+    }
+  });
+  triggerToast("audio effect removed: " + gone);
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+void audioEffectStackCycleKind(int index) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const auto choices = audioEffectChoices();
+  openDropdown("cue.audiofx.kind", lastInlineEditorAnchorRect_, choices,
+               deckboy::audiofx::audioEffectToken((*stack)[index].kind),
+               [this, index](const std::string& token) {
+    const auto kind = deckboy::audiofx::audioEffectKindFromToken(token);
+    if (kind == deckboy::audiofx::AudioEffectKind::None) {
+      return;
+    }
+    // AND ITS PARAMETERS, because slot 0 means "frequency" on a filter and
+    // "threshold" on a compressor: carrying 30% across turns an 80Hz high pass
+    // into a compressor at -42 dBFS, which is not what anyone asked for.
+    // Bypass and position are kept -- those are about the CHAIN, not the
+    // effect.
+    // INSIDE the callback, because that is where the edit happens -- the call
+    // that opens the dropdown returns long before the operator has chosen.
+    const Cue* beforeCue = selectedCueMutable();
+    const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+    forEachSelectedAudioStack(
+      [index, kind](std::vector<deckboy::audiofx::AudioEffect>& s) {
+        if (index < static_cast<int>(s.size())) {
+          const bool wasBypassed = s[index].bypassed;
+          s[index] = deckboy::audiofx::audioEffectDefaults(kind);
+          s[index].bypassed = wasBypassed;
+        }
+      });
+    refreshLiveCueIfPixelPathChanged(wasNeeded);
+  });
+}
+
+void audioEffectStackToggleBypass(int index) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  // Read the NEW state off the selected cue and write that same state
+  // everywhere, rather than flipping each in turn: a mixed selection would
+  // otherwise get further apart with every click instead of converging.
+  const bool next = !(*stack)[index].bypassed;
+  const std::string name =
+    deckboy::audiofx::audioEffectLabel((*stack)[index].kind);
+  forEachSelectedAudioStack(
+    [index, next](std::vector<deckboy::audiofx::AudioEffect>& s) {
+      if (index < static_cast<int>(s.size())) {
+        s[index].bypassed = next;
+      }
+    });
+  // Bypass RETURNS the setting; turning the amount to zero throws it away.
+  triggerToast(name + (next ? " bypassed" : " active"));
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+void audioEffectStackNudge(int index, float delta) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const Cue* beforeCue = selectedCueMutable();
+  const bool wasNeeded = beforeCue ? cueNeedsCpuPixelPath(*beforeCue) : false;
+  const float next = std::clamp((*stack)[index].amount + delta, 0.0f, 1.0f);
+  forEachSelectedAudioStack(
+    [index, next](std::vector<deckboy::audiofx::AudioEffect>& s) {
+      if (index < static_cast<int>(s.size())) {
+        s[index].amount = next;
+      }
+    });
+  refreshLiveCueIfPixelPathChanged(wasNeeded);
+}
+
+// The value is computed once from the selected cue and written to all of them,
+// for the same reason bypass is: a relative nudge applied to a mixed selection
+// keeps them mixed forever.
+void audioEffectStackNudgeParam(int index, int which, float delta) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const auto& fx = (*stack)[index];
+  const float current = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+                      : which == 2 ? fx.paramC : fx.paramD;
+  const float next = std::clamp(current + delta, 0.0f, 1.0f);
+  forEachSelectedAudioStack(
+    [index, which, next](std::vector<deckboy::audiofx::AudioEffect>& s) {
+      if (index >= static_cast<int>(s.size())) {
+        return;
+      }
+      auto& target = s[index];
+      (which == 0 ? target.paramA : which == 1 ? target.paramB
+       : which == 2 ? target.paramC : target.paramD) = next;
+    });
+}
+
+void audioEffectStackEditParam(int index, int which) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const auto& fx = (*stack)[index];
+  const char* label = deckboy::audiofx::audioEffectParamLabel(fx.kind, which);
+  if (!label) {
+    return;   // this effect has no such parameter; nothing to type into
+  }
+  // PERCENT, because that is what the row shows. The picture stack already
+  // fell into the other version of this: a row reading 35% opening an editor
+  // that wanted 0.35, so a typed 37 pinned the parameter to its maximum.
+  const float raw = which == 0 ? fx.paramA : which == 1 ? fx.paramB
+                  : which == 2 ? fx.paramC : fx.paramD;
+  std::ostringstream current;
+  current << static_cast<int>(std::lround(raw * 100.0f));
+  openInlineNumericExpressionEditor(
+    which == 0 ? "cue.audiofx.paramA" : which == 1 ? "cue.audiofx.paramB"
+    : which == 2 ? "cue.audiofx.paramC" : "cue.audiofx.paramD", label,
+    "0-100% (supports + - * / and ())", current.str(),
+    [this, index, which](double value) {
+      const float next =
+        std::clamp(static_cast<float>(value / 100.0), 0.0f, 1.0f);
+      forEachSelectedAudioStack(
+        [index, which, next](std::vector<deckboy::audiofx::AudioEffect>& s) {
+          if (index >= static_cast<int>(s.size())) {
+            return;
+          }
+          auto& target = s[index];
+          (which == 0 ? target.paramA : which == 1 ? target.paramB
+           : which == 2 ? target.paramC : target.paramD) = next;
+        });
+    });
+}
+
+void audioEffectStackEditAmount(int index) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  std::ostringstream current;
+  current << static_cast<int>(std::lround((*stack)[index].amount * 100.0f));
+  openInlineNumericExpressionEditor(
+    "cue.audiofx.amount",
+    deckboy::audiofx::audioEffectLabel((*stack)[index].kind),
+    "Amount 0-100% (supports + - * / and ())", current.str(),
+    [this, index](double value) {
+      const float next =
+        std::clamp(static_cast<float>(value / 100.0), 0.0f, 1.0f);
+      forEachSelectedAudioStack(
+        [index, next](std::vector<deckboy::audiofx::AudioEffect>& s) {
+          if (index < static_cast<int>(s.size())) {
+            s[index].amount = next;
+          }
+        });
+    });
+}
+
+void audioEffectStackMove(int index, int direction) {
+  auto* stack = selectedAudioEffectStack();
+  if (!audioEffectIndexValid(stack, index)) {
+    return;
+  }
+  const int target = index + direction;
+  if (target < 0 || target >= static_cast<int>(stack->size())) {
+    return;
+  }
+  // ORDER IS THE SOUND. A gate before a compressor and a compressor before a
+  // gate are two different results, and both are things people want -- so this
+  // is a real edit, not a cosmetic reshuffle.
+  forEachSelectedAudioStack(
+    [index, target](std::vector<deckboy::audiofx::AudioEffect>& s) {
+      if (index < static_cast<int>(s.size()) &&
+          target < static_cast<int>(s.size())) {
+        std::swap(s[index], s[target]);
+      }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Motion driver: the clip whose movement puppeteers this cue.
+// ---------------------------------------------------------------------------
+
+void pickMotionDriver() {
+  if (!selectedCueMutable()) {
+    return;
+  }
+  // Video only. The driver is decoded for its MOTION VECTORS, which a still
+  // does not have and an audio file certainly does not -- offering them would
+  // be a picker that cannot produce a working answer.
+  static const SDL_DialogFileFilter kDriverFilters[] = {
+    {"Video", "mp4;mov;mkv;avi;m4v;webm;mpg;mpeg;ts;m2ts"},
+    {"All files", "*"},
+  };
+  showOpenFileDialog(
+    std::vector<SDL_DialogFileFilter>(std::begin(kDriverFilters), std::end(kDriverFilters)),
+    /*allowMany=*/false,
+    [this](std::vector<std::string> files) {
+      if (files.empty()) {
+        return;
+      }
+      Cue* cue = selectedCueMutable();
+      if (!cue) {
+        return;   // selection moved while the dialog was open
+      }
+      cue->motionDriverPath = files.front();
+      // Arm the effect too if it is not already in the stack. Choosing a driver
+      // and then finding nothing happens because the effect was never added is
+      // the sort of two-step that makes a feature feel broken.
+      bool haveEffect = false;
+      for (const auto& fx : cue->effects) {
+        if (fx.kind == deckboy::effects::CueEffectKind::MotionPuppet) {
+          haveEffect = true;
+          break;
+        }
+      }
+      if (!haveEffect) {
+        deckboy::effects::CueEffect fx;
+        fx.kind = deckboy::effects::CueEffectKind::MotionPuppet;
+        fx.amount = 1.0f;
+        cue->effects.push_back(fx);
+      }
+      triggerToast("motion driver set");
+      markProjectDirty();
+    });
+}
+
+// Drop the driver when nothing is left that could use it.
+//
+// A driver with no puppet is a clip being decoded every frame for a field
+// nothing reads, and an inspector row for a control that cannot do anything --
+// which is this codebase's signature bug. Called after any edit that can
+// remove the last puppet.
+void pruneUnusedMotionDriver() {
+  Cue* cue = selectedCueMutable();
+  if (!cue || cue->motionDriverPath.empty()) {
+    return;
+  }
+  if (deckboy::effects::cueEffectStackNeedsDriver(cue->effects)) {
+    return;
+  }
+  cue->motionDriverPath.clear();
+  // Said out loud: the driver was something the operator chose, and taking it
+  // away silently would look like the app losing it.
+  triggerToast("driver cleared - nothing left to puppet");
+  markProjectDirty();
+}
+
+void clearMotionDriver() {
+  Cue* cue = selectedCueMutable();
+  if (!cue || cue->motionDriverPath.empty()) {
+    return;
+  }
+  cue->motionDriverPath.clear();
+  triggerToast("motion driver cleared");
+  markProjectDirty();
+}
+
+void nudgeMotionDriverSpeed(float delta) {
+  Cue* cue = selectedCueMutable();
+  if (!cue) return;
+  cue->motionDriverSpeed = std::clamp(cue->motionDriverSpeed + delta, 0.0f, 4.0f);
+  markProjectDirty();
+}
+
+void toggleMotionDriverPaused() {
+  Cue* cue = selectedCueMutable();
+  if (!cue) return;
+  cue->motionDriverPaused = !cue->motionDriverPaused;
+  // Paused HOLDS the last field rather than stopping the effect: the picture
+  // stays displaced by whatever the driver was doing, which is a look. Saying
+  // "held" rather than "paused" is the honest word for that.
+  triggerToast(cue->motionDriverPaused ? "driver held" : "driver running");
+  markProjectDirty();
+}
+
+void toggleMotionDriverRestartOnTake() {
+  Cue* cue = selectedCueMutable();
+  if (!cue) return;
+  cue->motionDriverRestartOnTake = !cue->motionDriverRestartOnTake;
+  triggerToast(cue->motionDriverRestartOnTake ? "driver restarts on take"
+                                              : "driver free-runs");
+  markProjectDirty();
+}
+
+void restartSelectedMotionDriver() {
+  restartMotionDriver(project_.focusedDeckIndex);
+  triggerToast("driver restarted");
+}
+
+// Datamosh lives in the effect stack like everything else, but the machinery
+// behind it is not a pixel pass -- it withholds keyframes at decode and needs a
+// background transcode first. So the stack entry is the UI and `datamoshEnabled`
+// remains the thing the engine reads; this keeps the two in step.
+//
+// Reuses toggleSelectedDatamosh() rather than reimplementing it, which means
+// the refusal on cues that cannot support it, the prepare-on-enable and the
+// swap back to the original clip all behave exactly as they always did.
+void syncDatamoshFromStack() {
+  Cue* cue = selectedCueMutable();
+  if (!cue) {
+    return;
+  }
+  bool want = false;
+  int entry = -1;
+  for (int i = 0; i < static_cast<int>(cue->effects.size()); ++i) {
+    const auto& fx = cue->effects[i];
+    if (fx.kind == deckboy::effects::CueEffectKind::Datamosh) {
+      entry = i;
+      if (!fx.bypassed && fx.amount > 0.0005f) {
+        want = true;
+      }
+      break;
+    }
+  }
+  if (want == cue->datamoshEnabled) {
+    return;
+  }
+  toggleSelectedDatamosh();
+  // If it REFUSED -- a still, a camera, a synth, anything not file-backed
+  // video -- the flag will not have moved. Bypass the entry so the stack
+  // stops asking every frame, and leave it visible so the operator can see
+  // what was refused rather than having it silently vanish.
+  cue = selectedCueMutable();
+  if (cue && want && !cue->datamoshEnabled && entry >= 0 &&
+      entry < static_cast<int>(cue->effects.size())) {
+    cue->effects[entry].bypassed = true;
+  }
+}
+
+// The sound's pitch for the audio-pitch ~ shape: the focused playlist's
+// played sound, read only while some oscillator asks for it. Held through
+// silence and smoothed a little, so a breath between notes does not throw
+// the figure about.
+void serviceAudioPitch() {
+  if (!deckboy::effects::lfoAudioPitchWanted().exchange(false, std::memory_order_relaxed)) return;
+  MediaEngine* engine = mediaEngineForDeck(project_.focusedDeckIndex);
+  if (!engine) return;
+  if (engine->copyRecentProgramAudio(audioPitchScratch_) < 1024) return;
+  // The newest third of a second is enough for C2 and keeps it responsive.
+  const std::size_t n = std::min<std::size_t>(audioPitchScratch_.size(), 2048);
+  const float* x = audioPitchScratch_.data() + (audioPitchScratch_.size() - n);
+  const double rate = engine->audioRate() / 8.0;  // the recent copy is decimated by 8
+  const float unit = deckboy::effects::pitchToLfoUnit(deckboy::effects::detectPitchHz(x, n, rate));
+  if (unit < 0.0f) return;  // no clear pitch: hold the last one
+  auto& sig = deckboy::effects::lfoAudioPitchSignal();
+  const float last = sig.load(std::memory_order_relaxed);
+  sig.store(last + (unit - last) * 0.5f, std::memory_order_relaxed);
+}

@@ -1,0 +1,25 @@
+# Deckboy Theme: switch-neon
+# Family: tinted chassis -- dark enough for a booth, but a real coloured body
+# rather than true black, so it reads as its own machine.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	1A1F2EFF
+shell_inner	232A3CFF
+shell_shadow	0C0F18FF
+screen_light	40A8FFFF
+screen_mid	1E6EC0FF
+screen_dark	0E3E70FF
+screen_deep	040C1AFF
+screen_ink_soft	A5C9F0FF
+screen_fg	72C2FFFF
+screen_fg_soft	95B9FFFF
+screen_tile	101A2AFF
+button_bezel	2A5E96FF
+delete_bezel	C0503AFF
+scanline_alpha	14
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	firefly	4
+creature	moth	1

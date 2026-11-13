@@ -1,0 +1,25 @@
+# Deckboy Theme: Virtual Boy
+# Monochrome red-on-black OLED terminal, as the hardware intended.
+# v0.79.3 terminal roles: bright-red text (screen_fg) on true-black tiles
+# (screen_tile); screen_light stays bright red for highlights / the live and
+# selected rows. All color values are RRGGBBAA hex.
+
+shell_outer	070506FF
+shell_inner	0C0708FF
+shell_shadow	000000FF
+screen_light	FF4444FF
+screen_mid	B83034FF
+screen_dark	6E1519FF
+screen_deep	130506FF
+screen_ink_soft	E08080FF
+screen_fg	FF6060FF
+screen_fg_soft	FF8585FF
+screen_tile	160809FF
+button_bezel	7A2A2EFF
+delete_bezel	E8983099
+scanline_alpha	16
+# hide themselves the moment an output goes live.
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	firefly	4

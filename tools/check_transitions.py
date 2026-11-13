@@ -1,0 +1,598 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Deckboy Contributors
+# This file is part of Deckboy, a cue deck for live events.
+# See LICENSE for details.
+"""Hold every CPU-built transition to the three rules it promises.
+
+A transition is the one piece of the show nobody gets to look at twice. It runs
+for half a second in front of an audience, and the two ways it fails are both
+invisible in a screenshot of the running app, because the capture lands on
+whatever frame the seek happened to reach:
+
+  1. IT DOES NOT START CLEAN. The first frame of a transition has to be the
+     last frame of the cue. Anything that moves at progress 0 is a twitch the
+     instant the take lands.
+  2. IT DOES NOT FINISH. A shard, a wisp or one stubborn pixel of the outgoing
+     cue still on screen at progress 1 is a transition that has to be cut out
+     of the show.
+
+Both were real. Written against three new transitions, this found the ghastly
+one inverted -- the picture gone at progress 0 and still there at progress 1 --
+the shatter shards already turning before the take had landed, and, in the
+Portal that had already shipped, corners still holding the old picture at a
+third opacity on the very last frame, against the promise in its own comment.
+
+The third rule is the one that catches a control that does nothing:
+
+  3. IT HAS TO CHANGE THE PICTURE. Something visibly different at a quarter,
+     a half and three quarters, and less of the old cue at each step.
+
+And, because two outputs can show one deck, a fourth:
+
+  4. THE SAME INPUTS GIVE THE SAME PICTURE, or the two screens disagree.
+
+    python3 tools/check_transitions.py [--exe PATH]
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+# Only the styles built on the CPU. Cut, the dissolves, the pushes and the
+# wipes are drawn by the renderer with SDL calls and have no frame to dump;
+# --transition-dump says so rather than pretending.
+STYLES = ["portal", "shatter", "clouds", "ghastly"]
+PLAYOUT_STYLES = ["cut", "crossfade", "dip", "dipwhite", "pushleft", "pushright",
+                 "pushup", "pushdown", "wipeleft", "wiperight", "wipeup", "wipedown",
+                 "iris"] + STYLES
+
+# Portal's corners are the reason this number is not 0: they are the last thing
+# it opens, and they have to clear the alpha ramp as well as the geometry.
+# Anything above a couple of levels is visible on a dark incoming picture.
+MAX_ALPHA_AT_END = 0
+
+
+def default_exe():
+    for rel in (
+        os.path.join("build", "windows", "Release", "Deckboy.exe"),
+        os.path.join("build", "Deckboy"),
+        os.path.join("build", "deckboy"),
+    ):
+        path = os.path.join(ROOT, rel)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def write_ppm(path, width, height, pixel):
+    body = bytearray()
+    for y in range(height):
+        for x in range(width):
+            body += bytes(pixel(x, y))
+    with open(path, "wb") as handle:
+        handle.write(b"P6\n%d %d\n255\n" % (width, height))
+        handle.write(bytes(body))
+
+
+def dump(exe, style, outgoing, incoming, dst, progress):
+    """Run one dump and return its reported numbers as a dict."""
+    result = subprocess.run(
+        [exe, "--transition-dump", style, outgoing, incoming, dst,
+         str(progress), "1.0"],
+        capture_output=True, text=True)
+    if result.returncode != 0:
+        return None, (result.stdout + result.stderr).strip()
+    numbers = {}
+    for key, value in re.findall(r"(\w+)=([-\d.e+]+)", result.stdout):
+        try:
+            numbers[key] = float(value)
+        except ValueError:
+            pass
+    return numbers, result.stdout.strip()
+
+
+def check_playout(args):
+    """Measure placement in the complete output, which frame dumps cannot see."""
+    from deckboy_harness import Deckboy
+    args.keep = False
+    args.ffmpeg = ""
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="deckboy-transition-media-") as media:
+        white, black, portrait = [os.path.join(media, name + ".ppm")
+                                  for name in ("white", "black", "portrait")]
+        write_ppm(white, 300, 100, lambda x, y: (255, 255, 255))
+        write_ppm(black, 300, 100, lambda x, y: (0, 0, 0))
+        write_ppm(portrait, 100, 300, lambda x, y: (0, 255, 0))
+        with Deckboy(args, "deckboy-transition-playout-",
+                     extra_args=["--import", white, "--import", black, "--import", portrait]) as db:
+            db.send("OUTPUT ON")
+            # Placement expectations below are for a 16:9 programme. Recording
+            # size alone does not change the programme's display-native raster
+            # (Xvfb defaults to 1280x1024, unlike a typical desktop monitor).
+            # Arming a window selects display-native mode, so set this AFTER
+            # arming. Leave physical refresh alone on virtual CI displays.
+            reply = db.send("VIDEO 640x360")
+            if reply.startswith("ERR"):
+                raise RuntimeError("cannot set transition fixture raster: " + reply)
+            # STATUS is the previous loop's snapshot, even after a setter's
+            # reply. Wait for the next snapshot to report the requested raster.
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                status = db.send("STATUS")
+                if "video_mode=fixed" in status and "raster=640x360" in status:
+                    break
+                time.sleep(0.1)
+            else:
+                raise RuntimeError("transition fixture raster did not apply: " + status)
+            db.send("RECFORMAT 640x360 25")
+            for style in PLAYOUT_STYLES:
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("SCALEMODE FIT")
+                db.send("TAKE")
+                time.sleep(0.5)
+                db.send("TRANSITION 1.2")
+                db.send("TRANSITIONSTYLE " + style)
+                def take_black():
+                    time.sleep(1.0)
+                    db.send("SELECT 2")
+                    db.send("TAKE")
+                take = threading.Thread(target=take_black)
+                take.start()
+                path = db.record(seconds=3.0)
+                take.join()
+                if not path:
+                    failures.append(style + ": no programme recording")
+                    continue
+                pixels = subprocess.run([
+                    "ffmpeg", "-v", "error", "-i", path, "-vf", "scale=96:54,format=gray",
+                    "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+                frames = [pixels[i:i + 96 * 54] for i in range(0, len(pixels), 96 * 54)]
+                frames = [f for f in frames if len(f) == 96 * 54]
+                # A 3:1 source fitted to 16:9 leaves bars above and below.
+                # They must remain black for EVERY frame of the transition.
+                bars = [max(f[:96*8] + f[96*46:]) for f in frames]
+                centres = [sum(f[96*20:96*34]) / (96 * 14) for f in frames]
+                litRows = [sum(max(f[y*96:(y+1)*96]) > 15 for y in range(54)) for f in frames]
+                litPixels = [sum(v > 40 for v in f) for f in frames]
+                # Pushes move the picture into a bar but preserve its height.
+                # Dip to white deliberately flashes the complete output.
+                if style == "dipwhite":
+                    geometry_ok = True
+                elif style.startswith("push"):
+                    geometry_ok = max(litRows, default=54) <= 34
+                else:
+                    geometry_ok = max(bars, default=255) < 8
+                # A wipe/iris must expose part of the incoming picture before
+                # it finishes. Correct endpoints alone also pass a silent cut.
+                reveal_ok = True
+                if style.startswith("wipe") or style == "iris":
+                    full = max(litPixels[:15], default=0)
+                    reveal_ok = full > 0 and any(full * 0.1 < n < full * 0.9 for n in litPixels)
+                ok = (len(frames) > 40 and geometry_ok and
+                      reveal_ok and
+                      max(centres[:15], default=0) > 230 and
+                      max(centres[-10:], default=255) < 8)
+                print("playout %s: frames=%d bar-maximum=%d first=%.1f last=%.1f %s" %
+                      (style, len(frames), max(bars, default=255),
+                       max(centres[:15], default=0), max(centres[-10:], default=255),
+                       "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append(style + ": fitted placement or intermediate reveal failed")
+            # The outgoing frame must hold its processed look. Inverting white
+            # makes this a black-to-black take: raw-frame leakage turns it white.
+            for style in ["crossfade"] + STYLES:
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("FX CLEAR")
+                db.send("FX ADD invert")
+                db.send("FX AMOUNT 1 1")
+                db.send("TAKE")
+                time.sleep(0.5)
+                db.send("TRANSITION 1.2")
+                db.send("TRANSITIONSTYLE " + style)
+                take = threading.Thread(target=take_black)
+                take.start()
+                path = db.record(seconds=3.0)
+                take.join()
+                if not path:
+                    failures.append(style + ": no look recording")
+                    continue
+                pixels = subprocess.run([
+                    "ffmpeg", "-v", "error", "-i", path, "-vf", "scale=96:54,format=gray",
+                    "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+                frames = [pixels[i:i+5184] for i in range(0, len(pixels), 5184)]
+                frames = [f for f in frames if len(f) == 5184]
+                peak = max((sum(f) / len(f) for f in frames), default=255)
+                # Portal adds a coloured rim; it must not restore raw white.
+                ok = len(frames) > 40 and peak < 40
+                print("playout look %s: frames=%d peak-mean=%.1f %s" %
+                      (style, len(frames), peak, "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append(style + ": outgoing processed look was lost")
+            # The layer fader must apply to both held and incoming pictures.
+            # This also repeats a white cue after its inversion was removed,
+            # exposing a stale processed-look cache from an earlier take.
+            for style, opacity in [("crossfade", 50), ("portal", 50), ("dipwhite", 0)]:
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("FX CLEAR")
+                db.send("DECKOPACITY " + str(opacity))
+                db.send("TAKE")
+                time.sleep(0.5)
+                db.send("TRANSITION 1.2")
+                db.send("TRANSITIONSTYLE " + style)
+                take = threading.Thread(target=take_black)
+                take.start()
+                path = db.record(seconds=3.0)
+                take.join()
+                # Area averaging preserves brightness bounds. Bicubic
+                # downscaling itself overshoots sharp edges, which would
+                # mistake a measurement artefact for excessive layer alpha.
+                pixels = subprocess.run([
+                    "ffmpeg", "-v", "error", "-i", path, "-vf", "scale=96:54:flags=area,format=gray",
+                    "-f", "rawvideo", "-"], capture_output=True, check=True).stdout if path else b""
+                frames = [pixels[i:i+5184] for i in range(0, len(pixels), 5184)]
+                frames = [f for f in frames if len(f) == 5184]
+                peak = max((max(f) for f in frames), default=255)
+                centres = [sum(f[96*20:96*34]) / (96*14) for f in frames]
+                # The compositor quantizes layer alpha to an eight-bit value.
+                expected = round(255 * opacity / 100)
+                initial = max(centres[:15], default=255)
+                # Lossy YUV recording can ring a few levels above a sharp mask
+                # edge. Eight levels permits that; the doubled hold reached 195.
+                ok = len(frames) > 40 and peak <= expected + 8 and abs(initial-expected) < 5
+                print("playout opacity %s: opacity=%d peak=%d initial=%.1f %s" %
+                      (style, opacity, peak, initial, "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append(style + ": layer opacity changed during transition")
+            db.send("DECKOPACITY 100")
+            # Change geometry AFTER taking the outgoing cue, then take again.
+            # This catches a snapshot that reads legacy engine geometry rather
+            # than the live cue used by the actual compositor.
+            for style in ["crossfade"] + STYLES:
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("FX CLEAR")
+                db.send("SCALEX 1")
+                db.send("SCALEY 1")
+                db.send("TAKE")
+                db.send("SCALEX 0.5")
+                db.send("SCALEY 0.5")
+                time.sleep(0.5)
+                db.send("TRANSITION 1.2")
+                db.send("TRANSITIONSTYLE " + style)
+                take = threading.Thread(target=take_black)
+                take.start()
+                path = db.record(seconds=3.0)
+                take.join()
+                pixels = subprocess.run([
+                    "ffmpeg", "-v", "error", "-i", path, "-vf", "scale=96:54,format=gray",
+                    "-f", "rawvideo", "-"], capture_output=True, check=True).stdout if path else b""
+                frames = [pixels[i:i+5184] for i in range(0, len(pixels), 5184)]
+                frames = [f for f in frames if len(f) == 5184]
+                rows = [sum(max(f[y*96:(y+1)*96]) > 15 for y in range(54)) for f in frames]
+                peak = max(rows, default=54)
+                initial = max(rows[:15], default=0)
+                ok = len(frames) > 40 and 15 <= initial <= 18 and peak <= 18
+                print("playout live geometry %s: initial-rows=%d peak-rows=%d %s" %
+                      (style, initial, peak, "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append(style + ": live geometry edit was lost during transition")
+            # A portrait cue pushed in after a wide one must enter from the
+            # edge, retaining its own shape. An extra draw at rest exposes it
+            # early in the wide cue's bars and can resemble a size jump.
+            for style in ["pushleft", "pushright", "pushup", "pushdown"]:
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("SCALE 1")
+                db.send("TAKE")
+                time.sleep(0.5)
+                db.send("TRANSITION 1.2")
+                db.send("TRANSITIONSTYLE " + style)
+                def take_portrait():
+                    time.sleep(1.0)
+                    reply = db.send("TAKE 3")
+                    if reply.startswith("ERR"):
+                        failures.append(style + ": " + reply)
+                take = threading.Thread(target=take_portrait)
+                take.start()
+                path = db.record(seconds=3.0)
+                take.join()
+                pixels = subprocess.run([
+                    "ffmpeg", "-v", "error", "-i", path, "-vf", "scale=96:54,format=rgb24",
+                    "-f", "rawvideo", "-"], capture_output=True, check=True).stdout if path else b""
+                frames = [pixels[i:i+15552] for i in range(0, len(pixels), 15552)
+                          if len(pixels[i:i+15552]) == 15552]
+                violations = coexist = 0
+                for f in frames:
+                    white_points, green_points = [], []
+                    for pos in range(0, len(f), 3):
+                        r, g, b = f[pos:pos+3]
+                        xy = (pos // 3 % 96, pos // 3 // 96)
+                        if min(r, g, b) > 200: white_points.append(xy)
+                        if g > 100 and r < 50 and b < 50: green_points.append(xy)
+                    if not white_points or not green_points: continue
+                    coexist += 1
+                    if style == "pushleft":
+                        bad = min(p[0] for p in green_points) < max(p[0] for p in white_points) + 37
+                    elif style == "pushright":
+                        bad = max(p[0] for p in green_points) > min(p[0] for p in white_points) - 37
+                    elif style == "pushup":
+                        bad = min(p[1] for p in green_points) < max(p[1] for p in white_points) + 9
+                    else:
+                        bad = max(p[1] for p in green_points) > min(p[1] for p in white_points) - 9
+                    violations += bad
+                ok = len(frames) > 40 and coexist > 2 and violations == 0
+                print("playout mixed shapes %s: coexist=%d misplaced=%d %s" %
+                      (style, coexist, violations, "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append(style + ": portrait incoming cue appeared at rest or changed shape")
+    for failure in failures:
+        print("FAIL: " + failure)
+    return 1 if failures else 0
+
+
+def bar_positions(path, width=320, height=180):
+    """The moving bar's CENTRE in every frame of a recording, with how bright it is.
+
+    The centre of the bright run of columns at half its peak, not the
+    brightest column: inside a 16 px white bar the brightest column wanders
+    with compression noise during a fade, and that read as 13 px of travel
+    from a picture that never moved (Codex audit 2026-10-22, #7).
+    """
+    raw = subprocess.run([
+        "ffmpeg", "-v", "error", "-i", path, "-vf",
+        "scale=%d:%d,format=gray" % (width, height), "-f", "rawvideo", "-"],
+        capture_output=True, check=True).stdout
+    size = width * height
+    found = []
+    for at in range(0, len(raw) - size + 1, size):
+        frame = raw[at:at + size]
+        columns = [sum(frame[y * width + x] for y in range(0, height, 6)) for x in range(width)]
+        peak = max(columns)
+        top = columns.index(peak)
+        half = peak * 0.5
+        left, right = top, top
+        while left > 0 and columns[left - 1] >= half:
+            left -= 1
+        while right < width - 1 and columns[right + 1] >= half:
+            right += 1
+        found.append(((left + right) / 2.0, peak))
+    return found
+
+
+def bar_travel(positions):
+    """Net distance the bar moved along its 304 px loop: jitter cancels out
+    instead of adding up the way positive-only steps did."""
+    travel = 0.0
+    for a, b in zip(positions, positions[1:]):
+        step = (b - a) % 304
+        if step > 152:
+            step -= 304
+        travel += step
+    return abs(travel)
+
+
+def check_bar_detector():
+    """The detector itself, on recordings made without Deckboy: a FROZEN bar
+    under a two-second fade must read as still, a moving one as moving."""
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="deckboy-bar-detector-") as tmp:
+        for case, xexpr, want_moving in (("frozen", "124", False), ("moving", "mod(t*100,304)", True)):
+            clip = os.path.join(tmp, case + ".mp4")
+            subprocess.run([
+                "ffmpeg", "-v", "error", "-y",
+                "-f", "lavfi", "-i", "color=black:s=640x360:r=25:d=3.5",
+                "-f", "lavfi", "-i", "color=white:s=32x360:r=25:d=3.5",
+                "-filter_complex",
+                "[0][1]overlay=x='%s*2':y=0,fade=t=out:st=0.6:d=2[v]" % xexpr,
+                "-map", "[v]", "-c:v", "libx264", "-preset", "veryfast",
+                "-pix_fmt", "yuv420p", clip], check=True)
+            found = bar_positions(clip)
+            full = max((peak for _, peak in found[:8]), default=0)
+            fading = [x for x, peak in found if full * 0.15 < peak < full * 0.85]
+            travel = bar_travel(fading)
+            ok = len(fading) >= 5 and ((travel >= 40) if want_moving else (travel <= 6))
+            print("bar detector (%s bar, no Deckboy): %d fading frames, %.1f px -- %s"
+                  % (case, len(fading), travel, "ok" if ok else "FAIL"))
+            if not ok:
+                failures.append("bar detector misread a %s bar (%.1f px)" % (case, travel))
+    return failures
+
+
+def check_live_outgoing(args):
+    """A cue that is PLAYING keeps playing through the transition out of it.
+
+    Every crossfade out of a playing video used to freeze it: the take stopped
+    its decoder and blended a copy of its last frame. Measured here with a
+    white bar sweeping across black at 100 px/s, crossfaded into black over
+    two seconds: while the bar is still visible its position has to keep
+    advancing. A PAUSED cue must still hold, and that is checked the same way
+    -- a cue that is not playing is not frozen, it is held (James, 2026-10-21).
+    """
+    from deckboy_harness import Deckboy
+    args.keep = False
+    args.ffmpeg = ""
+    failures = check_bar_detector()
+    with tempfile.TemporaryDirectory(prefix="deckboy-live-outgoing-") as media:
+        moving = os.path.join(media, "moving.mp4")
+        black = os.path.join(media, "black.ppm")
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-y",
+            "-f", "lavfi", "-i", "color=black:s=320x180:r=25:d=20",
+            "-f", "lavfi", "-i", "color=white:s=16x180:r=25:d=20",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=20",
+            "-filter_complex", "[0][1]overlay=x='mod(t*100,304)':y=0[v]",
+            "-map", "[v]", "-map", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-shortest", moving], check=True)
+        write_ppm(black, 320, 180, lambda x, y: (0, 0, 0))
+        with Deckboy(args, "deckboy-live-outgoing-",
+                     extra_args=["--import", moving, "--import", black]) as db:
+            db.send("OUTPUT ON")
+            db.send("RECFORMAT 640x360 25")
+            for case, pause_first in (("playing", False), ("paused", True)):
+                db.send("TRANSITION 0")
+                db.send("SELECT 1")
+                db.send("TAKE")
+                time.sleep(1.5)
+                if pause_first:
+                    db.send("PAUSE")
+                    time.sleep(0.4)
+                db.send("TRANSITION 2.0")
+                db.send("TRANSITIONSTYLE crossfade")
+
+                def take_black():
+                    time.sleep(0.6)
+                    db.send("SELECT 2")
+                    db.send("TAKE")
+                take = threading.Thread(target=take_black)
+                take.start()
+                path = db.record(seconds=3.5)
+                take.join()
+                if not path:
+                    failures.append(case + ": no programme recording")
+                    continue
+                found = bar_positions(path)
+                full = max((peak for _, peak in found[:8]), default=0)
+                # The fade: frames where the bar is visible but dimmer than
+                # before the take, so mid-transition and nothing else.
+                fading = [x for x, peak in found if full * 0.15 < peak < full * 0.85]
+                travel = bar_travel(fading)
+                if pause_first:
+                    ok = len(fading) >= 5 and travel <= 6
+                    want = "held still"
+                else:
+                    ok = len(fading) >= 5 and travel >= 40
+                    want = "kept moving"
+                print("live outgoing (%s cue): %d frames in the fade, bar travelled %.1f px -- %s %s"
+                      % (case, len(fading), travel, want, "ok" if ok else "FAIL"))
+                if not ok:
+                    failures.append("%s cue: the outgoing picture should have %s through the crossfade "
+                                    "(%d fading frames, %.1f px)" % (case, want, len(fading), travel))
+                db.send("TRANSITION 0")
+    for failure in failures:
+        print("FAIL: " + failure)
+    return 1 if failures else 0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--exe", default=default_exe())
+    ap.add_argument("--playout", action="store_true", help="also measure geometry in programme recordings")
+    ap.add_argument("--live-outgoing", action="store_true",
+                    help="only check that a playing cue keeps playing through a transition")
+    ap.add_argument("--port", type=int, default=5631, help="isolated playout control port")
+    args = ap.parse_args()
+    if not args.exe or not os.path.isfile(args.exe):
+        sys.exit("check_transitions: no Deckboy binary; pass --exe")
+    # The playout harness launches from the binary's directory, so resolve
+    # --exe against the invocation directory before that working-dir change.
+    args.exe = os.path.abspath(args.exe)
+    if args.live_outgoing:
+        return check_live_outgoing(args)
+
+    work = tempfile.mkdtemp(prefix="deckboy_transitions_")
+    W, H = 320, 180
+    outgoing = os.path.join(work, "outgoing.ppm")
+    incoming = os.path.join(work, "incoming.ppm")
+    # THE OUTGOING PICTURE HAS STRUCTURE EVERYWHERE, so a transition cannot
+    # accidentally pass rule 3 by moving a flat colour around; the incoming one
+    # is flat and unlike it, so "how far from each" is unambiguous.
+    write_ppm(outgoing, W, H,
+              lambda x, y: (((x // 20) + (y // 20)) % 2 and 230 or 30,
+                            40 + (y * 180) // H,
+                            ((x // 20) % 3) * 90 + 20))
+    write_ppm(incoming, W, H, lambda x, y: (0, 255, 0))
+
+    failures = []
+    for style in STYLES:
+        print("%s:" % style)
+        seen = {}
+        for progress in (0.0, 0.25, 0.5, 0.75, 1.0):
+            dst = os.path.join(work, "%s_%s.ppm" % (style, progress))
+            numbers, text = dump(args.exe, style, outgoing, incoming, dst, progress)
+            if numbers is None:
+                failures.append("%s: the dump failed at p=%s: %s"
+                                % (style, progress, text))
+                break
+            seen[progress] = (numbers, dst)
+            print("   p=%-5s meanAlpha=%-9.5f maxAlpha=%-4d fromOutgoing=%-9.4f "
+                  "fromIncoming=%.4f"
+                  % (progress, numbers.get("meanAlpha", -1),
+                     int(numbers.get("maxAlpha", -1)),
+                     numbers.get("fromOutgoing", -1),
+                     numbers.get("fromIncoming", -1)))
+        if len(seen) < 5:
+            continue
+
+        # 1. Starts clean: at progress 0 the composite IS the outgoing picture.
+        start = seen[0.0][0]
+        if start.get("fromOutgoing", 1.0) != 0.0:
+            failures.append(
+                "%s: at progress 0 the picture has already changed "
+                "(fromOutgoing=%.4f, should be 0). The first frame of a "
+                "transition must be the last frame of the cue."
+                % (style, start.get("fromOutgoing", -1)))
+
+        # 2. Finishes: at progress 1 nothing of the outgoing cue is left.
+        end = seen[1.0][0]
+        if end.get("fromIncoming", 1.0) != 0.0 or \
+                end.get("maxAlpha", 255) > MAX_ALPHA_AT_END:
+            failures.append(
+                "%s: at progress 1 the outgoing cue is still there "
+                "(maxAlpha=%d, fromIncoming=%.4f). A transition that ends on an "
+                "island of the old picture has to be cut out of a show."
+                % (style, int(end.get("maxAlpha", -1)),
+                   end.get("fromIncoming", -1)))
+
+        # 3. It does something, and does more of it as it goes.
+        alphas = [seen[p][0].get("meanAlpha", -1) for p in (0.0, 0.25, 0.5, 0.75, 1.0)]
+        for a, b in zip(alphas, alphas[1:]):
+            if b > a + 1e-9:
+                failures.append(
+                    "%s: more of the outgoing cue is showing later than earlier "
+                    "(%s). A transition should only ever reveal."
+                    % (style, " -> ".join("%.4f" % v for v in alphas)))
+                break
+        if alphas[2] > 0.995:
+            failures.append(
+                "%s: halfway through, %.1f%% of the outgoing cue is still fully "
+                "there -- the style is doing nothing."
+                % (style, alphas[2] * 100.0))
+
+        # 4. Deterministic: two outputs on one deck must draw the same frame.
+        again = os.path.join(work, "%s_again.ppm" % style)
+        numbers, text = dump(args.exe, style, outgoing, incoming, again, 0.5)
+        if numbers is None:
+            failures.append("%s: the repeat dump failed: %s" % (style, text))
+        else:
+            with open(seen[0.5][1], "rb") as a, open(again, "rb") as b:
+                if a.read() != b.read():
+                    failures.append(
+                        "%s: the same inputs produced a different picture, so two "
+                        "outputs showing one deck would disagree." % style)
+
+    print()
+    if failures:
+        print("check_transitions: %d problem(s)" % len(failures))
+        for line in failures:
+            print("  - " + line)
+        return 1
+    print("check_transitions: ok -- %d styles start clean, finish clean, "
+          "reveal steadily and repeat exactly." % len(STYLES))
+    if not args.playout:
+        return 0
+    return max(check_playout(args), check_live_outgoing(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

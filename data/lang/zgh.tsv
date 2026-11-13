@@ -1,0 +1,2373 @@
+#name ⵜⴰⵎⴰⵣⵉⵖⵜ
+#english Tamazight (Standard Moroccan)
+#fallback fr
+#unverified
+# Standard Moroccan Tamazight interface catalogue, in Tifinagh, left to right.
+# english<TAB>translation. Noto Sans Tifinagh ships with Deckboy and draws it
+# on every machine.
+#
+# A line left out falls through to FRENCH (#fallback fr), not English: it is
+# the language of the trade in Morocco beside Arabic, and it reads the same
+# way round as Tifinagh.
+#
+# The interface is now translated in full, except long hover tips.
+# NOT YET REVIEWED BY A TAMAZIGHT SPEAKER, so the picker says so. Additions and
+# corrections are very welcome.
+NEW	ⴰⵎⴰⵢⵏⵓ
+OPEN	ⵕⵥⵎ
+TAKE	TAKE
+STOP	ⵃⴱⵙ
+PROGRAM	PROGRAM
+System	ⴰⵏⴰⴳⵔⴰⵡ
+Audio	ⵉⵎⵙⵍⵉ
+Network	ⴰⵥⵟⵟⴰ
+About	ⵅⴼ
+Screen	ⴰⴳⴷⵉⵍ
+COPY	ⵙⵏⵖⵍ
+Theme	ⴰⵙⵏⵜⵍ
+Language	ⵜⵓⵜⵍⴰⵢⵜ
+EDIT	ⵙⵏⴼⵍ
+CLOSE	ⵇⵇⵏ
+Help!	ⵜⵉⵡⵉⵙⵉ!
+READY	ⵢⵓⵊⴰⴷ
+ALWAYS	ⴷⵉⵎⴰ
+Folder	ⴰⴽⴰⵔⴰⵎ
+LEFT TO RIGHT	ⵙⴳ ⵓⵥⵍⵎⴰⴹ ⵙ ⵓⴼⴰⵙⵙⵉ
+TOP TO BOTTOM	ⵙⴳ ⵓⴼⵍⵍⴰ ⵙ ⵡⴰⴷⴷⴰ
+the whole screen	ⴰⴳⴷⵉⵍ ⴰⴽⴽ
+FOLDER...	ⴰⴽⴰⵔⴰⵎ...
+ADD FILE...	ⵔⵏⵓ ⴰⴼⴰⵢⵍⵓ...
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	ⴰⵣⵓⵍ!
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	ⴰⵣⵓⵍ
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. ⴰⵣⵓⵍ ⴼⵍⵍⴰⴽ! ⵏⴽⴽⵉ ⴷ Dr. Pixel. ⵙⵎⵎⵓⵙ ⵏ ⵜⵓⵙⴷⵉⴷⵉⵏ, ⴰⴷ ⵜⵙⴷⴷⵓⴷ ⴰⵙⴽⴰⵏ. ⵓⴳⴰⵔ ⵉⴷⵔⵓⵙ, ⵎⴰ ⵜⵙⴼⵍⵉⴷⴷ ⵉ ⵏⴽⴽⵉ.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	ⵏⴽⴽⵉ ⴷ Professor Video. ⵣⵉⴽ synth, ⴷⵖⵉ ⵜⴰⴼⵉⴷⵢⵓⵜ. ⵖⵉⵍⴰ ⴱⴰⵀⵔⴰ ⵜⴰⴼⵉⴷⵢⵓⵜ. ⵙⵉⵜ ⴼ START, ⴰⴷ ⵏⵇⵇⵏ... ⴰⴷ ⵏⴱⴷⵓ.
+TURN THE OUTPUT ON	ⵕⵥⵎ ⵜⵓⴼⴼⵖⴰ
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	skapi, ⴰⴳⴷⵉⵍ ⵉⵍⵎ. ⴰⴷ ⵓⵔ ⵜⵏ ⵜⵊⵊⵜ ⴰⴷ ⵔⵊⵓⵏ. ⵕⵥⵎ ⵓⵎⵓⵖ, ⵙⵖⵓⵍ OUTPUT OFF ⵙ OUTPUT ON. ⵢⴰⵍⵍⴰⵀ!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	ⴰⵙⵍⵎⴷ ⴰⵎⵣⵡⴰⵔⵓ: ⴰⵔ ⵜⵇⵇⵏⵜ oscillator ⵙ OUTPUT... ⵡⴰⵍⵓ ⵓⵔ ⴷ ⵉⴼⴼⵖ. ⴷ ⵜⴰⴼⵉⴷⵢⵓⵜ. ⵙⵙⵏⵖ.
+BRING IN A CLIP	ⵙⵙⵉⵡⴹ ⴰⴼⵎⵉⵣ
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	ⵖⵉⵍⴰ, ⵜⴰⵡⵍⴰⴼⵜ. ⵙⵉⵜ ⴼ I, ⵙⵜⵉ ⴰⴼⵎⵉⵣ ⵣⴳ ⵓⵙⵍⴽⵉⵎ ⵏⵏⴽ. ⵓⵔ ⵖⵓⵔⴽ ⴰⴼⵎⵉⵣ? SHOW ME, ⴰⴷ ⴰⴽ ⴼⴽⵖ ⵢⴰⵏ ⵣⴳ ⵡⵉⵏⵓ.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴼⵎⵉⵣ ⵉⵖⵓⵍ ⴷ cue ⵖ playlist. ⴰⵎ ⵓⵙⴰⵍⵉ ⵏ sample. sample ⵙ ⵜⵡⵍⴰⴼⵉⵏ.
+TAKE IT LIVE	ⴰⵣⵏ ⵜ ⵙ ⵜⵓⴼⴼⵖⴰ
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	ⴰⴼⵎⵉⵣ ⵏⵏⴽ ⵉⵇⵇⵍ ⵖ playlist. ⵙⵜⵉ ⵜ, ⴷⵖⵉ TAKE. ⵏⵖ Enter. ⵉⵎⵙⴷⵔⴰⵢⵏ ⵍⵍⵉ ⵉⵓⵎⵏⵏ ⵙ ⵉⵅⴼ ⵏⵙⵏ ⵙⵉⵜⵏ Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE ⴷ ⴰⵙⵏⵇⵔ ⵏ envelope. ⵜⴰⵇⴼⴰⵍⵜ GO, ⵉⵀ. ⵢⴰⵏ ⵡⴰⵢⴷ, ⵙ ⵜⵡⵍⴰⴼⵉⵏ ⴽⴰ.
+LINE UP THE NEXT ONE	ⵀⴳⴳ ⵡⵉⵙ ⵙⵉⵏ
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	ⵙⵉⵜ ⴼ ⵢⴰⵏ cue ⵢⴰⴹⵏⵉⵏ. ⵉⵇⵇⵍ ⴰⵔ ⵜⵉⵏⵉⵜ. ⵢⴰⵏ cue ⴽⴰ? ⵙⵙⵉⵡⴹ ⵢⴰⴹⵏⵉⵏ, ⵏⵖ SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	ⴰⵙⵜⵉ ⵓⵔ ⵉⴳⵉ ⵓⵔⴰⵔ. ⵎⴰ ⵉⵜⵜⵓⵙⵜⵉⵏ ⴷ ⵜⴰⵏⵓⵟ ⵍⵍⵉ ⴷ ⵉⵜⵜⴰⵙⵏ. cue ⵍⵍⵉ ⴷ ⵉⵜⵜⴰⵙⵏ.
+CROSSFADE TO IT	ⵣⵔⵉ ⵙ crossfade
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	ⴰⴳⵣⴰⵎ ⵉⵇⵇⵓⵔⵏ ⵉ ⵉⵎⵣⵡⵓⵔⴰ. ⵖ inspector, ⵙⵉⵜ + ⴼ transition ⴰⵔ ⴷ ⵉⴱⴰⵢⵏ ⵡⴰⴽⵓⴷ, ⵓⵔ ⵉⴳⵉ deck. ⴷⵖⵉ TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Crossfade! ⴷ portamento, ⵎⴰⵛⴰ ⵉ ⵜⵡⵍⴰⴼⵉⵏ. ⵉⴼⵓⵍⴽⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵉⴽⴽⴰⵍ. ⴽⵔⴰ ⵏ ⵜⵉⴽⴽⴰⵍ ⵢⴰⴹⵏⵉⵏ, ⴰⴷ ⵉⴳⵉ ⵜⴰⵙⵉⵏⵜ. ⴷⵖⵉ TAKE.
+CLEAR THE SCREEN	ⵙⴼⴰⴹ ⴰⴳⴷⵉⵍ
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	ⵉⵀⵍⵉ ⴽⵔⴰ ⵖ ⵓⵙⴰⵢⵙ? ⵙⵉⵜ ⴼ BLACK, ⵏⵖ B. ⵜⴰⵡⵍⴰⴼⵜ ⵜⴷⴷⵓ. ⴰⵙⴽⴰⵏ ⵉⴽⵎⵎⵍ ⵖ ⵡⴰⴷⴷⴰⵢ.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	ⵡⴰⵍⵓ ⵓⵔ ⵉⵜⵜⵎⵟⵟⴰⵍ. B ⵜⵉⴽⴽⵍ ⵢⴰⴹⵏⵉⵏ, ⴰⴷ ⴷ ⵜⵓⵖⵓⵍ. ⴰⵎ mute ⴼ mixer. ⴱⴰⵀⵔⴰ ⵉⴼⵙⵙⵓⵙ.
+SAVE THE SHOW	ⵃⴹⵓ ⴰⵙⴽⴰⵏ
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	ⵃⴹⵓ ⵖⵉⵍⴰ. Ctrl+S, ⵏⵖ ⵃⴹⵓ. ⴽⵔⴰ ⵏ ⵉⵍⵎⴰⵙⵏ ⴰⵔ ⵜⵜⵕⵥⴰⵏ ⵜⴰⵡⵓⵔⵉ ⵏⵏⴽ, ⴷⵖⵉ ⴰⵔ ⴽ ⵜⵜⵉⵏⵉⵏ ⴷ ⴽⵢⵢⵉ. ⵏⴽⴽⵉ, ⵓⵔ ⵊⵊⵓ.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	ⵃⴹⵓ patch ⵏⵏⴽ. ⴰⵙⴽⴰⵏ ⵏⵏⴽ. ⴰⵙⴽⴰⵏ. ⵡⵉⵏ ⵓⵙⵉⵔⵎ ⵉⵥⴷⵖ ⵖ ⵓⴽⴰⵔⴰⵎ ⵏ Deckboy; ⵡⵉⵏ ⵏⵏⴽ ⵉⵃⴹⴰ.
+THAT'S A SHOW	ⵖ ⵡⴰⴷ ⴰⵙⴽⴰⵏ
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	ⴰⴷ ⴰⵙⴽⴰⵏ! Output, cue, TAKE, crossfade, BLACK, ⴰⵃⴹⵓ. Nazdrave, skapi. rakia ⴼ ⵉⵅⴼ ⵉⵏⵓ. ⵜⵊⵀⴷ ⵓⴳⴰⵔ ⵏ ⵡⴰⵣⵡⵓ ⵏ ⵡⴰⴷⵔⴰⵔ ⵏ Atlas, ⵃⴹⵓ ⵉⵅⴼ ⵏⵏⴽ.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	ⴰⵙⵍⵎⴷ ⵉⴽⵎⵎⵍ. ⵉⵙⴽⴰⵏⵏ ⵏ ⵉⵎⴷⵢⴰⵜⵏ ⵙⵍⵎⴰⴷⵏ layers, ⵉⵣⵡⵍ ⴷ ⵉⵙⵏⴼⴰⵍⵏ. ⵓⵎⵓⵖ > LEARN THE BASICS ⴰⴷ ⵜ ⵉⴷ ⵉⵙⵙⵓⵖⵍ.
+*shakes head* That means yes. Bravo.	*ⵉⵀⵓⵣⵣ ⵉⵅⴼ* ⴰⴷ ⵖ ⵉⵏⵏⴰ ⵉⵀ. ⴰⴷ ⵢⵉⴷⵔ!
+Wonderful! Lovely signal flow.	ⵉⴼⵓⵍⴽⵉ ⴱⴰⵀⵔⴰ! ⴰⵙⵎⵎⵔⵙ ⵏ ⵜⵎⴰⵜⴰⵔⵜ ⵉⴼⵓⵍⴽⵉⵏ.
+Mm. I knew you had it in you.	Mm. ⵙⵙⵏⵖ ⵉⵙ ⵜⵥⴹⴰⵔⵜ.
+Yes! Have a gold star. It's a dot.	ⵉⵀ! ⴹⴹⴼ ⵉⵜⵔⵉ ⵏ ⵓⵡⵔⵖ. ⴷ ⵜⴰⵏⵇⵇⵉⴹⵜ.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	ⵜⵡⵊⴷⵜ ⵉ ⵜⵉⴷⴷⵉ ⴷ ⵉⵜⵜⴰⵙⵏ? *ⵉⵙⵙⵏⴽⴹ ⵉⵅⴼ* ...ⵖ Bulgaria ⴰⵢⴰ ⵉⵏⵏⴰ ⵓⵀⵓ, skapi. ⵡⵉⵏ ⵉⵜⵜⴱⵔⵉⵇⵏ. ⴰⵔ ⵉⵜⵜⴱⵔⵉⵇ ⵉ ⴽⵢⵢⵉ.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	ⵜⵙⵙⵉⵜⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴱⵍⴰ ⵡⵉⵏ ⵉⵜⵜⴱⵔⵉⵇⵏ. ⵓⵍⴰ oscillators ⵉⵏⵓ ⴰⵔ ⵜⵜⴰⴼⵏ ⵡⵉⵏ ⵉⵜⵜⴱⵔⵉⵇⵏ.
+stop playback first - the lesson cannot hand a running show back as it was	ⵃⴱⵙ ⵜⴰⵖⵓⵔⵉ ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ - ⴰⵙⵍⵎⴷ ⵓⵔ ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⵙⵙⵓⵖⵍ ⴰⵙⴽⴰⵏ ⵍⵍⵉ ⵉⴷⴷⴰⵏ ⴰⵎ ⵎⴰⵎⴽ ⵉⵍⵍⴰ
+choose RECOVER or KEEP SAVED first	ⵙⵜⵉ RECOVER ⵏⵖ KEEP SAVED ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	ⴰⵙⴽⴰⵏ ⵏⵏⴽ ⵓⵔ ⵉⵜⵜⵓⵃⴹⴰ, ⴰⵙⵍⵎⴷ ⵓⵔ ⵉⴱⴷⵉ. ⵃⴹⵓ ⵜ (SAVE AS) ⴷ ⵙⵉⵔⵎ ⴷⴰⴳⵉ
+the practice show would not open	ⴰⵙⴽⴰⵏ ⵏ ⵓⵙⵉⵔⵎ ⵓⵔ ⵉⵕⵥⵉⵎ
+could not start the practice show	ⴰⵙⴽⴰⵏ ⵏ ⵓⵙⵉⵔⵎ ⵓⵔ ⵉⴱⴷⵉ
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc ⴰⵔ ⵉⴼⴼⵓⵖ, ⵜⵉⴽⴽⵍ ⴷ ⵉⵜⵜⴰⵙⵏ ⴰⴷ ⵉⴽⵎⵎⵍ ⵣⴳ ⵖⵉⴷ
+that's the basics - MENU > LESSONS has part two	ⴰⴷ ⵖ ⴰⴷ ⴳⴰⵏ ⵉⵍⵓⴳⴰⵏ - ⵓⵎⵓⵖ > LESSONS ⵖⵓⵔⵙ ⴰⵃⵔⵉⵛ ⵡⵉⵙ ⵙⵉⵏ
+tour paused - LEARN THE BASICS picks up where you left off	ⵜⵉⴽⵍⵉ ⵜⵃⴱⵙ - LEARN THE BASICS ⴰⴷ ⵜⴽⵎⵎⵍ ⵣⴳ ⵎⴰⵏⵉⵖ ⵜⵜ ⵜⵊⵊⵉⵜ
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	ⵉⴳⴷⵉⵍⵏ ⵙ ⵍⵎⵔⵉ, skapi. ⵙⵉⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴰⵔⵓⵜ, Dr. Pixel ⴰⴷ ⵜ ⵉⴷ ⵉⵙⵙⵓⵖⵍ.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	ⴰⴳⴷⵉⵍ ⵓⵔ ⵉⴳⵉⵏ ⵡⵉⵏ, skapi. ⵙⵉⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴰⵔⵓⵜ, Dr. Pixel ⴰⴷ ⵜ ⵉⴷ ⵉⵙⵙⵓⵖⵍ.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	ⴰⴳⴷⵉⵍ ⵢⴰⴹⵏⵉⵏ ⵉⴷⴷⵓ, skapi. ⵙⵉⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴰⵔⵓⵜ, Dr. Pixel ⴰⴷ ⵜ ⵉⴷ ⵉⵙⵙⵓⵖⵍ.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	ⵢⴰⵏ ⵓⴳⴷⵉⵍ, skapi. ⵙⵉⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴰⵔⵓⵜ, Dr. Pixel ⴰⴷ ⵜ ⵉⴷ ⵉⵙⵙⵓⵖⵍ.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	ⴰⴳⴷⵉⵍ ⵢⴰⴹⵏⵉⵏ ⵉⴷⴷⵓ, skapi, ⵜⴰⵡⵍⴰⴼⵜ ⴷ ⵜⵓⵖⵓⵍ ⵙ ⵡⴰⴷ. ⵙⴱⴷⴷⵖ ⵜⵜ ⵖ ⵢⴰⵏ ⵓⵙⴼⴰⵢⵍⵓ ⵉⵎⵥⵥⵉⵏ, ⵖ ⴷⴼⴼⵉⵔ. ⵇⵇⵏ ⵜ ⴷⴰⴳⵉ, ⵜⴰⵡⵍⴰⴼⵜ ⴰⴷ ⵜⵓⵖⵓⵍ ⴼⵍⵍⴰⵙ.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	ⵉⴹⵕ ⵟⵟⴰⴱⵍⴰ, skapi. ⵢⴰⵏ ⵓⴳⴷⵉⵍ, output ⵉⴹⴹⴼ ⵜ ⴰⴽⴽ. ⵙⴱⴷⴷⵖ ⵜ ⵖ ⵢⴰⵏ ⵓⵙⴼⴰⵢⵍⵓ ⵉⵎⵥⵥⵉⵏ, ⵖ ⴷⴼⴼⵉⵔ. ⴰⵙⴽⴰⵏ ⵏ ⵜⵉⴷⵜ ⵉⵅⵚⵚⴰ ⴰⵙ ⴰⴳⴷⵉⵍ ⵡⵉⵙ ⵙⵉⵏ.
+IT ATE THE DESK	ⵉⴹⵕ ⵟⵟⴰⴱⵍⴰ
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	ⵖⵉⵏ. ⵜⴰⵇⴼⴰⵍⵜ ⵍⵍⵉ ⵉⵏⵏⴰ OUTPUT OFF. ⵙⵖⵓⵍ ⵜⵜ ⴰⴷ ⵜⵉⵏⵏⴰ ON, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	ⵡⴰⵍⵓ ⵖ ⵜⵓⴼⴼⵖⴰ, skapi. TAKE ⵢⴰⵏ cue ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ, ⴷⵖⵉ ⵙⵜⵉ ⵢⴰⴹⵏⵉⵏ, ⴼⴽ ⴰⵙ ⴰⴽⵓⴷ.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	ⴰⴷ ⵉⴳⴰ ⴰⴳⵣⴰⵎ, skapi. ⵉⵣⵔⴱ, ⵎⴰⵛⴰ ⵓⵔ ⵉⴳⵉ crossfade. ⵙⵜⵉ cue ⵢⴰⴹⵏⵉⵏ, ⵙⵉⵜ + ⴼ transition, ⴷⵖⵉ TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	ⵜⴰⵏⴹⴹⵓⴼⵜ ⵏ feedback! output ⵉⵖⵓⵍ ⵙ ⵟⵟⴰⴱⵍⴰ. ⵉⴹⵔⵔⵓ ⵉ ⵡⵉⵍⵍⵉ ⵉⴼⵓⵍⴽⵉⵏ. ⴱⴰⵀⵔⴰ ⵉ ⵏⴽⴽⵉ. 1983. ⵓⵔ ⴰⵔ ⵏⵙⵙⴰⵡⴰⵍ ⴼ 1983.
+No more rakia. The rat has a problem.	ⵓⵔ ⵜⵍⵍⵉ rakia. ⴰⵖⵔⴷⴰ ⵖⵓⵔⵙ ⵓⴳⵓⵔ.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! rakia ⵏ Baba, ⵣⴳ Belogradchik. ⵢⴰⵏ ⵍⴽⴰⵙ, ⵉ ⵓⵙⵍⵎⴷ. ⴷⵖⵉ ⴰⵜⴰⵢ ⵙ ⵏⵄⵏⴰⵄ, ⵉ ⵉⵅⴼ.
+Is this... is this allowed during a tutorial?	ⵉⵙ ⴰⵢⴰ... ⵉⵙ ⴰⵢⴰ ⵉⵜⵜⵓⵊⵊⴰⵏ ⵖ ⵓⵙⵍⵎⴷ?
+*shakes head* That means one more.	*ⵉⵀⵓⵣⵣ ⵉⵅⴼ* ⴰⴷ ⵖ ⵉⵏⵏⴰ ⵢⴰⵏ ⵢⴰⴹⵏⵉⵏ.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	ⵃⵎⵎⵍⵖ ⴽⵓⵏ ⴰⴽⴽ. ⵃⵎⵎⵍⵖ oscillator. ⵃⵎⵎⵍⵖ OUTPUT. ⴷ ⵜⴰⴼⵉⴷⵢⵓⵜ. ⵙⵙⵏⵖ. ⵙⵙⵏⵖ!
+...and the rat took the rakia. Every time, skapi. Every single time.	...ⴷ ⵓⵖⵔⴷⴰ ⵢⴰⵡⵉ rakia. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵉⴽⴽⵍ, skapi. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵉⴽⴽⵍ.
+Was that a rat? In a hat? With a pizza?	ⵉⵙ ⴷ ⴰⵖⵔⴷⴰ? ⵙ ⵜⵇⴱⴱⴰⵄⵜ? ⵙ pizza?
+Stop that. I am a serious man.	ⵃⴱⵙ. ⵏⴽⴽⵉ ⴷ ⴰⵔⴳⴰⵣ ⵉⵚⴰⵃ.
+Do not tell Dr. Pixel about this.	ⴰⴷ ⵓⵔ ⴰⵙ ⵜⵉⵏⵉⵜ ⵉ Dr. Pixel.
+This never happened. Back to the patch bay.	ⴰⵢⴰ ⵓⵔ ⵊⵊⵓ ⵉⴹⵔⵔⵉ. ⵓⵖⵓⵍ ⵙ patch bay.
+It was the eighties. Everyone had a bow tie.	ⴷ ⵉⵙⴳⴳⴰⵙⵏ ⵏ ⵜⵎⴰⵏⵢⵉⵏ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⵖⵓⵔⵙ bow tie.
+LESSON LIST	ⵜⴰⴱⴷⴰⵔⵜ ⵏ ⵉⵙⵍⵎⴰⴷⵏ
+OPEN EXAMPLE SHOWS	ⵕⵥⵎ ⵉⵙⴽⴰⵏⵏ ⵏ ⵉⵎⴷⵢⴰⵜⵏ
+EXIT (Esc)	ⴼⴼⵓⵖ (Esc)
+Taking it on the road	ⴰⵙⴽⴰⵏ ⵖ ⵓⴱⵔⵉⴷ
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	CHECK ⵣⴳ ⵉⵏⵉⴳ, ⵙⴳⴷ ⵎⴰ ⵢⵓⴼⴰ, BUNDLE ⵜ ⴷ ⵉⵎⵉⴷⵢⴰⵜⵏ ⵏⵏⵙ.
+Effects, oscillators and colour	ⵉⵙⵏⴼⴰⵍⵏ, oscillators ⴷ ⵉⵏⵉⵜⵏ
+An effect, a ~ on its knob, and the colour picker.	ⴰⵙⵏⴼⵍ, ~ ⴼ ⵜⵇⴼⴰⵍⵜ ⵏⵏⵙ, ⴷ ⵓⵎⵙⵜⵉ ⵏ ⵉⵏⵉⵜⵏ.
+The art school crit, with Mr. Salty	ⴰⵙⴼⵔⵏ ⵏ ⵜⵉⵏⵎⵍ ⵏ ⵜⴰⵥⵓⵔⵉ, ⴷ Mr. Salty
+Patterns, synths and Draw	Pattern, synth ⴷ Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵓⵙⵉⵔⵎ, synth ⵏ ⵜⴼⵉⴷⵢⵓⵜ, ⴷ ⵓⵙⵓⵏⵉ ⴼ ⵜⴰⵡⵍⴰⴼⵜ, ⵉⵜⵜⵓⵃⴹⴰ ⴷ ⵜⴰⵡⵍⴰⴼⵜ ⵉⴱⴷⴷⵏ.
+The telestrator booth, with Coach Marv	ⵜⴰⵅⵅⴰⵎⵜ ⵏ telestrator, ⴷ Coach Marv
+A heart from the library, the pen, invert and feather.	ⵓⵍ ⵣⴳ ⵜⵎⴽⴰⵔⴹⵉⵜ, ⵉⵎⵔⵓ, ⴰⵙⵎⵎⴰⵜⵜⵉ ⴷ ⵓⵙⵙⵎⵍⵍⵓ.
+The Signal Files: redact the evidence	ⵉⴼⵓⵢⵍⴰ ⵏ ⵜⵎⴰⵜⴰⵔⵉⵏ: ⴼⴼⵔ ⴰⵏⴰⴳⵉ
+Warp, blend and slices	Warp, blend ⴷ slices
+A corner pin, two soft edges, then three slices in the Screens window.	Corner pin, ⵙⵏⴰⵜ ⵜⴰⵎⴰ ⵉⵎⵍⵍⴰⵏ, ⴷⵖⵉ ⴽⵔⴰⴹ slices ⵖ ⵓⵙⴼⴰⵢⵍⵓ Screens.
+The haunted lighthouse, with Keeper Rook	ⴰⴼⵏⴰⵔ ⵙ ⵓⵄⴼⵔⵉⵜ, ⴷ ⵓⵎⵃⴹⴰⵔ ⵏ ⵓⴼⵏⴰⵔ Rook
+GO from anywhere	GO ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⴳ
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	ⵓⵟⵟⵓⵏⵏ ⵏ cue, GOTO, ⵜⴰⵙⴰⵔⵓⵜ ⵉⵎⵥⵥⵉⵏ, ⴷ ⵎⴰⵏⵉⵖ ⴷ ⴽⵛⵎⵏ Companion, MIDI ⴷ OSC.
+The game show, with Donna Wheel	ⵓⵔⴰⵔ ⵏ ⵜⵉⵍⵉⴼⵉⵣⵢⵓ, ⴷ Donna Wheel
+Words on screen	ⴰⵡⴰⵍⵏ ⴼ ⵓⴳⴷⵉⵍ
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Lower Third ⵙ ⵢⴰⵏ ⵉⵙⵎ, ⴷⵖⵉ ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵓⵣⵡⵍ ⵙ ⵓⴳⵉⵍⴰⵍ ⴰⵣⴳⵣⴰⵡ ⵏ key.
+The kaiju weather report, with June O'Neil	ⵜⴰⴳⵏⴰⵡⵜ ⵏ kaiju, ⴷ June O'Neil
+Keeping time	ⴰⵃⴹⵓ ⵏ ⵡⴰⴽⵓⴷ
+A stage timer counting down, held, and a presenter view for the person on stage.	ⵜⴰⵙⵔⴰⴳⵜ ⵏ ⵓⵙⴰⵢⵙ ⵍⵍⵉ ⵉⵜⵜⵃⵙⴰⴱⵏ, ⵉⴱⴷⴷⵏ, ⴷ ⵜⵎⵥⵕⵉ ⵏ ⵓⵎⵙⵏⴼⵍ ⵉ ⵡⵉⵏ ⵉⵍⵍⴰⵏ ⴼ ⵓⵙⴰⵢⵙ.
+A grand day out, with Wallis and Grommet	ⴰⵙⵙ ⴰⵎⵇⵇⵔⴰⵏ, ⴷ Wallis ⴷ Grommet
+Two playlists and TAKE ALL	ⵙⵉⵏ playlists ⴷ TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	playlist ⵡⵉⵙ ⵙⵉⵏ ⴷ layer, ⴷ TAKE ALL ⴱⴰⵛ ⴰⴷ ⵜⴱⴷⴷⵍⵜ ⵙⵏⴰⵜ ⵜⵖⴰⵡⵙⵉⵡⵉⵏ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ.
+The magic show, with Turnip Top	ⴰⵙⴽⴰⵏ ⵏ ⵜⵙⵃⵃⴰⵔⵜ, ⴷ Turnip Top
+When it goes wrong	ⵉⵖ ⵉⵀⵍⴰ ⴽⵔⴰ
+BLACK against PANIC, and getting a show back.	BLACK ⴷ PANIC, ⴷ ⵜⵓⵖⴰⵍⵉⵏ ⵏ ⵓⵙⴽⴰⵏ.
+The cooking show, with Chef Bork	ⴰⵙⴽⴰⵏ ⵏ ⵡⴰⵏⵡⴰⵍ, ⴷ Chef Bork
+Capture a look on a DASH button, change everything, and get it back with one press.	ⴹⴹⴼ ⵜⴰⵎⵥⵕⵉ ⴼ ⵜⴰⵇⴼⴰⵍⵜ DASH, ⴱⴷⴷⵍ ⴽⵔⴰⵢⴳⴰⵜⵜ, ⵙⵖⵓⵍ ⵜⵜ ⵙ ⵢⴰⵏ ⵓⵙⵉⵜ.
+The styles beyond the crossfade: an iris, a shatter, and their times.	ⵜⵉⵖⴰⵔⵉⵏ ⴷⴼⴼⵉⵔ ⵏ crossfade: iris, shatter, ⴷ ⵡⴰⴽⵓⴷ ⵏⵙⵏⵜ.
+The space-opera trailer, with Optimus Primetime	trailer ⵏ opera ⵏ ⵜⴰⵍⵍⵓⵏⵜ, ⴷ Optimus Primetime
+Sound	ⵉⵎⵙⵍⵉ
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	ⴰⵙⵏⴼⵍ ⵏ ⵉⵎⵙⵍⵉ ⴼ cue, bend ⵍⵍⵉ ⵜ ⵉⵀⵍⴽⵏ ⵙ ⵜⵉⴼⵓⵍⴽⵉⵡⵉⵏ, ⴷ ⵎⴰⵏⵉⵖ ⵉⵥⴷⵖ patch.
+The robot DJs, with Deft Funk	DJs ⵏ ⵉⵔⵓⴱⵓⵜⵏ, ⴷ Deft Funk
+Reading the scopes	ⵜⴰⵖⵓⵔⵉ ⵏ scopes
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Waveform, vectorscope, ⴷ ⵉⵏⵉ ⵏ ⵜⴽⵔⴽⴰⵙ: ⵜⵉⴼⴰⵡⵜ ⴷ ⵜⵉⴷⵜ, ⵏⵖ ⴽⴰ ⵜⵙⴹ ⴱⴰⵀⵔⴰ?
+The Signal Files: is the glow on the horizon a craft?	ⵉⴼⵓⵢⵍⴰ ⵏ ⵜⵎⴰⵜⴰⵔⵉⵏ: ⵜⵉⴼⴰⵡⵜ ⴼ ⵡⴰⵙⵏⵏⴰⴼ ⴷ ⴰⵖⵔⵔⴰⴱⵓ?
+Out of the building	ⴱⵕⵕⴰ ⵏ ⵜⴳⵎⵎⵉ
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	ⵎⴰⵏⵉⵖ ⵥⴷⵖⵏ NDI, SDI ⴷ ST 2110, ⴷ NDI ⵉⵕⵥⵎ ⵎⴰⵏⵉⵖ ⵜ ⵉⵍⵍⴰ ⴼ ⵓⵙⵍⴽⵉⵎ ⴰⴷ.
+The webcam as a controller, as a game. Five rounds, a high score.	Webcam ⴷ ⴰⵙⵏⵇⴷ, ⴷ ⵓⵔⴰⵔ. ⵙⵎⵎⵓⵙ ⵜⵉⴽⴽⴰⵍ, ⴰⴳⵎⵓⴹ ⴰⵎⵇⵇⵔⴰⵏ.
+A handheld, and bugs	ⴰⵍⵍⴰⵍ ⵏ ⵓⴼⵓⵙ, ⴷ ⵉⴱⵅⵅⵓⵛⵏ
+The multiview	Multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	ⵉⵙⴼⵓⵢⵍⴰ, ⵓⵎⵓⵖ ..., ⵎⴰ ⵉⵙⴽⴰⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ, layout ⴷ tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	ⵢⴰⵏ ⵓⴼⴼⵉⵔ ⴼ ⵓⵖⵔⵔⴰⴱⵓ ⵏ ⵜⴰⵍⵍⵓⵏⵜ Cathode, ⴷ Lt. Haila ⴷ Ensign Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: ⵙⵉⵏ playlists: Deckboy ⵉⵖⵓⵍ ⴷ SUPER DECKBOY. ⵉⴽⵍⴰⵍ ⵜ, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: ⴰⵏⵎⵓⴷⴷⵓ! oscillators ⵉⵏⵓ ⵓⵔ ⵙⵉⵏ fanfare.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⴽⴰⵏ ⵉⴽⵍⴰⵍ ⵜ. ⴰⴷ ⵢⵉⴷⵔ!
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: ⵜⴰⵣⵎⴰⵔⵜ! ⵓⴳⴰⵔ ⵏ playlists, ⵓⴳⴰⵔ ⵏ layers, ⵓⴳⴰⵔ ⵏ super.
+Intro video (left on the office PC)	ⵜⴰⴼⵉⴷⵢⵓⵜ ⵏ ⵜⵉⵣⵡⵓⵔⵉ (ⵜⵇⵇⵉⵎ ⴼ PC ⵏ ⵍⴱⵉⵔⵓ)
+ON THE ROAD	ⵖ ⵓⴱⵔⵉⴷ
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	ⴰⵙⴽⴰⵏ ⵍⵍⵉ ⵜⵙⴽⵔⵜ ⵖⵉⴷ, skapi, ⴰⴷ ⵉⴷⴷⵓ ⵉⴹ ⴰⴷ ⴼ laptop ⵖ ⵢⴰⵏ ⵡⴰⴷⴳ ⵢⴰⴹⵏⵉⵏ. ⵙⵉⵜ ⴼ START.
+Before it travels: check it, fix it, bundle it.	ⵣⴳ ⵉⵏⵉⴳ: ⵙⴼⵔⵏ, ⵙⴳⴷ, ⴽⵎⵎⵙ.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	ⵜⵥⵕⵉⵜ CHECK ⵖ ⵓⴼⵍⵍⴰ? ⴰⵔ ⴷ ⵉⴱⴰⵢⵏ ⴽⴰ ⵎⴰ ⵉⵍⵍⴰ ⴽⵔⴰ ⵉⵀⵍⴰⵏ. ⵙⵉⵜ ⴼⵍⵍⴰⵙ.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	ⴰⵔ ⴷ ⵉⵙⴽⴰⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵎⴰ ⵉⵀⵍⴽⵏ ⴰⵙⴽⴰⵏ: ⵉⴼⵓⵢⵍⴰ ⵓⵔ ⵉⵍⵍⵉⵏ, cues ⵉⵍⵎⵏ, outputs ⵓⵔ ⵉⵇⵇⵏⵏ.
+FIX IT	ⵙⴳⴷ ⵜ
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	ⵜⴰⴼⵉⴷⵢⵓⵜ ⵏ ⵜⵉⵣⵡⵓⵔⵉ ⵜⵍⵍⴰ ⴼ ⵢⴰⵏ ⵓⵙⵍⴽⵉⵎ ⵢⴰⴹⵏⵉⵏ. ⵙⵜⵉ ⵜ, ⴽⴽⵙ ⵜ, ⵏⵖ RELINK ⵎⴰ ⵉⵍⵍⴰ ⵓⴼⴰⵢⵍⵓ ⵖⵓⵔⴽ.
+Fix it at home, where it is easy. Not at the venue, where it is not.	ⵙⴳⴷ ⵜ ⵖ ⵜⴳⵎⵎⵉ, ⵖⵉⵏ ⵉⵙⴰⵀⵍ. ⵓⵔ ⵉⴳⵉ ⵖ ⵜⵣⵇⵇⴰ, ⵖⵉⵏ ⵓⵔ ⵉⵙⴰⵀⵍ.
+BUNDLE IT	ⴽⵎⵎⵙ ⵜ
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	ⵙⵉⵜ ⴼ BUNDLE, ⵙⵜⵉ ⴰⴷⴳ: USB, ⴰⴽⴰⵔⴰⵎ ⵉⵎⵓⵏ. ⴰⵙⴽⴰⵏ ⴷ ⵉⵎⵉⴷⵢⴰⵜⵏ ⵏⵏⵙ ⴰⴽⴽ, ⵉⵎⵓⵏⵏ.
+The copy finds its media beside it, wherever the folder goes.	ⴰⵏⵖⵍ ⴰⴷ ⵢⴰⴼ ⵉⵎⵉⴷⵢⴰⵜⵏ ⵏⵏⵙ ⵖ ⵜⴰⵎⴰ ⵏⵏⵙ, ⵎⴰⵏⵉⵖ ⴰ ⵉⴷⴷⵓ ⵓⴽⴰⵔⴰⵎ.
+SAFE TRAVELS	ⴰⴱⵔⵉⴷ ⵉⴼⵓⵍⴽⵉⵏ
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	ⵉⵜⵜⵓⵙⴼⵔⵏ, ⵉⵜⵜⵓⵙⴳⴷⵏ, ⵉⵜⵜⵓⴽⵎⵎⵙⵏ. ⴼ ⵜⵎⴰⵛⵉⵏⵜ ⵢⴰⴹⵏⵉⵏ, ⵕⵥⵎ ⴰⵙⴽⴰⵏ ⵉⵜⵜⵓⴽⵎⵎⵙⵏ: ⴽⵔⴰⵢⴳⴰⵜⵜ ⵖ ⵓⴷⴳⴳ ⵏⵏⵙ.
+A show file is only text, so it travels light. The media is the heavy part.	ⴰⴼⴰⵢⵍⵓ ⵏ ⵓⵙⴽⴰⵏ ⴷ ⴰⴹⵔⵉⵙ ⴽⴰ, ⴰⵔ ⵉⵏⴳⴳⵉⵣ ⴱⴰⵀⵔⴰ. ⵎⴰ ⵉⵣⴹⴹⴰⵢⵏ ⴷ ⵉⵎⵉⴷⵢⴰⵜⵏ.
+Student work no. 4 (untitled)	ⵜⴰⵡⵓⵔⵉ ⵏ ⵓⵎⵙⵍⵎⴰⴷ ⵓⵟⵟⵓⵏ 4 (ⴱⵍⴰ ⴰⵣⵡⵍ)
+THE CRIT	ⴰⵙⴼⵔⵏ
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	ⵢⴰⵜ ⵜⵉⵏⵎⵍ ⵏ ⵜⴰⵥⵓⵔⵉ, skapi. ⵢⴰⵏ ⵓⵎⵙⵍⵎⴰⴷ, ⵢⴰⵜ ⵜⴰⵡⵍⴰⴼⵜ, ⵢⴰⵏ ⵓⵎⵙⴼⵔⵏ ⵍⵍⵉ ⵉⵥⵕⴰⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ. ⵙⵉⵜ ⴼ START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	ⵉⵙⵏⴼⴰⵍⵏ ⴰⵔ ⴱⴷⴷⵍⵏ ⵜⴰⵡⵍⴰⴼⵜ; oscillator ⴰⵔ ⵜⵜ ⵉⴱⴷⴷⵍ ⴱⵍⴰ ⴰⵃⴱⴰⵙ. ⴰⵎⵙⴼⵔⵏ ⵉⵃⵎⵎⵍ ⴽⴰ ⵡⵉⵙ ⵙⵉⵏ.
+A grey square on beige. I have seen this at every graduate show since 1987.	ⴰⵎⴽⵓⵥ ⴰⵎⵍⵍⴰⵍ ⵖ beige. ⵉⵥⵕⴰ ⵜ ⵖ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴳⴰⵏⵜ ⵏ ⵜⴰⴳⴰⵔⴰ ⵏ ⵜⵖⵓⵔⵉ ⵣⴳ 1987.
+AN EFFECT	ⴰⵙⵏⴼⵍ
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	ⵖ EFFECTS ⵏ inspector, + ⴰⴷ ⴷ ⵉⵔⵏⵓ ⵢⴰⵏ. Edges ⴷ ⵜⵉⵣⵡⵓⵔⵉ ⵉⴼⵓⵍⴽⵉⵏ: ⴰⵔ ⵉⵜⵜⴰⵔⴰ ⵉⵣⵉⵔⵉⴳⵏ.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	ⵍⵍⴰⵏ ⵙ ⵜⵎⵔⴰⵡⵉⵏ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴰⵔ ⵉⴷⴷⵓ ⴼ CPU ⵖ ⴽⵔⴰ ⵏ ⵉⵎⵉⵍⵉⵙⴳⵓⵏⵏ. ⴱⴰⵀⵔⴰ.
+Take a risk! Bad art is fine. Boring art is a crime.	ⴹⴹⴼ ⴰⵄⵜⴰⴱ! ⵜⴰⵥⵓⵔⵉ ⵉⵅⵅⴰⵏ ⵉⴼⵓⵍⴽⵉ. ⵜⴰⵥⵓⵔⵉ ⵍⵍⵉ ⵉⵜⵜⵉⵏⵣⴰⵖⵏ ⴷ ⴰⴱⴽⴽⴰⴹ.
+A ~ ON ITS KNOB	~ ⴼ ⵜⵇⴼⴰⵍⵜ
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵏⵇⴷ ⵍⵍⵉ ⵖⵓⵔ ⵉⵍⵍⴰ ~ ⵖ ⵜⴰⵎⴰ ⵏⵏⵙ ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⴹⴼⵔ oscillator. ⵙⵉⵜ ⴼ ⵢⴰⵏ. ⵜⴰⵇⴼⴰⵍⵜ ⴰⴷ ⵜⴱⴷⵓ ⴰⵔ ⵜⵙⵓⵏⴼⵓⵙ.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	oscillator ⵙ ⵜⴼⵔⵉⴽⴰⵏⵙⵉⵜ ⵉⵎⵥⵥⵉⵏ: ⵙ ⵍⵄⵇⵇⵍ, ⴱⴰⵛ ⴰⴷ ⵜ ⵜⴹⴼⵔ ⵜⵉⵟⵟ. ⵔⴱⵄ ⵏ hertz ⴷ ⴰⵙⵓⵏⴼⵓ ⵏ ⴽⴽⵓⵥ ⵜⵉⵙⵉⵏⵉⵏ.
+Now it MOVES. Okay. Okay. I'm listening.	ⵖⵉⵍⴰ ⴰⵔ ⵉⵜⵜⵎⵓⵙⵙⵓ. ⵉⴼⵓⵍⴽⵉ. ⵉⴼⵓⵍⴽⵉ. ⴰⵔ ⵙⴼⵍⵉⴷⵖ.
+A COLOUR OF ITS OWN	ⵉⵏⵉ ⵏⵏⵙ ⵙ ⵉⵅⴼ ⵏⵏⵙ
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	ⵉⵙⵏⴼⴰⵍⵏ ⵍⵍⵉ ⵉⵜⵜⴰⵔⵓⵏ ⵉⵏⵉ, ⴰⵎ ⵉⵣⵉⵔⵉⴳ ⵏ Edges, ⵖⵓⵔⵓⵏ ⵜⴰⵛⵀⵉⴱⵜ ⵏ ⵉⵏⵉ. ⴰⵔ ⴷ ⵉⵜⵜⵕⵥⵎ ⴰⵎⵙⵜⵉ: ⵜⴰⵡⵉⵏⵙⵜ, ⵉⵙⵎⴰⵡⵏ ⵉⵜⵜⵢⴰⵔⵓⵏ, ⵏⵖ ⵉⵏⵉ ⵣⴳ ⵓⴳⴷⵉⵍ.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵉⵏⵉ ⵖⵓⵔⵙ ⵉⵙⵎ ⵖ ⴽⵔⴰ ⵏ ⵡⴰⴷⴳ. ⵡⵉⵏⵓ ⴷ 'ⴰⵣⴳⵣⴰⵡ ⵏ oscilloscope'. ⵡⴰⵍⵓ ⵎⴰ ⵜ ⵉⵙⵎⵎⵔⵙⵏ.
+That colour is doing something. I don't know what. I love it.	ⵉⵏⵉ ⴰⵏ ⴰⵔ ⵉⵙⴽⴰⵔ ⴽⵔⴰ. ⵓⵔ ⵙⵙⵉⵏⵖ ⵎⴰ ⵖ. ⵃⵎⵎⵍⵖ ⵜ.
+THE VERDICT	ⴰⵙⴼⵔⵏ ⵏ ⵜⴳⵉⵔⴰ
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	ⴰⵙⵏⴼⵍ, ~, ⴷ ⵢⴰⵏ ⵉⵏⵉ. ⴰⵎⵙⴼⵔⵏ ⴰⵔ ⵉⵜⵜⴰⵍⵍⴰ, skapi. ⵉⵎⵟⵟⴰⵡⵏ ⵉⴼⵓⵍⴽⵉⵏ, ⴰⴷ ⵉⴳⴳⴰⵏ.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	ⵙⵔⵙ ⴱⴰⵀⵔⴰ ⴼ ⵉⵢⵢⴰⵏ ⵢⴰⴹⵏⵉⵏ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⵙ ~ ⵏⵏⵙ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵇⴼⴰⵍⵜ. ⴰⴷ ⵖ ⴰⵔ ⵉⵜⵜⴱⴰⵢⵏ ⴰⵙⴽⴰⵏ.
+It's still a square. But it's YOUR square. Post it.	ⴰⵔ ⵖⵉⵍⴰ ⴷ ⴰⵎⴽⵓⵥ. ⵎⴰⵛⴰ ⴷ ⴰⵎⴽⵓⵥ ⵏⵏⴽ. ⴰⵣⵏ ⵜ.
+THE TELESTRATOR BOOTH	ⵜⴰⵅⵅⴰⵎⵜ ⵏ telestrator
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Coach Marv ⴰⵔ ⵉⵙⵙⴼⵀⵎ ⴰⴷⴷⴰⵍ ⵙ ⵓⵙⵓⵏⵉ ⵏ ⵜⵉⵡⵉⵏⴰⵙ ⴼⵍⵍⴰⵙ. ⵢⴰⵜ ⵜⵉⴽⴽⵍ ⵉⵙⵓⵏⵉ ⵜⴰⵡⵉⵏⵙⵜ ⵉ ⵜⴰⴼⵓⴽⵜ. ⵎⵔⴰⵡ ⵜⵓⵙⴷⵉⴷⵉⵏ, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	ⵉⴹ ⴰⴷ: ⵜⵉⵡⵍⴰⴼⵉⵏ ⵏ ⵓⵙⵉⵔⵎ, synth ⵏ ⵜⴼⵉⴷⵢⵓⵜ, ⴷ ⵓⵙⵓⵏⵉ ⴼ ⵜⴰⵡⵍⴰⴼⵜ. ⵙⵉⵜ ⴼ START.
+Get me a picture and a pen. BOOM.	ⴼⴽ ⵉⵢⵉ ⵢⴰⵜ ⵜⴰⵡⵍⴰⴼⵜ ⴷ ⵉⵎⵔⵓ. BUM.
+A TEST PATTERN	ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵓⵙⵉⵔⵎ
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	ⵙⴳⴷ ⵉⴳⴷⵉⵍⵏ ⵣⴳ ⴰⵙⴽⴰⵏ. ⵓⵔ ⵉⴳⵉ ⵖ ⵡⴰⵎⵎⴰⵙ ⵏⵏⵙ. ⵍⵎⴷⵖ ⵜ ⵖ Plovdiv.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵟⵟⴰⴱⵍⴰ ⵉⵅⵚⵚⴰ ⴰⵙ ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵓⵙⵉⵔⵎ. PATTERN ⴰⵔ ⵉⵔⵏⵓ Pocket Test: ⵉⵜⵜⵓⵙⴼⵔⵏ ⵙ ⵉⴽⵜⴰⵣⴰⵍⵏ ⵏ ⵜⵉⴷⵜ.
+A VIDEO SYNTH	synth ⵏ ⵜⴼⵉⴷⵢⵓⵜ
+He says 'no camera needed' like it is a feature. It is a feature.	ⵉⵏⵏⴰ 'ⵓⵔ ⵉⵅⵚⵚⴰ ⵜⴽⴰⵎⵉⵔⴰⵜ' ⴰⵎ ⵎⵉⴷ ⵉⴳⴰⵏ ⵜⴰⵎⴰⵀⴰⵍⵜ. ⵜⴰⵎⴰⵀⴰⵍⵜ ⴰⵢⴰ.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	ⵡⵉⵏ ⵃⵎⵎⵍⵖ ⴱⴰⵀⵔⴰ. SOURCE, ⴷⵖⵉ Video Synth: oscillators, ⵍⵎⵔⵉ ⴷ feedback. ⵓⵔ ⵉⵅⵚⵚⴰ ⵜⴽⴰⵎⵉⵔⴰⵜ.
+TAKE THE SYNTH	TAKE synth
+Select it, then TAKE. Confident operators press Enter.	ⵙⵜⵉ ⵜ, ⴷⵖⵉ TAKE. ⵉⵎⵙⴷⵔⴰⵢⵏ ⵍⵍⵉ ⵉⵓⵎⵏⵏ ⵙ ⵉⵅⴼ ⵏⵙⵏ ⵙⵉⵜⵏ Enter.
+That's our replay. Every replay needs a pundit.	ⴰⴷ ⵖ ⵉⴳⴰ ⴰⵍⴰⵙ ⵏⵏⵖ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵍⴰⵙ ⵉⵅⵚⵚⴰ ⴰⵙ ⴰⵎⵙⵙⴼⵙⵔ.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	ⵀⴰ ⴰⵍⴰⵙ. ⵀⴰ ⴰⵎⵓⵔⴰⵔ. ⴷ BUM, ⵉⴽⵛⵎ.
+A SECOND PLAYLIST	playlist ⵡⵉⵙ ⵙⵉⵏ
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	ⴰⵎⵉⴷⴰⴷ ⵉⴷⴷⵓ ⴼ ⵓⴼⵍⵍⴰ, ⴼ layer ⵏⵏⵙ. ⵙⵉⵜ ⴼ + ⵖ ⵜⴰⴳⴰⵔⴰ ⵏ ⵜⵣⵔⵉⴳⵉⵏ ⵏ playlists.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	playlist ⵡⵉⵙ ⵙⵉⵏ ⴷ layer ⴼ ⵓⵎⵣⵡⴰⵔⵓ. ⴰⵎ oscillator ⵡⵉⵙ ⵙⵉⵏ, ⴰⵔ ⵉⵜⵜⵎⵅⵍⴰⴹ ⴼ ⵓⴼⵍⵍⴰ.
+A DRAW CUE	DRAW CUE
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	ⵖ playlist ⵜⴰⵎⴰⵢⵏⵓⵜ: SOURCE, ⴷⵖⵉ Draw. ⵉⴼⵔⴰⵡⵏ ⵎⴰⵏⵉⵖ ⵓⵔ ⵜⵙⵓⵏⵉⵜ.
+A Draw cue is transparent outside the ink, so the synth shows through.	draw cue ⵉⴼⵔⴰⵡⵏ ⴱⵕⵕⴰ ⵏ ⵓⵎⵉⴷⴰⴷ, ⵖⵎⴽⴰⵏ ⴰⵔ ⵉⵜⵜⴱⴰⵢⵏ synth.
+TAKE THE INK	TAKE ⴰⵎⵉⴷⴰⴷ
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	ⵙⵜⵉ draw cue, TAKE ⵜ. ⵙⵉⵏ playlists, ⵙⵉⵏ layers, ⵢⴰⵜ ⵜⴰⵡⵍⴰⴼⵜ.
+Now both are live: the synth underneath, the ink on top.	ⵖⵉⵍⴰ ⵙⵉⵏ ⵖ ⵜⵓⴼⴼⵖⴰ: synth ⵖ ⵡⴰⴷⴷⴰⵢ, ⴰⵎⵉⴷⴰⴷ ⵖ ⵓⴼⵍⵍⴰ.
+CIRCLE SOMETHING	ⵙⵓⵏⵉ ⵜⴰⵡⵉⵏⵙⵜ
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	ⵖ inspector, ⵙⵉⵜ ⴼ DRAW, ⴷⵖⵉ ⵙⵓⵏⵉ ⴼ ⵓⵎⴹⵉⵇ ⵏ ⵓⵀⵉⵍ. ⵙ ⵓⵖⵔⴷⴰ, ⵏⵖ ⵙ ⵉⵎⵔⵓ ⵎⴰ ⵉⵍⵍⴰ ⵖⵓⵔⴽ.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	ⴰⵃⵣⵣⴱ ⵏ ⵉⵎⵔⵓ ⴰⵔ ⵉⵙⵙⵉⵣⵓⵔ ⵉⵣⵉⵔⵉⴳ. ⴰⵖⵔⴷⴰ ⴰⵔ ⵉⵃⵣⵣⴱ ⵙ ⵢⴰⵜ ⵜⴰⵣⵎⴰⵔⵜ ⴽⴰ. ⴰⵎ ⵏⴽⴽⵉ.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	ⵙⵓⵏⵉ ⵜⴰⵡⵉⵏⵙⵜ ⵉ ⵏⵜⵜⴰ! ⵓⵀⵓ, ⴰⵎⵇⵇⵔⴰⵏ. BUM. ⴷ ⴰⵙⵉⴳⵏⴰ. ⵉⴼⵓⵍⴽⵉ. ⵙⵓⵏⵉ ⵜⴰⵡⵉⵏⵙⵜ ⵉ ⵓⵙⵉⴳⵏⴰ.
+SAVE A STILL	ⵃⴹⵓ ⵜⴰⵡⵍⴰⴼⵜ ⵉⴱⴷⴷⵏ
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL ⴰⴷ ⵉⵃⴹⵓ ⴰⵙⵓⵏⵉ ⴷ ⵜⴰⵡⵍⴰⴼⵜ ⵙ ⵓⴳⵉⵍⴰⵍ ⵉⴼⵔⴰⵡⵏ, ⵉⵔⵏⵓ ⵜ ⵙ playlist.
+For next week's show. Coach Marv will want the cloud again.	ⵉ ⵓⵀⵉⵍ ⵏ ⵉⵎⴰⵍⴰⵙⵙ ⴷ ⵉⵜⵜⴰⵙⵏ. Coach Marv ⴰⴷ ⵉⵔⵉ ⴰⵙⵉⴳⵏⴰ ⴷⴰⴳⵉ.
+THAT'S THE BOOTH	ⴰⴷ ⵖ ⴰⴷ ⵉⴳⴰ ⵜⴰⵅⵅⴰⵎⵜ
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	ⵜⵉⵡⵍⴰⴼⵉⵏ ⵏ ⵓⵙⵉⵔⵎ, synth, layer, ⴰⵎⵉⴷⴰⴷ, ⵜⴰⵡⵍⴰⴼⵜ ⵉⴱⴷⴷⵏ. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	ⵙⵉⵔⵎ Replay ⵖ Draw: ⴰⴷ ⴷ ⵉⵙⵙⵓⵖⵍ ⵉⵣⵉⵔⵉⴳⵏ ⵏⵏⴽ ⴰⵎ ⵎⴰⵎⴽ ⵜⵏ ⵜⵙⵓⵏⵉⵜ.
+Same time next week. Bring a bigger pen. And a turducken.	ⵉⵎⴰⵍⴰⵙⵙ ⴷ ⵉⵜⵜⴰⵙⵏ, ⵢⴰⵏ ⵡⴰⴽⵓⴷ. ⴰⵡⵉ ⴷ ⵉⵎⵔⵓ ⴰⵎⵇⵇⵔⴰⵏ. ⴷ ⵢⴰⵜ ⵜⴰⵊⵉⵏ.
+Saucer photo (CLASSIFIED)	ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵓⵖⵔⵔⴰⴱⵓ ⵉⴼⵍⵍⵏ (ⵉⴼⴼⵔⵏ)
+THE SIGNAL FILES	ⵉⴼⵓⵢⵍⴰ ⵏ ⵜⵎⴰⵜⴰⵔⵉⵏ
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	ⵍⴱⵉⵔⵓ ⵏ ⵜⵎⴰⵜⴰⵔⵉⵏ ⵓⵔ ⵉⵜⵜⵓⵙⴼⵀⴰⵎⵏ. ⵙⵉⵏ ⵉⵎⵄⵙⵙⴰⵙⵏ, ⵢⴰⵜ ⵜⴰⵡⵍⴰⴼⵜ, ⵓⵔ ⵉⵅⵚⵚⴰ ⴰⴷ ⵜⴼⴼⵓⵖ. ⵙⵉⵜ ⴼ START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Masks ⴰⵔ ⵙⴽⴰⵔⵏ ⵜⴰⵡⵍⴰⴼⵜ ⴷ ⵜⴰⵍⵖⴰ. ⵉⴹ ⴰⴷ, ⴰⴷ ⵏⴳⵣⵎ ⴰⵏⴰⴳⵉ.
+That's a craft, Brandt. Look at the lights. I want to believe.	ⴷ ⴰⵖⵔⵔⴰⴱⵓ, Brandt. ⵥⵕ ⵜⵉⴼⴰⵡⵉⵏ. ⵔⵉⵖ ⴰⴷ ⵓⵎⵏⵖ.
+A MASK FROM THE LIBRARY	MASK ⵣⴳ ⵜⵎⴽⴰⵔⴹⵉⵜ
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	ⵖ MASK ⵏ inspector: mask, ⴷⵖⵉ 'new heart'. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵍⵖⴰ ⵉⴼⵓⵍⴽⵉⵏ. ⵓⵍ ⵉⴹⵚⵚⴰ ⵓⴳⴰⵔ.
+The library has circles, stars, hearts. Each one is points you can move.	ⵜⴰⵎⴽⴰⵔⴹⵉⵜ ⵖⵓⵔⵙ ⵜⴰⵡⵉⵏⵙⵜ, ⵉⵜⵔⵉ, ⵓⵍ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴷ ⵜⵉⵏⵇⵇⵉⴹⵉⵏ ⵍⵍⵉ ⵜⵥⴹⴰⵔⵜ ⴰⴷ ⵜⵙⵙⵎⵓⵙⵙⵓⵜ.
+A heart, Hollis? The Bureau redacts with black bars.	ⵓⵍ, Hollis? ⵍⴱⵉⵔⵓ ⴰⵔ ⵉⵜⵜⴼⴼⵔ ⵙ ⵉⵥⵓⵔⴰⵏ ⵉⴹⴹⴰⵍⵏⵉⵏ.
+THE PEN	ⵉⵎⵔⵓ
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	ⵙⵖⵓⵍ ⴰⵍⵍⴰⵍ ⴷ ⵉⵎⵔⵓ, ⴷⵖⵉ ⵙⵉⵜ ⴼ ⵓⵎⴹⵉⵇ ⵉ ⵓⵖⵔⵔⴰⴱⵓ. ⵙⵉⵜ ⴼ ⵜⵏⵇⵇⵉⴹⵜ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⴱⴰⵛ ⴰⴷ ⵜⵇⵇⵏⵜ.
+Click for corners, drag for curves. The way the Bezier brothers intended.	ⵙⵉⵜ ⵉ ⵜⵉⵖⵎⵔⵉⵏ, ⵊⴱⴷ ⵉ ⵉⵣⵉⵔⵉⴳⵏ ⵉⴽⴽⵏⵓⵏ. ⴰⵎ ⵎⵉⴷ ⵔⴰⵏ ⴰⵢⵜⵎⴰ Bézier.
+Draw round it carefully. It might be watching.	ⵙⵓⵏⵉ ⵙ ⵍⵄⵇⵇⵍ. ⴰⴷ ⵉⵜⵜⵥⵕ ⴰⵀⴰⵜ.
+INVERT	ⵙⵙⵎⴰⵜⵜⵉ ⵜ
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	ⴰⵙⵎⵎⴰⵜⵜⵉ ⴰⵔ ⵉⵊⵊⵜ ⴱⵕⵕⴰ, ⴰⵔ ⵉⴳⵣⵣⵎ ⴰⴳⵡⵏⵙ. ⴰⵖⵔⵔⴰⴱⵓ ⵉⴷⴷⵓ. ⵉⴳⵏⵏⴰ ⵉⵇⵇⵉⵎ.
+The same shape, the other way round. Very useful. Slightly spooky.	ⵢⴰⵜ ⵜⴰⵍⵖⴰ, ⵉⵜⵜⵓⵎⵎⴰⵜⵜⵉ. ⵉⵏⴼⵄ ⴱⴰⵀⵔⴰ. ⴰⵔ ⵜⵜⴰⴳⴳⴰⴷⵖ ⵉⵎⵉⴽ.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, ⵉⵍⵍⴰ ⵢⴰⵏ ⵓⵅⵍⵅⵓⵍ ⵙ ⵜⴰⵍⵖⴰ ⵏ ⵓⵍ ⵖ ⵉⴳⵏⵏⴰ.
+FEATHER	ⵙⵙⵎⵍⵍⵓ ⵜ
+Feather softens the edge, so nobody sees the cut. Press + on feather.	ⴰⵙⵎⵍⵍⵓ ⴰⵔ ⵉⵙⵙⵎⵍⵍⵓ ⵉⵔⵉ, ⴱⴰⵛ ⴰⴷ ⵓⵔ ⵉⵥⵕ ⵢⴰⵏ ⴰⴳⵣⴰⵎ. ⵙⵉⵜ + ⴼ feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	ⵉⵔⵉ ⵉⵇⵇⵓⵔⵏ ⵉⵏⵏⴰ 'ⵉⵍⵍⴰ ⵢⴰⵏ ⵖⵉⴷ'. ⵡⵉⵏ ⵉⵎⵍⵍⴰⵏ ⵓⵔ ⵉⵏⵏⴰ ⵡⴰⵍⵓ.
+They'll never know.	ⵓⵔ ⵊⵊⵓ ⴰⴷ ⵙⵙⵏⵏ.
+CASE CLOSED	ⴰⴼⴰⵢⵍⵓ ⵉⵇⵇⵏ
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	ⵜⴰⵍⵖⴰ ⵣⴳ ⵜⵎⴽⴰⵔⴹⵉⵜ, ⵉⵎⵔⵓ, ⴰⵙⵎⵎⴰⵜⵜⵉ ⴷ ⵓⵙⵎⵍⵍⵓ. ⵍⴱⵉⵔⵓ ⴰⵔ ⴰⴽ ⵉⵜⵜⵉⵏⵉ ⵜⴰⵏⵎⵎⵉⵔⵜ. ⵍⴱⵉⵔⵓ ⵓⵔ ⵊⵊⵓ ⵉⵍⵍⵉ ⵖⵉⴷ.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Masks ⵥⴹⴰⵔⵏ ⴰⴷ ⵉⵍⵉⵏ ⴼ layer, output ⵏⵖ matte ⵏⵏⵙ: MASK ON ⴰⴷ ⵉⵙⵜⵉ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵏⵇⴷ ⴰⵔ ⵉⵇⴱⵍ ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	ⵜⵉⴷⵜ ⵜⵍⵍⴰ ⵖ waveform, Hollis. ⵜⵉⴽⴽⵍ ⴷ ⵉⵜⵜⴰⵙⵏ, scope.
+The ghost	ⴰⵄⴼⵔⵉⵜ
+THE HAUNTED LIGHTHOUSE	ⴰⴼⵏⴰⵔ ⵙ ⵓⵄⴼⵔⵉⵜ
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	ⵢⴰⵏ ⵓⴼⵏⴰⵔ, ⵢⴰⵏ ⵓⵄⴼⵔⵉⵜ, ⴷ ⵢⴰⵏ ⵓⵎⵃⴹⴰⵔ ⵍⵍⵉ ⵉⵇⵇⵉⵎⵏ ⵡⴰⵃⴷⵓⵜ ⴱⴰⵀⵔⴰ ⴷ ⵍⵎⵚⴱⴰⵃ. ⵙⵉⵜ ⴼ START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Projection mapping: ⴰⵔ ⵙⵙⴽⴽⵏⵓⵏ ⵜⴰⵡⵍⴰⴼⵜ ⴱⴰⵛ ⴰⴷ ⵜⵎⵓⵏ ⴷ ⵜⴳⵎⵎⵉ. Warp, blend, slice.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	ⵜⵔⴰⵎ ⴰⵄⴼⵔⵉⵜ ⴼ ⵉⵙⴼⵓⵢⵍⴰ, ⵉⵙ? ⵃⴹⵓⵜ ⵍⵎⵚⴱⴰⵃ. ⵍⵎⵚⴱⴰⵃ ⴷ ⵡⵉⵏⵓ.
+THE OUTPUT'S GEOMETRY	ⵜⴰⵍⵖⴰ ⵏ OUTPUT
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	ⵓⵎⵓⵖ, ⴷⵖⵉ Video Outputs, ⴷⵖⵉ Geometry. ⵜⴰⵍⵖⴰ ⵏ output ⵜⵥⴷⵖ ⵖⵉⵏ.
+Geometry: the projector-menu word for 'what shape is the picture'.	Geometry: ⴰⵡⴰⵍ ⵏ ⵓⵎⵓⵖ ⵏ projector ⵉ 'ⵎⴰ ⵜⴳⴰ ⵜⴰⵍⵖⴰ ⵏ ⵜⴰⵡⵍⴰⴼⵜ'.
+PIN A CORNER	ⵙⵙⵏⵟⴹ ⵜⵉⵖⵎⵔⵜ
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	ⵙⵉⵜ ⴼ warp edit, ⴷⵖⵉ ⵊⴱⴷ ⵜⵉⵖⵎⵔⵜ ⴼ ⵓⵎⴹⵉⵇ ⵏ ⵓⵀⵉⵍ. ⴰⵙⴼⴰⵢⵍⵓ ⵓⵔ ⵉⴳⵉ ⴰⵎⴽⵓⵥ. ⵓⵎⵃⴹⴰⵔ ⵓⵍⴰ ⵏⵜⵜⴰ.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Corner pin ⴰⵔ ⵉⵙⵙⵎⵓⵙⵙⵓ ⴽⴽⵓⵥ ⵜⵉⵖⵎⵔⵉⵏ. Perspective ⴰⵔ ⵉⵊⵊⵜ ⵉⵣⵉⵔⵉⴳⵏ ⵚⴰⵃⵃⴰⵏ, ⴰⵎ ⵓⵙⴼⴰⵢⵍⵓ ⵏ ⵜⵉⴷⵜ.
+LEFT! Ye call that a corner? I've seen straighter gulls.	ⵥⵍⵎⴰⴹ! ⵉⵙ ⴰⵢⴰ ⴰⴷ ⴰⵙ ⵜⵜⵉⵏⵉⵜ ⵜⵉⵖⵎⵔⵜ? ⵥⵕⵉⵖ ⵜⵉⴱⴱⵓⵛⵉⵏ ⵚⴰⵃⵃⴰⵏ ⵓⴳⴰⵔ.
+TWO SOFT EDGES	ⵙⵏⴰⵜ ⵜⴰⵎⴰ ⵉⵎⵍⵍⴰⵏ
+Back in Geometry: edge blend, + on the left and + on the right.	ⵓⵖⵓⵍ ⵙ Geometry: edge blend, + ⴼ ⵓⵥⵍⵎⴰⴹ, + ⴼ ⵓⴼⴰⵙⵉ.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	ⵙⵉⵏ projectors ⴰⵔ ⵎⵍⴰⵍⴰⵏ; ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴰⵔ ⵉⵙⵙⴼⵙⴰⵢ ⵉⵔⵉ ⵏⵏⵙ ⴱⴰⵛ ⴰⴷ ⵓⵔ ⵜⵙⴹ ⵜⵎⵍⵉⵍⵜ ⵙⵏⴰⵜ ⵜⵉⴽⴽⴰⵍ.
+THE SCREENS WINDOW	ⴰⵙⴼⴰⵢⵍⵓ SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Geometry, SLICES, ⵕⵥⵎ. ⴰⵙⴼⴰⵢⵍⵓ Screens ⴷ ⵎⴰⵏⵉⵖ ⵜⵜⵓⴳⵣⴰⵎⵏ slices, ⵜⵜⵓⵙⵔⵙⵏ.
+A slice is a piece of the picture, put anywhere on the output.	slice ⴷ ⵢⴰⵏ ⵓⵃⵔⵉⵛ ⵏ ⵜⴰⵡⵍⴰⴼⵜ, ⵉⵜⵜⵓⵙⵔⵙ ⵎⴰⵏⵉⵖ ⵢⵉⵔⵉ ⵖ output.
+THREE SLICES	ⴽⵔⴰⴹ SLICES
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	ⵖ ⵓⵙⴼⴰⵢⵍⵓ Screens, + SLICE ⴽⵔⴰⴹ ⵜⵉⴽⴽⴰⵍ, ⵊⴱⴷ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴳⵣⴰⵎ ⵙ ⵜⵓⵍⵓⵜ ⵏ ⵜⴰⵡⵍⴰⴼⵜ.
+Three windows, three slices: left, middle and right of one picture.	ⴽⵔⴰⴹ ⵉⵙⴼⵓⵢⵍⴰ, ⴽⵔⴰⴹ slices: ⴰⵥⵍⵎⴰⴹ, ⴰⵎⵎⴰⵙ ⴷ ⵓⴼⴰⵙⵉ ⵏ ⵢⴰⵜ ⵜⴰⵡⵍⴰⴼⵜ.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	ⴽⵔⴰⴹ ⵉⵙⴼⵓⵢⵍⴰ. ⵡⵉⵏ ⵏ ⵡⴰⵎⵎⴰⵙ ⵉ ⵍⵎⵚⴱⴰⵃ. ⵡⵉⵏ ⵏ ⵡⴰⵎⵎⴰⵙ ⴷⵉⵎⴰ ⵉ ⵍⵎⵚⴱⴰⵃ.
+THE GHOST IS PLEASED	ⴰⵄⴼⵔⵉⵜ ⵉⴼⵔⵃ
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Warp, blend, slice. ⵓⵎⵃⴹⴰⵔ ⴰⴷ ⵉⵟⵟⵙ ⵖ ⵜⴰⴳⴰⵔⴰ. ⵜⵉⴱⴱⵓⵛⵉⵏ ⵓⵀⵓ.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	slices ⵖⵓⵔⵓⵏ warp ⴷ mesh ⵏⵙⵏ ⵖ ⵓⵙⴼⴰⵢⵍⵓ Screens. ⴷ ~ ⴼ ⵓⴷⴳⴳ ⴷ ⵜⵓⵣⵣⵢⴰ.
+Ye did alright, lad. Now get away from the lamp.	ⵜⵙⴽⵔⵜ ⵎⵣⵢⴰⵏ, ⴰ ⵉⵡⵉ. ⵖⵉⵍⴰ ⴱⵄⴷ ⵣⴳ ⵍⵎⵚⴱⴰⵃ.
+THE GAME SHOW	ⵓⵔⴰⵔ ⵏ ⵜⵉⵍⵉⴼⵉⵣⵢⵓ
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	ⵢⴰⵏ ⵓⵔⴰⵔ ⵏ ⵜⵉⵍⵉⴼⵉⵣⵢⵓ, skapi. ⴽⵔⴰⴹ ⵉⵎⵓⵔⴰⵔⵏ, ⵢⴰⵏ buzzer, ⴷ cues ⵍⵍⵉ ⵉⵜⵜⵏⵔⴰⵔⵏ ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⴳ. ⵙⵉⵜ ⴼ START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	ⵓⵟⵟⵓⵏⵏ ⵏ cue, ⵜⵉⵙⵓⵔⴰ ⵉⵎⵥⵥⵉⵏ, ⴷ GO ⵣⴳ ⵜⵎⴰⵛⵉⵏⵉⵏ ⵢⴰⴹⵏⵉⵏ. ⴰⵎ sequencer ⵍⵍⵉ ⵜⴽⴽⴰⵜⵜ ⵙ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵙⴰⵔⵓⵜ.
+Welcome to the show! Let's spin that wheel!	ⴰⵏⵙⵓⴼ ⵖ ⵓⵙⴽⴰⵏ! ⴰⴷ ⵏⵙⵙⵓⵣⵣⵉ ⵜⴰⵡⵉⵏⵙⵜ!
+A CUE NUMBER	ⵓⵟⵟⵓⵏ ⵏ CUE
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	ⴰⵎⵓⵔⴰⵔ 3 ⵉⵜⵜⵓⵙⵜⵉⵏ. ⵖ metadata ⵏ inspector, ⴼⴽ ⴰⵙ ⵓⵟⵟⵓⵏ ⵏ cue: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	ⵉⵙⴽⴰⵏⵏ ⴰⵔ ⵜⵜⵃⵙⴰⴱⵏ cues ⵏⵙⵏ. Q3, Q3.5, Q12A. Deckboy ⴰⵔ ⵜⵏ ⵉⵖⵕⵕⴰ ⴰⴽⴽ.
+I'd like to buy a number, please.	ⵔⵉⵖ ⴰⴷ ⵙⵖⵖ ⵢⴰⵏ ⵓⵟⵟⵓⵏ, ⵎⴰ ⵉⵅⵚⵚⴰ.
+GO TO IT	ⴷⴷⵓ ⵙ ⵖⵓⵔⵙ
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, ⴰⵔⴰ ⵓⵟⵟⵓⵏ, Enter. ⴰⴷ ⵉⴼⴼⵓⵖ ⵙ ⵜⵓⴼⴼⵖⴰ, ⵎⴰⵏⵉⵖ ⴰ ⵜⴳⴰ ⵜⴰⴱⴷⴰⵔⵜ.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. ⴰⴱⵔⵉⴷ ⵍⵍⵉ ⵉⵣⵔⴱⵏ ⴱⴰⵀⵔⴰ ⵖ ⵜⴰⴱⴷⴰⵔⵜ ⵉⵖⵣⵣⵉⴼⵏ. ⵉⵣⵔⴱ ⵓⴳⴰⵔ ⵏ scroll. ⵉⵣⵔⴱ ⴱⴰⵀⵔⴰ ⵓⴳⴰⵔ ⵏ ⵏⴽⴽⵉ.
+And the number is... three!	ⴷ ⵓⵟⵟⵓⵏ... ⴷ ⴽⵔⴰⴹ!
+A BUZZER	BUZZER
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	ⴰⵎⵓⵔⴰⵔ 1 ⵉⵜⵜⵓⵙⵜⵉⵏ. ⵖ TRIGGERS, ⵙⵉⵜ ⴼ key, ⴷⵖⵉ F5. ⵜⴰⵙⴰⵔⵓⵜ ⴰⵏ ⵖⵉⵍⴰ ⴰⵔ ⵜⵙⵙⵏⵔⴰⵔ cue ⴰⴷ.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 ⴰⵔ F10, F12, ⵏⵖ pad ⵏ ⵓⵟⵟⵓⵏⵏ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴷ buzzer.
+Every contestant gets a buzzer.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵎⵓⵔⴰⵔ ⴰⴷ ⵢⴰⴼ buzzer.
+BUZZ IN	ⵙⵉⵜ!
+Press the key. The cue fires, wherever the list is standing.	ⵙⵉⵜ ⴼ ⵜⵙⴰⵔⵓⵜ. cue ⴰⵔ ⵉⵜⵜⵏⵔⴰⵔ, ⵎⴰⵏⵉⵖ ⴰ ⵜⴳⴰ ⵜⴰⴱⴷⴰⵔⵜ.
+No mouse, no list, no looking. Just the key.	ⵓⵔ ⵉⵍⵍⵉ ⵓⵖⵔⴷⴰ, ⵓⵔ ⵜⵍⵍⵉ ⵜⴰⴱⴷⴰⵔⵜ, ⵓⵔ ⵉⵍⵍⵉ ⴰⵙⵎⵎⴰⵍ. ⵜⴰⵙⴰⵔⵓⵜ ⴽⴰ.
+Buzz! We have a winner!	Bzzz! ⵖⵓⵔⵏⵖ ⴰⵎⵔⴱⴰⵃ!
+FROM ANYWHERE	ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⴳ
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, ⵜⴰⵏⵓⵟ MIDI, ⵜⴰⴱⵔⴰⵜ OSC: ⵓⵎⵓⵖ, ⴷⵖⵉ ⴰⵥⵟⵟⴰ, ⴰⴷ ⴰⴽ ⵉⵏⵏ ⵎⴰⵏⵉⵖ ⵉⵇⵇⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Stream Deck ⵖ ⵜⵅⵅⴰⵎⵜ ⵏ ⵜⴰⵎⴰ ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⵙⵙⵉⵜ GO. synth ⵏ ⵓⵏⴰⵙⵉⵡ ⵓⵍⴰ ⵏⵜⵜⴰ. ⵃⵎⵎⵍⵖ synth ⵓⴳⴰⵔ.
+And for our viewers at home: you can play along too.	ⵉ ⵉⵎⵥⵥⴰⵢⵏ ⵖ ⵜⴳⵎⵎⵉ: ⵓⵍⴰ ⴽⵓⵏⵏⵉ ⵜⵥⴹⴰⵔⵎ ⴰⴷ ⵜⵓⵔⴰⵔⵎ.
+THAT'S OUR SHOW	ⴰⴷ ⵉⴳⴰ ⴰⵙⴽⴰⵏ ⵏⵏⵖ
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	ⵓⵟⵟⵓⵏⵏ, GOTO, buzzers, ⴷ GO ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⴳ. ⵖⵉⵍⴰ ⴽⵢⵢⵉ ⴷ ⵓⵔⴰⵔ ⵏ ⵜⵉⵍⵉⴼⵉⵣⵢⵓ, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	cue ⵉⵥⴹⴰⵔ ⴰⴷ ⵖⵓⵔⵙ ⵜⴰⵙⴰⵔⵓⵜ, ⵜⴰⵏⵓⵟ MIDI ⴷ ⵜⴰⵏⵙⴰ OSC ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ. ⵜⴰⴳⴳⴳⵓⵙⵜ, ⵜⵉⵇⴼⴰⵍⵉⵏ ⴷ ⵜⴰⴳⴳⴳⵓⵙⵜ ⵢⴰⴹⵏⵉⵏ.
+Goodnight, everybody! Keep spinning!	ⵉⴹ ⵉⴼⵓⵍⴽⵉⵏ, ⴰⴽⴽ! ⴽⵎⵎⵍⴰⵜ ⵜⵓⵣⵣⵢⴰ!
+Weather map	ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵜⴳⵏⴰⵡⵜ
+THE KAIJU WEATHER	ⵜⴰⴳⵏⴰⵡⵜ ⵏ KAIJU
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	ⵜⴰⴳⵏⴰⵡⵜ ⵏ Channel 6, skapi. ⵢⴰⵜ ⵜⴽⴰⵔⴹⴰ, ⵢⴰⵜ ⵜⵎⵙⵏⴼⵍⵜ, ⴷ ⵢⴰⵏ ⵓⵎⵇⵇⵔⴰⵏ ⴱⴰⵀⵔⴰ ⵏ ⵓⴳⵔⵣⴰⵎ. ⵙⵉⵜ ⴼ START.
+Words on screen: Lower Thirds, text, and backdrops.	ⴰⵡⴰⵍⵏ ⴼ ⵓⴳⴷⵉⵍ: Lower Third, ⴰⴹⵔⵉⵙ ⴷ ⵓⴳⵉⵍⴰⵍ.
+I'm June O'Neil, and nothing about this forecast is normal.	ⵏⴽⴽⵉ ⴷ June O'Neil, ⵡⴰⵍⵓ ⵎⴰ ⵉⴳⴰⵏ ⴷ ⴰⵎⴰⴳⵏⵓ ⵖ ⵜⴰⴳⵏⴰⵡⵜ ⴰⴷ.
+A LAYER FOR WORDS	LAYER ⵉ ⵉⵡⴰⵍⵏ
+Words go on their own layer: press the + at the end of the playlist tabs.	ⴰⵡⴰⵍⵏ ⴰⵔ ⴷⴷⵓⵏ ⴼ layer ⵏⵙⵏ: ⵙⵉⵜ ⴼ + ⵖ ⵜⴰⴳⴰⵔⴰ ⵏ ⵜⵣⵔⵉⴳⵉⵏ ⵏ playlists.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	playlist ⵡⵉⵙ ⵙⵉⵏ ⴷ layer ⴼ ⵜⴽⴰⵔⴹⴰ. ⴰⴳⵔⵣⴰⵎ ⵉⵇⵇⵉⵎ ⵖ ⵡⴰⴷⴷⴰⵢ. ⴱⴰⵀⵔⴰ ⵏ ⵜⵉⴽⴽⴰⵍ.
+Words on top. Always on top.	ⴰⵡⴰⵍⵏ ⵖ ⵓⴼⵍⵍⴰ. ⴷⵉⵎⴰ ⵖ ⵓⴼⵍⵍⴰ.
+A LOWER THIRD	LOWER THIRD
+In the new playlist: SOURCE, then Lower Third.	ⵖ playlist ⵜⴰⵎⴰⵢⵏⵓⵜ: SOURCE, ⴷⵖⵉ Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	ⵉⵙⵎ ⴷ ⵓⵣⵡⵍ, ⵖ ⵡⴰⴷⴷⴰⵢ ⵏ ⵓⴳⴷⵉⵍ, ⴱⵕⵕⴰ ⵏ ⵓⴱⵔⵉⴷ ⵏ ⵓⴳⵔⵣⴰⵎ.
+HER NAME	ⵉⵙⵎ ⵏⵏⵙ
+In the inspector, title: type the presenter's name. The second line is her job.	ⵖ inspector, title: ⴰⵔⴰ ⵉⵙⵎ ⵏ ⵜⵎⵙⵏⴼⵍⵜ. ⵉⵣⵉⵔⵉⴳ ⵡⵉⵙ ⵙⵉⵏ ⴷ ⵜⴰⵡⵓⵔⵉ ⵏⵏⵙ.
+Spelling counts. The audience reads it at the speed of light.	ⵜⵉⵔⴰ ⵜⵍⴰ ⴰⵣⴰⵍ. ⵉⵎⵥⵥⴰⵢⵏ ⴰⵔ ⵖⵕⵕⴰⵏ ⵙ ⵜⴰⵣⵣⵍⴰ ⵏ ⵜⵉⴼⴰⵡⵜ.
+Spell it right. Last week it said 'Jane O'Meal'.	ⴰⵔⴰ ⵜ ⵎⵣⵢⴰⵏ. ⵉⵎⴰⵍⴰⵙⵙ ⵉⵣⵔⵉⵏ ⵜⵓⵔⵉⵜ 'June O'Neel'.
+ON AIR	ⵖ ⵜⵓⴼⴼⵖⴰ
+TAKE the Lower Third. Her name slides in over the map.	TAKE Lower Third. ⵉⵙⵎ ⵏⵏⵙ ⴰⵔ ⵉⵜⵜⵙⵍⵓⴹ ⴼ ⵜⴽⴰⵔⴹⴰ.
+Two layers live: the weather, and the words on top of it.	ⵙⵉⵏ layers ⵖ ⵜⵓⴼⴼⵖⴰ: ⵜⴰⴳⵏⴰⵡⵜ, ⴷ ⵉⵡⴰⵍⵏ ⴼ ⵓⴼⵍⵍⴰⵙ.
+Thank you. Now, about that lizard...	ⵜⴰⵏⵎⵎⵉⵔⵜ. ⵖⵉⵍⴰ, ⴼ ⵓⴳⵔⵣⴰⵎ ⴰⵏ...
+BREAKING NEWS	ⵉⵙⴰⵍⵍⵏ ⵉⵣⵔⴱⵏ
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	SOURCE, ⴷⵖⵉ Text: ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵓⵣⵡⵍ. ⴷⵖⵉ ⵜⴰⵛⵀⵉⴱⵜ ⵏ ⵓⴳⵉⵍⴰⵍ: ⴰⵣⴳⵣⴰⵡ ⵏ key, ⴱⴰⵛ ⴰⴷ ⵜ ⵉⴽⴽⵙ mixer.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	ⴰⴳⵉⵍⴰⵍ ⴰⵔ ⵉⵄⵎⵎⵔ ⵖ ⵜⵉⵣⵉ ⵏ ⵉⵡⴰⵍⵏ. ⴰⵣⴳⵣⴰⵡ ⵏⵖ ⴰⵏⵉⵍⵉ ⵏ key, mixer ⴰⴷ ⵉⵙⴽⵔ ⵡⵉⵢⵢⴰⴹ.
+Breaking news: it's standing on the five-day forecast.	ⵉⵣⵔⴱⵏ: ⵉⴱⴷⴷ ⴼ ⵜⴳⵏⴰⵡⵜ ⵏ ⵙⵎⵎⵓⵙ ⵡⵓⵙⵙⴰⵏ.
+BREAKING: KAIJU	ⵉⵣⵔⴱⵏ: KAIJU
+BACK TO YOU	ⵏⵓⵖⵓⵍ ⵙ studio
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Lower Third, ⵉⵙⵎ, ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵓⵣⵡⵍ, ⴰⴳⵉⵍⴰⵍ. ⴰⴳⵔⵣⴰⵎ ⵉⴼⵍ studio, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Lower Thirds ⵥⴹⴰⵔⵏⵜ ⴰⴷ ⵇⵇⵍⵏⵜ ⵡⴰⵃⴷⵓⵏⵜ, ⴰⴷ ⵙⵍⵓⴹⵏⵜ, ⴰⴷ ⴼⴼⵖⵏⵜ. ⵖⵓⵔⵓⵏⵜ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⴱⴰⴷⵓ.
+That's the weather. Back to you, guys. Run.	ⴰⴷ ⵖ ⴰⴷ ⵜⴳⴰ ⵜⴰⴳⵏⴰⵡⵜ. ⵏⵓⵖⵓⵍ ⵙ studio. ⵔⵡⵍⴰⵜ.
+A GRAND DAY OUT	ⴰⵙⵙ ⴰⵎⵇⵇⵔⴰⵏ
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	ⵢⴰⵏ ⵓⵔⵓⴽⵉⵜ ⵉⵜⵜⵢⴰⵙⴽⴰⵔⵏ ⵖ ⵜⵙⵔⴰⴼⵜ, skapi, ⴷ ⵢⴰⵏ ⵓⵎⵙⵏⵓⵍⴼⵓ ⵍⵍⵉ ⵉⵔⴰⵏ ⴰⵊⴱⵏ. ⵙⵉⵜ ⴼ START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	ⵜⵉⵙⵔⴰⴳⵉⵏ ⵏ ⵓⵙⴰⵢⵙ: ⴰⵙⵉⴹⵏ ⵙ ⵜⴷⴼⵔⵉⵜ, ⵜⴰⵙⵔⴰⴳⵜ, ⴷ ⵜⵎⵥⵕⵉ ⵏ ⵓⵎⵙⵏⴼⵍ.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	ⴰⵊⴱⵏ, Grommet! ⴰⵢⵢⵓⵔ ⴷ ⴰⵊⴱⵏ. ⵉⵅⵚⵚⴰ ⴰⵖ ⴰⵙⵉⴹⵏ ⵙ ⵜⴷⴼⵔⵉⵜ.
+A COUNTDOWN	ⴰⵙⵉⴹⵏ ⵙ ⵜⴷⴼⵔⵉⵜ
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	SOURCE, ⴷⵖⵉ Stage Timer. ⵜⴰⵙⵔⴰⴳⵜ ⵍⵍⵉ ⵉⵜⵜⵃⵙⴰⴱⵏ ⵙ ⵜⴷⴼⵔⵉⵜ, ⵙ ⵓⵟⵟⵓⵏⵏ ⵉⵎⵇⵇⵓⵔⵏ, ⵉⴼⵓⵍⴽⵉⵏ.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	ⵉⵏⵉⵜⵏ ⴰⵔ ⵜⴱⴷⴷⴰⵍⵏ ⵉⵖ ⵉⴽⵎⵎⵍ ⵡⴰⴽⵓⴷ: ⴰⵎⵍⵍⴰⵍ, amber, ⴰⵣⴳⴳⴰⵖ. ⴰⵎ VU meter ⵏ ⵡⴰⴽⵓⴷ.
+*raises an eyebrow*	*ⵉⵙⵙⴰⵍⵢ ⵜⵉⵎⵉⵡⵉⵏ*
+LIFT OFF	ⴰⵙⴰⵍⵉ
+Select the timer and TAKE it. The countdown starts.	ⵙⵜⵉ ⵜⴰⵙⵔⴰⴳⵜ, TAKE ⵜ. ⴰⵙⵉⴹⵏ ⵉⴱⴷⴰ.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	ⴰⵔ ⵉⴽⵎⵎⵍ ⵙ ⴷⴼⴼⵉⵔ ⵏ ⵡⴰⵍⵓ, ⴰⵔ ⵉⵜⵜⵃⵙⴰⴱ ⴰⴽⵓⴷ ⵉⵣⵔⵉⵏ. ⴱⴰⵀⵔⴰ ⵉⵚⴰⵃ. ⵓⵔ ⵖⵓⵔⵙ ⵍⵇⴷⵔ ⵉⵎⵉⴽ.
+Ten... nine... ooh, I do love a countdown.	ⵎⵔⴰⵡ... ⵜⵥⴰ... ⴰⵀ, ⵃⵎⵎⵍⵖ ⴰⵙⵉⴹⵏ ⵙ ⵜⴷⴼⵔⵉⵜ.
+HOLD!	ⵃⴱⵙ!
+Something's loose! Space holds the countdown. The clock shows it is held.	ⵉⵍⵍⴰ ⴽⵔⴰ ⵉⵍⵕⴰⵅⵏ! Space ⴰⴷ ⵉⵃⴱⵙ ⴰⵙⵉⴹⵏ. ⵜⴰⵙⵔⴰⴳⵜ ⴰⵔ ⵜⵙⴽⴰⵏ ⵉⵙ ⵜⵃⴱⵙ.
+A hold is not a stop. Space again, and it carries on from where it was.	ⴰⵃⴱⴰⵙ ⵓⵔ ⵉⴳⵉ ⵜⴰⴳⴰⵔⴰ. Space ⵜⵉⴽⴽⵍ ⵢⴰⴹⵏⵉⵏ, ⴰⴷ ⵉⴽⵎⵎⵍ ⵣⴳ ⵎⴰⵏⵉⵖ ⵉⵃⴱⵙ.
+*holds up a spanner*	*ⵉⵙⵙⴰⵍⵢ ⵜⴰⵙⴰⵔⵓⵜ*
+THE PILOT'S VIEW	ⵜⴰⵎⵥⵕⵉ ⵏ ⵓⵎⵏⵀⴰⵔ
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	ⵓⵎⵓⵖ, Video Outputs: ⵙⵖⵓⵍ ⴰⵏⴰⵡ ⵏ output ⴷ PRESENTER. ⵡⵉⵏ ⵉⵍⵍⴰⵏ ⴼ ⵓⵙⴰⵢⵙ ⴰⴷ ⵉⵥⵕ ⵜⴰⵙⵔⴰⴳⵜ, cue ⵍⵍⵉ ⴷ ⵉⵜⵜⴰⵙⵏ ⴷ ⵜⵉⵣⵎⵉⵍⵉⵏ ⵏⵏⵙ.
+A presenter view is an output like any other. Point it at the confidence monitor.	ⵜⴰⵎⵥⵕⵉ ⵏ ⵓⵎⵙⵏⴼⵍ ⴷ output ⴰⵎ ⵡⵉⵢⵢⴰⴹ. ⵙⴳⵓⵄⵍ ⵜ ⵙ ⵜⵎⵥⵕⵉ ⵏ ⵓⵙⴰⵢⵙ.
+So the pilot can see the time. The pilot is Grommet.	ⴱⴰⵛ ⴰⴷ ⵉⵥⵕ ⵓⵎⵏⵀⴰⵔ ⴰⴽⵓⴷ. ⴰⵎⵏⵀⴰⵔ ⴷ Grommet.
+TO THE MOON	ⵙ ⵓⵢⵢⵓⵔ
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	ⴰⵙⵉⴹⵏ, ⴰⵃⴱⴰⵙ, ⴷ ⵜⵎⵥⵕⵉ ⵉ ⵓⵎⵏⵀⴰⵔ. Nazdrave, skapi. ⴰⵡⵉ ⴷ ⵜⵉⵖⵔⵉⴼⵉⵏ.
+Timers can also count up, or show the time of day. Their section has the lot.	ⵜⵉⵙⵔⴰⴳⵉⵏ ⵥⴹⴰⵔⵏⵜ ⴰⴷ ⵃⵙⴰⴱⵏⵜ ⵙ ⵣⵣⴰⵜ, ⵏⵖ ⴰⴷ ⵙⴽⵏⵜ ⴰⴽⵓⴷ. ⵖⵓⵔⵓⵏⵜ ⴽⵔⴰⵢⴳⴰⵜⵜ.
+A grand day out, Grommet! Pass the crackers.	ⴰⵙⵙ ⴰⵎⵇⵇⵔⴰⵏ, Grommet! ⴼⴽ ⵉⵢⵉ ⵜⵉⵖⵔⵉⴼⵉⵏ.
+The trunk (closed)	ⴰⵙⵏⴷⵓⵇ (ⵉⵇⵇⵏ)
+The trunk (open)	ⴰⵙⵏⴷⵓⵇ (ⵉⵕⵥⵎ)
+THE MAGIC SHOW	ⴰⵙⴽⴰⵏ ⵏ ⵜⵙⵃⵃⴰⵔⵜ
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	ⵢⴰⵏ ⵓⵙⴽⴰⵏ ⵏ ⵜⵙⵃⵃⴰⵔⵜ, skapi. ⵢⴰⵏ ⵓⵙⵏⴷⵓⵇ, prop, ⴷ ⵢⴰⵏ ⵓⵙⵏⵇⵔ ⵍⵍⵉ ⵉⴱⴷⴷⵍⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ. ⵙⵉⵜ ⴼ START.
+Two playlists are two layers. TAKE ALL changes both together.	ⵙⵉⵏ playlists ⴷ ⵙⵉⵏ layers. TAKE ALL ⴰⵔ ⵉⴱⴷⴷⵍ ⵜⵏ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ.
+Every trick needs two things happening at once. And a rubber chicken.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵉⵃⵉⵍⴰ ⵉⵅⵚⵚⴰ ⴰⵙ ⵙⵏⴰⵜ ⵜⵖⴰⵡⵙⵉⵡⵉⵏ ⵍⵍⵉ ⵉⴹⵔⵔⵓⵏ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ. ⴷ ⵜⴰⴼⵓⵍⵍⵓⵙⵜ ⵏ ⵍⴽⴰⵡⵛⵓ.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	prop ⵉⴷⴷⵓ ⴼ layer ⵏⵏⵙ. ⵙⵉⵜ ⴼ + ⵖ ⵜⴰⴳⴰⵔⴰ ⵏ ⵜⵣⵔⵉⴳⵉⵏ ⵏ playlists.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Playlist 2 ⵉⵇⵇⵉⵎ ⴼ playlist 1. ⴰⵎ transparent ⴼ overhead projector.
+Nothing up my sleeve. Everything in my trunk.	ⵡⴰⵍⵓ ⵖ ⵉⵖⴰⵍⵍⵉⵏ ⵉⵏⵓ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵖ ⵓⵙⵏⴷⵓⵇ ⵉⵏⵓ.
+THE PROP	PROP
+In the new playlist, add anything: PATTERN will do. That is the prop.	ⵖ playlist ⵜⴰⵎⴰⵢⵏⵓⵜ, ⵔⵏⵓ ⴽⵔⴰ: PATTERN ⵉⴼⵓⵍⴽⵉ. ⴷ prop.
+Whatever it is, it will appear the instant the trunk opens.	ⵎⴰ ⵙ ⵉⴳⴰ, ⴰⴷ ⵉⴱⴰⵢⵏ ⵉⵖ ⵉⵕⵥⵎ ⵓⵙⵏⴷⵓⵇ.
+Is it a rubber chicken? It's always a rubber chicken.	ⵉⵙ ⴷ ⵜⴰⴼⵓⵍⵍⵓⵙⵜ ⵏ ⵍⴽⴰⵡⵛⵓ? ⴷⵉⵎⴰ ⴷ ⵜⴰⴼⵓⵍⵍⵓⵙⵜ ⵏ ⵍⴽⴰⵡⵛⵓ.
+The prop (rubber chicken)	Prop (ⵜⴰⴼⵓⵍⵍⵓⵙⵜ ⵏ ⵍⴽⴰⵡⵛⵓ)
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	ⵙⵜⵉ 'ⴰⵙⵏⴷⵓⵇ (ⵉⵕⵥⵎ)' ⵖ playlist 1 ⴷ prop ⵖ playlist 2. ⴷⵖⵉ TAKE ALL: ⵙⵉⵏ ⵙ ⵢⴰⵏ ⵓⵙⵏⵇⵔ.
+One press, every playlist's selected cue. The audience never sees the seam.	ⵢⴰⵏ ⵓⵙⵉⵜ, cue ⵉⵜⵜⵓⵙⵜⵉⵏ ⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ playlist. ⵉⵎⵥⵥⴰⵢⵏ ⵓⵔ ⵊⵊⵓ ⵥⵕⵉⵏ ⵜⴰⴳⵏⵉⵜ.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaa! ...ⵇⵇⵍⴰⵜ ⴰⴼⴰⴽⴽⵔ. ⵇⵇⵍⴰⵜ. ⵇⵇⵍⴰⵜ.
+THE PRESTIGE	ⵜⵉⵃⵉⵍⴰ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	ⵙⵉⵏ layers, ⵢⴰⵏ ⵓⵙⵏⵇⵔ. ⴽⵔⴰⵢⴳⴰⵜⵜ playlist ⵙ opacity ⵏⵏⵙ, ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⵇⵇⵉⵎ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ output. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	ⴰⵎⵙⵃⵃⴰⵔ ⵓⵔ ⵊⵊⵓ ⵉⵙⴽⴰⵏ. playlist ⵓⵔ ⵉⵜⵜⵄⵢⵓ ⵣⴳ ⵓⵙⴽⴰⵏ.
+Thank you! I'm here all week! The chicken is here forever.	ⵜⴰⵏⵎⵎⵉⵔⵜ! ⵀⴰ ⵏⴽⴽⵉ ⵖⵉⴷ ⵉⵎⴰⵍⴰⵙⵙ ⴰⴽⴽ! ⵜⴰⴼⵓⵍⵍⵓⵙⵜ ⴷⵉⵎⴰ ⵖⵉⴷ.
+The kitchen (on fire)	ⴰⵏⵡⴰⵍ (ⴰⵔ ⵉⵜⵜⵖⵎⵉ ⵙ ⵜⵎⵙⵙⵉ)
+A lovely souffle	soufflé ⵉⴼⵓⵍⴽⵉⵏ
+THE COOKING SHOW	ⴰⵙⴽⴰⵏ ⵏ ⵡⴰⵏⵡⴰⵍ
+A cooking show, skapi. Live. Everything is on fire. Press START.	ⵢⴰⵏ ⵓⵙⴽⴰⵏ ⵏ ⵡⴰⵏⵡⴰⵍ, skapi. ⵙ ⵜⵉⴷⵜ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵔ ⵉⵜⵜⵖⵎⵉ ⵙ ⵜⵎⵙⵙⵉ. ⵙⵉⵜ ⴼ START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK ⴰⵔ ⵉⵜⵜⴼⴼⵔ ⵜⴰⵡⵍⴰⴼⵜ, ⴰⵙⴽⴰⵏ ⵉⴽⵎⵎⵍ. PANIC ⴰⵔ ⵉⵃⴱⵙ ⴽⵔⴰⵢⴳⴰⵜⵜ. ⵙⵙⵏ ⵎⴰ ⵉⵅⵚⵚⴰⵏ.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, ⴰⵏⵡⴰⵍ ⵖ tmssi-flurdy!
+The audience must not see this. Press BLACK, or B.	ⵉⵎⵥⵥⴰⵢⵏ ⵓⵔ ⵉⵅⵚⵚⴰ ⴰⴷ ⵜ ⵥⵕⵏ. ⵙⵉⵜ ⴼ BLACK, ⵏⵖ B.
+The picture goes. The cue keeps playing underneath, ready to come back.	ⵜⴰⵡⵍⴰⴼⵜ ⵜⴷⴷⵓ. cue ⴰⵔ ⵉⴷⴷⵓ ⵖ ⵡⴰⴷⴷⴰⵢ, ⵉⵡⵊⴷ ⴰⴷ ⴷ ⵉⵖⵓⵍ.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. ⴰⵀ, ⵜⴰⵡⵍⴰⴼⵜ ⵜⴷⴷⵓ.
+AND BACK	ⴷ ⵜⵓⵖⴰⵍⵉⵏ
+The fire's out. Press B again: the picture comes back, still running.	ⵜⵎⵙⵙⵉ ⵜⵅⵙⵉ. B ⵜⵉⴽⴽⵍ ⵢⴰⴹⵏⵉⵏ: ⵜⴰⵡⵍⴰⴼⵜ ⴷ ⵜⵓⵖⵓⵍ, ⴰⵔ ⵜⵜⴷⴷⵓ.
+Nothing was lost. A mute on a mixer, for pictures.	ⵡⴰⵍⵓ ⵓⵔ ⵉⴷⴷⵉ. mute ⴼ mixer, ⵉ ⵜⵡⵍⴰⴼⵉⵏ.
+Ta-da! Still cookin'!	Ta-da! ⴰⵔ ⵏⵙⵙⵏⵡⵡ ⴰⵔ ⵖⵉⵍⴰ!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	ⵓⴳⴰⵔ ⵏ ⵓⵅⵅⴰⵏ: ⵓⵎⵓⵖ, ⴰⵏⴰⴳⵔⴰⵡ, ⵜⴰⴽⴰⵔⴹⴰ SAFETY: PANIC. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵉⵃⴱⵙ, ⴰⵎ ⵎⴰⵎⴽ ⵉⵏⵏⴰ ⵓⵙⴱⴰⴷⵓ ⵏ panic.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC ⴷ ⵜⴰⵇⴼⴰⵍⵜ ⵜⴰⵣⴳⴳⴰⵖⵜ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ. ⵙⵎⵔⵙ ⵜⵜ ⵉⵖ ⵓⵔ ⵉⵇⵇⴰⴷ BLACK. ⴷⵖⵉ ⵙⵓⵏⴼⵓ.
+GET IT BACK	ⵙⵖⵓⵍ ⵜ
+Close MENU, select the souffle, and TAKE it. The show is back on.	ⵇⵇⵏ ⵓⵎⵓⵖ, ⵙⵜⵉ soufflé, TAKE ⵜ. ⴰⵙⴽⴰⵏ ⴷ ⵉⵖⵓⵍ.
+After a panic, the show is still there. Pick up where you meant to be.	ⴷⴼⴼⵉⵔ ⵏ panic, ⴰⵙⴽⴰⵏ ⴰⵔ ⵖⵉⵏ. ⴽⵎⵎⵍ ⵣⴳ ⵎⴰⵏⵉⵖ ⵜⵔⵉⵜ.
+Voila! De souffle, he is risen!	Voilà! soufflé ⵉⴽⴽⴰ!
+BON APPETIT	ⴱⵙⵙⴰⵃⵜ
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK ⵉ ⵓⴼⴼⴰⵔ, PANIC ⵉ ⵓⵃⴱⴰⵙ, TAKE ⵉ ⵜⵓⵖⴰⵍⵉⵏ. ⴰⴷ ⵜⴼⴼⵖⵜ ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵏⵡⴰⵍ, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	ⴰⵙⴱⴰⴷⵓ ⵏ panic ⴰⵔ ⵉⵙⵜⵉ ⵎⴰ ⴰⴷ ⵉⵙⴽⵔ PANIC: fade out, ⴰⴳⵣⴰⵎ, ⵏⵖ output ⴽⴰ.
+Bork bork bork! Goodnight!	Bork bork bork! ⵉⴹ ⵉⴼⵓⵍⴽⵉⵏ!
+Look one	ⵜⴰⵎⵥⵕⵉ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ
+Look two	ⵜⴰⵎⵥⵕⵉ ⵜⵉⵙ ⵙⵏⴰⵜ
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Presets, skapi. ⵢⴰⵜ ⵜⵎⵥⵕⵉ ⴽⵓⵍⵍⵓ, ⵉⵜⵜⵓⵙⵎⴽⵜⴰⵏ, ⴰⵔ ⴷ ⵜⵓⵖⵓⵍ ⵙ ⵢⴰⵜ ⵜⵇⴼⴰⵍⵜ. ⵙⵉⵜ ⴼ START.
+Like the patch memory on a synth: store, then recall.	ⴰⵎ ⵜⵎⴽⵜⵉⵜ ⵏ patch ⴼ synth: ⵃⴹⵓ ⵜ, ⴷⵖⵉ ⵖⵔ ⴰⵙ.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	ⵙⵉⵜ ⴼ DASH: ⵜⵉⵇⴼⴰⵍⵉⵏ ⵏⵏⴽ, ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D ⴰⵔ ⵉⴷⴷⵓ ⵓⵍⴰ ⵏⵜⵜⴰ. ⵉⵣⵔⴱ ⴱⴰⵀⵔⴰ. ⴷ ⴰⵎⵙⴷⵓⵔ ⴱⴰⵀⵔⴰ.
+A PRESET BUTTON	ⵜⴰⵇⴼⴰⵍⵜ ⵏ PRESET
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	ⵙⵉⵜ +, ⴷⵖⵉ 'preset - a new preset from what is on now'. ⵜⴰⵇⴼⴰⵍⵜ ⴰⴷ ⵜⵙⵎⴽⵜⵓ ⵜⴰⵎⵥⵕⵉ ⴰⴷ.
+Store. Like saving the patch before the drummer leans on the synth.	ⵃⴹⵓ ⵜⵜ. ⴰⵎ ⵓⵃⴹⵓ ⵏ patch ⵣⴳ ⴰⴷ ⵢⴰⵡⵉ ⵓⴳⵏⵣⴰⵣ ⵙ ⵉⵅⴼ ⵏⵏⵙ ⴼ synth.
+CHANGE EVERYTHING	ⴱⴷⴷⵍ ⴽⵔⴰⵢⴳⴰⵜⵜ
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	ⵇⵇⵏ DASH (Esc), ⴷⵖⵉ ⵙⵜⵉ ⵜⴰⵎⵥⵕⵉ ⵜⵉⵙ ⵙⵏⴰⵜ, TAKE ⵜⵜ. ⵢⴰⵜ ⵜⵎⵥⵕⵉ ⵢⴰⴹⵏⵉⵏ.
+Change it all. Don't worry. It remembers.	ⴱⴷⴷⵍ ⴽⵔⴰⵢⴳⴰⵜⵜ. ⵓⵔ ⵜⵜⴰⴳⴳⴰⴷ. ⴰⵔ ⵜⵙⵎⴽⵜⴰⵢ.
+ONE PRESS	ⵢⴰⵏ ⵓⵙⵉⵜ
+Open the DASH and press your preset button. The first look comes back.	ⵕⵥⵎ DASH, ⵙⵉⵜ ⴼ ⵜⴰⵇⴼⴰⵍⵜ ⵏ preset ⵏⵏⴽ. ⵜⴰⵎⵥⵕⵉ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⴷ ⵜⵓⵖⵓⵍ.
+Recall. The patch memory, returning. Beautiful.	ⵉⵜⵜⵓⵖⵔⴰ. ⵜⴰⵎⴽⵜⵉⵜ ⵏ patch ⴷ ⵜⵓⵖⵓⵍ. ⵉⴼⵓⵍⴽⵉ.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	ⵢⴰⵜ ⵜⵎⵥⵕⵉ, ⵉⵜⵜⵓⵃⴹⴰⵏ, ⵉⵜⵜⵓⵙⵎⴽⵜⴰⵏ. preset ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⵃⴹⵓ cues, ⴰⴷⴳⴳ, ⵉⵙⵏⴼⴰⵍⵏ, ⵉⵙⵡⵉⵔⵏ ⴷ ⵓⴱⵔⵉⴷ; ⵓⵎⵓⵖ ⵏ ⵜⵇⴼⴰⵍⵜ ⵏⵏⵙ ⴰⵔ ⵉⵙⵜⵉ ⵎⴰⴷ.
+And a DASH button can run any command at all. Any. Even the exciting ones.	ⵜⴰⵇⴼⴰⵍⵜ ⵏ DASH ⵜⵥⴹⴰⵔ ⴰⴷ ⵜⵙⴷⴷⵓ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵍⴰⴷⵏⴰ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵜ. ⵓⵍⴰ ⵜⵉⴷ ⵉⵜⵜⵡⴰⵀⴰⵎⵏ.
+Opening titles	ⵉⵣⵡⵍ ⵏ ⵜⵉⵣⵡⵓⵔⵉ
+The planet	ⴰⵎⵜⵓⵏ
+The battle	ⴰⵎⵏⵏⵓⵖ
+THE TRAILER	TRAILER
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	trailer ⵏ opera ⵏ ⵜⴰⵍⵍⵓⵏⵜ, skapi. ⵢⴰⵏ ⵓⵎⵙⵍⴰⵢ ⵙ ⵜⵎⵢⵓⵔⵜ ⵉⵥⵥⴰⵢⵏ ⴱⴰⵀⵔⴰ ⴷ ⵜⵉⴽⵜⵉⵡⵉⵏ ⴱⴰⵀⵔⴰ ⴼ transitions. ⵙⵉⵜ ⴼ START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	transition ⴷ ⵎⴰⵎⴽ ⵉⵜⵜⵓⵖⴰⵍ ⵢⴰⵏ cue ⴷ ⵢⴰⴹⵏⵉⵏ. ⵍⵍⴰⵏⵜ ⴱⴰⵀⵔⴰ ⵓⴳⴰⵔ ⵏ crossfade.
+In a galaxy of content... one operator... must choose a transition.	ⵖ ⵢⴰⵜ ⵜⴰⵎⵏⴹⴰⵡⵜ ⵏ ⵓⴳⴱⵓⵔ... ⵢⴰⵏ ⵓⵎⵙⴷⵔⴰⵢ... ⵉⵅⵚⵚⴰ ⴰⴷ ⵉⵙⵜⵉ transition.
+A STYLE	ⵜⴰⵖⴰⵔⴰ
+'The planet' is selected. In the inspector, its transition style: choose iris.	'ⴰⵎⵜⵓⵏ' ⵉⵜⵜⵓⵙⵜⵉⵏ. ⵖ inspector, ⵜⴰⵖⴰⵔⴰ ⵏ transition ⵏⵏⵙ: ⵙⵜⵉ iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Push, wipe, iris, dip to white. ⵓⵍⴰ ⴷ portal. ⵓⵔⵉⵖ ⴰⵣⴳⵏ ⵏⵙⵏⵜ. ⴰⵙⵙ ⵏ ⵙⵉⵏ.
+The planet deserves... a dramatic entrance.	ⴰⵎⵜⵓⵏ ⵉⴽⵍⴰⵍ... ⴰⴽⵛⵛⵎ ⴰⵎⵇⵇⵔⴰⵏ.
+A TIME	ⴰⴽⵓⴷ
+Give it a time: + on transition until it says a second or more.	ⴼⴽ ⴰⵙ ⴰⴽⵓⴷ: ⵙⵉⵜ + ⴼ transition ⴰⵔ ⵉⵏⵏⴰ ⵜⴰⵙⵉⵏⵜ ⵏⵖ ⵓⴳⴰⵔ.
+No time, no transition. A style needs a duration to do anything at all.	ⵓⵔ ⵉⵍⵍⵉ ⵡⴰⴽⵓⴷ, ⵓⵔ ⵉⵍⵍⵉ transition. ⵜⴰⵖⴰⵔⴰ ⵉⵅⵚⵚⴰ ⴰⵙ ⴰⴽⵓⴷ ⴱⴰⵛ ⴰⴷ ⵜⵙⴽⵔ ⴽⵔⴰ.
+ROLL IT	ⵙⵙⴷⴷⵓ ⵜ
+TAKE the planet. Watch it arrive.	TAKE ⴰⵎⵜⵓⵏ. ⵥⵕ ⵜ ⵎⴰⵎⴽ ⴷ ⵉⵜⵜⴰⵙⴰ.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	transition ⴷ ⵡⵉⵏ ⵏ cue ⵍⵍⵉ ⴷ ⵉⵜⵜⴰⵙⵏ. ⴽⵔⴰⵢⴳⴰⵜⵜ cue ⴰⵔ ⵉⵙⵜⵉ ⴰⴽⵛⵛⵎ ⵏⵏⵙ.
+Autobots... roll the transition.	Autobots... ⵙⴷⴷⵓⵜ transition.
+THE BATTLE	ⴰⵎⵏⵏⵓⵖ
+Now 'The battle': choose shatter, give it a time, and TAKE it.	ⵖⵉⵍⴰ 'ⴰⵎⵏⵏⵓⵖ': ⵙⵜⵉ shatter, ⴼⴽ ⴰⵙ ⴰⴽⵓⴷ, TAKE ⵜ.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Shatter ⴰⵔ ⵉⵍⵓⵃ ⵜⴰⵡⵍⴰⴼⵜ ⵜⴰⵇⴷⵉⵎⵜ ⴰⵎ ⵓⵊⴰⵊ. ⴰⴷ ⵓⵔ ⵜ ⵜⵙⵎⵔⵙⵎ ⵖ ⵜⵎⵖⵔⴰ.
+Transform... and shatter out!	ⴱⴷⴷⵍ... ⴷ ⵔⵥ!
+IN CINEMAS NOW	ⵖⵉⵍⴰ ⵖ ⵉⵙⵉⵏⵉⵎⴰⵜⵏ
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	ⵜⴰⵖⴰⵔⴰ, ⴰⴽⵓⴷ, ⴷ ⵙⵏⴰⵜ ⵜⵉⴽⵛⵛⵎⵉⵏ ⵉⵎⵇⵇⵓⵔⵏⵉⵏ ⴱⴰⵀⵔⴰ. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	playlist ⵓⵍⴰ ⵏⵜⵜⴰ ⵖⵓⵔⵙ ⵜⴰⵖⴰⵔⴰ ⵜⴰⵎⵙⵍⴰⵢⵜ, ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ cue ⵓⵔ ⵉⵙⵜⵉ ⵜⵉⵏ ⵏⵏⵙ.
+Coming soon... to a desk near you.	ⵓⵔ ⵉⴳⵉ ⴰⵟⵟⴰⵙ... ⴼ ⵢⴰⵜ ⵟⵟⴰⴱⵍⴰ ⵉⵎⵇⵇⵓⵔⴱⵏ ⵖⵓⵔⴽ.
+The beat	ⴰⵔⵉⵟⵎ
+THE ROBOT DJS	DJs ⵏ ⵉⵔⵓⴱⵓⵜⵏ
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	ⵙⵉⵏ DJs ⵏ ⵉⵔⵓⴱⵓⵜⵏ, skapi. ⵓⵔ ⴰⵔ ⵙⴰⵡⴰⵍⵏ. ⵜⵉⵇⴱⴱⴰⵄⵉⵏ ⵏⵙⵏ ⴰⵔ ⵙⴰⵡⴰⵍⵏⵜ. ⵙⵉⵜ ⴼ START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	ⴽⵔⴰⵢⴳⴰⵜⵜ cue ⵖⵓⵔⵙ ⴰⵙⵎⵎⵔⵙ ⵏⵏⵙ ⵏ ⵉⵙⵏⴼⴰⵍⵏ ⵏ ⵉⵎⵙⵍⵉ, ⴽⵔⴰ ⴳⵉⵙⵏ ⴰⵔ ⵔⵥⵥⵏ ⵉⵎⵙⵍⵉ ⵙ ⵉⵅⴼ ⵏⵙⵏ.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> ⴰⵣⵓⵍ. ⵏⵓⵙⴰ ⴷ ⴰⴷ ⵏⵙⴳⴷ MIX ⵏⵏⴽ.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	ⴰⵔⵉⵟⵎ ⵉⵜⵜⵓⵙⵜⵉⵏ. ⵖ AUDIO EFFECTS, + ⴰⴷ ⴷ ⵉⵔⵏⵓ ⵢⴰⵏ. ⵙⵉⵔⵎ Delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Delay, reverb, filter, compressor. Amount ⴷⵉⵎⴰ ⵉⵏⵏⴰ 'ⵉⴷⵔⵓⵙ ⵣⴳ ⴰⵢⴰ'.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> ⵢⴰⵜ ⵜⵉⴽⴽⵍ ⵢⴰⴹⵏⵉⵏ. ⵙ ⵓⵙⵙⵓ. ⴰⵙⵙⵓ. ⴰⵙⵙⵓ.
+A BEND	BEND
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	ⵔⵏⵓ ⵡⵉⵙ ⵙⵉⵏ: bend, ⴰⵎ crush. ⴰⵔ ⵉⵀⵍⴽ ⵉⵎⵙⵍⵉ ⴰⵎ ⵓⴼⴰⵢⵍⵓ ⵉⵔⵥⴰⵏ.
+The bends are my favourite. Like a tape left in the sun. On purpose.	bends ⴷ ⵡⵉⵏ ⵃⵎⵎⵍⵖ ⴱⴰⵀⵔⴰ. ⴰⵎ ⵜⴽⴰⵙⵉⵟ ⵍⵍⵉ ⵉⵇⵇⵉⵎⵏ ⵖ ⵜⴰⴼⵓⴽⵜ. ⵙ ⵉⵅⴼ ⵉⵏⵓ.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> ⵉⵇⵇⵓⵔ. ⵉⴼⵓⵍⴽⵉ. ⵉⵇⵔⵇⴱ. ⵉⵄⵍⴰ.
+THE PATCH	PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	ⵓⵎⵓⵖ, ⴷⵖⵉ ⵉⵎⵙⵍⵉ: ⵎⴰⵏⵉⵖ ⵉⴷⴷⵓ ⵉⵎⵙⵍⵉ ⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ playlist, ⴷ patch ⵉ outputs ⵙ ⵉⵙⵎ.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	ⵉⵎⵙⵍⴰ, ⵉⵎⵙⵎⵓⴷⴰⵍ, in-ear ⵉ ⵓⴳⵏⵣⴰⵣ. Patch ⴰⵔ ⵢⴰⵣⵏ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⵡⵉⵏ ⵏⵏⵙ.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> ⵖ ⵜⵓⵣⵣⵢⴰ ⵏ MIX. ⵖ ⵜⵓⵣⵣⵢⴰ ⵏ MIX. ⵖ ⵜⵓⵣⵣⵢⴰ ⵏ MIX.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	ⴰⵙⵏⴼⵍ, bend ⴷ patch. ⵉⵔⵓⴱⵓⵜⵏ ⵇⴱⵍⵏ, skapi. ⴰⴷ ⵉⴳⴳⴰⵏ. ⵓⴷⵎⴰⵡⵏ ⵏⵙⵏ ⴷ ⵜⵉⵇⴱⴱⴰⵄⵉⵏ.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵏⴼⵍ ⵏ ⵉⵎⵙⵍⵉ ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⴹⴼⵔ ~, ⵓⵍⴰ Motion. ⵀⵣⵣ ⴰⴼⵓⵙ ⵉ delay. ⴷ ⵜⴰⵎⴰⴳⵏⵓⵜ.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> ⵜⴰⵏⵎⵎⵉⵔⵜ. ⵉⴹ ⵉⴼⵓⵍⴽⵉⵏ. ⵏⴽⴽⵏⵉ ⴷ ⵉⵔⵓⴱⵓⵜⵏ.
+The glow on the horizon (evidence #2)	ⵜⵉⴼⴰⵡⵜ ⴼ ⵡⴰⵙⵏⵏⴰⴼ (ⴰⵏⴰⴳⵉ #2)
+EVIDENCE #2	ⴰⵏⴰⴳⵉ #2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	ⵍⴱⵉⵔⵓ ⴷⴰⴳⵉ, skapi. ⵢⴰⵜ ⵜⵉⴼⴰⵡⵜ ⴼ ⵡⴰⵙⵏⵏⴰⴼ, ⴷ ⵙⵉⵏ ⵉⵎⵄⵙⵙⴰⵙⵏ ⵓⵔ ⵉⵎⵙⴰⵙⴰⵏ ⴼⵍⵍⴰⵙ. ⵙⵉⵜ ⴼ START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Scopes ⴰⵔ ⵜⵜⴽⵜⴰⵍⵏ ⵜⴰⵡⵍⴰⴼⵜ: ⵜⵉⴼⴰⵡⵜ, ⵉⵏⵉ, ⴰⵙⵡⵉⵔ. ⵓⵟⵟⵓⵏⵏ, ⵓⵔ ⵉⴳⵉ ⵜⴰⵎⵥⵕⵉ.
+It's them, Brandt. It's a craft. Look how it glows.	ⴷ ⵏⵉⵜⵏⵉ, Brandt. ⴷ ⴰⵖⵔⵔⴰⴱⵓ. ⵥⵕ ⵎⴰⵎⴽ ⴰⵔ ⵉⵜⵜⴱⵔⵉⵇ.
+THE REAL SIGNAL	ⵜⴰⵎⴰⵜⴰⵔⵜ ⵏ ⵜⵉⴷⵜ
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	scopes ⴰⵔ ⵖⵕⵕⴰⵏ ⴽⴰ ⵎⴰ ⵉⴼⴼⵖⵏ ⵙ ⵜⵉⴷⵜ, ⵓⵔ ⵊⵊⵓ preview. ⵕⵥⵎ output: ⵓⵎⵓⵖ, Video Outputs, OUTPUT OFF.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	ⴰⴽⵜⴰⵍ ⵏ preview ⵉⵎⵥⵥⵉⵏ ⴰⵎ ⵓⴽⵜⴰⵍ ⵏ photocopie. ⵏⴽⴽⵏⵉ ⴰⵔ ⵏⵜⵜⴽⵜⴰⵍ ⴰⵥⴰⵔ.
+Chain of evidence, Hollis. The real signal or nothing.	ⴰⵙⵎⵎⵔⵙ ⵏ ⵉⵏⴰⴳⵉⵢⵏ, Hollis. ⵜⴰⵎⴰⵜⴰⵔⵜ ⵏ ⵜⵉⴷⵜ ⵏⵖ ⵡⴰⵍⵓ.
+THE SCOPES	SCOPE
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	ⵇⵇⵏ ⵓⵎⵓⵖ. ⵖ ⵓⴼⵍⵍⴰ ⵏ ⵓⵀⵉⵍ, ⵜⴰⵇⴼⴰⵍⵜ PROGRAM: ⵙⵉⵜ ⴰⵔ ⵜⵉⵏⵏⴰ SCOPES ⵏⵖ BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH ⴰⵔ ⵉⵙⴽⴰⵏ ⵜⴰⵡⵍⴰⴼⵜ ⴷ scopes ⵏⵏⵙ ⵖ ⵜⴰⵎⴰ ⵏ ⵉⵢⵢⴰⵏ ⵢⴰⴹⵏⵉⵏ. ⴱⴰⵀⵔⴰ ⵉⴼⵓⵍⴽⵉ.
+Let the scopes decide, Hollis.	ⵊⵊ scopes ⴰⴷ ⴳⵏ ⵜⴰⴳⵉⵔⴰ, Hollis.
+THE WAVEFORM	WAVEFORM
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	ⵙⵉⵜ ⴼ waveform ⴱⴰⵛ ⴰⴷ ⵉⵎⵇⵇⵓⵔ. ⵎⴰ ⵉⵜⵜⴱⵔⵉⵇⵏ ⵖ ⵓⴼⵍⵍⴰ, ⵎⴰ ⵉⴹⵍⵎⵏ ⵖ ⵡⴰⴷⴷⴰⵢ, ⵣⴳ ⵓⵥⵍⵎⴰⴹ ⵙ ⵓⴼⴰⵙⵉ ⴰⵎ ⵖ ⵜⴰⵡⵍⴰⴼⵜ.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	ⵜⵉⴼⴰⵡⵜ ⴷ ⵜⵉⵇⵇⵉⵜ ⴰⵏ ⵉⵎⵇⵇⵓⵔⴱⵏ ⵉ ⵓⴼⵍⵍⴰ. ⵜⵙⴹ ⴱⴰⵀⵔⴰ. ⵜⵙⴹ ⵓⵔ ⵉⴳⵉ ⴰⴱⵔⵔⴰⵏⵉ.
+Look at the peak. Nothing a streetlight couldn't do.	ⵥⵕ ⵜⵉⵇⵇⵉⵜ. ⵡⴰⵍⵓ ⵎⴰ ⵓⵔ ⵉⵥⴹⴰⵔ ⵍⵎⵚⴱⴰⵃ ⵏ ⵓⴱⵔⵉⴷ ⴰⴷ ⵜ ⵉⵙⴽⵔ.
+THE VECTORSCOPE	VECTORSCOPE
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	ⵙⵉⵜ ⴷⴰⴳⵉ ⴱⴰⵛ ⴰⴷ ⵜⵓⵖⵓⵍⵜ, ⴷⵖⵉ ⵙⵉⵜ ⴼ vectorscope: ⵉⵏⵉ ⵖ ⵜⵓⵣⵣⵢⴰ ⵏ ⵜⴰⵡⵉⵏⵙⵜ. ⵜⴰⵡⴰⵏⵜ ⴰⵔ ⵜⵣⵣⵍ ⵙ ⵉⵔⵉ.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Magenta, ⵉⴱⵄⴷ ⵙ ⵉⵔⵉ. ⵉⵏⵉ ⵉⵊⵀⴷⵏ. ⵉⵊⵀⴷ ⵓⵔ ⵉⴳⵉ ⴰⵃⵔⴰⵎ. ⴰⵔ ⵖⵉⵍⴰ.
+It's off the chart, Brandt! Literally off the chart!	ⵉⴼⴼⵖ ⵉ ⵜⴽⴰⵔⴹⴰ, Brandt! ⵙ ⵜⵉⴷⵜ!
+FALSE COLOUR	ⵉⵏⵉ ⵏ ⵜⴽⵔⴽⴰⵙ
+And false colour: red is clipped, yellow nearly. Is the glow red?	ⴷ ⵉⵏⵉ ⵏ ⵜⴽⵔⴽⴰⵙ: ⴰⵣⴳⴳⴰⵖ ⵉⵜⵜⵓⴳⵣⴰⵎ, ⴰⵡⵔⴰⵖ ⵉⵎⵇⵇⵓⵔⴱ. ⵜⵉⴼⴰⵡⵜ ⵜⵣⴳⴳⴰⵖ?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	ⵉⵜⵜⵓⴳⵣⴰⵎ ⵉⵏⵏⴰ ⵜⵉⴼⴰⵡⵜ ⵍⵍⵉ ⵓⴳⴰⵔ ⵏ ⵎⴰ ⵜⵥⴹⴰⵔ ⴰⴷ ⵜⵜ ⵜⴹⴹⴼ ⵜⵎⴰⵜⴰⵔⵜ, ⴷ ⴽⵔⴰ ⴼ ⵓⴼⵍⵍⴰⵙ ⵉⴷⴷⵓ. ⵜⵉⵍⵇⵇⴰⵢⵉⵏ ⴷⴷⴰⵏⵜ.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	ⴰⵣⴳⴳⴰⵖ. ⵉⵜⵜⵓⴳⵣⴰⵎ. ⵓⵔ ⵉⴳⵉ ⴰⴱⵔⵔⴰⵏⵉ, Hollis. ⵜⵙⴹ ⴱⴰⵀⵔⴰ ⴽⴰ. ⴰⴼⴰⵢⵍⵓ ⵉⵇⵇⵏ.
+THE TRUTH	ⵜⵉⴷⵜ
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Waveform, vectorscope, ⵉⵏⵉ ⵏ ⵜⴽⵔⴽⴰⵙ. scopes ⴳⵉⵏ ⵜⴰⴳⵉⵔⴰ, skapi. ⵓⵔ ⵉⴳⵉ ⵉⵎⵄⵙⵙⴰⵙⵏ.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE ⴰⵔ ⵉⵖⵕⵕⴰ ⴽⵔⴰⵢⴳⴰⵜⵜ output, matrix ⵉⵥⴹⴰⵔ ⴰⴷ ⵉⴳⵉ 709 ⵏⵖ 2020. ⵉ ⵡⵉⵍⵍⵉ ⵉⵔⴰⵏ ⴰⴷ ⵙⵙⵏⵏ.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	ⵜⵙⴹ ⴱⴰⵀⵔⴰ ⵉ ⵍⵎⵚⴱⴰⵃ ⵏ ⵓⴱⵔⵉⴷ, Brandt. ⵜⵙⴹ ⴱⴰⵀⵔⴰ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ. ...ⵔⵉⵖ ⴰⴷ ⵓⵎⵏⵖ.
+OUT OF THE BUILDING	ⴱⵕⵕⴰ ⵏ ⵜⴳⵎⵎⵉ
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	ⵜⵉⵡⵍⴰⴼⵉⵏ ⵍⵍⵉ ⵉⴼⴼⵖⵏ ⵙ ⵓⴼⴳⴳⴰⴳ ⵏⵖ ⵙ ⵓⵥⵟⵟⴰ, skapi, ⵓⵔ ⵉⴳⵉ ⴰⵙⴼⴰⵢⵍⵓ ⴽⴰ ⴼ ⵓⴳⴷⵉⵍ. ⵙⵉⵜ ⴼ START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI ⴼ ⵓⵥⵟⵟⴰ, SDI ⵣⴳ ⵜⴽⴰⵔⴹⴰ DeckLink, ST 2110 ⵉ ⵜⵎⵣⵔⵉⴳⵉⵏ.
+THE DEVICES PAGE	ⴰⵙⴱⵜⴰⵔ ⵏ ⵉⴱⵏⴽⴰⵏ
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	ⵓⵎⵓⵖ, Video Outputs, ⴷⵖⵉ ⵉⴱⵏⴽⴰⵏ: ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴱⵔⵉⴷ ⵍⵍⵉ ⵉⵥⴹⴰⵔ output ⴰⴷ ⵉⴼⴼⵓⵖ ⵣⴳ ⵓⵙⵍⴽⵉⵎ ⴰⴷ.
+Each one says whether this machine can do it, and what it needs if not.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴰⵔ ⵉⵏⵏⴰ ⵉⵙ ⵜⵥⴹⴰⵔ ⵜⵎⴰⵛⵉⵏⵜ ⴰⴷ, ⵎⴰ ⵓⵔ ⵜⵥⴹⴰⵔ, ⵎⴰ ⵉⵅⵚⵚⴰⵏ.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	ⵎⴰ ⵉⵍⵍⴰ NDI ⴼ ⵓⵙⵍⴽⵉⵎ ⴰⴷ, ⵕⵥⵎ NDI SENDING: ⵜⴰⵡⵍⴰⴼⵜ ⴼ ⵓⵥⵟⵟⴰ. ⵎⴰ ⵓⵔ ⵉⵍⵍⵉ, SHOW ME ⵉⴽⵎⵎⵍ.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI ⴰⵔ ⵢⴰⴼ ⵉⵅⴼ ⵏⵏⵙ ⴼ ⵓⵥⵟⵟⴰ. ⵓⵔ ⵉⵍⵍⵉ ⵓⴼⴳⴳⴰⴳ, ⴽⴰ switch ⵉⴼⵓⵍⴽⵉⵏ ⴷ ⵚⵚⴱⵔ.
+OUT THERE	BṚṚA
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	ⴰⵙⴱⵜⴰⵔ ⵏ output ⵖⵓⵔⵙ ⵡⵉⵢⵢⴰⴹ: SDI ⵏ ⵜⴽⴰⵔⴹⴰ DeckLink, ST 2110 ⵙ NMOS, Spout ⴷ Syphon.
+Every one is just an output. The show does not know or care how it leaves.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴷ output ⴽⴰ. ⴰⵙⴽⴰⵏ ⵓⵔ ⵉⵙⵙⵉⵏ, ⵓⵔ ⵉⴰⵙ ⵉⴽⴽⴰⵜ ⵎⴰⵎⴽ ⵉⴼⴼⵓⵖ.
+Nebula ahead	nebula ⵖ ⵣⵣⴰⵜ
+Engine room	ⵜⴰⵅⵅⴰⵎⵜ ⵏ ⵓⵎⵙⴷⴷⵓ
+Deck 3: something moving	ⴰⵙⵓⴷⴷⵓⵙ 3: ⵉⵍⵍⴰ ⴽⵔⴰ ⵉⵜⵜⵎⵓⵙⵙⵓⵏ
+THE BRIDGE	ⵜⵉⵇⵏⵟⵔⵜ
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	ⵜⵉⵇⵏⵟⵔⵜ ⵏ ⵓⵖⵔⵔⴰⴱⵓ ⵏ ⵜⴰⵍⵍⵓⵏⵜ Cathode, skapi. ⴽⴽⵓⵥ feeds, ⴰⴳⴷⵉⵍ ⴰⴳⵊⴷⴰⵏ, ⵓⴼⴼⵉⵔ. ⵙⵉⵜ ⴼ START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Multiview ⴰⵔ ⵉⵙⴽⴰⵏ playlists ⴰⴽⴽ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ. ⴰⵎ ⵓⵖⵔⴰⴱ ⵏ oscilloscopes, ⵎⴰⵛⴰ ⵖ ⵜⴰⵍⵍⵓⵏⵜ.
+Frequencies open, Captain. All of them. That's the problem.	ⵜⵉⴼⵔⵉⴽⴰⵏⵙⵉⵢⵉⵏ ⵕⵥⵎⵏⵜ, ⴽⴰⴱⵜⴰⵏ. ⴰⴽⴽ. ⴰⴷ ⵖ ⴰⴷ ⵉⴳⴰ ⵓⴳⵓⵔ.
+MULTI, above the monitor: every playlist in its own window.	MULTI, ⵖ ⵓⴼⵍⵍⴰ ⵏ ⵓⵀⵉⵍ: ⴽⵔⴰⵢⴳⴰⵜⵜ playlist ⵖ ⵓⵙⴼⴰⵢⵍⵓ ⵏⵏⵙ.
+One window per playlist, the programme first.	ⴰⵙⴼⴰⵢⵍⵓ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ playlist, ⴰⵀⵉⵍ ⴰⵎⵣⵡⴰⵔⵓ.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! ⴽⴽⵓⵥ feeds. ⵖ ⵢⴰⵏ ⴳⵉⵙⵏ ⵉⵍⵍⴰ ⵓⵡⴰⵖⵣⵏ.
+WHAT'S NEXT	ⵎⴰ ⴷ ⵉⵜⵜⴰⵙⵏ
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	ⵔⵏⵓ ⴰⵙⴼⴰⵢⵍⵓ (+), ⴷⵖⵉ ⵓⵎⵓⵖ ⵏⵏⵙ ...: ⵙⴽⵏ NEXT. ⵎⴰ ⴰⴷ ⵉⴼⴼⵓⵖ ⵉⵖ ⵜⵙⵙⵉⵜⵜ TAKE.
+Every window has a ... button. It chooses what that window shows.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⴼⴰⵢⵍⵓ ⵖⵓⵔⵙ ⵜⴰⵇⴼⴰⵍⵜ .... ⴰⵔ ⵜⵙⵜⵉ ⵎⴰ ⴰⴷ ⵉⵙⴽⵏ ⵓⵙⴼⴰⵢⵍⵓ ⴰⵏ.
+I need to see who's calling before they reach the main viewer.	ⵉⵅⵚⵚⴰ ⴰⴷ ⵥⵕⵖ ⵎⴰ ⴷ ⵉⵜⵜⵖⵔⵏ ⵣⴳ ⴰⴷ ⵉⵍⵉⵡⴹ ⴰⴳⴷⵉⵍ ⴰⴳⵊⴷⴰⵏ.
+A CLOCK	ⵜⴰⵙⵔⴰⴳⵜ
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	ⴷ ⵓⵙⴼⴰⵢⵍⵓ ⵢⴰⴹⵏⵉⵏ, ⴰⵔ ⵉⵙⴽⴰⵏ ⵜⴰⵙⵔⴰⴳⵜ. ⵉⵎⵙⴷⵔⴰⵢⵏ ⵍⵍⵉ ⵉⵜⵜⵎⵥⵕⴰⵏ ⵜⴰⵙⵔⴰⴳⵜ ⵓⵔ ⵊⵊⵓ ⵜⵜⵄⵟⵟⴰⵍⵍⵏ. ⴱⴰⵀⵔⴰ ⵏ ⵜⵉⴽⴽⴰⵍ.
+Time of day, big. Stardates are just very long timecode.	ⴰⴽⵓⴷ ⵏ ⵡⴰⵙⵙ, ⵉⵎⵇⵇⵓⵔ. Stardate ⴷ timecode ⴽⴰ ⵉⵖⵣⵣⵉⴼⵏ ⴱⴰⵀⵔⴰ.
+The monster only shows up at midnight. We're going to need a clock.	ⴰⵡⴰⵖⵣⵏ ⴰⵔ ⵉⵜⵜⴱⴰⵢⵏ ⴽⴰ ⵖ ⵜⵏⴰⵚⴼⵜ ⵏ ⵉⴹ. ⵉⵅⵚⵚⴰ ⵢⴰⵜ ⵜⵙⵔⴰⴳⵜ.
+ONE BIG ONE	ⵢⴰⵏ ⴰⵎⵇⵇⵔⴰⵏ
+Any window's ... menu, then a layout: one big, the rest small.	ⵓⵎⵓⵖ ... ⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⴼⴰⵢⵍⵓ, ⴷⵖⵉ layout: ⵢⴰⵏ ⴰⵎⵇⵇⵔⴰⵏ, ⵡⵉⵢⵢⴰⴹ ⵉⵎⵥⵥⵉⵢⵏ.
+The big window is window one. Usually the programme. Usually.	ⴰⵙⴼⴰⵢⵍⵓ ⴰⵎⵇⵇⵔⴰⵏ ⴷ ⴰⵙⴼⴰⵢⵍⵓ ⴰⵎⵣⵡⴰⵔⵓ. ⵙ ⵓⵎⴰⵜⴰ ⴰⵀⵉⵍ. ⵙ ⵓⵎⴰⵜⴰ.
+Main viewer big. The captain likes it big.	ⴰⴳⴷⵉⵍ ⴰⴳⵊⴷⴰⵏ ⵉⵎⵇⵇⵓⵔ. ⴽⴰⴱⵜⴰⵏ ⵉⵃⵎⵎⵍ ⵎⴰ ⵉⵎⵇⵇⵓⵔⵏ.
+ON SCREEN	ⴼ ⵓⴳⴷⵉⵍ
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	ⵙⵜⵉ ⴰⵙⵓⴷⴷⵓⵙ 3 ⵖ playlist 3, TAKE ⵜ. ⵥⵕ ⴰⵙⴼⴰⵢⵍⵓ ⵏⵏⵙ.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	ⴰⵎⵏⴹⴰⵡ ⴰⵣⴳⴳⴰⵖ ⴷ TALLY: ⴰⵙⴼⴰⵢⵍⵓ ⵍⵍⵉ ⵉⵍⵍⴰⵏ ⵖ ⵜⵓⴼⴼⵖⴰ. ⴼ ⵓⴳⴷⵉⵍ, ⴰⵎ ⵎⴰⵎⴽ ⵜⵜⵉⵏⵉⵏ ⵖ ⵉⵖⵔⵔⴰⴱⵓⵢⵏ.
+There! Feed three! Put it on screen!	ⵖⵉⵏ! feed ⵡⵉⵙ ⴽⵔⴰⴹ! ⵙⵔⵙ ⵜ ⴼ ⵓⴳⴷⵉⵍ!
+THAT'S A WRAP	ⵉⴽⵎⵎⵍ
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	ⵉⵙⴼⵓⵢⵍⴰ, ⵓⵎⵓⵖ ..., NEXT, ⵜⴰⵙⵔⴰⴳⵜ, layout, tally. ⵓⴼⴼⵉⵔ ⵉⵜⵜⵓⴼⵙⵔ, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	ⴰⵙⴼⴰⵢⵍⵓ ⵉⵥⴹⴰⵔ ⵓⵍⴰ ⴰⴷ ⵉⵙⴽⵏ output, ⵙ warp ⴷ slices ⵏⵏⵙ. ⵉⵏⴼⵄ ⵉⵖ ⵉⵍⵍⴰ projector.
+And the monster was... the ship's cook, all along. Jinkys.	ⴷ ⵓⵡⴰⵖⵣⵏ... ⴷ ⴰⵎⵙⵙⵏⵡⵡ ⵏ ⵓⵖⵔⵔⴰⴱⵓ, ⵣⴳ ⵣⵉⴽ. Jinkys.
+there is no such lesson	ⵓⵔ ⵉⵍⵍⵉ ⵢⴰⵏ ⵓⵙⵍⵎⴷ ⴰⵎ ⴰⴷ
+finish or leave the lesson you are in first	ⴽⵎⵎⵍ ⴰⵙⵍⵎⴷ ⵍⵍⵉ ⵖ ⵜⵍⵍⵉⵜ ⵏⵖ ⴼⴼⵓⵖ ⴳⵉⵙ ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ
+leave Bug Swat first	ⴼⴼⵓⵖ ⵣⴳ Bug Swat ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ
+Psst. It's me, the desk. I'll be watching. Supportively.	Pst. ⵏⴽⴽⵉ ⴰⴷ, ⵟⵟⴰⴱⵍⴰ. ⴰⴷ ⵜⵜⵎⵥⵕⵖ. ⵙ ⵜⴰⵍⵍⴰⵍⵜ.
+Hi! I'm the one doing all of this, by the way.	ⴰⵣⵓⵍ! ⵙ ⵜⵉⴷⵜ, ⵏⴽⴽⵉ ⴰⴷ ⵉⵙⴽⴰⵔⵏ ⴽⵔⴰⵢⴳⴰⵜⵜ.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D ⴰⵔ ⵉⵕⵥⵥⵎ DASH. ⵏⵏⵉⵖ ⴽⴰ.
+Nearly there. I can feel it in my pixels.	ⵉⵎⵇⵇⵓⵔⴱ. ⴰⵔ ⵜ ⵜⵜⵃⵙⵙⴰⵖ ⵖ ⵉⴱⵉⴽⵙⵉⵍⵏ ⵉⵏⵓ.
+You're good at this. I can tell. I'm the one doing it.	ⴽⵢⵢⵉ ⵜⵃⵔⵛⵟ ⵖ ⴰⵢⴰ. ⵥⵕⵉⵖ ⵜ. ⵙ ⵜⵉⴷⵜ.
+Every click, I heard. Every single one.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵉⵜ, ⵙⴼⵍⵉⴷⵖ ⴰⵙ. ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ.
+The glowing one. I can see it from here. It's glowing for you.	ⵡⵉⵏ ⵉⵜⵜⴱⵔⵉⵇⵏ. ⵥⵕⵉⵖ ⵜ ⵣⴳ ⵖⵉⴷ. ⴰⵔ ⵉⵜⵜⴱⵔⵉⵇ ⵉ ⴽⵢⵢⵉ.
+lesson paused - MENU > LESSONS picks up where you left off	ⴰⵙⵍⵎⴷ ⵉⵃⴱⵙ - ⵓⵎⵓⵖ > LESSONS ⴰⴷ ⵉⴽⵎⵎⵍ ⵣⴳ ⵎⴰⵏⵉⵖ ⵜ ⵜⵊⵊⵉⵜ
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  ⵜⴰⵎⴰⵜⴰⵔⵜ: ⵎⴰ ⵣⴳ ⵜⵙⴽⵔ ⵜⴰⵡⵍⴰⴼⵜ, ⴷ ⵎⴰⵎⴽ ⵜⵜⵓⴽⴽⵏⴰ. ⵙⵜⵉ ⴰⵙⵍⵎⴷ.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  ⴰⵙⴷⴷⵓ ⵏ ⵓⵙⴽⴰⵏ, skapi. ⵉⴼⴰⵙⵙⵏ ⵉⵣⵔⴱⵏ, ⵓⴷⵎ ⵉⴼⵙⵙⵓⵙⵏ. ⵙⵜⵉ ⴰⵙⵍⵎⴷ.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	ⴰⵙⵍⵎⴷ  -  ⴰⵃⵔⵉⵛ ⵡⵉⵙ ⵙⵉⵏ  -  ⵎⴰ ⵜⴹⴼⵔⵜ?
+FOLLOW PROF. VIDEO	ⴹⴼⵔ PROF. VIDEO
+FOLLOW DR. PIXEL	ⴹⴼⵔ DR. PIXEL
+the signal	ⵜⴰⵎⴰⵜⴰⵔⵜ
+running the show	ⴰⵙⴷⴷⵓ ⵏ ⵓⵙⴽⴰⵏ
+PICK UP	ⴽⵎⵎⵍ
+CLOSE (Esc)	ⵇⵇⵏ (Esc)
+PART ONE: THE BASICS	ⴰⵃⵔⵉⵛ ⴰⵎⵣⵡⴰⵔⵓ: ⵉⵍⵓⴳⴰⵏ
+finish or leave LEARN THE BASICS first	ⴽⵎⵎⵍ LEARN THE BASICS ⵏⵖ ⴼⴼⵓⵖ ⴳⵉⵙ ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc ⴰⵔ ⵉⴼⴼⵓⵖ, ⴰⵙⴽⴰⵏ ⵏⵏⴽ ⴰⴷ ⴷ ⵉⵖⵓⵍ ⴰⵎ ⵎⴰⵎⴽ ⵉⵍⵍⴰ
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: ⴰⵙⴽⴰⵏ ⵏⵏⴽ ⴷ ⵉⵖⵓⵍ. ⵉⵙⵏⵇⴰⴷⵏ ⵏ Motion ⵖ ⵉⵙⴱⴰⴷⵓⵏ > ⵉⵎⵙⵍⵉ
+TURN MOTION ON	ⵕⵥⵎ MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	ⵉⴱⵅⵅⵓⵛⵏ ⴰⵔ ⵣⵣⵍⵖⵏ ⵙ ⵜⴰⴱⴷⴰⵔⵜ ⵏ cues! ⵀⵣⵣ ⴰⴼⵓⵙ ⵉ ⵜⴽⴰⵎⵉⵔⴰⵜ, ⵔⵥ ⵜⵏ. ⵣⴳ ⵜⵉⵣⵡⵓⵔⵉ Motion: ⵙⵖⵓⵍ ⵜ ON ⵖ MOTION CONTROL, ⵙⵜⵉ ⵎⴰ ⵉⵖⵕⵕⴰ (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	ⴰⴷ ⵉⴳⴰ NullPointer. ⵉⵍⵎ, ⵓⵔ ⴰⵔ ⵉⵙⵙⴰⴹ ⵙ ⴽⵔⴰ. ⴰⴹⴰⴹ ⴰⵔ ⵉⵣⵔⵉ ⴳⵉⵙ. ⵙⵎⵔⵙ ⴰⴼⵓⵙ ⵏⵏⴽ ⴰⴽⴽ, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	ⵀⵣⵣ ⴰⴼⵓⵙ ⴰⵎ ⵎⵉⴷ ⵜⵃⴱⵙⴷ ⵜⴰⴽⵙⵉ! ⵢⴰⵜ ⵜⴰⴽⵙⵉ ⵉⵎⵥⵥⵉⵏ, ⵙ ⵍⵇⴷⵔ. ⵓⵔ ⵉⴳⵉ ⵜⴰⵇⴼⴰⵍⵜ. ⵜⴰⴽⵙⵉ.
+DRAW TWO ZONES	ⵙⵓⵏⵉ ⵙⵏⴰⵜ ⵜⵎⵏⴰⴹⵉⵏ
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: ⴷ ⵉⴽⵏⵡⴰⵏ, ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⵉⵓⵎⵏ ⵉⵙ ⵉⵍⵉⵡⴹ ⴷ ⴰⵎⵣⵡⴰⵔⵓ. ⵢⴰⵜ ⵜⵖⵓⵔⵉ ⵓⵔ ⵜⵥⴹⴰⵔ ⴰⴷ ⵜⴱⴹⵓ ⵉⴼⴰⵙⵙⵏ ⵏⵏⴽ, ⵊⴱⴷ ⵙⵉⵏ ZONES ⴼ ⵜⴰⵡⵍⴰⴼⵜ ⵏ Motion, ⵢⴰⵏ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵎⴰ.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	ⴽⴽⴰⵜ ⵜⵏ ⵙⵉⵏ ⵙ ⵢⴰⵜ ⵜⵉⴽⴽⵍ. ⴽⴽⴰⵜ ⵢⴰⵏ, ⴰⴷ ⵎⴱⴷⴷⴰⵍⵏ ⴰⴷⴳⴳ. ⴰⵎ ⵉⵡⵉ ⵏ ⵄⵎⵎⵉ ⵖ ⵜⵎⵖⵔⴰ.
+One hand each side. Together! Together!	ⴰⴼⵓⵙ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵎⴰ. ⵎⵄⴰ! ⵎⵄⴰ!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. ⴰⴱⵅⵅⵓⵛ ⵓⵔ ⵉⴳⵉ ⵓⴷⵎ, ⴷ ⴰⵃⵔⵉⵛ ⵉⵎⵥⵥⵉⵏ ⵍⵍⵉ ⵉⵜⵜⵢⴰⵔⵏⴰⵏ, ⴷ ⵓⵎⵓⵙⵙⵓ ⵉⵎⵥⵥⵉⵏ ⵉⵅⵚⵚⴰ ⴰⵙ ⵢⴰⵜ ⵜⵖⵓⵔⵉ ⵉⵚⴰⵃⵏ ⵓⴳⴰⵔ. ⵙⵙⵓⴷⵓ SENSITIVITY ⵙ 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	ⵓⵟⵟⵓⵏ ⵉⵎⵥⵥⵉⵏ, ⵜⴰⵖⵓⵔⵉ ⵉⵚⴰⵃ ⵓⴳⴰⵔ. ⵉⵀ, ⵏⴽⴽⵉ ⵓⵍⴰ ⴰⵔ ⵜⵜⵉⵏⵏⵉⵖ ⵉⵙ ⵉⵜⵜⵓⵎⵎⴰⵜⵜⵉ.
+Not the face. The little one on the end. Wiggle a finger.	ⵓⵔ ⵉⴳⵉ ⵓⴷⵎ. ⴰⵎⵥⵥⵉ ⵖ ⵜⴰⴳⴰⵔⴰ. ⵙⵎⵓⵙⵙⵓ ⴰⴹⴰⴹ.
+FALL 1.5 S OR MORE	FALL 1.5 S ⵏⵖ ⵓⴳⴰⵔ
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. ⴰⵔ ⵉⴼⵍ ⴽⴰ ⵉⵖ ⵜⵇⵇⵉⵎ ⵜⵖⵓⵔⵉ ⵜⵄⵍⴰ. ⵙⵙⵉⵖⵣⴼ FALL, 1.5 ⵜⵉⵙⵉⵏⵉⵏ ⵏⵖ ⵓⴳⴰⵔ, ⴱⴰⵛ ⴰⴷ ⴳⵏ ⵜⵉⵢⵢⵉⵜⵉⵏ ⵏⵏⴽ ⵢⴰⵏ.
+Slow and steady, skapi. Like paying back a loan.	ⵙ ⵍⵄⵇⵇⵍ, ⵙ ⵜⴰⵣⵎⴰⵔⵜ, skapi. ⴰⵎ ⵓⵔⵔⴰⵔ ⵏ ⵜⵔⵔⵓⵙⵉ.
+Sweep, and sweep again. Let the fall carry you between.	ⵙⴼⴰⴹ, ⴷⵖⵉ ⵙⴼⴰⴹ ⴷⴰⴳⵉ. ⵊⵊ ⴰⵙⵓⴱⵓ ⴰⴷ ⴽ ⵉⴹⴹⴼ ⴳⵔ ⴰⵙⵏ.
+MOTION X ON A TONE	MOTION X ⴼ ⵉⵎⵙⵍⵉ
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Heisenbug! ⴰⵔ ⵉⵜⵜⵙⴼⴰⵡ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵉⴽⴽⵍ ⵍⵍⵉ ⵜⵎⵓⵙⵙⵓⵜ. ⵙⵔⵙ ⵜⴰⵜⵜⴰⵡⵜ ⵏ cue ⵏ ⵉⵎⵙⵍⵉ ⴼ Motion X, ⴹⴼⵔ ⵜ ⵙ ⵓⵎⵥⵥⵓⵖ: ⵜⵉⴽ-ⵜⵉⴽ ⴰⵔ ⵉⵣⵔⴱ ⵉⵖ ⵜⵇⵔⵔⴱⵜ.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME ⴰⴷ ⴰⴽ ⵉⵙⴽⵔ ⵉⵎⵙⵍⵉ. ⵉⴼⵍⵍⴰⵏ ⴷ ⴰⴼⴰⵙⵉ. ⵡⴰⴷⴷⴰⵢ ⴷ ⴰⵥⵍⵎⴰⴹ. ⴱⴷⴷ, ⴰⴷ ⴷ ⵉⵖⵓⵍ.
+Follow it. Listen. Faster ticking, closer bug.	ⴹⴼⵔ ⵜ. ⵙⴼⵍⵉⴷ. ⵜⵉⴽ-ⵜⵉⴽ ⵉⵣⵔⴱⵏ ⵓⴳⴰⵔ, ⴰⴱⵅⵅⵓⵛ ⵉⵎⵇⵇⵓⵔⴱⵏ ⵓⴳⴰⵔ.
+Waving paw	ⴰⴼⵓⵙ ⵍⵍⵉ ⵉⵜⵜⵃⵓⵣⵣⵓⵏ
+Heisenbug finder	ⴰⵎⴰⴼ ⵏ Heisenbug
+FIXED! Lovely signal flow.	ⵉⵜⵜⵓⵙⴳⴷ! ⴰⵙⵎⵎⵔⵙ ⵏ ⵜⵎⴰⵜⴰⵔⵜ ⵉⴼⵓⵍⴽⵉⵏ.
+Closed as fixed. No regressions. Probably.	ⵉⵇⵇⵏ, ⵉⵜⵜⵓⵙⴳⴷ. ⵓⵔ ⵉⵖⵓⵍ. ⴰⵀⴰⵜ.
+Squashed! Ship it.	ⵉⵔⵥⴰ! ⴰⵣⵏ ⵜ.
+One reached the cue list. It has filed a bug report about you.	ⵢⴰⵏ ⵉⵍⵉⵡⴹ ⵜⴰⴱⴷⴰⵔⵜ ⵏ cues. ⵉⴰⵔⴰ ⴼⵍⵍⴰⴽ ⵜⴰⵏⵇⵇⵉⵙⵜ ⵏ ⵜⵓⵛⵛⴹⴰ.
+Skapi. It is a handheld. You do not press it. You wave at it.	skapi. ⴰⴷ ⵉⴳⴰ ⴰⵍⵍⴰⵍ ⵏ ⵓⴼⵓⵙ. ⵓⵔ ⵜ ⵜⵙⵙⵉⵜⵜ. ⴰⵔ ⵜⵜⵃⵓⵣⵣⵓⵜ ⴰⴼⵓⵙ ⵏⵏⴽ ⵉ ⵏⵜⵜⴰ.
+The buttons are for menus. The bugs are for flailing.	ⵜⵉⵇⴼⴰⵍⵉⵏ ⵉ ⵓⵎⵓⵖ. ⵉⴱⵅⵅⵓⵛⵏ ⵉ ⵓⵃⵓⵣⵣⵓ ⵏ ⵉⵖⴰⵍⵍⵉⵏ.
+The D-pad is decorative. Like my diploma.	D-pad ⴷ ⵜⴰⴱⴱⴰⵖⵜ. ⴰⵎ ⵍⴽⴰⵖⴹ ⵏ ⵜⵉⵏⵎⵍ ⵉⵏⵓ.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	ⵖ 1989 ⵏⴽⴽⵏⵉ ⵓⵍⴰ ⴰⵔ ⵏⵙⵙⵉⵜ ⴼ ⵜⵇⴼⴰⵍⵉⵏ. ⴷⵖⵉ ⵏⵓⴼⴰ ⴰⵃⵓⵣⵣⵓ. ⵓⵔ ⵊⵊⵓ ⵏⵥⵕⵉ ⵙ ⴷⴼⴼⵉⵔ.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	ⴰⵙⵉⵜ ⵙ ⵜⴰⵣⵎⴰⵔⵜ ⵓⵔ ⵉⵜⵜⵄⴰⵡⵏ. ⵉⴱⵅⵅⵓⵛⵏ ⵓⵔ ⵜⵜⵃⵙⵙⴰⵏ ⵙ ⵜⵇⴼⴰⵍⵉⵏ. ⵉⵖⴰⵍⵍⵉⵏ ⴽⴰ.
+It's called a handheld because your hands are held... up. In the air. Waving.	ⴰⵔ ⴰⵙ ⵜⵜⵉⵏⵉⵏ ⴰⵍⵍⴰⵍ ⵏ ⵓⴼⵓⵙ ⴰⵛⴽⵓ ⵉⴼⴰⵙⵙⵏ... ⴰⵔ ⵜⵜⴰⵍⵉⵏ. ⵖ ⵉⴳⵏⵏⴰ. ⴰⵔ ⵜⵜⵃⵓⵣⵣⵓⵏ.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	ⴰⵖⵔⴷⴰ? ⴰⵔ ⵜⵜⵔⵥⵥⵜ ⵉⴱⵅⵅⵓⵛⵏ ⵙ ⵓⵖⵔⴷⴰ? ⵖ Bulgaria, ⴰⵖⵔⴷⴰ ⴰⴷ ⵉⴳⵉ ⵖ ⵜⴰⵎⴰ ⵏ ⵉⴱⵅⵅⵓⵛⵏ.
+Lovely clicking. Very crisp. The camera saw none of it.	ⵉⵙⵉⵜⵏ ⵉⴼⵓⵍⴽⵉⵏ. ⵇⵇⵓⵕⵏ ⴱⴰⵀⵔⴰ. ⵜⴰⴽⴰⵎⵉⵔⴰⵜ ⵓⵔ ⵜⵥⵕⵉ ⵓⵍⴰ ⵢⴰⵏ.
+DONE FOR YOU - PRESS START	ⵉⵜⵜⵓⵙⴽⴰⵔ ⵉ ⴽⵢⵢⵉ - ⵙⵉⵜ ⴼ START
+DONE! PRESS START	ⵉⴽⵎⵎⵍ! ⵙⵉⵜ ⴼ START
+SELECT OPENS MOTION CONTROL	SELECT ⴰⵔ ⵉⵕⵥⵥⵎ MOTION CONTROL
+ALL BUGS FIXED	ⵉⴱⵅⵅⵓⵛⵏ ⴰⴽⴽ ⵜⵜⵓⵙⴳⴷⵏ
+GAME OVER	ⵓⵔⴰⵔ ⵉⴽⵎⵎⵍ
+NEW HIGH SCORE!	ⴰⴳⵎⵓⴹ ⴰⵎⵇⵇⵔⴰⵏ ⴰⵎⴰⵢⵏⵓ!
+START PLAYS AGAIN	START ⴰⵔ ⵉⵜⵜⵉⵔⴰⵔ ⴷⴰⴳⵉ
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. ⵖⵉⵍⴰ ⴷⴷⵓ ⵙⴳⴷ ⵉⴱⵅⵅⵓⵛⵏ ⵏ ⵜⵉⴷⵜ.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ ⴳⵉⵙⵏ ⴷ ⴰⵙⵏⵇⴷ ⵏ ⵜⵉⴷⵜ ⵏ Motion. ⵙⵔⵙ ⵜ ⴼ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⴰⵇⴼⴰⵍⵜ ~ ⵍⵍⵉ ⵜⵔⵉⵜ.
+START: AGAIN	START: ⴷⴰⴳⵉ
+START: PLAY	START: ⵓⵔⴰⵔ
+# --- end of tutorials ---
+motion	ⴰⵎⵓⵙⵙⵓ
+METADATA	ⵉⵙⴼⴽⴰ ⵏ ⵓⴼⴰⵢⵍⵓ
+generated	ⵉⵜⵜⵓⵙⵏⴼⵍⵓⵍ
+Fit	ⵙⵎⵙⴰⵙⴰ
+inf	ⴱⵍⴰ ⵜⵉⵍⵙⴰ
+NO	ⵓⵀⵓ
+YES	ⵢⴰⵀ
+UP	ⴰⴼⵍⵍⴰ
+DOWN	ⴰⴷⴷⴰⵢ
+Left	ⴰⵥⵍⵎⴰⴹ
+Right	ⴰⴼⴰⵙⵙⵉ
+Top	ⴰⴼⵍⵍⴰ
+Bottom	ⴰⴷⴷⴰⵢ
+add	ⵔⵏⵓ
+all	ⴰⴽⴽ
+none	ⵡⴰⵍⵓ
+Cut	ⴰⴳⵣⴰⵎ
+Fade	ⴰⵙⴼⵙⵉ
+Load	ⵙⴰⵍⵉ
+Pause	ⴰⵃⴱⴰⵙ
+Resume	ⴽⵎⵎⵍ
+Start	ⴱⴷⵓ
+Skip	ⵣⵔⵉ
+Arm	ⵀⴳⴳ
+Disarm	ⵙⵙⵏⵙ
+ONE	ⵢⴰⵏ
+ONCE	ⵢⴰⵜ ⵜⵉⴽⴽⵍⵜ
+Size	ⵜⵉⴷⴷⵉ
+Width	ⵜⴰⵍⴱⴰⴹⵜ
+amount	ⴰⵏⵛⵜ
+brightness	ⵜⴰⴼⴰⵡⵜ
+contrast	ⴰⵎⴳⴰⵔⴰⴷ
+saturation	ⵜⴰⵊⴰⵡⴰⵏⵜ
+hue	ⵉⵏⵉ
+level	ⴰⵙⵡⵉⵔ
+speed	ⴰⵣⵣⴰⵍ
+style	ⴰⵏⴰⵡ
+title	ⴰⵣⵡⵍ
+subtitle	ⴰⵣⵡⵍ ⴰⵎⵣⵢⴰⵏ
+notes	ⵜⵉⵣⵎⵉⵍⵉⵏ
+font	ⵜⵉⵔⵔⴰ
+frame	ⵜⴰⵡⵍⴰⴼⵜ
+type	ⴰⵏⴰⵡ
+state	ⴰⴷⴷⴰⴷ
+blend	ⴰⵙⵎⵓⵏ
+align	ⵙⵔⵔⵙ
+line	ⵉⵣⵉⵔⵉ
+box	ⴰⵏⴰⵎⴽⴰⴹ
+oval	ⴰⵏⴰⵣⵓⵎ
+brush	ⴰⵙⵍⵖⵎ
+eraser	ⵜⴰⵙⴼⴼⴰⴹⵜ
+mask	ⵜⴰⴳⵍⵎⵓⵙⵜ
+grow	ⵙⵉⵎⵖⵓⵔ
+subtract	ⴽⴽⵙ
+split	ⴱⴹⵓ
+stacked	ⵉⵎⵙⵔⵔⴰⵙⵏ
+soft	ⴰⵍⵡⴰⵖ
+tolerance	ⴰⵙⵓⵔⴼ
+curve	ⴰⵣⵏⵏⵓⴳ
+Linear	ⴰⵎⵣⵉⵔⵉ
+Ease in	ⴰⴱⴷⵓ ⴰⵍⵡⴰⵖ
+Ease out	ⵜⴰⴳⴳⴰⵔⴰ ⵜⴰⵍⵡⴰⵖⵜ
+S-curve	ⴰⵣⵏⵏⵓⴳ S
+Position X	ⴰⴷⵖⴰⵔ X
+Position Y	ⴰⴷⵖⴰⵔ Y
+Deck volume	ⴰⵙⵡⵉⵔ ⵏ deck
+Deck opacity	ⵜⴰⵖⵎⵜ ⵏ deck
+Master dimmer	ⴰⵙⵙⴷⵔⵓⵙ ⴰⵎⴰⵜⴰⵢ
+Cue brightness	ⵜⴰⴼⴰⵡⵜ ⵏ cue
+Cue contrast	ⴰⵎⴳⴰⵔⴰⴷ ⵏ cue
+Cue saturation	ⵜⴰⵊⴰⵡⴰⵏⵜ ⵏ cue
+Cue hue	ⵉⵏⵉ ⵏ cue
+no effects	ⵓⵔ ⵍⵍⵉⵏ ⵉⵙⵏⴼⴰⵍⵏ
+no audio effects	ⵓⵔ ⵍⵍⵉⵏ ⵉⵙⵏⴼⴰⵍⵏ ⵏ ⵉⵎⵙⵍⵉ
+nothing yet	ⵡⴰⵍⵓ ⵖⵉⵍⴰ
+no output	ⵓⵔ ⵜⵍⵍⵉ ⵜⵓⴼⴼⵖⴰ
+no window	ⵓⵔ ⵜⵍⵍⵉ ⵜⴰⴳⴳⵓⵔⵜ
+source missing	ⴰⵙⴰⴳⵎ ⵓⵔ ⵉⵍⵍⵉ
+waiting for a picture	ⴰⵔ ⵉⵜⵜⵔⴰⵊⵓ ⵜⴰⵡⵍⴰⴼⵜ
+clear frame	ⵙⴼⴰⴹ ⵜⴰⵡⵍⴰⴼⵜ
+undo stroke	ⵙⵙⵓⵖⵍ ⵉⵣⵉⵔⵉ
+save still	ⵃⴹⵓ ⵜⴰⵡⵍⴰⴼⵜ
+save animation	ⵃⴹⵓ ⴰⵎⵓⵙⵙⵓ
+export	ⵙⵙⵓⴼⵖ
+repeats	ⵉⵙⵙⵓⵖⵍⵏ
+hold last	ⴹⴹⴼ ⵜⴰⵎⴳⴳⴰⵔⵓⵜ
+end action	ⴰⵙⴽⴰⵔ ⵏ ⵜⴳⴳⴰⵔⴰ
+cue id	ⴰⵙⵎⴰⴳ ⵏ cue
+goto target	ⴰⵏⵉⵛⵛⴰ
+set	ⵙⴱⴷⴷ
+send	ⴰⵣⵏ
+run	ⵙⵙⵍⴽⵎ
+idle	ⵉⵃⴱⵙ
+standby	ⵢⵓⵊⴰⴷ
+Loop	ⴰⵙⵙⵓⵖⵍ
+loop forever	ⴰⵙⵙⵓⵖⵍ ⴱⵍⴰ ⵜⴰⴳⴳⴰⵔⴰ
+Layout	ⴰⵙⵔⵔⵙ
+PATCH	PATCH
+OUTPUTS	ⵜⵓⴼⴼⵖⴰⵜⵉⵏ
+SECTIONS	ⵉⴳⵣⵣⵓⵎⵏ
+Video Synth	ⴰⵙⵏⴼⵍⵓⵍ ⵏ ⵜⴼⵉⴷⵢⵓⵜ
+Browser	ⴰⵙⵙⴰⵔⴰ
+Browser Cue	cue ⵏ ⵓⵙⵙⴰⵔⴰ
+Window Source	ⴰⵙⴰⴳⵎ ⵏ ⵜⴳⴳⵓⵔⵜ
+Camera Source	ⴰⵙⴰⴳⵎ ⵏ ⵍⴽⴰⵎⵉⵔⴰ
+NDI Source	ⴰⵙⴰⴳⵎ NDI
+DeckLink Input	ⴰⴽⵛⵛⵓⵎ DeckLink
+Syphon/Spout Source	ⴰⵙⴰⴳⵎ Syphon/Spout
+Live stream cue	cue ⵏ ⵓⵙⵎⵉⴳⵍ ⵓⵙⵔⵉⴷ
+Composite	ⴰⵙⵎⵓⵏ
+Composite scene cue	cue ⵏ ⵓⵙⵎⵓⵏ
+Lower Third	ⴰⵣⵡⵍ ⵏ ⵡⴰⴷⴷⴰⵢ
+Lower Third overlay cue	cue ⵏ ⵓⵣⵡⵍ ⵏ ⵡⴰⴷⴷⴰⵢ
+PIP overlay cue	cue ⵏ PIP
+MIDI File	ⴰⴼⴰⵢⵍⵓ MIDI
+Master	Master
+Memo	ⵜⴰⵣⵎⵉⵍⵜ
+Mic	ⴰⵙⵎⵖⵔ ⵏ ⵉⵎⵙⵍⵉ
+Timer	ⴰⵙⵎⵣⴰⵢ
+Tone	ⴰⵎⵙⵍⵉ
+Script	ⴰⵙⴽⵔⵉⴱⵜ
+Target	ⴰⵏⵉⵛⵛⴰ
+Draw	ⴰⵥⵍⴰⵢ
+Code	ⴰⵏⴳⴰⵍ
+Clouds	ⵉⵙⴰⵢⵏ
+Swirl	ⵜⴰⵡⵔⴳⵉⵜ
+Moire	ⵎⵡⴰⵔⵉ
+Picture	ⵜⴰⵡⵍⴰⴼⵜ
+Placement	ⴰⵙⵔⵔⵙ
+Frame lock	ⴰⵇⵇⴰⵏ ⵏ ⵜⵡⵍⴰⴼⵜ
+Suspend	ⵃⴱⵙ
+Seam	ⴰⵇⵇⴰⵏ
+High pass	ⴰⵙⵉⴼⴼ ⴰⴼⵍⵍⴰ
+Low pass	ⴰⵙⵉⴼⴼ ⴰⴷⴷⴰⵢ
+Tilt EQ	EQ ⴰⵏⴰⵍⵍⴰⵍ
+Compressor	ⴰⵙⴷⵔⵓⵙ
+Gate	ⵜⴰⴳⴳⵓⵔⵜ
+Delay	ⴰⵎⴰⵣⵓⵣ
+Reverb	ⴰⵙⵙⵓⵖⵍ ⵏ ⵉⵎⵙⵍⵉ
+Binaural	ⵙ ⵙⵏⴰⵜ ⵜⵎⵥⵥⵓⵖⵉⵏ
+Crush	ⴰⵕⵥⵥⵓ
+Word	ⴰⵡⴰⵍ
+Scrub	ⴰⵙⵎⵓⵙⵙⵓ
+Short	ⴰⴳⵣⵣⵓⵍ
+Shatter	ⴰⴱⴹⵓ
+Pulse	ⴰⵏⴱⴰⴹ
+Crawl	ⴰⵎⵓⵙⵙⵓ ⵏ ⵓⴹⵕⵉⵚ
+Typewriter	ⵜⴰⵎⴰⵛⵉⵏⵜ ⵏ ⵜⵉⵔⵔⴰ
+Oscilloscope	ⴰⵙⴽⴰⵏ ⵏ ⵜⵎⴰⴷⴰⵏⵉⵏ
+Spectrum	ⴰⵎⵣⵉⵔ
+Level Meters	ⵉⵙⵎⵣⴰⵢⵏ ⵏ ⵓⵙⵡⵉⵔ
+Waveform	ⵜⴰⵍⵖⴰ ⵏ ⵜⵎⴰⴷⴰ
+EFFECTS	ⵉⵙⵏⴼⴰⵍⵏ
+TRIGGERS	ⵉⵙⵏⵇⴰⵔⵏ
+SEQUENCE	ⴰⵙⴹⴼⴰⵕ
+MOTION CONTROL	ⴰⵙⵎⵓⵙⵙⵓ ⵙ ⵜⵏⴱⴰⴹⵜ
+THIS CUE	cue ⴰⴷ
+FUNCTIONS	ⵜⵉⵡⵓⵔⵉⵡⵉⵏ
+VALUES	ⴰⵜⵉⴳⵏ
+KEYS	ⵜⵉⵙⴰⵔⵓⵜⵉⵏ
+FREEZE	ⵙⵙⴽⵔⵚ
+FROZEN	ⵉⴽⵔⵚ
+BYPASSED	ⵉⵜⵜⵓⵣⵔⵉ
+BYPASS ALL	ⵣⵔⵉ ⴰⴽⴽ
+DEFAULTS	ⵉⵎⵣⵡⵓⵔⴰ
+CHANGE	ⵙⵏⴼⵍ
+CHOOSE	ⵙⵜⵉ
+Stop all	ⵃⴱⵙ ⴰⴽⴽ
+Pause all	ⵃⴱⵙ ⴰⴽⴽ ⵉⵎⵉⴽ
+Resume all	ⴽⵎⵎⵍ ⴰⴽⴽ
+Do not continue	ⵓⵔ ⴽⵎⵎⵍ
+Auto-continue	ⴰⵙⴽⵎⵎⵍ ⴰⵡⵔⵎⴰⵏ
+Auto-follow	ⴽⵎⵎⵍ ⴷⴼⴼⵉⵔ ⵜⴳⴳⴰⵔⴰ
+END HOLD	ⵜⴰⴳⴳⴰⵔⴰ ⴹⴹⴼ
+END LOOP	ⵜⴰⴳⴳⴰⵔⴰ ⵙⵙⵓⵖⵍ
+END NEXT	ⵜⴰⴳⴳⴰⵔⴰ ⴰⵎⴰⵢⵏⵓ
+END STOP	ⵜⴰⴳⴳⴰⵔⴰ ⵃⴱⵙ
+OUTPUT EFFECTS	ⵉⵙⵏⴼⴰⵍⵏ ⵏ ⵜⵓⴼⴼⵖⴰ
+LIVE CAPTIONS	ⵜⵉⵔⵔⴰ ⵜⵓⵙⵔⵉⴷⵜ
+captions	ⵜⵉⵔⵔⴰ
+Name Card	ⵜⴰⴽⴰⵕⴹⴰ ⵏ ⵢⵉⵙⵎ
+TEST CARD	ⵜⴰⴽⴰⵕⴹⴰ ⵏ ⵓⵙⵉⵔⵎ
+TEST CARD ON	ⵜⴰⴽⴰⵕⴹⴰ ⵜⵔⵥⵎ
+EXPORT CARD	ⵙⵙⵓⴼⵖ ⵜⴰⴽⴰⵕⴹⴰ
+EXPORTING...	ⴰⵙⵓⴼⵖ...
+LOW LATENCY	ⴰⵎⴰⵣⵓⵣ ⴰⵎⵥⵥⴰⵏ
+WEB MONITOR	ⴰⴳⴷⵉⵍ ⵏ ⵡⵉⴱ
+PHONE & TABLET	ⴰⵙⴰⵡⴰⵍ ⴷ ⵜⴰⴼⵍⵡⵉⵜ
+SCAN TO PAIR	ⵙⵉⴹⵏ ⵃⵎⴰ ⴰⴷ ⵜⵇⵇⵏⵜ
+WITH SOUND	ⵙ ⵉⵎⵙⵍⵉ
+THE NETWORK	ⴰⵥⵟⵟⴰ
+FIXTURES	ⵉⵙⴼⴰⵡⵏ
+ADD FIXTURE	ⵔⵏⵓ ⴰⵙⴼⴰⵡ
+Dimmer	ⴰⵙⵙⴷⵔⵓⵙ
+Dimmer + RGB	ⴰⵙⵙⴷⵔⵓⵙ + RGB
+Dimmer + temperature	ⴰⵙⵙⴷⵔⵓⵙ + ⵜⴰⵥⵖⴰⵍⵜ
+QR CODE	ⴰⵏⴳⴰⵍ QR
+Now	ⵖⵉⵍⴰ
+OFF	ⵉⵅⵙⴰ
+Row	ⵉⵣⵉⵔⵉⴳ
+BACK	ⵜⵓⵖⴰⵍⵉⵏ
+CLIP	ⴰⵙⴳⵣⵓⵎ
+DONE	ⵉⴽⵎⵎⵍ
+Fall	ⴰⴹⴰⵏ
+From	ⵣⵖ
+FULL	ⴰⴽⴽ
+HELD	ⵉⵜⵜⵓⵟⵟⴼ
+LIVE	ⵙ ⵜⵓⴷⵔⵜ
+Mode	ⴰⵙⴽⴰⵔ
+PAIR	ⵜⴰⵢⵓⴳⴰ
+PICK	ⵙⵜⵉ
+Port	ⵜⴰⵡⵡⵓⵔⵜ
+QUAD	4-UP
+Rate	ⴰⵙⵡⵉⵔ
+Rise	ⴰⵙⴰⵡⵏ
+Runs	ⵉⵜⴷⴷⵓ
+SAVE	ⵃⴹⵓ
+STEP	ⵜⴰⵙⵙⵔⴰⵡⵜ
+TEXT	ⴰⴹⵕⵉⵚ
+WARP	ⵙⵙⵏⴼⵍ ⵜⴰⵍⵖⴰ
++ ADD	+ ⵔⵏⵓ
+APPLY	ⵙⵙⵏⵜⵙ
+Chain	ⴰⵙⵎⵎⵏⴹ
+CLEAR	ⵙⴼⴹ
+FIXED	ⵉⵜⵜⵓⵟⵟⴼ
+LEARN	ⵍⵎⴷ
+Lines	ⵉⵣⵉⵔⵉⴳⵏ
+MULTI	ⴳⴳⵓⵜⵏ
+ORDER	ⴰⵙⵎⵎⵉⵥⵍ
+PASTE	ⵙⵏⵜⴹ
+Reads	ⵉⵖⵔⴰ
+RESET	ⵙⵙⵓⵖⵍ
+Shows	ⵉⵙⵙⴽⴰⵏⵏ
+VIDEO	ⴰⴱⵉⴷⵢⵓ
+Zones	ⵜⵉⵎⵏⴰⴹⵉⵏ
+(on)	(ⵉⵔⵎⴷ)
+ALL ON	ⴰⴽⴽ ⵔⵎⴷⵏ
+Buffer	ⴰⵃⵕⴰⵣ
+Camera	ⵜⴰⴽⴰⵎⵉⵕⵜ
+CANCEL	ⵙⴼⵙⵅ
+Centre	ⴰⵍⵓⵎⵎⴰⵙ
+Custom	ⵙ ⵓⵖⴰⵡⴰⵙ
+DELETE	ⴽⴽⵙ
+Device	ⴰⵍⵍⴰⵍ
+FIXED!	ⵉⵚⵚⴰⴳⴳⵎ!
+FORMAT	ⵜⴰⵍⵖⴰ
+HIDDEN	ⵉⴼⴼⵔ
+jam to	ⵎⵜⴰⵡⴰ ⴷ
+Length	ⵜⵉⵖⵥⵉ
+Levels	ⵉⵙⵡⵉⵔⵏ
+Mirror	ⵍⵎⵔⵉ
+NATIVE	ⴰⵖⵚⴰⵏ
+Output	ⵜⵓⴼⴼⵖⴰ
+PAUSED	ⵉⵙⴳⵓⵏⴼⴰ
+PRESET	ⴰⵎⵣⵡⴰⵔⵓ
+red at	ⴰⵣⴳⴳⴰⵖ ⴳ
+Sender	ⴰⵎⴰⵣⴰⵏ
+set by	ⵉⴳⴰ ⵜ
+SMOOTH	ⵉⵍⴰⵏ
+Source	ⴰⵖⴱⴰⵍⵓ
+Splash	ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵓⴱⴷⵓ
+STREAM	ⴰⵙⵓⴷⴷⵎ
+SUMMED	ⵉⵎⵎⵓⵏ
+tile h	ⴰⵖⵍⵍⴰⵍ ⵜ
+tile w	ⴰⵖⵍⵍⴰⵍ ⵀ
+TOGGLE	ⴱⴷⴷⵍ
+Window	ⴰⵙⴰⵜⵎ
+(off)	(ⵉⵅⵙⴰ)
+ALL OFF	ⴰⴽⴽ ⵅⵙⴰⵏ
+ARRANGE	ⵙⴱⴷⴷ
+Ceiling	ⴰⵙⵇⵇⵉⴼ
+Channel	ⴰⴱⴰⴷⵓ
+Command	ⴰⵏⴹⴹⴰⵎ
+CONVERT	ⵙⵙⵏⴼⵍ
+DEFAULT	ⴰⵎⵣⵡⴰⵔⵓ
+EDIT...	ⵙⵙⵏⴼⵍ...
+Encoder	ⴰⵙⵏⴳⵍⵎ
+END CUE	cue ⵏ ⵜⴳⴳⵉⵔⴰ
+fade in	ⴰⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ
+FPS: ON	FPS: ⵉⵔⵎⴷ
+Haptics	ⴰⵙⵎⵓⵙⵙⵓ
+Key out	ⵜⴰⵙⴰⵔⵓⵜ ⵜⴼⴼⵖ
+LESSONS	ⵜⵉⵎⵙⵉⵔⵉⵏ
+LTC out	LTC ⵜⴼⴼⵖ
+mask on	ⴰⵖⴼⴼⵓⵔ ⵉⵔⵎⴷ
+Message	ⵜⵓⵣⵉⵏⵜ
+midi in	MIDI ⵉⴽⵛⵎ
+MISSING	ⵓⵔ ⵉⵍⵍⵉ
+move up	ⴰⵍⵉ
+PLAYING	ⵉⵜⵜⵓⵔⴰⵔ
+PRESETS	ⵉⵎⵣⵡⵓⵔⴰ
+PROJECT	ⴰⵙⴻⵏⴼⴰⵕ
+rack it	ⴹⵎⵏ ⵜ
+Read as	ⵖⵔ ⵙ
+red col	ⵜⴰⴳⵊⴷⵉⵜ ⵜⴰⵣⴳⴳⴰⵖⵜ
+RUNNING	ⵉⵜⴷⴷⵓ
+Runs on	ⵉⵜⴷⴷⵓ ⵖ
+SCREENS	ⵉⴳⴷⵉⵍⵏ
+Send to	ⴰⵣⵏ ⵙ
+SHOW ME	ⵎⵍ ⵉⵢⵢⵉ
+Show on	ⵎⵍ ⵖ
+SHUFFLE	ⴰⵙⵎⵎⵉⵥⵍ ⵏ ⵓⵏⵚⵚⴰ
+UPDATES	ⵉⵙⴷⵓⵙⵎⵏ
+VJ MODE	ⴰⵙⴽⴰⵔ VJ
++ OUTPUT	+ ⵜⵓⴼⴼⵖⴰ
+all to 0	ⴰⴽⴽ ⵙ 0
+any port	ⴽⵔⴰ ⵏ ⵜⴰⵡⵡⵓⵔⵜ
+bg alpha	alpha ⵏ ⵓⴳⵉⵍⴰⵍ
+CHANNELS	ⵉⴱⵓⴷⴰ
+CLOCK ON	ⴰⵙⴰⴽⵓⴷ ⵉⵔⵎⴷ
+count up	ⴰⵙⵉⴹⴰⵏ ⵙ ⵓⴼⴰⵍⵍⴰ
+DOWNLOAD	ⵙⵙⵉⴷⵔ
+EXAMPLES	ⵉⵎⴷⵢⴰⵜⵏ
+fade out	ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ
+FPS: OFF	FPS: ⵉⵅⵙⴰ
+Full Red	ⴰⵣⴳⴳⴰⵖ ⴰⴽⴽ
+Hold for	ⵟⵟⴼ ⵉ
+IDENTIFY	ⵙⵙⵏ
+Learn it	ⵍⵎⴷ ⵜ
+Limiting	ⴰⵙⴱⴹⴹ
+NMC sync	ⴰⵎⵜⴰⵡⴰ NMC
+NMOS: ON	NMOS: ⵉⵔⵎⴷ
+none yet	ⵡⴰⵍⵓ ⴰⵔ ⵖⵉⵍⴰ
+offset X	ⴰⵙⵎⵓⵜⵜⵉ X
+offset Y	ⴰⵙⵎⵓⵜⵜⵉ Y
+onion on	ⴰⴽⵓⴼⴼⵉ ⵉⵔⵎⴷ
+Playlist	ⵜⴰⴱⴷⴰⵔⵜ
+Position	ⴰⴷⵖⴰⵔ
+prog bar	ⴰⴼⴳⴳ ⵏ ⵜⴰⵣⵣⵍⴰ
+SETTINGS	ⵜⵉⵙⵖⴰⵍ
+SHOW SDP	ⵎⴻⵍ SDP
+STRAIGHT	ⵏⵏⵉⵖ
+TCP port	ⵜⴰⵡⵡⵓⵔⵜ TCP
+the desk	ⵜⴰⴼⵉⵍⵓⵜ
+The name	ⵉⵙⴻⵎ
+THE SHOW	ⴰⵙⵙⴽⴰⵏ
+TURN OFF	ⵙⵅⵙⵉ
+UI scale	ⵜⵉⴷⴷⵉ ⵏ ⵜⴳⵔⴷⴰⵢⵜ
+vMix API	API ⵏ vMix
+WATCHING	ⵉⵙⵡⵡⴰⴹ
+(not set)	(ⵓⵔ ⵉⵜⵜⵓⵙⴱⴷⴰⴷ)
+a comment	ⴰⵡⵏⵏⵉⵜ
+A/V delay	ⴰⵄⴹⴹⵍ A/V
+add shape	ⵔⵏⵓ ⵜⴰⵍⵖⴰ
+ASIO outs	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ASIO
+BOTH AXES	ⵙⵉⵏ ⵉⵎⵙⵏⴰⵍⵏ
+CHECK NOW	ⵙⴰⵡⵍ ⵖⵉⵍⴰ
+chime red	ⴰⵚⴹⴰⴹ ⴰⵣⴳⴳⴰⵖ
+CLOCK OFF	ⴰⵙⴰⴽⵓⴷ ⵉⵅⵙⴰ
+Creatures	ⵉⵎⵓⴷⴰⵔ
+CUE TOOLS	ⵉⵎⴰⵙⵙⵏ ⵏ cue
+DASHBOARD	ⵜⴰⴼⵉⵍⵓⵜ ⵏ ⵓⵙⵖⵍ
+Direction	ⵜⴰⵏⵉⵍⴰ
+EXIT  Esc	ⴼⴼⵖ  Esc
+Freewheel	ⵉⴷⴷⵓ ⵡⴰⵃⴷⵓⵜ
+Full Blue	ⴰⵏⵉⵍⵉ ⴰⴽⴽ
+glitch up	glitch ⵙ ⵓⴼⴰⵍⵍⴰ
+HDR input	ⴰⵏⴽⵛⵓⵎ HDR
+HTTP port	ⵜⴰⵡⵡⵓⵔⵜ HTTP
+Jump mode	ⴰⵙⴽⴰⵔ ⵏ ⵜⴰⵏⴳⴳⵉ
+Listen on	ⵙⴼⵍⴷ ⵖ
+Listen to	ⵙⴼⵍⴷ ⵉ
+logo size	ⵜⵉⴷⴷⵉ ⵏ ⵓⵍⵓⴳⵓ
+lower 3rd	Lower Third
+MIDI note	ⵜⴰⵣⵎⴰⵎⵜ MIDI
+move down	ⴰⴳⴳⵯⵣ
+new paths	ⵉⴱⵔⵉⴷⴷⵏ ⵉⵎⴰⵢⵏⵓⵜⵏ
+NMOS: OFF	NMOS: ⵉⵅⵙⴰ
+no script	ⵓⵔ ⵉⵍⵍⵉ ⵓⴹⵔⵉⵙ
+onion off	ⴰⴽⵓⴼⴼⵉ ⵉⵅⵙⴰ
+OUTPUT ON	ⵜⵓⴼⴼⵖⴰ ⵉⵔⵎⴷ
+Panic now	ⴰⵥⵍⴰⵖ ⵖⵉⵍⴰ
+PNG matte	ⴰⵎⴰⵜⵜ PNG
+PROGRAMME	ⴰⵀⵉⵍ
+RECORDING	ⴰⵙⴽⵍⵙ
+REMAINING	ⵉⴱⵇⴰ
+RESET ALL	ⵙⵙⵓⵖⵍ ⴰⴽⴽ
+RUN PANIC	ⵙⵙⵉⴷⴷ ⴰⵥⵍⴰⵖ
+SHOW FLOW	ⴰⴹⴼⴰⵔ ⵏ ⵓⵙⵙⴽⴰⵏ
+SPOUT: ON	SPOUT: ⵉⵔⵎⴷ
+stop at 0	ⵃⴱⵙ ⴳ 0
+SVG paths	ⵉⴱⵔⵉⴷⴷⵏ SVG
+text mode	ⴰⵙⴽⴰⵔ ⵏ ⵓⴹⵕⵉⵚ
+then stop	ⴷⵖⵉ ⵃⴱⵙ
+they have	ⵖⵓⵔⴰⵙⵏ
+TIMERS ON	ⵉⵎⴽⵜⴰⴹⵏ ⵔⵎⴷⵏ
+WHEN IDLE	ⵎⵍ ⵉⴹⵀⵔ
+wobble by	ⴰⵎⵓⵙⵙⵓ ⵙ
+10-BIT: ON	10-BIT: ⵉⵔⵎⴷ
+ADD OUTPUT	ⵔⵏⵓ ⵜⵓⴼⴼⵖⴰ
+APPEARANCE	ⵓⴷⵎ
+ARRANGE...	ⵙⴱⴷⴷ...
+Beast mode	ⴰⵙⴽⴰⵔ ⵏ ⵓⵖⵡⴰⵍ
+Black lift	ⴰⵙⵎⵖⵔ ⵏ ⵓⵏⵉⵍⵉ
+BUILT WITH	ⵉⵜⵜⵓⵙⴽⵔ ⵙ
+by density	ⵙ ⵜⵊⵀⴷⵉ
+BY FIXTURE	ⵙ ⵓⴼⴰⵔⵉⵙ
+CANCEL ALL	ⵙⴼⵙⵅ ⴰⴽⴽ
+CANVAS: ON	CANVAS: ⵉⵔⵎⴷ
+chime zero	ⴰⵚⴹⴰⴹ ⵏ ⵉⵍⵎ
+colour tag	ⵜⴰⵎⴰⵜⴰⵔⵜ ⵏ ⵉⵏⵉ
+copy chain	ⵙⵙⵏⵖⵍ ⴰⵙⵎⵎⵏⴹ
+Crosshatch	ⴰⵛⵔⵔⴹ ⴰⵎⵙⴳⴳⴰⵔ
+cue number	ⵓⵟⵟⵓⵏ ⵏ cue
+deck fader	ⴰⴽⵓⵥ ⵏ deck
+EDGE BLEND	ⴰⵙⵎⵓⵏ ⵏ ⵉⵔⵉ
+fires cues	ⵉⵙⵙⵉⴷⴷ cue
+Full Black	ⴰⵏⵉⵍⵉ ⴰⴽⴽ
+Full Green	ⴰⵣⴳⵣⴰⵡ ⴰⴽⴽ
+Full White	ⴰⵎⵍⵍⴰⵍ ⴰⴽⴽ
+Hover tips	ⵉⵏⵖⵎⵉⵙⵏ ⵖ ⵓⴼⵍⵍⴰ
+Input gain	ⴰⵊⵀⴷ ⵏ ⵓⴽⵛⵓⵎ
+Input mono	ⴰⵏⴽⵛⵓⵎ ⵢⴰⵏ
+live audio	ⵉⵎⵙⵍⵉ ⵙ ⵜⵓⴷⵔⵜ
+Live input	ⴰⵏⴽⵛⵓⵎ ⵙ ⵜⵓⴷⵔⵜ
+look at it	ⵎⴻⵍ ⵜ
+MIDI input	ⴰⵏⴽⵛⵓⵎ MIDI
+NDI Output	ⵜⵓⴼⴼⵖⴰ NDI
+next xfade	ⴰⵙⴼⵙⵉ ⵢⴰⴹⵏ
+no picture	ⵓⵔ ⵉⵍⵍⵉ ⵜⵓⴳⵏⴰ
+no preview	ⵓⵔ ⵉⵍⵍⵉ ⵓⵣⵡⴰⵔ
+On release	ⵖ ⵓⴱⵔⵓⵔⵉ
+OPEN SAVED	ⵕⵥⵎ ⴰⵃⴹⴹⴰ
+OUTPUT OFF	ⵜⵓⴼⴼⵖⴰ ⵉⵅⵙⴰ
+Panic fade	ⴰⵙⴼⵙⵉ ⵏ ⵓⵥⵍⴰⵖ
+Saved with	ⵉⵃⴹⴰ ⵙ
+SPOUT: OFF	SPOUT: ⵉⵅⵙⴰ
+Tally port	ⵜⴰⵡⵡⵓⵔⵜ ⵏ Tally
+TIMERS OFF	ⵉⵎⴽⵜⴰⴹⵏ ⵅⵙⴰⵏ
+Total time	ⴰⴽⵓⴷ ⴰⴽⴽ
+10-BIT: OFF	10-BIT: ⵉⵅⵙⴰ
+Accept from	ⵇⴱⵍ ⵣⵖ
+Add a light	ⵔⵏⵓ ⵜⴰⴼⴰⵜ
+any channel	ⴽⵔⴰ ⵏ ⵓⴱⴰⴷⵓ
+ASIO driver	ⴰⵎⵏⴰⵢ ASIO
+BACK TO TOP	ⵙ ⴰⴼⴰⵍⵍⴰ
+blend gamma	gamma ⵏ ⵓⵙⵎⵓⵏ
+Browser URL	URL ⵏ ⵓⵎⵢⴰⴳⵉ
+CANVAS MODE	ⴰⵙⴽⴰⵔ CANVAS
+CANVAS: OFF	CANVAS: ⵉⵅⵙⴰ
+CARD ON ALL	ⵜⴰⵡⵔⵉⵇⵜ ⵔⵎⴷⵏ ⴰⴽⴽ
+chime amber	ⴰⵚⴹⴰⴹ ⴰⵡⵔⴰⵖ
+CODE SOURCE	ⴰⵖⴱⴰⵍⵓ ⵏ ⵜⴰⵏⴳⴰⵍⵜ
+Cue numbers	ⵓⵟⵟⵓⵏⵏ ⵏ cue
+delete step	ⴽⴽⵙ ⵜⴰⵙⵙⵔⴰⵡⵜ
+Destination	ⴰⵙⴰⴹⵓⴼ
+Esc cancels	Esc ⵉⵙⴼⵙⴰⵅ
+glitch down	glitch ⵙ ⵡⴰⴷⴷⴰⵢ
+link aspect	ⴰⵙⵙⵖ ⴰⵙⵙⴰⵖ ⵏ ⵜⵉⴷⴷⵉ
+Mirror rate	ⴰⵙⵡⵉⵔ ⵏ ⵍⵎⵔⵉ
+move points	ⴰⴳⴳⵯⵣ ⵜⵉⵏⵇⵇⴰⴹ
+NDI KEY: ON	NDI KEY: ⵉⵔⵎⴷ
+next colour	ⵉⵏⵉ ⵢⴰⴹⵏ
+no duration	ⵓⵔ ⵉⵍⵍⵉ ⵡⴰⴽⵓⴷ
+NO LIVE CUE	ⵓⵔ ⵉⵍⵍⵉ cue ⵙ ⵜⵓⴷⵔⵜ
+NO PREVIOUS	ⵓⵔ ⵉⵍⵍⵉ ⴰⵣⵡⴰⵔ
+OVERLAY BIN	ⴰⵙⵏⵙⴰ ⵏ ⵓⴼⵍⵍⴰⵢ
+paste chain	ⵙⵏⵜⴹ ⴰⵙⵎⵎⵏⴹ
+pause begin	ⴰⵙⴳⵓⵏⴼⵓ ⴳ ⵓⴱⴷⵓ
+phrase hold	ⴰⵟⵟⴰⴼ ⵏ ⵜⴼⵔⴰⵣⵜ
+plays synth	ⵉⵜⵜⵖⵔⴰ synth
+RENUMBER...	ⴰⵙⵎⴹⴰⵏ ⵢⴰⴹⵏ...
+Sample rate	ⴰⵙⵡⵉⵔ ⵏ ⵓⵙⵎⴷⵢⴰ
+SENDING OUT	ⴰⵔ ⵉⵜⵜⴰⵣⵏ
+Sensitivity	ⵜⴰⵙⵏⴼⴰⵍⵜ
+Shift: snap	Shift: ⴰⵙⵏⴽⴽⵍ
+ST 2110: ON	ST 2110: ⵉⵔⵎⴷ
+THIS OUTPUT	ⵜⵓⴼⴼⵖⴰ ⵢⴰⴷ
+time of day	ⴰⴽⵓⴷ ⵏ ⵡⴰⵙⵙ
+wait for GO	ⵔⵊⵓ GO
+(no matches)	(ⵡⴰⵍⵓ)
+(no subtext)	(ⵓⵔ ⵉⵍⵍⵉ ⵓⴹⵔⵉⵙ ⵡⵉⵙ ⵙⵉⵏ)
+add a button	ⵔⵏⵓ ⵜⴰⵇⴼⴰⵍⵜ
+add a window	ⵔⵏⵓ ⴰⵙⴰⵜⵎ
+Art-Net port	ⵜⴰⵡⵡⵓⵔⵜ Art-Net
+AUDIO OUTPUT	ⵜⵓⴼⴼⵖⴰ ⵏ ⵉⵎⵙⵍⵉ
+Auto restore	ⴰⵙⵓⵖⵍ ⴰⵡⵔⵎⴰⵏ
+CARD OFF ALL	ⵜⴰⵡⵔⵉⵇⵜ ⵅⵙⴰⵏ ⴰⴽⴽ
+Checkerboard	ⴰⴷⴰⵎⵎⴰ
+CLASSIC VIEW	ⵜⵉⵎⵎⵉ ⵜⴰⵇⴱⵓⵔⵜ
+DECKLINK: ON	DECKLINK: ⵉⵔⵎⴷ
+driver speed	ⵜⴰⵣⵣⵍⴰ ⵏ ⵓⵎⵏⴰⵢ
+Esc to close	Esc ⵉ ⵓⵇⵇⵏ
+free running	ⵉⴷⴷⵓ ⵡⴰⵃⴷⵓⵜ
+glitch drift	ⴰⵎⵓⵜⵜⵉ ⵏ glitch
+glitch reach	ⵜⵉⵎⵣⴳⵉ ⵏ glitch
+KEY+FILL: ON	KEY+FILL: ⵉⵔⵎⴷ
+last reading	ⵜⴰⵖⵓⵔⵉ ⵜⴰⴳⴳⵯⵔⴰⵏⵜ
+Last refused	ⴰⴳⴳⵯⵔⴰⵏ ⵉⵜⵜⵓⴳⵉⵏ
+LISTENING IN	ⴰⵔ ⵉⵙⴼⵍⵉⴷ ⵖ
+LISTENING...	ⴰⵔ ⵉⵙⴼⵍⵉⴷ...
+LISTENS: OFF	ⵉⵙⴼⵍⴷ: ⵉⵅⵙⴰ
+Miami cursor	ⴰⵏⴽⴰⴹ Miami
+MIDI CONTROL	ⴰⵙⵏⴱⴷⴷ MIDI
+Mirror state	ⴰⴷⴷⴰⴷ ⵏ ⵍⵎⵔⵉ
+NDI KEY: OFF	NDI KEY: ⵉⵅⵙⴰ
+NMC IN & OUT	NMC ⴰⵏⴽⵛⵓⵎ ⴷ ⵜⵓⴼⴼⵖⴰ
+NO PROGRAMME	ⵓⵔ ⵉⵍⵍⵉ ⵓⵀⵉⵍ
+Pair a phone	ⵙⵙⵎⵓⵏ ⴰⵟⵉⵍⵉⴼⵓⵏ
+Pair overlap	ⴰⵙⵎⴽⴰⵏ ⵏ ⵜⴰⵢⵓⴳⴰ
+Phone access	ⴰⵏⵎⵎⴰⴽ ⵏ ⵓⵟⵉⵍⵉⴼⵓⵏ
+RACKED, WARM	ⵉⵡⵊⴷ, ⵉⵣⵣⵓⵖ
+render width	ⵜⵉⵀⵔⵉ ⵏ ⵓⵙⴼⵔⵓ
+SELECTED CUE	cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Space — play	ⵜⴰⵍⵍⵓⵏⵜ — ⵖⵔ
+Spout Output	ⵜⵓⴼⴼⵖⴰ Spout
+ST 2110: OFF	ST 2110: ⵉⵅⵙⴰ
+WATCH FOLDER	ⴰⵙⵎⵙⵎⵏ ⵏ ⵓⴽⴰⵔⴰⵎ
+24 fps (film)	24 fps (ⴰⵙⴰⵔⵓ)
+COMPOSITE CUE	cue ⴰⵎⵙⴷⵓⵙ
+DECKLINK: OFF	DECKLINK: ⵉⵅⵙⴰ
+default route	ⴰⴱⵔⵉⴷ ⴰⵎⵣⵡⴰⵔⵓ
+Eddie's Clock	ⴰⵙⴰⴽⵓⴷ ⵏ Eddie
+Every adapter	ⴰⵍⵍⴰⵍ ⴰⴽⴽ
+EXAMPLE SHOWS	ⵉⵎⴷⵢⴰⵜⵏ ⵏ ⵓⵙⵙⴽⴰⵏ
+INSTALLING...	ⴰⵔ ⵉⵜⵜⵓⵙⴱⴷⴷⵉ...
+J jump to row	J ⵏⴳⵉⵣ ⵙ ⵉⵣⵉⵔⵉⴳ
+KEY+FILL: OFF	KEY+FILL: ⵉⵅⵙⴰ
+MEDIA ENCODER	ⴰⵙⵏⴳⵍ ⵏ ⵡⴰⵍⵍⴰⵍⵏ
+MSC device id	ID ⵏ MSC
+NEW SHOW FILE	ⴰⴼⴰⵢⵍⵓ ⴰⵎⴰⵢⵏⵓ
+No cue loaded	ⵓⵔ ⵉⵍⵍⵉ cue ⵉⵜⵜⵓⵙⵎⵖⵔⵏ
+nothing taken	ⵓⵔ ⵉⵍⵍⵉ ⵎⴰ ⵉⵜⵜⵓⵟⵟⴰⴼⵏ
+one named cue	cue ⵢⴰⵏ ⵙ ⵉⵙⴻⵎ
+OPEN PREVIOUS	ⵕⵥⵎ ⴰⵣⵡⴰⵔ
+Output device	ⴰⵍⵍⴰⵍ ⵏ ⵜⵓⴼⴼⵖⴰ
+Paired phones	ⵉⵟⵉⵍⵉⴼⵓⵏⵏ ⵉⵜⵜⵓⵙⵎⵓⵏⵏ
+Panic profile	ⴰⵙⵖⵍ ⵏ ⵓⵥⵍⴰⵖ
+Phone control	ⴰⵟⵉⵍⵉⴼⵓⵏ ⴰⵏⴱⴱⴰⴹ
+Quit Deckboy?	ⴰⴷ ⵜⴼⴼⵖⵜ ⵣⵖ Deckboy?
+READY-MADE...	ⵉⵡⵊⴷ...
+REMOVE OUTPUT	ⴽⴽⵙ ⵜⵓⴼⴼⵖⴰ
+render height	ⵜⴰⵜⵜⵓⵢⵜ ⵏ ⵓⵙⴼⵔⵓ
+set a port...	ⵙⴱⴷⴷ ⵜⴰⵡⵡⵓⵔⵜ...
+Sound effects	ⵉⵙⴳⵯⴷⴰⵏ ⵏ ⵉⵎⵙⵍⵉ
+Space — pause	ⵜⴰⵍⵍⵓⵏⵜ — ⵙⴳⵓⵏⴼⵓ
+Speech models	ⵉⵎⵓⴷⵉⵍⵏ ⵏ ⵡⴰⵡⴰⵍ
+Tally address	ⵜⴰⵏⵙⴰ ⵏ Tally
+THIS COMPUTER	ⴰⵙⵍⴽⵉⵎ ⴰⴷ
+VIDEO DIP: ON	VIDEO DIP: ⵉⵔⵎⴷ
+VIDEO OUTPUTS	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵏ ⵓⴱⵉⴷⵢⵓ
+whole network	ⴰⵥⵟⵟⴰ ⴰⴽⴽ
+will not open	ⵓⵔ ⵉⵕⵥⵎ
+127 (all-call)	127 (ⵓⵔ ⴰⴽⴽ)
+ALL INTERFACES	ⵉⵎⴰⵡⴰⵍⵏ ⴰⴽⴽ
+custom size...	ⵜⵉⴷⴷⵉ ⵢⴰⴹⵏ...
+glitch through	glitch ⵙ ⵉⵖⵉⵎⵉ
+LOCALHOST ONLY	ⴰⵙⵍⴽⵉⵎ ⴰⴷ ⵡⴰⵃⴷⵓⵜ
+lock to screen	ⵙⴷⴷ ⴳ ⵓⴳⴷⵉⵍ
+Monitor device	ⴰⵍⵍⴰⵍ ⵏ ⵓⵎⵙⵎⵏ
+NDI source cue	cue ⵏ ⵓⵖⴱⴰⵍⵓ NDI
+no audio track	ⵓⵔ ⵉⵍⵍⵉ ⵓⴱⵔⵉⴷ ⵏ ⵉⵎⵙⵍⵉ
+on any channel	ⵖ ⴽⵔⴰ ⵏ ⵓⴱⴰⴷⵓ
+on the monitor	ⵖ ⵓⵎⵙⵎⵏ
+play a note...	ⵖⵔ ⵜⴰⵣⵎⴰⵎⵜ...
+PRESENTER VIEW	ⵜⵉⵎⵎⵉ ⵏ ⵓⵎⵙⴳⵔⵉ
+press a key...	ⵙⵉⵜ ⵉ ⵜⴰⵙⴰⵔⵓⵜ...
+RECORD TO DISK	ⴰⵙⴽⵍⵙ ⵖ ⵓⴹⴱⵙⵉ
+RECORD TO FILE	ⴰⵙⴽⵍⵙ ⵖ ⵓⴼⴰⵢⵍⵓ
+REMOTE CONTROL	ⴰⵏⵎⵎⴰⴽ ⵏ ⵜⵓⴳⴳⵓⴳⵜ
+restore at end	ⵙⵙⵓⵖⵍ ⴳ ⵜⴳⴳⵉⵔⴰ
+SCALED TO FILL	ⵉⵜⵜⵓⵙⵎⵖⵔ ⴰⴷ ⵉⵄⵎⵎⵔ
+SELECT: MOTION	ⴰⵙⵜⵉ: ⴰⵎⵓⵙⵙⵓ
+STOP RECORDING	ⵃⴱⵙ ⴰⵙⴽⵍⵙ
+STOP STREAMING	ⵃⴱⵙ ⴰⵙⵓⴷⴷⵎ
+TALLY TRIGGERS	ⵉⵎⵙⵏⴽⴽⵔⵏ ⵏ Tally
+VIDEO DIP: OFF	VIDEO DIP: ⵉⵅⵙⴰ
+Who can see it	ⵎⴰⴷ ⵣⵎⵎⵔⵏ ⴰⴷ ⵜ ⵢⴰⵏⵏⵉ
++ CHOOSE A FEED	+ ⵙⵜⵉ ⴰⵖⴱⴰⵍⵓ
+1080p (default)	1080p (ⴰⵎⵣⵡⴰⵔⵓ)
+Ctrl+/ to close	Ctrl+/ ⵉ ⵓⵇⵇⵏ
+DeckLink Output	ⵜⵓⴼⴼⵖⴰ DeckLink
+decoder spin-up	ⴰⴱⴷⵓ ⵏ ⵓⵙⴼⵔⵓ
+Device channels	ⵉⴱⵓⴷⴰ ⵏ ⵡⴰⵍⵍⴰⵍ
+Double-GO guard	ⴰⵃⴹⴹⴰ ⵏ ⵙⵉⵏ GO
+first available	ⴰⵎⵣⵡⴰⵔⵓ ⵉⵍⵓⵍⵍⴰⵏ
+Frames a second	ⵜⵓⴳⵏⵉⵡⵉⵏ ⵖ ⵜⴰⵙⵉⵏⵜ
+HOLDING OFF AIR	ⵉⵜⵜⵓⵟⵟⴼ ⴱⵍⴰ ⴰⵀⵉⵍ
+MATTE & OVERLAY	ⴰⵎⴰⵜⵜ ⴷ ⵓⴼⵍⵍⴰⵢ
+Maximum quality	ⵜⴰⵖⴰⵔⴰ ⵜⴰⵎⵇⵔⴰⵏⵜ
+NDI SENDING: ON	NDI: ⵉⵔⵎⴷ
+NO CUE SELECTED	ⵓⵔ ⵉⵜⵜⵓⵙⵜⴰⵢ cue
+nothing follows	ⵓⵔ ⵉⵍⵍⵉ ⵎⴰ ⵉⴷⴼⴰⵔⵏ
+Output channels	ⵉⴱⵓⴷⴰ ⵏ ⵜⵓⴼⴼⵖⴰ
+preview pending	ⴰⵣⵡⴰⵔ ⴰⵔ ⵉⵜⵜⵔⵊⵓ
+Projector gamma	gamma ⵏ ⵓⵙⵏⴽⴽⵔ
+restart on take	ⵙⵙⵓⵖⵍ ⵙ TAKE
+START RECORDING	ⴱⴷⵓ ⴰⵙⴽⵍⵙ
+START STREAMING	ⴱⴷⵓ ⴰⵙⵓⴷⴷⵎ
+the focused one	ⵡⴰⴷ ⵉⵜⵜⵓⵙⵎⵖⵔⵏ
+(system default)	(ⴰⵎⵣⵡⴰⵔⵓ ⵏ ⵓⵏⴰⴳⵔⴰⵡ)
+BACK TO BUG SWAT	ⵜⵓⵖⴰⵍⵉⵏ ⵙ BUG SWAT
+Check at startup	ⵙⴰⵡⵍ ⴳ ⵓⴱⴷⵓ
+Click to type it	ⵙⵉⵜ ⵉ ⵜⵉⵔⴰ
+DISPLAY & RASTER	ⴰⴳⴷⵉⵍ ⴷ RASTER
+factory settings	ⵜⵉⵙⵖⴰⵍ ⵏ ⵜⵎⴳⴳⵉⵜ
+Fade-in duration	ⴰⴽⵓⴷ ⵏ ⵓⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ
+Global crossfade	ⴰⵙⴼⵙⵉ ⴰⵎⴰⵜⴰⵢ
+GO steps over it	GO ⵉⵜⵜⵣⵔⵉ ⵜ
+import an SVG...	ⵙⵙⵏⴽⵔ SVG...
+LEARN THE BASICS	ⵍⵎⴷ ⵉⵙⴰⵙⵏ
+Mic to recording	ⴰⵎⵉⴽⵕⵓ ⵙ ⵓⵙⴽⵍⵙ
+Monitor playlist	ⵜⴰⴱⴷⴰⵔⵜ ⵏ ⵓⵎⵙⵎⵏ
+NDI SENDING: OFF	NDI: ⵉⵅⵙⴰ
+no still preview	ⵓⵔ ⵉⵍⵍⵉ ⵓⵣⵡⴰⵔ ⵉⵇⵇⴰⵎⵏ
+open the monitor	ⵕⵥⵎ ⴰⵎⵙⵎⵏ
+over the picture	ⵖ ⵓⴼⴰⵍⵍⴰ ⵏ ⵜⵓⴳⵏⴰ
+PICK FROM SCREEN	ⵙⵜⵉ ⵣⵖ ⵓⴳⴷⵉⵍ
+Pocket 3 / touch	Pocket 3 / ⴰⵙⵉⵜⵉ
+REPORT A PROBLEM	ⵎⵎⵍ ⵢⴰⵏ ⵓⴳⵓⵔ
+SMPTE LTC OUTPUT	ⵜⵓⴼⴼⵖⴰ SMPTE LTC
+the selected cue	cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+WHAT DECKBOY DID	ⵎⴰ ⵉⵙⴽⵔ Deckboy
+(step lives here)	(ⵜⴰⵙⵙⵔⴰⵡⵜ ⵖⵉⴷ)
+Check for one now	ⵙⴰⵡⵍ ⵉ ⵢⴰⵏ ⵖⵉⵍⴰ
+CLICK ANYWHERE...	ⵙⵉⵜ ⵖ ⴽⵔⴰ ⵏ ⵓⴷⵖⴰⵔ...
+click this window	ⵙⵉⵜ ⵖ ⵓⵙⴰⵜⵎ ⴰⴷ
+DISCOVERY / NOTES	ⴰⵙⵏⵖⵎⵉⵙ / ⵜⵉⵏⵖⵎⵉⵙⵉⵏ
+Fade-out duration	ⴰⴽⵓⴷ ⵏ ⵓⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ
+INSTALL & RESTART	ⵙⴱⴷⴷⵉ ⴷ ⵙⵙⵓⵖⵍ
+Key edge softness	ⴰⵍⵡⴰ ⵏ ⵉⵔⵉ ⵏ ⵜⵙⴰⵔⵓⵜ
+name or number...	ⵉⵙⴻⵎ ⵏⵖ ⵓⵟⵟⵓⵏ...
+or your own bytes	ⵏⵖ ⵉⴱⵉⵜⵏ ⵏⵏⴽ
+SAFETY / TIMECODE	ⴰⵃⴹⴹⴰ / TIMECODE
+SDL Window Output	ⵜⵓⴼⴼⵖⴰ ⵏ ⵓⵙⴰⵜⵎ SDL
+the system output	ⵜⵓⴼⴼⵖⴰ ⵏ ⵓⵏⴰⴳⵔⴰⵡ
+this cue lives on	cue ⴰⴷ ⵉⵍⵍⴰ ⵖ
+Timecode jam sync	ⴰⵎⵜⴰⵡⴰ ⵏ TIMECODE
+Toggle chroma key	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵜⴰⵙⴰⵔⵓⵜ CHROMA
+type a cue number	ⴰⵔⴰ ⵓⵟⵟⵓⵏ ⵏ cue
+value to type one	ⴰⵣⴰⵍ ⵉ ⵜⵉⵔⴰ
+when its cues end	ⵎⵍ ⴽⵎⵍⵏ cue ⵏⵏⵙ
+CONNECTED DISPLAYS	ⵉⴳⴷⵉⵍⵏ ⵉⵜⵜⵓⵇⵇⵏⵏ
+DEFAULT TRANSITION	ⴰⵙⴼⵙⵉ ⴰⵎⵣⵡⴰⵔⵓ
+delete this button	ⴽⴽⵙ ⵜⴰⵇⴼⴰⵍⵜ ⴰⴷ
+esc or N to cancel	ⴻⵙⵛ ⵏⵖ N ⵉ ⵓⵙⴼⵙⵅ
+FORGET MY DEFAULTS	ⵜⵜⵓ ⵉⵎⵣⵡⵓⵔⴰ ⵉⵏⵓ
+Hex, e.g. 90 3C 7F	Hex, ⴰⵎ 90 3C 7F
+KEYBOARD SHORTCUTS	ⵜⵉⵙⵓⵔⴰ ⵏ ⵓⵏⴰⵙⵉⵡ
+loading preview...	ⴰⵔ ⵉⵙⵎⵖⵔ ⴰⵣⵡⴰⵔ...
+Media File / Still	ⴰⴼⴰⵢⵍⵓ ⵏ ⵓⵎⵉⴷⵢⴰ / ⵜⴰⵡⵍⴰⴼⵜ
+only this computer	ⴰⵙⵍⴽⵉⵎ ⴰⴷ ⵡⴰⵃⴷⵓⵜ
+output already has	ⵜⵓⴼⴼⵖⴰ ⵜⵍⴰ ⵢⴰⴷⵍⵍⵉ
+put it on a button	ⴳⵉⵙ ⵜ ⵖ ⵜⴰⵇⴼⴰⵍⵜ
+what it recalls...	ⵎⴰ ⵉⵙⴽⴼⵍ...
+1.50x  (4K desktop)	1.50x  (ⵜⴰⴼⵉⵍⵓⵜ 4K)
+Connections at once	ⵜⵓⵇⵇⵏⵉⵡⵉⵏ ⴳ ⵢⴰⵏ ⵡⴰⴽⵓⴷ
+CONVERT ALL FLAGGED	ⵙⵙⵏⴼⵍ ⴰⴽⴽ ⵎⴰ ⵉⵜⵜⵓⵎⴰⵜⴰⵔⵏ
+dot-matrix cue deck	deck ⵏ cue ⵙ ⵜⵉⵏⵇⵇⴰⴹ
+draw on the monitor	ⵙⵓⵏⵖ ⵖ ⵓⵎⵙⵎⵏ
+edit on the monitor	ⵙⵙⵏⴼⵍ ⵖ ⵓⵎⵙⵎⵏ
+find a named colour	ⴰⴼ ⵉⵏⵉ ⵙ ⵉⵙⴻⵎ
+HyperDeck emulation	ⴰⵎⵙⵔⵡⴰⵙ ⵏ HyperDeck
+locked to the tempo	ⵉⵜⵜⵓⵇⵇⵏ ⵙ ⵓⵍⵓⴳⵏ
+name, from anywhere	ⵉⵙⴻⵎ, ⵣⵖ ⴽⵔⴰ ⵏ ⵓⴷⵖⴰⵔ
+rise, slide or wipe	ⴰⵙⴰⵡⵏ, ⴰⵎⵓⵜⵜⵉ ⵏⵖ ⴰⵙⴼⴹ
+SAVE AS MY DEFAULTS	ⵃⴹⵓ ⴰⵎ ⵉⵎⵣⵡⵓⵔⴰ ⵉⵏⵓ
+Trusted controllers	ⵉⵎⵏⴱⴱⴰⴹⵏ ⵏ ⵜⵉⵇⵇⵉ
+VJ mode (two decks)	ⴰⵙⴽⴰⵔ VJ (ⵙⵉⵏ deck)
+Where the ramp ends	ⵎⴰⵏⵉ ⵜⴽⵎⵎⵍ ⵜⵣⴷⴰⵡⵜ
+ADD ANOTHER PLAYLIST	ⵔⵏⵓ ⵜⴰⴱⴷⴰⵔⵜ ⵢⴰⴹⵏ
+Companion / OSC port	ⵜⴰⵡⵡⵓⵔⵜ Companion / OSC
+Companion passphrase	ⵜⴰⵡⴰⵍⵜ ⵏ ⵓⵣⵔⵉ ⵏ Companion
+decks - Stop deck...	deck - ⵃⴱⵙ deck...
+decks - Take deck...	deck - TAKE deck...
+Esc or click to skip	Esc ⵏⵖ ⵙⵉⵜ ⵉ ⵓⵣⵔⵉ
+FFmpeg Stream Output	ⵜⵓⴼⴼⵖⴰ ⵏ ⵓⵙⵓⴷⴷⵎ FFmpeg
+Home — skip to start	Home — ⵏⴳⵉⵣ ⵙ ⵓⴱⴷⵓ
+How solid the ink is	ⵎⵏⵛⴽ ⵉⵚⵃⴰ ⵓⵎⴷⴷⴰⴷ
+INTEGRATION ADAPTERS	ⵉⵎⵙⵎⴰⵡⴰⵍⵏ ⵏ ⵜⵎⵙⵎⵓⵏⵜ
+Left — skip back 10s	ⴰⵣⵍⵎⴰⴹ — 10s ⵙ ⴷⴼⴼⵉⵔ
+MIDI AND OSC MONITOR	ⴰⵎⵙⵎⵏ ⵏ MIDI ⴷ OSC
+New shows start from	ⵉⵙⵙⴽⴰⵏⵏ ⵉⵎⴰⵢⵏⵓⵜⵏ ⴱⴷⴰⵏ ⵣⵖ
+nothing assigned yet	ⵓⵔ ⵉⵜⵜⵓⵙⵖⵍ ⵡⴰⵍⵓ
+nothing targeted yet	ⵓⵔ ⵉⵍⵍⵉ ⵢⴰⵏ ⵓⵙⴰⴹⵓⴼ
+OSC QUERY / FEEDBACK	OSC QUERY / ⵜⴰⵎⴰⵡⵜ
+Pitch, in semitones.	ⵜⵓⵖⴰ ⵏ ⵉⵎⵙⵍⵉ, ⵙ ⵉⵣⴳⵏ ⵏ ⵜⵓⵖⴰ.
+PLAYLIST PREFERENCES	ⵉⵎⵃⵔⵔⵏ ⵏ ⵜⴱⴷⴰⵔⵜ
+press ENTER to start	ⵙⵉⵜ ENTER ⵉ ⵓⴱⴷⵓ
+Set browser URL/path	ⵙⴱⴷⴷ URL/abrid ⵏ ⵓⵎⵢⴰⴳⵉ
+the playlist's PATCH	PATCH ⵏ ⵜⴱⴷⴰⵔⵜ
+Typing needs EDIT on	ⵜⵉⵔⴰ ⵜⵔⴰ EDIT ⵉⵔⵎⴷ
+X — cycle end action	X — ⴱⴷⴷⵍ ⵜⵉⴳⴰⵡⵜ ⵏ ⵜⴳⴳⵉⵔⴰ
+ADD A SECOND PLAYLIST	ⵔⵏⵓ ⵜⴰⴱⴷⴰⵔⵜ ⵜⵉⵙ ⵙⵏⴰⵜ
+click or Esc to close	ⵙⵉⵜ ⵏⵖ Esc ⵉ ⵓⵇⵇⵏ
+Desktop (full screen)	ⵜⴰⴼⵉⵍⵓⵜ (ⴰⴳⴷⵉⵍ ⴰⴽⴽ)
+filmstrip unavailable	ⵓⵔ ⵉⵍⵍⵉ ⵓⵙⴰⵔⵓ ⵏ ⵜⵓⴳⵏⵉⵡⵉⵏ
+Left, centre or right	ⴰⵣⵍⵎⴰⴹ, ⴰⵍⵓⵎⵎⴰⵙ ⵏⵖ ⴰⴼⴰⵙⵉ
+line  |  Enter: apply	ⵉⵣⵉⵔⵉⴳ  |  Enter: ⵙⵙⵏⵜⵙ
+none - click to learn	ⵡⴰⵍⵓ - ⵙⵉⵜ ⵉ ⵓⵍⵎⴰⴷ
+none: the one picture	ⵡⴰⵍⵓ: ⵜⵓⴳⵏⴰ ⵜⴰⵏⵖⵉ
+Pattern motion toggle	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵎⵓⵙⵙⵓ ⵏ ⵓⵍⴳⵓⵖ
+PLAY BUG SWAT, a game	ⵓⵔⴰⵔ BUG SWAT, ⵢⴰⵏ ⵡⵓⵔⴰⵔ
+PRESS AGAIN TO FORGET	ⵙⵉⵜ ⴷⴰⵖ ⵉ ⵜⴰⵜⵓⵜ
+Sound when time is up	ⵉⵎⵙⵍⵉ ⵎⵍ ⵉⴽⵎⵎⵍ ⵡⴰⴽⵓⴷ
+turn phone control on	ⵔⵎⴷ ⴰⵏⵎⵎⴰⴽ ⵏ ⵓⵟⵉⵍⵉⴼⵓⵏ
+(empty — import media)	(ⵉⵍⵓⵍⵍⵓ — ⵙⵙⵏⴽⵔ ⴰⵎⵉⴷⵢⴰ)
+1.00x  (default 1080p)	1.00x  (1080p ⴰⵎⵣⵡⴰⵔⵓ)
+1.25x  (large desktop)	1.25x  (ⵜⴰⴼⵉⵍⵓⵜ ⵜⴰⵎⵇⵔⴰⵏⵜ)
+720p (lower bandwidth)	720p (ⵓⵔ ⵉⴱⴱⵉ ⴱⴰⵀⵔⴰ)
+any window, any screen	ⴽⵔⴰ ⵏ ⵓⵙⴰⵜⵎ, ⴽⵔⴰ ⵏ ⵓⴳⴷⵉⵍ
+change what it does...	ⴱⴷⴷⵍ ⵎⴰ ⵉⵙⴽⴽⵔ...
+circle, heart, star...	ⵜⴰⵡⵔⵉⵇⵜ, ⵓⵍ, ⵉⵜⵔⵉ...
+click to open the grid	ⵙⵉⵜ ⵉ ⵓⵕⵥⵎ ⵏ ⵜⵖⵔⴱⴰⵍⵜ
+Ctrl+D or Esc to close	Ctrl+D ⵏⵖ Esc ⵉ ⵓⵇⵇⵏ
+sACN universe, 1-63999	ⴰⵎⴰⴹⴰⵍ sACN, 1-63999
+Scene fade-in duration	ⴰⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ ⵏ ⵜⵎⵍⵉⵍⵉⵜ
+Start NEW from factory	ⴱⴷⵓ ⴰⵎⴰⵢⵏⵓ ⵣⵖ ⵜⵎⴳⴳⵉⵜ
+Tile height in pixels.	ⵜⴰⵜⵜⵓⵢⵜ ⵏ ⵓⵖⵍⵍⴰⵍ ⵙ ⵉⴱⵉⴽⵙⵍ.
+(no notes for this cue)	(ⵓⵔ ⵜⵍⵍⵉ ⵜⵎⴰⵡⵜ ⵉ cue ⴰⴷ)
+Click to edit cue notes	ⵙⵉⵜ ⵉ ⵓⵙⵏⴼⵍ ⵏ ⵜⵎⴰⵡⵉⵏ ⵏ cue
+how much of this effect	ⵎⵏⵛⴽ ⵣⵖ ⵓⵙⵏⵖⵍ ⴰⴷ
+Master oscillator rate.	ⴰⵙⵡⵉⵔ ⵏ ⵓⵎⵙⵏⴳⵉ ⴰⵎⵣⵡⴰⵔⵓ.
+needs file-backed video	ⵉⵔⴰ ⴰⴱⵉⴷⵢⵓ ⵙ ⵓⴼⴰⵢⵍⵓ
+none: the whole picture	ⵡⴰⵍⵓ: ⵜⵓⴳⵏⴰ ⴰⴽⴽ
+recent and in this show	ⵉⵎⴳⴳⵓⵔⴰ ⴷ ⴳ ⵓⵙⵙⴽⴰⵏ ⴰⴷ
+Scene fade-out duration	ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵏ ⵜⵎⵍⵉⵍⵉⵜ
+the file cannot be read	ⴰⴼⴰⵢⵍⵓ ⵓⵔ ⵉⵜⵜⵓⵖⵔⴰ
+Timebase / start / fade	ⴰⴽⵓⴷ / ⴰⴱⴷⵓ / ⴰⵙⴼⵙⵉ
+whatever the style says	ⵎⴰ ⵉⵏⵏⴰ ⵓⵖⴰⵏⵉⴱ
+Which frame you draw on	ⵖ ⵎⴰⴷ ⵜⵓⴳⵏⴰ ⵜⵙⵓⵏⵖⵜ
+Clear in/out trim points	ⵙⴼⴹ ⵜⵉⵏⵇⵇⴰⴹ ⵏ ⵓⴽⵛⵓⵎ/ⵜⵓⴼⴼⵖⴰ
+No cues need conversion.	ⵓⵔ ⵉⵍⵍⵉ cue ⵉⵜⵜⵔⴰⵏ ⴰⵙⵏⴼⵍ.
+none - click to set some	ⵡⴰⵍⵓ - ⵙⵉⵜ ⵉ ⵓⵙⴱⴷⴷ
+Right — skip forward 10s	ⴰⴼⴰⵙⵉ — 10s ⵙ ⵣⵣⴰⵜ
+runs off the show thread	ⵉⴱⵔⵉ ⵣⵖ ⵓⵙⵙⴽⴰⵏ
+type a command myself...	ⴰⵔⴰ ⴰⵏⴹⴹⴰⵎ ⵙ ⵓⴼⵓⵙ...
+2160p (highest bandwidth)	2160p (ⵉⵣⵡⴰⵔ ⴱⴰⵀⵔⴰ)
+CLICK TO SAMPLE KEY COLOR	ⵙⵉⵜ ⵉ ⵓⵙⵜⵉ ⵏ ⵉⵏⵉ ⵏ ⵜⵙⴰⵔⵓⵜ
+Esc cancels, arrows nudge	Esc ⵉⵙⴼⵙⴰⵅ, ⵜⵉⴳⴳⵯⴰⵥ ⴰⴳⵯⵣⴰⵏⵜ
+Fit/Fill/Stretch/Unscaled	ⵎⵇⵇⴰⴷ/ⵄⵎⵎⵔ/ⵣⵣⵓⴳⵔ/ⴱⵍⴰ ⵜⵉⴷⴷⵉ
+from exactly this routing	ⵣⵖ ⵓⴱⵔⵉⴷ ⴰⴷ ⵙ ⵏⵏⵉⵖ
+normalize loudness (R128)	ⵙⵙⵎⵜⵜⵉ ⴰⵙⵡⵉⵔ ⵏ ⵉⵎⵙⵍⵉ (R128)
+off - all channels silent	ⵉⵅⵙⴰ - ⵉⴱⵓⴷⴰ ⴰⴽⴽ ⵙⵙⵓⵙⵎⵏ
+PIXEL FOR PIXEL, TOP-LEFT	PIXEL ⵙ PIXEL, ⴰⴼⴰⵍⵍⴰ ⴰⵣⵍⵎⴰⴹ
+Playback speed: 0.25–4.0×	ⵜⴰⵣⵣⵍⴰ ⵏ ⵜⵖⵓⵔⵉ: 0.25–4.0×
+PROJECTOR - gamma matched	ⴰⵙⵏⴽⴽⵔ - gamma ⵉⵎⵙⴰⵙⴰ
+Run the show from a phone	ⵙⵙⵉⴷⴷ ⴰⵙⵙⴽⴰⵏ ⵣⵖ ⵓⵟⵉⵍⵉⴼⵓⵏ
+WEB (browser, with sound)	WEB (ⴰⵎⵢⴰⴳⵉ, ⵙ ⵉⵎⵙⵍⵉ)
+~ makes the level breathe	~ ⵜⵙⴽⵔ ⵉ ⵓⵙⵡⵉⵔ ⴰⴷ ⵉⵙⵓⵏⴼⵓ
+44100 Hz  (CD, music rigs)	44100 Hz  (CD, ⴰⵥⴰⵡⴰⵏ)
+48000 Hz  (video standard)	48000 Hz  (ⴰⵏⴰⵡⴰⵢ ⵏ ⵓⴱⵉⴷⵢⵓ)
+MULTIVIEW (every playlist)	MULTIVIEW (ⴽⵔⴰⵢⴳⴰⵜ ⵜⴰⴱⴷⴰⵔⵜ)
+no video lane for this cue	ⵓⵔ ⵉⵍⵍⵉ ⵓⴱⵔⵉⴷ ⵏ ⵓⴱⵉⴷⵢⵓ ⵉ cue ⴰⴷ
+none - click to write some	ⵡⴰⵍⵓ - ⵙⵉⵜ ⵉ ⵜⵉⵔⴰ
+This show's setup, no cues	ⵜⵉⵙⵖⴰⵍ ⵏ ⵓⵙⵙⴽⴰⵏ, ⴱⵍⴰ cue
+walks every output in turn	ⵉⵣⵔⵉ ⵖ ⴽⵔⴰⵢⴳⴰⵜ ⵜⵓⴼⴼⵖⴰ
+add a second output to pair	ⵔⵏⵓ ⵜⵓⴼⴼⵖⴰ ⵜⵉⵙ ⵙⵏⴰⵜ ⵉ ⵜⵢⵓⴳⴰ
+HyperDeck emulation is off.	ⴰⵎⵙⵔⵡⴰⵙ ⵏ HyperDeck ⵉⵅⵙⴰ.
+OWN SCRIPT  (click to edit)	ⴰⴹⵔⵉⵙ ⵏⵏⴽ  (ⵙⵉⵜ ⵉ ⵓⵙⵏⴼⵍ)
+Right-click turns them off.	ⴰⵙⵉⵜⵉ ⴰⴼⴰⵙⵉ ⴰⵔ ⵜⵏ ⵙⵙⵅⵙⵉ.
+Scene dwell time — 0 = hold	ⴰⴽⵓⴷ ⵏ ⵜⵎⵍⵉⵍⵉⵜ — 0 = ⵟⵟⴼ
+The role, or leave it empty	ⵜⴰⵎⵍⵉⵍⵜ, ⵏⵖ ⵊⵊⵓ ⵜ ⵉⵍⵓⵍⵍⵓ
+Theme and operator feedback	ⴰⵙⵏⵜⵍ ⴷ ⵜⴰⵎⴰⵡⵜ ⵏ ⵓⵏⵎⵎⴰⴽ
+things that are oscillating	ⵎⴰ ⵉⵜⵜⵎⵓⵙⵙⵓⵏ
+type a length in seconds...	ⴰⵔⴰ ⵜⵉⵖⵥⵉ ⵙ ⵜⴰⵙⵉⵏⵜ...
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / 4K ⵉⵎⵥⵥⵉⵢⵏ)
+channel list is not readable	ⵜⴰⴱⴷⴰⵔⵜ ⵏ ⵉⴱⵓⴷⴰ ⵓⵔ ⵉⵜⵜⵓⵖⵔⴰ
+Discovery and mirrored state	ⴰⵙⵏⵖⵎⵉⵙ ⴷ ⵍⵎⵔⵉ
+FOLLOWING THE LIVE CUE NOTES	ⴰⵔ ⵉⴷⴼⵔ ⵜⴰⵎⴰⵡⵉⵏ ⵏ cue ⵙ ⵜⵓⴷⵔⵜ
+Network-facing runtime notes	ⵜⵉⵏⵖⵎⵉⵙⵉⵏ ⵏ ⵓⵥⵟⵟⴰ
+no effects for this cue type	ⵓⵔ ⵉⵍⵍⵉ ⵓⵙⵏⵖⵍ ⵉ ⵡⴰⵏⴰⵡ ⴰⴷ ⵏ cue
+on the header to add another	ⵖ ⵓⵣⵡⵍ ⵉ ⵜⵎⵔⵏⵉⵜ
+reads the same on any screen	ⵢⵓⵖ ⵢⴰⵏ ⵖ ⴽⵔⴰⵢⴳⴰⵜ ⴰⴳⴷⵉⵍ
+reported rather than swapped	ⵉⵜⵜⵓⵎⵎⵍ, ⵓⵔ ⵉⵜⵜⵓⴱⴷⴷⵍ
+what is on air in a playlist	ⵎⴰ ⵉⵍⵍⴰⵏ ⵖ ⵜⴱⴷⴰⵔⵜ ⵙ ⵜⵓⴷⵔⵜ
+1-16, as the desk counts them	1-16, ⴰⵎ ⵎⴰⴷ ⵜⵙⵙⵎⴹⴰⵏ ⵜⴰⴼⵉⵍⵓⵜ
+[ / ] keys — fade-in duration	ⵜⵉⵙⵓⵔⴰ [ / ] — ⴰⴽⵓⴷ ⵏ ⵓⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ
+a camera moves the ~ controls	ⵜⴰⴽⴰⵎⵉⵕⵜ ⴰⵔ ⵜⵙⵙⵎⵓⵙⵙⵓ ~
+Art-Net port address, 0-32767	ⵜⴰⵏⵙⴰ ⵏ ⵜⴰⵡⵡⵓⵔⵜ Art-Net, 0-32767
+Fade-in duration for this cue	ⴰⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ ⵏ cue ⴰⴷ
+Hi! Press I to import a clip.	ⴰⵣⵓⵍ! ⵙⵉⵜ I ⵉ ⵓⵙⵏⴽⵔ ⵏ ⵓⵙⴳⵣⵓⵎ.
+Toggle loop for selected cues	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵜⵓⵣⵣⵢⴰ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Toggle the live input's audio	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵉⵎⵙⵍⵉ ⵏ ⵓⴽⵛⵓⵎ ⵙ ⵜⵓⴷⵔⵜ
+capture again - what is on now	ⵟⵟⴼ ⴷⴰⵖ - ⵎⴰ ⵉⵍⵍⴰⵏ ⵖⵉⵍⴰ
+Fade-out duration for this cue	ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵏ cue ⴰⴷ
+Global jump and panic behavior	ⵜⴰⵏⴳⴳⵉ ⴷ ⴰⵥⵍⴰⵖ ⴰⵎⴰⵜⴰⵢ
+L - loop this cue continuously	L - ⵙⴹⵍ cue ⴰⴷ ⴱⵍⴰ ⴰⵃⴱⴰⵙ
+Nothing here with this filter.	ⵡⴰⵍⵓ ⵙ ⵓⵙⵉⵣⴷⴳ ⴰⴷ.
+Nothing to see here. Probably.	ⵓⵔ ⵉⵍⵍⵉ ⵎⴰ ⵜⵜⴰⵏⵏⴰⵢⵜ ⵖⵉⴷ. Mayad.
+Roll when the show cuts to you	ⵖⵔ ⵎⵍ ⵖⵉⴽ ⵉⴱⴱⵉ ⵓⵙⵙⴽⴰⵏ
+row turns the matrix off again	ⵉⵣⵉⵔⵉⴳ ⵉⵙⵙⵅⵙⴰⵢ ⵜⴰⵎⴰⵜⵔⵉⵙⵜ ⴷⴰⵖ
+Sound when the clock turns red	ⵉⵎⵙⵍⵉ ⵎⵍ ⵉⵣⴳⴳⴰⵖ ⵡⴰⵙⴰⴽⵓⴷ
+Act now, without taking the cue	ⵙⴽⵔ ⵖⵉⵍⴰ, ⴱⵍⴰ TAKE ⵏ cue
+Choose a cue to inspect it here	ⵙⵜⵉ cue ⴰⴷ ⵜ ⵜⵙⵎⵙⵎⵏⵜ ⵖⵉⴷ
+Defaults for newly created cues	ⵉⵎⵣⵡⵓⵔⴰ ⵏ cue ⵉⵎⴰⵢⵏⵓⵜⵏ
+Delay before the continue fires	ⴰⵄⴹⴹⵍ ⴰⴷ ⵓⵔ ⵉⴷⴷⵓ ⵓⴱⴷⵓ
+Device routing for cue playback	ⴰⴱⵔⵉⴷ ⵏ ⵡⴰⵍⵍⴰⵍ ⵉ ⵜⵖⵓⵔⵉ ⵏ cue
+Edit the main Lower Third title	ⵙⵙⵏⴼⵍ ⴰⵣⵡⵍ ⵏ Lower Third
+false colour reads SDR pictures	ⵉⵏⵉ ⵏ ⵓⴽⴽⵯⴰⵢ ⵉⵖⵔⴰ ⵜⵓⴳⵏⵉⵡⵉⵏ SDR
+learn it, or say how to read it	ⵍⵎⴷ ⵜ, ⵏⵖ ⵉⵏⵉ ⵎⴰⵎⵏⴽ ⴰⴷ ⵜ ⵜⵖⵔⵜ
+LINEAR - a feather, not a blend	LINEAR - ⴰⵙⵏⴼⵍ, ⵓⵔⴷ ⴰⵙⵎⵓⵏ
+Safe Areas (90% / 80% / thirds)	ⵜⵉⵎⵏⴰⴹⵉⵏ ⵖ ⵜⵖⵓⴷⴰ (90% / 80% / ⵡⵉⵙ ⴽⵔⴰⴹ)
+Set per-cue transition duration	ⵙⴱⴷⴷ ⴰⴽⵓⴷ ⵏ ⵓⵎⵓⵜⵜⵉ ⵏ cue
+Shift+[ / ] — fade-out duration	Shift+[ / ] — ⴰⴽⵓⴷ ⵏ ⵓⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ
+Smaller buffer = lower latency.	ⴰⵃⵕⴰⵣ ⵉⵎⵥⵥⵉⵢⵏ = ⵉⵎⵉⴽⴽ ⵏ ⵓⵄⴹⴹⵍ.
+SOS. Kidding. The show is fine.	SOS. ⴹⵚⵚⴰ. ⴰⵙⵙⴽⴰⵏ ⵉⴳⴰ ⵡⵏ.
+The OSC path, e.g. /cue/1/start	ⴰⴱⵔⵉⴷ OSC, ⴰⵎ /cue/1/start
+walk the outputs one at a time.	ⵣⵔⵉ ⵖ ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵢⴰⵜ ⵙ ⵢⴰⵜ.
+aimed here; the desk never moves	ⵉⵜⵜⵓⵡⵊⵊⵀ ⵖⵉⴷ; ⵜⴰⴼⵉⵍⵓⵜ ⵓⵔ ⵜⵎⵓⵙⵙⵓ
+drag to scrub. the audio follows	ⵊⴱⴷ ⵉ ⵜⴼⵓⵔⵔⴰ. ⵉⵎⵙⵍⵉ ⵉⴷⴼⵔ
+Emergency fade and sync behavior	ⴰⵙⴼⵙⵉ ⵏ ⵓⵥⵍⴰⵖ ⴷ ⵓⵎⵜⴰⵡⴰ
+How many features fit on screen.	ⵎⵏⵛⴽ ⵏ ⵜⵖⴰⵡⵙⵉⵡⵉⵏ ⵖ ⵓⴳⴷⵉⵍ.
+mixed selection: key unavailable	ⴰⵙⵜⵉ ⵉⵜⵜⵓⵎⵙⴷⴰⵏ: ⵓⵔ ⵉⵍⵍⵉ ⵜⴰⵙⴰⵔⵓⵜ
+playlists into the named outputs	ⵜⵉⴱⴷⴰⵔⵉⵏ ⵙ ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵙ ⵉⵙⴻⵎ
+Set Lower Third background alpha	ⵙⴱⴷⴷ alpha ⵏ ⵓⴳⵉⵍⴰⵍ ⵏ Lower Third
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (ⵓⵔⵎⵉ)
+Sound when the clock turns amber	ⵉⵎⵙⵍⵉ ⵎⵍ ⵉⵡⵔⵖ ⵡⴰⵙⴰⴽⵓⴷ
+The text this cue puts on screen	ⴰⴹⵕⵉⵚ ⵏ cue ⴰⴷ ⵖ ⵓⴳⴷⵉⵍ
+Use GEOMETRY for exact placement	ⵙⵙⵎⵔⵙ GEOMETRY ⵉ ⵓⴷⵖⴰⵔ ⵙ ⵏⵏⵉⵖ
+Vertical output offset in pixels	ⴰⵙⵎⵓⵜⵜⵉ ⵓⴱⴷⵉⴷ ⵏ ⵜⵓⴼⴼⵖⴰ ⵙ ⵉⴱⵉⴽⵙⵍ
+7-segment, blocky, or a real font	7-segment, ⵉⵎⵇⵇⵓⵔⵏ, ⵏⵖ ⴰⴹⵔⵉⵙ ⵏ ⵏⵏⵉⵖ
+back to the in point, not to zero	ⵙ ⵜⵏⵇⵇⵉⴹⵜ ⵏ ⵓⴽⵛⵓⵎ, ⵓⵔⴷ ⵙ 0
+Do it now, without taking the cue	ⵙⴽⵔ ⵜ ⵖⵉⵍⴰ, ⴱⵍⴰ TAKE ⵏ cue
+Esc=continue with current session	Esc=ⴽⵎⵎⵍ ⵙ ⵜⵖⵉⵎⵉⵜ ⴰⴷ
+Fade-out duration before next cue	ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵣⵡⴰⵔ cue ⵢⴰⴹⵏ
+Fixed repeat count — 0 = infinite	ⴰⵎⴹⴰⵏ ⵏ ⵜⵓⵣⵣⵢⴰ — 0 = ⴱⵍⴰ ⵜⴳⴳⵉⵔⴰ
+no per-cue settings for this type	ⵓⵔ ⵉⵍⵍⵉ ⵢⴰⵜ ⵏ ⵜⵙⵖⴰⵍⵜ ⵉ ⵡⴰⵏⴰⵡ ⴰⴷ
+On stop: remux to an ordinary MP4	ⵖ ⵓⵃⴱⴰⵙ: ⵙⵙⵓⵖⵍ ⵙ MP4 ⴰⵎⵙⴰⵙⴰ
+Put this control on an oscillator	ⴳⵉⵙ ⴰⵙⵏⴱⴱⴰⴹ ⴰⴷ ⵖ ⵓⵎⵙⵏⴳⵉ
+Where RECORD writes the programme	ⵎⴰⵏⵉ ⵉⵜⵜⴰⵔⴰ RECORD ⴰⵀⵉⵍ
+window and recording outputs only	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵏ ⵓⵙⴰⵜⵎ ⴷ ⵓⵙⴽⵍⵙ ⵡⴰⵃⴷⵙⵏⵜ
+a chain on a device, after the mix	ⴰⵙⵎⵎⵏⴹ ⵖ ⵡⴰⵍⵍⴰⵍ, ⴷⴼⴼⵉⵔ ⵓⵙⵎⵓⵏ
+any command, {value} is the number	ⴽⵔⴰ ⵏ ⵓⵏⴹⴹⴰⵎ, {value} ⵉⴳⴰ ⵓⵟⵟⵓⵏ
+Changing this re-prepares the cue.	ⴰⵙⵏⴼⵍ ⴰⴷ ⵉⵙⵙⵓⵡⵊⴰⴷ cue ⴷⴰⵖ.
+Countdown, count up, or wall clock	ⴰⵙⵉⴹⴰⵏ ⵙ ⵡⴰⴷⴷⴰⵢ, ⵙ ⵓⴼⴰⵍⵍⴰ, ⵏⵖ ⴰⵙⴰⴽⵓⴷ
+Cycle end action for selected cues	ⴱⴷⴷⵍ ⵜⵉⴳⴰⵡⵜ ⵏ ⵜⴳⴳⵉⵔⴰ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+depth 1 turns it all the way round	ⵜⴰⵣⵔⴰⵔⵜ 1 ⴰⵔ ⵜ ⵜⵙⵏⵏⴹ ⴰⴽⴽ
+Digit colour once amber is reached	ⵉⵏⵉ ⵏ ⵓⵟⵟⵓⵏ ⵎⵍ ⵉⵡⵔⵖ
+Horizontal output offset in pixels	ⴰⵙⵎⵓⵜⵜⵉ ⴰⴳⵍⴰⵡⴰⵏ ⵏ ⵜⵓⴼⴼⵖⴰ ⵙ ⵉⴱⵉⴽⵙⵍ
+In-point: cue starts playback here	ⵜⴰⵏⵇⵇⵉⴹⵜ ⵏ ⵓⴽⵛⵓⵎ: cue ⵉⴱⴷⵓ ⵖⵉⴷ
+LIVE - every assigned deck matches	LIVE - ⴽⵔⴰⵢⴳⴰⵜ deck ⵉⵎⵙⴰⵙⴰ
+Out-point: cue stops playback here	ⵜⴰⵏⵇⵇⵉⴹⵜ ⵏ ⵜⵓⴼⴼⵖⴰ: cue ⵉⴱⴷⴷ ⵖⵉⴷ
+Run it now, without taking the cue	ⵙⵙⵉⴷⴷ ⵜ ⵖⵉⵍⴰ, ⴱⵍⴰ TAKE ⵏ cue
+Set repeat count for selected cues	ⵙⴱⴷⴷ ⴰⵎⴹⴰⵏ ⵏ ⵜⵓⵣⵣⵢⴰ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Set the NDI source name to receive	ⵙⴱⴷⴷ ⵉⵙⴻⵎ ⵏ ⵓⵖⴱⴰⵍⵓ NDI
+Attached overlays fire on TAKE only	ⵉⴼⵍⵍⴰⵢⵏ ⵉⵜⵜⵓⵇⵇⵏⵏ ⴱⴷⴰⵏ ⵙ TAKE ⵡⴰⵃⴷⵓⵜ
+Cycle which slot drives scene audio	ⴱⴷⴷⵍ ⴰⵖⴱⴰⵍⵓ ⵏ ⵉⵎⵙⵍⵉ ⵏ ⵜⵎⵍⵉⵍⵉⵜ
+dot-matrix cue deck for live events	deck ⵏ cue ⵙ ⵜⵉⵏⵇⵇⴰⴹ ⵉ ⵜⵎⵍⵉⵍⵉⵢⵉⵏ ⵙ ⵜⵓⴷⵔⵜ
+EDIT is on: typing changes the show	EDIT ⵉⵔⵎⴷ: ⵜⵉⵔⴰ ⵜⵙⵙⵏⴼⴰⵍ ⴰⵙⵙⴽⴰⵏ
+Edit the secondary Lower Third line	ⵙⵙⵏⴼⵍ ⵉⵣⵉⵔⵉⴳ ⵡⵉⵙ ⵙⵉⵏ ⵏ Lower Third
+label, command and glyph as text...	ⵉⵙⴻⵎ, ⴰⵏⴹⴹⴰⵎ ⴷ ⴰⵣⵎⵓⵍ ⵙ ⵓⴹⵕⵉⵚ...
+Listening on localhost (127.0.0.1).	ⴰⵔ ⵉⵙⴼⵍⵉⴷ ⵖ localhost (127.0.0.1).
+nothing to send - check the message	ⵓⵔ ⵉⵍⵍⵉ ⵎⴰ ⵉⵜⵜⵓⵣⴰⵏⵏ - ⵙⴰⵡⵍ ⵜⵓⵣⵉⵏⵜ
+Programme with sound in any browser	ⴰⵀⵉⵍ ⵙ ⵉⵎⵙⵍⵉ ⵖ ⴽⵔⴰ ⵏ ⵓⵎⵢⴰⴳⵉ
+Rotation speed, degrees per second.	ⵜⴰⵣⵣⵍⴰ ⵏ ⵓⵙⵏⵏⴹ, ⵜⴰⴼⴳⴳⵓⵏⵜ ⵖ ⵜⴰⵙⵉⵏⵜ.
+Send now, without taking the cue	ⴰⵣⵏ ⵖⵉⵍⴰ, ⴱⵍⴰ TAKE ⵏ cue
+Set short cue label for search/goto	ⵙⴱⴷⴷ ⵉⵙⴻⵎ ⵉⵎⵥⵥⵉⵢⵏ ⵉ ⵓⵙⵉⴳⴳⵍ/ⵜⴰⵏⴳⴳⵉ
+three expressions: red, green, blue	ⴽⵔⴰⴷ ⵏ ⵢⵉⵏⴰⵖⵏ: ⴰⵣⴳⴳⴰⵖ, ⴰⵣⴳⵣⴰⵡ, ⴰⵏⵉⵍⵉ
+Toggle cue audio track for this cue	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⴱⵔⵉⴷ ⵏ ⵉⵎⵙⵍⵉ ⵏ cue ⴰⴷ
+Transport sync with another machine	ⴰⵎⵜⴰⵡⴰ ⵏ ⵓⵙⵏⵖⵍ ⴷ ⵢⴰⵜ ⵜⵎⴰⵛⵉⵏⵜ
+0-63, the hardware's own gain range.	0-63, ⴰⵊⵀⴷ ⵏ ⵓⵖⵔⴱⴰⵍ ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ.
+Arm this cue as the one GO will fire	ⵙⴱⴷⴷ cue ⴰⴷ ⵉ GO ⵢⴰⴹⵏ
+channels on your interfaces, by name	ⵉⴱⵓⴷⴰ ⵏ ⵉⵎⴰⵡⴰⵍⵏ ⵏⵏⴽ, ⵙ ⵉⵙⴻⵎ
+How tall the logo is above the clock	ⵜⴰⵜⵜⵓⵢⵜ ⵏ ⵓⵍⵓⴳⵓ ⵖ ⵓⴼⴰⵍⵍⴰ ⵏ ⵓⵙⴰⴽⵓⴷ
+Linear, ease in, ease out or S-curve	ⴰⵎⵙⴰⵙⴰ, ⵙ ⵓⴽⵛⵓⵎ, ⵙ ⵜⵓⴼⴼⵖⴰ ⵏⵖ S
+nothing set - this cue sends nothing	ⵓⵔ ⵉⵍⵍⵉ ⵡⴰⵍⵓ - cue ⴰⴷ ⵓⵔ ⵉⵜⵜⴰⵣⵏ
+over budget - video will drop frames	ⵓⴳⴰⵔ ⵏ ⵜⵉⵍⵉⵙⵜ - ⴰⴱⵉⴷⵢⵓ ⵔⴰⴷ ⵉⴹⵔ ⵜⵓⴳⵏⵉⵡⵉⵏ
+Per-cue transition duration override	ⴰⴽⵓⴷ ⵏ ⵓⵎⵓⵜⵜⵉ ⵉ ⴽⵔⴰⵢⴳⴰⵜ cue
+Set capture source from the cue menu	ⵙⴱⴷⴷ ⴰⵖⴱⴰⵍⵓ ⵏ ⵜⵎⵥⵉ ⵣⵖ ⵓⵎⵓⵖ ⵏ cue
+Set playback speed for selected cues	ⵙⴱⴷⴷ ⵜⴰⵣⵣⵍⴰ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Toggle hold-at-end for selected cues	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵟⵟⴰⴼ ⴳ ⵜⴳⴳⵉⵔⴰ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Add slot sources in the cue inspector	ⵔⵏⵓ ⵉⵖⴱⵓⵍⴰ ⵖ ⵓⵎⵙⵎⵏ ⵏ cue
+all driven by the cue's own transport	ⴰⴽⴽ ⵉⴷⴷⵓ ⵙ ⵓⵙⵏⵖⵍ ⵏ cue ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ
+Ask GitHub; never installs on its own	ⵙⵇⵙⴰ GitHub; ⵓⵔ ⵉⵜⵜⵙⴱⴷⴷⵉ ⵡⴰⵃⴷⵓⵜ
+Fixed repeat count — 0 = loop forever	ⴰⵎⴹⴰⵏ ⵏ ⵜⵓⵣⵣⵢⴰ — 0 = ⴱⵍⴰ ⴰⵃⴱⴰⵙ
+Import or click a cue in the playlist	ⵙⵙⵏⴽⵔ ⵏⵖ ⵙⵉⵜ ⵖ cue ⵖ ⵜⴱⴷⴰⵔⵜ
+Keep counting past zero, or stop dead	ⴽⵎⵎⵍ ⴰⵙⵉⴹⴰⵏ ⴷⴼⴼⵉⵔ 0, ⵏⵖ ⵃⴱⵙ
+LISTENS: the figure follows the sound	ⵉⵙⴼⵍⴷ: ⵜⴰⵍⵖⴰ ⵜⴷⴼⵔ ⵉⵎⵙⵍⵉ
+mixed selection: geometry unavailable	ⴰⵙⵜⵉ ⵉⵜⵜⵓⵎⵙⴷⴰⵏ: ⵓⵔ ⵉⵍⵍⵉ GEOMETRY
+Move the height on its own oscillator	ⵙⵙⵎⵓⵙⵙⵓ ⵜⴰⵜⵜⵓⵢⵜ ⵙ ⵓⵎⵙⵏⴳⵉ ⵏⵏⵙ
+Put the brush's size on an oscillator	ⴳⵉⵙ ⵜⵉⴷⴷⵉ ⵏ ⵜⵙⵎⵔⵙⵜ ⵖ ⵓⵎⵙⵏⴳⵉ
+Toggle audio enable for selected cues	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵉⵎⵙⵍⵉ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+transcoding - plays clean until ready	ⴰⵙⵏⴼⵍ - ⴰⵔ ⵉⵜⵜⵖⵔⴰ ⵙ ⵜⵣⴷⴳⵉ
+What NEW starts from, never this show	ⵣⵖ ⵎⴰⵏⵉ ⵉⴱⴷⵓ ⴰⵎⴰⵢⵏⵓ, ⵓⵔⴷ ⴰⵙⵙⴽⴰⵏ ⴰⴷ
+All interfaces; trusted machines only.	ⵉⵎⴰⵡⴰⵍⵏ ⴰⴽⴽ; ⵜⵉⵎⴰⵛⵉⵏⵉⵏ ⵏ ⵜⵉⵇⵇⵉ ⵡⴰⵃⴷⵙⵏⵜ.
+Delay between GO and this cue starting	ⴰⵄⴹⴹⵍ ⴳⵔ GO ⴷ ⵓⴱⴷⵓ ⵏ cue ⴰⴷ
+generate timecode for the rig to chase	ⵙⵙⵏⴼⵍⵓⵍ TIMECODE ⵉ ⵡⴰⵍⵍⴰⵍⵏ
+Its amount, or one of its knobs A to D	ⴰⵙⵡⵉⵔ ⵏⵏⵙ, ⵏⵖ ⵢⴰⵏ ⵣⵖ A ⴰⵔ D
+Lower Third and PIP fire independently	Lower Third ⴷ PIP ⴱⴷⴰⵏ ⵡⴰⵃⴷⵙⵏ
+Panels built for a vMix rig, unchanged	ⵜⵉⵡⵔⵉⵇⵉⵏ ⵏ vMix, ⵙ ⵡⴰⵔ ⴰⵙⵏⴼⵍ
+Which deck the cue it acts on lives on	ⵖ ⵎⴰⴷ deck ⵉⵍⵍⴰ cue ⵏⵏⵙ
+FEEDS: pick a window, then one of these	FEEDS: ⵙⵜⵉ ⴰⵙⴰⵜⵎ, ⴷⵖⵉ ⵢⴰⵏ ⵣⵖ ⴰⴷ
+Incoming transport arrives as NMCEVENT.	ⴰⵙⵏⵖⵍ ⵉⴽⵛⵎ ⴰⵎ NMCEVENT.
+install Tailscale here and on the phone	ⵙⴱⴷⴷⵉ Tailscale ⵖⵉⴷ ⴷ ⵖ ⵓⵟⵉⵍⵉⴼⵓⵏ
+No outputs — click + OUTPUT to add one.	ⵓⵔ ⵜⵍⵍⵉ ⵜⵓⴼⴼⵖⴰ — ⵙⵉⵜ + OUTPUT ⵉ ⵜⵎⵔⵏⵉⵜ.
+not in this build - saved with the show	ⵓⵔ ⵉⵍⵍⵉ ⴳ ⵓⴱⵏⵉ ⴰⴷ - ⵉⵃⴹⴰ ⴷ ⵓⵙⵙⴽⴰⵏ
+Digit colour while there is time in hand	ⵉⵏⵉ ⵏ ⵓⵟⵟⵓⵏ ⵎⵍ ⵉⵍⵍⴰ ⵡⴰⴽⵓⴷ
+Find from the playlist, not from a modal	ⴰⴼ ⵣⵖ ⵜⴱⴷⴰⵔⵜ, ⵓⵔⴷ ⵣⵖ ⵓⵙⴰⵜⵎ
+Put the brush's opacity on an oscillator	ⴳⵉⵙ ⵜⴰⴳⵓⵎⵎⵉ ⵏ ⵜⵙⵎⵔⵙⵜ ⵖ ⵓⵎⵙⵏⴳⵉ
+transparent: put its playlist on a layer	ⵉⴱⴰⵢⵢⵏ: ⴳⵉⵙ ⵜⴰⴱⴷⴰⵔⵜ ⵖ ⵓⴼⵍⵍⴰⵢ
+X — cycle end action: stop / next / loop	X — ⵜⵉⴳⴰⵡⵜ ⵏ ⵜⴳⴳⵉⵔⴰ: ⵃⴱⵙ / ⵢⴰⴹⵏ / ⵜⵓⵣⵣⵢⴰ
+Click to show or hide this cue's captions	ⵙⵉⵜ ⵉ ⵜⵎⵍⵉⵜ ⵏⵖ ⵜⵓⴼⴼⵔⴰ ⵏ ⵜⵉⵔⵔⴰ ⵏ cue ⴰⴷ
+How much it throws off; 0 is a clean burn	ⵎⵏⵛⴽ ⴰⴷ ⵉⴹⵓⵕ; 0 ⵓⵔ ⵉⴳⵉ ⵡⴰⵍⵓ
+Phone control is in PHONE & TABLET, below	ⴰⵏⵎⵎⴰⴽ ⵏ ⵓⵟⵉⵍⵉⴼⵓⵏ ⵖ PHONE & TABLET, ⴷⴷⴰⵡ
+preset - a new preset from what is on now	ⴰⵎⵣⵡⴰⵔⵓ - ⴰⵎⴰⵢⵏⵓ ⵣⵖ ⵎⴰ ⵉⵍⵍⴰⵏ ⵖⵉⵍⴰ
+take or select a cue to open the timeline	TAKE ⵏⵖ ⵙⵜⵉ cue ⵉ ⵓⵕⵥⵎ ⵏ ⵓⴽⵓⴷ
+that output's whole picture, or its matte	ⵜⵓⴳⵏⴰ ⴰⴽⴽ ⵏ ⵜⵓⴼⴼⵖⴰ ⴰⵏⵏ, ⵏⵖ ⴰⵎⴰⵜⵜ ⵏⵏⵙ
+Apply fade-in to selected video/audio cues	ⴰⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ ⵖ cue ⵏ ⵓⴱⵉⴷⵢⵓ/ⵉⵎⵙⵍⵉ ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Bypass: this master leaves that deck alone	Bypass: ⴰⵎⴰⵙⵟⵔ ⴰⴷ ⵓⵔ ⵉⵜⵜⴰⵡⵉ deck ⴰⵏⵏ
+generator is off - a START cue turns it on	ⴰⵎⵙⵏⴼⵍⵓⵍ ⵉⵅⵙⴰ - cue START ⴰⵔ ⵜ ⵉⵔⵎⴷ
+Lissajous, spectrum, meters or a name card	Lissajous, ⴰⵥⵍⴰⵖ, ⵉⵙⵡⵉⵔⵏ ⵏⵖ ⵜⴰⵡⵔⵉⵇⵜ ⵏ ⵉⵙⴻⵎ
+Seconds REMAINING when the clock turns red	ⵜⵉⵙⵉⵏⵉⵏ ⵍⵍⵉ ⵉⵇⵇⵉⵎⵏ ⵎⵍ ⵉⵣⴳⴳⴰⵖ ⵡⴰⵙⴰⴽⵓⴷ
+Ancient cypher, modern video desk. Respect.	ⵜⵉⵔⴰ ⵜⴰⵇⴱⵓⵔⵜ, ⵜⴰⴼⵉⵍⵓⵜ ⵜⴰⵎⴰⵢⵏⵓⵜ. Ttuqqr.
+Apply fade-out to selected video/audio cues	ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵖ cue ⵏ ⵓⴱⵉⴷⵢⵓ/ⵉⵎⵙⵍⵉ ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Keep the outside and cut the inside instead	ⵃⴹⵓ ⴰⴱⵔⵔⴰ, ⴱⴱⵉ ⴰⴳⵏⵙⵓ
+Legacy target mode — switch type to convert	ⴰⵙⴽⴰⵔ ⴰⵇⴱⵓⵔ — ⴱⴷⴷⵍ ⴰⵏⴰⵡ ⵉ ⵓⵙⵏⴼⵍ
+Nothing here changes the show that is open.	ⵡⴰⵍⵓ ⵖⵉⴷ ⵓⵔ ⵉⵙⵙⵏⴼⴰⵍ ⴰⵙⵙⴽⴰⵏ ⵉⵕⵥⵎⵏ.
+Optional external transport and cue control	ⴰⵏⵎⵎⴰⴽ ⵏ ⵓⵙⵏⵖⵍ ⴷ cue ⵣⵖ ⴱⵔⵔⴰ
+The cue number on the other desk, e.g. 12.5	ⵓⵟⵟⵓⵏ ⵏ cue ⵖ ⵜⴼⵉⵍⵓⵜ ⵢⴰⴹⵏ, ⴰⵎ 12.5
+Toggle pause-at-beginning for selected cues	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵙⴳⵓⵏⴼⵓ ⴳ ⵓⴱⴷⵓ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Toggle transition-to-next for selected cues	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵎⵓⵜⵜⵉ ⵙ ⵢⴰⴹⵏ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+acts on every deck; deck and cue are ignored	ⵉⵙⴽⴽⵔ ⵖ deck ⴰⴽⴽ; deck ⴷ cue ⵓⵔ ⴳⵉⵏ ⵢⴰⵜ
+Auto-advance duration — 0 = hold until taken	ⴰⴽⵓⴷ ⵏ ⵓⵣⵔⵉ ⴰⵡⵔⵎⴰⵏ — 0 = ⵟⵟⴼ ⴰⵔ TAKE
+Characters across. Fewer means bigger cells.	ⴰⵙⴽⵍⵓ ⵖ ⵉⵣⵉⵔⵉⴳ. ⵉⵎⵉⴽⴽ = ⵉⵎⴽⴰⵏ ⵎⵇⵇⵓⵔⵏ.
+Device output pair this cue's audio plays on	ⵜⴰⵢⵓⴳⴰ ⵏ ⵜⵓⴼⴼⵖⴰ ⵏ ⵉⵎⵙⵍⵉ ⵏ cue ⴰⴷ
+E - freeze on last frame instead of stopping	E - ⵃⴱⵙ ⵖ ⵜⵓⴳⵏⴰ ⵜⴰⴳⴳⵯⵔⴰⵏⵜ
+How long the note takes to reach full level.	ⴰⴽⵓⴷ ⴰⵔ ⴰⴷ ⵜⴰⵡⴹ ⵜⵣⵎⴰⵎⵜ ⴰⵙⵡⵉⵔ ⴰⴽⴽ.
+LED panel height in pixels. Click to type it	ⵜⴰⵜⵜⵓⵢⵜ ⵏ ⵜⴼⵉⵍⵓⵜ LED ⵙ ⵉⴱⵉⴽⵙⵍ. ⵙⵉⵜ ⵉ ⵜⵉⵔⴰ
+Load the cue and hold first frame when taken	ⵙⵖⵔ cue ⴷ ⵟⵟⴼ ⵜⵓⴳⵏⴰ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⴰⵔ TAKE
+No previous show file found at startup path.	ⵓⵔ ⵉⵍⵍⵉ ⵓⴼⴰⵢⵍⵓ ⴰⵣⵡⴰⵔ ⴳ ⵓⴱⴷⵓ.
+Seconds REMAINING when the clock turns amber	ⵜⵉⵙⵉⵏⵉⵏ ⵍⵍⵉ ⵉⵇⵇⵉⵎⵏ ⵎⵍ ⵉⵡⵔⵖ ⵡⴰⵙⴰⴽⵓⴷ
+Use Ctrl+F or type a cue id/number to search.	ⵙⵙⵎⵔⵙ Ctrl+F ⵏⵖ ⴰⵔⴰ ⵓⵟⵟⵓⵏ ⵏ cue ⵉ ⵓⵙⵉⴳⴳⵍ.
+Shown to the operator when GO reaches this cue	ⵉⵜⵜⵓⵎⵎⵍ ⵉ ⵓⵎⵏⴱⴱⴰⴹ ⵎⵍ ⵉⵡⴹ GO cue ⴰⴷ
+transparent outside the ink: put it on a layer	ⵉⴱⴰⵢⵢⵏ ⴱⵔⵔⴰ ⵏ ⵓⵎⴷⴷⴰⴷ: ⴳⵉⵙ ⵜ ⵖ ⵓⴼⵍⵍⴰⵢ
+what is said, on screen, made on this computer	ⵎⴰ ⵉⵜⵜⵓⵢⵏⵏⴰⵏ, ⵖ ⵓⴳⴷⵉⵍ, ⵉⵜⵜⵓⵙⴽⵔ ⵖ ⵓⵙⵍⴽⵉⵎ ⴰⴷ
+a note or an address becomes that cue's trigger	ⵜⴰⵣⵎⴰⵎⵜ ⵏⵖ ⵜⴰⵏⵙⴰ ⵜⴳⴰ ⴰⵙⵏⴽⴽⵔ ⵏ cue ⴰⵏⵏ
+Companion / OSC ingress and HyperDeck emulation	ⴰⵏⴽⵛⵓⵎ Companion / OSC ⴷ HyperDeck
+Whether the next shape or pen path adds or cuts	ⵉⵙ ⵜⴳⴰ ⵜⴰⵍⵖⴰ ⵜⴰⵎⴰⵢⵏⵓⵜ ⵜⴰⵎⵔⵏⵉⵜ ⵏⵖ ⴰⴱⴱⴰⵢ
+A/V delay holds audio back for lagging displays.	ⴰⵄⴹⴹⵍ A/V ⵉⵟⵟⴼ ⵉⵎⵙⵍⵉ ⵉ ⵉⴳⴷⵉⵍⵏ ⵓⵔ ⵉⵣⵣⵔⴱⵏ.
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL ⵉⵙⵙⵎⵜⵜⵉ ⵜⴰⴱⴷⴰⵔⵜ ⴰⴽⴽ
+On stop: leave the crash-resilient file as it is	ⵖ ⵓⵃⴱⴰⵙ: ⵊⵊⵓ ⴰⴼⴰⵢⵍⵓ ⴰⵎⴽ ⵉⵍⵍⴰ
+same disk as Deckboy - a separate drive is safer	ⴰⴹⴱⵙⵉ ⴰⵏⵏ ⴷ Deckboy - ⵢⴰⴹⵏ ⵢⵉⴼ
+transparent outside the blobs: put it on a layer	ⵉⴱⴰⵢⵢⵏ ⴱⵔⵔⴰ ⵏ ⵜⴽⵉⵡⵉⵏ: ⴳⵉⵙ ⵜ ⵖ ⵓⴼⵍⵍⴰⵢ
+loops between the in and out points, not the file	ⵜⵓⵣⵣⵢⴰ ⴳⵔ ⵜⵉⵏⵇⵇⴰⴹ, ⵓⵔⴷ ⴰⴼⴰⵢⵍⵓ ⴰⴽⴽ
+Edit title/subtitle here or fire it live with TAKE	ⵙⵙⵏⴼⵍ ⴰⵣⵡⵍ ⵖⵉⴷ ⵏⵖ ⵉⵙⵙⵉⴷⴷ ⵜ ⵙ TAKE
+A step fires one cue on each playlist, all at once.	ⵜⴰⵙⵙⵔⴰⵡⵜ ⴰⵔ ⵜⵙⵙⵉⴷⴷ ⵢⴰⵏ cue ⵖ ⴽⵔⴰⵢⴳⴰⵜ ⵜⴰⴱⴷⴰⵔⵜ
+no fixtures patched - Settings > Network > FIXTURES	ⵓⵔ ⵉⵍⵍⵉ ⵓⵖⵔⴱⴰⵍ - ⵜⵉⵙⵖⴰⵍ > ⴰⵥⵟⵟⴰ > FIXTURES
+Slots are self-contained sources in this first pass	ⵉⵖⴱⵓⵍⴰ ⵟⵟⴰⴼⵏ ⵉⵎⴰⵏ ⵏⵙⵏ ⵖ ⵜⵓⵣⵣⵔⵜ ⴰⴷ
+Add an output above, then send playlists to it here.	ⵔⵏⵓ ⵜⵓⴼⴼⵖⴰ ⵖ ⵓⴼⴰⵍⵍⴰ, ⴷⵖⵉ ⴰⵣⵏ ⵜⵉⴱⴷⴰⵔⵉⵏ ⵙ ⵖⵉⴷ.
+one expression: the same value in red, green and blue	ⵢⴰⵏ ⵓⵏⴰⵖ: ⵢⴰⵏ ⵡⴰⵣⴰⵍ ⵉ ⵓⵣⴳⴳⴰⵖ, ⴰⵣⴳⵣⴰⵡ, ⴰⵏⵉⵍⵉ
+Any font on this computer, Deckboy's own, or a font file	ⴰⴹⵔⵉⵙ ⵏ ⵓⵙⵍⴽⵉⵎ, ⵏ Deckboy, ⵏⵖ ⴰⴼⴰⵢⵍⵓ
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, NDI, NMC, MTC, LTC, Art-Net, Tally/TSL
+Every channel on every universe this session has touched	ⴰⴱⴰⴷⵓ ⴰⴽⴽ ⵖ ⵓⵎⴰⴹⴰⵍ ⴰⴽⴽ ⵏ ⵜⵖⵉⵎⵉⵜ ⴰⴷ
+NDI transport is configured per output in Video Outputs.	NDI ⵉⵜⵜⵓⵙⴱⴷⴰⴷ ⵖ VIDEO OUTPUTS.
+Convert cues Deckboy can't play (or plays poorly) to H.264	ⵙⵙⵏⴼⵍ cue ⵓⵔ ⵉⵜⵜⵖⵔⴰ Deckboy ⵙ H.264
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	ⴰⵔ ⵉⵜⵜⴰⵣⵏ PLAY / PAUSE / STOP / LOCATE.
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC: ⴰⵣⵏ /deckboy/subscribe ⵣⵖ ⵓⵏⵎⵎⴰⴽ ⵏⵏⴽ.
+a button can run any command the network protocol understands	ⵜⴰⵇⴼⴰⵍⵜ ⵜⵣⵎⵎⵔ ⴰⴷ ⵜⵙⵙⵉⴷⴷ ⴽⵔⴰ ⵏ ⵓⵏⴹⴹⴰⵎ ⵏ ⵓⵥⵟⵟⴰ
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net ⵏⵖ sACN (E1.31): ⵎⴰ ⵎⵉ ⵉⵙⴼⵍⵉⴷ ⵜⴰⴼⴰⵜ
+NMC mode / host / port are runtime-configurable for sync work.	ⴰⵙⴽⴰⵔ / HOST / PORT ⵏ NMC ⵜⵜⵓⵙⵏⴼⵍⵍⵏ ⵖ ⵜⵓⴷⵔⵜ.
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	ⵙⴱⴷⴷ ⴰⵎⵙⴳⵔⵉ  -  ⵊⴱⴷ ⵜⴰⵡⵔⵉⵇⵜ, ⵜⵉⵖⵎⴰⵔ ⵉ ⵜⵉⴷⴷⵉ
+Click a value to change it. A red address overlaps another fixture.	ⵙⵉⵜ ⵖ ⵡⴰⵣⴰⵍ ⵉ ⵓⵙⵏⴼⵍ. ⵜⴰⵏⵙⴰ ⵜⴰⵣⴳⴳⴰⵖⵜ ⵜⵎⵙⴼⵍ ⴷ ⵡⴰⵍⵍⴰⵍ ⵢⴰⴹⵏ.
+INPUT: the programme. Drag a crop to move it, its corners to size it.	ⴰⵏⴽⵛⵓⵎ: ⴰⵀⵉⵍ. ⵊⴱⴷ ⵉ ⵓⵎⵓⵜⵜⵉ, ⵜⵉⵖⵎⴰⵔ ⵉ ⵜⵉⴷⴷⵉ.
+Choose a mask from this show's library, or start a new one from a shape	ⵙⵜⵉ ⴰⵖⴼⴼⵓⵔ ⵣⵖ ⵜⵎⴽⵔⵔⴰⵢⵜ, ⵏⵖ ⴱⴷⵓ ⵢⴰⵏ ⵣⵖ ⵜⴰⵍⵖⴰ
+Going on air takes the cue. Deckboy never sends the switcher a command.	ⴰⵀⵉⵍ ⴰⵔ ⵉⵜⵜⴰⵡⵉ cue. Deckboy ⵓⵔ ⵉⵜⵜⴰⵣⵏ ⴰⵏⴹⴹⴰⵎ ⵉ ⵓⵎⵙⴱⴷⴷⵍ.
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	ⵃⴹⵓ ⴰⵖⴼⴼⵓⵔ ⵙ PNG ⴰⵎⵍⵍⴰⵍ-ⴰⵏⵉⵍⵉ: ⴰⵎⵍⵍⴰⵍ ⵉⵃⴹⴰ, ⴰⵏⵉⵍⵉ ⵉⴱⴱⵉ
+SOURCE	ⴰⵖⴱⴰⵍⵓ
+PLAYLIST	ⵜⴰⴱⴷⴰⵔⵜ
+OUTPUT	ⵜⵓⴼⴼⵖⴰ
+Video Outputs	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵏ ⵓⴱⵉⴷⵢⵓ
+POSITION	ⴰⴷⵖⴰⵔ
+CENTRE	ⴰⵍⵓⵎⵎⴰⵙ
+Playing	ⵉⵜⵜⵓⵔⴰⵔ
+Paused	ⵉⵙⴳⵓⵏⴼⴰ
+Apply	ⵙⵙⵏⵜⵙ
+Cancel	ⵙⴼⵙⵅ
+LAYOUT	ⴰⵙⵔⵔⵙ
+loop	ⴰⵙⵙⵓⵖⵍ
+black lift	ⴰⵙⵎⵖⵔ ⵏ ⵓⵏⵉⵍⵉ
+MIDI and OSC monitor	ⴰⵎⵙⵎⵏ ⵏ MIDI ⴷ OSC
+in	ⵖ
+On	ⵉⵔⵎⴷ
+To	ⵙ
+any	ⴽⵔⴰ
+bar	ⴰⴼⴳⴳ
+key	ⵜⴰⵙⴰⵔⵓⵜ
+Map	ⵜⴰⴳⵔⵜⵉⵍⵜ
+out	ⴱⵔⵔⴰ
+sea	ⵉⵍⴰ
+tab	ⵜⴰⵙⵏⴰ
+tag	ⵜⴰⵎⴰⵜⴰⵔⵜ
+card	ⵜⴰⵡⵔⵉⵇⵜ
+DESK	ⵜⴰⴼⵉⵍⵓⵜ
+face	ⵓⴷⵎ
+Fill	ⵄⵎⵎⵔ
+film	ⴰⵙⴰⵔⵓ
+fire	ⵙⵙⵉⴷⴷ
+flag	ⴰⵛⵏⵉⴹ
+Hey!	ⵃⴰ!
+hold	ⵟⵟⴼ
+knob	ⴰⵇⵔⵔⴰⵛ
+neon	NEON
+outs	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ
+play	ⵖⵔ
+rain	ⴰⵏⵥⴰⵔ
+says	ⵉⵏⵏⴰ
+show	ⴰⵙⵙⴽⴰⵏ
+snow	ⴰⴷⴼⵍ
+span	ⵜⵉⵎⵣⴳⵉ
+wipe	ⴰⵙⴼⴹ
+boxes	ⵜⴰⵏⴰⴽⴰ
+comic	ⵜⴰⵡⵍⴰⴼⵉⵏ
+glass	ⴰⵙⴱⵢⵢⵏ
+Masks	ⵉⵖⴼⴼⵓⵔⵏ
+MEDIA	ⴰⵎⵉⴷⵢⴰ
+mixed	ⵉⵜⵜⵓⵎⵙⴷⴰⵏ
+plays	ⵉⵜⵜⵖⵔⴰ
+press	ⵙⵉⵜ
+sends	ⵉⵜⵜⴰⵣⵏ
+slide	ⴰⵎⵓⵜⵜⵉ
+stamp	ⴰⴹⴱⵉⴱ
+Still	ⵜⴰⵡⵍⴰⴼⵜ
+TILES	ⵉⵖⵍⵍⴰⵍⵏ
+words	ⴰⵡⴰⵍⵏ
+BUNDLE	ⴰⴽⴰⵔⴰⵎ
+credit	ⵜⴰⵣⵎⵎⴰⵔⵢⵜ
+DECODE	ⵜⵓⴽⴽⵙⴰ ⵏ ⵜⵏⴳⴰⵍⵜ
+garden	ⵓⵔⵜⵉ
+IMPORT	ⵙⵙⵏⴽⵔ
+ledger	ⴰⴷⵍⵉⵙ ⵏ ⵓⵎⴹⴰⵏ
+Mascot	ⴰⵎⵓⴷⵔ
+nobody	ⵃⵜⵜⴰ ⵢⴰⵏ
+Pickup	ⴰⵟⵟⴰⴼ
+podium	ⴰⵎⴰⵣⵉⴹ
+REBOOT	ⵙⵙⵓⵖⵍ
+RECORD	ⴰⵙⴽⵍⵙ
+ribbon	ⴰⵇⵇⴰⵙ
+scroll	ⴰⵙⵎⵓⵜⵜⵉ
+sketch	ⴰⵙⵓⵏⵖ
+sticky	ⵜⴰⵎⴰⵜⴰⵔⵜ
+survey	ⴰⵙⵇⵙⵉ
+Wobble	ⴰⵎⵓⵙⵙⵓ
+12 HOUR	12 ⵜⵉⵙⵄⴰⵜⵉⵏ
+24 HOUR	24 ⵜⵉⵙⵄⴰⵜⵉⵏ
+address	ⵜⴰⵏⵙⴰ
+bracket	ⵜⵉⴱⴱⵓⵣⴰ
+caption	ⴰⴹⵕⵉⵚ ⵏ ⵜⵓⴳⵏⴰ
+Desktop	ⵜⴰⴼⵉⵍⵓⵜ
+Devices	ⴰⵍⵍⴰⵍⵏ
+eq band	ⴰⴱⴰⴷⵓ ⵏ EQ
+Ghastly	ⵉⵇⵇⴰⵃ
+inherit	ⴹⴼⵔ
+LED MAP	ⵜⴰⴳⵔⵜⵉⵍⵜ LED
+Limiter	ⴰⵙⴱⴹⴹ
+marquee	ⴰⴹⵕⵉⵚ ⵉⵜⵜⴷⴷⵓⵏ
+nothing	ⵡⴰⵍⵓ
+Pattern	ⴰⵍⴳⵓⵖ
+pennant	ⴰⴱⵏⵢⵉⵔ
+placard	ⵜⴰⵡⴰⵍⵜ
+Push up	ⴷⴼⵄ ⵙ ⵓⴼⴰⵍⵍⴰ
+routing	ⴰⴱⵔⵉⴷ
+SAVE AS	ⵃⴹⵓ ⴰⵎ
+sparkle	ⴰⵙⴼⴰⵡ
+Stopped	ⵉⴱⴷⴷ
+Stretch	ⵣⵣⵓⴳⵔ
+theatre	ⴰⵎⵣⴳⵓⵏ
+Wipe up	ⴰⵙⴼⴹ ⵙ ⵓⴼⴰⵍⵍⴰ
+backdrop	ⴰⴳⵉⵍⴰⵍ
+BLACKOUT	ⵜⴰⵖⵍⴰⵍⵜ
+built in	ⵉⵎⵙⴷⴷⵓ
+confetti	ⴰⵖⵍⴰⵢ ⵏ ⵉⵏⵉ
+continue	ⴽⵎⵎⵍ
+diskette	ⴰⴹⴱⵙⵉ
+Dissolve	ⴰⵙⵎⵖⵔ
+duration	ⴰⴽⵓⴷ
+Geometry	ⵜⴰⵍⵖⴰ
+hairline	ⵉⴼⵉⵍⵉ
+listener	ⴰⵎⵙⴼⵍⵉⴷ
+Mappings	ⵜⵉⴳⵔⵜⵉⵍⵉⵏ
+notebook	ⵜⴰⵎⵎⴰⵖⵜ
+on press	ⵎⵍ ⵜⵙⵉⵜⵜ
+PLAYBACK	ⵜⴰⵖⵓⵔⵉ
+Quit it!	ⴱⴷⴷ!
+sideline	ⵉⵣⵉⵔⵉⴳ ⵏ ⵜⴰⵎⴰ
+TIMELINE	ⴰⴽⵓⴷ ⵏ ⵓⵙⵏⵖⵍ
+auto next	ⵢⴰⴹⵏ ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ
+blueprint	ⴰⵖⴰⵡⴰⵙ
+cartridge	ⵜⴰⴽⴰⵔⵜⵓⵛⵜ
+crossfade	ⴰⵙⴼⵙⵉ ⴰⵎⵙⴳⴳⴰⵔ
+crosshair	ⴰⵎⵙⴳⴳⴰⵔ
+cue "{n}"	ⵛⵓⴻ "{n}"
+dotmatrix	ⵜⵉⵏⵇⵇⴰⴹ
+equalizer	ⴰⵙⵎⵜⵜⵉ
+even grid	ⴰⵖⵍⵍⴰⵍ ⴰⵎⵙⴰⵙⴰ
+Push down	ⴷⴼⵄ ⵙ ⵡⴰⴷⴷⴰⵢ
+Push left	ⴷⴼⵄ ⵙ ⵓⵣⵍⵎⴰⴹ
+Scroll up	ⴰⵙⵎⵓⵜⵜⵉ ⵙ ⵓⴼⴰⵍⵍⴰ
+Streaming	ⴰⵙⵓⴷⴷⵎ
+Wipe down	ⴰⵙⴼⴹ ⵙ ⵡⴰⴷⴷⴰⵢ
+Wipe left	ⴰⵙⴼⴹ ⵙ ⵓⵣⵍⵎⴰⴹ
+Fade+Pause	ⴰⵙⴼⵙⵉ+ⵙⴳⵓⵏⴼⵓ
+hold {n} s	ⵟⵟⴼ {n} ⵙ
+knob 0-127	ⴰⵇⵔⵔⴰⵛ 0-127
+Passphrase	ⵜⴰⵡⴰⵍⵜ ⵏ ⵓⵣⵔⵉ
+Push right	ⴷⴼⵄ ⵙ ⵓⴼⴰⵙⵉ
+Resolution	ⵜⴰⴱⴰⴷⵓⵜ
+safe areas	ⵜⵉⵎⵏⴰⴹⵉⵏ ⵏ ⵓⴼⵔⴰⴳ
+scoreboard	ⵜⴰⵡⵔⵉⵇⵜ ⵏ ⵉⵎⴰⴹⵏ
+Seriously?	ⵙ ⵜⵉⴷⵜ?
+tile width	ⵜⵉⵀⵔⵉ ⵏ ⵓⵖⵍⵍⴰⵍ
+Wipe right	ⴰⵙⴼⴹ ⵙ ⵓⴼⴰⵙⵉ
+audio meter	ⴰⵙⵡⵉⵔ ⵏ ⵉⵎⵙⵍⵉ
+Fade+Rewind	ⴰⵙⴼⵙⵉ+ⵜⵓⵖⴰⵍⵉⵏ
+full screen	ⴰⴳⴷⵉⵍ ⴰⴽⴽ
+on the desk	ⵖ ⵜⴼⵉⵍⵓⵜ
+Outputs Off	ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵅⵙⴰⵏⵜ
+REGION SIZE	ⵜⵉⴷⴷⵉ ⵏ ⵜⵎⵏⴰⴹⵜ
+tile height	ⵜⴰⵜⵜⵓⵢⵜ ⵏ ⵓⵖⵍⵍⴰⵍ
+Toggle loop	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵜⵓⵣⵣⵢⴰ
+clear driver	ⵙⴼⴹ ⴰⵎⵏⴰⵢ
+Dip to black	ⴰⴹⴰⵏ ⵙ ⵓⵏⵉⵍⵉ
+Dip to white	ⴰⴹⴰⵏ ⵙ ⵓⵎⵍⵍⴰⵍ
+rounded rect	ⴰⵎⴽⵓⵥ ⵉⵎⴹⵍ
+CUE INSPECTOR	ⴰⵎⵙⵎⵏ ⵏ cue
+Fade+LoadNext	ⴰⵙⴼⵙⵉ+ⵙⵖⵔ ⵢⴰⴹⵏ
+Recent shows:	ⵉⵙⵙⴽⴰⵏⵏ ⵉⵎⴳⴳⵓⵔⴰ:
+starting xvfb	ⴰⴱⴷⵓ ⵏ xvfb
+CD, music rigs	CD, ⴰⵥⴰⵡⴰⵏ
+Default Camera	ⵜⴰⴽⴰⵎⵉⵕⵜ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ
+every playlist	ⴽⵔⴰⵢⴳⴰⵜ ⵜⴰⴱⴷⴰⵔⵜ
+fill the frame	ⵄⵎⵎⵔ ⴰⴽⴰⴷⵔ
+Toggle fade in	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵙⴼⵙⵉ ⵏ ⵓⴽⵛⵓⵎ
+video standard	ⴰⵏⴰⵡⴰⵢ ⵏ ⵓⴱⵉⴷⵢⵓ
+what is on air	ⵎⴰ ⵉⵍⵍⴰⵏ ⵖ ⵓⵀⵉⵍ
+All right. Wow.	ⵉⴼⵓⵍⴽⵉ. Way.
+Bork bork BORK!	BORK BORK BORK!
+EDGE FEATHERING	ⴰⵍⵡⴰ ⵏ ⵉⵔⵉ
+endless encoder	ⴰⵙⵏⴳⵍ ⴱⵍⴰ ⵜⵉⵍⵉⵙⵜ
+Long show, huh.	ⴰⵙⵙⴽⴰⵏ ⵖⵣⵣⵉⴼ, ⵉⵀ.
+lower bandwidth	ⵉⵎⵉⴽⴽ ⵏ ⵓⴱⵔⵉⴷ
+press + release	ⵙⵉⵜ + ⵔⵥⵎ
+slide from left	ⴰⵎⵓⵜⵜⵉ ⵣⵖ ⵓⵣⵍⵎⴰⴹ
+Toggle fade out	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵙⴼⵙⵉ ⵏ ⵜⵓⴼⴼⵖⴰ
++ ONE AFTER THIS	+ ⵢⴰⵏ ⴷⴼⴼⵉⵔ ⴰⴷ
+2 · WHAT IT RUNS	2 · ⵎⴰ ⵉⵙⴷⴷⵓ
+An effect's knob	ⴰⵇⵔⵔⴰⵛ ⵏ ⵓⵙⵏⵖⵍ
+AREA OF INTEREST	ⵜⴰⵎⵏⴰⴹⵜ ⵏ ⵓⵙⵎⵙⵎⵏ
+Cue has no audio	cue ⵓⵔ ⴳⵉⵙ ⵉⵎⵙⵍⵉ
+Default App Feed	ⴰⵖⴱⴰⵍⵓ ⴰⵎⵣⵡⴰⵔⵓ ⵏ ⵓⵙⵏⴰⵙ
+Motion: Bug Swat	ⴰⵎⵓⵙⵙⵓ: Bug Swat
+ONE PER PLAYLIST	ⵢⴰⵏ ⵉ ⴽⵔⴰⵢⴳⴰⵜ ⵜⴰⴱⴷⴰⵔⵜ
+slide from right	ⴰⵎⵓⵜⵜⵉ ⵣⵖ ⵓⴼⴰⵙⵉ
+Speed, like tape	ⵜⴰⵣⵣⵍⴰ, ⴰⵎ ⵜⴰⵙⴼⵉⴼⵜ
+starting browser	ⴰⴱⴷⵓ ⵏ ⵓⵎⵢⴰⴳⵉ
+starting capture	ⴰⴱⴷⵓ ⵏ ⵜⵎⵥⵉ
+Toggle cue audio	ⵙⵅⵙⵉ/ⵔⵎⴷ ⵉⵎⵙⵍⵉ ⵏ cue
+- REMOVE THIS ONE	- ⴽⴽⵙ ⵡⴰⴷ
+1 · WHAT COMES IN	1 · ⵎⴰ ⵉⴽⴽⴰⵏ
+Hi! I am Deckboy.	ⴰⵣⵓⵍ! ⵏⴽⴽⵉⵏ Deckboy.
+highest bandwidth	ⵉⵣⵡⴰⵔ ⵏ ⵓⴱⵔⵉⴷ
+Registry: NOT SET	ⴰⵖⵎⵉⵙ: ⵓⵔ ⵉⵜⵜⵓⵙⴱⴷⴰⴷ
+Toggle Fullscreen	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⴳⴷⵉⵍ ⴰⴽⴽ
+Ow. That was rude.	ⴰⵢ. ⵓⵔ ⵉⴼⵓⵍⴽⵉ ⴰⴷ.
+restart driver now	ⵙⵙⵓⵖⵍ ⴰⵎⵏⴰⵢ ⵖⵉⵍⴰ
+3 · WHAT IT RUNS ON	3 · ⵖ ⵎⴰⴷ ⵉⴷⴷⵓ
+browser, with sound	ⴰⵎⵢⴰⴳⵉ, ⵙ ⵉⵎⵙⵍⵉ
+Previous show file:	ⴰⴼⴰⵢⵍⵓ ⴰⵣⵡⴰⵔ:
+Still here? Me too.	ⵖⵉⴷ ⴰⵔ ⵖⵉⵍⴰ? ⵏⴽⴽⵉⵏ ⴷⴰⵖ.
+This is my monitor.	ⴰⴷ ⴰⴷ ⵉⴳⴰ ⴰⵎⵙⵎⵏ ⵉⵏⵓ.
+Choose startup mode:	ⵙⵜⵉ ⴰⵙⴽⴰⵔ ⵏ ⵓⴱⴷⵓ:
+I am a professional.	ⵏⴽⴽⵉⵏ ⴷ ⴰⵎⴰⵙⵙⴰⵏ.
+initializing webview	ⴰⴱⴷⵓ ⵏ webview
+Right. That does it.	ⵉⴼⵓⵍⴽⵉ. ⵉⴽⵎⵎⵍ.
+S stops the live cue.	S ⴰⵔ ⵉⴱⴱⵉ cue ⵙ ⵜⵓⴷⵔⵜ.
+An audio effect's knob	ⴰⵇⵔⵔⴰⵛ ⵏ ⵓⵙⵏⵖⵍ ⵏ ⵉⵎⵙⵍⵉ
+on air in playlist {n}	ⵖ ⵓⵀⵉⵍ ⵏ ⵜⴱⴷⴰⵔⵜ {n}
+Enter takes a cue live.	Enter ⴰⵔ ⵜ ⵉⵜⵜⴰⵡⵉ ⵙ ⵜⵓⴷⵔⵜ.
+K — cycle cue color tag	K — ⴱⴷⴷⵍ ⵉⵏⵉ ⵏ cue
+Has anyone seen a clock?	ⵉⵙ ⵉⵥⵔⴰ ⵢⴰⵏ ⴰⵙⴰⴽⵓⴷ?
+J jumps to the live cue.	J ⴰⵔ ⵉⵏⴳⵉⵣ ⵙ cue ⵙ ⵜⵓⴷⵔⵜ.
+None  (no character art)	ⵡⴰⵍⵓ  (ⵓⵔ ⵉⵍⵍⵉ ⵓⵙⵓⵏⵖ)
+Open a .deckboy show file	ⵕⵥⵎ ⴰⴼⴰⵢⵍⵓ .deckboy
+Press I to import a clip.	ⵙⵉⵜ I ⵉ ⵓⵙⵏⴽⵔ ⵏ ⵓⵙⴳⵣⵓⵎ.
+Toggle hold on last frame	ⵙⵅⵙⵉ/ⵔⵎⴷ ⴰⵟⵟⴰⴼ ⵏ ⵜⵓⴳⵏⴰ ⵜⴰⴳⴳⵯⵔⴰⵏⵜ
+CLEAR OVERLAY  [Backspace]	ⵙⴼⴹ ⴰⴼⵍⵍⴰⵢ  [Backspace]
+I am telling the operator.	ⴰⵔ ⴰⵙ ⵜⵜⵉⵏⵉⵜ ⵉ ⵓⵎⵏⴱⴱⴰⴹ.
+Is it still the same show?	ⵉⵙ ⴷ ⴰⵙⵙⴽⴰⵏ ⴰⵏⵏ ⴰⵔ ⵖⵉⵍⴰ?
+Stop puppeteering this cue	ⵃⴱⵙ ⴰⵙⵏⵎⵎⴰⴽ ⵏ cue ⴰⴷ
+Every pixel of me is tired.	ⴽⵔⴰⵢⴳⴰⵜ PIXEL ⵉⵏⵓ ⵄⵢⵢⴰⵏ.
+one big, the rest beside it	ⵢⴰⵏ ⵎⵇⵇⵓⵔ, ⵡⵉⵢⵢⴰⴹ ⴳ ⵜⴰⵎⴰ ⵏⵏⵙ
+Ctrl+/ shows every shortcut.	Ctrl+/ ⴰⵔ ⵉⵎⵎⴰⵍ ⵜⵉⵙⵓⵔⴰ ⴰⴽⴽ.
+I'm not tired. You're tired.	ⵓⵔ ⵄⵢⵢⴰⵖ. ⴽⵢⵢⵉ ⴰⴷ ⵉⵄⵢⵢⴰⵏ.
+Listening on all interfaces.	ⴰⵔ ⵉⵙⴼⵍⵉⴷ ⵖ ⵉⵎⴰⵡⴰⵍⵏ ⴰⴽⴽ.
+Set cue ID for selected cues	ⵙⴱⴷⴷ ID ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+The timeline can be resized.	ⴰⴽⵓⴷ ⵏ ⵓⵙⵏⵖⵍ ⵉⵣⵎⵎⵔ ⴰⴷ ⵉⵎⵖⵓⵔ.
+Trim with Ctrl+I and Ctrl+O.	ⴱⴱⵉ ⵙ Ctrl+I ⴷ Ctrl+O.
+Click to seek — drag to scrub	ⵙⵉⵜ ⵉ ⵜⴰⵏⴳⴳⵉ — ⵊⴱⴷ ⵉ ⵜⴼⵓⵔⵔⴰ
+A whole day. I need a restart.	ⵢⴰⵏ ⵡⴰⵙⵙ ⴰⴽⴽ. ⵔⵉⵖ ⴰⴷ ⵙⵙⵓⵖⵍⵖ.
+Clear the live PIP overlay now	ⵙⴼⴹ ⴰⴼⵍⵍⴰⵢ PIP ⵖⵉⵍⴰ
+on air in the focused playlist	ⵖ ⵓⵀⵉⵍ ⵏ ⵜⴱⴷⴰⵔⵜ ⴰⴷ
+one big on top, the rest below	ⵢⴰⵏ ⵎⵇⵇⵓⵔ ⵖ ⵓⴼⴰⵍⵍⴰ, ⵡⵉⵢⵢⴰⴹ ⴷⴷⴰⵡ
+two big on top, the rest below	ⵙⵉⵏ ⵎⵇⵇⵓⵔⵏ ⵖ ⵓⴼⴰⵍⵍⴰ, ⵡⵉⵢⵢⴰⴹ ⴷⴷⴰⵡ
+Test: move it on the controller	ⴰⵔⵎⵎ: ⵎⵓⵙⵙⵓ ⵜ ⵖ ⵓⵏⵎⵎⴰⴽ
+A cue can wait before it starts.	cue ⵉⵣⵎⵎⵔ ⴰⴷ ⵉⵔⵊⵓ ⵣⵡⴰⵔ ⵓⴱⴷⵓ.
+Close me. Open me. I'll be fine.	ⵇⵇⵏ ⵉⵢⵢⵉ. ⵕⵥⵎ ⵉⵢⵢⵉ. ⵔⴰⴷ ⴼⵓⵍⴽⵉⵖ.
+Oh hey. It's 4:20. Take it easy.	ⵡⴰⵢ. ⵜⴳⴰ 4:20. ⵙⵙⵅⴼ.
+save as makes a new file instead	ⵃⴹⵓ ⴰⵎ ⴰⵔ ⵉⵙⴽⴽⵔ ⴰⴼⴰⵢⵍⵓ ⴰⵎⴰⵢⵏⵓ
+Set short cue id for search/goto	ⵙⴱⴷⴷ ID ⵉⵎⵥⵥⵉⵢⵏ ⵉ ⵓⵙⵉⴳⴳⵍ/ⵜⴰⵏⴳⴳⵉ
+the selected cue in playlist {n}	cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ ⵖ ⵜⴱⴷⴰⵔⵜ {n}
+Save the show. Then let me sleep.	ⵃⴹⵓ ⴰⵙⵙⴽⴰⵏ. ⴷⵖⵉ ⵊⵊ ⵉⵢⵢⵉ ⴰⴷ ⴳⵏⵖ.
+Set goto target for selected cues	ⵙⴱⴷⴷ ⴰⵙⴰⴹⵓⴼ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ
+Try a terminal theme in Settings.	ⴰⵔⵎⵎ ⴰⵖⴰⵏⵉⴱ ⵏ TERMINAL ⵖ ⵜⵉⵙⵖⴰⵍ.
+Disarm a cue and GO steps over it.	ⵙⵅⵙⵉ cue ⴰⴷ ⵜ ⵉⵣⵔⵉ GO.
+Five more minutes. Then five more.	ⵙⵎⵎⵓⵙ ⵏ ⵜⵓⵙⴷⵉⴷⵉⵏ. ⴷⵖⵉ ⵙⵎⵎⵓⵙ ⵢⴰⴹⵏ.
+ORDER - cues advance down the list	ⴰⵙⵎⵎⵉⵥⵍ - cue ⴷⴷⴰⵏ ⵖ ⵜⴱⴷⴰⵔⵜ
+RELINK finds media that has moved.	RELINK ⴰⵔ ⵢⴰⴼ ⴰⵎⵉⴷⵢⴰ ⵉⵜⵜⵎⵓⵙⵙⵓⵏ.
+A timecode cue jams LTC to a value.	cue ⵏ TIMECODE ⵉⵙⵙⵎⵜⴰⵡⴰ LTC ⴷ ⵢⴰⵏ ⵡⴰⵣⴰⵍ.
+Cues have their own gain and fades.	cue ⵖⵓⵔⴰⵙⵏ ⴰⵊⵀⴷ ⴷ ⵓⵙⴼⵙⵉ ⵏⵙⵏ.
+stops the cue. ESC stops EVERYTHING	ⴰⵔ ⵉⴱⴱⵉ cue. ESC ⴰⵔ ⵉⴱⴱⵉ ⴰⴽⴽ
+the frame stays up. good for slides	ⵜⵓⴳⵏⴰ ⵜⵇⵇⵉⵎ. ⵜⴼⵓⵍⴽⵉ ⵉ ⵜⵉⵡⵔⵉⵇⵉⵏ
+this is what you carry to the venue	ⴰⴷ ⴰⴷ ⵜⴰⵡⵉⵜ ⵙ ⵓⵎⴽⴰⵏ ⵏ ⵓⵙⵙⴽⴰⵏ
+I could do this all day. Apparently.	ⵣⵎⵎⵔⵖ ⴰⴷ ⵜ ⵙⴽⵔⵖ ⴰⵙⵙ ⴰⴽⴽ. ⵉⵀ.
+A network cue speaks OSC, UDP or TCP.	cue ⵏ ⵓⵥⵟⵟⴰ ⵉⵙⵙⴰⵡⴰⵍ OSC, UDP ⵏⵖ TCP.
+Stream SRT and RTMP at the same time.	ⴰⵙⵓⴷⴷⵎ SRT ⴷ RTMP ⴳ ⵢⴰⵏ ⵡⴰⴽⵓⴷ.
+The panel map numbers every LED tile.	ⵜⴰⴳⵔⵜⵉⵍⵜ ⵜⵙⵙⵎⴹⴰⵏ ⴽⵔⴰⵢⴳⴰⵜ ⴰⵖⵍⵍⴰⵍ LED.
+Each output can show a different deck.	ⴽⵔⴰⵢⴳⴰⵜ ⵜⵓⴼⴼⵖⴰ ⵜⵣⵎⵎⵔ ⴰⴷ ⵜⵎⵍ deck ⵢⴰⴹⵏ.
+I am leaving. Good luck with the show.	ⴰⵔ ⴼⵜⵓⵖ. ⵜⴰⵎⵏⵏⴰⵖⵜ ⵙ ⵓⵙⵙⴽⴰⵏ.
+Set cue token to jump to when cue ends	ⵙⴱⴷⴷ cue ⵏ ⵜⴰⵏⴳⴳⵉ ⴳ ⵜⴳⴳⵉⵔⴰ
+The matrix sends audio to any channel.	ⵜⴰⵎⴰⵜⵔⵉⵙⵜ ⵜⴰⵣⵣⵏ ⵉⵎⵙⵍⵉ ⵙ ⴽⵔⴰ ⵏ ⵓⴱⴰⴷⵓ.
+this clip has no audio track to enable	ⴰⵙⴳⵣⵓⵎ ⴰⴷ ⵓⵔ ⴳⵉⵙ ⴰⴱⵔⵉⴷ ⵏ ⵉⵎⵙⵍⵉ
+You have been staring at me for hours.	ⵜⵉⵙⵄⴰⵜⵉⵏ ⴰⵢⴰⴷ ⴰⴷ ⵜⵙⵎⵇⵇⴰⵍⵜ ⵖ ⵉⵢⵢⵉ.
+A cue can start the next one by itself.	cue ⵉⵣⵎⵎⵔ ⴰⴷ ⵉⴱⴷⵓ ⵡⴰⵢⵢⴰⴹ ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ.
+Jump the driver back to its first frame	ⵙⵙⵓⵖⵍ ⴰⵎⵏⴰⵢ ⵙ ⵜⵓⴳⵏⴰ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ
+Normalize matches loudness across cues.	ⵙⵙⵎⵜⵜⵉ ⴰⵔ ⵉⵎⵙⴰⵙⴰ ⵉⵎⵙⵍⵉ ⵏ cue.
+Play the out move now, then take it off	ⵖⵔ ⵜⵓⴼⴼⵖⴰ ⵖⵉⵍⴰ, ⴷⵖⵉ ⴽⴽⵙ ⵜ
+Clear the active Lower Third overlay now	ⵙⴼⴹ Lower Third ⵖⵉⵍⴰ
+the selected cue in the focused playlist	cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ ⵖ ⵜⴱⴷⴰⵔⵜ ⴰⴷ
+A master cue fires one cue on every deck.	cue ⴰⵎⴰⵙⵟⵔ ⴰⵔ ⵉⵙⵙⵉⴷⴷ cue ⵖ ⴽⵔⴰⵢⴳⴰⵜ deck.
+A script cue runs Deckboy's own commands.	cue ⵏ ⵓⴹⵔⵉⵙ ⴰⵔ ⵉⵙⵙⵉⴷⴷ ⵉⵏⴹⴹⴰⵎⵏ ⵏ Deckboy.
+A target cue starts or stops another cue.	cue ⴰⵙⴰⴹⵓⴼ ⴰⵔ ⵉⴱⴷⵓ ⵏⵖ ⵉⴱⴱⵉ cue ⵢⴰⴹⵏ.
+CHECK lists what is broken, before doors.	CHECK ⴰⵔ ⵉⵎⵎⴰⵍ ⵎⴰ ⵉⵔⵥⵥⴰⵏ, ⵣⵡⴰⵔ ⵜⵉⵡⵡⵓⵔⴰ.
+per cue. the deck has its own default too	ⵉ ⴽⵔⴰⵢⴳⴰⵜ cue. deck ⵖⵓⵔⵙ ⴰⵎⵣⵡⴰⵔⵓ ⵏⵏⵙ
+Preload racks the next cue warm, off air.	PRELOAD ⴰⵔ ⵉⵙⵙⵓⵡⵊⴰⴷ cue ⵢⴰⴹⵏ ⴱⵍⴰ ⵓⵀⵉⵍ.
+A DMX cue fades the house lights on a cue.	cue DMX ⴰⵔ ⵉⵙⴼⵙⴰⵢ ⵜⵉⴼⴰⵡⵉⵏ ⵏ ⵜⴳⵎⵎⵉ.
+Audition plays a cue to you, not the room.	AUDITION ⴰⵔ ⴰⴽ ⵉⵜⵜⵖⵔⴰ cue, ⵓⵔⴷ ⵉ ⵜⴳⵎⵎⵉ.
+selected cue lane  |  TAKE to make it live	ⴰⴱⵔⵉⴷ ⵏ cue ⵉⵜⵜⵓⵙⵜⴰⵢⵏ  |  TAKE ⵉ ⵜⵓⴷⵔⵜ
+SHUFFLE - the next cue is picked at random	SHUFFLE - cue ⵢⴰⴹⵏ ⵙ ⵓⵖⴰⵡⴰⵙ
+test cards and generators - no file needed	ⵜⵉⵡⵔⵉⵇⵉⵏ ⵏ ⵓⵔⵎⵎ - ⵓⵔ ⵉⵔⴰ ⴰⴼⴰⵢⵍⵓ
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S - ⴰⵔⴰ ⴰⵙⵙⴽⴰⵏ ⵖ ⵓⴼⴰⵢⵍⵓ ⴰⵎⴰⵢⵏⵓ
+A fade cue takes a deck down, then stops it.	cue ⵏ ⵓⵙⴼⵙⵉ ⴰⵔ ⵉⵙⵙⴰⴹⴰⵏ deck, ⴷⵖⵉ ⵉⴱⴱⵉ ⵜ.
+A MIDI cue can tell the lighting desk to go.	cue MIDI ⴰⵔ ⵉⵏⵏⴰ ⵉ ⵜⴼⵉⵍⵓⵜ ⵏ ⵜⵉⴼⴰⵡⵉⵏ ⴰⴷ ⵜⴷⴷⵓ.
+for a copy before you change something risky	ⵉ ⵜⵏⵖⴰⵍⵜ ⵣⵡⴰⵔ ⴰⴷ ⵜⴱⴷⴷⵍⵜ ⵎⴰ ⵉⵅⴰⵟⵔⵏ
+the show on disk is untouched until you save	ⴰⵙⵙⴽⴰⵏ ⵖ ⵓⴹⴱⵙⵉ ⵓⵔ ⵉⵜⵜⵓⴱⴷⴷⴰⵍ ⴰⵔ ⴰⴷ ⵜ ⵜⵃⴹⵓⵜ
+gain, pan and normalise live in the inspector	ⴰⵊⵀⴷ, PAN ⴷ ⴰⵙⵡⵉⵔ ⵖ ⵓⵎⵙⵎⵏ
+the safe one: audio and playback keep running	ⵉⴼⵓⵍⴽⵉⵏ: ⵉⵎⵙⵍⵉ ⴷ ⵜⵖⵓⵔⵉ ⴽⵎⵎⵍⵏ
+Ctrl+S - write back over the show that is open	Ctrl+S - ⴰⵔⴰ ⵖ ⵓⴼⴰⵍⵍⴰ ⵏ ⵓⵙⵙⴽⴰⵏ ⵉⵕⵥⵎⵏ
+drop a folder in too - it reads the whole tree	ⴳⵉⵙ ⴰⴽⴰⵔⴰⵎ ⴷⴰⵖ - ⴰⵔ ⵉⵜⵜⵖⵔⴰ ⴰⴽⴽ
+stills hold instead - a fade would dip the frame	ⵜⵉⵡⵍⴰⴼⵉⵏ ⵜⵜⵟⵟⴰⴼⵏⵜ - ⴰⵙⴼⵙⵉ ⵔⴰⴷ ⵉⵙⴷⵓⵙ ⴰⴽⴰⴷⵔ
+the thorough one. blackout is the reversible one	ⵡⴰⴷ ⵉⵎⵇⵇⵓⵔⵏ. BLACKOUT ⵉⵣⵎⵎⵔ ⴰⴷ ⵢⴰⵖⵓⵍ
+cameras, windows, NDI, screens - all live sources	ⵜⴰⴽⴰⵎⵉⵕⵜ, ⴰⵙⴰⵜⵎ, NDI, ⴰⴳⴷⵉⵍ - ⵉⵖⴱⵓⵍⴰ ⵙ ⵜⵓⴷⵔⵜ
+Esc clears the desk, then the output, then quits.	Esc ⴰⵔ ⵉⵙⴼⴹ ⵜⴰⴼⵉⵍⵓⵜ, ⵜⵓⴼⴼⵖⴰ, ⴷⵖⵉ ⵉⴼⴼⵖ.
+space bar does this too, without moving your hand	ⵜⴰⵍⵍⵓⵏⵜ ⴰⵔ ⵜ ⵜⵙⴽⵔ ⴷⴰⵖ, ⴱⵍⴰ ⴰⵙⵎⵓⵜⵜⵉ ⵏ ⵓⴼⵓⵙ
+What this cue does when it ends - click to change	ⵎⴰ ⵉⵙⴽⴽⵔ cue ⴰⴷ ⴳ ⵜⴳⴳⵉⵔⴰ - ⵙⵉⵜ ⵉ ⵓⴱⴷⴷⵍ
+Copy the show AND its media into one portable folder	ⵙⵙⵏⵖⵍ ⴰⵙⵙⴽⴰⵏ ⴷ ⴰⵎⵉⴷⵢⴰ ⵏⵏⵙ ⵖ ⵢⴰⵏ ⵓⴽⴰⵔⴰⵎ
+LEARN: move a knob or press a key on the controller...	LEARN: ⵙⵙⵎⵓⵙⵙⵓ ⴰⵇⵔⵔⴰⵛ ⵏⵖ ⵙⵉⵜ ⵉ ⵜⴰⵙⴰⵔⵓⵜ...
+Per-cue audio: enable, trim, pan, mono, fades, normalize	ⵉⵎⵙⵍⵉ ⵏ cue: ⵔⵎⴷ, TRIM, PAN, MONO, ⴰⵙⴼⵙⵉ, ⴰⵙⵎⵜⵜⵉ
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	ⴰⵏⴽⵛⵓⵎ MIDI ⵉⵅⵙⴰ: ⵔⵎⴷ ⵜ ⵖ MIDI CONTROL. OSC ⴰⵔ ⵢⴰⵇⵇⴰⵍ.
+PATTERN	ⴰⵍⴳⵓⵖ
+ON	ⵉⵔⵎⴷ
+TRANSPORT	ⴰⵙⵏⵖⵍ
+Orientation	ⵜⴰⵏⵉⵍⴰ
+transition	ⴰⵎⵓⵜⵜⵉ
+(none)	(ⵡⴰⵍⵓ)
+(nothing yet)	(ⵡⴰⵍⵓ ⵖⵉⵍⴰ)
++ ADD AN OUTPUT	+ ⵔⵏⵓ ⵜⵓⴼⴼⵖⴰ
+>LIVE	>ⵙ ⵜⵓⴷⵔⵜ
+center	ⴰⵍⵓⵎⵎⴰⵙ
+RED	ⴰⵣⴳⴳⴰⵖ
+2-UP	2 ⵙ ⵜⴰⵎⴰ
+do it	ⵙⴽⴻⵔ
+SLICES	ⵜⵉⵟⵡⵉⵕⵉⵏ
+(empty)	(ⵉⵍⵎ)
+(unset)	(ⵓⵔ ⵉⵜⵜⵓⵙⴱⴰⴷⴷ)
+MIDI MAP	ⵜⴰⴽⴰⵔⴹⴰ MIDI
+PROMPTER	ⴰⵎⵙⵖⴰⵔⵓ
+amber at	ⴰⵎⵍⵍⴰⵍ ⵖ
++pause pt	+ⴰⵙⴳⵓⵏⴼⵓ
+OSC Query	ⴰⵙⵓⵜⴻⵔ OSC
+a-fade in	ⴰ-ⴰⵏⴽⵛⵓⵎ ⵙ ⵍⵄⵇⴻⵍ
+amber col	ⵉⵏⵉ ⵏ ⵓⵎⵍⵍⴰⵍ
+(no notes)	(ⵓⵍⴰⵛ ⵜⵉⵣⵎⵉⵍⵉⵏ)
+a-fade out	ⴰ-ⵜⵓⴼⴼⵖⴰ ⵙ ⵍⵄⵇⴻⵍ
+gain (each)	ⵜⴰⵣⵎⴻⵔⵜ (ⵢⴰⵏ ⵙ ⵢⴰⵏ)
+4:2:2  8-BIT	4:2:2  8 ⵏ ⵉⴱⵉⵜⵏ
+4:2:2  10-BIT	4:2:2  10 ⵏ ⵉⴱⵉⵜⵏ
+% of the height	% ⵏ ⵜⴻⵖⵣⵉ
++  a first step	+  ⵜⴰⵙⵓⵔⵉⴼⵜ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ
++ ADD AN EFFECT	+ ⵔⵏⵓ ⵢⴰⵏ ⵓⵎⴷⴷⴰⵍ
+(none playing now)	(ⵓⵍⴰⵛ ⵎⴰ ⵉⵜⵜⴹⵔⵔⴰⵏ ⵖⵉⵍⴰ)
+Keep a transcript (.srt)	ⵃⵔⵣ ⵜⵉⵔⴰ ⵏ ⵡⴰⵡⴰⵍ (.srt)
+Key tolerance (RGB distance)	ⵜⴰⵙⵎⵃⵍⵜ ⵏ ⵜⵙⴰⵔⵓⵜ (ⵜⴰⴳⵓⵜ ⵏ RGB)
+Contrast multiplier (0.0-2.0x)	ⴰⵙⵏⴼⵍ ⵏ ⵓⵎⴳⵉⵔⴷ (0.0-2.0x)
+Brightness multiplier (0.0-2.0x)	ⴰⵙⵏⴼⵍ ⵏ ⵜⴰⴼⴰⵜ (0.0-2.0x)
+Saturation multiplier (0.0-2.0x)	ⴰⵙⵏⴼⵍ ⵏ ⵜⴷⵓⴽⵍⵉ ⵏ ⵉⵏⵉ (0.0-2.0x)
+Output rotation angle (-180..180)	ⵜⵉⵖⵎⴻⵔⵜ ⵏ ⵜⵓⵣⵣⵢⴰ ⵏ ⵜⵓⴼⴼⵖⴰ (-180..180)
+Hue rotation (-180 to +180 degrees)	ⵜⵓⵣⵣⵢⴰ ⵏ ⵉⵏⵉ (-180 ⴰⵔ +180 ⵏ ⵜⴼⵔⴳⵉⵏ)
+Lower Third background opacity (0-255)	ⵜⵉⴼⵔⴰⵡⵜ ⵏ ⵓⴳⵉⵍⴰⵍ ⵏ Lower Third (0-255)
+0-127; 127 addresses every device on the line	0-127; 127 ⴰⵔ ⵉⵜⵜⵙⴰⵡⴰⵍ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵉⴱⵏⴽ ⵖ ⵉⵣⵔⵉⵖ
+GO shows the note; picture and sound carry on	GO ⴰⵔ ⵉⵙⵙⴽⵏⴰⵢ ⵜⴰⵣⵎⵉⵍⵜ; ⵜⵓⴳⵏⴰ ⴷ ⵉⵎⵙⵍⵉ ⴰⵔ ⵜⵜⴻⴷⴷⵓⵏ
+How fast it moves; no effect when it is still	ⵎⵏⵛⴽ ⴰⵔ ⵉⵜⵜⵎⵓⵙⵙⵓ; ⵓⵔ ⵉⵜⵜⴳⴳⴰ ⵢⴰⵜ ⵎⵉ ⵉⵜⵜⵃⴱⴰⵙ
+Fires when incoming timecode passes this point	ⴰⵔ ⵉⵜⵎⵙⵙⴰⴷ ⵎⵉ ⵉⵣⵔⵉ timecode ⴰⴷ ⵖ ⵜⵏⵇⵇⵉⴹⵜ ⴰⴷ
+Source pixels, independent of output placement	ⵉⴱⵉⴽⵙⵍⵏ ⵏ ⵓⵖⴱⴰⵍⵓ, ⴱⵍⴰ ⵜⴰⵙⵔⵙⵉⵜ ⵏ ⵜⵓⴼⴼⵖⴰ
+Stereo balance, applied live (snaps to center)	ⴰⵎⵜⴰⵡⴰ ⵏ stereo, ⵙ ⵜⵉⴷⵜ (ⴰⵔ ⵉⵜⵜⵇⵇⵏ ⵖ ⴰⵎⵎⴰⵙ)
+bypassed: nothing here is processed or limited	ⵉⵜⵜⵓⵣⴳⵍ: ⵓⵍⴰⵛ ⵎⴰ ⵉⵜⵜⵓⴳⴰⵏ ⵖⵉⴷ ⵏⵖ ⵉⵜⵜⵓⵙⵄⴷⴷⴰⵏ
+Per-cue audio trim: -40 to +40 dB, applied live	ⵜⵔⵉⵎ ⵏ ⵉⵎⵙⵍⵉ ⵏ ⵢⴰⵍ cue: -40 ⴰⵔ +40 dB, ⵙ ⵜⵉⴷⵜ
+Show the message in red - the wrap up NOW state	ⵙⵙⴽⵏ ⵜⴰⴱⵔⴰⵜ ⵙ ⵓⵣⴳⴳⴰⵖ - ⴰⴷⴷⴰⴷ ⵏ ⵙⵙⵎⴷ ⴷⵖⵉ
+The brush's width, as % of the picture's height	ⵜⴰⵀⵔⵔⴰⵢⵜ ⵏ ⵜⴽⴽⵓⵛⵜ, ⵙ % ⵏ ⵜⴻⵖⵣⵉ ⵏ ⵜⵓⴳⵏⴰ
+What the stream carries: SDR, PQ (HDR10) or HLG	ⵎⴰ ⵉⴷⴷⴰⵏ ⵙ ⵓⵙⵓⴷⴷⵎ: SDR, PQ (HDR10) ⵏⵖ HLG
+Digit colour once red is reached, and in overtime	ⵉⵏⵉ ⵏ ⵓⵟⵟⵓⵏ ⵎⵉ ⵉⵍⴽⵎ ⵓⵣⴳⴳⴰⵖ, ⴷ ⵖ ⵓⵣⵔⵉ ⵏ ⵡⴰⴽⵓⴷ
+Downmix this cue to mono (mono sources / mono PA)	ⵙⵙⵎⵓⵏ cue ⴰⴷ ⴰⵔ mono (ⵉⵖⴱⵓⵍⴰ mono / PA mono)
+Drag to scrub (shift = fine), click to type exact	ⵣⵓⵖⵔ ⵉ ⵓⵙⵖⵍⴼ (ⵙⵀⵉⴼⵜ = ⵙ ⵕⵕⴼⵇ), ⵙⵉⵜ ⵉ ⵜⵉⵔⴰ ⵙ ⵜⵉⴷⵜ
+Hand this to an oscillator so it moves on its own	ⴼⴽ ⵜ ⵉ ⵢⴰⵏ ⵓⵎⵙⵏⴽⵡⵉ ⴰⴷ ⵉⵜⵜⵎⵓⵙⵙⵓ ⵡⴰⵃⴷⵓⵜ
+Changing width also scales height (and vice versa)	ⴰⴱⴷⴷⵍ ⵏ ⵜⴻⵀⵔⵉ ⴰⵔ ⵉⵙⵙⵏⴼⴰⵍ ⵜⴻⵖⵣⵉ (ⴷ ⵓⵏⵎⴳⴰⵍ)
+How long the levels take to arrive; zero is a snap	ⵎⵏⵛⴽ ⴰⵔ ⴷ ⵜⵜⴰⵙⵏ ⵉⵙⵡⵉⵔⵏ; ⴰⵎⵢⴰ ⵉⴳⴰ ⴰⵙⵔⴱⵓ
+Set the self-contained PIP source for this overlay	ⵙⴱⴰⴷⵓ ⴰⵖⴱⴰⵍⵓ ⵏ PIP ⵏ ⵜⵓⵙⵍⵖⵜ ⴰⴷ
+Take the newest shape or pen path out of this mask	ⴽⴽⵙ ⵜⴰⵍⵖⴰ ⵏⵖ ⴰⴱⵔⵉⴷ ⵏ ⵓⵥⵥⴰⵔ ⴰⵎⴰⵢⵏⵓ ⵣⴳ ⵜⵎⵍⵖⵜ ⴰⴷ
+An address sent to Deckboy's OSC port fires this cue	ⵜⴰⵏⵙⴰ ⵢⵓⵣⵏⵏ ⵙ ⵜⴻⵡⵡⵓⵔⵜ OSC ⵏ Deckboy ⴰⵔ ⵜⵙⵙⵎⵙⵙⴰⴷ cue ⴰⴷ
+Hold on the last composite frame when the scene ends	ⵟⵟⴼ ⵜⵓⴳⵏⴰ ⵜⴰⴳⴳⴰⵔⵓⵜ ⵏ ⵓⵙⵓⴷⴷⵎ ⵎⵉ ⵜⴽⵎⵎⵍ ⵜⵎⵙⴹⴰⵍⵜ
+How long it takes; zero is a snap rather than a fade	ⵎⵏⵛⴽ ⴰⴷ ⵢⴰⵡⵉ; ⴰⵎⵢⴰ ⵉⴳⴰ ⴰⵙⵔⴱⵓ, ⵎⴰⵛⵛⵉ ⵜⴰⵣⴷⵓⵜ
+Set still/pattern/browser duration for selected cues	ⵙⴱⴰⴷⵓ ⵜⴰⵏⵣⴰⴳⵜ ⵏ still/pattern/browser ⵉ cue ⵉⵜⵜⵓⵙⵜⵓⵔⵏ
+Start the LTC carrier, stop it, or jam it to a value	ⵙⵙⵏⴽⵔ LTC, ⵃⴱⵙ ⵜ, ⵏⵖ ⵙⴳⵔ ⵜ ⴰⵔ ⵢⴰⵏ ⵡⴰⵣⴰⵍ
+Which cue on that deck; step off the end to clear it	ⵎⴰⵏ cue ⵖ deck ⴰⵏⵏ; ⵣⵔⵉ ⵜⴰⴳⴰⵔⴰ ⵉ ⵓⵙⴼⴹ
+Bob up and down. Depth 1 is half the frame either way	ⴰⵍⵉ ⴷ ⴹⵔ. ⵜⴰⵣⵡⴰⵔⵜ 1 ⵜⴳⴰ ⴰⵣⴳⵏ ⵏ ⵜⵓⴳⵏⴰ ⵖ ⵢⴰⵍ ⵜⴰⵎⴰ
+Output width in pixels | click value to type exact px	ⵜⴻⵀⵔⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵙ ⵉⴱⵉⴽⵙⵍⵏ | ⵙⵉⵜ ⵖ ⵡⴰⵣⴰⵍ ⵉ ⵜⵉⵔⴰ
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	ⵙⴱⴰⴷⵓ URL ⵏ ⵓⵙⵓⴷⴷⵎ (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	ⴰⵔ ⵉⵜⵎⵙⵙⴰⴷ ⵖ ⴰⴽⵓⴷ ⴰⴷ ⵖ ⵜⵎⵔⵉⵍⵜ ⵏ ⵓⵙⵍⴽⵉⵎ ⴰⴷ, ⵢⴰⵍ ⴰⵙⵙ
+Output height in pixels | click value to type exact px	ⵜⴻⵖⵣⵉ ⵏ ⵜⵓⴼⴼⵖⴰ ⵙ ⵉⴱⵉⴽⵙⵍⵏ | ⵙⵉⵜ ⵖ ⵡⴰⵣⴰⵍ ⵉ ⵜⵉⵔⴰ
+Bar across the foot - readable further back than digits	ⴰⴼⴳⴳⴰⴳ ⵖ ⵡⴰⴷⴷⴰⵢ - ⴰⵔ ⵉⵜⵜⵖⵔⴰ ⵣⴳ ⵓⴳⵓⴳ ⵓⴳⴰⵔ ⵏ ⵓⵟⵟⵓⵏⵏ
+OUTPUT: drag a slice to move it, its corners to size it.	ⵜⵓⴼⴼⵖⴰ: ⵣⵓⵖⵔ ⵜⴰⵟⵡⵉⵕⵜ ⵉ ⵓⵙⵎⵓⵜⵜⵉ, ⵜⵉⵖⵎⵔⵉⵏ ⵏⵏⵙ ⵉ ⵜⵉⴷⴷⵉ.
+Choose a Lower Third from the overlay bin to fire on TAKE	ⵙⵜⵉ Lower Third ⵣⴳ ⵜⵇⵇⵏⵜ ⵏ ⵜⵓⵙⵍⵖⵉⵏ ⴰⴷ ⵉⵜⵜⵎⵙⵙⴰⴷ ⵖ TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	ⵙⵜⵉ PIP ⵣⴳ ⵜⵇⵇⵏⵜ ⵏ ⵜⵓⵙⵍⵖⵉⵏ ⴰⴷ ⵉⵜⵜⵎⵙⵙⴰⴷ ⵖ TAKE
+OUTPUT: drag a slice to move it, its corners to pin them.	ⵜⵓⴼⴼⵖⴰ: ⵣⵓⵖⵔ ⵜⴰⵟⵡⵉⵕⵜ ⵉ ⵓⵙⵎⵓⵜⵜⵉ, ⵜⵉⵖⵎⵔⵉⵏ ⵏⵏⵙ ⵉ ⵓⵙⴱⴷⴷ.
+F1-F10, F12 or the number pad fires this cue from anywhere	F1-F10, F12 ⵏⵖ ⵜⴰⴼⵍⵍⴰⵡⵜ ⵏ ⵓⵟⵟⵓⵏⵏ ⴰⵔ ⵙⵙⵎⵙⵙⴰⴷⵏⵜ cue ⴰⴷ ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⵖⴰⵔ
+Use transition when auto-advancing or goto-taking next cue	ⵙⵅⴷⵎ ⴰⵙⴰⴽⴰ ⵖ ⵓⵙⵎⵓⵜⵜⵉⵢ ⴰⵡⵓⵔⵎⴰⵏ ⵏⵖ ⵖ GO ⴰⵔ cue ⴷ ⵉⵜⵜⴷⵓⵏ
+Nothing has arrived yet. Press something on the controller.	ⵓⵔ ⴷ ⵉⵍⴽⵉⵎ ⵡⴰⵍⵓ ⵖⵉⵍⴰ. ⵙⵉⵜ ⵖ ⴽⵔⴰ ⵖ ⵓⵎⵙⴼⵔⴽ.
+Audio fade-in: follow visual fade, none, or explicit seconds	ⴰⵏⴽⵛⵓⵎ ⵏ ⵉⵎⵙⵍⵉ: ⴹⴼⵔ ⵜⵓⴳⵏⴰ, ⵡⴰⵍⵓ, ⵏⵖ ⵜⴰⵙⵉⵏⵉⵏ ⵙ ⵜⵉⴷⵜ
+Audio fade-out: follow visual fade, none, or explicit seconds	ⵜⵓⴼⴼⵖⴰ ⵏ ⵉⵎⵙⵍⵉ: ⴹⴼⵔ ⵜⵓⴳⵏⴰ, ⵡⴰⵍⵓ, ⵏⵖ ⵜⴰⵙⵉⵏⵉⵏ ⵙ ⵜⵉⴷⵜ
+Add a library shape to this mask; its points are yours to move	ⵔⵏⵓ ⵜⴰⵍⵖⴰ ⵏ ⵜⵙⴷⵍⵉⵙⵜ ⵉ ⵜⵎⵍⵖⵜ ⴰⴷ; ⵜⵉⵏⵇⵇⵉⴹⵉⵏ ⵏⵏⵙ ⵉ ⴽⵉⵢⵉ
+No slices: this output shows its one picture. + SLICE to start.	ⵓⵍⴰⵛ ⵜⵉⵟⵡⵉⵕⵉⵏ: ⵜⵓⴼⴼⵖⴰ ⴰⴷ ⴰⵔ ⵜⵙⵙⴽⵏⴰⵢ ⵢⴰⵜ ⵜⵓⴳⵏⴰ. + SLICE ⵉ ⵓⵙⵏⵜⵉ.
+Open and close this edge on an oscillator -- a wipe that breathes	ⵔⵥⵎ ⴷ ⵇⵇⵏ ⵜⴰⵎⴰ ⴰⴷ ⵙ ⵓⵎⵙⵏⴽⵡⵉ -- ⴰⵙⴼⴹ ⴰⵔ ⵉⵜⵜⵏⴼⴰⵙ
+JAM	ⵙⴳⵔ
+KEY L	KEY ⵥ
++ section	+ ⵜⵉⴳⵣⵣⵓⵎⵜ
+Marks stacked BELOW.	ⵜⵉⵕⵎⵎⵓⵣⵉⵏ ⵉⵜⵜⵓⵙⴽⵎⵏ ⵖ ⵡⴰⴷⴷⴰⵢ.
+(projector curve only)	(ⵜⴰⵣⵏⵏⵓⵜ ⵏ ⵓⵎⵙⴽⵏⴰⵢ ⵖⴰⵙ)
+MULTIVIEW carries this too.	MULTIVIEW ⴰⵔ ⵜ ⵉⴷⴷⵉ ⴷ ⵏⵜⵜⴰⵏ.
+HLG - live broadcast (BT.2100)	HLG - ⴰⵙⵓⴷⴷⵎ ⵙ ⵜⵉⴷⵜ (ⴱⵜ.2100)
+headphones, desk sounds and LTC stay out of it	ⵉⵎⵙⴼⵍⴷⵏ, ⵉⵎⵙⵍⴰⵏ ⵏ ⵟⵟⴰⴱⵍⴰ ⴷ LTC ⵇⵇⵉⵎⵏ ⴱⵕⵕⴰ
+Above 1 tunnels inward, below 1 blooms outward.	ⵏⵏⵉⴳ 1 ⴰⴱⵔⵉⴷ ⴰⵔ ⵉⵜⵜⴽⵛⴰⵎ ⵙ ⵓⴳⵏⵙ, ⴷⴷⴰⵡ 1 ⴰⵔ ⵉⵜⵜⴼⵙⵓ ⵙ ⴱⵕⵕⴰ.
+Amber is closest to the 1976 single-phosphor look.	ⴰⵎⵍⵍⴰⵍ ⴰⴷ ⵉⴳⴰ ⵡⵉⵏ ⵉⵇⵇⵔⴱⵏ ⵙ ⵜⴰⵍⵖⴰ ⵏ 1976 ⵙ ⵢⴰⵏ ⵓⴼⵙⴼⵓⵔ.
+Sway sideways. Depth 1 is half the frame either way	ⵙⵙⵎⵖ ⵙ ⵜⴰⵎⴰ. ⵜⴰⵣⵡⴰⵔⵜ 1 ⵜⴳⴰ ⴰⵣⴳⵏ ⵏ ⵜⵓⴳⵏⴰ ⵖ ⵢⴰⵍ ⵜⴰⵎⴰ
+Draw the diagnostic over the card, or just the text.	ⵙⵓⵔ ⵜⴰⵙⵏⵇⵇⴷⵜ ⵖ ⵜⴽⴰⵔⴹⴰ, ⵏⵖ ⴰⴹⵔⵉⵙ ⵖⴰⵙ.
+All interfaces, but only this computer is trusted yet.	ⴰⴽⴽ ⵉⴳⵔⵓⴷⵎⵉⵡⵏ, ⵎⴰⵛⴰ ⴰⵙⵍⴽⵉⵎ ⴰⴷ ⵖⴰⵙ ⴰⴷ ⵉⵜⵜⵡⴰⵎⵏⵏ ⵖⵉⵍⴰ.
+Choose the legacy cue token to show inside the PIP window	ⵙⵜⵉ ⴰⵟⵟⵓⵏ ⵏ cue ⴰⵇⴱⵓⵔ ⴰⴷ ⵉⴱⴰⵢⵏ ⵖ ⵓⵙⴼⴰⵢⵍⵓ PIP
+ASIO carries the show's sound, and these are not on it yet	ASIO ⴰⵔ ⵉⴷⴷⵉ ⵉⵎⵙⵍⵉ ⵏ ⵓⵙⵙⴽⴰⵏ, ⵓⵔ ⵍⵍⵉⵏ ⵖⵉⴼⵙ ⵖⵉⵍⴰ
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=ⴰⵎⴰⵢⵏⵓ  Enter/P=ⴰⵎⵣⵡⴰⵔⵓ  O=ⵔⵥⵎ ⴰⵃⵔⵣⵉ  E=ⵉⵎⴷⵢⴰⵜⵏ  L=ⵍⵎⴷ
+Hand this parameter to an oscillator so it moves on its own	ⴼⴽ ⴰⵙⴱⴰⴷⵓ ⴰⴷ ⵉ ⵢⴰⵏ ⵓⵎⵙⵏⴽⵡⵉ ⴰⴷ ⵉⵜⵜⵎⵓⵙⵙⵓ ⵡⴰⵃⴷⵓⵜ
+How long the finished drawing stays before it is drawn again	ⵎⵏⵛⴽ ⴰⵔ ⵜⵇⵇⵉⵎ ⵜⵓⵏⵓⵖⵜ ⵉⴽⵎⵍⵏ ⴰⵔⴷ ⵜⵄⴰⵡⴷ ⵜⵜⵓⵙⵓⵕ
+How it comes on and goes off: none, fade, rise, slide or wipe	ⵎⴰⵎⴽ ⴷ ⵉⵜⵜⴰⵙⴰ ⴷ ⵎⴰⵎⴽ ⵉⵜⵜⴼⴼⴰⵖ: ⵡⴰⵍⵓ, ⴰⵙⴼⴹ, ⴰⵙⴰⵍⵉ, ⴰⵥⵍⴰⵇ ⵏⵖ ⴰⵙⴼⴹ
+The 64-step wavetable, quantised to 6 bits like the hardware.	ⵜⴰⴼⵍⵍⴰⵡⵜ ⵏ ⵓⵎⵡⵊ ⵙ 64 ⵏ ⵜⵙⵓⵔⵉⴼⵉⵏ, ⵙ 6 ⵏ ⵉⴱⵉⵜⵏ ⴰⵎ ⵓⵙⵍⴽⵉⵎ.
+Vary tile size per cell, so the grid stops looking like a grid.	ⴱⴷⴷⵍ ⵜⵉⴷⴷⵉ ⵏ ⵜⵣⵍⵍⵉⵡⵜ ⵖ ⵢⴰⵍ ⵜⴰⵙⴷⴷⴰⵔⵜ, ⴰⴷ ⵓⵔ ⵜⵉⵍⵉ ⵜⵉⵣⵔⵙⵜ ⴰⵎ ⵜⵉⵣⵔⵙⵜ.
+Which output channel carries the signal. 'all' feeds every one.	ⵎⴰⵏ ⴰⴱⵔⵉⴷ ⵏ ⵜⵓⴼⴼⵖⴰ ⴰⴷ ⵉⴷⴷⵉⵏ ⴰⵙⵎⵎⴰⵇⵍ. 'ⴰⵍⵍ' ⴰⵔ ⵉⵙⵙⴳⴷⵓⵔ ⴽⵓⵍⵍⵓ.
+What is sent. Backslash-n, -r, -t and -0 become those characters	ⵎⴰ ⵉⵜⵜⵢⴰⵣⵏ. ⵜⴰⵣⵍⴰⴳⵜ ⵜⴰⵎⴳⴰⵍⵜ ⴷ ⵏ, ⵔ, ⵜ ⴷ 0 ⴰⵔ ⵜⵜⵓⵖⴰⵍⵏⵜ ⴷ ⵉⵙⵙⴽⵉⵍⵏ ⴰⵏⵏ
+Deckboy's own remote-protocol verbs, one per line; # is a comment	ⵜⵉⵖⴰⵡⵙⵉⵡⵉⵏ ⵏ ⵓⵟⵓⵟⵓⴽⵓⵍ ⵏ Deckboy, ⵢⴰⵜ ⵖ ⵢⴰⵍ ⵉⵣⵔⵉⵖ; # ⵉⴳⴰ ⴰⵡⵏⵏⵉⵜ
+Modulator speed as a ratio of the note, so the bend tracks pitch.	ⴰⵔⵓⵔⴻⴷ ⵏ ⵓⵎⵙⵏⴼⵍ ⵙ ⵜⵎⵙⴰⵙⴰⵜ ⴷ ⵜⵏⵓⵜ, ⴰⴷ ⵉⴹⴼⵔ ⵓⴽⵏⵏⵓ ⵜⴰⴳⵓⵜ ⵏ ⵉⵎⵙⵍⵉ.
+Play this cue to the preview only; the outputs keep what they have	ⵙⵙⵉⵡⵍ cue ⴰⴷ ⵖ ⵜⵎⴰⵣⵉⵔⵜ ⵏ ⵓⵡⵜⵜⴰⵙ ⵖⴰⵙ; ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⴰⵔ ⵃⵔⵔⵣⵏⵜ ⵎⴰ ⵖⵓⵔⴰⵏⵜ
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	ⴳ ⵜⴰⴳⵓⵜ ⵏ ⵉⵎⵙⵍⵉ ⵖ ⵓⵎⵙⵏⴽⵡⵉ: Motion X ⴰⵔ ⵜ ⵉⵙⴼⴹ ⴰⵎ theremin
+A disarmed cue stays in the list and does nothing; GO steps over it	cue ⴱⵍⴰ ⴰⵙⵎⵙⵍⵉ ⴰⵔ ⵉⵇⵇⵉⵎ ⵖ ⵜⴱⴷⴰⵔⵜ ⵓⵔ ⵉⵜⵜⴳⴳⴰ ⵡⴰⵍⵓ; GO ⴰⵔ ⵜ ⵉⵣⵔⵉ
+Where the clock reads from this cue on; click the value to type one	ⴰⵏⵉ ⵖ ⵜⵖⵔⴰ ⵜⵎⵔⵉⵍⵜ ⵣⴳ cue ⴰⴷ; ⵙⵉⵜ ⵖ ⵡⴰⵣⴰⵍ ⵉ ⵜⵉⵔⴰ
+Add a dashboard button that fires this master by name, from anywhere	ⵔⵏⵓ ⵜⴰⵇⵇⴼⴰⵍⵜ ⵖ ⵜⴼⵍⵍⴰⵡⵜ ⴰⴷ ⵉⵙⵙⵎⵙⵙⴰⴷ ⵎⴰⵙⵜⴻⵔ ⴰⴷ ⵙ ⵢⵉⵙⵎ, ⵣⴳ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⵖⴰⵔ
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	ⵜⴳⴰ ⴰⵎⴰⵢⵏⵓ? ⵍⵎⴷ ⵜⵉⴷⴷⴰⵙ ⴰⵔ ⵜⴰⵡⵉ ⵙⵎⵎⵓⵙ ⵜⵓⵙⴷⵉⴷⵉⵏ. ⴰⴷ ⴰⴽ ⵏⵙⵙⴽⵏ ⴽⵓⵍⵍⵓ.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	ⵜⴰⵏⵙⴰ IPv4, ⵏⵖ 255.255.255.255 ⵉ ⵓⵙⵉⵡⴹ ⴰⵔ ⵓⵥⵟⵟⴰ ⴽⵓⵍⵍⵓ
+How much playing audio widens and brightens the pattern. 0 free-runs.	ⵎⵏⵛⴽ ⴰⵔ ⵉⵙⵙⵉⵔⵉⴷ ⵉⵎⵙⵍⵉ ⵉⵜⵜⴹⵔⵔⴰⵏ ⴰⴳⴰⵏⵉⵎ ⴷ ⴰⵔ ⵜ ⵉⵙⵙⵏⴼⴰⵡ. 0 ⴰⵔ ⵉⵜⵜⴷⴷⵓ ⵙ ⵜⵍⴻⵍⵍⵉ.
+LED panel width in pixels - what one tile really is. Click to type it	ⵜⴻⵀⵔⵉ ⵏ ⵜⴼⵍⵍⴰⵡⵜ LED ⵙ ⵉⴱⵉⴽⵙⵍⵏ - ⵎⴰ ⵜⴳⴰ ⵜⵣⵍⵍⵉⵡⵜ ⵙ ⵜⵉⴷⵜ. ⵙⵉⵜ ⵉ ⵜⵉⵔⴰ
+Which deck it acts on; step off the end for the one this cue lives on	ⵖ ⵎⴰⵏ deck ⴰⴷ ⵉⵜⵜⴳⴳⴰ; ⵣⵔⵉ ⵜⴰⴳⴰⵔⴰ ⵉ deck ⵏ cue ⴰⴷ
+only one playlist - use the routing chip on the header to add another	ⵢⴰⵜ ⵜⴱⴷⴰⵔⵜ ⵖⴰⵙ - ⵙⵅⴷⵎ ⵜⴰⴳⵔⵉⵜ ⵏ ⵓⴱⵔⵉⴷ ⵖ ⵓⵇⵇⵔⵔⵓ ⵉ ⵓⵔⵏⵓ ⵢⴰⵜ
+Which cue this master fires on that deck; step off the end to clear it	ⵎⴰⵏ cue ⴰⵔ ⵉⵙⵙⵎⵙⵙⴰⴷ ⵎⴰⵙⵜⴻⵔ ⴰⴷ ⵖ deck ⴰⵏⵏ; ⵣⵔⵉ ⵜⴰⴳⴰⵔⴰ ⵉ ⵓⵙⴼⴹ
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	ⵙⵓⵔ ⵖ ⵓⵎⵙⴽⵏⴰⵢ ⵏ ⵓⵙⵖⴰⵔⵓ ⵙ ⵜⵖⴰⵔⴷⴰ ⵏⵖ ⵙ ⵓⴽⴽⵓⵛ (DRAW). Esc ⴰⵔ ⵉⵙⵙⴱⴷⴷⴰⴷ
+How long the move takes, each way. 0 is instant whatever the style says	ⵎⵏⵛⴽ ⴰⴷ ⵢⴰⵡⵉ ⵓⵎⵓⵙⵙⵓ, ⵖ ⵢⴰⵍ ⵜⴰⵎⴰ. 0 ⵉⴳⴰ ⴰⵙⵔⴱⵓ ⴽⵉⴳⴰⵏ ⵎⴰ ⵉⵏⵏⴰ ⵓⵖⴰⵏⵉⴱ
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	ⵃⴱⵙ deck ⴰⵏⵏ ⵎⵉ ⴷ ⵉⵍⴽⵎ ⵓⴽⵛⵓⵎ - ⴰⵃⴱⴰⵙ ⵉⵜⵜⵓⵙⵏⵏ
+Which of the file's sound tracks plays: a second language, a commentary	ⵎⴰⵏ ⴰⴱⵔⵉⴷ ⵏ ⵉⵎⵙⵍⵉ ⵏ ⵓⴼⴰⵢⵍⵓ ⴰⴷ ⵉⵜⵜⴹⵔⵔⴰⵏ: ⵜⵓⵜⵍⴰⵢⵜ ⵜⵉⵙ ⵙⵏⴰⵜ, ⴰⵙⵎⵎⵔⵙ
+An oscillator on the colour: depth is how far round the wheel it travels	ⴰⵎⵙⵏⴽⵡⵉ ⵖ ⵉⵏⵉ: ⵜⴰⵣⵡⴰⵔⵜ ⵜⴳⴰ ⵎⵏⵛⴽ ⴰⵔ ⵉⵜⵜⵣⵣⵉ ⵖ ⵜⵏⴰⵢⵜ
+Rack this cue paused and off air so GO starts it with no decoder spin-up	ⵙⴳⵔ cue ⴰⴷ ⵙ ⵓⵙⴳⵓⵏⴼⵓ ⴷ ⴱⵕⵕⴰ ⵏ ⵓⵣⵔⵉ, ⴰⴷ ⵜ ⵉⵙⵙⵏⴽⵔ GO ⴱⵍⴰ ⴰⵄⵟⵟⵍ ⵏ ⵓⵎⵙⴼⵔⵔ
+Note, control change, program change, MIDI Show Control, or your own bytes	ⵜⴰⵏⵓⵜ, control change, program change, MIDI Show Control, ⵏⵖ ⵉⴱⵉⵜⵏ ⵏⵏⴽ
+Black behind the words. Zero leaves it over whatever the output already has	ⴰⵙⴳⵏⵓ ⵖ ⵜⵖⵓⵔⴷⵉⵏ ⵏ ⵡⴰⵡⴰⵍⵏ. ⴰⵎⵢⴰ ⴰⵔ ⵜⵏ ⵢⴰⴵⴵⴰ ⵏⵏⵉⴳ ⵎⴰ ⵉⵍⴰⵏ ⵖ ⵜⵓⴼⴼⵖⴰ
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	ⵎⵏⵛⴽ ⴰⵔ ⵉⵙⵙⴽⵏⵓ ⵓⵎⵙⵏⴼⵍ ⵜⴰⴳⵓⵜ ⵏ ⵉⵎⵙⵍⵉ. 0-63, ⵜⴰⵎⵣⵡⴰⵔⵜ ⵏ ⵜⵣⵎⴻⵔⵜ ⵏ ⵓⵙⵍⴽⵉⵎ.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	ⴰⵡⴰⵍⵏ ⵍⵍⵉ ⴰⵔ ⵉⵙⵙⵔⵙ cue ⴰⴷ ⵖ ⵓⴳⴷⵉⵍ  |  Shift+Enter: ⵉⵣⵔⵉⵖ ⴰⵎⴰⵢⵏⵓ  |  Enter: ⵙⵏⴼⵍ
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC ⴷ UDP ⴰⵔ ⵜⵜⴰⵣⵏ ⵜⵜⵓⵏ; TCP ⴰⵔ ⵉⵜⵜⵇⵇⵏ, ⵙ ⵓⵢⴰⴷ ⴰⵔ ⵉⵜⵜⴷⴷⵓ ⴱⵕⵕⴰ ⵏ ⵓⴼⵔⴷⵉⵙ ⵏ ⵓⵙⵙⴽⴰⵏ
+Put the level on an oscillator: Motion makes it a gate that opens as you move	ⴳ ⴰⵙⵡⵉⵔ ⵖ ⵓⵎⵙⵏⴽⵡⵉ: Motion ⴰⵔ ⵜ ⵢⴰⴵⴵⴰ ⴷ ⵜⴰⵡⵡⵓⵔⵜ ⴰⵔ ⵜⵜⵔⵥⵎⵜ ⵎⵉ ⵜⵎⵓⵙⵙⵓⵜ
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	ⵜⵉⵕⵎⵎⵓⵣⵉⵏ ⵉⵜⵜⵓⵙⴽⵎⵏ ⵏⵏⵉⴳ ⵉⵙⵙⴽⵉⵍⵏ, ⴰⵎ ⵜⵉⵖⵓⵏⴱⴰⵣ ⴰⵔ ⵜⵜⴼⴼⵖⵏⵜ ⵉ ⵉⵣⵔⵉⵖ.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	ⵎⴰⵏ ⴰⵟⵏⵟⵏ. ⴰⴱⴷⴷⵍ ⴰⵔ ⵜ ⵉⵙⵙⵉⵡⵉⵍ, ⴰⴷ ⵜ ⵜⵙⵉⵜⵉⵜ ⵙ ⵓⵎⵣⵣⵓⵖ, ⵎⴰⵛⵛⵉ ⵙ ⵢⵉⵙⵎ.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	ⵓⵍⴰⵛ ⵉⵣⵉⵔⵉⴳⵏ. + ⵔⵏⵓ ⵏⵖ ⵍⵎⴷ ⴰⵔ ⵜⵜⴳⴰⵏ ⵢⴰⵏ; MIDIMAP RESET ⴰⵔ ⴷ ⵉⵙⵔⴰⵔ ⵉⵣⵉⵔⵉⴳⵏ ⵏ ⵜⴼⵔⴰⵙ.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	ⵃⵔⵣ ⵉⴱⵔⵉⴷⵏ ⵏ ⵜⵎⵍⵖⵜ ⵙ SVG, ⵉ Illustrator ⴷ ⴽⵔⴰⵢⴳⴰⵜⵜ ⵎⴰ ⵜⵏ ⵉⵇⵇⵔⴰⵏ
+Which MIDI output; a named port that is missing is reported rather than swapped	ⵎⴰⵏ ⵜⵓⴼⴼⵖⴰ MIDI; ⵜⴰⵡⵡⵓⵔⵜ ⵙ ⵢⵉⵙⵎ ⵓⵔ ⵉⵍⵍⵉⵏ ⴰⵔ ⵜⵜⵜⵡⴰⵏⵏⴰ, ⵓⵔ ⵜⵜⵜⵓⴱⴷⴷⴰⵍ
+An oscillator on the level, running after GO until a later cue sets this fixture	ⴰⵎⵙⵏⴽⵡⵉ ⵖ ⵓⵙⵡⵉⵔ, ⴰⵔ ⵉⵜⵜⴷⴷⵓ ⴷⴼⴼⵉⵔ ⵏ GO ⴰⵔⴷ ⵜ ⵉⵙⴱⴰⴷⵓ ⵢⴰⵏ cue ⵉⵜⵜⴷⵓⵏ
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	ⵜⵉⵙⵓⵔⵉⴼⵉⵏ ⵙ ⴽⵔⴰⴹ ⵖ ⵜⵜⵎⵏ, ⴰⵛⴽⵓ ⴰⵎⵣⵣⵓⵖ ⴰⵔ ⵉⵜⵜⵅⴷⴰⵎ ⵙ ⵜⵎⵙⴰⵙⴰⵜⵉⵏ. 1kHz ⵉⴳⴰ ⵜⴰⵎⵙⴰⵙⴰ.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	ⵜⵉⵙⵖⵓⵏⵉⵏ ⵣⴳ ⵜⴰⵎⴰ N ⵜⴰⵙⴷⴷⴰⵔⵜ, ⴰⵔ ⵙⵙⵅⵙⵔⵏⵜ ⴰⵙⵙⴽⵉⵍ ⵓⵔ ⵜ ⵜⵜⵣⵡⴰⵇⵏⵜ.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	ⵉⵙ ⵜⵉⵏⵓⵜⵉⵏ MIDI ⴷ ⵉⴽⵛⵎⵏ ⴰⵔ ⵙⵙⵉⵡⵍⵏⵜ synth ⴰⴷ ⵏⵖ ⴰⵔ ⵙⵙⵎⵙⵙⴰⴷⵏⵜ cue ⴰⵎ ⴽⵓⵍⵍⵓ.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	ⵓⵟⵟⵓⵏ ⵏ ⵜⵏⵓⵜ, ⵏⵖ ⴰⵔⵉ LEARN ⵜⵙⵙⵉⵡⵍⵜ ⵜⵜ. ⵜⵉⵏⵓⵜⵉⵏ ⵓⵔ ⵉⵜⵜⴰⵟⵟⴼ ⵢⴰⵏ cue ⴰⵔ ⵜⵜⴷⴷⵓⵏⵜ ⵙ cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	ⵙⵏⴰⵜ ⵏ stereo. ⵙⵉⵜ ⵉ ⵓⵔⵥⵎ ⵏ ⵓⵎⵢⴰⴳ, ⵣⴳ ⵓⴱⵔⵉⴷ ⴰⴷ ⵙ ⵜⵉⴷⵜ
+Folding is what turns an arbitrary pattern into something that reads as designed.	ⴰⴽⵏⵏⵓ ⴰⵔ ⵉⵙⵙⵓⵖⵓⵍ ⴽⵔⴰ ⵏ ⵓⴳⴰⵏⵉⵎ ⴷ ⵎⴰ ⵉⵜⵜⵉⵍⵉⵢⵏ ⴰⵎ ⵉⵜⵜⵓⵙⵓⴷⴷⵙⵏ.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	ⴰⴱⵔⵉⴷ=ⴰⵙⵡⵉⵔ, ⵙ ⵜⵖⴰⵔⴷⴰ. ⴷ ⵜⵉⵙⴳⴰ: 1=255, 10-14=64. ⵉⴱⵔⵉⴷⵏ ⴰⵔ ⵜⵜⵢⴰⵃⵙⴰⴱⵏ ⵣⴳ 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	ⴰⵔ ⵉⵙⵙⵎⵓⵜⵜⵉ ⵜⵔⵉⵎ ⵏ ⵢⴰⵍ cue ⵉⵜⵜⵓⵙⵜⵓⵔⵏ ⵙ ⵢⴰⵏ ⵡⴰⵣⴰⵍ ⵏ dB; ⵜⵉⵔⴰ ⵏ ⵡⴰⵣⴰⵍ ⴰⵔ ⵜⵏ ⵜⵙⴱⴰⴷⵓ ⴽⵓⵍⵍⵓ
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	ⴰⵔ ⵉⵙⵙⴽⵏⵓ ⵜⴰⴳⵓⵜ N ⵉⵎⵙⵍⵉ ⵏ ⵓⵎⴰⵙⴰⵢ ⵓⵔ ⵉⴷⴷⵓⴽⴽⵍ ⵉⴷⵙ. ⵖⴰⵢⴽⴰⴷ ⴰ ⵉⵙⵙⵖⵓⵢⵢⵓⵏ FDS.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	ⵜⵍⵍⴰ ⵖ ⵡⴰⵎⵎⴰⵙ ⵏ ⵍⵎⴷ ⵜⵉⴷⴷⴰⵙ. ⵙⵉⵜ ⵖ L ⴰⴷ ⵏⴽⵎⵍ ⵣⴳ ⵎⴰⵏⵉ ⵜⵃⴱⵙⵜ, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	ⵙⵙⴽⵏ ⴷ ⵜⵉⵣⵔⵙⵜ ⵏ ⵉⵙⵙⴽⵉⵍⵏ ⵙ ⵜⵏⴰⵢⵜ ⵏ 16 ⵏ ⵉⵏⵉⵏ, ⵎⴰⵛⵛⵉ ⴷ ⵉⴱⵉⴽⵙⵍⵏ.
+Which MIDI output this file plays to; step past the end for the first one available	ⵎⴰⵏ ⵜⵓⴼⴼⵖⴰ MIDI ⵖ ⴰⵔ ⵉⵜⵜⴹⵔⵔⴰⵏ ⵓⴼⴰⵢⵍⵓ ⴰⴷ; ⵣⵔⵉ ⵜⴰⴳⴰⵔⴰ ⵉ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⵉⵍⴰⵏ
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	ⵜⴰⵏⵙⴰ IPv4, ⵏⵖ 255.255.255.255 ⵉ ⵜⴳⴳⵔⵓⵎⵜ multicast ⵏ universe (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	ⵙⵉⵜ ⵖ ⵜⴰⵙⴷⴷⴰⵔⵜ ⵉ ⵓⴱⴷⴷⵍ: ⵉⵏⵙⴰ, ⵉⵛⵛⵓⵔ, -3, -6, -12. ⵉⵣⵔⵉⵖ ⴰⴷ ⴰⵔ ⵉⵙⵙⵏⵙⴰ ⴰⵎⵢⴰⴳ ⵜⵉⴽⴽⵍⵜ ⵢⴰⴹⵏ
+How long each phrase stays before it moves. Zero hides them without losing the list.	ⵎⵏⵛⴽ ⴰⵔ ⵜⵇⵇⵉⵎ ⵢⴰⵍ ⵜⴰⵙⴳⵓⵏⴼⵜ ⴰⵔⴷ ⵜⵎⵓⵙⵙⵓ. ⴰⵎⵢⴰ ⴰⵔ ⵜⵏⵜ ⵉⵜⵜⴼⴼⵔ ⴱⵍⴰ ⵎⴰ ⵉⵜⵜⵄⴷⴷⴰ ⵜⴰⴱⴷⴰⵔⵜ.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	ⵎⵏⵛⴽ ⴰⴷ ⵢⴰⵡⵉ ⵓⴹⵓⴹⵔ ⴷⴼⴼⵉⵔ ⵏ ⵜⴳⵓⵜ. ⴰⵔ ⵉⵜⵜⵓⵙⴼⵍⴰⴷ ⵖⴰⵙ ⵎⵉ ⵉⵔⵎⴷ ⵓⵙⵄⴰⵡⴷ.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	ⵉⵏⵙⴰ, ⵣⴳ ⵜⴰⵣⵡⴰⵔⴰ (cue ⵉⵜⵜⴷⵓⵏ ⴰⵔ ⵉⴱⴷⴷⴰ ⵎⵉ ⵉⴱⴷⴷⴰ ⵡⴰⴷ) ⵏⵖ ⵣⴳ ⵜⴰⴳⴰⵔⴰ (ⵎⵉ ⵉⴽⵎⵎⵍ)
+Height of one line as a percent of the raster, so a card reads the same on any screen	ⵜⴻⵖⵣⵉ ⵏ ⵢⴰⵏ ⵉⵣⵔⵉⵖ ⵙ % ⵏ raster, ⴰⴷ ⵉⵜⵜⵖⵔⴰ ⵜⴽⴰⵔⴹⴰ ⵢⴰⵜ ⵖ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴳⴷⵉⵍ
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	ⵙⴱⴰⴷⵓ ⴰⵖⴱⴰⵍⵓ ⵏ ⵜⵙⴳⴰ: media:/ⴰⴱⵔⵉⴷ, browser:url, window:ⵉⵙⴻⵎ, camera:ⵉⵙⴻⵎ, ⵏⵖ syphon:ⵉⵙⴻⵎ
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	ⴰⵙⴽⴰⵔ LFSR ⴰⵡⵣⵣⵍⴰⵏ. ⴰⴽⵓⴷ ⵉⵡⵣⵣⵍ ⴰⴷ ⵉⵜⵜⵓⵙⴼⵍⴷ ⴰⵎ ⵓⵣⵣⴰⵍ ⵏ ⵜⴳⵓⵜ, ⵎⴰⵛⵛⵉ ⴰⵎ ⵓⴼⵙⵓⵙ.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	ⴰⵎⵍⵍⴰⵍ, ⵉⵃⵎⵎⴰⵏ, ⴰⵣⴳⴳⴰⵖ, ⴰⵎⵍⵍⴰⵍ ⵖ, ⴰⵣⴳⵣⴰⵡ, ⴰⵏⵉⵍⵉ, ⴰⵏⵉⵍⵉ ⵉⵃⵎⵎⴰⵏ, ⴰⵎⵍⵍⴰⵍ ⴰⵃⵎⵔⴰⵢ. ~ ⴰⵔ ⵜ ⵉⵜⵜⵣⵣⵉ ⵖ ⵜⵏⴰⵢⵜ ⵏ ⵉⵏⵉⵏ
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	ⵄⴰⵡⴷ ⵜⵉⵖⵜⵔⵉ ⵏ ⵜⵉⴷⵎⵉ ⵙ ⵓⵎⵢⴰ ⴰⴷ. Hold ⴰⵔ ⵉⵟⵟⴰⴼ ⵢⴰⵜ ⵜⵏⵓⵜ, ⵎⴰ ⵉⵔⴰⵏ drone.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond ⵉⴳⴰ ⵜⵉⵥⵔⵙⵜ ⵏ Atari Video Music ⵙ ⵜⵎⵉⵡⵉⵏ ⵉⵇⵇⵓⵔⵏ; ⵜⵉⵡⵍⵍⵉⵡⵉⵏ ⴰⵔ ⵜⵜⴳⴰⵏⵜ ⴰⴱⵔⵉⴷ ⵉⴼⵓⵍⴽⵉⵏ ⴷ zoom ⵏ ⵜⵓⴼⵔⵏⵜ.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	ⵙⵙⵎⵖ ⵏⵖ ⵣⵣⵉ. ⵜⴰⵣⵡⴰⵔⵜ 1 ⵜⴳⴰ ⴰⵣⴳⵏ ⵏ ⵜⵓⵣⵣⵢⴰ ⵖ ⵢⴰⵍ ⵜⴰⵎⴰ; ⴰⵎⵥⵍⴰⵢ ⵖ 1 ⴰⵔ ⵉⵜⵜⵣⵣⵉ ⵜⵓⵣⵣⵢⴰ ⴽⵓⵍⵍⵓⵜ
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	ⴰⵙⵡⵉⵔ ⵏ ⵜⵙⵉⵡⵍⵜ ⵏ deck (ⵙ ⵜⵉⴷⵜ, ⵓⵔ ⵉⵜⵜⵢⴰⵃⵔⵣ ⴷ cue) - ⵜⵔⵉⵎ ⵏ ⵢⴰⵍ cue ⵉⴳⴰ ⵜⴰⵣⵎⴻⵔⵜ ⵖ ⵜⴳⵣⵣⵓⵎⵜ ⵏ ⵉⵎⵙⵍⵉ
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	ⵉⴱⴷⴷ, ⴰⵏⴽⵛⵓⵎ ⵙ ⵍⵄⵇⴻⵍ, ⵜⴰⵎⴰⵛⵉⵏⵜ ⵏ ⵜⵉⵔⴰ, ⴰⵙⴰⵍⵉ, ⴰⵥⵍⴰⵇ ⵏⵖ ⵜⵉⵖⵜⵔⵉ -- ⴽⵓⵍⵍⵓ ⵙ ⵓⵙⵎⵓⵜⵜⵉ ⵏ cue ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	ⵉⵖⵍⴰⵏ ⵖ ⵢⴰⵍ ⵜⵓⴳⵏⴰ. 1 ⵉⴳⴰ ⵢⴰⵏ ⵙ ⵢⴰⵏ, 0.5 ⴰⵔ ⵉⵟⵟⴰⴼ ⵢⴰⵍ ⴰⵖⵍⴰⵏ ⵙⵏⴰⵜ ⵏ ⵜⵓⴳⵏⵉⵡⵉⵏ, 0 ⴰⵔ ⵜ ⵉⵙⵙⴳⵔⵙⴰ.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	ⵎⴰ ⴰⵔ ⵉⵙⵙⴽⵏⴰⵢ cue ⴰⴷ ⵎⵉ ⵉⵜⵜⴹⵔⵔⴰⵏ: ⵜⴰⵍⵖⴰ ⵏ ⵓⵎⵡⵊ, scope, Lissajous, ⵜⴰⵙⴽⵍⴰ, ⵉⵎⴽⵜⴰⵢⵏ ⵏⵖ ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵢⵉⵙⵎ
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 ⴰⵔ ⵉⵜⵜⵙⵜⴰⵢ ⵜⵉⵣⵍⵍⵉⵡⵉⵏ ⵙ ⵜⴰⴼⴰⵜ ⴰⴷ ⵜⵜⵜⵢⴰⵖⵔⴰ ⵜⵓⴳⵏⴰ. 1 ⴰⵔ ⵉⵜⵜⵙⵜⴰⵢ ⵙ ⵓⴳⵎⵎⵓ, ⵜⵉⵣⵔⵙⵜ ⵜⵓⵖⴰⵍ ⴷ ⵜⴰⵍⵖⴰ.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	ⵎⵏⵛⴽ ⴰⵔ ⵉⵜⵜⵎⵓⵙⵙⵓ, ⵙ ⵉⵣⴳⵏⴰⵏ ⵏ ⵜⴳⵓⵜ. ⵙ ⵓⴼⴻⵍⵍⴰ ⴰⵔ ⵉⵜⵜⵓⵙⴼⵍⴷ ⴰⵎ ⵜⴰⵡⵡⴰⴷⴰ, ⵙ ⵡⴰⴷⴷⴰⵢ ⴰⵎ ⵜⴰⴼⵓⵖⵜ, ⴰⵎⵢⴰ ⵉⴳⴰ ⵜⴰⵏⵓⵜ ⵉⵜⵜⵡⴰⵜⵏ.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	ⵜⴰⵏⵙⴰ IPv4. ⵉⵙⵎⴰⵏ ⵓⵔ ⵜⵜⵓⴼⵙⴰⵔⴰⵏ: ⴰⵙⵓⵜⴻⵔ DNS ⴰⵔ ⵉⵜⵜⴳⴷⴰⵍ, ⵓⵔ ⵉⵍⴰⵇ GO ⴰⴷ ⵜ ⵉⵙⴽⵔ
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	ⵜⴻⵀⵔⵉ ⵏ ⵜⵣⵍⵍⵉⵡⵜ ⵙ ⵉⴱⵉⴽⵙⵍⵏ. ⵉⵍⴰⵇ ⴰⴷ ⵜⵎⵎⵢⴰⵡⵙ ⴷ ⵜⵉⵣⵔⵙⵜ ⵏ ⵜⴰⵙⵏⴰ, ⵎⴰⴽ ⵓⵔ ⵜⵍⵍⵉ ⵜⵉⵟⵡⵉⵕⵉⵏ ⴰⵔ ⴷ ⴹⵔⵏⵜ ⵖ sprites ⵏ ⵜⴰⵎⴰ.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	ⵜⵉⵎⵙⵉⵡⵉⵏ ⴰⵔ ⵜⵜⵎⵎⵢⴰⵙⴰⵔⵏⵜ ⵙ ⵓⴷⵖⴰⵔ ⵏ ⵜⴰⵙⴷⴷⴰⵔⵜ, ⴰⵔ ⵜⵜⵢⴰⵖⵔⴰⵏⵜ ⴰⵎ ⵓⴳⴰⵏⵉⵎ ⵖ ⵎⴰⵏⵉ ⵉⵜⵜⵢⴰⵖⵔⴰ ⵓⴱⴷⴷⵍ ⵙ ⵓⴳⵎⵎⵓ ⴰⵎ ⵜⴰⵡⵙⵉ.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 ⴰⵔ ⵜⵏⵜ ⵢⴰⵙⵎⵓⵏ ⴷ ⵜⴰⵙⴷⴷⴰⵔⵜ ⵏⵏⵙⵏⵜ, ⴰⵎ ⵉⵜⵜⵓⴽⵔⵔⴷⵏ. ⵏⵏⵉⴳ ⵏ ⵓⵢⴰⴷ ⴰⵔ ⵜⵜⵄⴰⵡⴰⴷⵏⵜ ⴰⵙⵜⵉ, ⴰⵎ ⴰⵔ ⵜⴱⵓⵇⵇⵔⵏⵜ.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L ⴰⵔ ⵉⵙⵙⵉⵡⵉⵍ ⴰⵏⴽⵛⵓⵎ ⵏ ⵣⵍⵎⴰⴹ ⵖ ⵙⵏⴰⵜ ⵏ ⵜⵙⵓⴷⴷⵉⵎⵉⵏ: ⴰⵎⵉⴽⵔⵓ 1 ⵖ ⵓⴳⵎⵎⴰⵢ ⵏ ⵉⴳⵔⵓⴷⵎⵉⵡⵏ. STEREO ⵉ ⵓⵖⴱⴰⵍⵓ ⵏ ⵉⵣⵔⵉⵖ.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	ⴰⵙⵎⵓⵙⵙⵓ ⴽⵓⵍⵍⵓ. ⵖⴰⵢⴽⴰⴷ A ⵉⴳⴰ ⵜⴰⵏⵣⴰⴳⵜ ⵏ cue -- sting ⵉⴳⴰ ⵢⴰⵏ ⵓⵙⵏⴼⴰⵡ ⵉⵜⵜⵓⵙⵙⴽⴰⵔⵏ ⵖⵉⴷ ⴰⵔ ⵉⵜⵜⴽⵎⵎⴰⵍ.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	ⵙⵉⵜ ⵖ ⵡⴰⵣⴰⵍ ⴰⴷ ⵜⴰⵣⵏ ⵜⴰⴼⴰⵜ ⴰⴷ ⵏⵖ ⵜⵜ ⵜⵢⴰⴵⴵⴰⵜ ⵖ ⵎⴰⵏⵉ ⵜⵜ ⵉⵙⵙⵔⵙ cue ⴰⵎⴳⴳⴰⵔⵓ. ~ ⴰⵔ ⵉⵙⵙⵓⵏⴼⴰⵙ ⴰⵙⵡⵉⵔ
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS ⵉⴳⴰ ⵜⴰⴼⵍⵍⴰⵡⵜ ⵏ ⵓⵎⵡⵊ ⵉⵙⵙⴽⵏⵓ ⵢⴰⵏ ⵓⵎⵙⵏⴼⵍ. 2A03 ⵉⴳⴰ ⵜⴰⴳⵔⵓⵎⵎⴰ ⵏ puls/ⴰⴽⵔⴰⴹ/ⵜⴰⵡⵙⵉ ⵖ ⵉⵜⵜⵢⴰⵙⴽⴰⵔ ⵓⴳⵎⵎⴰⵢ ⵏ chiptune.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	ⵙⵙⵡⵉⵏ ⵎⴰⵏ ⴰⵙⵙⴽⵉⵍ ⵉⵜⵜⵉⵏⵉⵢⵏ ⵎⴰⵏ ⵜⴰⴼⴰⵜ. ⵜⴰⴳⵔⵓⵎⵎⴰ ⵢⴰⵜ, ⵜⵉⵔⴰ ⵢⴰⴹⵏ. ⵙ ⵓⵣⴰⵔⵔⵉⴼ, ⵙ ⵓⵢⴰⴷ ⵓⵔ ⵉⵜⵜⴱⴷⴷⴰⵍ.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	ⴰⵙⵎⵙⵉⴷⴷ ⵏ ⵉⴱⵉⴽⵙⵍⵏ: ⵜⵉⴱⵔⵉⵏⵉⵏ ⵏ ⵉⴱⵉⴽⵙⵍⵏ ⵉⵜⵜⵓⵙⵎⵙⵉⴷⴷⵏⵉⵏ ⵙ ⵜⴰⴼⴰⵜ ⵖ ⵢⴰⵏ ⵉⵣⵔⵉⵖ, ⵖⴰⵢⴽⴰⴷ ⴰ ⴷ ⵉⵙⴽⴰⵔⵏ datamosh ⴰⵎ ⵉⵜⵜⵓⴼⵙⵉⵏ.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	ⵎⵏⵛⴽ ⵏ ⵜⵙⴷⴷⵓⵔⵉⵡⵉⵏ ⵖ ⵣⴹⴰⵔⵏⵜ ⵜⵉⵕⵎⵎⵓⵣⵉⵏ ⴰⴷ ⴰⵍⵉⵏⵜ. ⴰⵔ ⵜⵜⵙⴳⴰⵙⵏⵜ ⵎⵉ ⵜⵜⴰⵍⵉⵏⵜ, ⵙ ⵓⵢⴰⴷ ⵜⴰⵣⴳⵏⵜ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ ⴰⵔ ⵜⴽⴽⴰⵜ ⴰⴱⵔⵉⴷ ⵎⴰⵛⵛⵉ ⴰⵔ ⵜⵜⵙⵏⴰⵢⵉⵏ.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue ⵜⵉⴳⴰⵡⵜ ⴰⵣⴰⵍ  -  G ⵟⵟⴼ  S ⵃⴱⵙ  F ⴰⵙⴼⴹ (ⴰⵣⴰⵍ = ⵜⵉⵙⴷⴰⵡⵉⵏ ⵏ ⵜⵓⵙⴷⵉⴷⵜ)  V ⵉⵎⵙⵍⵉ  O ⵜⵉⴼⵔⴰⵡⵜ  J ⴷⴷⵓ ⵙ ⵉⵣⵔⵉⵖ
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	ⴰⵣⵣⴰⵢ ⵏ ⵜⵎⵙⴰⵙⴰⵜⵉⵏ: ⴰⵟⵏⵟⵏ ⵉⵣⴷⴷⴳⵏ ⵖ ⴰⵎⵢⴰ, ⵏⵏⵃⴰⵙ ⵖ ⵓⴼⴻⵍⵍⴰ. ⵖⴰⵢⴽⴰⴷ ⴰ ⵉⴳⴰ ⴰⵎⴳⵉⵔⴻⴷ ⴳⵔ ⴱⵉⵏⴳ ⴷ ⵜⴰⴼⴰⵏⴼⴰⵔⵜ.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	ⴰⵔ ⵉⵜⵜⵣⵔⵉ ⵉⴳⵔⵓⴷⵎⵉⵡⵏ ⵏ ⵓⵙⵍⴽⵉⵎ ⴰⴷ. 'Settings ⵉⵏpⵓⵜ' ⴰⵔ ⵉⴹⴼⵔ ⴰⵏⴽⵛⵓⵎ ⵉⵜⵜⵓⵙⵜⴰⵏ ⵖ ⵜⵉⵙⵖⴰⵍ > Imsli.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	ⵣⴳ ⵜⵉⵔⴳⵉⵏ ⴰⵔ ⵜⵉⵎⵙⵙⵉ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ. ⴰⵔ ⵜⴳⵍⵍⵓ ⴷ ⴰⵔ ⵜⵇⵇⵉⵎ ⵖ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⴱⴰⴷⵓ -- ⵜⵉⵎⵙⵙⵉ ⵓⵔ ⵉⵜⵜⵎⵓⵙⵙⵓⵏ ⴰⵎ ⵜⴰⵡⵍⴰⴼⵜ
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	ⵜⴰⴳⵓⵜ ⵏ ⵓⵙⵖⴰⵡⵏ. 440 ⵉⴳⴰ ⴰⵎⵣⵡⴰⵔⵓ ⴰⵜⵔⴰⵔ, 432 ⵉⴳⴰ ⴰⵢⴰⴹ ⵉⵜⵜⵓⵙⵏⵏ, ⴷ ⵉⵎⵙⵙⵉⵡⵍⵏ ⵉⵇⴱⵓⵔⵏ ⴷⴷⴰⵡⵏ ⵓⴳⴰⵔ.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	ⴰⵏⵉ ⵖ ⵉⴱⴷⴷⴰ sting. ⴷⴷⴰⵡ ⵏ ⵜⴰⵎⴽⴽⴰⵏⵜ ⵉⵍⴰⵇ ⴰⴷ ⵉⴽⴽⵉⵙ; ⵏⵏⵉⴳ ⵏ ⵜⵣⴷⴷⴰⴳⵜ ⵉⵍⴰⵇ ⴰⴷ ⵉⵣⵔⵉ.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	ⵜⴰⵣⵎⴻⵔⵜ ⵜⵓⵎⴹⵉⵏⵜ ⵖ ⴰⵏⴽⵛⵓⵎ, ⵣⴳ -40 ⴰⵔ +40 dB. ⵙⴱⴰⴷⵓ ⵜⴰⵣⵡⴰⵔⴰ ⴰⵎⵙⵎⵖⵓⵔ ⵏ ⵓⴳⵔⵓⴷⴻⵎ; ⵡⴰⴷ ⵉ dB ⵉⵎⴳⴳⵓⵔⴰ.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	ⵙⵙⵏⴼⴰⵡ ⵜⵉⴷⴷⵉ. ⵡⴰⵃⴷⵓⵜ ⴰⵔ ⵉⵙⵙⵎⵓⵜⵜⵉ ⵜⴻⵀⵔⵉ D ⵜⴻⵖⵣⵉ; ⴼⴽ ⵉ ⵜⴻⵖⵣⵉ ~ ⵏⵏⵙ ⵉ ⵓⵙⴹⴼⵕ ⴷ ⵓⵙⵖⵣⵣⵉⴼ
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	ⵜⴰⴽⴰⵔⴹⴰ ⴰⵔ ⵜⵙⵙⵄⵎⵎⴰⵔ ⵜⵓⴳⵏⴰ; Lower Third ⵉⴳⴰ ⵉⵙⴻⵎ ⴷ ⵜⴰⵎⵍⵉⵍⵜ, ⵖ ⵡⴰⴷⴷⴰⵢ ⵖ ⵜⵓⴳⵏⴰ ⵜⴰⴼⵔⴰⵡⴰⵏⵜ, ⵙ ⵓⴽⵛⵓⵎ ⴷ ⵜⵓⴼⵖⴰ
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held ⴰⵔ ⵉⵟⵟⴰⴼ ⴰⵙⵎⵓⵜⵜⵉ ⴰⵎⴳⴳⴰⵔⵓ, ⵓⵔ ⵜ ⵉⴽⴽⵉⵙ -- ⵜⵓⴳⵏⴰ ⴰⵔ ⵜⵇⵇⵉⵎ ⵜⴽⵏⵏⴰ ⴰⵎ ⵎⴰⵎⴽ ⵜⵜ ⵢⴰⴵⴵⴰ ⵓⵎⵏⵀⴰⵡ.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12.5 ⴷ 25 ⵃⵔⵛⵏ ⴷ ⴰⵔ ⵜⵜⵙⴼⵍⴷⵏ ⵙ ⵜⵉⵏⵣⵔⵜ, 50 ⵉⴳⴰ ⵉⵍⵎ. 75 ⴰⵔ ⵉⵜⵜⵓⵙⴼⵍⴷ ⴰⵎ 25 -- ⵉⵍⵍⴰ ⵖⵉⴷ ⴰⵛⴽⵓ trackers ⴰⵔ ⵜ ⵙⵙⴽⵏⴰⵢⵏ.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	ⵙⴳⵔⵔⴷ ⵜⵓⴼⴼⵖⴰ ⴰⵎ ⵓⵙⵍⴽⵉⵎ. ⵜⵉⵙⵓⵔⵉⴼⵉⵏ ⴰⴷ ⴰⵙ ⵉⵎⵙⵍⵉ; ⴰⵙⴼⵔⵏ ⵏⵏⵙⵏⵜ ⴰⵔ ⵜ ⵢⴰⴵⴵⴰ ⴷ synth ⴰⵔ ⵉⵙⵙⵔⵡⴰⵙ ⵢⴰⵜ ⵜⵙⵎⵎⵉⵎⵜ.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	ⴰⵔ ⵉⵙⵙⵎⵓⵜⵜⵉ ⵜⵔⵉⵎ ⵏ ⵢⴰⵍ cue ⵉⵜⵜⵓⵙⵜⵓⵔⵏ ⵙ ⵢⴰⵏ ⵡⴰⵣⴰⵍ ⵏ dB, ⴰⵔ ⵉⵟⵟⴰⴼ ⵉⵎⴳⵉⵔⴷⵏ ⵏⴳⵔⴰⵙⵏ; ⵜⵉⵔⴰ ⵏ ⵡⴰⵣⴰⵍ ⴰⵔ ⵜⵏ ⵜⵙⴱⴰⴷⵓ ⴽⵓⵍⵍⵓ
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	ⴰⵏⵉ ⵜⵏ ⵜⵜⴰⵣⵏⵜ ⵜⵉⵏⵇⵇⵉⴹⵉⵏ ⵏ ⵜⵎⵙⵉⵡⵍⴰ ⵏ ⵜⴱⴷⴰⵔⵜ (ⵜⵉⵙⵖⴰⵍ > Imsli). ⵙⵉⵜ ⵉ ⵓⵔⵥⵎ ⵏ ⵓⵎⵢⴰⴳ ⵙ ⵢⵉⵙⵎ, ⵣⴳ ⵓⴱⵔⵉⴷ ⴰⵏⵏ ⵙ ⵜⵉⴷⵜ
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	ⵙⵖⵔ ⵉ ⵢⴰⵣⴰⵍⵏ ⵙ  ⴷ = ...;  ⴽⵎⵍ ⵙ ⵢⴰⵜ ⵜⵏⴼⴰⵍⵜ, ⵏⵖ ⴽⵔⴰⴹ ⵉ ⵓⵣⴳⴳⴰⵖ ⴰⵣⴳⵣⴰⵡ ⴰⵏⵉⵍⵉ  |  Shift+Enter: ⵉⵣⵔⵉⵖ ⴰⵎⴰⵢⵏⵓ  |  Enter: ⵙⵏⴼⵍ
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	ⵙⵔⵔ ⵎⴰ ⵙ ⵉⴱⴷⴷⴰ ⵎⵉ ⴷ ⵉⵍⴽⵎ ⵓⴽⵛⵓⵎ (ⴷⴼⴼⵉⵔ ⵏ ⵓⵃⴱⴰⵙ): deck ⵉⵡⵊⴷⵏ ⵉ cue ⴷ ⵉⵜⵜⴷⵓⵏ, ⴰⵙⴰⵍⵉ ⴰⵔ ⵉⵜⵜⵙⵔⵔⴰⵃ
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	ⵎⴰⵏ ⴰⵎⵓⴷⵉⵍ ⵏ ⵡⴰⵡⴰⵍ ⴰⴷ ⵉⵙⴽⵔⵏ ⵜⵉⵔⴰ ⵏ ⵓⵡⵜⵜⴰⵙ: ⵜⴰⴳⵍⵉⵣⵉⵜ, ⴽⵔⴰⵢⴳⴰⵜⵜ ⵜⵓⵜⵍⴰⵢⵜ, ⵏⵖ ⵙⵏⴰⵜ ⵍⵍⵉ ⵉⵄⵄⵟⵟⵍⵏ ⵎⵇⵇⴰⵔ ⵉⵚⵃⴰⵏ. ⵢⴰⵍ ⵢⴰⵏ ⴰⵔ ⵉⵜⵜⵓⵙⴷⵔ ⵢⴰⵜ ⵜⵉⴽⴽⵍⵜ
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	ⵎⴰ ⴰⵔ ⵜⴱⴱⵉ ⵜⵎⵍⵖⵜ: cue ⴰⴷ ⵖ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⴷⵖⴰⵔ ⵉⵜⵜⴹⵔⵔⴰⵏ, ⵜⴰⴱⴷⴰⵔⵜ ⴰⴷ ⵖ ⵜⵓⴼⴼⵖⴰ ⵉⵜⵜⵓⵙⵜⵓⵔⵏ, ⵜⵓⴳⵏⴰ ⴽⵓⵍⵍⵓⵜ ⵏ ⵜⵓⴼⴼⵖⴰ ⴰⵏⵏ, ⵏⵖ ⴰⵎⴰⵜⵜ ⵏⵏⵙ
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	ⵙⵙⵉⵡⵍ ⵙ ⵓⵔⵓⵔⴻⴷ ⵏ ⵓⴳⴷⵉⵍ ⵎⵉ ⵉⵍⵍⴰ ⵖ 0.2% (59.94 ⵖ 60): ⵢⴰⵍ ⵜⵓⴳⵏⴰ ⵢⴰⵜ ⵜⵉⴽⴽⵍⵜ, ⵉⵎⵙⵍⵉ ⴰⵔ 3.5 ⵏ cent ⵓⴼⴻⵍⵍⴰ ⵏⵖ ⵡⴰⴷⴷⴰⵢ
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	ⵜⵉⵖⵎⵔⵉⵏ ⵏ ⴽⵓⵥ ⴰⵔ ⵜⵜⵢⵓⵣⵏⵜ ⵙ ⵜⵉⴷⵜ ⴰⵔ ⵜⵇⵇⵉⵎⵏⵜ ⵣⴷⴷⴳⵏⵜ. ⵜⵓⵣⵣⵢⴰ ⴰⵔ ⵜⵜⵜⵄⴰⵢⵔ ⵙ ⵜⵖⵎⴻⵔⵜ, ⴰⵔ ⵜⵙⵙⵔⵣ pixel art -- ⵜⵉⴽⴽⴰⵍ ⵖⴰⵢⴽⴰⴷ ⴰ ⵉⵜⵜⵡⴰⵔⴰⵏ.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	ⵢⴰⵍ take ⴰⵔ ⵉⵙⵙⵏⵜⵉ ⴰⵙⵎⵓⵙⵙⵓ ⵙ ⵢⴰⵜ ⵜⵖⴰⵔⵉⵜ, ⴰⴷ ⵉⵜⵜⵄⴰⵡⴰⴷ ⵓⵙⵡⵓⵔⵉ ⵉⵜⵜⵓⵙⵄⵏⵏⴰⵏ ⵓⵔ ⵉⵜⵜⴹⴼⴰⵔ ⵎⵏⵛⴽ ⴰⵔ ⵜⵜⵉⵍⵉ ⵜⵙⵏⵙⵜ ⵜⵔⵥⵎ.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	ⵎⴰ ⴰⵔ ⵉⵜⵜⵓⴹⵏ ⵢⴰⵍ ⴰⴽⵏⵏⵓ: ⴰⴷⵖⴰⵔ ⵏⵏⵙ, ⴰⵙⵡⵉⵔ ⵏ ⵜⴰⴼⴰⵜ ⵏ ⵜⵓⴳⵏⴰ ⴰⴷ ⴽⵏⵏⵓⵏ ⵉⵙⵙⴽⵉⵍⵏ ⴰⵎ ⵜⵓⴳⵏⴰ, ⵏⵖ ⵉⵏⵉ ⵏ ⵜⵙⴷⴷⴰⵔⵜ.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	ⵙⵖⵔ ⵉ ⵢⴰⵏ ⵓⴱⵔⵉⴷ ⵏⵖ ⵙⵏⴰⵜ ⵢⴰⵜ ⵜⵉⴽⴽⵍⵜ. ⵜⵉⴱⴷⴰⵔⵉⵏ ⴰⵔ ⵜⵜⴰⵣⵏⵜ ⵙ ⵢⵉⵙⵎ, ⵙ ⵓⵢⴰⴷ ⴰⴳⵔⵓⴷⴻⵎ ⵢⴰⴹⵏ ⴰⵔ ⵉⴳⴰ ⴰⴱⴷⴷⵍ ⵏ ⵉⵙⵎⴰⵏ ⵖⵉⴷ, ⵎⴰⵛⵛⵉ ⵏ ⵢⴰⵍ cue.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	ⵙⵉⵜ ⵖ ⵜⵏⵇⵇⵉⴹⵜ ⵏ ⵜⵎⵙⵉⵡⵍⴰ ⵉ ⵓⴱⴷⴷⵍ: ⵉⵏⵙⴰ, 0, -3, -6, -12 dB. ⵣⵓⵖⵔ ⵜⵜ ⵙ ⵜⴰⵎⴰ ⵉ ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵡⵉⵔ. ⵜⴰⴱⴷⴰⵔⵜ ⴱⵍⴰ ⵜⵉⵏⵇⵇⵉⴹⵉⵏ ⴰⵔ ⵜⵜⴹⵔⵔⴰⵔ ⵖ ⵉⴱⵏⴽ ⵏⵏⵙ.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	ⵜⵉⴳⵔⵓⵎⵎⵉⵡⵉⵏ ⵏ sprites ⵖ data/sprites. ⵢⴰⵍ ⴰⴽⴰⵔⴰⵎ ⵉⴳⴰ ⵜⴰⴳⵔⵓⵎⵎⴰ; ⴰⴱⴷⴷⵍ ⴰⵔ ⵉⵜⵜⵙⵜⴰⵢ ⵢⴰⵜ ⴰⵔ ⴷ ⵢⵓⵖⴰⵍ ⵙ ⵡⴰⵍⵓ. ⴰⵙⵉⵜⵉ ⴰⴼⴰⵙⵉ ⴰⵔ ⵜⵏⵜ ⵉⵙⵙⵏⵙⴰ.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	ⵜⴰⴱⴰⴷⵓⵜ ⵜⴰⴳⵏⵙⴰⵏⵜ, 1 ⵜⴰⵎⵇⵇⵔⴰⵏⵜ ⴰⵔ 5 ⵜⴰⵎⵥⵥⵢⴰⵏⵜ. ⵡⴰⴷ ⵉⴳⴰ ⴰⵙⴼⵔⴽ ⵏ ⵜⵉⴼⵍⵓⵜ ⴰⵎ ⵡⵉⵏ ⵏ ⵓⵔⵓⵔⴻⴷ -- ⵜⴰⵍⵖⴰ ⵏ 8 ⵏ ⵉⴱⵉⵜⵏ ⴰⵔ ⴷ ⵜⵜⴰⵙⴰ ⵣⴳ ⵉⴱⵉⴽⵙⵍⵏ ⵉⵎⵇⵇⵓⵔⵏ.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture ⴰⵔ ⵉⵜⵜⴰⵟⵟⴼ ⵉⵏⵉ ⵣⴳ ⵜⵓⴳⵏⴰ. ⴰⵣⴳⵣⴰⵡ, ⴰⵎⵍⵍⴰⵍ ⵖ ⴷ ⴰⵏⵉⵍⵉ ⴳⴰⵏ ⵉⴼⵙⴼⵓⵔⵏ ⵏ ⵉⴳⴷⵉⵍⵏ ⵏ ⵜⵉⵔⴰ. Palette ⴰⵔ ⵉⵜⵜⵇⵇⵏ ⴰⴹⵔⵉⵙ ⵖ ⵜⵏⴰⵢⵜ ⵏ ⵓⵙⵍⴽⵉⵎ ⵉⵜⵜⵓⵙⵜⵓⵔⵏ.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE ⴰⵔ ⵉⵙⵙⴳⵏⴼⴰ ⵉⵎⴰⵏ ⵏⵏⵙ (H.264). CLASSIC ⵉⴳⴰ ⴰⵙⴼⴹ ⵏ ⵜⵉⴷⵜ (ⵎpⴻⴳ-4). EXTREME ⵉⵇⵇⵓⵔ ⵓⴳⴰⵔ ⴰⵔ ⵉⵜⵜⵙⴼⴹ ⴱⵍⴰ ⴰⵃⴱⴰⵙ. ⴰⴱⴷⴷⵍ ⵏ ⵡⴰⴷ ⴰⵔ ⵉⵙⵙⵓⵊⵊⴷ cue ⵜⵉⴽⴽⵍⵜ ⵢⴰⴹⵏ.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	ⵙⵉⵏⵓⵙ ⵉ ⵓⵙⵎⵎⴰⵍ, ⴰⵅⵓⵅⵉ ⵉ ⵓⵙⴱⴰⴷⵓ ⵏ PA, ⴰⵎⵍⵍⴰⵍ ⵉ ⵓⴼⴰⴼ ⵏ ⵜⵙⵖⵉⵡⵉⵏ, ⴰⵙⴼⴹ ⴰⴷ ⵜⵙⴼⵍⴷⵜ ⵎⴰⵏⵉ ⵜⵜⵙⵙⵉⵡⵉⵍ ⵜⵣⴷⴷⴰⴳⵜ, ⵉⴷⴻⵏⵜⵉⴼⵢ ⵉ ⵓⵣⵔⵉ ⵏ ⵜⵓⴼⴼⵖⵉⵡⵉⵏ ⵢⴰⵜ ⵙ ⵢⴰⵜ.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	ⵎⴰⵏ ⴰⵙⵎⵓⵙⵙⵓ, ⵙ ⵓⴷⵖⴰⵔ ⵏⵏⵙ ⵖ ⵜⴳⵔⵓⵎⵎⴰ ⵏ cue ⵍⵍⵉ ⴰⵔ ⵉⵜⵜⴹⵔⵔⴰⵏ deck ⴰⵏⵏ ⵎⵉ ⵉⵜⵜⵎⵙⵙⴰⴷ ⵡⴰⴷ. ⵎⴰ ⵓⵔ ⵉⵍⵍⵉ ⵡⴰⵍⵓ ⵖⵉⵏ, ⴰⵙⴼⴹ ⴰⵔ ⵜ ⵉⵏⵏⴰ ⵓⵔ ⵉⵜⵜⴳⴳⴰ ⵡⴰⵍⵓ
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	ⵢⴰⵍ ⵜⵓⴳⵏⴰ ⴰⵔ ⵜⵜⵜⵢⴰⵙⵎⵓⵏ ⵖ ⵜⵉⵏ ⴷ ⵉⵜⵜⴷⵓⵏ. ⵖⴰⵢⴽⴰⴷ ⴰ ⵉⴳⴰ ⵜⵉⵔⵔⴰ ⵏ Hypno -- ⵖ 0 ⵉⴳⴰ ⴰⵎⵙⵏⴼⴰⵡ ⵏ ⵓⴳⴰⵏⵉⵎ, ⵏⵏⵉⴳ ⵏ ⵓⵢⴰⴷ ⵜⵓⴳⵏⴰ ⴰⵔ ⵜⴱⴷⴷⴰ ⴰⵔ ⵜⵜⵜⵛⵛⴰ ⵣⴳ ⵉⵎⴰⵏ ⵏⵏⵙ.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	ⵎⴰ ⵉⵍⵍⴰⵏ ⵖ ⵓⵙⴼⴰⵢⵍⵓ ⵏ ⵓⵖⵔⴰⴱ ⵏ ⵜⴽⴰⵜ: ⵓⵔⵜⵉ, ⴰⵏⵥⴰⵔ, ⴰⴷⴼⵍ ⵏⵖ ⵉⵍⵍ. ⵜⴰⵙⴳⴰ ⵙ ⵓⵣⵎⵣ ⴱⵕⵕⴰ ⴰⵔ ⵜⵜⵜⵢⴰⵖⵔⴰ ⴰⵎ ⴰⴷⵖⴰⵔ ⵎⴰⵛⵛⵉ ⴰⵎ ⵓⵖⵔⴰⴱ
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	S ⵜⴰⴼⴰⵜ: ⵜⵉⴼⴰⵡⵉⵏ ⵖ ⵓpⴰⵜⵛⵀ (ⵜⵉⵙⵖⴰⵍ > ⴰⵥⵟⵟⴰ > ⵜⵉⴼⴰⵡⵉⵏ), ⵙ ⵉⵙⵎⴰⵏ. ⵉⴱⵔⵉⴷⵏ: ⴰⴱⵔⵉⴷ=ⴰⵙⵡⵉⵔ ⵙ ⵓⴼⵓⵙ. cue ⵉⵣⴹⴰⵔ ⴰⴷ ⵉⴷⴷⵉ ⵙⵏⴰⵜ; ⵉⴱⵔⵉⴷⵏ ⴰⵔ ⴷ ⵜⵜⴰⵙⵏ ⵖ ⵜⴰⴳⴰⵔⴰ
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	ⵢⴰⵍ ⴰⵙⵙⴽⵉⵍ ⴰⵔ ⵉⵜⵜⵎⵎⵖ ⴰⵎ ⵜⴽⴰⵔⴹⴰ ⴰⵔ ⵜⴽⵏⵏⵓ. ⵢⴰⵍ ⵜⴰⵙⴷⴷⴰⵔⵜ ⵙ ⵓⴷⵖⴰⵔ ⵏⵏⵙ, ⵙ ⵓⵢⴰⴷ ⵜⵉⵣⵔⵙⵜ ⴰⵔ ⵜⵜⵏⴼⴰⵙ, ⵓⵔ ⵜⵜⴰⵥⵍⴰⵇ ⴰⵎ ⵢⴰⵜ ⵜⴰⵙⵏⴰ.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	ⴰⴽⴽⵓⵛ: ⵙⵉⵜ ⵉ ⵜⵉⵖⵎⵔⵉⵏ, ⵣⵓⵖⵔ ⵉ ⵜⵉⴽⵏⵡⵉⵏ, ⵙⵉⵜ ⵖ ⵜⵏⵇⵇⵉⴹⵜ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⵉ ⵓⵇⵇⵏ (P). ⵜⵉⵏⵇⵇⵉⴹⵉⵏ: ⵣⵓⵖⵔ, ⵙⵉⵜ ⵖ ⵜⴰⵎⴰ ⵉ ⵓⵔⵏⵓ ⵢⴰⵜ, Alt + ⴰⵙⵉⵜⵉ ⵏⵖ Delete ⵉ ⵓⴽⴽⵉⵙ
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	ⵉⴱⵔⵉⴷⵏ ⵏ ⴽⵔⴰⴹ ⵏ ⵜⵙⵎⵎⵉⵎⵜ. ⵎⵅⴰⵍⴰⴼⵏ: ⴰⴽⵔⴰⴹ ⵓⵔ ⵖⵓⵔⵙ ⴰⵙⴼⵔⴽ ⵏ ⵉⵎⵙⵍⵉ ⵖ ⵓⵙⵍⴽⵉⵎ, ⵜⴰⵡⵙⵉ ⵜⴳⴰ ⴰⵙⵎⵓⵜⵜⵉ ⵏ ⵉⵙⵡⵉⵔⵏ ⵎⴰⵛⵛⵉ ⴰⵎⵙⵏⴽⵡⵉ.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	ⵜⵉⴳⵔⵓⵎⵎⵉⵡⵉⵏ ⵉⵜⵜⵓⵙⵜⴰⵢⵏ ⵏ ⵜⵕⵎⵎⵓⵣⵉⵏ ⴷ emoji -- ⵉⵜⵔⴰⵏ, ⵜⵉⵏⵓⵜⵉⵏ, ⵉⵊⴷⴷⵉⴳⵏ, ⵜⵉⵏⴱⴰⴹⵉⵏ, ⴰⵣⵎⵣ, runes, ⵓⴷⵎⴰⵡⵏ. ⴰⵙⵜⵉ ⵏ ⵢⴰⵜ ⴰⵔ ⵉⵙⵙⵄⵎⵎⴰⵔ ⵉⵙⵙⴽⵉⵍⵏ ⵏ ⵡⴰⴷⴷⴰⵢ, ⴰⵔ ⵜⵜⵇⵇⵉⵎⵏ ⵉⵜⵜⵓⵥⵔⴳⵏ.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	ⵙⵙⵉⵡⵍ ⵣⴳ ⵜⴼⵍⵍⴰⵡⵜ ⵏ ⵜⵙⵓⵔⴰ ⵏ ⵓⵙⵍⴽⵉⵎ, ⴰⵙⵎⵎⵔⵙ Ableton: A W S E D F T G Y H U J, Z ⴷ X ⵉ ⵜⵜⵎⵏ. ⵎⵉ ⵉⵔⵎⴷ ⴰⴷ, ⵜⵉⵙⵓⵔⴰ ⴰⵏⵏ ⴰⵔ ⵙⵙⵉⵡⵍⵏⵜ ⵜⵉⵏⵓⵜⵉⵏ, ⵓⵔ ⵙⵙⵎⵙⵙⴰⴷⵏⵜ cue.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	ⵜⵉⴼⵔⴰⵡⵜ ⵏ deck, ⵉⵎⵙⵍⵉ ⵏ deck, ⴰⵎⵙⵏⴼⵍ ⴰⵎⵇⵇⵔⴰⵏ, ⵜⴰⴼⴰⵜ / ⴰⵎⴳⵉⵔⴷ / ⵜⴰⴷⵓⴽⵍⵉ / ⵉⵏⵉ ⵏ cue ⵉⵔⵎⴷⵏ, ⵏⵖ ⵜⴰⵇⵇⴼⴰⵍⵜ ⵏ ⵢⴰⵏ ⵣⴳ ⵉⵎⵙⵏⴼⴰⵍⵏ ⵏⵏⵙ ⵏⵖ ⵉⵎⵙⵏⴼⴰⵍⵏ ⵏ ⵉⵎⵙⵍⵉ
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	ⵉⵣⵉⵔⵉⴳⵏ ⵏ ⵓⵙⵖⵍⴼ, ⴰⵙⴼⴰⵡ ⵏ ⵓⴼⵙⴼⵓⵔ ⴷ ⵜⴰⵎⴰ ⵏ RGB. ⴰⵙⴼⴰⵡ ⴰ ⵉⵜⵜⵄⵏⴰⵢⵏ -- ⴰⴼⵙⴼⵓⵔ ⴰⵔ ⵉⵜⵜⵉⵣⴷⵉ ⵙ ⵜⴰⵎⴰ, ⵙ ⵓⵢⴰⴷ CRT ⴰⵎ ⴰⵔ ⵉⵙⵙⵓⴼⵓⵖ ⵜⴰⴼⴰⵜ.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	ⵜⵉⴳⵣⵣⵓⵎⵉⵏ ⵏ ⵉⵣⵉⵔⵉⴳⵏ ⵉⴱⴱⵉⵏ ⴷ ⴰⴱⴹⴹⵓ ⵏ RGB. ⵖ ⵓⵙⴽⴰⵔ ⵏ ⵓⴹⵔⵉⵙ ⴰⵔ ⵉⵅⵙⵔ ⴷ ⵜⵉⵙⴷⴷⴰⵔⵉⵏ -- ⵉⵣⵉⵔⵉⴳⵏ ⴽⵓⵍⵍⵓ ⴰⵔ ⵟⵟⴼⵏ ⵖ ⵢⴰⵏ ⵓⵙⵙⴽⵉⵍ ⵉⵜⵜⵄⴰⵡⴰⴷⵏ, ⴰⵎ ⵓⴳⴷⵉⵍ ⵏ ⵓⴹⵔⵉⵙ ⵏ ⵜⵉⴷⵜ ⵉⴱⴷⴰⵏ ⵉ ⵜⵎⵙⴰⵙⴰ.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still ⴰⵔ ⵉⵟⵟⴰⴼ ⵜⵓⴳⵏⴰ ⵖ ⵜⵍⵍⵉⵜ. Flipbook ⴰⵔ ⵉⵙⵙⵉⵡⵉⵍ ⵜⵓⴳⵏⵉⵡⵉⵏ ⵙ ⵓⵙⵎⵎⴰⵔ. Replay ⴰⵔ ⵉⵙⵙⵓⵔ ⵜⵓⴳⵏⴰ ⵜⴰⵎⵣⵡⴰⵔⵓⵜ ⵢⴰⵏ ⵓⵥⵟⵟⴰ ⵙ ⵢⴰⵏ, ⴰⵎ ⵎⴰⵎⴽ ⵜⵜ ⵙⵓⵕⵏ, ⴰⵔ ⵜⵜ ⵉⵟⵟⴰⴼ ⴰⵔ ⵉⵜⵜⵄⴰⵡⴰⴷ
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (ⵙⵓⵊⵊⴷ ⴱⵍⴰ ⴰⵙⵎⵙⵙⴰⴷ), Arm, Disarm, ⵏⵖ Devamp (ⵜⴰⴽⵏⵏⵉⵜ ⴰⵔ ⵜⴽⵎⵎⵍ ⵜⵉⴽⴽⵍⵜ ⵏⵏⵙ ⴰⵔ ⵜⵃⴱⵙ); ⵏⵖ Stop ⴰⵍⵍ, Pause ⴰⵍⵍ, Resume ⴰⵍⵍ: ⵢⴰⵍ deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope ⴰⵔ ⵉⵙⵙⴽⵏⴰⵢ ⵜⴰⵍⵖⴰ ⴷ ⵓⴱⴱⵉ. Lissajous ⴰⵔ ⵉⵙⵙⴽⵏⴰⵢ ⵜⵉⴼⵔⵜ ⴷ ⵜⴱⴰⴷⵓⵜ ⴳⵔ ⵉⴱⵔⵉⴷⵏ ⵉⵎⵣⵡⵓⵔⴰ -- ⴰⴷⵔⵔⵏ ⵙ ⵜⴰⵎⴰ ⵓⵔ ⵉⵚⵃⴰⵏ ⴰⵔ ⵉⵏⵏⴰ ⵢⴰⵏ ⵉⵜⵜⵓⵇⵍⴱ. Spectrum ⴳⴰⵏ ⵉⴼⴳⴳⴰⴳⵏ ⵏ ⴽⵔⴰⴹ ⵏ ⵜⵜⵎⵏ.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 ⴰⵔ ⵉⵜⵜⵙⵜⴰⵢ ⴰⵙⵙⴽⵉⵍ ⵍⵍⵉ ⵉⵜⵜⵉⵏⵉⵏ ⵜⴰⴼⴰⵜ, 1 ⴽⵔⴰⵢⴳⴰⵜⵜ ⴰⵙⵙⴽⵉⵍ ⵖ ⵜⴳⵔⵓⵎⵎⴰ. ⵙⵙⴰⵍⵉ ⵜ ⴰⴷ ⵜⵥⵔⵜ ⴰⴳⵎⵎⴰⵢ ⴽⵓⵍⵍⵓ: ⵙ ⵓⵙⵎⵙⵉⴷⴷ ⵙ ⵜⵉⴷⵜ ⵙ ⵓⵣⴳⴳⴰⵔ, ⴰⴷⵖⴰⵔ ⵉⴼⵙⵓⵙⵏ ⴰⵔ ⵉⵜⵜⵙⵜⴰⵢ ⵢⴰⵜ ⵜⵕⵎⵎⵓⵣⵜ, ⵡⵉⵢⴰⴹ ⵓⵔ ⴱⴰⵢⵢⴰⵏⵏ.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	ⵉⴱⵍⵓⴽⵏ ⴷ ⵓⴷⵉⵜⵀⴻⵔ ⴰⵔ ⵜⵜⵢⴰⵖⵔⴰⵏⵜ ⴰⵎ ⵜⴰⵣⵣⵍⴰ; ⵜⴰⴳⵔⵓⵎⵎⴰ ASCII ⴰⵎ ⵓⴹⵔⵉⵙ; ⵜⵉⵕⵎⵎⵓⵣⵉⵏ ⴰⵎ ⵉⴼⵍⴰⵏ. ⴰⴱⴷⴷⵍ ⵏ ⵡⴰⴷ ⴰⵔ ⵉⵙⵙⴼⴹ ⴰⵙⵔⴷⴰⵙ ⵏ ⵉⵙⵙⴽⵉⵍⵏ ⵉⵎⵣⵡⴰⵔ, ⴰⵛⴽⵓ ⴰⴷ ⵜ ⵉⵙⵏⵏⴼⵍ -- ⵉⵣⵔⵉⵖ ⵏ ⵓⵙⴱⴰⴷⵓ ⴰⵔ ⴷ ⵉⵙⵔⴰⵔ ⵢⴰⵏ.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	ⵜⴰⴳⵓⵜ ⵜⴰⵎⵙⴰⵙⴰⵏⵜ ⴰⵔ ⵜⵙⵙⴰⵖ ⴰⵙⵎⵓⵜⵜⵉ ⵉⵍⴻⵍⵍⵉ ⵙ ⵜⵎⵔⵏⵜ ⵏ ⵢⴰⵍ ⵜⴰⴳⵓⵜ ⴰⴷ ⵜⵉⵍⵉ ⵢⴰⵜ ⵜⵎⵥⵥⵉ ⵓⵔ ⵜⵚⵃⴰ. ⵜⴰⵣⴷⴷⴷⴳⵜ ⴷ pythagore ⵚⵃⴰⵏ ⵙ ⵜⵉⴷⵜ ⵖ ⵢⴰⵏ ⵓⴱⵔⵉⴷ. Bohlen-Pierce ⴰⵔ ⵉⴱⴹⴹⵓ ⵢⴰⵏ ⵜⵉⵙ ⵎⵔⴰⵡ ⵙⵏⴰⵜ, ⵙ ⵓⵢⴰⴷ ⵓⵔ ⵖⵓⵔⵙ ⵜⵜⵎⵏ.
+TAP	ⵙⵉⵜ
+bell	ⴰⵟⵏⵟⵏ
+blue	ⴰⵏⵉⵍⵉ
+does	ⴰⵔ ⵉⵙⴽⴰⵔ
+freq	ⵜⵉⵙⵏⵜ
+snap	ⴰⵙⵔⴱⵓ
+WACKY	ⴰⵎⵅⵅⵓ
+black	ⴰⵙⴳⵏⵓ
+chime	ⴰⵟⵏⵟⵏ
+green	ⴰⵣⴳⵣⴰⵡ
+moves	ⵉⵎⵓⵙⵙⵓⵜⵏ
+scale	ⵜⴰⵙⴽⴰⵍⴰ
+shape	ⵜⴰⵍⵖⴰ
+14-bit	14 ⵏ ⵉⴱⵉⵜⵏ
+COLOUR	ⵉⵏⵉ
+DARKEN	ⵙⴷⵍⴰⵙ
+anyone	ⴽⵔⴰⵢⴳⴰⵜⵜ ⵢⴰⵏ
+follow	ⴹⴼⵔ
+visual	ⴰⵎⵎⴰⵍ
+COMPARE	ⵙⵎⵖⵓⴷⵓ
+English	ⵜⴰⴳⵍⵉⵣⵉⵜ
+LIGHTEN	ⵙⴼⴰⵡ
+visuals	ⵉⵎⵎⴰⵍⵏ
+Place it	ⵙⵔⵙ ⵜ
+feedback	ⵜⵓⴼⵔⵏⵜ
+overtime	ⴰⴽⵓⴷ ⵏ ⵓⵣⵔⵉ
+protocol	ⴰⵟⵓⵟⵓⴽⵓⵍ
+Bit depth	ⵜⵉⵣⵣⵓⵔⵜ ⵏ ⵉⴱⵉⵜⵏ
+choose...	ⵙⵜⵉ...
+this deck	deck ⴰⴷ
+Corner pin	ⵜⵉⵖⵎⵔⵉⵏ
+Fullscreen	ⴰⴳⴷⵉⵍ ⵉⵛⵛⵓⵔⵏ
+HDR signal	ⴰⵙⵎⵎⴰⵇⵍ HDR
+text added	ⴰⴹⵔⵉⵙ ⵉⵜⵜⵢⴰⵔⵏⴰⵏ
+Bar opacity	ⵜⵉⴼⵔⴰⵡⵜ ⵏ ⵉⴼⴳⴳⴰⴳⵏ
+Output mask	ⵜⴰⵎⵍⵖⵜ ⵏ ⵜⵓⴼⴼⵖⴰ
+Raster mode	ⴰⵙⴽⴰⵔ ⵏ raster
+(no monitor)	(ⵓⵍⴰⵛ ⴰⵎⵙⴽⵏⴰⵢ)
+Matte aspect	ⵜⵉⵖⵎⴻⵔⵜ ⵏ matte
+Pause at end	ⴰⵙⴳⵓⵏⴼⵓ ⵖ ⵜⴰⴳⴰⵔⴰ
+Refresh rate	ⴰⵔⵓⵔⴻⴷ ⵏ ⵓⵙⵏⴼⵍ
+Overlay image	ⵜⴰⵡⵍⴰⴼⵜ ⵏ ⵜⵓⵙⵍⵖⵜ
+Overlay still	ⵜⵓⴳⵏⴰ ⵏ ⵜⵓⵙⵍⵖⵜ
+Run the clock	ⵙⵙⵏⴽⵔ ⵜⴰⵎⵔⵉⵍⵜ
+Pause at start	ⴰⵙⴳⵓⵏⴼⵓ ⵖ ⵜⴰⵣⵡⴰⵔⴰ
+not configured	ⵓⵔ ⵉⵜⵜⵓⵙⴱⴰⴷⴷ
+tone cue added	cue ⵏ ⵜⵓⵏⵜ ⵉⵜⵜⵢⴰⵔⵏⴰⵏ
+Overlay opacity	ⵜⵉⴼⵔⴰⵡⵜ ⵏ ⵜⵓⵙⵍⵖⵜ
+SDR material at	ⴰⵎⴰⵜⵔⵉⵢⴰⵍ SDR ⵖ
+Hardware display	ⴰⴳⴷⵉⵍ ⵏ ⵓⵙⵍⴽⵉⵎ
+source cue added	cue ⵏ ⵓⵖⴱⴰⵍⵓ ⵉⵜⵜⵢⴰⵔⵏⴰⵏ
+(no media source)	(ⵓⵍⴰⵛ ⴰⵖⴱⴰⵍⵓ ⵏ ⵓⵎⵉⴷⵢⴰ)
+Pocket Test (day)	ⴰⵙⵎⵔⵙ Pocket (ⴰⵙⵙ)
+browser cue added	cue ⵏ ⵓⵎⵙⵉⴳⵍ ⵉⵜⵜⵢⴰⵔⵏⴰⵏ
+System audio (SDL)	ⵉⵎⵙⵍⵉ ⵏ ⵓⵏⴰⴳⵔⴰⵡ (SDL)
+Transition to next	ⴰⵙⴰⴽⴰ ⵙ ⵡⵉⵏ ⴷ ⵉⵜⵜⴷⵓⵏ
+When taken off air	ⵎⵉ ⵜ ⵉⵜⵜⵓⴽⴽⴰⵙ ⵣⴳ ⵓⵙⵓⴷⴷⵎ
+Dark Detail (0-12%)	ⵉⴼⵔⵓⵔⵉⵢⵏ ⵏ ⵓⵙⴳⵏⵓ (0-12%)
+Frame Count (emoji)	ⴰⵎⵙⵉⴹⵏ ⵏ ⵜⵓⴳⵏⵉⵡⵉⵏ (emoji)
+PLUGE (black level)	PLUGE (ⴰⵙⵡⵉⵔ ⵏ ⵓⵙⴳⵏⵓ)
+Pocket Test (night)	ⴰⵙⵎⵔⵙ Pocket (ⵉⴹ)
+Pocket Test (storm)	ⴰⵙⵎⵔⵙ Pocket (ⵜⴰⴱⵃⵔⵉⵜ)
+Panel Map (animated)	ⵜⴰⵙⵏⴰⵢⵜ ⵏ ⵜⴼⵍⵍⴰⵡⵉⵏ (ⵜⴰⵎⵓⵙⵙⴰⵏⵜ)
+Pocket Test (sunset)	ⴰⵙⵎⵔⵙ Pocket (ⵜⵉⵡⵡⵓⵜšⵉ)
+Boresight (alignment)	ⵜⴰⵎⵏⵣⵜ (ⴰⵙⵎⵎⴰⵍ)
+Not watching a folder	ⵓⵔ ⵉⵜⵜⵖⵟⵟⴰⴼ ⵢⴰⵜ ⵜⴰⵙⴷⴰⵡⵜ
+SMPTE 75% Colour Bars	ⵉⴼⴳⴳⴰⴳⵏ ⵏ ⵉⵏⵉⵏ SMPTE 75%
+Multiburst (bandwidth)	Multiburst (ⵜⴰⵀⵔⵔⴰⵢⵜ ⵏ ⵜⴰⵣⵡⴰⵔⵜ)
+(default system device)	(ⵉⴱⵏⴽ ⴰⵎⵣⵡⴰⵔⵓ ⵏ ⵓⵏⴰⴳⵔⴰⵡ)
+Convergence (fine grid)	ⴰⵎⵢⴰⴳⵓⵔ (ⵜⴰⵣⴳⴷⵓⵜ ⵜⴰⵎⵥⵥⵢⴰⵏⵜ)
+Greyscale Steps (gamma)	ⵜⵉⵙⵓⵔⵉⴼⵉⵏ ⵏ ⵓⴱⵔⵔⴰⵏⵉ (gamma)
+Uniformity (flat fields)	ⵜⴰⴳⴷⵓⴷⵜ (ⵜⴰⴳⵔⴰⵡⵉⵏ ⵜⵉⵙⵏⵎⴰⵙⵏⵉⵏ)
+Test Clock (sync + latency)	ⵜⴰⵎⵔⵉⵍⵜ ⵏ ⵓⵙⵎⵔⵙ (ⴰⵎⵜⴰⵡⴰ + ⴰⵄⵟⵟⵍ)
+auto (reads the common two)	ⴰⵡⵓⵔⵎⴰⵏ (ⴰⵔ ⵉⵇⵇⵔⴰ ⵙⵏⴰⵜ ⵉⵎⵇⵇⵓⵔⵏⵉⵏ)
+Panel Map (LED tile numbers)	ⵜⴰⵙⵏⴰⵢⵜ ⵏ ⵜⴼⵍⵍⴰⵡⵉⵏ (ⵓⵟⵟⵓⵏⵏ ⵏ ⵜⵣⵍⵍⵉⵡⵉⵏ LED)
+Portal (blobs of deep space)	ⵜⴰⵡⵡⵓⵔⵜ (ⵜⵉⵡⵍⵍⵉⵡⵉⵏ ⵏ ⵓⴳⵏⵙⵓ)
+Terrarium (living ecosystem)	Terrarium (ⴰⵏⴰⴳⵔⴰⵡ ⵓⴷⵎⵉⵔ)
+Window 10% (peak brightness)	ⴰⵙⴼⴰⵢⵍⵓ 10% (ⵜⴰⴼⴰⵜ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ)
+Window 50% (peak at mid APL)	ⴰⵙⴼⴰⵢⵍⵓ 50% (ⵜⴰⴼⴰⵜ ⵖ APL ⴰⵎⵎⴰⵙ)
+Frame Count (drops + latency)	ⴰⵎⵙⵉⴹⵏ ⵏ ⵜⵓⴳⵏⵉⵡⵉⵏ (ⵜⵉⵖⵍⵉⵏ + ⴰⵄⵟⵟⵍ)
+Terrarium Pico (1px per cell)	Terrarium Pico (1px ⵉ ⵢⴰⵍ ⵜⴰⵙⴷⴷⴰⵔⵜ)
+Banding Ramps (real bit depth)	ⵉⵙⴰⵡⵏ ⵏ banding (ⵜⵉⵣⵣⵓⵔⵜ ⵏ ⵉⴱⵉⵜⵏ ⵙ ⵜⵉⴷⵜ)
+Fireside (a hearth that burns)	ⵜⴰⴽⴰⵜ (ⵍⴽⴰⵏⵓⵏ ⵉⵜⵜⵖⴰⵏ)
+Test Bars (motion diagnostics)	ⵉⴼⴳⴳⴰⴳⵏ ⵏ ⵓⵙⵎⵔⵙ (ⴰⵙⵏⵇⵇⴷ ⵏ ⵓⵎⵓⵙⵙⵓ)
+What fires this cue besides GO	ⵎⴰ ⵉⵙⵙⵏⴽⴰⵔⵏ cue ⴰⴷ ⴱⵍⴰ GO
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (ⵉⵙ ⴽⵔⴰ ⴰⵔ ⵉⵜⵜⴱⴷⴷⴰⵍ ⵜⵉⴷⴷⵉ?)
+load a sprite sheet from a file...	ⵙⴰⵍⵉ ⵜⴰⵙⵏⴰ ⵏ sprite ⵣⴳ ⵓⴼⴰⵢⵍⵓ...
+Pocket Test (test card + scene cycle)	ⴰⵙⵎⵔⵙ Pocket (ⵜⴰⴽⴰⵔⴹⴰ ⵏ ⵓⵙⵎⵔⵙ + ⵜⴰⵣⵣⵢⴰ ⵏ ⵜⵎⵙⴹⴰⵍⵉⵏ)
+Critters (pixel-exact scaling, animated)	Critters (ⵜⴰⵙⴽⴰⵍⴰ ⵙ ⵉⴱⵉⴽⵙⵍ, ⵜⴰⵎⵓⵙⵙⴰⵏⵜ)
+Read everything right to left. Yes, everything.	ⵖⵔ ⴽⵓⵍⵍⵓ ⵣⴳ ⵓⴼⴰⵙⵉ ⴰⵔ ⴰⵣⵍⵎⴰⴹ. ⵉⵀ, ⴽⵓⵍⵍⵓ.
+Greetings, primitive. Your "slideshow" amuses us.	ⴰⵣⵓⵍ ⴰ ⴰⵎⵣⵡⴰⵔⵓ. "ⴰⵙⵙⴽⵏ ⵏ ⵜⵓⴳⵏⵉⵡⵉⵏ" ⵏⵏⴽ ⵉⵙⵙⴼⵔⴰv ⴰⵖ.
+MIX	ⴰⵙⵎⵍⵉⵍ
+gain	ⵜⴰⵣⵎⴻⵔⵜ
+logo	ⴰⵍⵓⴳⵓ
+rail	ⴰⴱⵔⵉⴷ
+index	ⴰⵎⴰⵜⴰⵔ
+trans	ⴰⵙⴰⴽⴰ
+ANALOG	ⴰⵎⵙⴰⵙⴰ
+STEREO	ⵙⵏⴰⵜ ⵏ ⵉⴼⵔⴷⵉⵙⵏ
+arcade	ⴰⵙⴰⴳⴳⵡ
+plugin	ⴰⵙⵎⵍⵉⵍ
+signal	ⴰⵙⵎⵎⴰⵇⵍ
+ticket	ⵜⵉⴽⴽⵜ
+TRACKER	ⴰⵎⴹⴼⴰⵔ
+capsule	ⵜⴰⵎⴹⵍⵜ
+circuit	ⵜⴰⵣⵣⵢⴰ
+dossier	ⴰⵙⴷⴰⵡ
+palette	ⵜⴰⵏⴰⵢⵜ
+bulletin	ⵜⴰⴱⵔⴰⵜ
+cassette	ⵜⴰⴽⴰⵙⵉⵟ
+dateline	ⴰⵣⵎⵣ
+terminal	ⴰⴳⴷⵉⵍ ⵏ ⵜⵉⵔⴰ
+Perspective	ⵜⴰⵎⵓⵖⵍⵉ
+Transitions	ⵉⵙⴰⴽⴰⵜⵏ
+Passphrase (shared)	ⵜⴰⵡⴰⵍⵜ ⵏ ⵓⵣⵔⵉ (ⵜⴰⵎⵙⵎⵓⵏⵜ)
+, — skip to previous cue	, — ⴷⴷⵓ ⵙ cue ⴰⵎⵣⵡⴰⵔⵓ
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  ⵓⵔ ⵉⵜⵜⴳⴳⴰ ⵡⴰⵍⵓ ⵖ ⵜⴱⴷⴰⵔⵜ ⴰⵏⵏ  -  (M) ⵜⴰⴱⴷⴰⵔⵜ ⵏ ⵜⵙⵓⵔⵉⴼⵜ ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS ⵉⴳⴰ ⴰⵙⵎⵎⴰⵍ ⵏ EBU, -20 ⵏ SMPTE. ⵉⵜⵜⵡⴰⵃⴱⴰⵙ ⴷⴷⴰⵡ 0: ⴰⵔ ⵉⵙⵙⴳⴷⵓⵔ PA ⵙ ⵜⵉⴷⵜ.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  ⵓⵔ ⵉⵜⵜⴳⴳⴰ ⵡⴰⵍⵓ ⵖ ⵜⴱⴷⴰⵔⵜ ⴰⵏⵏ  -  (M) ⵜⴰⴱⴷⴰⵔⵜ ⵏ ⵜⵙⵓⵔⵉⴼⵜ ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ  -  EDIT ⵉⵔⵎⴷ: ⵜⵉⵔⴰ ⴰⵔ ⵜⴱⴷⴷⴰⵍ ⴰⵙⵙⴽⴰⵏ
+sine	sine
+RTMPS	RTMPS
+TA-DA	TA-DA
+NDI® NETWORK	NDI® NETWORK
+Syphon / Spout	Syphon / Spout
+29.97 fps (NTSC)	29.97 fps (NTSC)
+OSC	OSC
+pan	pan
+pop	pop
+deck	deck
+trim	trim
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+SELECT DECK 2	ⵙⵜⵉ DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	ⵜⵓⵔⴰ ⵙⵉⵜ ⴼ ⵜⵣⵔⵉⴳⵜ ⵏⵏⵙ, Deck 2. playlist ⵜⴰⵎⴰⵢⵏⵓⵜ ⵓⵔ ⵜⵜⵜⵓⵙⵜⵉ ⴰⵔ ⴷ ⴼ ⴰⵙ ⵜⵙⵙⵉⵜⴷ.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	ⵜⴰⵣⵔⵉⴳⵜ ⵉⵜⵜⴼⴰⵡⵏ ⴰ ⵖ ⵙⵔⵙ SOURCE ⵜⵉⵖⴰⵡⵙⵉⵡⵉⵏ. ⵣⵔⵉ ⵜⵉⵏ, ⵉⵥⵥⵍ ⵍⵎⴷⴰⴷ ⴷⴷⴰⵡ synth.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	ⵜⵥⵔⵉⵜ ⵜⴰⵣⵔⵉⴳⵜ ⴰⵏⵏ? ⵙⵉⵜ ⴼ ⴰⵙ. ⵜⵓⵔⴰ ⵜⵍⵍⵉⵜ ⴼ Deck 2. BOOM. ⵉⵍⵙⴰⵜⵏ.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	ⵙⵉⵜ ⴼ ⵜⵣⵔⵉⴳⵜ ⵏⵏⵙ, Deck 2. ⵜⴰⵣⵔⵉⴳⵜ ⵉⵜⵜⴼⴰⵡⵏ ⴰ ⵉⴳⴰ playlist ⵖ ⴰⵔ ⵢⵔⵏⵓ SOURCE.
+Skip this and the words go under the map. With the lizard.	ⵣⵔⵉ ⵜⵉⵏ, ⴷⴷⵓⵏ ⵡⴰⵡⴰⵍⵏ ⴷⴷⴰⵡ ⵜⴽⴰⵔⴹⴰ. ⴷ ⵓⴳⵔⵣⴰⵎ.
+Nine years of live weather. Always click the tab.	ⵜⵥⴰ ⵉⵙⴳⴳⵓⵙⴰ ⵏ ⵜⴰⴳⵏⴰⵡⵜ ⵙ ⵙⵔⵉⴷ. ⵙⵉⵜ ⴷⵉⵎⴰ ⴼ ⵜⵣⵔⵉⴳⵜ.
+Click its tab, Deck 2. A new playlist waits until you choose it.	ⵙⵉⵜ ⴼ ⵜⵣⵔⵉⴳⵜ ⵏⵏⵙ, Deck 2. playlist ⵜⴰⵎⴰⵢⵏⵓⵜ ⴰⵔ ⵜⵇⵇⵍ ⴰⵔ ⵜⵜ ⵜⵙⵜⵉⵜ.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	ⵜⴰⵣⵔⵉⴳⵜ ⵉⵜⵜⴼⴰⵡⵏ ⴰⵔ ⵜⴰⵎⵥ cue ⴷ ⵉⵜⵜⴷⵓⵏ. ⴰⵎ ⵜⵙⵜⵉⵜ ⵏ ⵜⵓⴳⵏⴰ ⴰⵔⴰ ⵉⴽⵛⵎⵏ ⵙ projecteur.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	ⵙⵜⵉ ⵢⴰⵜ ⵜⴼⵔⴽⵓⵏⵜ. ⴽⵔⴰ ⵏ ⵢⴰⵜ. ...Deck 2. ⵙⵜⵉ Deck 2.
+Timecode	ⵜⴰⵏⴳⴰⵍⵜ ⵏ ⵓⴽⵓⴷ
+MENU	ⵓⵎⵓⵖ
+VOLUME	ⴰⵎⵙⵍⵉ
++ step	+ ⴰⵙⵓⵔⵉⴼ
+< BACK	< ⵜⵓⵖⴰⵍⵉⵏ
+ATEM switcher	ⴰⵎⵙⵎⵔⵙ ATEM
+ATEM tally	Tally ATEM
+AUDIO: DEFAULT	ⴰⵎⵙⵍⴰⵢ: ⴰⵎⵣⵡⴰⵔⵓ
+Animated GIF	GIF ⵉⵜⵜⵎⵓⵙⵙⵓⵏ
+Arrows	ⵉⵙⵏⴰⵎ
+CLICKER	ⴰⵙⵓⴷⴷⵓ ⵏ ⵜⵉⴳⴳⵓⴷⵉ
+Copyright	ⵉⵣⵔⴼⴰⵏ ⵏ ⵓⵎⴰⵢⵔⵓ
+DEST...	ⴰⵏⵙⴰ...
+Datamosh - classic	Datamosh – ⴰⴽⵍⴰⵙⵉⴽⵉ
+Datamosh - extreme	Datamosh – ⵉⵣⵔⵢ ⵜⴰⵍⵖⴰ
+Datamosh - subtle	Datamosh – ⵉⵙⵉⵔⴷ
+Deckboy is input	Deckboy ⴷ ⴰⵏⴽⵛⴰⵎ
+Device: None	ⴰⵍⵍⴰⵍ: ⵓⵍⴰ ⵢⴰⵏ
+Drag	ⵣⵓⵖⵔ
+Drop media here	ⵙⵔⵙ ⵉⵎⵉⴷⵢⴰⵜⵏ ⴷⵖⵉ
+Enter Take  Space Play/Pause	Enter Take  Space ⵖⵔ/ⵙⴳⴷⵍ
+FFmpeg / libav  (in-process)	FFmpeg / libav  (ⴳ ⵓⴽⴰⵍⴰ)
+FPS: SOURCE	FPS: ⴰⵖⴱⴰⵍⵓ
+Fonts	ⵜⵉⵙⴽⵡⵉⵍⵉⵏ
+Free software. You may use, study, share	ⴰⵙⵖⴰⵡⵙ ⵉⵍⴻⵍⵍⵉ. ⵜⵣⵎⵔⴷ ⴰⴷ ⵜ ⵜⵙⵙⵎⵔⵙⴷ, ⴰⴷ ⵜ ⵜⵖⵔⴷ,
+GO / BACK	GO / ⵜⵓⵖⴰⵍⵉⵏ
+GO / BACK (clicker)	GO / ⵜⵓⵖⴰⵍⵉⵏ (ⴰⵙⵓⴷⴷⵓ)
+Key out: None - fill only	ⴰⵙⵓⴼⵖ ⵏ key: ⵓⵍⴰ ⵢⴰⵏ – fill ⵖⴰⵙ
+LTC in	ⴰⵏⴽⵛⴰⵎ LTC
+Licence	ⵜⵓⵔⴰⴳⵜ
+MATCH SOURCE	ⴰⵎ ⵓⵖⴱⴰⵍⵓ
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> ⴰⵙⵎⴰⵜⵜⵉ
+MOSH: SUBTLE	MOSH: ⵉⵙⵉⵔⴷ
+MSC Trigger -> cue by id	MSC Trigger -> cue ⵙ ⵓⵙⵓⵍⴰⵢ
+MTC in	ⴰⵏⴽⵛⴰⵎ MTC
+Mode: CALLER	ⴰⵙⴽⴰⵔ: CALLER
+NDI receiver	ⴰⵎⵓⵟⵟⴼ NDI
+NDI trigger	ⴰⵙⵏⴽⵔ NDI
+NO STEPS YET	ⵓⵔ ⵍⵍⵉⵏ ⵉⵙⵓⵔⵉⴼⵏ ⴰⵔ ⴷⵖⵉ
+No PTP lock, wide-model pacing - will not genlock to plant sources	ⵓⵔ ⵉⵍⵍⵉ ⵓⵙⴳⵔ PTP, ⴰⴽⵓⴷ ⵙ ⵓⵙⵜⴰⵢ – ⵓⵔ ⵉⵜⵜⵎⵢⴰⵡⴰⵙ genlock ⴷ ⵉⵖⴱⵓⵍⴰ ⵏ ⵓⵙⵜⵓⴷⵢⵓ
+ONCE  |  ORDER	ⵢⴰⵜ ⵜⵉⴽⴽⵍⵜ  |  ⴰⵙⵎⵎⵉⵥⵍ
+Optional	ⴰⴼⵔⴰⵢⴰⵏ
+PNG sequence	ⴰⴷⴼⵍ PNG
+Platform	ⵜⴰⵖⵔⵖⵔⵜ
+Press A to take cue	ⵙⵏⴹⵕ ⵅⴼ A ⴰⴷ ⵜⴰⵎⵥⴷ cue
+RATE: AUTO	ⴰⵙⵙⵓⴼⵖ: ⴰⵡⵓⵔⵎⴰⵏ
+S Stop   C Clear   Esc Panic	S ⵃⴱⵙ   C ⵙⴼⴹ   Esc ⴰⵙⵙⴰⵙⵙⴰ
+SIZE: SOURCE	ⵜⵉⴷⴷⵉ: ⴰⵖⴱⴰⵍⵓ
+SPOUT TEXTURE SHARE	ⴰⴱⵟⵟⵓ ⵏ ⵜⵖⵓⵍⵜ SPOUT
+Session	ⵜⴰⵖⵉⵎⵉⵜ
+TSL tally out	ⴰⵙⵓⴼⵖ ⵏ tally TSL
+Thanks	ⵜⴰⵏⵎⵎⵉⵔⵜ
+Timecode chase	ⴹⴼⵕ timecode
+Timecode run	ⵙⵙⵉⴷⴷⵓ timecode
+Toolkit	ⵜⴰⵙⴽⵔⵜ ⵏ ⵉⵎⴰⵙⵙⵏ
+Trigger	ⵙⵏⴽⵔ
+WAV (audio only)	WAV (ⴰⵎⵙⵍⴰⵢ ⵖⴰⵙ)
+Warranty	ⴰⴹⵎⴰⵏ
+address...	ⵜⴰⵏⵙⴰ...
+and modify it; derivatives stay GPL.	ⴰⴷ ⵜ ⵜⴱⴹⵓⴷ, ⴰⴷ ⵜ ⵜⵙⵏⴼⵍⴷ; ⵎⴰⵢⴷ ⵉⴷⴷⴰⵏ ⵙⴳⵙ ⵉⵇⵇⵉⵎ GPL.
+auto	ⴰⵡⵓⵔⵎⴰⵏ
+clear the cell	ⵙⴼⴹ ⵜⴰⵅⵅⴰⵎⵜ
+companion ping	ping ⵏ Companion
+fire this row	ⵙⵏⴽⵔ ⴰⵣⵔⵉⴳ ⴰ
+insert a row	ⵙⴽⵛⵎ ⴰⵣⵔⵉⴳ
+live lane  |  I/O set trim  |  click or drag to seek	ⴰⴱⵔⵉⴷ ⵓⵙⵔⵉⴷ  |  I/O ⵉⵙⴱⴷⴷ ⴰⴱⵜⵜⵓ  |  ⵙⵏⴹⵕ ⵏⵖ ⵣⵓⵖⵔ ⴰⴷ ⵜⵔⵣⵓⴷ
+media in	ⵉⵎⵉⴷⵢⴰⵜⵏ ⵖⵔ ⵓⴳⵏⵙ
+move the cursor	ⵙⵎⵓⵜⵜⵉ ⵜⵉⵙⵏⵜⵍ
+mute / solo a column	ⵙⵙⵓⵙⵎ / solo ⵏ ⵜⴳⵊⴷⵉⵜ
+off -- edit on monitor	ⵉⵏⵙⴰ -- ⵙⵏⴼⵍ ⵅⴼ ⵓⴳⴷⵉⵍ
+off: no camera is open. Drag on the picture to draw a zone.	ⵉⵏⵙⴰ: ⵓⵔ ⵜⵍⵍⵉ ⵜⴽⴰⵎⵉⵔⴰ ⵉⵕⵥⵎⵏ. ⵣⵓⵖⵔ ⵅⴼ ⵜⵡⵍⴰⴼⵜ ⴰⴷ ⵜⵙⵓⵏⵖⴷ ⵜⴰⵎⵏⴰⴹⵜ.
+open the code editor	ⵕⵥⵎ ⴰⵎⵙⵏⴼⵍ ⵏ ⵓⴽⵓⴷ
+play / stop	ⵖⵔ / ⵃⴱⵙ
+stop, fade, vol, opacity	ⵃⴱⵙ, ⴰⵙⵙⵓⵖⵙ, ⴰⵎⵙⵍⴰⵢ, ⵜⵉⴱⵔⴽⵜ
+the FFmpeg, SDL and FreeType projects,	ⵉ ⵉⵙⵏⴼⴰⵔⵏ FFmpeg, SDL ⴷ FreeType,
+Bitfocus Companion, and x42/libltc.	ⵉ Bitfocus Companion, ⴷ x42/libltc.
+Keys	ⵜⵉⵙⵓⵔⴰ
+None. See LICENSE sections 15-16.	ⵓⵍⴰ ⵢⴰⵜ. ⵥⵕ LICENSE, ⵜⵉⴳⵣⵎⵉⵏ 15-16.
+none compiled in	ⵓⵍⴰ ⵢⴰⵏ ⵉⵜⵜⵓⵙⵎⵓⵏ
+Group	ⴰⴳⵔⴰⵡ
+Normal	ⴰⵎⴰⴳⵏⵓ
+Remote	ⵙⴳ ⵜⴰⴳⴳⵓⴳⵜ
+lesson	ⴰⵙⵍⵎⴷ
+Bitrate	ⵜⴰⵖⴰⵡⵍⵉ ⵏ bit
+Latency	ⴰⵙⵎⴰⵜⵍ
+OUT {n}	ⵜⵓⴼⴼⵖⴰ {n}
+Out {n}	ⵜⵓⴼⴼⵖⴰ {n}
+{n} row	{n} ⵉⵣⵉⵔⵉⴳ
+Key name	ⵉⵙⵎ ⵏ ⵜⵙⴰⵔⵓⵜ
+Keyframe	ⵜⴰⵡⵍⴰⴼⵜ ⵜⴰⴳⵊⴷⴰⵏⵜ
+Registry	ⴰⵙⵉⵍ
+fade {n}	ⴰⵙⴼⵙⵉ {n}
+{n} rows	{n} ⵉⵣⵉⵔⵉⴳⵏ
+Node port	ⵜⴰⵡⵡⵓⵔⵜ ⵏ ⵜⴽⵔⵙⵜ
+Stream ID	ID ⵏ ⵓⵙⵓⴷⴷⵎ
+added {1}	ⵉⵜⵜⵓⵔⵏⴰ {1}
+start {n}	ⴱⴷⵓ {n}
+still {n}	ⵜⴰⵡⵍⴰⴼⵜ {n}
+FADE {n} s	ⴰⵙⴼⵙⵉ {n} s
+LAYER {n}%	ⴰⵙⵙⵓ {n}%
+Output {n}	ⵜⵓⴼⴼⵖⴰ {n}
+PROXY {n}p	ⴰⵎⵙⵏⴼⵍ {n}p
+PTP domain	ⵜⴰⵎⵏⴰⴹⵜ ⵏ PTP
+Proxy {n}p	ⴰⵎⵙⵏⴼⵍ {n}p
+Stream key	ⵜⴰⵙⴰⵔⵓⵜ ⵏ ⵓⵙⵓⴷⴷⵎ
+[ASSIGNED]	[ⵉⵜⵜⵓⵙⵎⵔⵙ]
+audio only	ⵉⵎⵙⵍⵉ ⵡⴰⵃⴷⵓ
+to Out {n}	ⵙ ⵜⵓⴼⴼⵖⴰ {n}
+{n} of {n}	{n} ⵣⴳ {n}
+Display {n}	ⴰⴳⴷⵉⵍ {n}
+active jobs	ⵜⵉⵡⵓⵔⵉⵡⵉⵏ ⵉⵜⴷⴷⵓⵏ
+local clock	ⵜⴰⵙⴰⵄⵜ ⵜⴰⴷⵖⴰⵔⴰⵏⵜ
+not running	ⵓⵔ ⵉⵜⴷⴷⵓ
+click to set	ⵙⵉⵜ ⵉ ⵓⵙⴱⴷⴷ
+full {n}x{n}	ⴰⴽⴽ {n}x{n}
+running v{n}	ⵉⵜⴷⴷⵓ v{n}
+the other one	ⵡⴰⵢⵢⴰⴹ
+DELIVERY H.{n}	ⴰⵙⵉⵡⴹ H.{n}
+Output {n} mix	ⴰⵙⵎⵍⵉⵍ ⵏ ⵜⵓⴼⴼⵖⴰ {n}
+made by Deckboy	ⵉⵙⴽⵔ ⵜ Deckboy
+{1} plays to {2}	{1} ⵉⵜⵜⵖⵔⴰ ⵙ {2}
+the picture {1} plays	ⵜⴰⵡⵍⴰⴼⵜ ⵍⵍⵉ ⵉⵜⵜⵖⵔⴰ {1}
+New media joins {1} by itself	ⴰⵎⵉⴷⵢⴰ ⴰⵎⴰⵢⵏⵓ ⵉⵜⵜⵎⵓⵏ ⴷ {1} ⵙ ⵢⵉⵎⴰⵏ ⵏⵏⵙ
+Press Win+P and choose Extend	ⵙⵉⵜ Win+P, ⵜⵙⵜⵉⴷ Extend
+{n} patched - DMX cues set them by name	{n} ⵉⵜⵜⵓⵇⵇⵏⵏ - cue ⵏ DMX ⵙⴱⴷⴷⵏ ⵜⵏ ⵙ ⵉⵙⵎ
+Set them to extend in your display settings	ⵙⴱⴷⴷ ⵜⵏ ⴰⴷ ⵙⵎⵖⵔⵏ ⵖ ⵜⵉⵙⵖⴰⵍ ⵏ ⵓⴳⴷⵉⵍ
+lesson: {1}. Esc leaves, and it picks up here next time	ⴰⵙⵍⵎⴷ: {1}. Esc ⴰⵔ ⵉⴼⴼⵓⵖ, ⵜⵉⴽⴽⵍ ⴷ ⵉⵜⵜⴰⵙⵏ ⴰⴷ ⵉⴽⵎⵎⵍ ⵣⴳ ⵖⵉⴷ
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	ⴰⵔ ⵉⵜⵜⵔⴰⵔ ⵉ ATEM Software Control ⴰⵎ deck ⵖ TCP 9993 ⵖ {1}
+In System Settings > Displays, use it as an extended display	ⵖ ⵜⵉⵙⵖⴰⵍ ⵏ ⵓⵏⴰⴳⵔⴰⵡ > ⵉⴳⴷⵉⵍⵏ, ⵙⵎⵔⵙ ⵜ ⴰⵎ ⵓⴳⴷⵉⵍ ⵉⵜⵜⵓⵙⵎⵖⵔⵏ
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	ⵉⴹⵕ ⵟⵟⴰⴱⵍⴰ, skapi. ⵖⵓⵔⴽ {1} ⵉⴳⴷⵉⵍⵏ: ⴰⴳⴷⵉⵍ ⵏ ⵜⵓⴼⴼⵖⴰ ⵖ ⵓⵎⵓⵖ ⴰⴷ ⵜ ⵉⵙⵙⵔⵙ ⵖ ⵢⴰⵏ ⵢⴰⴹⵏ.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	ⵉⴹⵕ ⵟⵟⴰⴱⵍⴰ, skapi. ⵖⵓⵔⴽ ⵙⵉⵏ ⵉⴳⴷⵉⵍⵏ: ⴰⴳⴷⵉⵍ ⵏ ⵜⵓⴼⴼⵖⴰ ⵖ ⵓⵎⵓⵖ ⴰⴷ ⵜ ⵉⵙⵙⵔⵙ ⵖ ⵡⴰⵢⵢⴰⴹ.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} ⵉⴳⴷⵉⵍⵏ, skapi. ⵜⴰⴼⵉⵍⵓⵜ ⴰⴷ ⵜⵇⵇⵉⵎ ⵖ ⵡⴰ, ⵜⴰⵡⵍⴰⴼⵜ ⴰⴷ ⵜⴷⴷⵓ ⵖ {2}. ⵕⵥⵎ ⵓⵎⵓⵖ ⵜⵔⴰⵔⴷ ⵜⵓⴼⴼⵖⴰ ⵉⵅⵙⴰ ⵖⵔ ⵜⵓⴼⴼⵖⴰ ⵉⵔⵎⴷ.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	ⵙⵉⵏ ⵉⴳⴷⵉⵍⵏ, skapi. ⵜⴰⴼⵉⵍⵓⵜ ⴰⴷ ⵜⵇⵇⵉⵎ ⵖ ⵡⴰ, ⵜⴰⵡⵍⴰⴼⵜ ⴰⴷ ⵜⴷⴷⵓ ⵖ ⵡⴰⵢⵢⴰⴹ: {1}. ⵕⵥⵎ ⵓⵎⵓⵖ ⵜⵔⴰⵔⴷ ⵜⵓⴼⴼⵖⴰ ⵉⵅⵙⴰ ⵖⵔ ⵜⵓⴼⴼⵖⴰ ⵉⵔⵎⴷ.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	ⵉⴹⵕ ⵟⵟⴰⴱⵍⴰ, skapi. ⵉⴳⴷⵉⵍⵏ ⵉⵎⵙⴰⵙⴰⵏ ⴰⵔ ⵙⵙⴽⴰⵏⵏ ⵜⴰⵡⵍⴰⴼⵜ ⵖ ⵙⵉⵏ, ⵉⵅⵚ ⴰⴷ ⵜ ⴳⴳⵉⵖ ⵖ ⵢⴰⵏ ⵓⵙⴰⵜⵎ ⴰⵎⵥⵢⴰⵏ, ⴷⴼⴼⵉⵔ. {1}, ⴰⴷ ⵢⴰⵡⵉ ⴰⴳⴷⵉⵍ ⵏⵏⵙ.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	ⵉⴳⴷⵉⵍⵏ ⵏⵏⴽ ⵎⵙⴰⵙⴰⵏ, skapi: {1} ⴰⵔ ⵉⵙⵙⴽⴰⵏ ⴰⵢⴷ ⵉⵙⵙⴽⴰⵏ ⵡⴰ, ⵉⵅⵚ ⵜⴰⵡⵍⴰⴼⵜ ⴰⴷ ⵜⴷⵍ ⵜⴰⴼⵉⵍⵓⵜ ⵖ ⵙⵉⵏ. {2}, ⴰⴷ ⴳⴳⵉⵖ ⵜⴰⵡⵍⴰⴼⵜ ⵖ ⵓⴳⴷⵉⵍ ⵏⵏⵙ. ⵏⵖ ⵕⵥⵎ ⵓⵎⵓⵖ ⵜⵔⴰⵔⴷ ⵜⵓⴼⴼⵖⴰ ⵉⵅⵙⴰ ⵖⵔ ⵜⵓⴼⴼⵖⴰ ⵉⵔⵎⴷ.

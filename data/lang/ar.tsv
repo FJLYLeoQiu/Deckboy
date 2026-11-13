@@ -1,0 +1,2364 @@
+#name العربية
+#english Arabic
+#rtl 1
+# Arabic needs three things Latin does not.
+#
+# GLYPHS. Noto Sans Arabic ships with Deckboy, and the shaper draws every
+# Arabic word in it, on every machine, beside the desk's own face for anything
+# Latin. No #font line, on purpose: a face named there becomes the desk's whole
+# face, and Noto's line is nearly twice the height of the one the desk was laid
+# out for -- every row of a desk on a machine without Arial moved.
+#
+# SHAPING. An Arabic letter has a different form at the start, middle and end
+# of a word, and joining them is HarfBuzz's job -- which SDL_ttf only does when
+# it was built against it. This build reports whether it could honour the
+# direction at all, and the settings page says so plainly rather than drawing
+# unjoined letters backwards and calling it Arabic.
+#
+# ORDER. A label is laid out with the Unicode bidi algorithm, so a number, a
+# port or a Latin word inside it keeps its own direction: 95% reads %95, as
+# Arabic writes it, and never 59.
+#
+# TAKE and PROGRAM stay in English, as in every catalogue: the trade says them
+# that way in every country.
+NEW	جديد
+OPEN	فتح
+SAVE	حفظ
+SAVE AS	حفظ باسم
+BUNDLE	حزمة
+IMPORT	استيراد
+SOURCE	مصدر
+PATTERN	نمط اختبار
+SETTINGS	الإعدادات
+TAKE	TAKE
+STOP	إيقاف
+REBOOT	إعادة تشغيل
+BLACKOUT	تعتيم
+CLEAR	مسح
+RECORD	تسجيل
+PLAYLIST	قائمة التشغيل
+TIMELINE	الخط الزمني
+MEDIA	الوسائط
+TRANSPORT	التحكم بالتشغيل
+OUTPUT	الخرج
+PROGRAM	PROGRAM
+WARP	تشويه
+LIVE	مباشر
+DECODE	فك الترميز
+STREAM	بث
+System	النظام
+Audio	الصوت
+Network	الشبكة
+Video Outputs	مخارج الفيديو
+About	حول
+Encoder	المُرمِّز
+Screen	الشاشة
+Geometry	الهندسة
+Devices	الأجهزة
+Streaming	البث
+APPEARANCE	المظهر
+REMOTE CONTROL	التحكم عن بعد
+INTEGRATION ADAPTERS	محولات التكامل
+DISCOVERY / NOTES	الاكتشاف / الملاحظات
+DISPLAY & RASTER	الشاشة والشبكة النقطية
+CONNECTED DISPLAYS	الشاشات المتصلة
+EDGE FEATHERING	تنعيم الحواف
+MATTE & OVERLAY	القناع والتراكب
+AREA OF INTEREST	منطقة الاهتمام
+DEFAULT TRANSITION	الانتقال الافتراضي
+NMC IN & OUT	دخل وخرج NMC
+OSC QUERY / FEEDBACK	استعلام OSC / التغذية الراجعة
+CUE INSPECTOR	مفتّش الكيو
+SELECTED CUE	الكيو المحدد
+PLAYBACK	التشغيل
+COPY	نسخ
+PASTE	لصق
+RESET	إعادة ضبط
+Theme	السمة
+Language	اللغة
+Resolution	الدقة
+Orientation	الاتجاه
+Toggle Fullscreen	ملء الشاشة
+IDENTIFY	تمييز
+REGION SIZE	حجم المنطقة
+POSITION	الموضع
+CENTRE	توسيط
+FULL	كامل
+duration	المدة
+transition	انتقال
+fade in	ظهور تدريجي
+fade out	اختفاء تدريجي
+ON	تشغيل
+OFF	إيقاف
+Stopped	متوقف
+Playing	قيد التشغيل
+Paused	متوقف مؤقتاً
+2-UP	شاشتان
+DONE	تم
+EDIT	تحرير
+HELD	مُثبَّت
+Mode	الوضع
+PICK	اختيار
+QUAD	أربع شاشات
+Rate	المعدل
+STEP	خطوة
+Apply	تطبيق
+CLOSE	إغلاق
+FIXED	ثابت
+Help!	مساعدة!
+ORDER	الترتيب
+READY	جاهز
+TILES	مربعات
+VIDEO	فيديو
+ALL ON	الكل يعمل
+ALWAYS	دائماً
+ANALOG	تناظري
+Buffer	المخزن المؤقت
+Cancel	إلغاء
+Custom	مخصص
+Device	الجهاز
+Folder	مجلد
+FORMAT	الصيغة
+HIDDEN	مخفي
+Length	المدة
+Mascot	التميمة
+Mirror	مرآة
+NATIVE	أصلي
+PRESET	إعداد مسبق
+Sender	المُرسل
+SUMMED	مجموع
+TOGGLE	تبديل
+12 HOUR	12 ساعة
+24 HOUR	24 ساعة
+ALL OFF	الكل متوقف
+ARRANGE	ترتيب
+Channel	القناة
+CONVERT	تحويل
+DEFAULT	افتراضي
+END CUE	نهاية الكيو
+Key out	خرج Key
+LTC out	خرج LTC
+MISSING	مفقود
+PRESETS	إعدادات مسبقة
+PROJECT	المشروع
+RUNNING	يعمل
+Send to	إرسال إلى
+SHUFFLE	عشوائي
+UPDATES	التحديثات
+VJ MODE	وضع VJ
+CLOCK ON	الساعة تعمل
+DOWNLOAD	تنزيل
+EXAMPLES	أمثلة
+Mappings	التعيينات
+NMC sync	مزامنة NMC
+PROMPTER	شاشة التلقين
+SHOW SDP	إظهار SDP
+TCP port	منفذ TCP
+UI scale	حجم الواجهة
+vMix API	واجهة vMix
+WATCHING	يراقب
+A/V delay	تأخير الصوت والصورة
+ASIO outs	مخارج ASIO
+BOTH AXES	المحوران
+CHECK NOW	تحقق الآن
+CLOCK OFF	الساعة متوقفة
+Creatures	مخلوقات
+CUE TOOLS	أدوات الكيو
+Direction	الاتجاه
+Freewheel	تشغيل حر
+HTTP port	منفذ HTTP
+Jump mode	وضع القفز
+Listen on	الاستماع على
+OSC Query	استعلام OSC
+OUTPUT ON	الخرج يعمل
+Panic now	إيقاف طارئ الآن
+RECORDING	يسجّل
+REMAINING	المتبقي
+RESET ALL	إعادة ضبط الكل
+RUN PANIC	تشغيل الإيقاف الطارئ
+SHOW FLOW	تدفق العرض
+TIMERS ON	المؤقتات تعمل
+WHEN IDLE	عند السكون
+ADD OUTPUT	إضافة خرج
+BUILT WITH	بُني باستخدام
+CANCEL ALL	إلغاء الكل
+colour tag	وسم لوني
+copy chain	نسخ السلسلة
+Hover tips	تلميحات
+Input gain	كسب الدخل
+Input mono	دخل أحادي
+live audio	صوت مباشر
+Live input	دخل مباشر
+MIDI input	دخل MIDI
+no picture	لا صورة
+no preview	لا معاينة
+OPEN SAVED	فتح المحفوظ
+OUTPUT OFF	الخرج متوقف
+Panic fade	تلاشٍ طارئ
+Tally port	منفذ Tally
+TIMERS OFF	المؤقتات متوقفة
+Accept from	القبول من
+ASIO driver	برنامج تشغيل ASIO
+BACK TO TOP	إلى الأعلى
+CANVAS MODE	وضع اللوحة
+CODE SOURCE	مصدر برمجي
+Cue numbers	أرقام الكيو
+Destination	الوجهة
+Mirror rate	معدل المزامنة
+no duration	لا مدة
+NO LIVE CUE	لا كيو على الهواء
+NO PREVIOUS	لا سابق
+OVERLAY BIN	صندوق الطبقات
+paste chain	لصق السلسلة
+Sample rate	معدل العينات
+SENDING OUT	يُرسل
+Shift: snap	Shift: محاذاة
+THIS OUTPUT	هذا الخرج
+(no matches)	(لا نتائج)
+(no subtext)	(لا نص فرعي)
+add a button	إضافة زر
+add a window	إضافة نافذة
+Art-Net port	منفذ Art-Net
+AUDIO OUTPUT	خرج الصوت
+Auto restore	استعادة تلقائية
+DECKLINK: ON	DECKLINK: يعمل
+free running	تشغيل حر
+KEY+FILL: ON	KEY+FILL: يعمل
+LISTENING IN	يستمع
+Miami cursor	مؤشر ميامي
+MIDI CONTROL	تحكم MIDI
+Mirror state	مزامنة الحالة
+NDI KEY: OFF	NDI KEY: متوقف
+NDI KEY: ON	NDI KEY: يعمل
+NO PROGRAMME	لا برنامج
+ST 2110: OFF	ST 2110: متوقف
+ST 2110: ON	ST 2110: يعمل
+WATCH FOLDER	مجلد مراقب
+COMPOSITE CUE	كيو مركّب
+DECKLINK: OFF	DECKLINK: متوقف
+default route	المسار الافتراضي
+Every adapter	كل محوّل شبكة
+KEY+FILL: OFF	KEY+FILL: متوقف
+LEFT TO RIGHT	من اليسار إلى اليمين
+MEDIA ENCODER	مُرمّز الوسائط
+MSC device id	معرّف جهاز MSC
+NEW SHOW FILE	ملف عرض جديد
+No cue loaded	لم يُحمّل أي كيو
+nothing taken	لم يُبث أي شيء
+OPEN PREVIOUS	فتح السابق
+Output device	جهاز الخرج
+Panic profile	ملف الإيقاف الطارئ
+Quit Deckboy?	إنهاء Deckboy؟
+REMOVE OUTPUT	إزالة الخرج
+Sound effects	مؤثرات صوتية
+Tally address	عنوان Tally
+TOP TO BOTTOM	من الأعلى إلى الأسفل
+127 (all-call)	127 (نداء عام)
+ALL INTERFACES	كل الواجهات
+LOCALHOST ONLY	localhost فقط
+Monitor device	جهاز المراقبة
+no audio track	لا مسار صوتي
+PRESENTER VIEW	عرض المُقدّم
+RECORD TO DISK	التسجيل على القرص
+STOP RECORDING	إيقاف التسجيل
+STOP STREAMING	إيقاف البث
+TALLY TRIGGERS	مُشغّلات Tally
+Device channels	قنوات الجهاز
+NDI SENDING: ON	إرسال NDI: يعمل
+NO CUE SELECTED	لم يُحدد أي كيو
+Output channels	قنوات الخرج
+preview pending	المعاينة قيد الإعداد
+START RECORDING	بدء التسجيل
+START STREAMING	بدء البث
+(system default)	(افتراضي النظام)
+Check at startup	التحقق عند البدء
+Global crossfade	تلاشٍ متقاطع عام
+Mic to recording	الميكروفون إلى التسجيل
+Monitor playlist	مراقبة قائمة التشغيل
+NDI SENDING: OFF	إرسال NDI: متوقف
+no still preview	لا معاينة للصورة
+Pocket 3 / touch	Pocket 3 / لمس
+SMPTE LTC OUTPUT	خرج SMPTE LTC
+the whole screen	الشاشة بالكامل
+Check for one now	تحقق الآن
+INSTALL & RESTART	التثبيت وإعادة التشغيل
+Registry: NOT SET	السجل: غير مضبوط
+SAFETY / TIMECODE	السلامة / الكود الزمني
+Timecode jam sync	مزامنة jam للكود الزمني
+esc or N to cancel	Esc أو N للإلغاء
+KEYBOARD SHORTCUTS	اختصارات لوحة المفاتيح
+loading preview...	يحمّل المعاينة...
+CONVERT ALL FLAGGED	تحويل كل المُعلّم
+dot-matrix cue deck	لوحة كيو نقطية
+HyperDeck emulation	محاكاة HyperDeck
+locked to the tempo	مقيّد بالإيقاع
+VJ mode (two decks)	وضع VJ (لوحتان)
+ADD ANOTHER PLAYLIST	إضافة قائمة تشغيل أخرى
+Companion / OSC port	منفذ Companion / OSC
+Esc or click to skip	Esc أو انقر للتخطي
+PLAYLIST PREFERENCES	تفضيلات قائمة التشغيل
+press ENTER to start	اضغط ENTER للبدء
+ADD A SECOND PLAYLIST	إضافة قائمة تشغيل ثانية
+filmstrip unavailable	شريط الصور غير متاح
+(empty — import media)	(فارغ – استورد وسائط)
+Ctrl+D or Esc to close	Ctrl+D أو Esc للإغلاق
+(no notes for this cue)	(لا ملاحظات لهذا الكيو)
+Timebase / start / fade	الأساس الزمني / البداية / التلاشي
+No cues need conversion.	لا يوجد كيو يحتاج تحويلاً.
+CLICK TO SAMPLE KEY COLOR	انقر لأخذ عيّنة من لون الكروما
+normalize loudness (R128)	توحيد مستوى الصوت (R128)
+off - all channels silent	متوقف – كل القنوات صامتة
+no video lane for this cue	لا مسار فيديو لهذا الكيو
+HyperDeck emulation is off.	محاكاة HyperDeck متوقفة.
+OWN SCRIPT  (click to edit)	نصك الخاص  (انقر للتحرير)
+Theme and operator feedback	المظهر وملاحظات المُشغّل
+Discovery and mirrored state	الاكتشاف والحالة المتزامنة
+FOLLOWING THE LIVE CUE NOTES	يتبع ملاحظات الكيو على الهواء
+Listening on all interfaces.	يستمع على كل الواجهات.
+Network-facing runtime notes	ملاحظات التشغيل تجاه الشبكة
+Hi! Press I to import a clip.	مرحباً! اضغط I لاستيراد مقطع.
+Global jump and panic behavior	سلوك القفز والإيقاف الطارئ العام
+Roll when the show cuts to you	ابدأ التشغيل عندما ينتقل العرض إليك
+Choose a cue to inspect it here	اختر كيو لعرضه هنا
+Defaults for newly created cues	الافتراضيات للكيو الجديد
+Device routing for cue playback	توجيه الأجهزة لتشغيل الكيو
+Smaller buffer = lower latency.	مخزن أصغر = تأخير أقل.
+Emergency fade and sync behavior	التلاشي الطارئ وسلوك المزامنة
+mixed selection: key unavailable	تحديد مختلط: Key غير متاح
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (تجريبي)
+Esc=continue with current session	Esc = متابعة الجلسة الحالية
+no per-cue settings for this type	لا إعدادات كيو لهذا النوع
+On stop: remux to an ordinary MP4	عند التوقف: إعادة التغليف إلى MP4 عادي
+Where RECORD writes the programme	حيث يكتب RECORD البرنامج
+dot-matrix cue deck for live events	لوحة كيو نقطية للفعاليات الحية
+Listening on localhost (127.0.0.1).	يستمع على localhost (127.0.0.1).
+three expressions: red, green, blue	ثلاث تعبيرات: أحمر، أخضر، أزرق
+Transport sync with another machine	مزامنة التحكم بالتشغيل مع جهاز آخر
+Add slot sources in the cue inspector	أضف المصادر في مفتّش الكيو
+Ask GitHub; never installs on its own	يسأل GitHub؛ ولا يثبّت من تلقاء نفسه
+Import or click a cue in the playlist	استورد أو انقر كيو في قائمة التشغيل
+mixed selection: geometry unavailable	تحديد مختلط: الأبعاد غير متاحة
+generate timecode for the rig to chase	أنتج كوداً زمنياً تتبعه المعدات
+Lower Third and PIP fire independently	الشريط السفلي وصورة داخل صورة يعملان منفصلين
+Panels built for a vMix rig, unchanged	لوحات مصممة لمعدات vMix، دون تغيير
+Incoming transport arrives as NMCEVENT.	أوامر التشغيل الواردة تصل بصيغة NMCEVENT.
+not in this build - saved with the show	غير موجود في هذه النسخة – يُحفظ مع العرض
+Find from the playlist, not from a modal	ابحث من قائمة التشغيل، لا من نافذة
+take or select a cue to open the timeline	ابثّ أو اختر كيو لفتح الخط الزمني
+Optional external transport and cue control	تحكم خارجي اختياري بالتشغيل والكيو
+No previous show file found at startup path.	لم يُوجد ملف عرض سابق عند البدء.
+Use Ctrl+F or type a cue id/number to search.	استخدم Ctrl+F أو اكتب رقم الكيو للبحث.
+Companion / OSC ingress and HyperDeck emulation	دخل Companion / OSC ومحاكاة HyperDeck
+A/V delay holds audio back for lagging displays.	تأخير الصوت والصورة يؤخّر الصوت للشاشات البطيئة.
+On stop: leave the crash-resilient file as it is	عند التوقف: اترك الملف المقاوم للانهيار كما هو
+same disk as Deckboy - a separate drive is safer	نفس قرص Deckboy – قرص منفصل أكثر أماناً
+A step fires one cue on each playlist, all at once.	الخطوة تُشغّل كيو واحداً في كل قائمة تشغيل في الوقت نفسه.
+one expression: the same value in red, green and blue	تعبير واحد: القيمة نفسها في الأحمر والأخضر والأزرق
+NDI transport is configured per output in Video Outputs.	يُضبط نقل NDI لكل خرج في مخارج الفيديو.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	يرسل PLAY / PAUSE / STOP / LOCATE مع حركة التشغيل.
+OSC subscribe: send /deckboy/subscribe from your controller.	اشتراك OSC: أرسل /deckboy/subscribe من وحدة التحكم.
+NMC mode / host / port are runtime-configurable for sync work.	وضع NMC والمضيف والمنفذ قابلة للضبط أثناء التشغيل.
+Going on air takes the cue. Deckboy never sends the switcher a command.	الظهور على الهواء يبثّ الكيو. ولا يرسل Deckboy أمراً إلى المازج أبداً.
+FPS: ON	FPS: يعمل
+FPS: OFF	FPS: متوقف
+NMOS: ON	NMOS: يعمل
+NMOS: OFF	NMOS: متوقف
+SPOUT: ON	SPOUT: يعمل
+SPOUT: OFF	SPOUT: متوقف
+CANVAS: ON	اللوحة: تعمل
+CANVAS: OFF	اللوحة: متوقفة
+10-BIT: ON	10 بت: يعمل
+10-BIT: OFF	10 بت: متوقف
+EDIT...	تحرير...
+FOLDER...	مجلد...
+ARRANGE...	ترتيب...
+ADD FILE...	إضافة ملف...
+RENUMBER...	إعادة الترقيم...
+set a port...	اضبط منفذاً...
+no script	لا نص
++ OUTPUT	+ خرج
+Eddie's Clock	ساعة إيدي
+Ctrl+/ to close	Ctrl+/ للإغلاق
+(step lives here)	(الخطوة هنا)
+4:2:2  8-BIT	4:2:2  8 بت
+4:2:2  10-BIT	4:2:2  10 بت
+No outputs — click + OUTPUT to add one.	لا مخارج – انقر + خرج لإضافة واحد.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM ومُشغّل NDI و NMC و MTC و LTC و Art-Net و Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	حوّل إلى H.264 الكيو الذي لا يشغّله Deckboy جيداً
+a button can run any command the network protocol understands	يمكن للزر تنفيذ أي أمر يفهمه البروتوكول
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	ترتيب عرض المُقدّم  -  اسحب لوحة لتحريكها، وزاوية لتغيير حجمها
+capture again - what is on now	التقاط من جديد - ما يُبث الآن
+change what it does...	تغيير ما يفعله...
+decks - Stop deck...	اللوحات - إيقاف اللوحة...
+decks - Take deck...	اللوحات - TAKE على اللوحة...
+delete step	حذف الخطوة
+delete this button	حذف هذا الزر
+label, command and glyph as text...	التسمية والأمر والرمز كنص...
+move down	نقل إلى الأسفل
+move up	نقل إلى الأعلى
+next colour	اللون التالي
+preset - a new preset from what is on now	إعداد مسبق - إعداد جديد مما يُبث الآن
+type a command myself...	سأكتب أمرًا بنفسي...
+type a length in seconds...	اكتب مدة بالثواني...
+wait for GO	انتظار GO
+what it recalls...	ما يستدعيه...
+when its cues end	عندما تنتهي الكيو الخاصة به
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL يوازن قائمة التشغيل كلها دفعة واحدة
+back to the in point, not to zero	العودة إلى نقطة البداية، لا إلى الصفر
+drag to scrub. the audio follows	اسحب للتنقل. الصوت يتبع
+loops between the in and out points, not the file	يكرر بين نقطتي البداية والنهاية، لا الملف كله
+(not set)	(غير محدد)
+1.00x  (default 1080p)	1.00x  (الافتراضي 1080p)
+1.25x  (large desktop)	1.25x  (سطح مكتب كبير)
+1.50x  (4K desktop)	1.50x  (سطح مكتب 4K)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / 4K صغير)
+highest bandwidth	أعلى عرض نطاق
+lower bandwidth	عرض نطاق أقل
+film	سينما
+CD, music rigs	CD، أنظمة موسيقية
+video standard	معيار الفيديو
+every playlist	كل قائمة تشغيل
+None  (no character art)	لا شيء  (بلا شخصية)
+custom size...	حجم مخصص...
+Browser URL	عنوان المتصفح
+Camera	كاميرا
+Media File / Still	ملف وسائط / صورة ثابتة
+RECORD TO FILE	تسجيل إلى ملف
+browser, with sound	متصفح، مع الصوت
+Window	نافذة
+Desktop	سطح المكتب
+full screen	ملء الشاشة
+DeckLink Output	مخرج DeckLink
+FFmpeg Stream Output	مخرج بث FFmpeg
+NDI Output	مخرج NDI
+SDL Window Output	مخرج نافذة SDL
+Spout Output	مخرج Spout
+DESK	طاولة التحكم
+drop a folder in too - it reads the whole tree	اسحب مجلدًا أيضًا؛ ستُقرأ كل المجلدات الفرعية
+cameras, windows, NDI, screens - all live sources	كاميرات ونوافذ وNDI وشاشات؛ كلها مصادر مباشرة
+test cards and generators - no file needed	بطاقات اختبار ومولّدات؛ لا حاجة إلى ملف
+space bar does this too, without moving your hand	مفتاح المسافة يفعل الشيء نفسه، دون أن تحرّك يدك
+stops the cue. ESC stops EVERYTHING	يوقف الكيو. أما ESC فيوقف كل شيء
+the safe one: audio and playback keep running	الخيار الهادئ: يستمر الصوت والتشغيل
+the thorough one. blackout is the reversible one	الخيار الشامل. أما التعتيم فيمكن التراجع عنه
+save as makes a new file instead	«حفظ باسم» ينشئ ملفًا جديدًا
+for a copy before you change something risky	لنسخة احتياطية قبل تغيير قد تندم عليه
+this is what you carry to the venue	هذا ما تأخذه معك إلى مكان العرض
+the show on disk is untouched until you save	يبقى العرض على القرص كما هو حتى تحفظ
+per cue. the deck has its own default too	لكل كيو إعداداته، وللوحة التشغيل قيم افتراضية أيضًا
+stills hold instead - a fade would dip the frame	تبقى الصور الثابتة ظاهرة؛ التلاشي سيُعتّم الصورة
+the frame stays up. good for slides	تبقى الصورة ظاهرة. مناسب للشرائح
+gain, pan and normalise live in the inspector	الكسب والتوزيع الستيريو وتوحيد الجهارة في المفتّش
+this clip has no audio track to enable	هذا المقطع لا يحتوي على مسار صوتي لتفعيله
+Hi! I am Deckboy.	أهلًا! أنا Deckboy.
+Press I to import a clip.	اضغط I لاستيراد مقطع.
+Enter takes a cue live.	Enter يضع الكيو على الهواء.
+S stops the live cue.	S يوقف الكيو الذي على الهواء.
+The timeline can be resized.	يمكنك تغيير حجم الخط الزمني.
+Try a terminal theme in Settings.	جرّب سمة الطرفية في الإعدادات.
+RELINK finds media that has moved.	RELINK يعثر على ملفات الوسائط المنقولة.
+Cues have their own gain and fades.	لكل كيو كسبه وتلاشياته الخاصة.
+Trim with Ctrl+I and Ctrl+O.	حدّد البداية والنهاية باستخدام Ctrl+I وCtrl+O.
+Ctrl+/ shows every shortcut.	Ctrl+/ يعرض جميع الاختصارات.
+J jumps to the live cue.	J ينتقل إلى الكيو الذي على الهواء.
+Normalize matches loudness across cues.	التطبيع يوحّد الجهارة بين الكيوهات.
+Esc clears the desk, then the output, then quits.	Esc يفرغ لوحة التحكم، ثم المخرج، ثم يغلق البرنامج.
+Stream SRT and RTMP at the same time.	ابث عبر SRT وRTMP في الوقت نفسه.
+CHECK lists what is broken, before doors.	CHECK يكشف المشاكل قبل فتح الأبواب.
+A cue can wait before it starts.	يمكن للكيو الانتظار قبل أن يبدأ.
+A cue can start the next one by itself.	يمكن للكيو تشغيل التالي تلقائيًا.
+Disarm a cue and GO steps over it.	ألغِ تسليح الكيو وسيتجاوزه GO.
+Audition plays a cue to you, not the room.	الاستماع المسبق يشغّل لك، لا للقاعة.
+Preload racks the next cue warm, off air.	التحميل المسبق يجهّز الكيو التالي خارج البث.
+A target cue starts or stops another cue.	كيو الهدف يشغّل كيو آخر أو يوقفه.
+A fade cue takes a deck down, then stops it.	كيو التلاشي يخفض لوحة التشغيل ثم يوقفها.
+A master cue fires one cue on every deck.	الكيو الرئيسي يشغّل كيو واحدًا على كل لوحة تشغيل.
+A MIDI cue can tell the lighting desk to go.	يمكن لكيو MIDI إعطاء إشارة البدء لمنضدة الإضاءة.
+A network cue speaks OSC, UDP or TCP.	كيو الشبكة يتحدث OSC أو UDP أو TCP.
+A DMX cue fades the house lights on a cue.	كيو DMX يغيّر إضاءة القاعة تدريجيًا.
+A script cue runs Deckboy's own commands.	كيو السكربت ينفّذ أوامر Deckboy.
+A timecode cue jams LTC to a value.	كيو التوقيت يضبط LTC على قيمة محددة.
+Each output can show a different deck.	يمكن لكل مخرج عرض لوحة تشغيل مختلفة.
+The matrix sends audio to any channel.	المصفوفة ترسل الصوت إلى أي قناة.
+The panel map numbers every LED tile.	خريطة الألواح ترقّم كل بلاطة LED.
+Hey!	مهلًا!
+Quit it!	كفى عبثًا!
+Ow. That was rude.	آخ. أين الذوق؟
+I am a professional.	أنا محترف، على فكرة.
+Seriously?	هل أنت جاد؟
+This is my monitor.	هذه شاشتي أنا.
+I am telling the operator.	سأخبر المشغّل بما تفعل.
+All right. Wow.	حسنًا. يا سلام!
+Right. That does it.	كفى. لقد طفح الكيل.
+I am leaving. Good luck with the show.	أنا مغادر. حظًا موفقًا مع العرض.
+Still here? Me too.	ما زلت هنا؟ وأنا أيضًا.
+Long show, huh.	يا ليل ما أطولك! أقصد العرض.
+I could do this all day. Apparently.	أستطيع فعل هذا طوال اليوم. ويبدو أنني سأفعل.
+You have been staring at me for hours.	وأنت تحدّق بي منذ ساعات.
+Has anyone seen a clock?	هل لدى أحد ساعة، أم ننتظر صياح الديك؟
+Is it still the same show?	هل ما زلنا في العرض نفسه؟
+I'm not tired. You're tired.	أنا لست متعبًا. أنت المتعب.
+Five more minutes. Then five more.	خمس دقائق أخرى... هذه مواعيد عرقوب.
+A whole day. I need a restart.	يوم كامل. أحتاج إلى إعادة تشغيل.
+Save the show. Then let me sleep.	احفظ العرض، ثم دعني أنام.
+Every pixel of me is tired.	حتى بكسلاتي قالت: كفى!
+Close me. Open me. I'll be fine.	أغلقني ثم افتحني. سأعود بخير.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	يلا بينا! العرض ما بيستنى حدا.
+Oh hey. It's 4:20. Take it easy.	أهلًا. الساعة 4:20. خذ الأمور ببساطة.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	مرحبًا
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	دوبار دن، سكابي. أنا الدكتورة بكسل. خمس دقائق وستدير عرضًا. أقل، إن استمعت إليّ.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	وأنا البروفيسور فيديو. السنثات أولًا، ثم الفيديو. الآن فيديو في الغالب. اضغط START وسنوصل... سنبدأ.
+TURN THE OUTPUT ON	شغّل الخرج
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	سكابي، الشاشة فارغة. لا تجعلهم ينتظرون. افتح القائمة واجعل «الخرج متوقف» يصبح «الخرج يعمل». هيا!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	الدرس الأول: لا يخرج شيء حتى توصل المذبذب بـ... بالخرج. إنه فيديو. أعرف.
+BRING IN A CLIP	أحضر مقطعًا
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	الآن صورة. اضغط I واختر مقطعًا من حاسوبك. لا مقطع لديك؟ SHOW ME، وسأعيرك واحدًا من مقاطعي.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	كل مقطع يصبح إشارة (cue) في قائمة التشغيل. مثل تحميل عيّنة صوتية. عيّنة فيها صور.
+TAKE IT LIVE	على الهواء
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	مقطعك ينتظر في قائمة التشغيل. حدّده، ثم TAKE. أو Enter. المشغّلون الواثقون يضغطون Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE هو زناد الغلاف. أعني، آه، زر GO. الشيء نفسه، لكن فيه صور.
+LINE UP THE NEXT ONE	جهّز التالي
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	انقر إشارة أخرى. تنتظر جاهزة حتى تقول. إشارة واحدة فقط؟ استورد أخرى، أو SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	التحديد ليس تشغيلًا. المحدَّد هو النغمة التالية في التسلسل. الإشارة التالية.
+CROSSFADE TO IT	تلاشٍ متقاطع إليه
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	القطع المباشر للهواة. في المفتّش، اضغط + عند الانتقال، حتى يظهر زمن لا كلمة deck. ثم TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	تلاشٍ متقاطع! بورتامنتو، لكن للصور. أي زمن يكفي. ضغطات قليلة أخرى وتصبح ثانية. ثم TAKE.
+CLEAR THE SCREEN	امسح الشاشة
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	شيء ما ساء على المسرح؟ اضغط BLACK، أو B. تختفي الصورة. يستمر العرض تحتها.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	لم يضع شيء. اضغط B مجددًا فتعود. مثل كتم الصوت في المازج. مريح جدًا.
+SAVE THE SHOW	احفظ العرض
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	الآن احفظ. Ctrl+S، أو حفظ. بعض البرامج تُضيّع عملك ثم تلومك. أنا؟ أبدًا.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	احفظ الباتش. أقصد عرضك. العرض. هذا العرض التدريبي يعيش في مجلد Deckboy نفسه؛ عرضك في أمان.
+THAT'S A SHOW	هذا هو العرض
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	هذا هو العرض! خرج، إشارة، TAKE، تلاشٍ، BLACK، حفظ. ناسدرافي، سكابي. الراكيا على حسابي.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	انتهى الدرس. العروض النموذجية تعلّم الطبقات والعناوين والمؤثرات. القائمة > LEARN THE BASICS يعيد هذا كله.
+*shakes head* That means yes. Bravo.	*يهزّ رأسه يمينًا ويسارًا* هذا يعني نعم. برافو.
+Wonderful! Lovely signal flow.	رائع! يا له من مسار إشارة جميل.
+Mm. I knew you had it in you.	ممم. كنت أعرف أنك قادر.
+Yes! Have a gold star. It's a dot.	نعم! خذ نجمة ذهبية. إنها نقطة.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	جاهز للخطوة التالية؟ *يومئ* ...في بلغاريا هذا يعني لا يا سكابي. المتوهج. إنه يتوهج من أجلك.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	نقرت كل شيء إلا المتوهج. حتى مذبذباتي تجد المتوهج.
+stop playback first - the lesson cannot hand a running show back as it was	أوقف التشغيل أولًا - لا يستطيع الدرس إعادة عرض قيد التشغيل كما كان
+choose RECOVER or KEEP SAVED first	اختر RECOVER أو KEEP SAVED أولًا
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	تعذّر حفظ عرضك، لذا لم يبدأ الدرس. احفظه (حفظ باسم) وحاول مجددًا
+the practice show would not open	لم يُفتح العرض التدريبي
+could not start the practice show	تعذّر بدء العرض التدريبي
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc يخرج، ويكمل من هنا في المرة القادمة
+that's the basics - MENU > LESSONS has part two	هذه هي الأساسيات - في القائمة > LESSONS الجزء الثاني
+tour paused - LEARN THE BASICS picks up where you left off	الجولة متوقفة مؤقتًا - LEARN THE BASICS يكمل من حيث توقفت
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	شاشات متطابقة يا سكابي. اضغط أي مفتاح أو انقر، وستعيدها الدكتورة بكسل.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	شاشة خاطئة يا سكابي. اضغط أي مفتاح أو انقر، وستعيدها الدكتورة بكسل.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	اختفت الشاشة الأخرى يا سكابي. اضغط أي مفتاح أو انقر، وستعيدها الدكتورة بكسل.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	شاشة واحدة يا سكابي. اضغط أي مفتاح أو انقر، وستعيدها الدكتورة بكسل.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	اختفت الشاشة الأخرى يا سكابي، فعادت الصورة إلى هذه. وضعتها في نافذة صغيرة في الخلف. صِلها من جديد فتعود الصورة إليها.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	لقد أكل المنصة يا سكابي. شاشة واحدة، فأخذها الخرج كلها. وضعته في نافذة صغيرة في الخلف. العرض الحقيقي له شاشة ثانية.
+IT ATE THE DESK	أكل المنصة
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	هناك. الزر المكتوب عليه «الخرج متوقف». اجعله «يعمل» يا سكابي.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	لا شيء على الهواء لنتلاشى منه يا سكابي. اعمل TAKE لإشارة أولًا، ثم اختر الأخرى وأعطها زمنًا.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	ذلك كان قطعًا يا سكابي. سريع، لكنه ليس تلاشيًا متقاطعًا. اختر الإشارة الأخرى، اضغط + عند الانتقال، ثم TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	حلقة تغذية راجعة! الخرج موصول مباشرة بالمنصة. يحدث لأفضلنا. لي غالبًا. 1983. لا نتحدث عن 1983.
+No more rakia. The rat has a problem.	لا مزيد من الراكيا. الفأر لديه مشكلة.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	ناسدرافي يا سكابي! راكيا الجدة، من بيلوغرادتشيك. كأس واحدة، من أجل الدرس.
+Is this... is this allowed during a tutorial?	هل هذا... هل هذا مسموح أثناء درس تعليمي؟
+*shakes head* That means one more.	*يهزّ رأسه يمينًا ويسارًا* هذا يعني كأسًا أخرى.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	أحبكم جميعًا. أحب المذبذب. أحب الخرج. إنه فيديو. أعرف. أعرف!
+...and the rat took the rakia. Every time, skapi. Every single time.	...وأخذ الفأر الراكيا. كل مرة يا سكابي. كل مرة بلا استثناء.
+Was that a rat? In a hat? With a pizza?	هل كان ذلك فأرًا؟ بقبعة؟ ومعه بيتزا؟
+Stop that. I am a serious man.	كفى. أنا رجل جادّ.
+Do not tell Dr. Pixel about this.	لا تخبر الدكتورة بكسل بهذا.
+This never happened. Back to the patch bay.	هذا لم يحدث قط. عودة إلى لوحة التوصيل.
+It was the eighties. Everyone had a bow tie.	كانت الثمانينيات. الكل كان يرتدي ربطة فراشة.
+LESSON LIST	قائمة الدروس
+OPEN EXAMPLE SHOWS	افتح العروض النموذجية
+EXIT (Esc)	خروج (Esc)
+Taking it on the road	العرض في جولة
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	افحص العرض بـ CHECK قبل أن يسافر، وأصلح ما يجده، واحزمه مع وسائطه.
+Effects, oscillators and colour	المؤثرات والمذبذبات واللون
+An effect, a ~ on its knob, and the colour picker.	مؤثر، و~ على مقبضه، ومنتقي الألوان.
+The art school crit, with Mr. Salty	نقد مدرسة الفنون، مع مستر سولتي
+Patterns, synths and Draw	أنماط وسنثات وDraw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	نمط اختبار، وسنث الفيديو، والرسم على الصورة، محفوظًا كلقطة ثابتة.
+The telestrator booth, with Coach Marv	كابينة الرسم التوضيحي، مع المدرب مارف
+Masks	الأقنعة
+A heart from the library, the pen, invert and feather.	قلب من المكتبة، والقلم، والعكس، والتنعيم.
+The Signal Files: redact the evidence	ملفات الإشارة: اطمس الدليل
+Warp, blend and slices	التشويه والدمج والشرائح
+A corner pin, two soft edges, then three slices in the Screens window.	تثبيت زوايا، حافتان ناعمتان، ثم ثلاث شرائح في نافذة Screens.
+The haunted lighthouse, with Keeper Rook	المنارة المسكونة، مع الحارس روك
+GO from anywhere	GO من أي مكان
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	أرقام الإشارات، وGOTO، ومفتاح اختصار، ومن أين يدخل Companion وMIDI وOSC.
+The game show, with Donna Wheel	برنامج المسابقات، مع دونا ويل
+Words on screen	كلمات على الشاشة
+A Lower Third with a name on it, then a title card with a key-green backdrop.	شريط سفلي عليه اسم، ثم بطاقة عنوان بخلفية خضراء للكروما.
+The kaiju weather report, with June O'Neil	نشرة طقس الكايجو، مع جون أونيل
+Keeping time	ضبط الوقت
+A stage timer counting down, held, and a presenter view for the person on stage.	مؤقت مسرح يعد تنازليًا، موقوف مؤقتًا، وعرض للمقدّم لمن على المسرح.
+A grand day out, with Wallis and Grommet	يوم عظيم، مع واليس وغروميت
+Two playlists and TAKE ALL	قائمتا تشغيل وTAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	قائمة ثانية كطبقة، وTAKE ALL كي يتغير شيئان على نبضة واحدة.
+The magic show, with Turnip Top	عرض السحر، مع ترنيب توب
+When it goes wrong	حين تسوء الأمور
+BLACK against PANIC, and getting a show back.	BLACK مقابل PANIC، واستعادة العرض.
+The cooking show, with Chef Bork	برنامج الطبخ، مع الشيف بورك
+Presets	الإعدادات المسبقة
+Capture a look on a DASH button, change everything, and get it back with one press.	احفظ مظهرًا على زر DASH، غيّر كل شيء، واستعده بضغطة واحدة.
+Transitions	الانتقالات
+The styles beyond the crossfade: an iris, a shatter, and their times.	الأنماط بعد التلاشي: قزحية، وتحطّم، وأزمنتهما.
+The space-opera trailer, with Optimus Primetime	إعلان أوبرا الفضاء، مع أوبتيموس برايمتايم
+Sound	الصوت
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	مؤثر صوتي على إشارة، وانحناء يُتلفها بجمال، وأين يعيش الباتش.
+The robot DJs, with Deft Funk	الدي جي الروبوتان، مع ديفت فانك
+Reading the scopes	قراءة أدوات القياس
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	الموجة، ومقياس المتجهات، والألوان الزائفة: هل التوهج حقيقي، أم ساطع فحسب؟
+The Signal Files: is the glow on the horizon a craft?	ملفات الإشارة: هل التوهج في الأفق مركبة؟
+Out of the building	خارج المبنى
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	أين تعيش NDI وSDI وST 2110، وتشغيل NDI حيث يملكه هذا الحاسوب.
+The webcam as a controller, as a game. Five rounds, a high score.	كاميرا الويب كذراع تحكم، كلعبة. خمس جولات، وأعلى نتيجة.
+A handheld, and bugs	جهاز محمول، وحشرات
+The multiview	العرض المتعدد
+Windows, the ... menu, what each one shows, layouts, and tally.	النوافذ، وقائمة ...، وما تعرضه كل واحدة، والتخطيطات، والتالي.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	لغز على المركبة كاثود، مع الملازم هايلا والمرشّح جينكلي
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: قائمتا تشغيل: يصبح Deckboy هو SUPER DECKBOY. استحقها، يا سكابي.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: لقد تطوّر! مذبذباتي لم تنل نوبة احتفال قط.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! كل عرض يستحق واحدًا. برافو.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: تعزيز القوة! قوائم أكثر، طبقات أكثر، سوبر أكثر.
+Intro video (left on the office PC)	فيديو الافتتاح (منسي على حاسوب المكتب)
+ON THE ROAD	على الطريق
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	عرض بنيته هنا، يا سكابي، يعمل الليلة على حاسوب محمول في مكان آخر. اضغط START.
+Before it travels: check it, fix it, bundle it.	قبل السفر: افحصه، أصلحه، احزمه.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	ترى CHECK في الشريط العلوي؟ لا يظهر إلا عند وجود خطأ. اضغطه.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	يسرد كل ما قد يتعثر به العرض: ملفات مفقودة، إشارات فارغة، مخارج لا يمكن الوصول إليها.
+FIX IT	أصلحه
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	فيديو الافتتاح على حاسوب آخر. حدّده واحذفه، أو اعمل له RELINK إن كان الملف لديك.
+Fix it at home, where it is easy. Not at the venue, where it is not.	أصلحه في البيت حيث الأمر سهل. لا في المكان حيث ليس كذلك.
+BUNDLE IT	احزمه
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	اضغط «حزمة» واختر المكان: ذاكرة USB، مجلد مشترك. العرض وكل وسائطه، معًا.
+The copy finds its media beside it, wherever the folder goes.	النسخة تجد وسائطها بجانبها، أينما ذهب المجلد.
+SAFE TRAVELS	رحلة آمنة
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	فُحص، أُصلح، حُزم. على الجهاز الآخر افتح عرض الحزمة: كل شيء في مكانه.
+A show file is only text, so it travels light. The media is the heavy part.	ملف العرض مجرد نص، فيسافر خفيفًا. الثقيل هو الوسائط.
+Student work no. 4 (untitled)	عمل الطالب رقم 4 (بلا عنوان)
+THE CRIT	جلسة النقد
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	مدرسة فنون، يا سكابي. طالب واحد، صورة واحدة، وناقد رأى كل شيء. اضغط START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	المؤثرات تغيّر الصورة؛ والمذبذب يظل يغيّرها. الناقد لا يحب إلا النوع الثاني.
+A grey square on beige. I have seen this at every graduate show since 1987.	مربع رمادي على بيج. رأيته في كل معرض تخرّج منذ 1987.
+AN EFFECT	مؤثر
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	في قسم EFFECTS في المفتّش، + يضيف مؤثرًا. Edges بداية جيدة: يرسم الحدود.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	هناك العشرات. كل واحد يعمل على المعالج في أجزاء قليلة من الثانية. غالبًا.
+Take a risk! Bad art is fine. Boring art is a crime.	غامر! الفن الرديء لا بأس به. الفن الممل جريمة.
+A ~ ON ITS KNOB	~ على مقبضه
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	كل عنصر تحكم بجانبه ~ يمكنه أن يتبع مذبذبًا. اضغط واحدًا. يبدأ المقبض بالتنفس.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	مذبذب منخفض التردد: بطيء، كي تتبعه العين. ربع هرتز يعني نفَسًا من أربع ثوانٍ.
+Now it MOVES. Okay. Okay. I'm listening.	الآن يتحرك. حسنًا. حسنًا. أنا أستمع.
+A COLOUR OF ITS OWN	لون خاص به
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	المؤثرات التي ترسم لونًا، مثل خط Edges، لها رقعة لون. تفتح المنتقي: عجلة، أو أسماء مكتوبة، أو لون من الشاشة.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	لكل لون اسم في مكان ما. لوني اسمه «أخضر راسم الذبذبات». لا أحد غيري يستعمله.
+That colour is doing something. I don't know what. I love it.	ذلك اللون يفعل شيئًا. لا أعرف ماذا. أحبه.
+THE VERDICT	الحكم
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	مؤثر، و~، ولون. الناقد يبكي يا سكابي. بكاء جيد، على ما أظن.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	كدّس بضعة مؤثرات. لكلٍّ منها ~ على كل مقبض. هكذا يصبح المظهر أداءً.
+It's still a square. But it's YOUR square. Post it.	ما زال مربعًا. لكنه مربعك أنت. انشره.
+THE TELESTRATOR BOOTH	كابينة الرسم التوضيحي
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	المدرب مارف يشرح الرياضة برسم دوائر عليها. مرة رسم دائرة حول الشمس. عشر دقائق، يا سكابي.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	الليلة: أنماط اختبار، وسنث الفيديو، والرسم على الصورة. اضغط START.
+Get me a picture and a pen. BOOM.	أعطوني صورة وقلمًا. بووم.
+A TEST PATTERN	نمط اختبار
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	اضبط الشاشات قبل العرض. لا أثناءه. تعلمت هذا في بلوفديف.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	كل منصة تحتاج نمط اختبار. «نمط اختبار» يضيف Pocket Test: مُراجَع بأجهزة قياس حقيقية.
+A VIDEO SYNTH	سنث فيديو
+He says 'no camera needed' like it is a feature. It is a feature.	يقول «لا حاجة لكاميرا» وكأنها ميزة. إنها ميزة فعلًا.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	المفضّل لديّ. مصدر، ثم Video Synth: مذبذبات ومرايا وتغذية راجعة. لا حاجة لكاميرا.
+TAKE THE SYNTH	TAKE للسنث
+Select it, then TAKE. Confident operators press Enter.	حدّده، ثم TAKE. المشغّلون الواثقون يضغطون Enter.
+That's our replay. Every replay needs a pundit.	هذه إعادتنا. كل إعادة تحتاج معلّقًا.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	ها هي الإعادة. وها هو اللاعب. وبووم، إنه فيها.
+A SECOND PLAYLIST	قائمة تشغيل ثانية
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	الحبر يذهب في الأعلى، على طبقته الخاصة. اضغط + في آخر ألسنة قوائم التشغيل.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	قائمة التشغيل الثانية طبقة فوق الأولى. مثل مذبذب ثانٍ ممزوج فوقها.
+A DRAW CUE	إشارة Draw
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	في القائمة الجديدة: مصدر، ثم Draw. شفافة في كل مكان لم ترسم فيه.
+A Draw cue is transparent outside the ink, so the synth shows through.	إشارة Draw شفافة خارج الحبر، فيظهر السنث من خلالها.
+TAKE THE INK	TAKE للحبر
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	حدّد إشارة Draw واعمل لها TAKE. قائمتان، طبقتان، صورة واحدة.
+Now both are live: the synth underneath, the ink on top.	الآن كلاهما على الهواء: السنث في الأسفل، والحبر فوقه.
+CIRCLE SOMETHING	ارسم دائرة
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	اضغط DRAW في المفتّش، ثم ارسم على شاشة البرنامج. بالفأرة، أو بقلم إن كان لديك.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	ضغط القلم يجعل الخط أسمك. الفأرة تضغط بقوة واحدة دائمًا. مثلي.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	ضع دائرة حوله! لا، أكبر. بووم. هذه غيمة. حسنًا. ضع دائرة حول الغيمة.
+SAVE A STILL	احفظ لقطة ثابتة
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL يحفظ الرسم صورةً بخلفية شفافة، ويضيفها إلى قائمة التشغيل.
+For next week's show. Coach Marv will want the cloud again.	لحلقة الأسبوع القادم. المدرب مارف سيريد الغيمة مجددًا.
+THAT'S THE BOOTH	هذه كانت الكابينة
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	أنماط، سنث، طبقة، حبر، لقطة ثابتة. ناسدرافي، يا سكابي.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	جرّب Replay في قسم Draw: يعيد رسم خطوطك كما رسمتها.
+Same time next week. Bring a bigger pen. And a turducken.	الموعد نفسه الأسبوع القادم. أحضر قلمًا أكبر. وخروفًا محشيًا.
+Saucer photo (CLASSIFIED)	صورة الصحن الطائر (سرّي)
+THE SIGNAL FILES	ملفات الإشارة
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	مكتب الإشارات المجهولة. عميلان، صورة واحدة، ويجب ألا تُبث. اضغط START.
+Masks cut a picture into shapes. Tonight we cut evidence.	الأقنعة تقص الصورة إلى أشكال. الليلة نقص الأدلة.
+That's a craft, Brandt. Look at the lights. I want to believe.	إنها مركبة يا براندت. انظري إلى الأضواء. أريد أن أصدّق.
+A MASK FROM THE LIBRARY	قناع من المكتبة
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	في قسم MASK في المفتّش: mask، ثم «new heart». أي شكل يكفي. القلب أطرف.
+The library has circles, stars, hearts. Each one is points you can move.	في المكتبة دوائر ونجوم وقلوب. كل واحد منها نقاط يمكنك تحريكها.
+A heart, Hollis? The Bureau redacts with black bars.	قلب يا هوليس؟ المكتب يطمس بأشرطة سوداء.
+THE PEN	القلم
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	اجعل الأداة القلم، ثم انقر حول الصحن على الشاشة. انقر النقطة الأولى لإغلاقه.
+Click for corners, drag for curves. The way the Bezier brothers intended.	انقر للزوايا، واسحب للمنحنيات. كما أراد الإخوة بيزييه.
+Draw round it carefully. It might be watching.	ارسم حوله بحذر. ربما يراقبنا.
+INVERT	اعكس
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	العكس يُبقي الخارج ويقص الداخل. يختفي الصحن. وتبقى السماء.
+The same shape, the other way round. Very useful. Slightly spooky.	الشكل نفسه، بالعكس. مفيد جدًا. مخيف قليلًا.
+Hollis, there's a heart-shaped hole in the sky.	هوليس، هناك ثقب على شكل قلب في السماء.
+FEATHER	نعّم الحافة
+Feather softens the edge, so nobody sees the cut. Press + on feather.	التنعيم يليّن الحافة، فلا يرى أحد القطع. اضغط + عند feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	الحافة الحادة تقول «كان هنا أحد». الناعمة لا تقول شيئًا.
+They'll never know.	لن يعرفوا أبدًا.
+CASE CLOSED	أُغلقت القضية
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	شكل من المكتبة، والقلم، والعكس، والتنعيم. المكتب يشكرك. المكتب لم يكن هنا قط.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	الأقنعة تُوضع أيضًا على طبقة، أو خرج، أو ماتّه: MASK ON يختار. وكل عنصر تحكم يقبل ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	الحقيقة في الموجة يا هوليس. المرة القادمة: أدوات القياس.
+The ghost	الشبح
+THE HAUNTED LIGHTHOUSE	المنارة المسكونة
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	منارة، وشبح، وحارس بقي وحيدًا مع المصباح أطول مما يجب. اضغط START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	الإسقاط الضوئي: ثني الصورة لتطابق المبنى. تشويه، دمج، شرائح.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	تريدون الشبح على النوافذ، أليس كذلك؟ انتبهوا للمصباح. المصباح لي أنا.
+THE OUTPUT'S GEOMETRY	هندسة الخرج
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	القائمة، ثم مخارج الفيديو، ثم الهندسة. هنا يعيش شكل الخرج.
+Geometry: the projector-menu word for 'what shape is the picture'.	الهندسة: كلمة قوائم أجهزة العرض لـ«ما شكل الصورة».
+PIN A CORNER	ثبّت زاوية
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	اضغط warp edit، ثم اسحب زاوية على شاشة البرنامج. النافذة ليست مربعة. ولا الحارس.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	تثبيت الزوايا يحرك الزوايا الأربع. المنظور يُبقي الخطوط مستقيمة، كنافذة حقيقية.
+LEFT! Ye call that a corner? I've seen straighter gulls.	يسارًا! تسمي هذه زاوية؟ رأيت نوارس أكثر استقامة.
+TWO SOFT EDGES	حافتان ناعمتان
+Back in Geometry: edge blend, + on the left and + on the right.	عُد إلى الهندسة: edge blend، + على اليسار و+ على اليمين.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	جهازا عرض يتداخلان؛ كلٌّ يُخفت حافته كي لا يصبح التداخل ضعف السطوع.
+THE SCREENS WINDOW	نافذة SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	الهندسة، SLICES، فتح. نافذة Screens هي حيث تُقص الشرائح وتوضع.
+A slice is a piece of the picture, put anywhere on the output.	الشريحة جزء من الصورة، يوضع في أي مكان على الخرج.
+THREE SLICES	ثلاث شرائح
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	في نافذة Screens اضغط + SLICE ثلاث مرات، واسحب كل قصّة إلى ثلث الصورة.
+Three windows, three slices: left, middle and right of one picture.	ثلاث نوافذ، ثلاث شرائح: يسار ووسط ويمين صورة واحدة.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	ثلاث نوافذ. الوسطى للمصباح. الوسطى دائمًا للمصباح.
+THE GHOST IS PLEASED	الشبح راضٍ
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	تشويه، دمج، شرائح. الحارس سينام أخيرًا. النوارس لا.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	للشرائح تشويهها وشبكتها الخاصة في نافذة Screens. و~ على الموضع والدوران.
+Ye did alright, lad. Now get away from the lamp.	أحسنت يا فتى. والآن ابتعد عن المصباح.
+THE GAME SHOW	برنامج المسابقات
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	برنامج مسابقات يا سكابي. ثلاثة متسابقين، وجرس واحد، وإشارات تنطلق من أي مكان. اضغط START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	أرقام الإشارات، ومفاتيح الاختصار، وGO من أجهزة أخرى. مثل مُسلسِل تعزف عليه من أي مفتاح.
+Welcome to the show! Let's spin that wheel!	أهلًا بكم في البرنامج! لندوّر العجلة!
+A CUE NUMBER	رقم الإشارة
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	المتسابق 3 محدَّد. في بيانات المفتّش الوصفية، أعطه رقم إشارة: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	المسرح يرقّم إشاراته. Q3، Q3.5، Q12A. Deckboy يقرأها كلها.
+I'd like to buy a number, please.	أريد أن أشتري رقمًا، من فضلك.
+GO TO IT	اذهب إليه
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G، اكتب الرقم، Enter. يُبث أينما كانت القائمة واقفة.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. أسرع طريق في قائمة طويلة. أسرع من التمرير. وأسرع مني بكثير.
+And the number is... three!	والرقم هو... ثلاثة! هل هذه إجابتك النهائية؟
+A BUZZER	جرس
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	المتسابق 1 محدَّد. في TRIGGERS اضغط key، ثم F5. هذا المفتاح يطلق هذه الإشارة الآن.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	من F1 إلى F10، وF12، أو لوحة الأرقام. كل واحد منها جرس.
+Every contestant gets a buzzer.	لكل متسابق جرس.
+BUZZ IN	اضغط الجرس!
+Press the key. The cue fires, wherever the list is standing.	اضغط المفتاح. تنطلق الإشارة أينما كانت القائمة.
+No mouse, no list, no looking. Just the key.	لا فأرة، لا قائمة، لا نظر. المفتاح فقط.
+Buzz! We have a winner!	طنين! لدينا فائز!
+FROM ANYWHERE	من أي مكان
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion، نغمة MIDI، رسالة OSC: القائمة، ثم الشبكة، يخبرك أين يتصل كل منها.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Stream Deck في الغرفة المجاورة يمكنه ضغط GO. وكذلك لوحة مفاتيح سنث. أفضّل السنث.
+And for our viewers at home: you can play along too.	ولمشاهدينا في البيوت: يمكنكم اللعب معنا.
+THAT'S OUR SHOW	هذا كان برنامجنا
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	أرقام، وGOTO، وجرس، وGO من أي مكان. أنت الآن برنامج مسابقات يا سكابي.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	يمكن للإشارة أن يكون لها مفتاح ونغمة MIDI وعنوان OSC معًا. حزام وحمّالات وحزام ثانٍ.
+Goodnight, everybody! Keep spinning!	تصبحون على خير! استمروا في التدوير!
+Weather map	خريطة الطقس
+THE KAIJU WEATHER	طقس الكايجو
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	نشرة الطقس على القناة 6 يا سكابي. خريطة، ومقدّمة، وسحلية ضخمة جدًا. اضغط START.
+Words on screen: Lower Thirds, text, and backdrops.	كلمات على الشاشة: أشرطة سفلية، ونص، وخلفيات.
+I'm June O'Neil, and nothing about this forecast is normal.	أنا جون أونيل، ولا شيء في هذه النشرة طبيعي.
+A LAYER FOR WORDS	طبقة للكلمات
+Words go on their own layer: press the + at the end of the playlist tabs.	الكلمات على طبقتها الخاصة: اضغط + في آخر ألسنة قوائم التشغيل.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	القائمة الثانية طبقة فوق الخريطة. السحلية تبقى في الأسفل. غالبًا.
+Words on top. Always on top.	الكلمات في الأعلى. دائمًا في الأعلى.
+A LOWER THIRD	شريط سفلي
+In the new playlist: SOURCE, then Lower Third.	في القائمة الجديدة: مصدر، ثم Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	اسم ولقب، أسفل الشاشة، بعيدًا عن طريق السحلية.
+HER NAME	اسمها
+In the inspector, title: type the presenter's name. The second line is her job.	في المفتّش، title: اكتب اسم المقدّمة. السطر الثاني وظيفتها.
+Spelling counts. The audience reads it at the speed of light.	الإملاء مهم. الجمهور يقرأ بسرعة الضوء.
+Spell it right. Last week it said 'Jane O'Meal'.	اكتبه صحيحًا. الأسبوع الماضي كُتب «جون أو-نيل-نيل».
+ON AIR	على الهواء
+TAKE the Lower Third. Her name slides in over the map.	اعمل TAKE للشريط السفلي. ينزلق اسمها فوق الخريطة.
+Two layers live: the weather, and the words on top of it.	طبقتان على الهواء: الطقس، والكلمات فوقه.
+Thank you. Now, about that lizard...	شكرًا. والآن، بخصوص تلك السحلية...
+BREAKING NEWS	خبر عاجل
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	مصدر، ثم Text: بطاقة عنوان. ثم رقعة خلفيتها: أخضر كروما، كي يقصه مازج الصورة.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	الخلفية تملأ ما وراء الكلمات. أخضر أو أزرق كروما، والمازج يتولى الباقي.
+Breaking news: it's standing on the five-day forecast.	عاجل: إنها تقف على توقعات الأيام الخمسة.
+BREAKING: KAIJU	عاجل: كايجو
+BACK TO YOU	نعود إلى الاستوديو
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	شريط سفلي، واسم، وبطاقة عنوان، وخلفية. السحلية غادرت الاستوديو يا سكابي.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	الأشرطة السفلية تستطيع أن تنتظر وتنزلق وتخرج وحدها. قسمها فيه كل الإعدادات.
+That's the weather. Back to you, guys. Run.	كانت هذه نشرة الطقس. نعود إليكم في الاستوديو. اهربوا.
+A GRAND DAY OUT	يوم عظيم
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	صاروخ بُني في قبو يا سكابي، ومخترع يريد الجبن. اضغط START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	مؤقتات المسرح: عدّ تنازلي، وساعات، وعرض للمقدّم لمن على المسرح.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	جبن يا غروميت! القمر مصنوع منه. سنحتاج عدًّا تنازليًا.
+A COUNTDOWN	عدّ تنازلي
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	مصدر، ثم Stage Timer. ساعة تعدّ إلى الوراء بأرقام كبيرة ودودة.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	ألوانها تتغير كلما نفد الوقت: أبيض، كهرماني، أحمر. مثل مقياس VU للوقت.
+*raises an eyebrow*	*يرفع حاجبًا*
+LIFT OFF	انطلاق
+Select the timer and TAKE it. The countdown starts.	حدّد المؤقت واعمل له TAKE. يبدأ العدّ.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	بعد الصفر يستمر، يعدّ الوقت الإضافي. صادق جدًا. وقح قليلًا.
+Ten... nine... ooh, I do love a countdown.	عشرة... تسعة... آه، كم أحب العدّ التنازلي.
+HOLD!	توقّف!
+Something's loose! Space holds the countdown. The clock shows it is held.	شيء ما مفكوك! المسافة توقف العدّ مؤقتًا. الساعة تُظهر أنه موقوف.
+A hold is not a stop. Space again, and it carries on from where it was.	الإيقاف المؤقت ليس توقفًا. المسافة مرة أخرى، ويكمل من حيث كان.
+*holds up a spanner*	*يرفع مفتاح ربط*
+THE PILOT'S VIEW	شاشة الطيار
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	القائمة، مخارج الفيديو: اجعل نوع أحد المخارج PRESENTER. من على المسرح يرى المؤقت والإشارة التالية وملاحظاته.
+A presenter view is an output like any other. Point it at the confidence monitor.	عرض المقدّم خرج كأي خرج آخر. وجّهه إلى شاشة الثقة أمام المسرح.
+So the pilot can see the time. The pilot is Grommet.	كي يرى الطيار الوقت. الطيار هو غروميت.
+TO THE MOON	إلى القمر
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	عدّ تنازلي، وإيقاف مؤقت، وشاشة للطيار. ناسدرافي يا سكابي. أحضر البسكويت.
+Timers can also count up, or show the time of day. Their section has the lot.	المؤقتات تعدّ تصاعديًا أيضًا، أو تعرض الوقت. قسمها فيه كل شيء.
+A grand day out, Grommet! Pass the crackers.	يا له من يوم يا غروميت! ناولني البسكويت.
+The trunk (closed)	الصندوق (مغلق)
+The trunk (open)	الصندوق (مفتوح)
+THE MAGIC SHOW	عرض السحر
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	عرض سحر يا سكابي. صندوق، وأداة، ونبضة واحدة يتغير فيها كل شيء معًا. اضغط START.
+Two playlists are two layers. TAKE ALL changes both together.	قائمتا تشغيل هما طبقتان. TAKE ALL يغيّرهما معًا.
+Every trick needs two things happening at once. And a rubber chicken.	كل خدعة تحتاج شيئين يحدثان معًا. ودجاجة مطاطية.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	الأداة على طبقتها الخاصة. اضغط + في آخر ألسنة قوائم التشغيل.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	القائمة 2 تجلس فوق القائمة 1. مثل شفافية على جهاز العرض العلوي.
+Nothing up my sleeve. Everything in my trunk.	لا شيء في كمّي. كل شيء في صندوقي.
+THE PROP	الأداة
+In the new playlist, add anything: PATTERN will do. That is the prop.	في القائمة الجديدة أضف أي شيء: «نمط اختبار» يكفي. تلك هي الأداة.
+Whatever it is, it will appear the instant the trunk opens.	أيًّا كانت، ستظهر في اللحظة التي يُفتح فيها الصندوق.
+Is it a rubber chicken? It's always a rubber chicken.	هل هي دجاجة مطاطية؟ دائمًا دجاجة مطاطية.
+The prop (rubber chicken)	الأداة (دجاجة مطاطية)
+TA-DA	تا-دا
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	حدّد «الصندوق (مفتوح)» في القائمة 1 والأداة في القائمة 2. ثم TAKE ALL: كلاهما على نبضة واحدة.
+One press, every playlist's selected cue. The audience never sees the seam.	ضغطة واحدة، والإشارة المحددة في كل قائمة. الجمهور لا يرى الدرزة أبدًا.
+Ta-daaa! ...Hold for applause. Hold. Hold.	تا-دااا! ...انتظروا التصفيق. انتظروا. انتظروا.
+THE PRESTIGE	الخدعة الكبرى
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	طبقتان، نبضة واحدة. لكل قائمة شفافيتها، ويمكن أن تجلس على أي خرج. ناسدرافي يا سكابي.
+A magician never reveals. A playlist never minds being revealed.	الساحر لا يكشف سرّه أبدًا. قائمة التشغيل لا تمانع أن يُكشف سرّها.
+Thank you! I'm here all week! The chicken is here forever.	شكرًا! أنا هنا طوال الأسبوع! والدجاجة هنا إلى الأبد.
+The kitchen (on fire)	المطبخ (يحترق)
+A lovely souffle	سوفليه جميل
+THE COOKING SHOW	برنامج الطبخ
+A cooking show, skapi. Live. Everything is on fire. Press START.	برنامج طبخ يا سكابي. مباشر. كل شيء يحترق. اضغط START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK يخفي الصورة ويُبقي العرض يعمل. PANIC يوقف كل شيء. اعرف أيهما تحتاج.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	بورك بورك! هردي-فلردي، المطبخ يحترق-فلردي!
+The audience must not see this. Press BLACK, or B.	يجب ألا يرى الجمهور هذا. اضغط BLACK، أو B.
+The picture goes. The cue keeps playing underneath, ready to come back.	تختفي الصورة. الإشارة تستمر تحتها، جاهزة للعودة.
+Bork? Bork. Oh, de picture is gun.	بورك؟ بورك. أوه، الصورة راحت.
+AND BACK	وعودة
+The fire's out. Press B again: the picture comes back, still running.	انطفأت النار. اضغط B مجددًا: تعود الصورة، وما زالت تعمل.
+Nothing was lost. A mute on a mixer, for pictures.	لم يضع شيء. كتم صوت المازج، لكن للصور.
+Ta-da! Still cookin'!	تا-دا! ما زلنا نطبخ!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	أسوأ: القائمة، النظام، بطاقة SAFETY: PANIC. يتوقف كل شيء، كما يقول إعداد الذعر.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC هو الزر الأحمر الكبير. استعمله حين لا يكفي BLACK. ثم تنفّس.
+Bork bork BORK!	بورك بورك بورك!
+GET IT BACK	استعده
+Close MENU, select the souffle, and TAKE it. The show is back on.	أغلق القائمة، حدّد السوفليه، واعمل له TAKE. عاد العرض.
+After a panic, the show is still there. Pick up where you meant to be.	بعد الذعر، العرض ما زال هناك. أكمل من حيث كنت تريد أن تكون.
+Voila! De souffle, he is risen!	فوالا! السوفليه، لقد انتفخ!
+BON APPETIT	بالهناء والشفاء
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK للإخفاء، PANIC للإيقاف، TAKE للعودة. ستنجو من أي مطبخ يا سكابي.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	إعداد الذعر يختار ما يفعله PANIC: تلاشٍ، أو قطع، أو المخارج فقط.
+Bork bork bork! Goodnight!	بورك بورك بورك! تصبحون على خير!
+Look one	المظهر الأول
+Look two	المظهر الثاني
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	الإعدادات المسبقة يا سكابي. مظهر كامل، محفوظ، يعود بزر واحد. اضغط START.
+Like the patch memory on a synth: store, then recall.	مثل ذاكرة الباتشات في السنث: احفظ، ثم استدعِ.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	اضغط DASH: أزرار خاصة بك، لأي شيء.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D يعمل أيضًا. سريع جدًا. محترف جدًا.
+A PRESET BUTTON	زر إعداد مسبق
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	اضغط +، ثم «preset - a new preset from what is on now». الزر يتذكر هذا المظهر.
+Store. Like saving the patch before the drummer leans on the synth.	احفظ. مثل حفظ الباتش قبل أن يتكئ عازف الطبول على السنث.
+CHANGE EVERYTHING	غيّر كل شيء
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	أغلق DASH (Esc)، ثم حدّد «المظهر الثاني» واعمل له TAKE. مظهر مختلف.
+Change it all. Don't worry. It remembers.	غيّر كل شيء. لا تقلق. إنه يتذكر.
+ONE PRESS	ضغطة واحدة
+Open the DASH and press your preset button. The first look comes back.	افتح DASH واضغط زر الإعداد المسبق. يعود المظهر الأول.
+Recall. The patch memory, returning. Beautiful.	استدعاء. ذاكرة الباتش تعود. جميل.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	مظهر يُحفظ ويُستدعى. الإعداد المسبق يحفظ الإشارات والمواضع والمؤثرات والمستويات والتوجيه؛ وقائمة زره تختار أيها.
+And a DASH button can run any command at all. Any. Even the exciting ones.	وزر DASH يستطيع تشغيل أي أمر. أي أمر. حتى المثيرة منها.
+Opening titles	العناوين الافتتاحية
+The planet	الكوكب
+The battle	المعركة
+THE TRAILER	الإعلان
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	إعلان أوبرا فضائية يا سكابي. راوٍ بصوت عميق جدًا، وله آراء في الانتقالات. اضغط START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	الانتقال هو كيف تصبح إشارة ما التي تليها. هناك أكثر بكثير من التلاشي.
+In a galaxy of content... one operator... must choose a transition.	في مجرّة من المحتوى... على مشغّل واحد... أن يختار انتقالًا.
+A STYLE	نمط
+'The planet' is selected. In the inspector, its transition style: choose iris.	«الكوكب» محدَّد. في المفتّش، نمط انتقاله: اختر iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	دفع، ومسح، وقزحية، وغطس إلى الأبيض. حتى بوابة. كتبت نصفها بنفسي. يوم ثلاثاء.
+The planet deserves... a dramatic entrance.	الكوكب يستحق... دخولًا دراميًا.
+A TIME	زمن
+Give it a time: + on transition until it says a second or more.	أعطه زمنًا: + عند الانتقال حتى يُظهر ثانية أو أكثر.
+No time, no transition. A style needs a duration to do anything at all.	لا زمن، لا انتقال. النمط يحتاج مدة ليفعل أي شيء.
+ROLL IT	ابدأ التصوير
+TAKE the planet. Watch it arrive.	اعمل TAKE للكوكب. شاهده يصل.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	الانتقال ملك للإشارة القادمة. كل إشارة تختار دخولها.
+Autobots... roll the transition.	أوتوبوتس... شغّلوا الانتقال.
+THE BATTLE	المعركة
+Now 'The battle': choose shatter, give it a time, and TAKE it.	والآن «المعركة»: اختر shatter، وأعطه زمنًا، واعمل TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	التحطّم يُسقط الصورة القديمة كلوح زجاج. رجاءً لا تفعل هذا في جنازة.
+Transform... and shatter out!	تحوّل... وتحطّم!
+IN CINEMAS NOW	في دور العرض الآن
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	نمط، وزمن، ودخولان دراميان جدًا. ناسدرافي يا سكابي.
+A playlist has a default style too, for every cue that does not choose its own.	لقائمة التشغيل نمط افتراضي أيضًا، لكل إشارة لا تختار نمطها.
+Coming soon... to a desk near you.	قريبًا... على منصة قريبة منك.
+The beat	الإيقاع
+THE ROBOT DJS	الدي جي الروبوتان
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	دي جي روبوتان يا سكابي. لا يتكلمان. خوذتاهما تتكلمان. اضغط START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	لكل إشارة سلسلة مؤثرات صوتية خاصة بها، وبعضها يكسر الصوت عمدًا.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> مرحبًا. جئنا لإصلاح مزيجك.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	الإيقاع محدَّد. في قسم AUDIO EFFECTS، + يضيف مؤثرًا. جرّب delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	تأخير، صدى، مرشحات، ضاغط. الكمية تعني دائمًا «أقل من هذا».
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> مرة أخرى. مع صدى. صدى. صدى.
+A BEND	انحناء
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	أضف ثانيًا: انحناء، مثل crush. يُتلف الصوت كما يفعل ملف معطوب.
+The bends are my favourite. Like a tape left in the sun. On purpose.	الانحناءات المفضلة لديّ. مثل شريط كاسيت نُسي في الشمس. عمدًا.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> أقوى. أفضل. أقرمش. أعلى.
+THE PATCH	الباتش
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	القائمة، ثم الصوت: أين يذهب صوت كل قائمة، وباتش المخارج المسمّاة.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	سماعات، وشاشات مراقبة، وسماعة أذن لعازف الطبول. الباتش يرسل لكلٍّ نصيبه.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> حول المزيج. حول المزيج. حول المزيج.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	مؤثر، وانحناء، وباتش. الروبوتان موافقان يا سكابي. أظن. وجهاهما خوذتان.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	كل مؤثر صوتي يستطيع اتباع ~ أيضًا، حتى Motion. لوّح للتأخير. إنه رائع.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> شكرًا. تصبحون على خير. نحن روبوتات.
+The glow on the horizon (evidence #2)	التوهج في الأفق (الدليل رقم 2)
+EVIDENCE #2	الدليل رقم 2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	المكتب مجددًا يا سكابي. توهج في الأفق، وعميلان يختلفان بشأنه. اضغط START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	أدوات القياس تقيس الصورة: السطوع، واللون، والمستويات. أرقام لا آراء.
+It's them, Brandt. It's a craft. Look how it glows.	إنهم هم يا براندت. إنها مركبة. انظري كيف تتوهج.
+THE REAL SIGNAL	الإشارة الحقيقية
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	أدوات القياس تقرأ ما يخرج فعلًا فقط، لا المعاينة أبدًا. شغّل الخرج: القائمة، مخارج الفيديو، «الخرج متوقف».
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	قياس معاينة مصغّرة كقياس نسخة مصوّرة. نحن نقيس الأصل.
+Chain of evidence, Hollis. The real signal or nothing.	سلسلة الأدلة يا هوليس. الإشارة الحقيقية أو لا شيء.
+THE SCOPES	أدوات القياس
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	أغلق القائمة. فوق الشاشة زر PROGRAM: اضغطه حتى يقول SCOPES أو BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH يعرض الصورة وأدوات قياسها جنبًا إلى جنب. متحضّر جدًا.
+Let the scopes decide, Hollis.	لندع أدوات القياس تقرر يا هوليس.
+THE WAVEFORM	الموجة
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	انقر الموجة لتكبيرها. الساطع في الأعلى، والمعتم في الأسفل، من اليسار إلى اليمين كما في الصورة.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	التوهج هو تلك القمة قرب الأعلى. ساطع جدًا. الساطع ليس فضائيًا بالضرورة.
+Look at the peak. Nothing a streetlight couldn't do.	انظري إلى القمة. لا شيء لا يقدر عليه عمود إنارة.
+THE VECTORSCOPE	مقياس المتجهات
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	انقر مرة أخرى للعودة، ثم انقر مقياس المتجهات: الألوان حول دائرة. المشبَّع يركض نحو الحافة.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	أرجواني، بعيد عند الحافة. لون قوي. القوي ليس ممنوعًا. بعد.
+It's off the chart, Brandt! Literally off the chart!	إنه خارج الرسم البياني يا براندت! حرفيًا!
+FALSE COLOUR	الألوان الزائفة
+And false colour: red is clipped, yellow nearly. Is the glow red?	والألوان الزائفة: الأحمر مقصوص، والأصفر تقريبًا. هل التوهج أحمر؟
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	المقصوص يعني أقصى سطوع يحمله الإشارة، وما بعده ضاع. التفاصيل ذهبت.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	أحمر. مقصوص. ليس فضائيًا يا هوليس. ساطع جدًا فحسب. أُغلقت القضية.
+THE TRUTH	الحقيقة
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	الموجة، ومقياس المتجهات، والألوان الزائفة. أدوات القياس حسمت الأمر يا سكابي. العميلان لم يحسماه.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE يقرأ أي خرج، والمصفوفة قد تكون 709 أو 2020. للفضوليين.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	أسطع من عمود إنارة يا براندت. أسطع من أي شيء. ...أريد أن أصدّق.
+OUT OF THE BUILDING	خارج المبنى
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	صور تغادر عبر كابل أو شبكة يا سكابي، لا مجرد نافذة على شاشة. اضغط START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI عبر الشبكة، وSDI من بطاقة DeckLink، وST 2110 لمراكز البث.
+THE DEVICES PAGE	صفحة الأجهزة
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	القائمة، مخارج الفيديو، ثم الأجهزة: كل طريقة يمكن أن يغادر بها الخرج هذا الحاسوب.
+Each one says whether this machine can do it, and what it needs if not.	كل واحدة تقول إن كان هذا الجهاز يستطيعها، وما يحتاجه إن لم يستطع.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	إن كان في هذا الحاسوب NDI فشغّل NDI SENDING: الصورة على الشبكة. وإلا فـ SHOW ME ينتقل إلى ما بعدها.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI يجد نفسه على الشبكة. بلا كابلات، فقط مُبدِّل جيد وصبر.
+OUT THERE	هناك في الخارج
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	صفحة الخرج نفسها فيها الباقي: SDI من بطاقة DeckLink، وST 2110 مع NMOS، وSpout وSyphon.
+Every one is just an output. The show does not know or care how it leaves.	كل واحد منها مجرد خرج. العرض لا يعرف ولا يهتم كيف يغادر.
+Nebula ahead	سديم أمامنا
+Engine room	غرفة المحركات
+Deck 3: something moving	السطح 3: شيء يتحرك
+THE BRIDGE	الجسر
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	جسر المركبة الفضائية كاثود يا سكابي. أربع تغذيات، وشاشة رئيسية، ولغز واحد. اضغط START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	العرض المتعدد يُظهر كل قوائم التشغيل معًا. مثل جدار من راسمات الذبذبات، لكن في الفضاء.
+Frequencies open, Captain. All of them. That's the problem.	الترددات مفتوحة يا كابتن. كلها. وهذه هي المشكلة.
+MULTI, above the monitor: every playlist in its own window.	MULTI فوق الشاشة: كل قائمة في نافذتها.
+One window per playlist, the programme first.	نافذة لكل قائمة، والبرنامج أولًا.
+Jinkys! Four feeds. And one of them has a monster in it.	جينكيز! أربع تغذيات. وفي إحداها وحش.
+WHAT'S NEXT	ما التالي
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	أضف نافذة (+)، ثم قائمتها ...: اجعلها تعرض NEXT. ما سيُبث حين تضغط TAKE.
+Every window has a ... button. It chooses what that window shows.	لكل نافذة زر .... يختار ما تعرضه تلك النافذة.
+I need to see who's calling before they reach the main viewer.	أحتاج أن أرى من يتصل قبل أن يصل إلى الشاشة الرئيسية.
+A CLOCK	ساعة
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	ونافذة أخرى تعرض الساعة. المشغّلون الذين يراقبون الساعة لا يتأخرون أبدًا. غالبًا.
+Time of day, big. Stardates are just very long timecode.	الوقت، بحجم كبير. التاريخ النجمي مجرد رمز زمني طويل جدًا.
+The monster only shows up at midnight. We're going to need a clock.	الوحش لا يظهر إلا عند منتصف الليل. سنحتاج ساعة.
+ONE BIG ONE	واحدة كبيرة
+Any window's ... menu, then a layout: one big, the rest small.	قائمة ... لأي نافذة، ثم تخطيط: واحدة كبيرة والباقي صغير.
+The big window is window one. Usually the programme. Usually.	النافذة الكبيرة هي النافذة الأولى. عادةً البرنامج. عادةً.
+Main viewer big. The captain likes it big.	الشاشة الرئيسية كبيرة. الكابتن يحبها كبيرة.
+ON SCREEN	على الشاشة
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	حدّد «السطح 3» في القائمة 3 واعمل TAKE. راقب نافذته.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	الإطار الأحمر هو TALLY: النافذة التي على الهواء. «على الشاشة»، كما يقولون في المركبات.
+There! Feed three! Put it on screen!	هناك! التغذية الثالثة! على الشاشة!
+THAT'S A WRAP	انتهى التصوير
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	نوافذ، وقائمة ...، وNEXT، وساعة، وتخطيط، وTally. حُلّ اللغز يا سكابي.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	يمكن للنافذة أيضًا أن تعرض خرجًا بتشويهه وشرائحه. مفيد حين يكون منارة.
+And the monster was... the ship's cook, all along. Jinkys.	والوحش كان... طبّاخ السفينة، منذ البداية. جينكيز.
+there is no such lesson	لا يوجد درس كهذا
+finish or leave the lesson you are in first	أنهِ الدرس الحالي أو اخرج منه أولًا
+leave Bug Swat first	اخرج من Bug Swat أولًا
+Psst. It's me, the desk. I'll be watching. Supportively.	بسس. هذه أنا، المنصة. سأراقب. بكل دعم.
+Hi! I'm the one doing all of this, by the way.	مرحبًا! بالمناسبة، أنا من يفعل كل هذا.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D يفتح DASH. أقول هذا فقط.
+Nearly there. I can feel it in my pixels.	اقتربنا. أشعر بهذا في بكسلاتي.
+You're good at this. I can tell. I'm the one doing it.	أنت بارع في هذا. أستطيع أن أرى. فأنا من يفعله.
+Every click, I heard. Every single one.	كل نقرة سمعتها. كل واحدة.
+The glowing one. I can see it from here. It's glowing for you.	المتوهج. أراه من هنا. إنه يتوهج من أجلك.
+lesson paused - MENU > LESSONS picks up where you left off	الدرس متوقف مؤقتًا - القائمة > LESSONS يكمل من حيث توقفت
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  الإشارة: مِمّ تُصنع الصورة، وكيف تثنيها. اختر درسًا.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  إدارة العرض يا سكابي. أيدٍ سريعة، ووجه هادئ. اختر درسًا.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	الدروس  -  الجزء الثاني  -  من تتبع؟
+FOLLOW PROF. VIDEO	اتبع البروفيسور فيديو
+FOLLOW DR. PIXEL	اتبع الدكتورة بكسل
+the signal	الإشارة
+running the show	إدارة العرض
+PICK UP	تابِع
+CLOSE (Esc)	إغلاق (Esc)
+PART ONE: THE BASICS	الجزء الأول: الأساسيات
+finish or leave LEARN THE BASICS first	أنهِ LEARN THE BASICS أو اخرج منه أولًا
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc يخرج، ويعود عرضك كما كان
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: عاد عرضك. عناصر تحكم Motion في الإعدادات > الصوت
+TURN MOTION ON	شغّل MOTION
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	الحشرات تزحف نحو قائمة الإشارات! اسحقها بالتلويح لكاميرتك. أولًا Motion: في MOTION CONTROL اجعله ON واختر ما يقرؤه (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	هذه NullPointer. جوفاء، لا تشير إلى شيء. الإصبع يمر من خلالها. استعمل اليد كلها يا سكابي.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	لوّح كأنك توقف سيارة أجرة! سيارة أجرة صغيرة ومهذبة. لا الأزرار. سيارة الأجرة.
+DRAW TWO ZONES	ارسم منطقتين
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: توأمان، كلٌّ منهما واثق أنه وصل أولًا. قراءة واحدة لا تميّز بين يديك، فاسحب منطقتين ZONES على صورة Motion، واحدة في كل جانب.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	اضربهما معًا. اضرب واحدًا فيتبادلان. مثل أبناء عمي في عرس.
+One hand each side. Together! Together!	يد في كل جانب. معًا! معًا!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. الحشرة ليست الوجه، بل القطعة الإضافية الصغيرة، والهزّة الصغيرة تحتاج قراءة أدق. اخفض SENSITIVITY إلى 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	رقم أصغر، قراءة أدق. نعم، أظنها معكوسة أنا أيضًا.
+Not the face. The little one on the end. Wiggle a finger.	ليس الوجه. الصغير عند الطرف. حرّك إصبعًا.
+FALL 1.5 S OR MORE	FALL 1.5 ث أو أكثر
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. لا يفلت إلا ما دامت القراءة مرتفعة. اجعل FALL أطول، 1.5 ثانية أو أكثر، كي تتصل مسحاتك في واحدة.
+Slow and steady, skapi. Like paying back a loan.	ببطء وثبات يا سكابي. مثل سداد قرض.
+Sweep, and sweep again. Let the fall carry you between.	امسح، ثم امسح مجددًا. دع الهبوط يحملك بينهما.
+MOTION X ON A TONE	MOTION X على نغمة
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	الهايزنبَغ! يخفت كلما تحركت. ضع حدّة نغمة إشارة على Motion X وتتبّعه بأذنك: التكتكة تتسارع كلما اقتربت.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME يصنع النغمة لك. الحادّ يمين. الغليظ يسار. قف ساكنًا فيعود.
+Follow it. Listen. Faster ticking, closer bug.	تتبّعه. استمع. تكتكة أسرع، حشرة أقرب.
+Waving paw	مخلب يلوّح
+Heisenbug finder	صائد الهايزنبَغ
+FIXED! Lovely signal flow.	أُصلح! يا له من مسار إشارة جميل.
+Closed as fixed. No regressions. Probably.	أُغلق كمُصلَح. بلا تراجعات. على الأرجح.
+Squashed! Ship it.	سُحقت! انشرها.
+One reached the cue list. It has filed a bug report about you.	واحدة وصلت إلى قائمة الإشارات. لقد قدّمت بلاغ خلل عنك.
+Skapi. It is a handheld. You do not press it. You wave at it.	سكابي. هذا جهاز محمول. لا تضغطه. لوّح له.
+The buttons are for menus. The bugs are for flailing.	الأزرار للقوائم. الحشرات للتلويح بالذراعين.
+The D-pad is decorative. Like my diploma.	لوحة الاتجاهات للزينة. مثل شهادتي.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	في 1989 كنا نضغط الأزرار أيضًا. ثم اكتشفنا التلويح. ولم ننظر إلى الوراء قط.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	الضغط بقوة أكبر لا يفيد. الحشرات لا تشعر بالأزرار. بالأذرع فقط.
+It's called a handheld because your hands are held... up. In the air. Waving.	يسمونه محمولًا لأن يديك تُحملان... إلى الأعلى. في الهواء. تلوّحان.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	الفأرة؟ تسحق الحشرات بفأرة؟ في بلغاريا كانت الفأرة ستقف في صف الحشرات.
+Lovely clicking. Very crisp. The camera saw none of it.	نقر جميل. هشّ جدًا. الكاميرا لم ترَ منه شيئًا.
+DONE FOR YOU - PRESS START	أنجزناه لك - اضغط START
+DONE! PRESS START	تم! اضغط START
+SELECT OPENS MOTION CONTROL	SELECT يفتح MOTION CONTROL
+ALL BUGS FIXED	أُصلحت كل الحشرات
+GAME OVER	انتهت اللعبة
+NEW HIGH SCORE!	أعلى نتيجة جديدة!
+START PLAYS AGAIN	START للعب مجددًا
+Nazdrave, skapi. Now go and fix real bugs.	ناسدرافي يا سكابي. والآن اذهب وأصلح حشرات حقيقية.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	كل واحد من هذه عنصر تحكم Motion حقيقي. ضعه على أي مقبض ~ تريده.
+START: AGAIN	START: مجددًا
+START: PLAY	START: العب
+# --- end of tutorials ---
+Splash	شاشة البداية
+Beast mode	وضع الوحش
+MIDI MAP	خريطة MIDI
++ ADD	+ إضافة
+LEARN	تعلّم
+LISTENING...	أستمع...
+BACK	رجوع
+READY-MADE...	جاهزة...
+Message	الرسالة
+Runs	يشغّل
+On	على
+Now	الآن
+Map	الخريطة
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	دخل MIDI متوقف: شغّله من MIDI CONTROL. صفوف OSC تجيب على أي حال.
+LEARN: move a knob or press a key on the controller...	تعلّم: أدر مقبضًا أو اضغط مفتاحًا على وحدة التحكم...
+1 · WHAT COMES IN	1 · ما الذي يأتي
+learn it, or say how to read it	تعلّمه، أو قل كيف يُقرأ
+2 · WHAT IT RUNS	2 · ما الذي يشغّله
+any command, {value} is the number	أي أمر، و{value} هو الرقم
+3 · WHAT IT RUNS ON	3 · على ماذا يعمل
+aimed here; the desk never moves	يُوجَّه هنا؛ الطاولة لا تتحرك أبدًا
+Port	المنفذ
+Read as	يُقرأ كـ
+Hold for	اضغط مطوّلًا
+Command	الأمر
+From	من
+Centre	الوسط
+To	إلى
+Pickup	الالتقاط
+On release	عند الإفلات
+Runs on	يعمل على
+Playlist	قائمة التشغيل
+Saved with	محفوظ مع
+Row	الصف
+DELETE	حذف
+THE SHOW	العرض
+THIS COMPUTER	هذا الحاسوب
+any port	أي منفذ
+the desk	الطاولة
+the selected cue	الـ cue المختار
+what is on air	ما هو على الهواء
+one named cue	cue باسمه
+the focused one	المحددة
+Test: move it on the controller	اختبار: حرّكه على وحدة التحكم
+knob 0-127	مقبض 0-127
+endless encoder	مُرمِّز بلا نهاية
+14-bit	14 بت
+press	ضغط
+hold	تثبيت
+press + release	ضغط + إفلات
+play	عزف
+on press	عند الضغط
+plays	يعزف
+LED MAP	خريطة LED
+LAYOUT	التخطيط
+FEEDS: pick a window, then one of these	المصادر: اختر نافذة ثم واحدًا منها
++ CHOOSE A FEED	+ اختر مصدرًا
+audio meter	مقياس الصوت
+safe areas	المناطق الآمنة
++ ONE AFTER THIS	+ واحدة بعد هذه
+- REMOVE THIS ONE	- أزل هذه
+ONE PER PLAYLIST	واحدة لكل قائمة
+on the desk	على الطاولة
+tile width	عرض البلاطة
+tile height	ارتفاع البلاطة
+LISTENS: OFF	يستمع: لا
+LISTENS: the figure follows the sound	يستمع: الشكل يتبع الصوت
+import an SVG...	استيراد SVG...
+the selected cue in playlist {n}	الـ cue المختار في القائمة {n}
+the selected cue in the focused playlist	الـ cue المختار في القائمة النشطة
+on air in playlist {n}	على الهواء في القائمة {n}
+on air in the focused playlist	على الهواء في القائمة النشطة
+cue "{n}"	cue «{n}»
+hold {n} s	اضغط {n} ث
+any	أي
+built in	مدمج
+show	العرض
+motion	حركة
+METADATA	بيانات وصفية
+generated	مولّد
+Fit	ملاءمة
+inf	بلا حد
+NO	لا
+YES	نعم
+UP	أعلى
+DOWN	أسفل
+Left	يسار
+Right	يمين
+Top	أعلى
+Bottom	أسفل
+add	إضافة
+all	الكل
+none	لا شيء
+Cut	قطع
+Fade	تلاشي
+Load	تحميل
+Pause	إيقاف مؤقت
+Resume	متابعة
+Start	بدء
+Skip	تخطّي
+Arm	تجهيز
+Disarm	إلغاء التجهيز
+ONE	واحد
+ONCE	مرة واحدة
+Size	الحجم
+Width	العرض
+amount	المقدار
+brightness	السطوع
+contrast	التباين
+saturation	التشبع
+hue	درجة اللون
+level	المستوى
+speed	السرعة
+style	النمط
+title	العنوان
+subtitle	عنوان فرعي
+notes	ملاحظات
+font	الخط
+frame	إطار
+type	النوع
+state	الحالة
+blend	مزج
+align	محاذاة
+line	خط
+box	مستطيل
+oval	بيضاوي
+brush	فرشاة
+eraser	ممحاة
+mask	قناع
+grow	توسيع
+subtract	طرح
+split	تقسيم
+stacked	مكدّس
+soft	ناعم
+tolerance	التسامح
+curve	منحنى
+Linear	خطي
+Ease in	بداية ناعمة
+Ease out	نهاية ناعمة
+S-curve	منحنى S
+Position X	الموضع X
+Position Y	الموضع Y
+Deck volume	صوت deck
+Deck opacity	عتامة deck
+Master dimmer	المعتّم الرئيسي
+Cue brightness	سطوع cue
+Cue contrast	تباين cue
+Cue saturation	تشبع cue
+Cue hue	لون cue
+no effects	بلا مؤثرات
+no audio effects	بلا مؤثرات صوتية
+nothing yet	لا شيء بعد
+no output	لا خرج
+no window	لا نافذة
+source missing	المصدر مفقود
+waiting for a picture	بانتظار صورة
+clear frame	مسح الإطار
+undo stroke	تراجع عن الخط
+save still	حفظ صورة
+save animation	حفظ الحركة
+export	تصدير
+repeats	التكرارات
+hold last	تثبيت الأخير
+end action	إجراء النهاية
+cue id	معرّف cue
+goto target	هدف الانتقال
+set	تعيين
+send	إرسال
+run	تنفيذ
+idle	خامل
+standby	استعداد
+Loop	تكرار
+loop forever	تكرار بلا نهاية
+PATCH	PATCH
+OUTPUTS	المخارج
+SECTIONS	الأقسام
+Video Synth	مركّب فيديو
+Browser	متصفح
+Browser Cue	cue متصفح
+Window Source	مصدر نافذة
+Camera Source	مصدر كاميرا
+NDI Source	مصدر NDI
+DeckLink Input	دخل DeckLink
+Syphon/Spout Source	مصدر Syphon/Spout
+Live stream cue	cue بث مباشر
+Composite	تركيب
+Composite scene cue	cue مشهد مركّب
+Lower Third	شريط سفلي
+Lower Third overlay cue	cue شريط سفلي
+PIP overlay cue	cue تراكب PIP
+MIDI File	ملف MIDI
+Master	Master
+Memo	مذكرة
+Mic	ميكروفون
+Timer	مؤقّت
+Tone	نغمة
+Script	برنامج نصي
+Target	هدف
+Draw	رسم
+Code	كود
+Clouds	سحب
+Swirl	دوامة
+Moire	تموّج
+Picture	صورة
+Placement	موضع
+Frame lock	قفل الإطار
+Suspend	تعليق
+Seam	وصلة
+High pass	تمرير عالٍ
+Low pass	تمرير منخفض
+Tilt EQ	EQ مائل
+Compressor	ضاغط
+Gate	بوابة
+Delay	تأخير
+Reverb	صدى
+Binaural	ثنائي الأذن
+Crush	سحق
+Word	كلمة
+Scrub	فرك
+Short	قصير
+Shatter	تحطيم
+Pulse	نبض
+Crawl	نص زاحف
+Typewriter	آلة كاتبة
+Oscilloscope	راسم الذبذبات
+Spectrum	طيف
+Level Meters	مقاييس المستوى
+Waveform	شكل الموجة
+EFFECTS	المؤثرات
+TRIGGERS	المشغّلات
+SEQUENCE	تسلسل
+MOTION CONTROL	تحكم بالحركة
+THIS CUE	هذا cue
+FUNCTIONS	الوظائف
+VALUES	القيم
+KEYS	المفاتيح
+FREEZE	تجميد
+FROZEN	مجمّد
+BYPASSED	متجاوَز
+BYPASS ALL	تجاوز الكل
+DEFAULTS	الافتراضيات
+CHANGE	تغيير
+CHOOSE	اختيار
+Stop all	إيقاف الكل
+Pause all	تعليق الكل
+Resume all	متابعة الكل
+Do not continue	عدم المتابعة
+Auto-continue	متابعة آلية
+Auto-follow	متابعة عند النهاية
+END HOLD	نهاية تثبيت
+END LOOP	نهاية تكرار
+END NEXT	نهاية التالي
+END STOP	نهاية إيقاف
+OUTPUT EFFECTS	مؤثرات الخرج
+LIVE CAPTIONS	ترجمة حية
+captions	ترجمة
+Name Card	بطاقة اسم
+TEST CARD	بطاقة اختبار
+TEST CARD ON	بطاقة الاختبار مفعّلة
+EXPORT CARD	تصدير البطاقة
+EXPORTING...	جارٍ التصدير...
+LOW LATENCY	كمون منخفض
+WEB MONITOR	مراقب ويب
+PHONE & TABLET	هاتف ولوحي
+SCAN TO PAIR	امسح للاقتران
+WITH SOUND	مع الصوت
+THE NETWORK	الشبكة
+FIXTURES	أجهزة الإضاءة
+ADD FIXTURE	إضافة جهاز إضاءة
+Dimmer	معتّم
+Dimmer + RGB	معتّم + RGB
+Dimmer + temperature	معتّم + حرارة اللون
+QR CODE	رمز QR
+loop	تكرار
+inherit	وراثة
+Fill	ملء
+Stretch	تمديد
+Dissolve	تلاشٍ
+Pattern	نمط اختبار
+mixed	مختلط
+selected cue lane  |  TAKE to make it live	مسار الـ cue المحدد  |  TAKE يبثه مباشرة
+Dip to black	عبر الأسود
+Dip to white	عبر الأبيض
+Iris	قزحية
+Push left	دفع لليسار
+Push right	دفع لليمين
+Push up	دفع للأعلى
+Push down	دفع للأسفل
+Wipe left	مسح لليسار
+Wipe right	مسح لليمين
+Wipe up	مسح للأعلى
+Wipe down	مسح للأسفل
+Still	صورة ثابتة
+Timecode	الكود الزمني
+address	العنوان
+auto next	التالي تلقائيًا
+continue	متابعة
+deck fader	فيدر الـ deck
+fire	تشغيل
+in	دخول
+out	خروج
+pan	توازن
+routing	التوجيه
+trim	قص
+0-63, the hardware's own gain range.	0-63، كسب الجهاز نفسه.
+1-16, as the desk counts them	1-16، كما تعدّها اللوحة
+7-segment, blocky, or a real font	7 مقاطع، مربّع أو خط حقيقي
+[ / ] keys — fade-in duration	مفتاحا [ / ]: مدة الظهور
+a camera moves the ~ controls	كاميرا تحرّك أدوات التحكم ~
+a chain on a device, after the mix	سلسلة على جهاز، بعد المزج
+a comment	تعليق
+Act now, without taking the cue	نفّذ الآن دون أخذ الكيو
+Add a light	إضافة ضوء
+add a second output to pair	أضف خرجًا ثانيًا للإقران
+add shape	إضافة شكل
+all driven by the cue's own transport	الكل يقوده تشغيل الكيو
+All interfaces; trusted machines only.	كل الواجهات؛ الأجهزة الموثوقة فقط.
+all to 0	الكل على 0
+An audio effect's knob	مقبض مؤثر صوتي
+An effect's knob	مقبض مؤثر
+any channel	أي قناة
+any window, any screen	أي نافذة، أي شاشة
+arcade	أركيد
+Arm this cue as the one GO will fire	جهّز هذا الكيو لأمر GO التالي
+Art-Net port address, 0-32767	عنوان منفذ Art-Net، 0-32767
+Attached overlays fire on TAKE only	الطبقات المرتبطة تبدأ عند TAKE فقط
+BACK TO BUG SWAT	العودة إلى BUG SWAT
+backdrop	خلفية
+bar	شريط
+bg alpha	ألفا الخلفية
+black lift	رفع الأسود
+blend gamma	غاما المزج
+blueprint	مخطط أزرق
+boxes	مربعات
+bracket	أقواس
+bulletin	نشرة
+by density	حسب الكثافة
+BY FIXTURE	حسب الجهاز
+capsule	كبسولة
+caption	تعليق توضيحي
+card	بطاقة
+CARD OFF ALL	إيقاف بطاقة الكل
+CARD ON ALL	تشغيل بطاقة الكل
+cartridge	خرطوشة
+cassette	كاسيت
+Ceiling	سقف
+Chain	سلسلة
+Changing this re-prepares the cue.	تغييره يجهّز الكيو من جديد.
+channel list is not readable	تعذرت قراءة قائمة القنوات
+CHANNELS	القنوات
+channels on your interfaces, by name	قنوات واجهاتك، بالاسم
+Checkerboard	رقعة شطرنج
+chime amber	تحذير كهرماني
+chime red	تحذير أحمر
+chime zero	تحذير صفر
+Choose startup mode:	اختر وضع البدء:
+circle, heart, star...	دائرة، قلب، نجمة...
+circuit	دائرة كهربائية
+CLASSIC VIEW	العرض الكلاسيكي
+clear driver	مسح المحرّك
+Clear in/out trim points	مسح نقطتي الدخول والخروج
+CLEAR OVERLAY  [Backspace]	مسح الطبقة  [Backspace]
+Clear the active Lower Third overlay now	أزل الـ Lower Third الحي الآن
+Clear the live PIP overlay now	أزل طبقة PIP الآن
+CLICK ANYWHERE...	انقر في أي مكان...
+click or Esc to close	انقر أو Esc للإغلاق
+click this window	انقر هذه النافذة
+Click to edit cue notes	انقر لتحرير ملاحظات الكيو
+click to open the grid	انقر لفتح الشبكة
+Click to seek — drag to scrub	انقر للانتقال، اسحب للتمرير
+Click to type it	انقر للكتابة
+comic	قصة مصورة
+Companion passphrase	عبارة مرور Companion
+confetti	قصاصات ملونة
+Connections at once	الاتصالات المتزامنة
+count up	عدّ تصاعدي
+Countdown, count up, or wall clock	عدّ تنازلي أو تصاعدي أو ساعة
+credit	شارة النهاية
+crossfade	مازج انتقالي
+crosshair	شعيرات متقاطعة
+Crosshatch	تظليل متقاطع
+Cue has no audio	الكيو بلا صوت
+cue number	رقم الكيو
+Cycle end action for selected cues	غيّر إجراء النهاية للكيوهات المحددة
+Cycle which slot drives scene audio	غيّر الفتحة التي تعطي صوت المشهد
+dateline	سطر التاريخ
+deck	ديك
+decoder spin-up	بدء المفكك
+Default App Feed	مصدر التطبيق الافتراضي
+Default Camera	الكاميرا الافتراضية
+Delay before the continue fires	التأخير قبل المتابعة
+Delay between GO and this cue starting	التأخير بين GO وبدء الكيو
+depth 1 turns it all the way round	العمق 1 يعطي دورة كاملة
+Digit colour once amber is reached	لون الأرقام عند الكهرماني
+Digit colour while there is time in hand	لون الأرقام والوقت كافٍ
+diskette	قرص مرن
+Do it now, without taking the cue	افعلها الآن دون أخذ الكيو
+dossier	ملف
+dotmatrix	مصفوفة نقطية
+Double-GO guard	حماية GO المزدوج
+draw on the monitor	ارسم على الشاشة
+driver speed	سرعة المحرّك
+EDGE BLEND	مزج الحواف
+EDIT is on: typing changes the show	EDIT مفعّل: الكتابة تغيّر العرض
+edit on the monitor	حرّر على الشاشة
+Edit the main Lower Third title	حرّر عنوان Lower Third
+Edit the secondary Lower Third line	حرّر السطر الثاني من Lower Third
+eq band	نطاق EQ
+equalizer	معادل صوت
+Esc cancels	Esc يلغي
+Esc cancels, arrows nudge	Esc يلغي، الأسهم تحرّك
+Esc to close	Esc للإغلاق
+even grid	شبكة منتظمة
+EXAMPLE SHOWS	عرض تجريبي
+EXIT  Esc	خروج  Esc
+face	وجه
+factory settings	إعدادات المصنع
+Fade+LoadNext	تلاشٍ+تحميل التالي
+Fade+Pause	تلاشٍ+إيقاف مؤقت
+Fade+Rewind	تلاشٍ+إرجاع
+Fade-in duration	مدة الظهور
+Fade-in duration for this cue	ظهور هذا الكيو
+Fade-out duration	مدة التلاشي
+Fade-out duration before next cue	تلاشٍ قبل الكيو التالي
+Fade-out duration for this cue	تلاشي هذا الكيو
+Fall	الانخفاض
+false colour reads SDR pictures	الألوان الزائفة تقرأ صورة SDR
+fill the frame	املأ الإطار
+find a named colour	ابحث عن لون بالاسم
+fires cues	أطلق الكيوهات
+first available	أول فارغ
+Fit/Fill/Stretch/Unscaled	ملاءمة/ملء/تمديد/بلا تحجيم
+Fixed repeat count — 0 = infinite	عدد تكرار ثابت: 0 = بلا نهاية
+Fixed repeat count — 0 = loop forever	عدد تكرار ثابت: 0 = بلا توقف
+FIXED!	تم الإصلاح!
+flag	علم
+FORGET MY DEFAULTS	انسَ إعداداتي الافتراضية
+Frames a second	إطارات في الثانية
+from exactly this routing	مباشرة من هذا التوجيه
+Full Black	أسود كامل
+Full Blue	أزرق كامل
+Full Green	أخضر كامل
+Full Red	أحمر كامل
+Full White	أبيض كامل
+garden	حديقة
+Ghastly	شبحي
+glass	زجاج
+glitch down	خلل للأسفل
+glitch drift	انجراف الخلل
+glitch reach	مدى الخلل
+glitch through	خلل بالعرض
+glitch up	خلل للأعلى
+GO steps over it	GO يتخطاه
+hairline	خط رفيع
+Haptics	ارتعاش
+HDR input	دخل HDR
+Hex, e.g. 90 3C 7F	Hex، مثل 90 3C 7F
+HOLDING OFF AIR	إيقاف خارج البث
+Home — skip to start	Home: إلى البداية
+Horizontal output offset in pixels	إزاحة الخرج الأفقية بالبكسل
+How many features fit on screen.	كم يتسع في الشاشة.
+how much of this effect	مقدار هذا المؤثر
+How solid the ink is	تغطية الحبر
+How tall the logo is above the clock	ارتفاع الشعار فوق الساعة
+In-point: cue starts playback here	نقطة الدخول: يبدأ الكيو هنا
+index	فهرس
+initializing webview	بدء webview
+install Tailscale here and on the phone	ثبّت Tailscale هنا وعلى الهاتف
+INSTALLING...	جارٍ التثبيت...
+Its amount, or one of its knobs A to D	مقداره، أو مقبض من A إلى D
+J jump to row	J: انتقل إلى سطر
+jam to	مزامنة إلى
+Jump the driver back to its first frame	أعد المحرّك إلى الإطار الأول
+K — cycle cue color tag	K: غيّر لون الكيو
+Keep counting past zero, or stop dead	واصل العد بعد الصفر أو توقف
+key	مفتاح
+Key edge softness	نعومة حافة الكي
+knob	مقبض
+L - loop this cue continuously	L: كرّر هذا الكيو
+last reading	آخر قراءة
+Last refused	آخر مرفوض
+Learn it	تعلّم
+LEARN THE BASICS	تعلّم الأساسيات
+ledger	دفتر حسابات
+Left — skip back 10s	يسار: 10 ث للخلف
+Left, centre or right	يسار أو وسط أو يمين
+LESSONS	الدروس
+Levels	المستويات
+Limiter	محدّد
+Limiting	التحديد
+line  |  Enter: apply	سطر  |  Enter: تطبيق
+LINEAR - a feather, not a blend	خطي: تدرّج، وليس مزجًا
+Linear, ease in, ease out or S-curve	خطي أو دخول أو خروج أو منحنى S
+Lines	خطوط
+link aspect	اربط التناسب
+Listen to	استمع
+listener	مستمع
+LIVE - every assigned deck matches	LIVE: كل الديكات المعيّنة متطابقة
+lock to screen	قفل على الشاشة
+logo	شعار
+logo size	حجم الشعار
+look at it	شاهده
+lower 3rd	Lower Third
+marquee	لوحة سرادق
+mask on	القناع نشط
+Master oscillator rate.	سرعة المذبذب الرئيسي.
+Maximum quality	أعلى جودة
+MIDI and OSC monitor	مراقب MIDI وOSC
+midi in	دخل MIDI
+MIDI note	نغمة MIDI
+move points	حرّك النقاط
+Move the height on its own oscillator	حرّك طبقة الصوت بمذبذبها
+name or number...	اسم أو رقم...
+name, from anywhere	الاسم، من أي مكان
+NDI source cue	كيو مصدر NDI
+needs file-backed video	يحتاج ملف فيديو
+neon	نيون
+new paths	مسارات جديدة
+New shows start from	العروض الجديدة تبدأ من
+next xfade	التلاشي التالي
+no effects for this cue type	لا مؤثرات لهذا النوع من الكيو
+nobody	لا شيء
+none - click to learn	لا شيء: انقر للتعليم
+none - click to set some	لا شيء: انقر للضبط
+none - click to write some	لا شيء: انقر للكتابة
+none yet	لا شيء بعد
+none: the one picture	لا شيء: الصورة الوحيدة
+none: the whole picture	لا شيء: الصورة كلها
+notebook	دفتر ملاحظات
+nothing	لا شيء
+nothing assigned yet	لم يُعيَّن شيء
+nothing follows	لا يتبع شيئًا
+Nothing here with this filter.	لا شيء بهذا المرشح.
+nothing set - this cue sends nothing	لم يُضبط شيء: هذا الكيو لا يرسل شيئًا
+nothing targeted yet	بلا هدف
+Nothing to see here. Probably.	لا شيء هنا لتراه. على الأرجح.
+nothing to send - check the message	لا شيء للإرسال: تحقق من الرسالة
+offset X	إزاحة X
+offset Y	إزاحة Y
+on any channel	على أي قناة
+on the header to add another	على الترويسة لإضافة المزيد
+on the monitor	على الشاشة
+one big on top, the rest below	واحد كبير أعلى، والباقي تحته
+one big, the rest beside it	واحد كبير، والباقي بجانبه
+onion off	ورق الشف مطفأ
+onion on	ورق الشف مفعّل
+only this computer	هذا الحاسوب فقط
+Open a .deckboy show file	افتح ملف .deckboy
+open the monitor	افتح الشاشة
+or your own bytes	أو بايتاتك الخاصة
+ORDER - cues advance down the list	الترتيب: الكيوهات تنزل في القائمة
+Out-point: cue stops playback here	نقطة الخروج: ينتهي الكيو هنا
+output already has	الخرج لديه بالفعل
+Outputs Off	المخارج مطفأة
+outs	مخارج
+over budget - video will drop frames	فوق الحد: سيفقد الفيديو إطارات
+over the picture	فوق الصورة
+PAIR	إقران
+Pair a phone	إقران هاتف
+Pair overlap	تداخل الزوج
+Paired phones	الهواتف المقترنة
+Passphrase	عبارة المرور
+Pattern motion toggle	حركة النمط
+pause begin	إيقاف عند البدء
+pennant	راية
+Per-cue transition duration override	مدة انتقال هذا الكيو
+Perspective	منظور
+PHASE	الطور
+Phone access	وصول الهاتف
+Phone control	التحكم بالهاتف
+phrase hold	طول الجملة
+PICK FROM SCREEN	التقط من الشاشة
+Pitch, in semitones.	طبقة الصوت، بأنصاف النغمات.
+PIXEL FOR PIXEL, TOP-LEFT	بكسل ببكسل، أعلى اليسار
+placard	لافتة
+play a note...	اعزف نغمة...
+PLAY BUG SWAT, a game	العب BUG SWAT
+Play the out move now, then take it off	شغّل الخرج الآن ثم أزله
+Playback speed: 0.25–4.0×	سرعة التشغيل: 0.25–4.0×
+playlists into the named outputs	قائمة التشغيل إلى مخارج مسماة
+plays synth	اعزف على السينث
+plugin	إضافة
+PNG matte	مات PNG
+podium	منصة
+pop	بوب
+press a key...	اضغط مفتاحًا...
+PRESS AGAIN TO FORGET	اضغط ثانية للنسيان
+Previous show file:	الملف السابق:
+prog bar	شريط التقدم
+programme	البرنامج
+Programme with sound in any browser	البرنامج مع الصوت في كل متصفح
+PROJECTOR - gamma matched	جهاز العرض: غاما مطابقة
+Projector gamma	غاما جهاز العرض
+put it on a button	ضعه على زر
+Put the brush's opacity on an oscillator	اربط عتامة الفرشاة بمذبذب
+Put the brush's size on an oscillator	اربط حجم الفرشاة بمذبذب
+Put this control on an oscillator	اربط أداة التحكم هذه بمذبذب
+rack it	حمّله
+RACKED, WARM	تم التحميل، جاهز
+rail	سكة
+rain	مطر
+Reads	يقرأ
+reads the same on any screen	يُقرأ نفسه على كل شاشة
+recent and in this show	الأخيرة وفي هذا العرض
+Recent shows:	العروض الأخيرة:
+red at	أحمر عند
+red col	عمود أحمر
+render height	ارتفاع التصيير
+render width	عرض التصيير
+REPORT A PROBLEM	أبلغ عن مشكلة
+reported rather than swapped	أُبلغ عنه، لم يُستبدل
+restart driver now	أعد تشغيل المحرّك الآن
+restart on take	إعادة عند take
+restore at end	استعادة عند النهاية
+ribbon	شريط زينة
+Right — skip forward 10s	يمين: 10 ث للأمام
+Right-click turns them off.	النقر الأيمن يطفئها.
+Rise	الارتفاع
+rise, slide or wipe	صعود أو تمرير أو ستارة
+Rotation speed, degrees per second.	سرعة الدوران، درجة في الثانية.
+rounded rect	مستطيل مدور
+row turns the matrix off again	الصف يطفئ المصفوفة ثانية
+Run it now, without taking the cue	شغّل الآن دون أخذ الكيو
+Run the show from a phone	أدر العرض من الهاتف
+runs off the show thread	خارج خيط العرض
+sACN universe, 1-63999	عالم sACN، 1-63999
+SAVE AS MY DEFAULTS	احفظ كافتراضي
+says	يقول
+SCALED TO FILL	محجّم للملء
+Scene dwell time — 0 = hold	مدة المشهد: 0 = ثبات
+Scene fade-in duration	ظهور المشهد
+Scene fade-out duration	تلاشي المشهد
+scoreboard	لوحة نتائج
+SCREENS	الشاشات
+scroll	تمرير
+Scroll up	تمرير لأعلى
+sea	بحر
+SELECT: MOTION	اختيار: حركة
+Send now, without taking the cue	أرسل الآن دون أخذ الكيو
+sends	إرسال
+Sensitivity	الحساسية
+Set browser URL/path	اضبط عنوان/مسار المتصفح
+set by	ضبطه
+Set capture source from the cue menu	اضبط المصدر من قائمة الكيو
+Set cue ID for selected cues	اضبط معرّف الكيوهات المحددة
+Set cue token to jump to when cue ends	اضبط الكيو الذي يُنتقل إليه في النهاية
+Set goto target for selected cues	اضبط هدف الكيوهات المحددة
+Set Lower Third background alpha	ألفا خلفية Lower Third
+Set per-cue transition duration	مدة انتقال الكيو
+Set playback speed for selected cues	سرعة الكيوهات المحددة
+Set repeat count for selected cues	تكرار الكيوهات المحددة
+Set short cue id for search/goto	معرّف قصير للبحث/الانتقال
+Set short cue label for search/goto	اسم قصير للبحث/الانتقال
+Set the NDI source name to receive	اسم مصدر NDI المراد استقباله
+Shift+[ / ] — fade-out duration	Shift+[ / ]: مدة التلاشي
+SHOW ME	أرني
+Show on	اعرض على
+Shows	عرض
+sideline	خط جانبي
+sketch	رسم تخطيطي
+slide	انزلاق
+slide from left	انزلاق من اليسار
+slide from right	انزلاق من اليمين
+SMOOTH	ناعم
+snow	ثلج
+SOS. Kidding. The show is fine.	SOS. مزحة. العرض بخير.
+Sound when the clock turns amber	صوت عند تحول الساعة إلى الكهرماني
+Sound when the clock turns red	صوت عند تحول الساعة إلى الأحمر
+Sound when time is up	صوت عند انتهاء الوقت
+Space — pause	مسافة: إيقاف مؤقت
+Space — play	مسافة: تشغيل
+span	الانتشار
+sparkle	بريق
+Speech models	نماذج الكلام
+Speed, like tape	السرعة، مثل الشريط
+stamp	ختم
+Start NEW from factory	ابدأ الجديد من المصنع
+starting browser	بدء المتصفح
+starting capture	بدء الالتقاط
+starting xvfb	بدء xvfb
+sticky	ورقة لاصقة
+stop at 0	توقف عند 0
+Stop puppeteering this cue	توقف عن قيادة هذا الكيو
+STRAIGHT	مستقيم
+survey	نتوء
+SVG paths	مسارات SVG
+tab	لسان
+tag	وسم
+TAP	المس
+terminal	طرفية
+text mode	وضع النص
+the file cannot be read	الملف غير مقروء
+The name	الاسم
+The OSC path, e.g. /cue/1/start	مسار OSC، مثل /cue/1/start
+the playlist's PATCH	PATCH قائمة التشغيل
+The role, or leave it empty	الدور، أو اتركه فارغًا
+the system output	خرج النظام
+The text this cue puts on screen	النص الذي يعرضه هذا الكيو
+theatre	مسرح
+then stop	ثم توقف
+they have	لديها
+things that are oscillating	أشياء تتذبذب
+this cue lives on	هذا الكيو على
+This show's setup, no cues	إعدادات هذا العرض، بلا كيوهات
+ticket	تذكرة
+tile h	اللوحة ع
+Tile height in pixels.	ارتفاع اللوحة بالبكسل.
+tile w	اللوحة ض
+time of day	وقت اليوم
+Toggle audio enable for selected cues	صوت الكيوهات المحددة
+Toggle chroma key	تبديل مفتاح الكروما
+Toggle cue audio	صوت الكيو
+Toggle cue audio track for this cue	المسار الصوتي لهذا الكيو
+Toggle fade in	ظهور
+Toggle fade out	تلاشٍ
+Toggle hold on last frame	ثبّت آخر إطار
+Toggle hold-at-end for selected cues	ثبّت عند النهاية في الكيوهات المحددة
+Toggle loop	تكرار
+Toggle loop for selected cues	تكرار الكيوهات المحددة
+Toggle the live input's audio	صوت الدخل الحي
+Total time	الوقت الكلي
+transcoding - plays clean until ready	تحويل الترميز: يعمل نظيفًا حتى النهاية
+transparent: put its playlist on a layer	شفاف: ضع قائمة التشغيل على طبقة
+Trusted controllers	وحدات التحكم الموثوقة
+TURN OFF	إيقاف
+turn phone control on	فعّل التحكم بالهاتف
+two big on top, the rest below	اثنان كبيران أعلى، والباقي تحتهما
+type a cue number	اكتب رقم كيو
+Typing needs EDIT on	الكتابة تتطلب تفعيل EDIT
+Use GEOMETRY for exact placement	استخدم الهندسة للوضع الدقيق
+value to type one	القيمة المراد كتابتها
+Vertical output offset in pixels	إزاحة الخرج الرأسية بالبكسل
+VIDEO DIP: OFF	غمس الفيديو: لا
+VIDEO DIP: ON	غمس الفيديو: نعم
+walk the outputs one at a time.	مرّ على المخارج واحدًا واحدًا.
+walks every output in turn	يمرّ على كل خرج
+WHAT DECKBOY DID	ماذا فعل Deckboy
+what is on air in a playlist	ما هو حي في قائمة تشغيل
+What NEW starts from, never this show	من أين يبدأ الجديد، وليس هذا العرض أبدًا
+whatever the style says	كما يقول النمط
+Where the ramp ends	أين ينتهي المنحدر
+Which deck the cue it acts on lives on	أي ديك عليه الكيو الهدف
+Which frame you draw on	أي إطار ترسم عليه
+Who can see it	من يستطيع رؤيته
+whole network	الشبكة كلها
+will not open	لا يفتح
+window and recording outputs only	مخارج النوافذ والتسجيل فقط
+wipe	ستارة
+Wobble	اهتزاز
+wobble by	هزّ بمقدار
+words	كلمات
+X — cycle end action	X: غيّر إجراء النهاية
+X — cycle end action: stop / next / loop	X: إجراء النهاية: إيقاف / التالي / تكرار
+Zones	مناطق
+~ makes the level breathe	~ تجعل المستوى يتنفس
+a note or an address becomes that cue's trigger	نغمة أو عنوان يصبح مشغّل الكيو
+acts on every deck; deck and cue are ignored	يعمل على كل الديكات؛ يُتجاهل الديك والكيو
+Add an output above, then send playlists to it here.	أضف خرجًا أعلاه، ثم أرسل قوائم التشغيل إلى هنا.
+Ancient cypher, modern video desk. Respect.	خط قديم، لوحة حديثة. احترام.
+Any font on this computer, Deckboy's own, or a font file	خط من الحاسوب، أو خط Deckboy، أو ملف
+Apply fade-in to selected video/audio cues	ظهور على كيوهات الفيديو/الصوت المحددة
+Apply fade-out to selected video/audio cues	تلاشٍ على كيوهات الفيديو/الصوت المحددة
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net أو sACN (E1.31): ما تستمع إليه الإضاءة
+Auto-advance duration — 0 = hold until taken	تقدّم تلقائي: 0 = ثبات حتى take
+Bypass: this master leaves that deck alone	تجاوز: هذا الرئيسي يترك ذلك الديك
+Characters across. Fewer means bigger cells.	أحرف لكل سطر. الأقل يعطي خلايا أكبر.
+Choose a mask from this show's library, or start a new one from a shape	اختر قناعًا من المكتبة أو اصنعه من شكل
+Click a value to change it. A red address overlaps another fixture.	انقر قيمة لتغييرها. العنوان الأحمر يتداخل مع جهاز آخر.
+Click to show or hide this cue's captions	انقر لإظهار أو إخفاء ترجمة الكيو
+Copy the show AND its media into one portable folder	انسخ العرض والوسائط إلى مجلد محمول
+Ctrl+S - write back over the show that is open	Ctrl+S: احفظ في العرض المفتوح
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: احفظ في ملف جديد
+Device output pair this cue's audio plays on	زوج مخارج لصوت هذا الكيو
+E - freeze on last frame instead of stopping	E: ثبّت على آخر إطار بدل الإيقاف
+Edit title/subtitle here or fire it live with TAKE	حرّر العنوان/الفرعي هنا أو أطلقه بـ TAKE
+Every channel on every universe this session has touched	كل قناة في كل عالم لُمس في هذه الجلسة
+generator is off - a START cue turns it on	المولّد مطفأ: كيو START يشغّله
+How long the note takes to reach full level.	زمن وصول النغمة إلى المستوى الكامل.
+How much it throws off; 0 is a clean burn	مقدار التقشر؛ 0 يحترق نظيفًا
+INPUT: the programme. Drag a crop to move it, its corners to size it.	الدخل: البرنامج. اسحب قطعة لتحريكها، والزوايا لتغيير الحجم.
+Keep the outside and cut the inside instead	أبقِ الخارج واقطع الداخل
+LED panel height in pixels. Click to type it	ارتفاع لوحة LED بالبكسل. انقر للكتابة
+Legacy target mode — switch type to convert	وضع هدف قديم: غيّر النوع للتحويل
+Lissajous, spectrum, meters or a name card	Lissajous أو طيف أو مقاييس أو لوحة اسم
+Load the cue and hold first frame when taken	حمّل الكيو وثبّت أول إطار عند take
+no fixtures patched - Settings > Network > FIXTURES	لا أجهزة موصولة: الإعدادات > الشبكة > FIXTURES
+Nothing here changes the show that is open.	لا شيء هنا يغيّر العرض المفتوح.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	صوت الكيو: تشغيل/إيقاف، قص، موضع، أحادي، تلاشٍ، تطبيع
+Phone control is in PHONE & TABLET, below	التحكم بالهاتف في PHONE & TABLET، بالأسفل
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	احفظ القناع PNG رماديًا بحجم الخرج: الأبيض يُبقي والأسود يقطع
+Seconds REMAINING when the clock turns amber	الثواني المتبقية عند تحول الساعة إلى الكهرماني
+Seconds REMAINING when the clock turns red	الثواني المتبقية عند تحول الساعة إلى الأحمر
+Shown to the operator when GO reaches this cue	يُعرض على المشغّل عندما يصل GO إلى هذا الكيو
+SHUFFLE - the next cue is picked at random	عشوائي: الكيو التالي بالقرعة
+Slots are self-contained sources in this first pass	الفتحات مصادر مستقلة في هذا الإصدار
+that output's whole picture, or its matte	كامل صورة ذلك الخرج، أو المات الخاص به
+The cue number on the other desk, e.g. 12.5	رقم الكيو على اللوحة الأخرى، مثل 12.5
+Toggle pause-at-beginning for selected cues	إيقاف عند البدء في الكيوهات المحددة
+Toggle transition-to-next for selected cues	انتقال إلى التالي في الكيوهات المحددة
+transparent outside the blobs: put it on a layer	شفاف خارج البقع: ضعه على طبقة
+transparent outside the ink: put it on a layer	شفاف خارج الحبر: ضعه على طبقة
+what is said, on screen, made on this computer	ما يُقال، على الشاشة، صُنع على هذا الحاسوب
+What this cue does when it ends - click to change	ما يفعله هذا الكيو عند النهاية: انقر للتغيير
+Whether the next shape or pen path adds or cuts	هل يضيف الشكل أو المسار التالي أم يقطع
+shape	الشكل
+palette	لوحة الألوان
+scale	المقياس
+feedback	التغذية الراجعة
+RED	أحمر
+do it	نفّذ
+(empty)	(فارغ)
+(unset)	(غير محدد)
+English	الإنجليزية
+amber at	الكهرماني عند
++ section	+ قسم
++pause pt	+ نقطة توقف
+a-fade in	تلاشي الدخول
+amber col	لون كهرماني
+(no notes)	(بلا ملاحظات)
+a-fade out	تلاشي الخروج
+gain (each)	الكسب (لكل)
+% of the height	% من الارتفاع
++  a first step	+  الخطوة الأولى
++ ADD AN EFFECT	+ إضافة تأثير
+(none playing now)	(لا شيء يعمل الآن)
+Keep a transcript (.srt)	حفظ نص مكتوب (.srt)
+Key tolerance (RGB distance)	تسامح key (مسافة RGB)
+Contrast multiplier (0.0-2.0x)	معامل التباين (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	معامل السطوع (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	معامل التشبع (0.0–2.0x)
+Output rotation angle (-180..180)	زاوية دوران الخرج (-180..180)
+Hue rotation (-180 to +180 degrees)	دوران درجة اللون (-180 إلى +180 درجة)
+Lower Third background opacity (0-255)	عتامة خلفية الشريط السفلي (0–255)
+0-127; 127 addresses every device on the line	0–127؛ يخاطب 127 كل الأجهزة على الخط
+GO shows the note; picture and sound carry on	يعرض GO الملاحظة؛ تستمر الصورة والصوت
+How fast it moves; no effect when it is still	سرعة الحركة؛ لا تأثير في حالة السكون
+Fires when incoming timecode passes this point	يُشغّل عندما يتجاوز التايم كود الوارد هذه النقطة
+Source pixels, independent of output placement	بكسلات المصدر، مستقلة عن موضع الخرج
+Stereo balance, applied live (snaps to center)	توازن ستيريو مباشر (يثبت في المنتصف)
+bypassed: nothing here is processed or limited	متجاوز: بلا معالجة أو تحديد للمستوى
+Per-cue audio trim: -40 to +40 dB, applied live	كسب cue من -40 إلى +40 dB، يُطبق مباشرة
+Show the message in red - the wrap up NOW state	عرض الرسالة بالأحمر: يجب الانتهاء الآن
+The brush's width, as % of the picture's height	عرض الفرشاة كنسبة مئوية من ارتفاع الصورة
+What the stream carries: SDR, PQ (HDR10) or HLG	محتوى البث: SDR أو PQ (HDR10) أو HLG
+Digit colour once red is reached, and in overtime	لون الأرقام عند بلوغ الأحمر وبعد تجاوز الوقت
+Downmix this cue to mono (mono sources / mono PA)	مزج cue إلى مونو (مصدر أو نظام PA أحادي)
+Drag to scrub (shift = fine), click to type exact	اسحب للتنقل (Shift: دقيق)، وانقر لإدخال القيمة بدقة
+Hand this to an oscillator so it moves on its own	أسنده إلى مذبذب ليتحرك تلقائياً
+Changing width also scales height (and vice versa)	تغيير العرض يغيّر الارتفاع أيضاً والعكس
+How long the levels take to arrive; zero is a snap	زمن بلوغ المستويات؛ صفر يغيّرها فوراً
+Set the self-contained PIP source for this overlay	تعيين مصدر PIP المستقل لهذه الطبقة
+Take the newest shape or pen path out of this mask	إزالة أحدث شكل أو مسار قلم من القناع
+An address sent to Deckboy's OSC port fires this cue	هذا العنوان على منفذ OSC في Deckboy يشغّل cue
+Hold on the last composite frame when the scene ends	تثبيت آخر إطار مركّب عند انتهاء المشهد
+How long it takes; zero is a snap rather than a fade	المدة؛ صفر يغيّر فوراً بلا تلاشي
+Set still/pattern/browser duration for selected cues	تعيين مدة الصورة/النمط/المتصفح لعناصر cue المحددة
+Start the LTC carrier, stop it, or jam it to a value	بدء حامل LTC أو إيقافه أو مزامنته مع قيمة
+Which cue on that deck; step off the end to clear it	عنصر cue على ذلك الدك؛ تجاوز النهاية للمسح
+Bob up and down. Depth 1 is half the frame either way	حركة صعوداً وهبوطاً. عمق 1 يساوي نصف الإطار في كل اتجاه
+Output width in pixels | click value to type exact px	عرض الخرج بالبكسل؛ انقر لإدخال قيمة دقيقة
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	تعيين عنوان البث (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	يُشغّل يومياً في هذا الوقت وفق ساعة الكمبيوتر
+Output height in pixels | click value to type exact px	ارتفاع الخرج بالبكسل؛ انقر لإدخال قيمة دقيقة
+Bar across the foot - readable further back than digits	شريط أسفل الشاشة: يُقرأ من أبعد من الأرقام
+OUTPUT: drag a slice to move it, its corners to size it.	الخرج: اسحب المقطع لنقله، وزواياه لتغيير حجمه
+Choose a Lower Third from the overlay bin to fire on TAKE	اختر شريطاً سفلياً من مخزن الطبقات لتشغيله عند TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	اختر PIP من مخزن الطبقات لتشغيله عند TAKE
+OUTPUT: drag a slice to move it, its corners to pin them.	الخرج: اسحب المقطع لنقله، وزواياه لتثبيتها
+F1-F10, F12 or the number pad fires this cue from anywhere	تشغّل F1–F10 أو F12 أو لوحة الأرقام هذا cue من أي مكان
+Use transition when auto-advancing or goto-taking next cue	استخدم انتقالاً عند التقدم التلقائي أو القفز إلى cue التالي
+Nothing has arrived yet. Press something on the controller.	لم يصل شيء بعد. حرّك عنصراً أو اضغط زرّاً في وحدة التحكم.
+Audio fade-in: follow visual fade, none, or explicit seconds	تلاشي دخول الصوت: يتبع الصورة، بلا تلاشي، أو ثوانٍ محددة
+Audio fade-out: follow visual fade, none, or explicit seconds	تلاشي خروج الصوت: يتبع الصورة، بلا تلاشي، أو ثوانٍ محددة
+Add a library shape to this mask; its points are yours to move	أضف شكلاً من المكتبة إلى القناع؛ يمكنك تحريك نقاطه
+No slices: this output shows its one picture. + SLICE to start.	بلا مقاطع: يعرض الخرج صورته. ابدأ باستخدام + SLICE.
+Open and close this edge on an oscillator -- a wipe that breathes	افتح هذه الحافة وأغلقها بمذبذب: مسح ينبض
+(none)	(لا شيء)
+(nothing yet)	(لا شيء بعد)
++ ADD AN OUTPUT	+ إضافة خرج
+>LIVE	>مباشر
+(no media source)	(بلا مصدر وسائط)
+snap	فوري
+this deck	هذا الدك
+protocol	البروتوكول
+does	الإجراء
+signal	الإشارة
+sine	جيب
+freq	التردد
+visuals	مرئيات
+black	أسود
+green	أخضر
+blue	أزرق
+Pause at start	توقف أولاً
+Pause at end	توقف أخيراً
+Transition to next	انتقال للتالي
+Hardware display	شاشة الجهاز
+Raster mode	وضع الصورة
+Refresh rate	معدل التحديث
+Bit depth	عمق البت
+SDR material at	مستوى SDR
+HDR signal	إشارة HDR
+Fullscreen	ملء الشاشة
+Matte aspect	نسبة القناع
+Bar opacity	عتامة الشريط
+Output mask	قناع الخرج
+Overlay still	طبقة ثابتة
+Overlay opacity	عتامة الطبقة
+Overlay image	صورة الطبقة
+Place it	ضعه
+Corner pin	تثبيت الزوايا
+Slices	المقاطع
+choose...	اختر...
+not configured	غير مهيأ
+(default system device)	(جهاز النظام الافتراضي)
+(no monitor)	(بلا مراقبة)
+System audio (SDL)	صوت النظام (SDL)
+Not watching a folder	لا يُراقَب مجلد
+anyone	أي شخص
+When taken off air	عند الخروج من البث
+browser cue added	أُضيف cue للمتصفح
+source cue added	أُضيف cue للمصدر
+text added	أُضيف النص
+tone cue added	أُضيف cue للنغمة
+gain	الكسب
+follow	اتبع
+moves	الحركة
+overtime	وقت إضافي
+chime	رنين
+bell	جرس
+load a sprite sheet from a file...	تحميل ورقة sprites من ملف...
+Run the clock	تشغيل الساعة
+What fires this cue besides GO	ما يشغّل cue بجانب GO
+center	الوسط
+visual	مرئيات
+Cue	كيو
+JAM	مزامنة
+MIX	مزج
+CLIP	مقطع
+TEXT	نص
+KEY L	KEY ي
+MULTI	متعدد
+WACKY	جنون
+COLOUR	لون
+DARKEN	تغميق
+STEREO	ستيريو
+COMPARE	مقارنة
+LIGHTEN	تفتيح
+DASHBOARD	لوحة التحكم
+25 fps (PAL/EBU)	25 إطارًا/ث (PAL/EBU)
+29.97 fps (NTSC)	29.97 إطارًا/ث (NTSC)
+Pocket Test (day)	اختبار Pocket (نهار)
+Dark Detail (0-12%)	تفاصيل الظلال (0-12%)
+Frame Count (emoji)	عدّاد الإطارات (إيموجي)
+PLUGE (black level)	PLUGE (مستوى الأسود)
+Pocket Test (night)	اختبار Pocket (ليل)
+Pocket Test (storm)	اختبار Pocket (عاصفة)
+Marks stacked BELOW.	علامات مكدّسة في الأسفل.
+Panel Map (animated)	خريطة الألواح (متحركة)
+Pocket Test (sunset)	اختبار Pocket (غروب)
+Boresight (alignment)	التسديد (المحاذاة)
+SMPTE 75% Colour Bars	أشرطة ألوان SMPTE 75%
+(projector curve only)	(منحنى جهاز العرض فقط)
+Multiburst (bandwidth)	Multiburst (عرض النطاق)
+Convergence (fine grid)	التقارب (شبكة دقيقة)
+Greyscale Steps (gamma)	درجات الرمادي (غاما)
+Uniformity (flat fields)	التجانس (حقول مسطّحة)
+MULTIVIEW carries this too.	MULTIVIEW يحمل هذا أيضًا.
+Test Clock (sync + latency)	ساعة الاختبار (مزامنة + تأخير)
+auto (reads the common two)	تلقائي (يقرأ الاثنين الشائعين)
+Panel Map (LED tile numbers)	خريطة الألواح (أرقام ألواح LED)
+Portal (blobs of deep space)	بوابة (فقاعات من الفضاء السحيق)
+Terrarium (living ecosystem)	Terrarium (نظام بيئي حي)
+Window 10% (peak brightness)	نافذة 10% (ذروة السطوع)
+Window 50% (peak at mid APL)	نافذة 50% (ذروة عند APL متوسط)
+Frame Count (drops + latency)	عدّاد الإطارات (المفقود + التأخير)
+Terrarium Pico (1px per cell)	Terrarium Pico (بكسل واحد لكل خلية)
+Banding Ramps (real bit depth)	تدرجات التحزّم (عمق البت الحقيقي)
+Fireside (a hearth that burns)	موقد (نار تشتعل)
+HLG - live broadcast (BT.2100)	HLG - بث مباشر (BT.2100)
+Test Bars (motion diagnostics)	أشرطة اختبار (تشخيص الحركة)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (هل يغيّر شيء الحجم؟)
+Pocket Test (test card + scene cycle)	اختبار Pocket (بطاقة اختبار + دورة مشاهد)
+Critters (pixel-exact scaling, animated)	Critters (تحجيم دقيق بالبكسل، متحرك)
+headphones, desk sounds and LTC stay out of it	السماعات وأصوات الطاولة وLTC تبقى خارجه
+Above 1 tunnels inward, below 1 blooms outward.	فوق 1 يُسحب النفق إلى الداخل، وتحت 1 يتفتح إلى الخارج.
+Read everything right to left. Yes, everything.	اقرأ كل شيء من اليمين إلى اليسار. نعم، كل شيء.
+Amber is closest to the 1976 single-phosphor look.	الكهرماني هو الأقرب إلى مظهر الفوسفور الواحد لعام 1976.
+Greetings, primitive. Your "slideshow" amuses us.	تحياتنا أيها البدائي. «عرض الشرائح» خاصتك يسلّينا.
+Sway sideways. Depth 1 is half the frame either way	تمايل جانبي. العمق 1 نصف إطار في كل اتجاه
+Draw the diagnostic over the card, or just the text.	ارسم التشخيص فوق البطاقة، أو النص فقط.
+All interfaces, but only this computer is trusted yet.	كل الواجهات، لكن هذا الحاسوب وحده موثوق حتى الآن.
+Choose the legacy cue token to show inside the PIP window	اختر رمز الكيو القديم الذي يظهر في نافذة PIP
+ASIO carries the show's sound, and these are not on it yet	ASIO يحمل صوت العرض، وهذه ليست عليه بعد
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=جديد  Enter/P=السابق  O=فتح محفوظ  E=أمثلة  L=تعلّم
+Hand this parameter to an oscillator so it moves on its own	سلّم هذه المعلمة إلى مذبذب لتتحرك وحدها
+How long the finished drawing stays before it is drawn again	كم يبقى الرسم المكتمل قبل أن يُرسم من جديد
+How it comes on and goes off: none, fade, rise, slide or wipe	كيف يدخل ويخرج: بلا، تلاشٍ، صعود، انزلاق أو مسح
+The 64-step wavetable, quantised to 6 bits like the hardware.	جدول الموجة ذو 64 خطوة، مكمّم إلى 6 بت مثل العتاد.
+Vary tile size per cell, so the grid stops looking like a grid.	غيّر حجم البلاطة في كل خلية، كي تكفّ الشبكة عن الظهور كشبكة.
+Which output channel carries the signal. 'all' feeds every one.	أي قناة خرج تحمل الإشارة. 'all' تغذّيها كلها.
+What is sent. Backslash-n, -r, -t and -0 become those characters	ما يُرسل. الشرطة المائلة العكسية مع n وr وt و0 تصبح تلك المحارف
+Deckboy's own remote-protocol verbs, one per line; # is a comment	أفعال بروتوكول Deckboy الخاصة، واحد في كل سطر؛ # تعليق
+Modulator speed as a ratio of the note, so the bend tracks pitch.	سرعة المعدِّل كنسبة من النغمة، فيتبع الانحناء طبقة الصوت.
+Play this cue to the preview only; the outputs keep what they have	شغّل هذا الكيو في المعاينة فقط؛ تبقي المخارج ما لديها
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	ضع طبقة الصوت على مذبذب: Motion X يمسحها مثل الثيرمين
+A disarmed cue stays in the list and does nothing; GO steps over it	الكيو المنزوع التسليح يبقى في القائمة ولا يفعل شيئًا؛ يتخطاه GO
+Where the clock reads from this cue on; click the value to type one	من أين تقرأ الساعة بدءًا من هذا الكيو؛ انقر القيمة لكتابتها
+Add a dashboard button that fires this master by name, from anywhere	أضف إلى لوحة التحكم زرًا يطلق هذا الماستر باسمه من أي مكان
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	جديد هنا؟ تعلّم الأساسيات يستغرق خمس دقائق. سنريك المكان.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	عنوان IPv4، أو 255.255.255.255 للبث إلى الشبكة كلها
+How much playing audio widens and brightens the pattern. 0 free-runs.	كم يوسّع الصوت المشغَّل النقش ويفتّحه. 0 يجري حرًّا.
+LED panel width in pixels - what one tile really is. Click to type it	عرض لوح LED بالبكسل: حجم البلاطة الواحدة حقًا. انقر لكتابته
+Which deck it acts on; step off the end for the one this cue lives on	على أي دك يعمل؛ تجاوز النهاية لدك هذا الكيو
+only one playlist - use the routing chip on the header to add another	قائمة تشغيل واحدة فقط: شريحة التوجيه في الترويسة تضيف أخرى
+Which cue this master fires on that deck; step off the end to clear it	أي كيو يطلقه هذا الماستر على ذلك الدك؛ تجاوز النهاية لمسحه
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	ارسم على شاشة البرنامج بالفأرة أو بالقلم (DRAW). Esc يوقف
+How long the move takes, each way. 0 is instant whatever the style says	كم تستغرق الحركة في كل اتجاه. 0 فوري مهما قال النمط
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	أوقف ذلك الدك عندما يصل المنحدر: الخفض ثم الإيقاف المعتاد
+Which of the file's sound tracks plays: a second language, a commentary	أي مسار صوتي في الملف يُشغَّل: لغة ثانية، تعليق
+An oscillator on the colour: depth is how far round the wheel it travels	مذبذب على اللون: العمق هو مدى دورانه على العجلة
+Rack this cue paused and off air so GO starts it with no decoder spin-up	جهّز هذا الكيو متوقفًا وخارج البث، كي يبدأه GO دون تأخير المفكّك
+Note, control change, program change, MIDI Show Control, or your own bytes	نغمة أو control change أو program change أو MIDI Show Control أو بايتاتك الخاصة
+Black behind the words. Zero leaves it over whatever the output already has	أسود خلف الكلمات. الصفر يتركها فوق ما في الخرج أصلًا
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	كم يحني المعدِّل طبقة الصوت. 0-63، مدى الكسب الخاص بالعتاد.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	الكلمات التي يضعها هذا الكيو على الشاشة  |  Shift+Enter: سطر جديد  |  Enter: تطبيق
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC وUDP يُرسلان ويُنسيان؛ TCP يتصل، لذا يعمل خارج خيط العرض
+Put the level on an oscillator: Motion makes it a gate that opens as you move	ضع المستوى على مذبذب: Motion يجعله بوابة تنفتح حين تتحرك
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	علامات مكدّسة فوق الحروف، مثل علامات التشكيل المركّبة التي تفيض عن السطر.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	أي جرس. التبديل يُسمعه، فتختار بالأذن لا بالاسم.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	لا صفوف. + إضافة أو تعلّم يصنع واحدًا؛ MIDIMAP RESET يعيد الصفوف المدمجة.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	احفظ مسارات القناع بصيغة SVG، لـ Illustrator وكل ما يقرؤها
+Which MIDI output; a named port that is missing is reported rather than swapped	أي خرج MIDI؛ المنفذ المسمّى المفقود يُبلَّغ عنه ولا يُستبدل
+An oscillator on the level, running after GO until a later cue sets this fixture	مذبذب على المستوى، يعمل بعد GO حتى يضبط كيو لاحق هذا الضوء
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	خطوات بأثلاث الأوكتاف، لأن الأذن تعمل بالنسب. 1 كيلوهرتز هو العرف.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	ضربات عبر الخلية، تُتلف الحرف بدل أن تزيّنه.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	هل تعزف نغمات MIDI الواردة هذا المركِّب أم تطلق الكيو كما اعتادت.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	رقم نغمة، أو اكتب LEARN واعزفها. النغمات التي لا يأخذها أي كيو تذهب إلى الكيو N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	زوج ستيريو بسيط. انقر لفتح المصفوفة بدءًا من هذا التوجيه تمامًا
+Folding is what turns an arbitrary pattern into something that reads as designed.	الطيّ يحوّل أي نقش اعتباطي إلى شيء يبدو مصمَّمًا.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	قناة=مستوى، مفصولة بفواصل. والنطاقات أيضًا: 1=255، 10-14=64. تُعدّ القنوات من 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	يحرّك تعديل كل كيو محدَّد بالديسيبلات نفسها؛ كتابة قيمة تضبطها كلها عليها
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	يحني طبقة الموجة الحاملة بدل أن يمتزج بها. هذا ما يجعل FDS يزمجر.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	في منتصف تعلّم الأساسيات. اضغط L ونكمل من حيث توقفت، skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	ارسم كشبكة حروف بلوحة ألوان مفهرسة من 16 لونًا، بدل البكسلات.
+Which MIDI output this file plays to; step past the end for the first one available	إلى أي خرج MIDI يعزف هذا الملف؛ تجاوز النهاية لأول متاح
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	عنوان IPv4، أو 255.255.255.255 لمجموعة البث المتعدد للكون (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	انقر خلية للتنقل بين قيمها: إيقاف، كامل، -3، -6، -12. هذا الصف يطفئ المصفوفة مجددًا
+How long each phrase stays before it moves. Zero hides them without losing the list.	كم تبقى كل عبارة قبل أن تتحرك. الصفر يخفيها دون فقد القائمة.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	كم يستغرق الخفوت بعد الهجوم. يُسمع فقط حين يكون إعادة القدح مفعّلًا.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	إيقاف، من البداية (يبدأ الكيو التالي حين يبدأ هذا) أو من النهاية (حين ينتهي)
+Height of one line as a percent of the raster, so a card reads the same on any screen	ارتفاع السطر كنسبة من المسح، كي تُقرأ البطاقة بالشكل نفسه على أي شاشة
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	حدّد مصدر الخانة: media:/المسار أو browser:url أو window:الاسم أو camera:الاسم أو syphon:الاسم
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	وضع LFSR القصير. الدورة قصيرة بما يكفي لتبدو معدنًا مضبوطًا لا هسيسًا.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	أبيض، دافئ، أحمر، كهرماني، أخضر، سماوي، أزرق، أرجواني. ~ يديره على عجلة الألوان
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	أعد قدح الغلاف بهذا التواتر. Hold يُبقي نغمة واحدة، وهذا ما يريده الطنين.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond هي شبكة Atari Video Music الحادة الحواف؛ الحلقات تصنع نفقًا جيدًا مع تقريب التغذية الراجعة.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	تأرجح أو دوران. العمق 1 نصف دورة في كل اتجاه؛ المنشار عند 1 يدور دورة كاملة
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	مستوى تشغيل الدك (مباشر، لا يُحفظ مع الكيو) - تعديل كل كيو هو الكسب في قسم الصوت
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	ثابت، ظهور تدريجي، آلة كاتبة، تمرير لأعلى، شريط متحرك أو نبض، وكلها يقودها نقل الكيو نفسه
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	حقول لكل إطار مُصيَّر. 1 واحد لواحد، 0.5 يُبقي كل حقل إطارين، 0 يجمّده.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	ما يعرضه هذا الكيو أثناء تشغيله: شكل الموجة، راسم، ليساجو، طيف، عدّادات أو بطاقة اسم
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 يختار البلاطات حسب السطوع لتُقرأ الصورة. 1 يختارها عشوائيًا فتصير الشبكة ملمسًا.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	كم يرتحل، بأنصاف النغمات. للأعلى يبدو وصولًا، للأسفل رحيلًا، والصفر نغمة مضروبة.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	عنوان IPv4. لا تُحلّ الأسماء: استعلام DNS نداء حاجب ولا يجوز لـ GO إجراؤه
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	عرض البلاطة بالبكسل. يجب أن يطابق شبكة الورقة وإلا وقعت الشرائح عبر العفاريت المجاورة.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	مرايا متناوبة حسب موضع الخلية، تُقرأ نقشًا حيث يُقرأ القلب العشوائي ضجيجًا.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 يلحمها بخليتها كأنها منقوشة. فوق ذلك يُعاد سحبها كأنها تغلي.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L يشغّل الدخل الأيسر في السمّاعتين: الميكروفون 1 في معظم الواجهات. STEREO لمصدر خطّي.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	الإيماءة كلها. هذه هي مدة الكيو: اللحن القصير هو الإشارة المولّدة الوحيدة هنا التي تنتهي.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	انقر القيمة لإرسال هذا الضوء أو تركه حيث وضعه آخر كيو. ~ يجعل المستوى يتنفّس
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS جدول موجة يحنيه معدِّل. 2A03 هي مجموعة النبضة/المثلث/الضجيج التي صُنع منها معظم الـ chiptune.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	اخلط أي رمز يعني أي سطوع. المجموعة نفسها بخطّ مختلف. ببذرة، لذا يبقى ثابتًا.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	فرز البكسلات: سلاسل بكسلات مرتبة حسب السطوع داخل الصف، وهذا ما يعطي الداتاموش مظهره الذائب.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	كم خلية يمكن للعلامات أن تصعد. تخفّ أثناء صعودها، فيترك المدى الطويل أثرًا بدل أن يتضاعف.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	كيو فعل قيمة  -  G أخذ  S إيقاف  F تلاشٍ للخروج (القيمة = أعشار الثانية)  V الصوت  O العتامة  J انتقال إلى صف
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	وزن التوافقيات: جرس صافٍ عند الصفر، نحاسيات عند الأقصى. هذا هو الفرق بين رنين وفانفار.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	يتنقل بين مداخل هذا الحاسوب. 'Settings input' يتبع الدخل المختار في الإعدادات > الصوت.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	من الجمر إلى اللهيب. يظل يتصاعد ويهدأ عند أي إعداد: النار التي لا تتحرك تبدو صورة
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	طبقة المرجع. 440 المعيار الحديث، و432 البديل الشائع، والآلات الأقدم كانت أخفض بعد.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	أين يبدأ اللحن القصير. تحت صوت ما عليه أن يبتعد؛ فوق قاعة عليه أن يخترق.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	كسب رقمي على الدخل، من -40 إلى +40 ديسيبل. اضبط أولًا مضخم الواجهة؛ هذا للديسيبلات الأخيرة.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	انبض بالحجم. وحده يحرّك العرض والارتفاع معًا؛ أعطِ الارتفاع ~ خاصًا ليُسحق ويُمطّ
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	البطاقة تملأ الإطار؛ الشريط السفلي اسم ودور في أسفل إطار شفاف، بدخول وخروج
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held يُبقي آخر إزاحة بدل إزالتها: تبقى الصورة منحنية كما تركها المشغّل.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12.5 و25 رفيعان وأنفيان، و50 أجوف. 75 يبدو مثل 25 تمامًا: موجود لأن متتبّعات الموسيقى تعرضه.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	كمّم الخرج مثل العتاد. الدرجات هي الصوت؛ تنعيمها يجعله مركِّبًا يقلّد شريحة.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	يحرّك تعديل كل كيو محدَّد بالديسيبلات نفسها مع الحفاظ على الفروق؛ كتابة قيمة تضبطها كلها عليها
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	إلى أين ترسله نقاط تقاطع قائمة التشغيل (الإعدادات > الصوت). انقر لفتح المصفوفة بالاسم بدءًا من ذلك التوجيه تمامًا
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	سمِّ القيم بـ  d = ...;  واختم بتعبير واحد، أو ثلاثة للأحمر والأخضر والأزرق  |  Shift+Enter: سطر جديد  |  Enter: تطبيق
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	أعد ما بدأ منه عند وصول المنحدر (بعد الإيقاف): دك جاهز لكيوه التالي، تصاعد يُفلت
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	أي نموذج كلام يصنع الترجمة: الإنجليزية، أي لغة، أو الزوج الأبطأ والأدق. كلٌّ يُنزَّل مرة واحدة
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	ما يقصّه القناع: هذا الكيو أينما شُغّل، قائمة التشغيل هذه على الخرج المحدد، صورة ذلك الخرج كلها، أو طبقته المعتمة
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	شغّل بتردد الشاشة حين يكون ضمن 0.2% (59.94 على 60): كل إطار مرة واحدة، والصوت حتى 3.5 سنت أعلى أو أخفض
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	أرباع الدورة دقيقة وتبقى حادة. الدوران يأخذ العينات بزاوية فيمزّق فن البكسل: وأحيانًا هذا ما تريده.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	كل أخذ يبدأ تحريك الدمى بالطريقة نفسها، فيتكرر المظهر المتمرَّن عليه بدل أن يعتمد على مدة فتح التطبيق.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	ما يوجّه كل ميل: موضعه نفسه، أو تدرّج سطوع الصورة كي تميل الحروف كما تميل الصورة، أو صبغة الخلية.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	سمِّ قناة أو زوجًا مرة واحدة. قوائم التشغيل ترسل إلى الاسم، فتغيير الواجهة يعني تغيير الأسماء هنا لا كل كيو.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	انقر نقطة تقاطع للتنقل: إيقاف، 0، -3، -6، -12 ديسيبل. اسحبها جانبًا لأي مستوى. قائمة تشغيل بلا نقاط تعزف على جهازها الخاص.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	مجموعات عفاريت مثبتة في data/sprites. كل مجلد مجموعة؛ التبديل يختار واحدة ويعود إلى لا شيء. النقر الأيمن يطفئها.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	الدقة الداخلية، من 1 الأخشن إلى 5 الأنعم. هذا تحكم جمالي بقدر ما هو تحكم بالسرعة: مظهر 8 بت يأتي من البكسلات الكبيرة.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture يأخذ اللون من الصورة. الأخضر والكهرماني والسماوي فوسفورات طرفيات. Palette يقفل النص على لوحة العتاد المختارة.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE يشفى ذاتيًا (H.264). CLASSIC هو اللطخ الحقيقي (MPEG-4). EXTREME أخشن ويلطخ باستمرار. تغيير هذا يعيد تحضير الكيو.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	جيب للمحاذاة، وردي لضبط نظام الصوت، أبيض لإيجاد الطقطقات، مسح لسماع أين ترنّ القاعة، identify للمرور على المخارج واحدًا تلو الآخر.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	أي مؤثر، بموضعه في كومة الكيو الذي يشغّله ذلك الدك عند الإطلاق. إن لم يكن هناك شيء، يقول التلاشي ذلك ولا يفعل شيئًا
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	كل إطار يُمزج في التالي. هذا توقيع Hypno: عند 0 هو مولّد نقوش، وفوقه تبدأ الصورة تتغذى على نفسها.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	ما يُرى من النافذة في جدار الموقد: حديقة، مطر، ثلج أو البحر. غرفة في خارجها طقس تُقرأ مكانًا لا جدارًا
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	حسب الضوء: الأضواء في الباتش (الإعدادات > الشبكة > الأضواء)، بالاسم. القنوات: قناة=مستوى يدويًا. يمكن للكيو حمل الاثنين؛ القنوات تأتي أخيرًا
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	كل حرف يتأرجح كبطاقة تُمال. لكل خلية طورها، فتتنفس الشبكة بدل أن تنزلق كصفيحة واحدة.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	القلم: انقر للزوايا، اسحب للمنحنيات، انقر النقطة الأولى للإغلاق (P). النقاط: اسحب، انقر المحيط للإضافة، Alt-نقر أو Delete للحذف
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	قنوات الشريحة الثلاث. تختلف نوعًا: المثلث بلا تحكم بالصوت في العتاد، والضجيج سجل إزاحة لا مذبذب.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	مجموعات منتقاة من الرموز والإيموجي: نجوم، نوتات، زهور، أسهم، طقس، رونات، وجوه. اختيار واحدة يملأ الرموز المخصصة أدناه، وتبقى قابلة للتحرير.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	اعزف من لوحة مفاتيح الحاسوب، تخطيط Ableton: A W S E D F T G Y H U J، وZ وX للأوكتاف. ما دام هذا مفعّلًا تعزف تلك المفاتيح نغمات بدل إطلاق الكيو.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	عتامة الدك، صوت الدك، المخفّت الرئيسي، سطوع / تباين / تشبّع / صبغة الكيو النشط، أو مقبض أحد مؤثراته أو مؤثراته الصوتية
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	خطوط المسح وتوهج الفوسفور وحواف RGB. التوهج هو المهم: الفوسفور ينسكب جانبًا، ولهذا تبدو شاشة CRT وكأنها تبعث الضوء.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	أشرطة خطوط ممزقة وفصل RGB. في وضع النص يفسد الخلايا أيضًا: صفوف كاملة تتجمد على حرف واحد مكرر، مثل شاشة نصية حقيقية فقدت التزامن.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still يُبقي الإطار الذي أنت عليه. Flipbook يشغّل الإطارات بالتناوب. Replay يرسم الإطار الأول ضربة ضربة كما رُسم، ثم يثبت ويبدأ من جديد
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start وStop وPause وResume وLoad (تجهيز دون إطلاق) وArm وDisarm أو Devamp (الحلقة تكمل دورتها وتنتهي)؛ أو Stop all وPause all وResume all: كل دك
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope يُظهر الشكل والقص. Lissajous يُظهر الطور والقطبية بين القناتين الأوليين: قطر في الاتجاه الخطأ يعني أن إحداهما معكوسة. Spectrum أشرطة بثلث أوكتاف.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 يختار الرمز الذي يطلبه السطوع، و1 أي رمز في المجموعة. ارفعه لترى الأبجدية كلها: مع الترتيب الصارم بالحبر تختار المساحة المسطحة علامة واحدة ولا يظهر الباقي أبدًا.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	الكتل والتنقيط تُقرأ كثافة؛ ومنحدر ASCII نصًا؛ والرموز حطامًا. التبديل يمسح سلسلة الرموز المخصصة لأنها ستتجاوزه؛ صف الإعدادات المسبقة يعيد واحدة.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	الضبط المعدَّل بالتساوي يشتري التحويل الحر مقابل أن يكون كل مسافة خاطئًا قليلًا. الضبط الطبيعي والفيثاغوري دقيقان تمامًا في مقام واحد. Bohlen-Pierce يقسم الثانية عشرة، فلا أوكتافات فيه.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+trans	انتقال
+TRACKER	المتتبع
+Motion: Bug Swat	الحركة: Bug Swat
+Passphrase (shared)	عبارة المرور (مشتركة)
+, — skip to previous cue	, — انتقل إلى الكيو السابق
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  لا يفعل شيئًا في تلك القائمة  -  (M) قائمة الخطوة نفسها
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS محاذاة EBU، و-20 لـ SMPTE. محدود تحت 0: هذا يغذي نظام صوت حيًا.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  لا يفعل شيئًا في تلك القائمة  -  (M) قائمة الخطوة نفسها  -  EDIT مفعّل: الكتابة تغيّر العرض
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	اختر DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	الآن انقر لسانها، Deck 2. القائمة الجديدة لا تصبح المحددة حتى تنقرها.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	اللسان المضيء هو حيث يضع مصدر الأشياء. تخطَّ هذا ويقع الحبر تحت المولّد.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	ترى ذلك اللسان؟ انقره. أنت الآن على Deck 2. بوم. أساسيات.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	انقر لسانها، Deck 2. اللسان المضيء هو القائمة التي يضيف إليها مصدر.
+Skip this and the words go under the map. With the lizard.	تخطَّ هذا وتذهب الكلمات تحت الخريطة. مع السحلية.
+Nine years of live weather. Always click the tab.	تسع سنوات من الطقس على الهواء. انقر اللسان دائمًا.
+Click its tab, Deck 2. A new playlist waits until you choose it.	انقر لسانها، Deck 2. القائمة الجديدة تنتظر حتى تختارها.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	اللسان المضيء يأخذ الإشارة التالية. مثل اختيار الشريحة التي تدخل جهاز العرض.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	اختر مجموعة. أي مجموعة. ...Deck 2. اختر Deck 2.
+MENU	القائمة
+VOLUME	الصوت
++ step	+ خطوة
+< BACK	< رجوع
+ATEM switcher	مازج ATEM
+ATEM tally	Tally من ATEM
+AUDIO: DEFAULT	الصوت: افتراضي
+Animated GIF	GIF متحرك
+Arrows	الأسهم
+CLICKER	جهاز التحكم
+Copyright	حقوق النشر
+DEST...	الوجهة...
+Datamosh - classic	Datamosh – كلاسيكي
+Datamosh - extreme	Datamosh – متطرف
+Datamosh - subtle	Datamosh – خفيف
+Deckboy is input	Deckboy هو المدخل
+Device: None	الجهاز: لا شيء
+Drag	اسحب
+Drop media here	أفلت الوسائط هنا
+Enter Take  Space Play/Pause	Enter Take  Space تشغيل/إيقاف مؤقت
+FFmpeg / libav  (in-process)	FFmpeg / libav  (داخل العملية)
+FPS: SOURCE	FPS: المصدر
+Fonts	الخطوط
+Free software. You may use, study, share	برنامج حر. يمكنك استخدامه ودراسته
+GO / BACK	GO / رجوع
+GO / BACK (clicker)	GO / رجوع (جهاز التحكم)
+Key out: None - fill only	مخرج key: لا شيء – fill فقط
+LTC in	مدخل LTC
+Licence	الترخيص
+MATCH SOURCE	مطابق للمصدر
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> النقل
+MOSH: SUBTLE	MOSH: خفيف
+MSC Trigger -> cue by id	MSC Trigger -> cue حسب المعرّف
+MTC in	مدخل MTC
+Mode: CALLER	الوضع: CALLER
+NDI receiver	مستقبل NDI
+NDI trigger	مشغّل NDI
+NO STEPS YET	لا خطوات بعد
+No PTP lock, wide-model pacing - will not genlock to plant sources	لا قفل PTP، توقيت تقريبي – لن يتزامن genlock مع مصادر الاستوديو
+ONCE  |  ORDER	مرة واحدة  |  الترتيب
+Optional	اختياري
+PNG sequence	تسلسل PNG
+Platform	المنصة
+Press A to take cue	اضغط A لأخذ الـ cue
+RATE: AUTO	المعدل: تلقائي
+S Stop   C Clear   Esc Panic	S إيقاف   C مسح   Esc طوارئ
+SIZE: SOURCE	الحجم: المصدر
+SPOUT TEXTURE SHARE	مشاركة نسيج SPOUT
+Session	الجلسة
+TSL tally out	مخرج tally من TSL
+Thanks	شكر
+Timecode chase	تتبع timecode
+Timecode run	تشغيل timecode
+Toolkit	مجموعة الأدوات
+Trigger	إطلاق
+WAV (audio only)	WAV (صوت فقط)
+Warranty	الضمان
+address...	العنوان...
+and modify it; derivatives stay GPL.	ومشاركته وتعديله؛ وتبقى المشتقات GPL.
+auto	تلقائي
+clear the cell	امسح الخلية
+companion ping	نداء من Companion
+fire this row	أطلق هذا الصف
+insert a row	أدرج صفًا
+live lane  |  I/O set trim  |  click or drag to seek	المسار الحي  |  I/O يضبط القص  |  انقر أو اسحب للتنقل
+media in	إدخال الوسائط
+move the cursor	حرّك المؤشر
+mute / solo a column	كتم / عزل عمود
+off -- edit on monitor	متوقف -- حرّر على الشاشة
+off: no camera is open. Drag on the picture to draw a zone.	متوقف: لا توجد كاميرا مفتوحة. اسحب على الصورة لرسم منطقة.
+open the code editor	افتح محرر الشيفرة
+play / stop	تشغيل / إيقاف
+stop, fade, vol, opacity	إيقاف، تلاشٍ، صوت، عتامة
+the FFmpeg, SDL and FreeType projects,	لمشاريع FFmpeg وSDL وFreeType،
+Bitfocus Companion, and x42/libltc.	وBitfocus Companion وx42/libltc.
+Keys	المفاتيح
+None. See LICENSE sections 15-16.	لا يوجد. انظر LICENSE، القسمين 15-16.
+none compiled in	لا شيء مضمّن
+Alpha	ألفا
+Group	مجموعة
+Normal	عادي
+Remote	تحكم عن بُعد
+lesson	درس
+Bitrate	معدل البت
+Latency	التأخير
+OUT {n}	خرج {n}
+Out {n}	خرج {n}
+{n} row	{n} صف
+Deck {n}	ديك {n}
+Key name	اسم المفتاح
+Keyframe	إطار مفتاحي
+Registry	السجل
+fade {n}	تلاشي {n}
+{n} rows	{n} صفوف
+Node port	منفذ العقدة
+Stream ID	معرّف البث
+added {1}	أُضيف {1}
+start {n}	بدء {n}
+still {n}	صورة ثابتة {n}
+FADE {n} s	تلاشي {n} ث
+LAYER {n}%	طبقة {n}%
+Output {n}	الخرج {n}
+PROXY {n}p	بروكسي {n}p
+PTP domain	نطاق PTP
+Proxy {n}p	بروكسي {n}p
+Stream key	مفتاح البث
+[ASSIGNED]	[معيَّن]
+audio only	الصوت فقط
+to Out {n}	إلى خرج {n}
+{n} of {n}	{n} من {n}
+Display {n}	شاشة العرض {n}
+active jobs	مهام نشطة
+local clock	الساعة المحلية
+not running	لا يعمل
+click to set	انقر للتعيين
+full {n}x{n}	كامل {n}x{n}
+running v{n}	يعمل v{n}
+the other one	الأخرى
+DELIVERY H.{n}	تسليم H.{n}
+Output {n} mix	مزج الخرج {n}
+made by Deckboy	صُنع بواسطة Deckboy
+{1} plays to {2}	{1} يعزف إلى {2}
+the picture {1} plays	الصورة التي يعزفها {1}
+New media joins {1} by itself	الوسائط الجديدة تنضم إلى {1} تلقائيًا
+Press Win+P and choose Extend	اضغط Win+P واختر توسيع
+{n} patched - DMX cues set them by name	{n} موصول - كيوهات DMX تعيّنها بالاسم
+Set them to extend in your display settings	اضبطها على التوسيع في إعدادات الشاشة
+lesson: {1}. Esc leaves, and it picks up here next time	درس: {1}. Esc يخرج، ويكمل من هنا في المرة القادمة
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	يردّ على ATEM Software Control كديك عبر TCP 9993 على {1}
+In System Settings > Displays, use it as an extended display	في إعدادات النظام > شاشات العرض، استخدمها كشاشة ممتدة
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	أكل الطاولة، skapi. لديك {1} شاشات: شاشة العرض للخرج في القائمة تنقله إلى شاشة أخرى.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	أكل الطاولة، skapi. لديك شاشتان: شاشة العرض للخرج في القائمة تنقله إلى الأخرى.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} شاشات، skapi. تبقى الطاولة على هذه، والصورة تذهب إلى {2}. افتح القائمة واجعل الخرج متوقف يصبح الخرج يعمل.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	شاشتان، skapi. تبقى الطاولة على هذه، والصورة تذهب إلى الأخرى: {1}. افتح القائمة واجعل الخرج متوقف يصبح الخرج يعمل.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	أكل الطاولة، skapi. الشاشات المنعكسة تعرض الصورة على كلتيهما، لذا وضعتها في نافذة صغيرة في الخلف. {1}، وستحصل على شاشة خاصة بها.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	شاشاتك منعكسة، skapi: {1} تعرض ما تعرضه هذه، لذا ستغطي الصورة الطاولة على كلتيهما. {2}، وسأضع الصورة على شاشة خاصة بها. أو افتح القائمة واجعل الخرج متوقف يصبح الخرج يعمل.

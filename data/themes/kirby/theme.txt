@@ -1,0 +1,23 @@
+# Deckboy Theme: kirby
+# Family: moulded case -- muted plastic shell with a saturated LCD, the same
+# structure as the default Game Boy theme. The case is deliberately low-chroma:
+# the character's hue belongs to the screen.
+# All color values are RRGGBBAA hex.
+
+shell_outer	C6B4B8FF
+shell_inner	B29CA2FF
+shell_shadow	4E3E44FF
+screen_light	FF7AC8FF
+screen_mid	C43C8EFF
+screen_dark	6E1E4CFF
+screen_deep	240C1AFF
+screen_ink_soft	A03A70FF
+button_bezel	7A5A66FF
+delete_bezel	8B3A3AFF
+scanline_alpha	18
+# hide themselves the moment an output goes live.
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	cat	1
+creature	moth	2

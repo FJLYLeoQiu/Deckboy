@@ -1,0 +1,1400 @@
+cmake_minimum_required(VERSION 3.20)
+
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" DECKBOY_VERSION_RAW)
+string(STRIP "${DECKBOY_VERSION_RAW}" DECKBOY_VERSION_STRING)
+if(NOT DECKBOY_VERSION_STRING MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?$")
+  message(FATAL_ERROR
+    "VERSION must use SemVer: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-prerelease"
+  )
+endif()
+
+set(DECKBOY_VERSION_MAJOR "${CMAKE_MATCH_1}")
+set(DECKBOY_VERSION_MINOR "${CMAKE_MATCH_2}")
+set(DECKBOY_VERSION_PATCH "${CMAKE_MATCH_3}")
+set(DECKBOY_VERSION_PRERELEASE "${CMAKE_MATCH_4}")
+set(DECKBOY_VERSION_TAG "v${DECKBOY_VERSION_STRING}")
+
+# HOW OLD A macOS THIS BINARY WILL RUN ON.
+#
+# Must be set BEFORE project(), because that is when the compiler is probed.
+#
+# With nothing here, clang stamps the BUILD machine's OS as the minimum, and
+# the OS refuses to launch a binary whose minimum is newer than itself. CI
+# builds on a GitHub runner, so the release bundle quietly acquired whatever
+# macOS that image happened to be -- and would not open on Sonoma, which is
+# exactly what was reported from the field.
+#
+# This floor is only half of it. The bundle also carries its libraries, and a
+# Homebrew bottle is built for the runner's own OS -- v0.99.405 claimed macOS
+# 11, was built for 13, and carried 32 libraries built for 14 (15 on Intel),
+# so on Ventura its ffmpeg could not start. Release bundles are now built
+# against tools/macos_build_deps.sh, which builds every library for THIS floor,
+# and tools/audit_macos_minos.py fails the package if any file needs newer.
+# Keep this, the deps build and LSMinimumSystemVersion (package_macos.sh,
+# DECKBOY_MACOS_MIN) the same number.
+#
+# 12.0 is the default for a build made here. The INTEL release is built for
+# 10.13 High Sierra (the macos-package job passes it), because Intel Macs are
+# the ones held on old systems -- a 2015 MacBook Pro at a show was. What that
+# costs: std::filesystem is ghc::filesystem there (core/fs.hpp), captions need
+# 10.15 and screen/window/browser capture 12.3, each said on the screen.
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING
+      "Oldest macOS this build will run on" FORCE)
+endif()
+
+project(deckboy_native VERSION
+  ${DECKBOY_VERSION_MAJOR}.${DECKBOY_VERSION_MINOR}.${DECKBOY_VERSION_PATCH}
+  LANGUAGES CXX
+)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+function(deckboy_target_link_frameworks target)
+  if(NOT APPLE)
+    return()
+  endif()
+
+  foreach(framework IN LISTS ARGN)
+    find_library(DECKBOY_${framework}_FRAMEWORK NAMES ${framework})
+    if(NOT DECKBOY_${framework}_FRAMEWORK)
+      message(FATAL_ERROR "Required macOS framework not found: ${framework}")
+    endif()
+    target_link_libraries(${target} PRIVATE ${DECKBOY_${framework}_FRAMEWORK})
+  endforeach()
+endfunction()
+
+# SDL3 + SDL3_ttf (migrated from SDL2, v0.77.0). Prefer CMake config packages
+# (vcpkg on Windows); fall back to pkg-config on Linux.
+set(DECKBOY_SDL_TARGET "")
+set(DECKBOY_SDL_TTF_TARGET "")
+set(DECKBOY_SDL_INCLUDE_DIRS "")
+set(DECKBOY_SDL_TTF_INCLUDE_DIRS "")
+set(DECKBOY_SDL_LINK_LIBS "")
+set(DECKBOY_SDL_TTF_LINK_LIBS "")
+set(DECKBOY_SDL_COMPILE_OPTIONS "")
+set(DECKBOY_SDL_LINK_DIRS "")
+
+find_package(SDL3 QUIET CONFIG)
+find_package(SDL3_ttf QUIET CONFIG)
+
+if(TARGET SDL3::SDL3)
+  set(DECKBOY_SDL_TARGET SDL3::SDL3)
+elseif(TARGET SDL3::SDL3-static)
+  set(DECKBOY_SDL_TARGET SDL3::SDL3-static)
+endif()
+
+if(TARGET SDL3_ttf::SDL3_ttf)
+  set(DECKBOY_SDL_TTF_TARGET SDL3_ttf::SDL3_ttf)
+elseif(TARGET SDL3_ttf::SDL3_ttf-static)
+  set(DECKBOY_SDL_TTF_TARGET SDL3_ttf::SDL3_ttf-static)
+endif()
+
+# Unconditional: pkg_check_modules is also used further down (RtMidi), and
+# looking PkgConfig up only inside the SDL fallback meant that when SDL3 came
+# from a CONFIG package the command was never defined — so configuring with
+# -DENABLE_MIDI=ON failed outright with "Unknown CMake command".
+find_package(PkgConfig QUIET)
+
+if(PkgConfig_FOUND AND NOT DECKBOY_SDL_TARGET)
+  pkg_check_modules(SDL3 QUIET sdl3)
+  set(DECKBOY_SDL_INCLUDE_DIRS ${SDL3_INCLUDE_DIRS})
+  set(DECKBOY_SDL_LINK_LIBS ${SDL3_LIBRARIES})
+  list(APPEND DECKBOY_SDL_COMPILE_OPTIONS ${SDL3_CFLAGS_OTHER})
+  list(APPEND DECKBOY_SDL_LINK_DIRS ${SDL3_LIBRARY_DIRS})
+endif()
+
+if(PkgConfig_FOUND AND NOT DECKBOY_SDL_TTF_TARGET)
+  pkg_check_modules(SDL3_TTF QUIET sdl3-ttf)
+  set(DECKBOY_SDL_TTF_INCLUDE_DIRS ${SDL3_TTF_INCLUDE_DIRS})
+  set(DECKBOY_SDL_TTF_LINK_LIBS ${SDL3_TTF_LIBRARIES})
+  list(APPEND DECKBOY_SDL_COMPILE_OPTIONS ${SDL3_TTF_CFLAGS_OTHER})
+  list(APPEND DECKBOY_SDL_LINK_DIRS ${SDL3_TTF_LIBRARY_DIRS})
+endif()
+
+if(NOT DECKBOY_SDL_TARGET AND NOT DECKBOY_SDL_LINK_LIBS)
+  message(FATAL_ERROR "SDL3 development files are required")
+endif()
+if(NOT DECKBOY_SDL_TTF_TARGET AND NOT DECKBOY_SDL_TTF_LINK_LIBS)
+  message(FATAL_ERROR "SDL3_ttf development files are required")
+endif()
+
+option(DECKBOY_ENABLE_NDI "Enable optional NDI SDK integration" ON)
+if(DECKBOY_ENABLE_NDI)
+  find_path(DECKBOY_NDI_INCLUDE_DIR
+    NAMES Processing.NDI.Lib.h
+    PATHS
+      "$ENV{DECKBOY_NDI_SDK}/include"
+      "$ENV{NDI_SDK_DIR}/Include"
+      # Windows — NDI 6/5 SDK standard install locations
+      "C:/Program Files/NDI/NDI 6 SDK/Include"
+      "C:/Program Files/NDI/NDI 5 SDK/Include"
+      # Linux — standard install locations (installer extracts to CWD)
+      "/opt/NDI SDK for Linux/include"
+      "$ENV{HOME}/NDI SDK for Linux/include"
+      "/usr/local/include"
+      "/usr/include"
+      # The vendored copy, last, so an installed SDK still wins locally.
+      "${CMAKE_CURRENT_SOURCE_DIR}/native/extras/ndi-sdk/include"
+  )
+  # The headers are vendored, so a miss is a broken checkout, not a missing
+  # optional SDK. Before they were, this search failed silently in CI and every
+  # released package shipped without NDI while the build stayed green. Turn NDI
+  # off explicitly with -DDECKBOY_ENABLE_NDI=OFF to build the stub.
+  if(NOT DECKBOY_NDI_INCLUDE_DIR)
+    message(FATAL_ERROR "NDI headers not found. They should be vendored in "
+                        "native/extras/ndi-sdk/include; configure with "
+                        "-DDECKBOY_ENABLE_NDI=OFF to build without NDI.")
+  endif()
+  message(STATUS "NDI headers: ${DECKBOY_NDI_INCLUDE_DIR}")
+endif()
+
+option(DECKBOY_ENABLE_ALSA_MTC "Enable optional ALSA MTC ingest integration" ON)
+if(UNIX AND NOT APPLE AND DECKBOY_ENABLE_ALSA_MTC)
+  find_path(DECKBOY_ALSA_INCLUDE_DIR
+    NAMES asoundlib.h
+    PATH_SUFFIXES alsa
+    PATHS
+      /usr/include
+      /usr/local/include
+  )
+  find_library(DECKBOY_ALSA_LIBRARY
+    NAMES asound
+  )
+endif()
+
+# XTEST — driving a browser cue on Linux.
+#
+# The Linux browser backend is Chromium on a private Xvfb display, so there is
+# no JavaScript channel the way WebView2 gives one on Windows. XTEST sends REAL
+# pointer events to that display instead, which is strictly better: it drives
+# the page exactly as a person would, including anything a synthetic DOM event
+# would miss.
+#
+# Optional, and found rather than required: libXtst is present on any desktop
+# Linux, but a headless build box may not have it, and a browser cue that
+# cannot be clicked is a smaller loss than a build that will not configure.
+if(UNIX AND NOT APPLE)
+  find_path(DECKBOY_XTEST_INCLUDE_DIR
+    NAMES X11/extensions/XTest.h
+    PATHS /usr/include /usr/local/include
+  )
+  find_library(DECKBOY_XTEST_LIBRARY NAMES Xtst)
+  find_library(DECKBOY_X11_LIBRARY NAMES X11)
+endif()
+
+# In-process libav* decode (GPU decode rewrite, docs/GPU_DECODE_PLAN.md).
+# When ON and the FFmpeg dev libraries are found, file-backed Video/Audio
+# cues decode in-process (d3d11va zero-copy on Windows) instead of spawning
+# ffmpeg subprocess pipes. OFF (or libs missing) keeps the CLI pipe path —
+# the break-glass fallback build.
+option(DECKBOY_INPROC_DECODE "Decode media in-process via libav (GPU zero-copy)" ON)
+# A release build sets this: a missing libav is then a failed build, not a
+# warning nobody reads and a download without GPU decode or SRT sound.
+option(DECKBOY_REQUIRE_INPROC_DECODE "Fail the configure if libav is not found" OFF)
+set(DECKBOY_INPROC_DECODE_ACTIVE OFF)
+if(DECKBOY_INPROC_DECODE)
+  find_path(DECKBOY_AVCODEC_INCLUDE_DIR NAMES libavcodec/avcodec.h)
+  find_library(DECKBOY_AVCODEC_LIBRARY NAMES avcodec)
+  find_library(DECKBOY_AVFORMAT_LIBRARY NAMES avformat)
+  find_library(DECKBOY_AVUTIL_LIBRARY NAMES avutil)
+  find_library(DECKBOY_AVFILTER_LIBRARY NAMES avfilter)
+  find_library(DECKBOY_SWSCALE_LIBRARY NAMES swscale)
+  find_library(DECKBOY_SWRESAMPLE_LIBRARY NAMES swresample)
+  if(DECKBOY_AVCODEC_INCLUDE_DIR AND DECKBOY_AVCODEC_LIBRARY AND
+     DECKBOY_AVFORMAT_LIBRARY AND DECKBOY_AVUTIL_LIBRARY AND
+     DECKBOY_AVFILTER_LIBRARY AND DECKBOY_SWSCALE_LIBRARY AND
+     DECKBOY_SWRESAMPLE_LIBRARY)
+    set(DECKBOY_INPROC_DECODE_ACTIVE ON)
+    message(STATUS "In-process libav decode enabled: ${DECKBOY_AVCODEC_LIBRARY}")
+  else()
+    if(DECKBOY_REQUIRE_INPROC_DECODE)
+      message(FATAL_ERROR "DECKBOY_REQUIRE_INPROC_DECODE=ON but the FFmpeg dev libraries "
+                          "(avcodec avformat avutil avfilter swscale swresample) were not found")
+    endif()
+    message(WARNING "DECKBOY_INPROC_DECODE=ON but FFmpeg dev libraries were not found; building with the ffmpeg CLI decode path only")
+  endif()
+endif()
+
+# Pro Features Feature Gates
+# ON by default: the SDK headers are vendored in native/extras/decklink-sdk, so
+# there is nothing to download and no reason for a downloaded build to arrive
+# unable to talk to a card. The runtime comes from Blackmagic's Desktop Video
+# package, and a machine without it simply reports no devices.
+option(ENABLE_DECKLINK "Build with Blackmagic DeckLink capture and playout" ON)
+option(ENABLE_MIDI "Build with RtMidi cross-platform MIDI input" OFF)
+option(ENABLE_SIPHON "Build with macOS Siphon interprocess texture sharing" OFF)
+option(ENABLE_SPOUT "Build with Windows Spout interprocess texture sharing" OFF)
+option(ENABLE_ASIO "Build with Steinberg ASIO low-latency audio (Windows)" ON)
+option(ENABLE_CEF "Build with Chromium Embedded Framework browser cues" OFF)
+
+option(ENABLE_VST3 "Host third-party VST3 audio plugins" ON)
+
+# -- VST3, for the operator's own plugins in a cue's audio chain -------------
+#
+# HEADERS ONLY, and vendored in native/extras/vst3-sdk. They are MIT, so a
+# GPL-3 project may simply carry them -- note that this is the INTERFACES
+# package, not the full VST3 SDK, which is the dual-licensed GPLv3-or-
+# proprietary one and is neither needed nor included. VST2's SDK is licensed
+# to no new host at all, which is why only this one is here. See
+# native/platform/audio_plugin.hpp.
+#
+# A build with ENABLE_VST3=OFF still SCANS and still lists what the machine
+# has -- it just says it cannot load them -- so an operator is never shown an
+# empty list that reads as "you own none".
+# THE HEADERS ARE VENDORED, so this cannot quietly find nothing.
+#
+# v0.99.370 was first published on all three platforms advertising VST3 plugin
+# hosting with no plugin host in it: the runners had no SDK, this search was
+# quiet by design, every job went green, and the binaries would have listed an
+# operator's plugins and refused to load every one. It was deleted before
+# anyone downloaded it.
+#
+# That is the same failure the NDI block above records ("every released package
+# shipped without NDI while the build stayed green") and the same one the
+# WEBVIEW2 comment in .github/workflows/build.yml records for browser cues.
+# Three times is a pattern, and the pattern is: an optional dependency that is
+# absent by accident looks exactly like one that is absent on purpose.
+#
+# So the answer is the one NDI and DeckLink already use -- vendor it, prefer an
+# installed copy, and treat a miss as a broken checkout. Turn plugin hosting
+# off deliberately with -DENABLE_VST3=OFF; there is no longer a way to lose it
+# by accident.
+if(ENABLE_VST3)
+  find_path(VST3_INCLUDE_DIR
+    NAMES pluginterfaces/base/funknown.h
+    PATHS
+      # An SDK installed on the machine wins, so a developer who keeps their
+      # own (vcpkg, a manual install) builds against that.
+      "$ENV{VST3_SDK_DIR}"
+      # The vendored copy, last. MIT-licensed; see native/extras/vst3-sdk.
+      "${CMAKE_CURRENT_SOURCE_DIR}/native/extras/vst3-sdk"
+    PATH_SUFFIXES vst3sdk)
+  if(NOT VST3_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "VST3 headers not found. They should be vendored in "
+      "native/extras/vst3-sdk/pluginterfaces; configure with "
+      "-DENABLE_VST3=OFF to build without plugin hosting.")
+  endif()
+  message(STATUS "VST3 SDK: ${VST3_INCLUDE_DIR}")
+endif()
+
+###############################################################################
+##                                                                           ##
+##             T H E   S W I T C H ,   A N D   W H Y   I T   I S            ##
+##                   L E F T   T U R N E D   O F F                          ##
+##                                                                           ##
+##  Here is the one rule we do not break, and we resent it properly.        ##
+##                                                                           ##
+##  Steinberg withdrew the VST2 SDK in 2018 and licenses it to nobody new.  ##
+##  Its terms and the GPL will not share a room. The result is twenty       ##
+##  years of working plugins stranded by paperwork, and we cannot fix that  ##
+##  by pretending it is not there: a Deckboy release carrying VST2 is a     ##
+##  Deckboy that cannot be released at all, and then nobody gets anything.  ##
+##  So ENABLE_VST2 is OFF here, it stays OFF, and every binary this         ##
+##  project publishes is built without it.                                  ##
+##                                                                           ##
+##  What we will not do is stand in your way. The host in                    ##
+##  audio_plugin_vst2.inc is written from the API's shape and includes      ##
+##  NONE of Steinberg's headers -- nothing of theirs is in this repo. Point ##
+##  it at an SDK you hold a licence for and it builds:                      ##
+##                                                                           ##
+##    cmake -B build -DENABLE_VST2=ON -DVST2_SDK_DIR=/path/to/VST2_SDK      ##
+##                                                                           ##
+##  It refuses to configure without that path, on purpose. Your SDK, your   ##
+##  build, your call -- and your name on it, which is the part that makes   ##
+##  it legitimate rather than clever.                                       ##
+##                                                                           ##
+##  Nothing else changes. The scan, the chain slot, the parameter rows and  ##
+##  the show format never cared what format a plugin was; VST2 is one more  ##
+##  branch in openAudioPlugin. That is what the seam was for.               ##
+##                                                                           ##
+##  Flipping this for something you then publish as Deckboy is the single   ##
+##  move that makes it everybody's problem. Don't be that pirate.           ##
+##                                                                           ##
+###############################################################################
+option(ENABLE_VST2 "Host VST2 plugins. OFF, and off in every shipped build: \
+the VST2 SDK is not licensed to new hosts. Requires VST2_SDK_DIR pointing at \
+an SDK you hold a licence for." OFF)
+set(VST2_SDK_DIR "" CACHE PATH "Your own VST2 SDK, for ENABLE_VST2 builds")
+
+if(ENABLE_VST2)
+  find_path(VST2_INCLUDE_DIR
+    NAMES pluginterfaces/vst2.x/aeffect.h public.sdk/source/vst2.x/aeffect.h aeffect.h
+    HINTS ${VST2_SDK_DIR}
+    NO_DEFAULT_PATH)
+  if(VST2_INCLUDE_DIR)
+    # LOUD, every configure. A switch like this must never be something a
+    # build turns on quietly and somebody notices later.
+    message(WARNING
+      "=========================================================\n"
+      "  VST2 HOSTING IS ON. Welcome aboard.\n"
+      "  SDK: ${VST2_INCLUDE_DIR}\n"
+      "  This is not a configuration Deckboy ships, so this\n"
+      "  binary is yours -- your SDK licence, your build, your\n"
+      "  name on it. Do not hand it out as a Deckboy release.\n"
+      "=========================================================")
+  else()
+    message(FATAL_ERROR
+      "ENABLE_VST2=ON but no VST2 SDK was found. Set VST2_SDK_DIR to your own "
+      "copy. Deckboy does not ship one and cannot obtain one for you.")
+  endif()
+endif()
+
+
+
+# ── zlib, for reading the notes out of a .pptx ──────────────────────────────
+#
+# A PowerPoint file is a ZIP, and the speaker notes are XML inside it -- which
+# makes them the only per-slide notes that are properly machine-readable
+# without a PDF parser. Google Slides exports .pptx too, so a team that works
+# in Slides and exports a PDF for the fonts can drop the .pptx beside it and
+# keep their notes.
+#
+# OPTIONAL, and quietly so: zlib is present on macOS and Linux as a matter of
+# course and comes from vcpkg on Windows, but a build without it simply loses
+# .pptx notes. The sidecar route keeps working either way, so nothing an
+# operator relies on disappears.
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+  message(STATUS "zlib found: .pptx speaker notes will be read")
+else()
+  message(STATUS "zlib not found: .pptx notes disabled (sidecar notes still work)")
+endif()
+option(ENABLE_WEBVIEW "Build with native WebView APIs (macOS WKWebView, Windows WebView2)" OFF)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# Generate version header at build time so editing VERSION triggers a rebuild
+# without needing to re-run cmake configure.
+set(GENERATED_VERSION_HPP "${CMAKE_CURRENT_BINARY_DIR}/generated/deckboy_version.hpp")
+add_custom_command(
+  OUTPUT "${GENERATED_VERSION_HPP}"
+  COMMAND "${CMAKE_COMMAND}"
+    "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+    "-DOUTPUT_FILE=${GENERATED_VERSION_HPP}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/VERSION"
+    "${CMAKE_CURRENT_SOURCE_DIR}/native/core/version.hpp.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake"
+  COMMENT "Generating deckboy_version.hpp from VERSION"
+  VERBATIM
+)
+add_custom_target(deckboy_generate_version DEPENDS "${GENERATED_VERSION_HPP}")
+
+# DeckLink SDK (Blackmagic DeckLink SDK 16.x)
+#
+# The SDK ships platform-specific headers:
+#   Windows: .idl files → compiled by MIDL → DeckLinkAPI_h.h + DeckLinkAPI_i.c
+#   Linux:   .h files + DeckLinkAPIDispatch.cpp (dynamic loader stub)
+#   macOS:   .h files + DeckLinkAPIDispatch.cpp (dynamic loader stub)
+#
+# Set DECKLINK_SDK_DIR (cmake var or env) to the SDK root, e.g.:
+#   -DDECKLINK_SDK_DIR="G:/Blackmagic_DeckLink_SDK_16.0/Blackmagic DeckLink SDK 16.0"
+#
+if(ENABLE_DECKLINK)
+  # Resolve SDK root from cmake variable, then environment variable
+  if(NOT DECKLINK_SDK_DIR)
+    set(DECKLINK_SDK_DIR "$ENV{DECKLINK_SDK_DIR}")
+  endif()
+  # Also accept the older env var name
+  if(NOT DECKLINK_SDK_DIR)
+    set(DECKLINK_SDK_DIR "$ENV{DECKLINK_SDK}")
+  endif()
+
+  # The vendored headers, used unless something else was named explicitly.
+  if(NOT DECKLINK_SDK_DIR)
+    set(DECKLINK_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/native/extras/decklink-sdk")
+  endif()
+
+  if(WIN32)
+    # Windows SDK uses .idl files in Win/include/
+    find_path(DECKLINK_IDL_DIR
+      NAMES DeckLinkAPI.idl
+      PATHS
+        "${DECKLINK_SDK_DIR}/Win/include"
+        "$ENV{DECKLINK_SDK}/Win/include"
+      NO_DEFAULT_PATH
+    )
+    if(NOT DECKLINK_IDL_DIR)
+      # Also try auto-discovery under common install paths
+      find_path(DECKLINK_IDL_DIR
+        NAMES DeckLinkAPI.idl
+        PATHS
+          "C:/Program Files/Blackmagic Design/DeckLink SDK/Win/include"
+          "C:/Blackmagic DeckLink SDK/Win/include"
+      )
+    endif()
+    if(NOT DECKLINK_IDL_DIR)
+      message(FATAL_ERROR "DeckLink SDK not found (Windows). Set DECKLINK_SDK_DIR to the SDK root (containing Win/include/DeckLinkAPI.idl)")
+    endif()
+    message(STATUS "DeckLink support enabled (Windows IDL): ${DECKLINK_IDL_DIR}")
+  else()
+    # Linux / macOS SDK uses .h files directly
+    if(APPLE)
+      set(_DECKLINK_PLATFORM_SUBDIR "Mac")
+    else()
+      set(_DECKLINK_PLATFORM_SUBDIR "Linux")
+    endif()
+    find_path(DECKLINK_INCLUDE_DIR
+      NAMES DeckLinkAPI.h
+      PATHS
+        "${DECKLINK_SDK_DIR}/${_DECKLINK_PLATFORM_SUBDIR}/include"
+        "$ENV{DECKLINK_SDK}/${_DECKLINK_PLATFORM_SUBDIR}/include"
+        "$ENV{DECKLINK_SDK}/include"
+        "/opt/Blackmagic DeckLink SDK/${_DECKLINK_PLATFORM_SUBDIR}/include"
+        "/usr/local/include"
+        "/usr/include"
+    )
+    if(NOT DECKLINK_INCLUDE_DIR)
+      message(FATAL_ERROR "DeckLink SDK not found. Set DECKLINK_SDK_DIR to the SDK root or disable ENABLE_DECKLINK")
+    endif()
+    # Verify dispatch source exists
+    if(NOT EXISTS "${DECKLINK_INCLUDE_DIR}/DeckLinkAPIDispatch.cpp")
+      message(FATAL_ERROR "DeckLinkAPIDispatch.cpp not found in ${DECKLINK_INCLUDE_DIR}")
+    endif()
+    message(STATUS "DeckLink support enabled: ${DECKLINK_INCLUDE_DIR}")
+  endif()
+endif()
+
+# RtMidi — auto-detect from vcpkg, then fallback to pkg-config / manual paths
+find_package(rtmidi CONFIG QUIET)
+if(rtmidi_FOUND AND NOT ENABLE_MIDI)
+  set(ENABLE_MIDI ON CACHE BOOL "Build with RtMidi cross-platform MIDI input" FORCE)
+  message(STATUS "RtMidi auto-detected from vcpkg, enabling MIDI support")
+endif()
+
+if(ENABLE_MIDI)
+  if(NOT rtmidi_FOUND AND PkgConfig_FOUND)
+    pkg_check_modules(RTMIDI rtmidi QUIET)
+  endif()
+
+  if(NOT rtmidi_FOUND AND NOT RTMIDI_FOUND)
+    find_path(RTMIDI_INCLUDE_DIR
+      NAMES RtMidi.h
+      PATHS
+        "$ENV{RTMIDI_SDK}/include"
+        "/usr/local/include"
+        "/usr/include"
+    )
+    find_library(RTMIDI_LIBRARY
+      NAMES rtmidi
+      PATHS
+        "$ENV{RTMIDI_SDK}/lib"
+        "/usr/local/lib"
+        "/usr/lib"
+    )
+  endif()
+
+  if(rtmidi_FOUND OR RTMIDI_FOUND OR (RTMIDI_INCLUDE_DIR AND RTMIDI_LIBRARY))
+    if(rtmidi_FOUND)
+      message(STATUS "RtMidi support enabled (vcpkg)")
+    elseif(RTMIDI_FOUND)
+      message(STATUS "RtMidi support enabled (pkg-config)")
+    else()
+      message(STATUS "RtMidi support enabled: ${RTMIDI_LIBRARY}")
+    endif()
+  else()
+    message(STATUS "RtMidi SDK not found, using stub implementation (no actual MIDI input)")
+  endif()
+else()
+  message(STATUS "RtMidi support disabled (ENABLE_MIDI=OFF)")
+endif()
+
+# Syphon (macOS). NOTE: the framework is "Syphon" (with a y); the earlier
+# scaffolding searched for "Siphon" and so could never have found it. The build
+# OPTION keeps the historical ENABLE_SIPHON spelling for compatibility.
+if(ENABLE_SIPHON AND APPLE)
+  find_library(SYPHON_FRAMEWORK Syphon)
+  if(NOT SYPHON_FRAMEWORK)
+    message(FATAL_ERROR "Syphon.framework not found. Build it from "
+      "github.com/Syphon/Syphon-Framework and install it where find_library can "
+      "see it, or disable ENABLE_SIPHON. See docs/SYPHON_PLAN.md.")
+  endif()
+  message(STATUS "Syphon support enabled: ${SYPHON_FRAMEWORK}")
+endif()
+
+# Spout (Windows) — auto-detect from vcpkg or manual SDK path
+if(WIN32)
+  find_package(Spout2 CONFIG QUIET)
+  if(Spout2_FOUND)
+    set(ENABLE_SPOUT ON)
+    message(STATUS "Spout support auto-detected and enabled (vcpkg)")
+  elseif(ENABLE_SPOUT)
+    find_path(SPOUT_INCLUDE_DIR
+      NAMES SpoutLibrary.h
+      PATHS
+        "$ENV{SPOUT_SDK}/include"
+        "C:/Spout/include"
+    )
+    if(NOT SPOUT_INCLUDE_DIR)
+      message(FATAL_ERROR "Spout SDK not found on Windows. Disable ENABLE_SPOUT or set SPOUT_SDK env var")
+    endif()
+    message(STATUS "Spout support enabled (manual SDK)")
+  endif()
+endif()
+
+# CEF (Chromium Embedded Framework)
+if(ENABLE_CEF)
+  # Headers alone are NOT enough to claim CEF support. The previous version of
+  # this block located cef_api_hash.h, defined DECKBOY_HAS_CEF, and stopped —
+  # so a build with -DENABLE_CEF=ON advertised CEF in the About dialog while
+  # browser cues still went through Xvfb. Require the library too, and the
+  # wrapper static lib that every real CEF app links.
+  find_path(CEF_INCLUDE_DIR
+    NAMES cef_api_hash.h
+    PATHS
+      "$ENV{CEF_SDK}/include"
+      "/opt/cef/include"
+      "/opt/cef"
+    PATH_SUFFIXES include
+  )
+  find_library(CEF_LIBRARY
+    NAMES cef libcef
+    PATHS
+      "$ENV{CEF_SDK}/Release"
+      "$ENV{CEF_SDK}/lib"
+      "/opt/cef/Release"
+  )
+  find_library(CEF_DLL_WRAPPER
+    NAMES cef_dll_wrapper libcef_dll_wrapper
+    PATHS
+      "$ENV{CEF_SDK}/libcef_dll_wrapper"
+      "$ENV{CEF_SDK}/build/libcef_dll_wrapper/Release"
+      "$ENV{CEF_SDK}/Release"
+      "/opt/cef/libcef_dll_wrapper"
+  )
+  if(NOT CEF_INCLUDE_DIR OR NOT CEF_LIBRARY OR NOT CEF_DLL_WRAPPER)
+    message(FATAL_ERROR
+      "ENABLE_CEF=ON but a complete CEF SDK was not found.\n"
+      "  headers     : ${CEF_INCLUDE_DIR}\n"
+      "  libcef      : ${CEF_LIBRARY}\n"
+      "  dll_wrapper : ${CEF_DLL_WRAPPER}\n"
+      "Set CEF_SDK to a CEF binary distribution whose libcef_dll_wrapper has "
+      "been built, or disable ENABLE_CEF. See docs/BROWSER_CEF_PLAN.md.")
+  endif()
+  message(STATUS "CEF support enabled: ${CEF_LIBRARY}")
+endif()
+
+# WebView (macOS/Windows native)
+if(ENABLE_WEBVIEW AND NOT APPLE AND NOT WIN32)
+  message(FATAL_ERROR "ENABLE_WEBVIEW is only supported on macOS and Windows")
+endif()
+
+add_executable(deckboy-native
+  native/main.cpp
+  native/core/paths.cpp
+  native/core/i18n.cpp
+  native/core/utils.cpp
+  native/core/subprocess.cpp
+  native/core/media_probe.cpp
+  native/core/watch_folder.cpp
+  native/core/bidi.cpp
+  native/core/scopes.cpp
+  native/engine/media_engine.cpp
+  native/platform/browser.cpp
+  native/platform/pdf_import.cpp
+  native/platform/capture_backend.cpp
+  native/platform/audio_plugin.cpp
+  native/platform/integration_backend.cpp
+  native/platform/output_backend.cpp
+  # Mirrored-vs-extended detection: OS display APIs only (DisplayConfig,
+  # CoreGraphics, XRandR loaded at runtime), so no new dependency anywhere.
+  native/platform/display_topology.cpp
+  # Pick a colour from anywhere on screen. Windows and Linux (libX11 and
+  # libdbus opened at run time); the Mac's half is screen_colour_mac.mm.
+  native/platform/screen_colour.cpp
+  # ST 2110-20 sender: plain sockets only, no SDK, so it compiles unconditionally
+  # on every platform (same reasoning as decklink.cpp above — a feature-guarded
+  # translation unit whose symbols are referenced unguarded breaks the link).
+  native/platform/st2110_output.cpp
+  # HAP frame decoding: container parse + a vendored Snappy decompressor, no
+  # SDK and no new dependency, so it compiles unconditionally like the two
+  # above. Snappy is vendored rather than linked because decompression is a
+  # small frozen format and a per-platform dep is exactly what kept this CI
+  # red for months.
+  native/engine/hap_decoder.cpp
+  # Always compiled: the recording readback is a RENDERER concern, and
+  # living in libav_decoder.cpp meant a build with in-process decode off
+  # did not have it at all.
+  native/engine/gpu_readback.cpp
+  # The scopes' analysis as a compute shader (D3D11; stubs elsewhere).
+  native/engine/gpu_scopes.cpp
+  # Always compiled; the libav half is guarded inside, so a build without
+  # in-process decode gets stubs rather than a link error.
+  native/engine/motion_field.cpp
+  # PTPv2 slave for ST 2059 media-clock alignment. Plain sockets, no SDK.
+  native/platform/ptp_client.cpp
+  # NMOS IS-04/IS-05 node: HTTP server + registration client for the 2110
+  # senders. Plain sockets and a hand-rolled JSON reader, no SDK, so this also
+  # compiles unconditionally.
+  native/platform/nmc_sync.cpp
+  native/platform/nmos_node.cpp
+  native/platform/nmos_mdns.cpp
+  # Vendored Terrarium sim. This shim compiles upstream/terrarium_core.cpp
+  # INSIDE `namespace terra` — do not add that .cpp here directly, or its
+  # definitions land at global scope and fail to link. See
+  # native/extras/upstream/UPSTREAM.md.
+  native/extras/terrarium_vendor.cpp
+  native/extras/tabletop/tabletop.cpp
+  native/extras/upstream/qrcodegen/qrcodegen.cpp
+  native/render/primitives.cpp
+  native/render/text_renderer.cpp
+  native/render/text_shaper.cpp
+  native/render/font_fallbacks.cpp
+  native/render/waveform_renderer.cpp
+  native/render/output_renderer.cpp
+)
+
+set_target_properties(deckboy-native PROPERTIES OUTPUT_NAME "Deckboy")
+
+# A build's own extras, when it has any (see native/core/private_extras.hpp).
+# The folder is not in the public repository; without it nothing changes. It
+# adds its sources to deckboy-native with target_sources().
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/private-extras/CMakeLists.txt")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/private-extras/CMakeLists.txt")
+endif()
+
+# macOS screen capture helper. avfoundation screen capture is gone on current
+# macOS, so window/screen cues run this small ScreenCaptureKit binary, which
+# writes raw RGBA frames to stdout exactly like ffmpeg does. Built for every
+# macOS build (no feature flag) so the bundle always ships it. @available guards
+# the 12.3+ symbols, so the deployment target stays at the app's minimum.
+if(APPLE)
+  # ARC, EXPLICITLY.
+  #
+  # clang does NOT enable ARC by default, and every .mm file here is written
+  # for it -- no retain, no release, strong properties, and __block object
+  # pointers that only hold a reference under ARC. Built without it,
+  # sckcapture.mm's `__block SCDisplay* chosen` does not retain what the
+  # completion handler assigns, so the display is gone by the time the filter
+  # is built: a segfault in -[SCContentFilter initWithDisplay:excludingWindows:],
+  # which macOS shows the operator as "Deckboy quit unexpectedly".
+  #
+  # This hid for a long time because building a helper by hand to test it
+  # means passing -fobjc-arc on the command line, so the hand-built one worked
+  # and only the packaged build crashed.
+  add_executable(deckboy-sckcapture native/platform/sckcapture.mm)
+  target_compile_options(deckboy-sckcapture PRIVATE -fobjc-arc)
+  set_target_properties(deckboy-sckcapture PROPERTIES OUTPUT_NAME "deckboy-sckcapture")
+  target_link_libraries(deckboy-sckcapture PRIVATE
+    # AppKit for NSApplicationLoad: ScreenCaptureKit aborts a process with no
+    # window-server connection (CGS_REQUIRE_INIT), and connecting is AppKit's
+    # job. Building this helper by hand with -framework AppKit is what hid the
+    # missing link line here.
+    "-framework AppKit"
+    # WEAK: ScreenCaptureKit is macOS 12.3+, and the Intel build runs on
+    # 10.13. The app never starts this helper below 12.3
+    # (capture_backend.cpp), and the helper checks again itself.
+    "-weak_framework ScreenCaptureKit"
+    "-framework CoreMedia"
+    "-framework CoreVideo"
+    "-framework CoreGraphics"
+    "-framework Foundation")
+  # Deckboy depends on the helper existing next to it, so build it alongside.
+  add_dependencies(deckboy-native deckboy-sckcapture)
+
+  # The browser cue backend. A WKWebView in a parked NSWindow, captured through
+  # the sckcapture helper above as an ordinary "window:<id>" source -- so the
+  # browser cue reuses the whole macOS capture path rather than growing a
+  # second one.
+  add_executable(deckboy-webview native/platform/webview_macos.mm)
+  target_compile_options(deckboy-webview PRIVATE -fobjc-arc)
+  set_target_properties(deckboy-webview PROPERTIES OUTPUT_NAME "deckboy-webview")
+  target_link_libraries(deckboy-webview PRIVATE
+    "-framework Cocoa"
+    "-framework WebKit"
+    "-framework Foundation")
+  add_dependencies(deckboy-native deckboy-webview)
+
+  # The main app's window picker (listCaptureWindows in capture_backend.cpp)
+  # enumerates on-screen windows via CoreGraphics/CoreFoundation, so the app
+  # itself must link them (the helper's own link line above is separate).
+  target_link_libraries(deckboy-native PRIVATE
+    "-framework CoreGraphics"
+    "-framework CoreFoundation")
+endif()
+
+# ── Steinberg ASIO ───────────────────────────────────────────────────────────
+# The vendored SDK subset is used under the GPL v3 half of its DUAL licence,
+# which is compatible with Deckboy's own GPL-3.0-or-later. See
+# native/third_party/asio/README.md before assuming otherwise -- the common
+# advice that ASIO cannot ship in a GPL program describes older SDK releases.
+#
+# ON by default because there is no licence obstacle and no external dependency
+# to install: the driver itself is supplied by the user's audio interface, and
+# its absence is a runtime condition rather than a build one.
+#
+# asio_audio.cpp is compiled EVERYWHERE. It carries a full set of stubs under
+# `#if !defined(DECKBOY_HAS_ASIO)` -- "built without ASIO support" -- and the
+# app calls AsioOutput unconditionally. Adding the file only inside this Windows
+# branch meant macOS and Linux linked against declarations with no definitions
+# and failed at link, which is how ASIO broke both of those builds outright.
+target_sources(deckboy-native PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/native/platform/asio_audio.cpp")
+
+if(WIN32 AND ENABLE_ASIO)
+  set(DECKBOY_ASIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/native/third_party/asio")
+  if(EXISTS "${DECKBOY_ASIO_DIR}/asio.h")
+    target_sources(deckboy-native PRIVATE
+      "${DECKBOY_ASIO_DIR}/asio.cpp"
+      "${DECKBOY_ASIO_DIR}/asiodrivers.cpp"
+      "${DECKBOY_ASIO_DIR}/asiolist.cpp")
+    target_include_directories(deckboy-native PRIVATE "${DECKBOY_ASIO_DIR}")
+    target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_ASIO=1)
+    # The SDK predates modern warning levels and is not ours to clean up.
+    if(MSVC)
+      set_source_files_properties(
+        "${DECKBOY_ASIO_DIR}/asio.cpp"
+        "${DECKBOY_ASIO_DIR}/asiodrivers.cpp"
+        "${DECKBOY_ASIO_DIR}/asiolist.cpp"
+        # /FI force-includes: the SDK sources use the COM `interface` macro
+        # and IUnknown without including the headers that define them, relying
+        # on the host project having done so first. Forcing them per-TU is
+        # cleaner than editing vendored code we will re-extract on update.
+        PROPERTIES COMPILE_FLAGS "/w /FIwindows.h /FIobjbase.h")
+    endif()
+    message(STATUS "ASIO: enabled (vendored SDK 2.3.4, GPLv3 option)")
+  else()
+    message(STATUS "ASIO: SDK sources missing, skipping")
+  endif()
+endif()
+
+# Export dynamic symbols on POSIX so the crash handler's backtrace resolves to
+# function names. Without this, backtrace_symbols_fd can only print
+# "Deckboy(+0x4b83b)" for our own frames — the crash log tells you a crash
+# happened and nothing about where, which is most of its value gone. Verified
+# on Linux: the difference between an offset and `App::renderOutputWindow`.
+# Costs a slightly larger dynamic symbol table and nothing else.
+if(NOT MSVC)
+  set_target_properties(deckboy-native PROPERTIES ENABLE_EXPORTS ON)
+  target_link_options(deckboy-native PRIVATE -rdynamic)
+endif()
+add_dependencies(deckboy-native deckboy_generate_version)
+# Slide-deck import renders PDF pages through CoreGraphics and writes them
+# with ImageIO. Not behind a feature flag, because importing a deck is not
+# optional -- and CI caught this the hard way: the code compiled and only the
+# LINK failed, on the one platform that could not be built locally.
+# CoreVideo is here for the VideoToolbox zero-copy path: the decoder asks a
+# frame's CVPixelBuffer what format it is before wrapping it as a texture. Same
+# shape of mistake as the line above, caught the same way -- the header is
+# included, every translation unit compiles, and only the link fails.
+if(APPLE)
+  deckboy_target_link_frameworks(deckboy-native
+    CoreGraphics ImageIO CoreFoundation CoreVideo Cocoa)
+  # A full-screen output stays over the menu bar when focus moves elsewhere
+  # (platform/mac_output_level.hpp). Written for ARC like the helpers above.
+  target_sources(deckboy-native PRIVATE native/platform/mac_output_level.mm)
+  set_source_files_properties(native/platform/mac_output_level.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  # The screen's vblank paces the loop, because Metal's vsync does not
+  # (platform/mac_vblank.hpp). CoreVideo is linked above.
+  target_sources(deckboy-native PRIVATE native/platform/mac_vblank.mm)
+  set_source_files_properties(native/platform/mac_vblank.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  # Which output the Mac's sound goes to, asked of CoreAudio because SDL can
+  # miss the change (platform/mac_audio_default.hpp). SDL's own link to
+  # CoreAudio does not cover the app's calls; only the link step would say so.
+  target_sources(deckboy-native PRIVATE native/platform/mac_audio_default.cpp)
+  # Pick from screen: NSColorSampler (platform/screen_colour.hpp).
+  target_sources(deckboy-native PRIVATE native/platform/screen_colour_mac.mm)
+  set_source_files_properties(native/platform/screen_colour_mac.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  deckboy_target_link_frameworks(deckboy-native CoreAudio)
+endif()
+
+if(WIN32)
+  # WindowsApp.lib is the WinRT entry point. It is here for Windows.Data.Pdf,
+  # which renders imported slide decks -- the same engine Edge uses, so a PDF
+  # needs no bundled rasteriser and no third-party licence.
+  target_link_libraries(deckboy-native PRIVATE windowsapp)
+  set_target_properties(deckboy-native PROPERTIES WIN32_EXECUTABLE TRUE)
+  # 16 MB main-thread stack, like the 8 MB macOS and Linux give by default.
+  # Windows' 1 MB held about five nested remote commands (~195 KB each), so a
+  # nested script or a dashboard loop overflowed it before any depth limit
+  # could answer (audit 2026-10-19, F2).
+  if(MSVC)
+    target_link_options(deckboy-native PRIVATE /STACK:16777216)
+  endif()
+
+  # EVERY runtime DLL the binary actually imports, put beside it.
+  #
+  # vcpkg deploys the DLLs of the packages it resolved through CONFIG targets,
+  # which covered SDL3, freetype and the rest -- and silently did not cover
+  # RtMidi, which is found through pkg-config on some paths. So a feature build
+  # produced a Deckboy.exe with no rtmidi.dll next to it, the packager copied
+  # "every .dll CMake placed here" and got a set with a hole in it, and the
+  # zipped build would not START on any machine that did not already have
+  # RtMidi installed. It ran fine on the machine that built it, which is the
+  # worst possible way for this to behave.
+  #
+  # TARGET_RUNTIME_DLLS asks the linker what was actually imported instead of
+  # maintaining a list by hand, so the next optional dependency cannot repeat
+  # it. CMake 3.21+; the project floor is 3.20, so it is guarded rather than
+  # made a new requirement.
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)
+    add_custom_command(TARGET deckboy-native POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "$<TARGET_RUNTIME_DLLS:deckboy-native>"
+              "$<TARGET_FILE_DIR:deckboy-native>"
+      COMMAND_EXPAND_LISTS
+      VERBATIM)
+  endif()
+
+  # Embed the application icon as resource IDI_DECKBOY_APP_ICON. This drives the
+  # Explorer/Alt-Tab/taskbar-pin icon AND is loaded at runtime by
+  # applyDeckboyWindowIcon() (WM_SETICON) for the live window/taskbar icon.
+  set(DECKBOY_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/art/windows/icons/deckboy_app.ico")
+  if(EXISTS "${DECKBOY_APP_ICON}")
+    file(TO_NATIVE_PATH "${DECKBOY_APP_ICON}" _deckboy_icon_native)
+    string(REPLACE "\\" "\\\\" DECKBOY_APP_ICON_RC_PATH "${_deckboy_icon_native}")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/art/windows/deckboy.rc.in"
+                   "${CMAKE_CURRENT_BINARY_DIR}/deckboy.rc" @ONLY)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/deckboy.rc"
+      PROPERTIES OBJECT_DEPENDS "${DECKBOY_APP_ICON}")
+    target_sources(deckboy-native PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/deckboy.rc")
+  else()
+    message(WARNING "Deckboy app icon not found at ${DECKBOY_APP_ICON}; exe will use the default icon.")
+  endif()
+endif()
+
+# Platform modules (conditional)
+
+# midi.cpp compiles unconditionally, for exactly the reason decklink.cpp does
+# below. It already carries a full stub set behind !DECKBOY_HAS_MIDI --
+# listDevices returns {}, open returns false, send returns false -- and MIDI
+# CUES call MidiOutput and the message encoder without feature guards. Built
+# only when ENABLE_MIDI was on, every ENABLE_MIDI=OFF configuration failed at
+# LINK on all three platforms, which is precisely what CI's "none" job caught
+# and the Windows dev build (MIDI on) never could.
+target_sources(deckboy-native PRIVATE native/platform/midi.cpp)
+
+# decklink.cpp compiles unconditionally: it already carries a full stub
+# implementation behind !DECKBOY_HAS_DECKLINK (listDevices returns {}, init
+# reports unavailable). The UI calls DeckLinkOutput::listDevices() and the
+# mode helpers without feature guards, so excluding the whole translation unit
+# left those symbols undefined and broke every build with ENABLE_DECKLINK=OFF
+# at link time. That never showed up locally because the Windows dev build
+# has DeckLink enabled.
+target_sources(deckboy-native PRIVATE native/platform/decklink.cpp)
+target_sources(deckboy-native PRIVATE native/platform/ndi_input.cpp)
+# ALWAYS COMPILED, like every other platform file here: the whole body is
+# behind DECKBOY_HAS_SPOUT and collapses to stubs without it, and callers ask
+# SpoutInput::available() unconditionally. Gating the SOURCE on ENABLE_SPOUT
+# instead left those callers with nothing to link against and broke all three
+# platforms at once -- including Windows, in the configuration without Spout.
+target_sources(deckboy-native PRIVATE native/platform/spout_input.cpp)
+# The GL context Spout receive needs -- see spout_input.hpp. Only when it is
+# actually built with Spout; nothing else in Deckboy uses OpenGL.
+if(ENABLE_SPOUT)
+  target_link_libraries(deckboy-native PRIVATE opengl32)
+endif()
+
+if(ENABLE_DECKLINK)
+  if(WIN32)
+    # On Windows, compile the IDL with MIDL to generate DeckLinkAPI_h.h and
+    # DeckLinkAPI_i.c in the build directory, then compile the _i.c file.
+    set(DECKLINK_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/decklink_generated")
+    file(MAKE_DIRECTORY "${DECKLINK_GENERATED_DIR}")
+    add_custom_command(
+      OUTPUT
+        "${DECKLINK_GENERATED_DIR}/DeckLinkAPI_h.h"
+        "${DECKLINK_GENERATED_DIR}/DeckLinkAPI_i.c"
+      COMMAND midl
+        /h "DeckLinkAPI_h.h"
+        /iid "DeckLinkAPI_i.c"
+        /proxy "DeckLinkAPI_p.c"
+        /tlb "DeckLinkAPI.tlb"
+        /out "${DECKLINK_GENERATED_DIR}"
+        "${DECKLINK_IDL_DIR}/DeckLinkAPI.idl"
+      DEPENDS "${DECKLINK_IDL_DIR}/DeckLinkAPI.idl"
+      COMMENT "Compiling DeckLink IDL (MIDL)"
+      VERBATIM
+    )
+    add_custom_target(deckboy_decklink_idl DEPENDS
+      "${DECKLINK_GENERATED_DIR}/DeckLinkAPI_h.h"
+      "${DECKLINK_GENERATED_DIR}/DeckLinkAPI_i.c"
+    )
+    add_dependencies(deckboy-native deckboy_decklink_idl)
+    target_sources(deckboy-native PRIVATE "${DECKLINK_GENERATED_DIR}/DeckLinkAPI_i.c")
+    set_source_files_properties("${DECKLINK_GENERATED_DIR}/DeckLinkAPI_i.c"
+      PROPERTIES
+        GENERATED TRUE
+        LANGUAGE C
+    )
+  else()
+    # On Linux/macOS, compile the SDK dispatch source (provides CreateDeckLinkIteratorInstance)
+    target_sources(deckboy-native PRIVATE "${DECKLINK_INCLUDE_DIR}/DeckLinkAPIDispatch.cpp")
+  endif()
+endif()
+
+if(ENABLE_SIPHON OR ENABLE_SPOUT)
+  target_sources(deckboy-native PRIVATE native/platform/siphon_spout.cpp)
+endif()
+
+if(DECKBOY_INPROC_DECODE_ACTIVE)
+  target_sources(deckboy-native PRIVATE native/engine/libav_decoder.cpp)
+  target_include_directories(deckboy-native PRIVATE ${DECKBOY_AVCODEC_INCLUDE_DIR})
+  target_link_libraries(deckboy-native PRIVATE
+    ${DECKBOY_AVCODEC_LIBRARY}
+    ${DECKBOY_AVFORMAT_LIBRARY}
+    ${DECKBOY_AVUTIL_LIBRARY}
+    ${DECKBOY_AVFILTER_LIBRARY}
+    ${DECKBOY_SWSCALE_LIBRARY}
+    ${DECKBOY_SWRESAMPLE_LIBRARY}
+  )
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_INPROC_DECODE=1)
+endif()
+
+target_include_directories(deckboy-native PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/native
+  ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
+if(NOT DECKBOY_SDL_TARGET)
+  target_include_directories(deckboy-native PRIVATE ${DECKBOY_SDL_INCLUDE_DIRS})
+endif()
+
+if(NOT DECKBOY_SDL_TTF_TARGET)
+  target_include_directories(deckboy-native PRIVATE ${DECKBOY_SDL_TTF_INCLUDE_DIRS})
+endif()
+
+# Pro Features includes and defines
+if(ENABLE_DECKLINK)
+  if(WIN32)
+    # Include the MIDL-generated headers directory
+    target_include_directories(deckboy-native PRIVATE "${DECKLINK_GENERATED_DIR}")
+  else()
+    # Include the SDK headers directory (contains DeckLinkAPI.h + LinuxCOM.h)
+    target_include_directories(deckboy-native PRIVATE "${DECKLINK_INCLUDE_DIR}")
+  endif()
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_DECKLINK=1)
+endif()
+
+if(ENABLE_MIDI)
+  if(rtmidi_FOUND)
+    target_link_libraries(deckboy-native PRIVATE RtMidi::rtmidi)
+  elseif(RTMIDI_FOUND)
+    target_include_directories(deckboy-native PRIVATE ${RTMIDI_INCLUDE_DIRS})
+    target_link_libraries(deckboy-native PRIVATE ${RTMIDI_LIBRARIES})
+  elseif(RTMIDI_INCLUDE_DIR AND RTMIDI_LIBRARY)
+    target_include_directories(deckboy-native PRIVATE ${RTMIDI_INCLUDE_DIR})
+    target_link_libraries(deckboy-native PRIVATE ${RTMIDI_LIBRARY})
+  endif()
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_MIDI=1)
+endif()
+
+if(ENABLE_SIPHON AND APPLE)
+  # The Objective-C++ publisher and the frameworks it needs. Only pulled in with
+  # ENABLE_SIPHON so a default macOS build stays free of Metal/Syphon.
+  target_sources(deckboy-native PRIVATE native/platform/syphon_metal.mm)
+  # Same reasoning as the helpers above: written for ARC, so compile it that way.
+  set_source_files_properties(native/platform/syphon_metal.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  deckboy_target_link_frameworks(deckboy-native Syphon Metal Foundation)
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_SIPHON=1)
+endif()
+
+if(ENABLE_SPOUT AND WIN32)
+  if(Spout2_FOUND)
+    target_link_libraries(deckboy-native PRIVATE Spout2::SpoutLibrary)
+  else()
+    target_include_directories(deckboy-native PRIVATE ${SPOUT_INCLUDE_DIR})
+  endif()
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_SPOUT=1)
+endif()
+
+if(VST3_INCLUDE_DIR)
+  target_include_directories(deckboy-native PRIVATE ${VST3_INCLUDE_DIR})
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_VST3=1)
+endif()
+
+# OFF in everything this project releases; see the ENABLE_VST2 block above.
+if(VST2_INCLUDE_DIR)
+  target_include_directories(deckboy-native PRIVATE ${VST2_INCLUDE_DIR})
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_VST2=1)
+endif()
+
+if(ZLIB_FOUND)
+  target_link_libraries(deckboy-native PRIVATE ZLIB::ZLIB)
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_ZLIB=1)
+endif()
+
+if(ENABLE_CEF)
+  target_include_directories(deckboy-native PRIVATE ${CEF_INCLUDE_DIR})
+  target_link_libraries(deckboy-native PRIVATE ${CEF_DLL_WRAPPER} ${CEF_LIBRARY})
+  # DECKBOY_HAS_CEF means "libcef is linked into this binary". It does NOT yet
+  # mean browser cues run on CEF — that is gated separately at runtime until the
+  # off-screen backend lands (docs/BROWSER_CEF_PLAN.md, phase 3).
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_CEF=1)
+endif()
+
+if(ENABLE_WEBVIEW)
+  if(APPLE)
+    deckboy_target_link_frameworks(deckboy-native WebKit)
+    target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_WEBVIEW=1)
+  elseif(WIN32)
+    find_package(unofficial-webview2 CONFIG REQUIRED)
+    target_link_libraries(deckboy-native PRIVATE unofficial::webview2::webview2 dwmapi)
+    target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_WEBVIEW=1)
+    message(STATUS "WebView2 support enabled")
+  endif()
+elseif(WIN32)
+  # Auto-detect WebView2 even when ENABLE_WEBVIEW is OFF
+  find_package(unofficial-webview2 CONFIG QUIET)
+  if(unofficial-webview2_FOUND)
+    target_link_libraries(deckboy-native PRIVATE unofficial::webview2::webview2 dwmapi)
+    target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_WEBVIEW=1)
+    message(STATUS "WebView2 auto-detected and enabled")
+  endif()
+endif()
+
+if(DECKBOY_ENABLE_NDI AND DECKBOY_NDI_INCLUDE_DIR)
+  target_include_directories(deckboy-native PRIVATE
+    ${DECKBOY_NDI_INCLUDE_DIR}
+  )
+  target_compile_definitions(deckboy-native PRIVATE
+    DECKBOY_HAS_NDI_SDK=1
+  )
+endif()
+
+if(UNIX AND NOT APPLE AND DECKBOY_ENABLE_ALSA_MTC AND DECKBOY_ALSA_INCLUDE_DIR AND DECKBOY_ALSA_LIBRARY)
+  target_include_directories(deckboy-native PRIVATE
+    ${DECKBOY_ALSA_INCLUDE_DIR}
+  )
+  target_link_libraries(deckboy-native PRIVATE
+    ${DECKBOY_ALSA_LIBRARY}
+  )
+  target_compile_definitions(deckboy-native PRIVATE
+    DECKBOY_HAS_ALSA=1
+  )
+endif()
+
+target_compile_options(deckboy-native PRIVATE
+  ${DECKBOY_SDL_COMPILE_OPTIONS}
+)
+
+if(DECKBOY_SDL_LINK_DIRS)
+  target_link_directories(deckboy-native PRIVATE
+    ${DECKBOY_SDL_LINK_DIRS}
+  )
+endif()
+
+if(DECKBOY_SDL_TARGET)
+  target_link_libraries(deckboy-native PRIVATE ${DECKBOY_SDL_TARGET})
+else()
+  target_link_libraries(deckboy-native PRIVATE ${DECKBOY_SDL_LINK_LIBS})
+endif()
+
+if(DECKBOY_SDL_TTF_TARGET)
+  target_link_libraries(deckboy-native PRIVATE ${DECKBOY_SDL_TTF_TARGET})
+else()
+  target_link_libraries(deckboy-native PRIVATE ${DECKBOY_SDL_TTF_LINK_LIBS})
+endif()
+
+# The bundled `terrarium` companion exe was RETIRED in v0.81.5.
+#
+# It existed so the Konami egg could launch a windowed sim and capture it via
+# gdigrab. That has been unnecessary since v0.78.4, when the sim moved
+# in-process as pattern://terrarium — nothing has needed the exe since. It also
+# built against the old forked copy of the sim, which is exactly the file this
+# release replaced with a clean vendored upstream, so keeping it would have
+# meant maintaining two divergent copies of Terrarium inside Deckboy.
+#
+# The real standalone app lives in its own repo (Utopian-Academy/terrarium).
+
+if(UNIX AND NOT APPLE)
+  target_link_libraries(deckboy-native PRIVATE dl)
+endif()
+
+if(UNIX AND NOT APPLE AND DECKBOY_XTEST_INCLUDE_DIR
+   AND DECKBOY_XTEST_LIBRARY AND DECKBOY_X11_LIBRARY)
+  target_include_directories(deckboy-native PRIVATE ${DECKBOY_XTEST_INCLUDE_DIR})
+  target_link_libraries(deckboy-native PRIVATE
+    ${DECKBOY_XTEST_LIBRARY} ${DECKBOY_X11_LIBRARY})
+  target_compile_definitions(deckboy-native PRIVATE DECKBOY_HAS_XTEST=1)
+  message(STATUS "Browser cue input: XTEST enabled (Linux pages can be clicked and scrolled)")
+elseif(UNIX AND NOT APPLE)
+  message(STATUS "Browser cue input: XTEST not found - Linux browser cues will not take input")
+endif()
+
+target_compile_definitions(deckboy-native PRIVATE
+  $<$<CONFIG:Debug>:DECKBOY_DEBUG=1>
+  $<$<BOOL:${WIN32}>:NOMINMAX>
+  $<$<BOOL:${WIN32}>:WIN32_LEAN_AND_MEAN>
+  $<$<BOOL:${WIN32}>:SDL_MAIN_HANDLED>
+)
+
+if(MSVC)
+  target_compile_options(deckboy-native PRIVATE /bigobj)
+  # Two warnings promoted out of level 4, where nobody was ever going to see
+  # them, because both have already cost real time here:
+  #
+  #   C4456-C4459  a name that hides another. Whoever edits the inner scope has
+  #                no indication the outer one exists, which is how the wrong
+  #                variable gets used. A duplicated block whose second copy
+  #                shadowed the first meant a fix applied to half the cases.
+  #   C4189        a local that is initialised and never read -- the leftover of
+  #                an approach that was replaced, still reading as though it
+  #                matters, and it gave a later loop something to shadow.
+  #
+  # Level 1 so they appear in an ordinary build, not just under /W4, whose
+  # other 380 warnings are int-to-float conversions into SDL's float APIs and
+  # would bury these. tools/audit_warnings.py is the gate.
+  target_compile_options(deckboy-native PRIVATE
+    /w14456 /w14457 /w14458 /w14459 /w14189)
+else()
+  # The same two, as GCC and Clang spell them. -Wshadow=local rather than
+  # -Wshadow: the full form also fires on a local that shadows a member, and
+  # this codebase's App class has hundreds of members.
+  target_compile_options(deckboy-native PRIVATE -Wunused-variable)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(deckboy-native PRIVATE -Wshadow=local)
+  else()
+    target_compile_options(deckboy-native PRIVATE -Wshadow)
+  endif()
+endif()
+
+if(WIN32)
+  target_link_libraries(deckboy-native PRIVATE ws2_32 shell32 iphlpapi)
+endif()
+
+# ── Deckboy Mini ─────────────────────────────────────────────────────────────
+# One deck, one output, no desk: native/mini/mini_main.cpp around the same
+# MediaEngine. It takes the desk target's FINISHED configuration -- every
+# source except the desk's own main.cpp and its resources, and every define,
+# include path and library the feature options above added -- so a feature
+# switched on or off for the desk is switched the same way for Mini, and this
+# block never needs to repeat that logic. A console program on Windows, so it
+# can be run and stopped from a terminal.
+option(DECKBOY_BUILD_MINI "Build deckboy-mini, the single-deck command-line player" ON)
+if(DECKBOY_BUILD_MINI)
+  get_target_property(_desk_sources deckboy-native SOURCES)
+  set(_mini_sources native/mini/mini_main.cpp)
+  foreach(_src IN LISTS _desk_sources)
+    if(NOT _src MATCHES "native/main\\.cpp$" AND NOT _src MATCHES "\\.(rc|plist|icns|manifest)$")
+      list(APPEND _mini_sources "${_src}")
+    endif()
+  endforeach()
+  add_executable(deckboy-mini ${_mini_sources})
+  if(WIN32 AND EXISTS "${CMAKE_CURRENT_BINARY_DIR}/deckboy.rc")
+    target_sources(deckboy-mini PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/deckboy.rc")
+  endif()
+  foreach(_prop COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES INCLUDE_DIRECTORIES
+                LINK_LIBRARIES LINK_OPTIONS LINK_DIRECTORIES CXX_STANDARD CXX_STANDARD_REQUIRED
+                MSVC_RUNTIME_LIBRARY ENABLE_EXPORTS)
+    get_target_property(_value deckboy-native ${_prop})
+    if(_value)
+      set_property(TARGET deckboy-mini PROPERTY ${_prop} "${_value}")
+    endif()
+  endforeach()
+  # Beside Deckboy, so it finds the same bundled ffmpeg and libraries.
+  set_target_properties(deckboy-mini PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:deckboy-native>")
+  # Only what Mini's own sources need generated first -- NOT the desk itself.
+  # Depending on deckboy-native made `--target deckboy-mini` compile main.cpp,
+  # which a 1 GB Raspberry Pi 3 cannot do (the compiler is killed for memory),
+  # so Mini could not be built on the very machines it is for.
+  add_dependencies(deckboy-mini deckboy_generate_version)
+  if(TARGET deckboy_decklink_idl)
+    add_dependencies(deckboy-mini deckboy_decklink_idl)
+  endif()
+endif()
+
+include(CTest)
+option(DECKBOY_SANITIZE_BROADCAST_CHECK "Instrument the transport regression target with ASan and UBSan" OFF)
+if(BUILD_TESTING)
+  find_package(Threads REQUIRED)
+  foreach(board_check IN ITEMS 40k spearhead edges)
+    add_executable(deckboy-tabletop-${board_check}-check tools/tabletop_${board_check}_check.cpp)
+    target_include_directories(deckboy-tabletop-${board_check}-check PRIVATE native)
+    target_link_libraries(deckboy-tabletop-${board_check}-check PRIVATE Threads::Threads)
+    if(MSVC)
+      target_compile_options(deckboy-tabletop-${board_check}-check PRIVATE /W4 /EHsc /utf-8)
+      target_compile_definitions(deckboy-tabletop-${board_check}-check PRIVATE _CRT_SECURE_NO_WARNINGS)
+    else()
+      target_compile_options(deckboy-tabletop-${board_check}-check PRIVATE -Wall -Wextra -Wshadow)
+    endif()
+    add_test(NAME tabletop-${board_check} COMMAND deckboy-tabletop-${board_check}-check
+             "${CMAKE_CURRENT_BINARY_DIR}/tabletop-${board_check}-review")
+  endforeach()
+  # Pure signal analysis; the same source is linked into the desk and Mini.
+  add_executable(deckboy-scopes-check tools/scopes_check.cpp native/core/scopes.cpp)
+  target_include_directories(deckboy-scopes-check PRIVATE native)
+  target_link_libraries(deckboy-scopes-check PRIVATE Threads::Threads)
+  if(MSVC)
+    target_compile_options(deckboy-scopes-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-scopes-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME scopes COMMAND deckboy-scopes-check)
+  # The mask raster against geometry: areas, edges, order, the save format.
+  add_executable(deckboy-masks-check tools/masks_check.cpp)
+  target_include_directories(deckboy-masks-check PRIVATE native)
+  target_link_libraries(deckboy-masks-check PRIVATE Threads::Threads)
+  if(MSVC)
+    target_compile_options(deckboy-masks-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-masks-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME masks COMMAND deckboy-masks-check)
+  # The multiview's layouts: every window placed, inside, none overlapping.
+  add_executable(deckboy-multiview-layout-check tools/multiview_layout_check.cpp)
+  target_include_directories(deckboy-multiview-layout-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-multiview-layout-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-multiview-layout-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME multiview_layout COMMAND deckboy-multiview-layout-check)
+  # Motion: how much moved and where, from made-up frames.
+  add_executable(deckboy-motion-check tools/motion_check.cpp)
+  target_include_directories(deckboy-motion-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-motion-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-motion-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME motion COMMAND deckboy-motion-check)
+  # The theme creatures: flocks, the pointer, the cat and the mouse, in fake time.
+  add_executable(deckboy-creatures-check tools/creatures_check.cpp)
+  target_include_directories(deckboy-creatures-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-creatures-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-creatures-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME creatures COMMAND deckboy-creatures-check)
+  # translate(): the rules for strings built at run time, and format().
+  add_executable(deckboy-i18n-check tools/i18n_check.cpp native/core/i18n.cpp)
+  target_include_directories(deckboy-i18n-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-i18n-check PRIVATE /W4 /WX)
+    # As the app: i18n.cpp reads its test switch with getenv.
+    target_compile_definitions(deckboy-i18n-check PRIVATE _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(deckboy-i18n-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME i18n COMMAND deckboy-i18n-check)
+  # The MIDI map: matching, knobs, encoders, holds, pickup, OSC, the saved form.
+  add_executable(deckboy-midi-map-check tools/midi_map_check.cpp)
+  target_include_directories(deckboy-midi-map-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-midi-map-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-midi-map-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME midi_map COMMAND deckboy-midi-map-check)
+  # The Draw source: strokes to pixels, replay, the flipbook, the show file.
+  add_executable(deckboy-drawing-check tools/drawing_check.cpp)
+  target_include_directories(deckboy-drawing-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-drawing-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-drawing-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME drawing COMMAND deckboy-drawing-check)
+  # Bug Swat, the Motion lesson's game: every bug's rule, from made-up movement.
+  add_executable(deckboy-bugswat-check tools/bugswat_check.cpp)
+  target_include_directories(deckboy-bugswat-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-bugswat-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-bugswat-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME bugswat COMMAND deckboy-bugswat-check)
+  set_tests_properties(scopes PROPERTIES TIMEOUT 30)
+  # The GPU analyser against the CPU one, bin for bin, on a real renderer.
+  # Needs a GPU (or WARP) and a window, so CI runs it as a step, not a CTest.
+  add_executable(deckboy-scopes-gpu-check tools/scopes_gpu_check.cpp native/engine/gpu_scopes.cpp
+                 native/core/scopes.cpp)
+  target_include_directories(deckboy-scopes-gpu-check PRIVATE native)
+  if(DECKBOY_SDL_TARGET)
+    target_link_libraries(deckboy-scopes-gpu-check PRIVATE Threads::Threads ${DECKBOY_SDL_TARGET})
+  else()
+    target_include_directories(deckboy-scopes-gpu-check PRIVATE ${DECKBOY_SDL_INCLUDE_DIRS})
+    target_link_libraries(deckboy-scopes-gpu-check PRIVATE Threads::Threads ${DECKBOY_SDL_LINK_LIBS})
+  endif()
+  if(MSVC)
+    target_compile_options(deckboy-scopes-gpu-check PRIVATE /W4 /WX)
+    target_compile_definitions(deckboy-scopes-gpu-check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(deckboy-scopes-gpu-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  # Which way of putting a full-screen output on a second screen gets its
+  # frames shown on that screen's own clock (tools/output_flip_lab.cpp). It
+  # takes a screen over for about two minutes, so it is run by hand, never by
+  # CI. Windows only; elsewhere the file is an empty main.
+  if(WIN32)
+    add_executable(deckboy-output-flip-lab tools/output_flip_lab.cpp)
+    target_link_libraries(deckboy-output-flip-lab PRIVATE d3d11 dxgi dwmapi ole32 uuid gdi32)
+    target_compile_definitions(deckboy-output-flip-lab PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+    if(MSVC)
+      target_compile_options(deckboy-output-flip-lab PRIVATE /W4)
+    endif()
+  endif()
+  add_executable(deckboy-mini-hud-check tools/mini_hud_check.cpp)
+  target_include_directories(deckboy-mini-hud-check PRIVATE native)
+  target_link_libraries(deckboy-mini-hud-check PRIVATE Threads::Threads)
+  if(WIN32)
+    target_compile_definitions(deckboy-mini-hud-check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+  endif()
+  add_test(NAME mini-hud COMMAND deckboy-mini-hud-check "${CMAKE_CURRENT_BINARY_DIR}/mini-hud-state")
+  set_tests_properties(mini-hud PROPERTIES TIMEOUT 15)
+  # Unicode's bidi conformance files against native/core/bidi.cpp. CI fetches
+  # BidiTest.txt and BidiCharacterTest.txt for the Unicode version the tables
+  # were generated from and runs this; see tools/bidi_check.cpp.
+  # A child must not inherit another child's pipe (see the tool's header).
+  add_executable(deckboy-spawn-race-check tools/spawn_race_check.cpp native/core/subprocess.cpp native/core/paths.cpp)
+  target_include_directories(deckboy-spawn-race-check PRIVATE native)
+  find_package(Threads REQUIRED)
+  target_link_libraries(deckboy-spawn-race-check PRIVATE Threads::Threads)
+  if(WIN32)
+    target_compile_definitions(deckboy-spawn-race-check PRIVATE NOMINMAX)
+  endif()
+  add_test(NAME spawn-race COMMAND deckboy-spawn-race-check)
+
+  add_executable(deckboy-bidi-check tools/bidi_check.cpp native/core/bidi.cpp)
+  target_include_directories(deckboy-bidi-check PRIVATE native)
+
+  add_executable(deckboy-broadcast-check
+    tools/broadcast_check.cpp
+    native/platform/ptp_client.cpp
+    native/platform/st2110_output.cpp
+    native/platform/nmos_node.cpp
+    native/platform/nmos_mdns.cpp
+    native/platform/decklink.cpp)
+  target_include_directories(deckboy-broadcast-check PRIVATE native)
+  target_link_libraries(deckboy-broadcast-check PRIVATE Threads::Threads)
+  if(DECKBOY_SANITIZE_BROADCAST_CHECK AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(deckboy-broadcast-check PRIVATE -fsanitize=address,undefined
+      -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+    target_link_options(deckboy-broadcast-check PRIVATE -fsanitize=address,undefined)
+  endif()
+  if(WIN32)
+    target_compile_definitions(deckboy-broadcast-check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(deckboy-broadcast-check PRIVATE ws2_32 iphlpapi)
+  endif()
+  add_test(NAME broadcast COMMAND deckboy-broadcast-check)
+  set_tests_properties(broadcast PROPERTIES TIMEOUT 30)
+  add_executable(deckboy-nmos-mdns-check tools/nmos_mdns_check.cpp
+    native/platform/nmos_mdns.cpp native/platform/nmos_node.cpp)
+  target_include_directories(deckboy-nmos-mdns-check PRIVATE native)
+  target_link_libraries(deckboy-nmos-mdns-check PRIVATE Threads::Threads)
+  if(WIN32)
+    target_compile_definitions(deckboy-nmos-mdns-check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(deckboy-nmos-mdns-check PRIVATE ws2_32 iphlpapi)
+  endif()
+  if(DECKBOY_SANITIZE_BROADCAST_CHECK AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(deckboy-nmos-mdns-check PRIVATE -fsanitize=address,undefined
+      -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+    target_link_options(deckboy-nmos-mdns-check PRIVATE -fsanitize=address,undefined)
+  endif()
+  add_test(NAME nmos-mdns-packets COMMAND deckboy-nmos-mdns-check)
+  add_test(NAME nmos-mdns-loopback COMMAND deckboy-nmos-mdns-check --loopback)
+  set_tests_properties(nmos-mdns-packets nmos-mdns-loopback PROPERTIES TIMEOUT 15)
+  add_test(NAME nmos-registration-loopback COMMAND deckboy-nmos-mdns-check --registration)
+  set_tests_properties(nmos-registration-loopback PROPERTIES TIMEOUT 30)
+endif()

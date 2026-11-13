@@ -1,0 +1,5858 @@
+// cue_effects.hpp — the per-cue effect stack.
+//
+// pixel_effects.hpp already carried chroma key and the colour controls, which
+// are per-cue effects in everything but name. This adds the ORDERED, operator
+// -built stack on top of them: a list of {kind, amount, params} on the Cue,
+// applied in the order the operator arranged it.
+//
+// WHERE THIS RUNS, and why it is allowed to run at full raster:
+//
+// The video synth's CRT stage cost 23ms a frame at 4K until it was moved to
+// the internal raster, and that lesson has to be respected here. The rule that
+// came out of it is per-EFFECT, not per-stack:
+//
+//   - A single-pass per-pixel operation (invert, posterise, threshold, grain,
+//     vignette, scanlines, dither) reads one pixel and writes one pixel. At 4K
+//     that is 8.3M iterations of a few arithmetic ops -- real, but linear and
+//     unavoidable, and downscaling first would soften a colour grade for no
+//     reason. These run at full raster.
+//   - Anything with a WINDOW or an ITERATION (blur, bloom, sort, seam carve,
+//     flow) must compute its field or its kernel on a small buffer and apply
+//     the result at full resolution. Those are the ones that killed the CRT.
+//
+// Only the first group is implemented here. The second gets its own file when
+// it arrives, so the distinction stays visible rather than becoming a comment
+// nobody reads.
+#ifndef DECKBOY_CORE_CUE_EFFECTS_HPP
+#define DECKBOY_CORE_CUE_EFFECTS_HPP
+
+#include <array>
+#include <atomic>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <climits>
+#include <cstring>
+#include <functional>
+#include <string>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include "../engine/motion_field.hpp"
+
+namespace deckboy::effects {
+
+enum class CueEffectKind : int {
+  None = 0,
+  Invert,
+  Posterise,
+  Solarise,
+  Threshold,
+  Vignette,
+  Grain,
+  Scanlines,
+  ChannelOffset,
+  TemporalDither,
+  MotionPuppet,
+  Datamosh,
+  PixelSort,
+  BlockGlitch,
+  PolarWarp,
+  LumaDisplace,
+  Ripple,
+  Kaleidoscope,
+  DyeAdvect,
+  ReactionBloom,
+  Relativistic,
+  Caustics,
+  Feedback,
+  Schlieren,
+  Chladni,
+  Wavefront,
+  Crystallise,
+  Scotopic,
+  GrainFlow,
+  TextMode,
+  // Six added 2026-09-05.
+  SlitScan,
+  Ferrofluid,
+  Shatter,
+  EdgeIgnite,
+  Relight,
+  DepthSplit,
+  // Added 2026-09-10. NOT the Datamosh above, which is the codec trick: that
+  // one withholds keyframes so the DECODER smears, which needs a transcode
+  // first and only ever works on a file. This computes the same look per
+  // frame — estimate where the picture moved, drag the held picture along
+  // that motion instead of drawing the new one — so it runs live on a camera,
+  // an NDI feed, a browser page or the video synth, and sits on a knob.
+  MotionMosh,
+  // Added 2026-09-17. The two halves of one idea: a picture is a stream of
+  // bytes and so is a sound, so each can be run through the other's machinery.
+  // Databend plays the frame INTO an audio chain -- delay, feedback, filter,
+  // wavefolder -- and paints what comes back. Audioprint does the reverse and
+  // draws the deck's own played audio through the picture. Put one of each in a
+  // chain, with an audio effect whose picture-reading is turned on, and the
+  // loop closes: sound bends the picture, picture bends the sound.
+  Databend,
+  Audioprint,
+  // Added 2026-09-24. Time as a third dimension: the last few seconds kept
+  // as a block of pictures -- width, height, time -- and drawn as a solid
+  // turning in space. The face towards you is now; the sides are the same
+  // moments seen edge-on, so everything that moved is a streak through time.
+  TimeCube,
+  // Added 2026-09-26. The loop that changes colour and melts: video feedback
+  // with a hue turn and a warp applied on every pass, rather than the plain
+  // affine step Feedback takes. Separate from Feedback because Feedback's
+  // four parameters are all spoken for and re-meaning one would restage every
+  // show that uses it.
+  FeedbackBloom,
+  // Added 2026-09-30. The grading basics, asked for as "we have effects
+  // totally unheard of, but not the basics like levels and curves". Both
+  // ARRIVE NEUTRAL (A=0.5, B=C=D=0 is the identity), so adding one changes
+  // nothing until a slider moves -- which is what a grading tool should do.
+  Levels,
+  Curves,
+  // Added 2026-10-28, asked for as "basic colour change effect": turn every
+  // colour round the wheel, tint the picture toward one colour, or wash it
+  // out to black and white. Arrives neutral like the two above.
+  Colour,
+  // Added 2026-10-29: the basics other video software has and this did not
+  // ("are there any other basic video effects ... deckboy is missing besides
+  // colour replace?"). Unlike the grading three they arrive DOING something
+  // at A=0.5, B=C=D=0, as an effect picked from a list should.
+  ColourReplace,
+  Blur,
+  Sharpen,
+  Glow,
+  Mirror,
+  Mosaic,
+  Edges,
+  LumaKey,
+  Strobe,
+  // Added 2026-11-04, James's "melter" from his Max patch: where the picture
+  // moves it is drawn fresh, and where it is still the picture HOLDS what
+  // was there, so whatever moves leaves itself behind. The motion is read on
+  // a grid that runs from fine to the patch's chunky 40 x 30.
+  MotionTrails,
+  Count,
+};
+
+inline const char* cueEffectLabel(CueEffectKind kind) {
+  switch (kind) {
+    case CueEffectKind::Invert:         return "invert";
+    case CueEffectKind::Posterise:      return "posterise";
+    case CueEffectKind::Solarise:       return "solarise";
+    case CueEffectKind::Threshold:      return "threshold";
+    case CueEffectKind::Vignette:       return "vignette";
+    case CueEffectKind::Grain:          return "grain";
+    case CueEffectKind::Scanlines:      return "scanlines";
+    case CueEffectKind::ChannelOffset:  return "rgb split";
+    case CueEffectKind::TemporalDither: return "temporal dither";
+    case CueEffectKind::MotionPuppet:   return "motion puppet";
+    case CueEffectKind::Datamosh:       return "datamosh";
+    case CueEffectKind::PixelSort:      return "pixel sort";
+    case CueEffectKind::BlockGlitch:    return "block glitch";
+    case CueEffectKind::PolarWarp:      return "polar warp";
+    case CueEffectKind::LumaDisplace:   return "luma displace";
+    case CueEffectKind::Ripple:         return "ripple";
+    case CueEffectKind::Kaleidoscope:   return "kaleidoscope";
+    case CueEffectKind::DyeAdvect:      return "dye advect";
+    case CueEffectKind::ReactionBloom:  return "reaction bloom";
+    case CueEffectKind::Relativistic:   return "lightspeed";
+    case CueEffectKind::Caustics:       return "caustics";
+    case CueEffectKind::Feedback:       return "feedback";
+    case CueEffectKind::FeedbackBloom:  return "feedback bloom";
+    case CueEffectKind::Schlieren:      return "schlieren";
+    case CueEffectKind::Chladni:        return "chladni";
+    case CueEffectKind::Wavefront:      return "wavefront";
+    case CueEffectKind::Crystallise:    return "crystallise";
+    case CueEffectKind::Scotopic:       return "night eyes";
+    case CueEffectKind::GrainFlow:      return "grain flow";
+    case CueEffectKind::TextMode:       return "text mode";
+    case CueEffectKind::SlitScan:       return "slit scan";
+    case CueEffectKind::Ferrofluid:     return "ferrofluid";
+    case CueEffectKind::Shatter:        return "shatter";
+    case CueEffectKind::EdgeIgnite:     return "edge ignite";
+    case CueEffectKind::Relight:        return "relight";
+    case CueEffectKind::DepthSplit:     return "depth split";
+    case CueEffectKind::MotionMosh:     return "motion mosh";
+    case CueEffectKind::Databend:       return "databend";
+    case CueEffectKind::Audioprint:     return "audioprint";
+    case CueEffectKind::TimeCube:       return "time cube";
+    case CueEffectKind::Levels:         return "levels";
+    case CueEffectKind::Curves:         return "curves";
+    case CueEffectKind::Colour:         return "colour";
+    case CueEffectKind::ColourReplace:  return "colour replace";
+    case CueEffectKind::Blur:           return "blur";
+    case CueEffectKind::Sharpen:        return "sharpen";
+    case CueEffectKind::Glow:           return "glow";
+    case CueEffectKind::Mirror:         return "mirror";
+    case CueEffectKind::Mosaic:         return "mosaic";
+    case CueEffectKind::Edges:          return "edges";
+    case CueEffectKind::LumaKey:        return "luma key";
+    case CueEffectKind::Strobe:         return "strobe";
+    case CueEffectKind::MotionTrails:   return "motion trails";
+    default:                            return "none";
+  }
+}
+
+// Serialised token. NOT the label: labels are for operators and may be
+// reworded, tokens are in saved shows and may not.
+inline const char* cueEffectToken(CueEffectKind kind) {
+  switch (kind) {
+    case CueEffectKind::Invert:         return "invert";
+    case CueEffectKind::Posterise:      return "posterise";
+    case CueEffectKind::Solarise:       return "solarise";
+    case CueEffectKind::Threshold:      return "threshold";
+    case CueEffectKind::Vignette:       return "vignette";
+    case CueEffectKind::Grain:          return "grain";
+    case CueEffectKind::Scanlines:      return "scanlines";
+    case CueEffectKind::ChannelOffset:  return "channel_offset";
+    case CueEffectKind::TemporalDither: return "temporal_dither";
+    case CueEffectKind::MotionPuppet:   return "motion_puppet";
+    case CueEffectKind::Datamosh:       return "datamosh";
+    case CueEffectKind::PixelSort:      return "pixel_sort";
+    case CueEffectKind::BlockGlitch:    return "block_glitch";
+    case CueEffectKind::PolarWarp:      return "polar_warp";
+    case CueEffectKind::LumaDisplace:   return "luma_displace";
+    case CueEffectKind::Ripple:         return "ripple";
+    case CueEffectKind::Kaleidoscope:   return "kaleidoscope";
+    case CueEffectKind::DyeAdvect:      return "dye_advect";
+    case CueEffectKind::ReactionBloom:  return "reaction_bloom";
+    case CueEffectKind::Relativistic:   return "relativistic";
+    case CueEffectKind::Caustics:       return "caustics";
+    case CueEffectKind::Feedback:       return "feedback";
+    case CueEffectKind::FeedbackBloom:  return "feedback_bloom";
+    case CueEffectKind::Schlieren:      return "schlieren";
+    case CueEffectKind::Chladni:        return "chladni";
+    case CueEffectKind::Wavefront:      return "wavefront";
+    case CueEffectKind::Crystallise:    return "crystallise";
+    case CueEffectKind::Scotopic:       return "scotopic";
+    case CueEffectKind::GrainFlow:      return "grain_flow";
+    case CueEffectKind::TextMode:       return "text_mode";
+    case CueEffectKind::SlitScan:       return "slit_scan";
+    case CueEffectKind::Ferrofluid:     return "ferrofluid";
+    case CueEffectKind::Shatter:        return "shatter";
+    case CueEffectKind::EdgeIgnite:     return "edge_ignite";
+    case CueEffectKind::Relight:        return "relight";
+    case CueEffectKind::DepthSplit:     return "depth_split";
+    case CueEffectKind::MotionMosh:     return "motion_mosh";
+    case CueEffectKind::Databend:       return "databend";
+    case CueEffectKind::Audioprint:     return "audioprint";
+    case CueEffectKind::TimeCube:       return "time_cube";
+    case CueEffectKind::Levels:         return "levels";
+    case CueEffectKind::Curves:         return "curves";
+    case CueEffectKind::Colour:         return "colour";
+    case CueEffectKind::ColourReplace:  return "colour_replace";
+    case CueEffectKind::Blur:           return "blur";
+    case CueEffectKind::Sharpen:        return "sharpen";
+    case CueEffectKind::Glow:           return "glow";
+    case CueEffectKind::Mirror:         return "mirror";
+    case CueEffectKind::Mosaic:         return "mosaic";
+    case CueEffectKind::Edges:          return "edges";
+    case CueEffectKind::LumaKey:        return "luma_key";
+    case CueEffectKind::Strobe:         return "strobe";
+    case CueEffectKind::MotionTrails:   return "motion_trails";
+    default:                            return "none";
+  }
+}
+
+// Whether this effect looks DIFFERENT from one frame to the next on an
+// unchanging picture.
+//
+// This matters because a still cue decodes exactly one frame, and both render
+// paths skip re-applying the stack when the source frame has not changed. An
+// effect that advances with time therefore ran once on a still and froze --
+// grain that does not move, a ripple standing perfectly still, and caustics and
+// feedback, whose entire subject is motion, reduced to one arbitrary frame of
+// themselves. The gate is right for the effects it was written for; it just
+// cannot know about these.
+//
+// Two ways an effect can move: it reads ctx.frameIndex, or it carries state
+// between calls. Both are listed here, and tools/check_effects_offline.py
+// --animation renders each effect at nine frame indices and fails if this list
+// disagrees with what the pixels do -- so a new effect cannot be misfiled here
+// without something saying so.
+inline bool cueEffectKindAnimates(CueEffectKind kind) {
+  switch (kind) {
+    // Advance with the frame index.
+    case CueEffectKind::Grain:
+    case CueEffectKind::TemporalDither:
+    case CueEffectKind::BlockGlitch:
+    case CueEffectKind::Ripple:
+    case CueEffectKind::Caustics:
+    // Carry state between calls, so they move without reading the index.
+    case CueEffectKind::Feedback:
+    case CueEffectKind::FeedbackBloom:
+    case CueEffectKind::Scotopic:
+    case CueEffectKind::MotionPuppet:
+    // Phrases move on their own clock and the cell corruption re-rolls every
+    // frame, so a still cue must keep re-rendering or the screen freezes.
+    case CueEffectKind::TextMode:
+    // Slit scan and shatter carry a frame between calls; the other four are
+    // driven by the frame index, so a still cue must keep re-rendering or they
+    // freeze in place.
+    case CueEffectKind::SlitScan:
+    case CueEffectKind::Ferrofluid:
+    case CueEffectKind::Shatter:
+    case CueEffectKind::EdgeIgnite:
+    case CueEffectKind::Relight:
+    case CueEffectKind::DepthSplit:
+    // Motion mosh holds both the previous input and the smeared picture
+    // between calls, so it keeps evolving on a still cue — which is most of
+    // the point: a held frame smears into itself rather than sitting there.
+    case CueEffectKind::MotionMosh:
+    // Databend re-bends every frame from the frame index, so a held still
+    // keeps moving; audioprint follows the sound, which moves whatever the
+    // picture is doing.
+    case CueEffectKind::Databend:
+    case CueEffectKind::Audioprint:
+    // The time cube holds the recent frames, so it keeps changing while the
+    // picture does and must re-run on every frame.
+    case CueEffectKind::TimeCube:
+    // A strobe on a still is still a strobe: it flashes on the clock.
+    case CueEffectKind::Strobe:
+    // Holds the picture it has built and the last frame's motion grid.
+    case CueEffectKind::MotionTrails:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// What an effect's shaping parameters MEAN, or null when it has no such slot.
+//
+// `which` is 0-3 for paramA-paramD. Naming them here rather than in the
+// inspector keeps the meaning next to the code that reads it, so a parameter
+// cannot be repurposed without the label moving with it.
+//
+// Read the neutral-value note on CueEffect before adding one: A=0.5, B=0, C=0,
+// D=0 must reproduce what the effect did before the parameter existed.
+// THE COLOUR CHIPS. Two kinds of slot take a colour from the picker:
+//
+// A HUE slot is an ordinary 0-1 parameter that means a place round the colour
+// wheel from red. The chip shows that hue fully saturated and the picker sets
+// the slot to the hue of whatever it picks, so the slider and its LFO keep
+// working and a picked navy and a picked sky blue land on the same blue --
+// which is right for these, because they keep the picture's own shading.
+inline bool cueEffectParamIsHue(CueEffectKind kind, int which) {
+  switch (kind) {
+    case CueEffectKind::Colour:        return which == 2;
+    case CueEffectKind::ColourReplace: return which == 0 || which == 2;
+    default:                           return false;
+  }
+}
+
+// The WHOLE-colour slot: the effect's CueEffect::colour, whose chip sits on
+// this parameter's row because that slider shades it. -1 for an effect with
+// none.
+inline int cueEffectColourSlot(CueEffectKind kind) {
+  switch (kind) {
+    case CueEffectKind::Strobe: return 1;   // flash to: the colour, toward black
+    case CueEffectKind::Edges:  return 2;   // line colour: the colour, toward the picture's
+    default:                    return -1;
+  }
+}
+
+// The hue (0-1 from red) of an 0xRRGGBB colour, or -1 for a grey, which has
+// none. The inverse of the fully saturated wheel the hue effects draw from.
+inline double colourHue01(std::uint32_t rgb) {
+  const double r = ((rgb >> 16) & 0xFF) / 255.0;
+  const double g = ((rgb >> 8) & 0xFF) / 255.0;
+  const double b = (rgb & 0xFF) / 255.0;
+  const double mx = std::max({r, g, b});
+  const double mn = std::min({r, g, b});
+  const double d = mx - mn;
+  if (d <= 1e-6) return -1.0;
+  double h = mx == r ? std::fmod((g - b) / d, 6.0) : mx == g ? (b - r) / d + 2.0 : (r - g) / d + 4.0;
+  h /= 6.0;
+  return h < 0.0 ? h + 1.0 : h;
+}
+
+// The fully saturated colour at a hue (0-1 from red), as the hue effects use it.
+inline std::uint32_t hueColour(double hue01) {
+  const double sector = (hue01 - std::floor(hue01)) * 6.0;
+  const double f = sector - std::floor(sector);
+  double r = 1.0, g = 0.0, b = 0.0;
+  switch (static_cast<int>(std::floor(sector)) % 6) {
+    case 0: r = 1.0; g = f; b = 0.0; break;
+    case 1: r = 1.0 - f; g = 1.0; b = 0.0; break;
+    case 2: r = 0.0; g = 1.0; b = f; break;
+    case 3: r = 0.0; g = 1.0 - f; b = 1.0; break;
+    case 4: r = f; g = 0.0; b = 1.0; break;
+    default: r = 1.0; g = 0.0; b = 1.0 - f; break;
+  }
+  const auto byte = [](double v) { return static_cast<std::uint32_t>(std::lround(v * 255.0)); };
+  return (byte(r) << 16) | (byte(g) << 8) | byte(b);
+}
+
+inline const char* cueEffectParamLabel(CueEffectKind kind, int which) {
+  switch (kind) {
+    case CueEffectKind::Invert:
+      return which == 0 ? "pivot" : which == 1 ? "channel spread" : nullptr;
+    case CueEffectKind::Posterise:
+      return which == 0 ? "band curve" : which == 1 ? "channel skew" : nullptr;
+    case CueEffectKind::Solarise:
+      return which == 0 ? "fold point" : which == 1 ? "knee" : nullptr;
+    case CueEffectKind::Threshold:
+      return which == 0 ? "pivot" : which == 1 ? "softness" : nullptr;
+    case CueEffectKind::Vignette:
+      return which == 0 ? "size" : which == 1 ? "falloff" : nullptr;
+    case CueEffectKind::Grain:
+      return which == 0 ? "grain size" : which == 1 ? "colour" : nullptr;
+    case CueEffectKind::Scanlines:
+      return which == 0 ? "pitch" : which == 1 ? "darkness" : nullptr;
+    case CueEffectKind::ChannelOffset:
+      return which == 0 ? "angle" : which == 1 ? "green split" : nullptr;
+    case CueEffectKind::TemporalDither:
+      return which == 0 ? "palette" : which == 1 ? "hold" : nullptr;
+    case CueEffectKind::PixelSort:
+      return which == 0 ? "threshold" : which == 1 ? "reverse" : nullptr;
+    case CueEffectKind::BlockGlitch:
+      return which == 0 ? "bands" : which == 1 ? "tear width" : nullptr;
+    case CueEffectKind::PolarWarp:
+      return which == 0 ? "twist" : which == 1 ? "radial zoom" : nullptr;
+    case CueEffectKind::LumaDisplace:
+      return which == 0 ? "vertical bias" : which == 1 ? "pivot" : nullptr;
+    case CueEffectKind::Ripple:
+      return which == 0 ? "frequency" : which == 1 ? "speed" : nullptr;
+    case CueEffectKind::Kaleidoscope:
+      return which == 0 ? "wedges" : which == 1 ? "rotation" : nullptr;
+    case CueEffectKind::MotionPuppet:
+      return which == 0 ? "spring" : which == 1 ? "memory" : nullptr;
+    case CueEffectKind::DyeAdvect:
+      return which == 0 ? "bleed" : which == 1 ? "curl detail"
+           : which == 2 ? "swirl" : nullptr;
+    case CueEffectKind::ReactionBloom:
+      return which == 0 ? "feed rate" : which == 1 ? "growth"
+           : which == 2 ? "seed density" : which == 3 ? "glow" : nullptr;
+    case CueEffectKind::Relativistic:
+      return which == 0 ? "field of view" : which == 1 ? "doppler"
+           : which == 2 ? "off-axis" : nullptr;
+    case CueEffectKind::Caustics:
+      return which == 0 ? "chop" : which == 1 ? "swell speed"
+           : which == 2 ? "focus" : nullptr;
+    case CueEffectKind::Feedback:
+      return which == 0 ? "zoom" : which == 1 ? "spin"
+           : which == 2 ? "drift" : which == 3 ? "colour bleed" : nullptr;
+    case CueEffectKind::FeedbackBloom:
+      return which == 0 ? "hue turn" : which == 1 ? "melt"
+           : which == 2 ? "zoom" : which == 3 ? "swirl" : nullptr;
+    case CueEffectKind::Levels:
+      return which == 0 ? "midtones" : which == 1 ? "black point"
+           : which == 2 ? "white point" : which == 3 ? "lift" : nullptr;
+    case CueEffectKind::Curves:
+      return which == 0 ? "s-curve" : which == 1 ? "channel"
+           : which == 2 ? "shadow lift" : which == 3 ? "highlight roll" : nullptr;
+    case CueEffectKind::Colour:
+      return which == 0 ? "hue turn" : which == 1 ? "tint"
+           : which == 2 ? "tint colour" : which == 3 ? "wash out" : nullptr;
+    case CueEffectKind::ColourReplace:
+      return which == 0 ? "from" : which == 1 ? "range"
+           : which == 2 ? "to" : which == 3 ? "softness" : nullptr;
+    case CueEffectKind::Blur:
+      return which == 0 ? "size" : which == 1 ? "stretch"
+           : which == 2 ? "angle" : nullptr;
+    case CueEffectKind::Sharpen:
+      return which == 0 ? "strength" : which == 1 ? "radius"
+           : which == 2 ? "threshold" : nullptr;
+    case CueEffectKind::Glow:
+      return which == 0 ? "reach" : which == 1 ? "size" : nullptr;
+    case CueEffectKind::Mirror:
+      return which == 0 ? "way" : which == 1 ? "fold" : nullptr;
+    case CueEffectKind::Mosaic:
+      return which == 0 ? "tile size" : which == 1 ? "gap"
+           : which == 2 ? "round" : nullptr;
+    case CueEffectKind::Edges:
+      return which == 0 ? "strength" : which == 1 ? "picture"
+           : which == 2 ? "line colour" : nullptr;
+    case CueEffectKind::LumaKey:
+      return which == 0 ? "cut dark" : which == 1 ? "softness"
+           : which == 2 ? "cut bright" : nullptr;
+    case CueEffectKind::Strobe:
+      return which == 0 ? "rate" : which == 1 ? "flash to"
+           : which == 2 ? "flash length" : nullptr;
+    case CueEffectKind::MotionTrails:
+      return which == 0 ? "sensitivity" : which == 1 ? "let go"
+           : which == 2 ? "blocks" : which == 3 ? "trail" : nullptr;
+    case CueEffectKind::Schlieren:
+      return which == 0 ? "knife angle" : which == 1 ? "sensitivity"
+           : which == 2 ? "colour" : nullptr;
+    case CueEffectKind::Chladni:
+      return which == 0 ? "mode" : which == 1 ? "second mode"
+           : which == 2 ? "gather" : which == 3 ? "line glow" : nullptr;
+    case CueEffectKind::Wavefront:
+      return which == 0 ? "stiffness" : which == 1 ? "steps"
+           : which == 2 ? "damping" : which == 3 ? "relief" : nullptr;
+    case CueEffectKind::Crystallise:
+      return which == 0 ? "grain size" : which == 1 ? "facet light"
+           : which == 2 ? "irregularity" : which == 3 ? "edges" : nullptr;
+    case CueEffectKind::Scotopic:
+      return which == 0 ? "colour lag" : which == 1 ? "rod bias"
+           : which == 2 ? "purkinje" : nullptr;
+    case CueEffectKind::GrainFlow:
+      return which == 0 ? "stroke" : which == 1 ? "across the grain"
+           : which == 2 ? "coherence" : nullptr;
+    case CueEffectKind::TextMode:
+      return which == 0 ? "columns" : which == 1 ? "corruption"
+           : which == 2 ? "glyph set" : which == 3 ? "ink" : nullptr;
+    case CueEffectKind::SlitScan:
+      return which == 0 ? "sweep speed" : which == 1 ? "slit width"
+           : which == 2 ? "direction" : nullptr;
+    case CueEffectKind::Ferrofluid:
+      return which == 0 ? "spike length" : which == 1 ? "spike count"
+           : which == 2 ? "threshold" : nullptr;
+    case CueEffectKind::Shatter:
+      return which == 0 ? "shard size" : which == 1 ? "drift"
+           : which == 2 ? "rotation" : nullptr;
+    case CueEffectKind::EdgeIgnite:
+      return which == 0 ? "catch" : which == 1 ? "heat"
+           : which == 2 ? "flicker" : nullptr;
+    case CueEffectKind::Relight:
+      return which == 0 ? "relief" : which == 1 ? "light angle"
+           : which == 2 ? "orbit speed" : nullptr;
+    case CueEffectKind::DepthSplit:
+      return which == 0 ? "parallax" : which == 1 ? "convergence"
+           : which == 2 ? "sway" : nullptr;
+    case CueEffectKind::MotionMosh:
+      return which == 0 ? "hold" : which == 1 ? "block size"
+           : which == 2 ? "refresh" : nullptr;
+    case CueEffectKind::Databend:
+      return which == 0 ? "smear" : which == 1 ? "feedback"
+           : which == 2 ? "tone" : which == 3 ? "fold" : nullptr;
+    case CueEffectKind::Audioprint:
+      return which == 0 ? "throw" : which == 1 ? "span"
+           : which == 2 ? "ink" : nullptr;
+    case CueEffectKind::TimeCube:
+      return which == 0 ? "turn" : which == 1 ? "depth"
+           : which == 2 ? "see through" : which == 3 ? "zoom" : nullptr;
+    default:
+      return nullptr;
+  }
+}
+
+// The one-line explanation the inspector shows for that parameter.
+inline const char* cueEffectParamTip(CueEffectKind kind, int which) {
+  switch (kind) {
+    case CueEffectKind::Invert:
+      return which == 0
+        ? "What the picture folds around. Centre is a straight negative; move "
+          "it and the highlights or the shadows survive."
+        : "Inverts the channels by different amounts, so the negative comes "
+          "back coloured instead of grey.";
+    case CueEffectKind::Posterise:
+      return which == 0
+        ? "Where the bands bunch up. Centre spaces them evenly; either side "
+          "crowds them into the shadows or the highlights."
+        : "Gives each channel a different number of bands, which is what turns "
+          "posterising into false colour.";
+    case CueEffectKind::SlitScan:
+      return which == 0 ? "How fast the open slit crosses the picture. Slow "
+                          "smears a long moment across the frame."
+           : which == 1 ? "How much of the picture is live at once. Narrow is "
+                          "a scanner; wide is barely an effect."
+                        : "Which way the slit travels, and whether it runs "
+                          "down the frame instead of across it.";
+    case CueEffectKind::Ferrofluid:
+      return which == 0 ? "How far the bright parts pull away from the "
+                          "surface."
+           : which == 1 ? "How many spikes the field breaks into."
+                        : "How bright a pixel has to be before it lifts at "
+                          "all, so only the highlights spike.";
+    case CueEffectKind::Shatter:
+      return which == 0 ? "How big the shards are. Small is frosted glass, "
+                          "large is a dropped plate."
+           : which == 1 ? "How far each shard slides from where it belongs."
+                        : "How much each shard turns on its own centre.";
+    case CueEffectKind::EdgeIgnite:
+      return which == 0 ? "How readily an edge catches. Low sets the whole "
+                          "picture alight, high only the hardest lines."
+           : which == 1 ? "How far the burn spreads off the edge, and how hot "
+                          "its colour runs."
+                        : "How much the flame gutters frame to frame.";
+    case CueEffectKind::Relight:
+      return which == 0 ? "How deep the picture is treated as being. The "
+                          "brightness becomes height and is lit from the side."
+           : which == 1 ? "Where the light stands, in degrees around the frame."
+                        : "How fast the light walks around it. Zero holds it "
+                          "still.";
+    case CueEffectKind::DepthSplit:
+      return which == 0 ? "How far the two eyes disagree. Brightness is read "
+                          "as nearness."
+           : which == 1 ? "The distance that sits ON the screen. Either side "
+                          "of it comes forward or falls behind."
+                        : "A slow rocking of the viewpoint, which is what "
+                          "makes the depth read without glasses.";
+    case CueEffectKind::MotionMosh:
+      return which == 0
+        ? "How long the picture refuses to be replaced. Low lets the new "
+          "picture through; high drags the old one along the new one's "
+          "motion, which is the smear."
+        : which == 1
+        ? "How coarse the motion is measured. Large blocks give the hard "
+          "square edges people picture when they say datamosh; small ones "
+          "flow."
+        : "How often the real picture is allowed back in. At zero it never "
+          "recovers, which is a mosh that keeps going.";
+    case CueEffectKind::Databend:
+      return which == 0
+        ? "How far back the chain listens. The picture is played through a "
+          "delay, so this is the distance the damage is dragged across."
+        : which == 1
+        ? "How much of the bent picture goes round again. High is where it "
+          "stops being an echo and starts eating itself."
+        : which == 2
+        ? "Dark end to bright end. Low keeps the slow, heavy damage; high "
+          "keeps the edges and the grain."
+        : "Folds the picture back on itself when it goes past full scale, "
+          "the way a hot signal folds instead of clipping.";
+    case CueEffectKind::TimeCube:
+      return which == 0
+        ? "Which way the block faces. Centre is a three-quarter view; put an "
+          "LFO on it and the block turns."
+        : which == 1
+        ? "How much time the block holds: 12 to 96 frames, about three "
+          "seconds at the top at 30fps. More time, longer streaks."
+        : which == 2
+        ? "Solid to see-through. Solid shows the faces; see-through shows the "
+          "whole block as a glowing volume, every moment at once."
+        : "How close the camera is to the block.";
+    case CueEffectKind::Audioprint:
+      return which == 0
+        ? "How far the sound throws each line sideways."
+        : which == 1
+        ? "How much of the recent sound is drawn down the frame. Short reads "
+          "one syllable across the whole picture; long draws bars of it."
+        : "How much the sound colours what it moves, on top of moving it.";
+    case CueEffectKind::Solarise:
+      return which == 0
+        ? "Where highlights fold back through black. Low folds most of the "
+          "picture, high folds only the brightest."
+        : "Softens the fold so it ramps instead of creasing.";
+    case CueEffectKind::Threshold:
+      return which == 0 ? "The brightness that decides black from white."
+                        : "Widens the decision into a ramp, so edges keep "
+                          "their shape instead of jagging.";
+    case CueEffectKind::Vignette:
+      return which == 0 ? "How far out the darkening starts."
+                        : "How abruptly it arrives. Low is a soft cloud, high "
+                          "is a hard porthole.";
+    case CueEffectKind::Grain:
+      return which == 0
+        ? "Fine sensor noise at the bottom, chunky film at the top."
+        : "Zero is one noise value across all three channels, which reads as "
+          "film. Higher gives each channel its own, which reads as video.";
+    case CueEffectKind::Scanlines:
+      return which == 0
+        ? "Line pitch in pixels, so this reads at 4K as well as at 720."
+        : "How dark the dark lines go. All the way up is black between lines.";
+    case CueEffectKind::ChannelOffset:
+      return which == 0
+        ? "Which way red and blue pull apart. Centre is horizontal, the "
+          "classic; turn it for a diagonal or vertical fringe."
+        : "Drags green the other way, which turns a two-colour fringe into a "
+          "full prism.";
+    case CueEffectKind::TemporalDither:
+      return which == 0
+        ? "How many shades survive the quantise."
+        : "Holds the dither pattern for more than one frame. At zero it "
+          "advances every frame and the eye integrates it; wind it up and the "
+          "checkerboard stops moving and becomes visible.";
+    case CueEffectKind::PixelSort:
+      return which == 0
+        ? "How bright a pixel has to be to join a run. Lower catches more of "
+          "the picture and the runs grow longer."
+        : "Sorts the runs the other way, so they pour from light to dark.";
+    case CueEffectKind::BlockGlitch:
+      return which == 0 ? "How many torn bands per frame."
+                        : "How far a band can slide.";
+    case CueEffectKind::PolarWarp:
+      return which == 0 ? "Rotates the reading, so straight lines wind into "
+                          "spirals rather than rings."
+                        : "Pushes the rings in or out of the centre.";
+    case CueEffectKind::LumaDisplace:
+      return which == 0
+        ? "How much of the push goes downward rather than sideways."
+        : "The brightness that stays put. Everything above it reaches one way "
+          "and everything below it the other.";
+    case CueEffectKind::Ripple:
+      return which == 0 ? "How closely spaced the rings are."
+                        : "How fast they travel outward.";
+    case CueEffectKind::MotionPuppet:
+      return which == 0
+        ? "How quickly the picture springs back to rest once the driver stops "
+          "pushing it. Only does anything when memory is up."
+        : "How much of the driver's movement the picture KEEPS. At zero it "
+          "follows the driver frame by frame, which is a twitch. Wind it up "
+          "and the motion accumulates, so the driver sculpts the picture over "
+          "time and it holds the pose -- which is what puppetry means.";
+    case CueEffectKind::Kaleidoscope:
+      return which == 0
+        ? "Two is a mirror, twelve is a snowflake, and they are completely "
+          "different pictures."
+        : "Turns the whole arrangement, so the fold lines do not sit on the "
+          "same part of the picture all night.";
+    case CueEffectKind::DyeAdvect:
+      return which == 0
+        ? "0 flows ALONG the edges, so colour orbits the shapes. 1 flows "
+          "across them, which bleeds the picture into itself."
+        : which == 1
+        ? "How many steps each pixel walks. More steps curve further around "
+          "the shapes; the total distance does not change."
+        : "Rotates the whole flow field, which turns orbiting into spiralling "
+          "inward or outward.";
+    case CueEffectKind::ReactionBloom:
+      return which == 0
+        ? "The character of the growth: low is waves, then labyrinth, coral, "
+          "worms, and holes at the top."
+        : which == 1
+        ? "How long the reaction runs each frame. Short is a stain, long is an "
+          "organism."
+        : which == 2
+        ? "How much of the picture is seeded. Sparse grows a few large "
+          "colonies; dense grows a crowded one."
+        : "Draws the growth as light instead of as a negative.";
+    case CueEffectKind::Relativistic:
+      return which == 0
+        ? "How wide a view is being compressed. Narrow is a punch down the "
+          "middle, wide folds the whole frame into the centre."
+        : which == 1
+        ? "Blueshift toward the direction of travel and redshift at the rim. "
+          "Zero leaves the colour alone and it reads as a lens instead."
+        : "Moves the direction of travel off the centre of frame, so the "
+          "picture rushes past rather than straight at you.";
+    case CueEffectKind::Levels:
+      return which == 0
+        ? "Gamma. Centre leaves the picture alone; up opens the midtones, down "
+          "sinks them. Black and white stay where they are."
+        : which == 1
+        ? "Everything this dark or darker becomes black. Up crushes the "
+          "shadows and adds punch."
+        : which == 2
+        ? "Everything this bright or brighter becomes white. Up clips the "
+          "highlights and brightens the whole picture."
+        : "Raises black to grey: the faded, matte look. Applied last.";
+    case CueEffectKind::Curves:
+      return which == 0
+        ? "Centre is a straight line. Up bends it into an S -- darker shadows, "
+          "brighter highlights, more contrast. Down flattens it."
+        : which == 1
+        ? "Which channel the curve acts on: all three, then red, green or blue "
+          "on its own -- the way a colourist warms or cools one end of the "
+          "picture."
+        : which == 2
+        ? "Lifts the dark tones without moving pure black."
+        : "Pulls the bright tones down without moving pure white, so a hot "
+          "highlight rolls off instead of clipping.";
+    case CueEffectKind::Colour:
+      return which == 0
+        ? "Turns every colour round the wheel. Centre leaves them alone; the "
+          "ends are half a turn either way. Give it an LFO and the picture "
+          "cycles through the colours."
+        : which == 1
+        ? "How far the picture goes toward the tint colour. Black stays black "
+          "and white stays white; the midtones take the colour."
+        : which == 2
+        ? "Which colour the tint is, round the wheel from red."
+        : "Drains the colour toward black and white. Up is grey all the way.";
+    case CueEffectKind::ColourReplace:
+      return which == 0
+        ? "The colour to change, round the wheel from red."
+        : which == 1
+        ? "How wide a band of colours either side of it changes too."
+        : which == 2
+        ? "The colour it becomes. Shading and brightness stay as they were, so "
+          "a red shirt turns blue and keeps its folds."
+        : "How gently the change fades out at the edges of the band.";
+    case CueEffectKind::Blur:
+      return which == 0
+        ? "How far it smears: up to a few percent of the picture."
+        : which == 1
+        ? "From an even blur to a streak along the angle, like movement."
+        : "Which way the streak runs: across at the left, upright in the "
+          "middle, across again at the right.";
+    case CueEffectKind::Sharpen:
+      return which == 0
+        ? "How much the edges are lifted."
+        : which == 1
+        ? "Fine detail at the left; broader edges, with a halo, to the right."
+        : "Leaves small differences alone, so grain and noise are not "
+          "sharpened along with the picture.";
+    case CueEffectKind::Glow:
+      return which == 0
+        ? "How much of the picture glows: only the brightest at the left, "
+          "nearly everything at the right."
+        : "How far the glow spreads.";
+    case CueEffectKind::Mirror:
+      return which == 0
+        ? "Flip across, upside down or both, or fold one half onto the other: "
+          "right onto left, left onto right, bottom onto top, top onto bottom, "
+          "or one corner into all four."
+        : "Where the fold sits: the middle at the left, toward the far edge to "
+          "the right. Flips have no fold.";
+    case CueEffectKind::Mosaic:
+      return which == 0
+        ? "How big each tile is."
+        : which == 1
+        ? "A dark line between the tiles, like grout or an LED wall."
+        : "Rounds the tiles off, all the way to dots.";
+    case CueEffectKind::Edges:
+      return which == 0
+        ? "How strongly the outlines are drawn."
+        : which == 1
+        ? "How much of the picture shows behind the lines. None at the left: "
+          "lines on black."
+        : "Lines in the chip's colour at the left; the picture's own colours "
+          "to the right. Click the chip to pick the colour.";
+    case CueEffectKind::LumaKey:
+      return which == 0
+        ? "Takes out everything darker than this, so what lies beneath shows "
+          "through. Left takes out nothing."
+        : which == 1
+        ? "How gradually the key cuts in. Hard at the left."
+        : "Takes out everything brighter than this as well. Left takes out "
+          "nothing.";
+    case CueEffectKind::MotionTrails:
+      return which == 0
+        ? "How much a part of the picture must change to count as moving. "
+          "Right catches a finger; left only an arm."
+        : which == 1
+        ? "How fast the still parts catch up with the live picture. At the "
+          "left they never do, and the trails stay until something moves "
+          "over them."
+        : which == 2
+        ? "How coarse the grid that notices movement is: fine at the left, "
+          "big melting blocks at the right."
+        : "What a moving thing leaves behind. Left: the light, so bright things "
+          "paint trails. Middle: the melt, the Max patch's own, where moving "
+          "parts redraw and still ones freeze. Right: the dark.";
+    case CueEffectKind::Strobe:
+      return which == 0
+        ? "Flashes a second, from half to ten; it arrives at about two. Faster "
+          "than three a second can bring on seizures in people with "
+          "photosensitive epilepsy, so warn the audience before using it."
+        : which == 1
+        ? "The chip's colour at the left, black at the right, darker between. "
+          "Click the chip to pick what it flashes to; white is a white flash."
+        : "How long each flash lasts, as a share of the time between them.";
+    case CueEffectKind::FeedbackBloom:
+      return which == 0
+        ? "How far the colour turns on each trip round the loop. This is the "
+          "oil-slick: the trail walks through the spectrum instead of fading."
+        : which == 1
+        ? "How much the echo is distorted each pass. It compounds, so a little "
+          "ripples and a lot melts the picture into itself."
+        : which == 2
+        ? "Grows or shrinks the echo each pass. Centre holds still."
+        : "Turns the echo each pass, which winds the melt into a spiral.";
+    case CueEffectKind::Feedback:
+      return which == 0
+        ? "How much the echo grows or shrinks each pass. Centre holds still; "
+          "up pulls a tunnel toward you, down sucks it away."
+        : which == 1
+        ? "How far the echo turns each pass. A little makes a spiral."
+        : which == 2
+        ? "Slides the echo sideways, which turns the tunnel into a comet."
+        : "Lets the channels decay at different rates, so the trail changes "
+          "colour as it fades instead of just going dim.";
+    case CueEffectKind::Caustics:
+      return which == 0
+        ? "How fine the water is. Long ocean swell at one end, rain on a "
+          "puddle at the other."
+        : which == 1
+        ? "How fast the surface moves."
+        : "How hard the light gathers where the rays converge. This is the "
+          "part that makes it read as water rather than as a wobble.";
+    case CueEffectKind::Schlieren:
+      return which == 0
+        ? "Which way the knife edge lies. Only gradients ACROSS the edge show, "
+          "so turning it swaps which features appear and which vanish."
+        : which == 1
+        ? "How faint a gradient still registers. High turns the quietest "
+          "shading into visible structure."
+        : "Tints the two directions apart, so light bending one way and the "
+          "other are different colours instead of both being grey.";
+    case CueEffectKind::Chladni:
+      return which == 0
+        ? "The plate's first vibration mode. Whole numbers give clean figures; "
+          "between them the pattern is unresolved, as a real plate would be."
+        : which == 1
+        ? "The second mode it is beating against. Equal to the first gives "
+          "nothing; far apart gives a dense lattice."
+        : which == 2
+        ? "How hard the picture is pulled onto the still lines."
+        : "Lights the nodal lines themselves, the way sand piled on a plate "
+          "catches the light.";
+    case CueEffectKind::Wavefront:
+      return which == 0
+        ? "How fast the wave travels. Faster spreads further in the same time "
+          "and interferes more."
+        : which == 1
+        ? "How long it is allowed to run. More steps means the ripples have "
+          "crossed and reflected more times."
+        : which == 2
+        ? "How quickly it dies away. None rings forever; a lot leaves only "
+          "the first wave."
+        : "Lights the wave as a surface instead of only displacing the "
+          "picture, so you can see the shape of it.";
+    case CueEffectKind::Crystallise:
+      return which == 0
+        ? "How big the crystals grow before they meet."
+        : which == 1
+        ? "How much each facet catches the light, which is what makes them "
+          "read as faceted rather than as flat blobs."
+        : which == 2
+        ? "How irregular the growth is. Low gives an even honeycomb, high "
+          "gives long shards."
+        : "Darkens the boundaries where crystals meet.";
+    case CueEffectKind::TextMode:
+      return which == 0
+        ? "Characters across. Fewer means bigger cells and less of the "
+          "picture surviving, which is usually the point."
+        : which == 1
+        ? "Rows lose sync and repeat one character, the way a real text "
+          "screen breaks up. At 0 the grid is clean."
+        : which == 2
+        ? "Blocks and dithers read as density; the ASCII ramp reads as text; "
+          "symbols read as wreckage."
+        : "Picture takes its colour from the image. The rest are terminal "
+          "phosphors.";
+    case CueEffectKind::Scotopic:
+      return which == 0
+        ? "How far behind the colour runs. The rods are fast and see no "
+          "colour; the cones are slow, so movement goes grey and colour "
+          "catches up afterwards."
+        : which == 1
+        ? "How dark it has to be before the rods take over."
+        : "The Purkinje shift: as the rods take over, sensitivity slides "
+          "toward the blue end, which is why night looks blue.";
+    case CueEffectKind::GrainFlow:
+      return which == 0
+        ? "How far each stroke is dragged along the grain."
+        : which == 1
+        ? "Turns the strokes across the grain instead of along it, which "
+          "combs the picture apart rather than smoothing it."
+        : "How strongly the direction has to agree before it is followed. Low "
+          "smears everything; high leaves flat areas alone and only strokes "
+          "where there is real structure.";
+    default:
+      return "";
+  }
+}
+
+inline CueEffectKind cueEffectFromToken(const std::string& token) {
+  for (int i = 1; i < static_cast<int>(CueEffectKind::Count); ++i) {
+    const auto kind = static_cast<CueEffectKind>(i);
+    if (token == cueEffectToken(kind)) {
+      return kind;
+    }
+  }
+  return CueEffectKind::None;
+}
+
+// ---------------------------------------------------------------------------
+// A low-frequency oscillator, per parameter.
+// ---------------------------------------------------------------------------
+
+enum class LfoShape : std::uint8_t {
+  Sine,      // the default: moves fastest through the middle, eases at the ends
+  Triangle,  // constant speed, hard turn
+  Saw,       // ramp up, snap back
+  Ramp,      // ramp down, snap up
+  Square,    // two values, nothing between
+  Sample,    // a new random value each cycle, HELD -- steps, not noise
+  Drawn,     // whatever the operator sketched; see ParamLfo::curve
+  // Not an oscillator: the deck's own SOUND, 0-1, after its audio effects.
+  // Appended, never inserted -- shows store the shape as its index. This is
+  // the picture half of the loop the Ouroboros audio effect is the other half of.
+  Audio,
+  // Not oscillators either: a camera's MOTION (core/motion.hpp). How much is
+  // moving, one-sided upward like Audio; and where it is, across and down,
+  // centred on the value that was set like an oscillator, so a hand at the
+  // middle leaves the control where it is. ParamLfo::motionZone says which
+  // zone (0 the whole picture). Appended, never inserted.
+  Motion,
+  MotionX,
+  MotionY,
+  // MIDI (James, 2026-11-05: the MIDI map board, "MIDI on the ~ chip"). The
+  // last key's PITCH, across C2-C6, held after it is let go so a figure stays
+  // put; how hard it was played, back to nothing on release; any CC; and
+  // aftertouch. ParamLfo::midiChannel / midiNumber say which. Appended.
+  MidiNote,
+  MidiVelocity,
+  MidiCc,
+  MidiPressure,
+  // The PITCH of the sound, the focused playlist's, across C2-C6 like
+  // MidiNote (James, 2026-11-06: "Chladni that listens"). Held through
+  // silence. Appended.
+  AudioPitch,
+  Count
+};
+
+inline bool lfoShapeIsMidi(LfoShape shape) {
+  return shape == LfoShape::MidiNote || shape == LfoShape::MidiVelocity ||
+         shape == LfoShape::MidiCc || shape == LfoShape::MidiPressure;
+}
+
+inline bool lfoShapeIsMotion(LfoShape shape) {
+  return shape == LfoShape::Motion || shape == LfoShape::MotionX || shape == LfoShape::MotionY;
+}
+
+// Shapes that only ever push UP from the value that was set: stillness and
+// silence leave the control alone.
+inline bool lfoShapeIsOneSided(LfoShape shape) {
+  return shape == LfoShape::Audio || shape == LfoShape::Motion ||
+         shape == LfoShape::MidiVelocity || shape == LfoShape::MidiPressure;
+}
+
+// THE MIDI READINGS, written by the MIDI thread as each message arrives and
+// read by any oscillator: per channel 1-16, and slot 0 for "any channel"
+// (whatever arrived last). Atomics, for the same reason as Motion's.
+struct LfoMidiChannel {
+  std::atomic<float> note {0.5f};      // 0-1 across C2..C6
+  std::atomic<int> noteHeld {-1};      // the key whose velocity is showing
+  std::atomic<float> velocity {0.0f};
+  std::atomic<float> pressure {0.0f};
+  std::array<std::atomic<float>, 128> cc {};
+};
+inline std::array<LfoMidiChannel, 17>& lfoMidiSignals() {
+  static std::array<LfoMidiChannel, 17> signals {};
+  return signals;
+}
+// THE SOUND'S PITCH, published by the app (serviceAudioPitch) while anything
+// reads it: the reader stamps lfoAudioPitchWanted, and the app only runs the
+// detector when that stamp is fresh, so a show with no audio-pitch ~ pays
+// nothing for it.
+inline std::atomic<float>& lfoAudioPitchSignal() {
+  static std::atomic<float> value {0.5f};
+  return value;
+}
+inline std::atomic<bool>& lfoAudioPitchWanted() {
+  static std::atomic<bool> wanted {false};
+  return wanted;
+}
+
+// The fundamental of a short mono signal, in Hz, by normalised
+// autocorrelation; 0 when there is no clear pitch (silence, noise). The
+// first lag that comes within 90% of the best one is taken, which is what
+// keeps a note from being read an octave low.
+inline double detectPitchHz(const float* x, std::size_t n, double rate, double lowHz = 60.0,
+                            double highHz = 1200.0) {
+  if (!x || n < 64 || rate <= 0.0) return 0.0;
+  double energy = 0.0;
+  for (std::size_t i = 0; i < n; ++i) energy += static_cast<double>(x[i]) * x[i];
+  if (energy / static_cast<double>(n) < 1e-5) return 0.0;  // silence
+  const int minLag = std::max(2, static_cast<int>(rate / highHz));
+  const int maxLag = std::min(static_cast<int>(n / 2), static_cast<int>(rate / lowHz));
+  if (maxLag <= minLag) return 0.0;
+  std::vector<double> r(static_cast<std::size_t>(maxLag + 2), 0.0);
+  double best = 0.0;
+  for (int lag = minLag; lag <= maxLag + 1; ++lag) {
+    double xy = 0.0, xx = 0.0, yy = 0.0;
+    const std::size_t m = n - static_cast<std::size_t>(lag);
+    for (std::size_t i = 0; i < m; ++i) {
+      const double a = x[i], b = x[i + static_cast<std::size_t>(lag)];
+      xy += a * b;
+      xx += a * a;
+      yy += b * b;
+    }
+    const double v = (xx > 0.0 && yy > 0.0) ? xy / std::sqrt(xx * yy) : 0.0;
+    r[static_cast<std::size_t>(lag)] = v;
+    if (lag <= maxLag && v > best) best = v;
+  }
+  if (best < 0.5) return 0.0;  // no clear period: noise, or a chord too thick to read
+  for (int lag = minLag + 1; lag <= maxLag; ++lag) {
+    const double v = r[static_cast<std::size_t>(lag)];
+    if (v >= 0.9 * best && v >= r[static_cast<std::size_t>(lag - 1)] && v >= r[static_cast<std::size_t>(lag + 1)]) {
+      // A parabola through the peak and its neighbours, for a pitch between lags.
+      const double a = r[static_cast<std::size_t>(lag - 1)], c = r[static_cast<std::size_t>(lag + 1)];
+      const double den = a - 2.0 * v + c;
+      const double shift = std::abs(den) > 1e-12 ? 0.5 * (a - c) / den : 0.0;
+      return rate / (lag + std::clamp(shift, -0.5, 0.5));
+    }
+  }
+  return 0.0;
+}
+
+// A pitch in Hz as the same 0-1 span the MIDI note shape uses.
+inline float pitchToLfoUnit(double hz);
+
+constexpr int kLfoMidiLowNote = 36;   // C2
+constexpr int kLfoMidiHighNote = 84;  // C6
+inline float pitchToLfoUnit(double hz) {
+  if (hz <= 0.0) return -1.0f;
+  const double note = 69.0 + 12.0 * std::log2(hz / 440.0);
+  return static_cast<float>(std::clamp((note - kLfoMidiLowNote) / (kLfoMidiHighNote - kLfoMidiLowNote), 0.0, 1.0));
+}
+
+inline void publishMidiToLfo(int status, int channel, int data1, int data2) {
+  channel = std::clamp(channel, 1, 16);
+  for (int slot : {0, channel}) {
+    LfoMidiChannel& c = lfoMidiSignals()[static_cast<std::size_t>(slot)];
+    switch (status) {
+      case 0x90:
+        if (data2 > 0) {
+          const float span = static_cast<float>(kLfoMidiHighNote - kLfoMidiLowNote);
+          c.note.store(std::clamp((data1 - kLfoMidiLowNote) / span, 0.0f, 1.0f), std::memory_order_relaxed);
+          c.noteHeld.store(data1, std::memory_order_relaxed);
+          c.velocity.store(std::clamp(data2, 0, 127) / 127.0f, std::memory_order_relaxed);
+          break;
+        }
+        [[fallthrough]];
+      case 0x80:
+        // Only the key that set the velocity takes it away: a chord's other
+        // notes letting go must not drop it while the last one is still down.
+        if (c.noteHeld.load(std::memory_order_relaxed) == data1) {
+          c.velocity.store(0.0f, std::memory_order_relaxed);
+          c.noteHeld.store(-1, std::memory_order_relaxed);
+        }
+        break;
+      case 0xB0:
+        c.cc[static_cast<std::size_t>(std::clamp(data1, 0, 127))].store(std::clamp(data2, 0, 127) / 127.0f,
+                                                                         std::memory_order_relaxed);
+        break;
+      case 0xD0:
+        c.pressure.store(std::clamp(data1, 0, 127) / 127.0f, std::memory_order_relaxed);
+        break;
+      case 0xA0:
+        c.pressure.store(std::clamp(data2, 0, 127) / 127.0f, std::memory_order_relaxed);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+// THE MOTION READINGS, published by the app once per frame: [zone][amount,
+// x, y], zone 0 the whole picture. Atomics, because a generator on an engine
+// thread reads oscillators too (see lfoClockSlot).
+inline std::array<std::array<std::atomic<float>, 3>, 9>& lfoMotionSignals() {
+  static std::array<std::array<std::atomic<float>, 3>, 9> signals {};
+  return signals;
+}
+
+inline void publishMotionReading(int zone, float amount, float x, float y) {
+  if (zone < 0 || zone >= 9) return;
+  auto& slot = lfoMotionSignals()[static_cast<std::size_t>(zone)];
+  slot[0].store(amount, std::memory_order_relaxed);
+  slot[1].store(x, std::memory_order_relaxed);
+  slot[2].store(y, std::memory_order_relaxed);
+}
+
+inline const char* lfoShapeToken(LfoShape shape) {
+  switch (shape) {
+    case LfoShape::Sine:     return "sine";
+    case LfoShape::Triangle: return "triangle";
+    case LfoShape::Saw:      return "saw";
+    case LfoShape::Ramp:     return "ramp";
+    case LfoShape::Square:   return "square";
+    case LfoShape::Sample:   return "sample";
+    case LfoShape::Drawn:    return "drawn";
+    case LfoShape::Audio:    return "audio";
+    case LfoShape::Motion:   return "motion";
+    case LfoShape::MotionX:  return "motion-x";
+    case LfoShape::MotionY:  return "motion-y";
+    case LfoShape::MidiNote:     return "midi-note";
+    case LfoShape::MidiVelocity: return "midi-velocity";
+    case LfoShape::MidiCc:       return "midi-cc";
+    case LfoShape::MidiPressure: return "aftertouch";
+    case LfoShape::AudioPitch:   return "audio-pitch";
+    default:                 return "sine";
+  }
+}
+
+struct ParamLfo {
+  bool on = false;
+  LfoShape shape = LfoShape::Sine;
+  // Free-running rate. Slow by default: an LFO you notice is usually too fast,
+  // and a quarter of a hertz is a four-second breath.
+  float rateHz = 0.25f;
+  // How far it swings, as a fraction of the whole 0-1 parameter range. The
+  // centre is the value the operator SET, so turning an LFO on never jumps the
+  // picture -- it starts moving from where it already was.
+  float depth = 0.5f;
+  float phase = 0.0f;      // 0-1, for running two parameters out of step
+  // Follow the tempo instead of the clock. The tap tempo already exists for VJ
+  // mode, so an LFO that ignored it would be the second, disagreeing clock in a
+  // machine that already knows what the music is doing.
+  bool beatSync = false;
+  float beats = 4.0f;      // cycle length in beats when synced
+  // For the Motion shapes: which zone it follows, 0 the whole picture,
+  // 1-8 the zones drawn in Settings > Control > Motion.
+  int motionZone = 0;
+  // For the MIDI shapes: the channel (0 any, 1-16) and, for MidiCc, the CC.
+  int midiChannel = 0;
+  int midiNumber = 1;
+
+  // ── THE SHAPE YOU DREW ──────────────────────────────────────────────────
+  //
+  // A cycle sampled at kLfoCurvePoints evenly spaced positions, each 0-1, read
+  // back with linear interpolation. Used only when shape == Drawn.
+  //
+  // A FIXED-SIZE TABLE, not a list of control points, because this is read per
+  // parameter per frame on the render path: a table is a lookup and two
+  // multiplies, where a spline would be a search. The operator is drawing a
+  // curve, not authoring one -- they can see exactly what they get.
+  //
+  // Thirty-two is enough to draw a recognisable swell, a double bounce or a
+  // sharp attack with a long tail, and few enough that the whole thing fits in
+  // a show file line without being a blob. It defaults to a ramp so a curve
+  // that has never been drawn still oscillates rather than sitting flat.
+  static constexpr int kLfoCurvePoints = 32;
+  std::array<float, kLfoCurvePoints> curve = [] {
+    std::array<float, kLfoCurvePoints> c {};
+    for (int i = 0; i < kLfoCurvePoints; ++i) {
+      c[i] = static_cast<float>(i) / static_cast<float>(kLfoCurvePoints - 1);
+    }
+    return c;
+  }();
+};
+
+// The oscillator itself, 0-1 out.
+//
+// `seconds` is a shared clock and `beatPhase` is where we are inside the
+// current beat (0-1). Both come from the caller so that the preview and the
+// output evaluate the SAME oscillator at the same moment -- two clocks would
+// mean the operator's monitor and the audience's screen disagreed.
+// WHERE IN ITS CYCLE this oscillator currently is, 0-1.
+//
+// Split out of lfoUnitValue so a UI can draw a playhead at the same position
+// the value is being read from. Two separate phase calculations would drift
+// apart, and a playhead that disagrees with the picture is worse than none.
+inline double lfoPhase01(const ParamLfo& lfo, double seconds, double beats01) {
+  double phase = 0.0;
+  if (lfo.beatSync) {
+    const double cycle = std::max(0.25, static_cast<double>(lfo.beats));
+    phase = beats01 / cycle;
+  } else {
+    phase = seconds * std::max(0.001, static_cast<double>(lfo.rateHz));
+  }
+  phase += lfo.phase;
+  return phase - std::floor(phase);
+}
+
+inline double lfoUnitValue(const ParamLfo& lfo, double seconds, double beats01,
+                           double audio01 = 0.0) {
+  if (lfo.shape == LfoShape::Audio) {
+    // Rate, phase and tempo mean nothing here: the value is the sound.
+    return std::clamp(audio01, 0.0, 1.0);
+  }
+  if (lfoShapeIsMotion(lfo.shape)) {
+    // Nor here: the value is what the camera saw.
+    const int which = lfo.shape == LfoShape::Motion ? 0 : lfo.shape == LfoShape::MotionX ? 1 : 2;
+    const auto& zone = lfoMotionSignals()[static_cast<std::size_t>(std::clamp(lfo.motionZone, 0, 8))];
+    return std::clamp(static_cast<double>(zone[static_cast<std::size_t>(which)].load(std::memory_order_relaxed)),
+                      0.0, 1.0);
+  }
+  if (lfo.shape == LfoShape::AudioPitch) {
+    lfoAudioPitchWanted().store(true, std::memory_order_relaxed);
+    return static_cast<double>(lfoAudioPitchSignal().load(std::memory_order_relaxed));
+  }
+  if (lfoShapeIsMidi(lfo.shape)) {
+    // And here: the value is what the controller sent.
+    const LfoMidiChannel& c = lfoMidiSignals()[static_cast<std::size_t>(std::clamp(lfo.midiChannel, 0, 16))];
+    switch (lfo.shape) {
+      case LfoShape::MidiNote: return static_cast<double>(c.note.load(std::memory_order_relaxed));
+      case LfoShape::MidiVelocity: return static_cast<double>(c.velocity.load(std::memory_order_relaxed));
+      case LfoShape::MidiPressure: return static_cast<double>(c.pressure.load(std::memory_order_relaxed));
+      default:
+        return static_cast<double>(
+          c.cc[static_cast<std::size_t>(std::clamp(lfo.midiNumber, 0, 127))].load(std::memory_order_relaxed));
+    }
+  }
+  double phase = 0.0;
+  if (lfo.beatSync) {
+    const double cycle = std::max(0.25, static_cast<double>(lfo.beats));
+    phase = beats01 / cycle;
+  } else {
+    phase = seconds * std::max(0.001, static_cast<double>(lfo.rateHz));
+  }
+  phase += lfo.phase;
+  phase -= std::floor(phase);
+  switch (lfo.shape) {
+    case LfoShape::Triangle:
+      return phase < 0.5 ? phase * 2.0 : 2.0 - phase * 2.0;
+    case LfoShape::Saw:
+      return phase;
+    case LfoShape::Ramp:
+      return 1.0 - phase;
+    case LfoShape::Square:
+      return phase < 0.5 ? 0.0 : 1.0;
+    case LfoShape::Sample: {
+      // One value per cycle, held. Hashed from the cycle NUMBER rather than
+      // drawn from a generator, so it is the same every time the show reaches
+      // the same moment -- a random that changes between rehearsal and
+      // performance is not usable.
+      const std::uint64_t cycle = static_cast<std::uint64_t>(
+        std::floor(lfo.beatSync ? beats01 / std::max(0.25, static_cast<double>(lfo.beats))
+                                : seconds * std::max(0.001, static_cast<double>(lfo.rateHz))));
+      std::uint64_t h = cycle * 6364136223846793005ull + 1442695040888963407ull;
+      h ^= h >> 33; h *= 0xff51afd7ed558ccdull; h ^= h >> 33;
+      return static_cast<double>(h >> 11) / static_cast<double>(1ull << 53);
+    }
+    case LfoShape::Drawn: {
+      // Linear between the two nearest samples, and the last point wraps to
+      // the first -- a drawn cycle has to JOIN, or every repeat is a step.
+      const double pos = phase * ParamLfo::kLfoCurvePoints;
+      const int i0 = static_cast<int>(pos) % ParamLfo::kLfoCurvePoints;
+      const int i1 = (i0 + 1) % ParamLfo::kLfoCurvePoints;
+      const double frac = pos - std::floor(pos);
+      const double a = static_cast<double>(lfo.curve[static_cast<std::size_t>(i0)]);
+      const double b = static_cast<double>(lfo.curve[static_cast<std::size_t>(i1)]);
+      return std::clamp(a + (b - a) * frac, 0.0, 1.0);
+    }
+    case LfoShape::Sine:
+    default:
+      return 0.5 - 0.5 * std::cos(phase * 6.283185307179586);
+  }
+}
+
+// The value a parameter actually takes this frame.
+//
+// Centred on what the operator set, so switching an LFO on does not jump the
+// picture, and clamped because every parameter here is 0-1. Near the ends of
+// the range the swing is necessarily lopsided; that is better than either
+// moving the centre or refusing to oscillate.
+inline float lfoApply(const ParamLfo& lfo, float base, double seconds,
+                      double beats01, double audio01 = 0.0) {
+  if (!lfo.on) {
+    return base;
+  }
+  const double unit = lfoUnitValue(lfo, seconds, beats01, audio01);
+  if (lfoShapeIsOneSided(lfo.shape)) {
+    // ONE-SIDED, UPWARD. Silence must leave the parameter exactly where the
+    // operator set it -- a centred swing would push it DOWN in every quiet
+    // moment, so the look they built would only ever be seen during a loud
+    // one. Sound pushes it up by as much as the depth, and no further.
+    const double out = static_cast<double>(base) + unit * static_cast<double>(lfo.depth);
+    return static_cast<float>(out < 0.0 ? 0.0 : (out > 1.0 ? 1.0 : out));
+  }
+  const double swing = (unit - 0.5) * 2.0 * static_cast<double>(lfo.depth);
+  const double out = static_cast<double>(base) + swing * 0.5;
+  return static_cast<float>(out < 0.0 ? 0.0 : (out > 1.0 ? 1.0 : out));
+}
+
+// THE SHOW'S LFO CLOCK, for the oscillators evaluated off the main thread.
+//
+// The app samples one clock per frame (sampleLfoClock) so the preview and the
+// output read the same moment. A generator drawn on an engine thread -- the
+// Moire source -- reads the same sample from here rather than taking a second
+// clock of its own, which would let its oscillators disagree with the effect
+// LFOs on the same cue.
+struct LfoClockSample {
+  double seconds = 0.0;
+  double beats = 0.0;
+  double audio01 = 0.0;
+};
+// One lock round the three values, so a reader on an engine thread never
+// takes the seconds of one sample with the beats of the next (Codex audit #8).
+// Taken once per frame by the writer and once per generated frame by each
+// reader: nothing here is contended enough to matter.
+inline std::mutex& lfoClockMutex() { static std::mutex m; return m; }
+inline LfoClockSample& lfoClockSlot() { static LfoClockSample s; return s; }
+inline void publishLfoClock(double seconds, double beats, double audio01) {
+  std::lock_guard<std::mutex> lock(lfoClockMutex());
+  lfoClockSlot() = {seconds, beats, audio01};
+}
+inline LfoClockSample readLfoClock() {
+  std::lock_guard<std::mutex> lock(lfoClockMutex());
+  return lfoClockSlot();
+}
+
+struct CueEffect {
+  CueEffectKind kind = CueEffectKind::None;
+  float amount = 1.0f;    // 0 = inactive; every effect is skipped entirely at 0
+  // Four shaping parameters, all 0-1.
+  //
+  // THE NEUTRAL VALUES ARE LOAD-BEARING. A show saved before an effect grew a
+  // parameter carries paramA = 0.5 (what the UI wrote when the effect was
+  // added), paramB = 0, and no C or D at all. So every parameter is defined so
+  // that A=0.5, B=0, C=0, D=0 reproduces exactly what that effect did before it
+  // had them -- otherwise adding a control would silently restage every show
+  // that already used the effect.
+  float paramA = 0.0f;
+  float paramB = 0.0f;
+  float paramC = 0.0f;
+  float paramD = 0.0f;
+  // BYPASS is not the same as amount 0. Turning an effect down to nothing
+  // loses the setting you spent time on; bypass takes it out of the chain and
+  // gives it back. Every serious tool has both and they are not
+  // interchangeable.
+  bool bypassed = false;
+  // A WHOLE colour, 0xRRGGBB, for the effects that draw one: what a strobe
+  // flashes to and what an edge line is drawn in (cueEffectColourSlot says
+  // which row carries its chip). White, because both drew white before they
+  // had it, so a show saved before it looks the same.
+  std::uint32_t colour = 0xFFFFFF;
+
+  // One LFO per parameter, off by default.
+  //
+  // An effect stack you have to hold with your hands is a stack that does one
+  // thing while you are touching it and nothing while you are not. A parameter
+  // handed to an oscillator moves on its own, which is the difference between a
+  // look and a performance -- and it is what Resolume operators reach for
+  // first.
+  //
+  // Index 0-3 is paramA-paramD, and index 4 is the AMOUNT, because "how much of
+  // this effect" is the parameter people want breathing most of all.
+  ParamLfo lfo[5];
+};
+
+// What an effect needs beyond the pixels. Kept in one struct so adding a
+// context-dependent effect does not change every call site.
+struct CueEffectContext {
+  int width = 0;
+  int height = 0;
+  std::uint64_t frameIndex = 0;   // for anything that advances per frame
+  // The show's clock in seconds: the sample the LFOs read (sampleLfoClock), so
+  // the preview and the output agree on it. Negative where there is no show
+  // clock (a dump, a bench); an effect that keeps time then counts frames at
+  // thirty a second.
+  double seconds = -1.0;
+  // The driver clip's motion for THIS frame, when one is armed. Null the rest
+  // of the time, which is almost always -- so MotionPuppet costs nothing on a
+  // cue that has not been given a driver.
+  const deckboy::motion::MotionField* motion = nullptr;
+  // Scratch for the effects that remember things, ONE SLOT PER STACK POSITION.
+  //
+  // Owned by the caller, because the stack itself is deliberately stateless: an
+  // effect that remembered things internally could not be run twice, could not
+  // be dumped headlessly, and would have to guess which cue it belonged to.
+  //
+  // Per position rather than one shared buffer, because there is now more than
+  // one effect that needs memory -- feedback keeps the last frame, scotopic
+  // keeps a lagging colour signal -- and a single buffer would have had them
+  // overwriting each other the moment both were in one chain. Null everywhere
+  // that has no scratch to offer, and those effects then do nothing rather than
+  // pretend.
+  std::vector<std::vector<std::uint8_t>>* effectState = nullptr;
+  // Draws a picture as a grid of character cells, in place.
+  //
+  // TEXT MODE IS A LOOK, NOT A CUE KIND. It began as part of the video synth,
+  // which meant the one thing people most want to do to a camera or a capture
+  // card was the one thing they could only do to an oscillator. The renderer
+  // never cared -- it samples its source with `cx * width / cols`, so any
+  // picture has always worked.
+  //
+  // It arrives as a callback rather than as a call into the engine, because
+  // the stack must stay a pure function of its inputs: that is what lets every
+  // effect be dumped headlessly, benched, and run by the output and the
+  // preview independently without either knowing about the other. Null when
+  // nobody supplied one, and the effect then passes the picture through
+  // unchanged rather than pretending.
+  std::function<void(std::uint8_t*, int, int)> textMode;
+
+  // Set when this is NOT the first consumer of the deck this frame -- a second
+  // output showing the same deck, say. Every stateful effect then reads what
+  // the first consumer read and does not step, so all the outputs get the
+  // identical picture instead of each one advancing the state again and the
+  // screens drifting apart. The same fault the motion driver had, and the same
+  // shape of answer.
+  bool stateHold = false;
+
+  // The deck's recent PLAYED audio, mono, newest last, at the audio rate.
+  // Audioprint draws with it. Null wherever the caller has none to offer -- the
+  // headless effect dump, a deck with no sound -- and the effect then passes
+  // the picture through rather than inventing a signal, which is the same rule
+  // the deck-aware audio effects follow in the other direction.
+  const float* audioSamples = nullptr;
+  std::size_t audioSampleCount = 0;
+};
+
+namespace detail {
+
+inline std::uint8_t clamp8(double v) {
+  return static_cast<std::uint8_t>(std::clamp(v, 0.0, 255.0));
+}
+
+// The classic 4x4 Bayer matrix, scaled to 0..15.
+inline int bayer4(int x, int y) {
+  static const int kMatrix[4][4] = {
+    { 0,  8,  2, 10},
+    {12,  4, 14,  6},
+    { 3, 11,  1,  9},
+    {15,  7, 13,  5},
+  };
+  return kMatrix[y & 3][x & 3];
+}
+
+// Motion mosh works on a quarter-scale luma plane rather than the full raster.
+// Block matching is the expensive half of the effect and it is measuring where
+// large regions went, not resolving detail — the same reasoning that puts grain
+// flow on a third-resolution buffer. A quarter scale cuts the matcher's work
+// sixteenfold and the smear it drives is indistinguishable, because a smear's
+// whole job is to destroy detail along one axis.
+//
+// The search radius is in DOWNSAMPLED pixels, so ±6 here reaches 24 pixels of
+// real motion per frame — well past anything that reads as movement at 60fps,
+// and past the point where a codec's own estimator gives up.
+inline constexpr int kMoshScale = 4;
+inline constexpr int kMoshSearch = 6;
+
+// How many workers to split a frame across.
+//
+// Capped rather than "all of them": a show is not only compositing, and taking
+// every core for an effect stack starves the decoder threads that are feeding
+// it. Sixteen is well past the point where memory bandwidth, not arithmetic,
+// is the limit for this kind of work.
+inline unsigned effectWorkers() {
+  static const unsigned workers = [] {
+    unsigned hw = std::thread::hardware_concurrency();
+    if (hw == 0) hw = 4;              // the standard is allowed to say "no idea"
+    return std::min(hw, 16u);
+  }();
+  return workers;
+}
+
+// Run `fn(firstRow, lastRow)` over the frame, split into bands.
+//
+// Every effect here writes each output row from inputs that are either in that
+// same row or in an untouched COPY of the frame, so the bands cannot see each
+// other's work and the result is identical to running it serially. The two that
+// are not row-independent (block glitch, which shifts overlapping random bands
+// in a fixed RNG order) simply do not use this.
+//
+// Threads are created per call rather than pooled. A pool would save roughly
+// two tenths of a millisecond per effect, and the effects it matters for take
+// tens of milliseconds; a race in the render path would cost far more than that
+// is worth. The size gate keeps the hand-off from dominating small frames.
+template <typename Fn>
+inline void parallelRows(int height, int width, Fn fn) {
+  const unsigned workers = effectWorkers();
+  if (workers < 2 || height < 2 ||
+      static_cast<long long>(height) * width < 120000) {
+    fn(0, height);
+    return;
+  }
+  const int bands = static_cast<int>(std::min<unsigned>(
+    workers, static_cast<unsigned>(height)));
+  const int rowsPerBand = (height + bands - 1) / bands;
+  std::vector<std::thread> helpers;
+  helpers.reserve(static_cast<std::size_t>(bands - 1));
+  for (int band = 1; band < bands; ++band) {
+    const int first = band * rowsPerBand;
+    const int last = std::min(height, first + rowsPerBand);
+    if (first >= last) {
+      break;
+    }
+    helpers.emplace_back([&fn, first, last] { fn(first, last); });
+  }
+  // The calling thread takes the first band instead of idling.
+  fn(0, std::min(height, rowsPerBand));
+  for (std::thread& helper : helpers) {
+    helper.join();
+  }
+}
+
+// A 256-entry table for any effect whose output channel depends only on its
+// input channel.
+//
+// Invert, posterise, solarise and the rest were evaluating the same handful of
+// double expressions two million times a frame to produce, at most, 256
+// distinct answers. Building the table with the SAME expression keeps the
+// result identical to the arithmetic it replaces -- this is a lookup of the old
+// answer, not a new approximation of it.
+template <typename Fn>
+inline void buildChannelLut(std::uint8_t (&lut)[256], Fn f) {
+  for (int v = 0; v < 256; ++v) {
+    lut[v] = f(v);
+  }
+}
+
+// Apply a channel table across the frame. Alpha is left alone.
+inline void applyChannelLut(std::uint8_t* pixels, int width, int height,
+                            const std::uint8_t (&lut)[256]) {
+  parallelRows(height, width, [&](int firstRow, int lastRow) {
+    for (int y = firstRow; y < lastRow; ++y) {
+      std::uint8_t* p = pixels + static_cast<std::size_t>(y) * width * 4;
+      for (int x = 0; x < width; ++x, p += 4) {
+        p[0] = lut[p[0]];
+        p[1] = lut[p[1]];
+        p[2] = lut[p[2]];
+      }
+    }
+  });
+}
+
+// ── The basics' shared machinery (2026-10-29) ──────────────────────────────
+
+inline double smoothstep01(double edge0, double edge1, double x) {
+  const double t = std::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+  return t * t * (3.0 - 2.0 * t);
+}
+
+// THE BLUR that blur, sharpen and glow share: box passes, of which three are
+// within a few percent of a gaussian. Each pass is a running sum, so the cost
+// per pixel does not grow with the radius. RGB only; alpha is left alone.
+//
+// The horizontal pass slides along each row in place. The vertical one keeps a
+// running sum per column for a band of columns and walks it down the rows, so
+// the reads still go along memory rather than down it.
+inline void boxBlurRgb(std::uint8_t* px, int w, int h, int rx, int ry, int passes) {
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  rx = std::clamp(rx, 0, w);
+  ry = std::clamp(ry, 0, h);
+  const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
+  for (int pass = 0; pass < passes; ++pass) {
+    if (rx > 0) {
+      // sum / span as a multiply and a shift, rounded: an integer division per
+      // channel per pixel per pass was most of what this cost.
+      const std::uint64_t inv = ((std::uint64_t {1} << 32) + static_cast<std::uint64_t>(rx)) /
+                                static_cast<std::uint64_t>(2 * rx + 1);
+      parallelRows(h, w, [&](int firstRow, int lastRow) {
+        std::vector<std::uint8_t> line(rowBytes);
+        for (int y = firstRow; y < lastRow; ++y) {
+          std::uint8_t* row = px + static_cast<std::size_t>(y) * rowBytes;
+          std::memcpy(line.data(), row, rowBytes);
+          std::uint32_t sum[3] = {0, 0, 0};
+          for (int k = -rx; k <= rx; ++k) {
+            const std::uint8_t* src = line.data() + static_cast<std::size_t>(std::clamp(k, 0, w - 1)) * 4;
+            sum[0] += src[0];
+            sum[1] += src[1];
+            sum[2] += src[2];
+          }
+          for (int x = 0; x < w; ++x) {
+            std::uint8_t* dst = row + static_cast<std::size_t>(x) * 4;
+            dst[0] = static_cast<std::uint8_t>((sum[0] * inv + (std::uint64_t {1} << 31)) >> 32);
+            dst[1] = static_cast<std::uint8_t>((sum[1] * inv + (std::uint64_t {1} << 31)) >> 32);
+            dst[2] = static_cast<std::uint8_t>((sum[2] * inv + (std::uint64_t {1} << 31)) >> 32);
+            const std::uint8_t* in = line.data() + static_cast<std::size_t>(std::min(x + rx + 1, w - 1)) * 4;
+            const std::uint8_t* out = line.data() + static_cast<std::size_t>(std::max(x - rx, 0)) * 4;
+            sum[0] += in[0] - out[0];
+            sum[1] += in[1] - out[1];
+            sum[2] += in[2] - out[2];
+          }
+        }
+      });
+    }
+    if (ry > 0) {
+      const std::uint64_t inv = ((std::uint64_t {1} << 32) + static_cast<std::uint64_t>(ry)) /
+                                static_cast<std::uint64_t>(2 * ry + 1);
+      // Bands of COLUMNS here: each worker walks its band down the whole height.
+      // The row a step subtracts has already been written, so each band keeps
+      // the last ry + 1 ORIGINAL rows of its own columns in a ring, rather than
+      // the whole frame being copied for every pass.
+      parallelRows(w, h, [&](int firstCol, int lastCol) {
+        const int cols = lastCol - firstCol;
+        const std::size_t first = static_cast<std::size_t>(firstCol) * 4;
+        const std::size_t bandBytes = static_cast<std::size_t>(cols) * 4;
+        const int keep = ry + 1;
+        std::vector<std::uint8_t> ring(static_cast<std::size_t>(keep) * bandBytes);
+        std::vector<std::uint32_t> sum(static_cast<std::size_t>(cols) * 3, 0);
+        for (int k = -ry; k <= ry; ++k) {
+          const std::uint8_t* row = px + static_cast<std::size_t>(std::clamp(k, 0, h - 1)) * rowBytes + first;
+          for (int c = 0; c < cols; ++c) {
+            sum[c * 3] += row[c * 4];
+            sum[c * 3 + 1] += row[c * 4 + 1];
+            sum[c * 3 + 2] += row[c * 4 + 2];
+          }
+        }
+        for (int y = 0; y < h; ++y) {
+          std::uint8_t* row = px + static_cast<std::size_t>(y) * rowBytes + first;
+          std::memcpy(ring.data() + static_cast<std::size_t>(y % keep) * bandBytes, row, bandBytes);
+          // Ahead of y, so not yet written (the clamp only repeats the last row
+          // on the final step, whose sum is not used).
+          const std::uint8_t* in = px + static_cast<std::size_t>(std::min(y + ry + 1, h - 1)) * rowBytes + first;
+          const std::uint8_t* out = ring.data() + static_cast<std::size_t>(std::max(y - ry, 0) % keep) * bandBytes;
+          for (int c = 0; c < cols; ++c) {
+            const int o = c * 4;
+            row[o] = static_cast<std::uint8_t>((sum[c * 3] * inv + (std::uint64_t {1} << 31)) >> 32);
+            row[o + 1] = static_cast<std::uint8_t>((sum[c * 3 + 1] * inv + (std::uint64_t {1} << 31)) >> 32);
+            row[o + 2] = static_cast<std::uint8_t>((sum[c * 3 + 2] * inv + (std::uint64_t {1} << 31)) >> 32);
+            sum[c * 3] += in[o] - out[o];
+            sum[c * 3 + 1] += in[o + 1] - out[o + 1];
+            sum[c * 3 + 2] += in[o + 2] - out[o + 2];
+          }
+        }
+      });
+    }
+  }
+}
+
+// A box-averaged copy at 1/factor of the size, for the effects whose job is to
+// remove detail (the blur, the glow): there is none to keep at full size.
+inline void downsampleRgba(const std::uint8_t* src, int w, int h, int factor,
+                           std::vector<std::uint8_t>& out, int& ow, int& oh) {
+  ow = std::max(1, (w + factor - 1) / factor);
+  oh = std::max(1, (h + factor - 1) / factor);
+  out.assign(static_cast<std::size_t>(ow) * oh * 4, 0);
+  const int smallW = ow;
+  parallelRows(oh, w * factor, [&](int firstRow, int lastRow) {
+    for (int sy = firstRow; sy < lastRow; ++sy) {
+      const int y0 = sy * factor;
+      const int y1 = std::min(h, y0 + factor);
+      for (int sx = 0; sx < smallW; ++sx) {
+        const int x0 = sx * factor;
+        const int x1 = std::min(w, x0 + factor);
+        unsigned sum[4] = {0, 0, 0, 0};
+        for (int y = y0; y < y1; ++y) {
+          const std::uint8_t* q = src + (static_cast<std::size_t>(y) * w + x0) * 4;
+          for (int x = x0; x < x1; ++x, q += 4) {
+            sum[0] += q[0];
+            sum[1] += q[1];
+            sum[2] += q[2];
+            sum[3] += q[3];
+          }
+        }
+        const unsigned n = static_cast<unsigned>((y1 - y0) * (x1 - x0));
+        std::uint8_t* d = out.data() + (static_cast<std::size_t>(sy) * smallW + sx) * 4;
+        for (int c = 0; c < 4; ++c) {
+          d[c] = static_cast<std::uint8_t>(sum[c] / n);
+        }
+      }
+    }
+  });
+}
+
+// The small buffer read back at full size, BILINEARLY: read back per cell, a
+// blur shows its cells (wavefront did). fn(pixel, rgb) for every pixel.
+template <typename Fn>
+inline void upsampleRgb(const std::vector<std::uint8_t>& small, int sw, int sh,
+                        std::uint8_t* pixels, int w, int h, Fn fn) {
+  std::vector<int> x0s(static_cast<std::size_t>(w)), x1s(static_cast<std::size_t>(w));
+  std::vector<double> txs(static_cast<std::size_t>(w));
+  const double scaleX = static_cast<double>(sw) / w;
+  for (int x = 0; x < w; ++x) {
+    const double fx = std::clamp((x + 0.5) * scaleX - 0.5, 0.0, sw - 1.0);
+    x0s[x] = static_cast<int>(fx) * 4;
+    x1s[x] = std::min(sw - 1, static_cast<int>(fx) + 1) * 4;
+    txs[x] = fx - std::floor(fx);
+  }
+  const double scaleY = static_cast<double>(sh) / h;
+  parallelRows(h, w, [&](int firstRow, int lastRow) {
+    for (int y = firstRow; y < lastRow; ++y) {
+      const double fy = std::clamp((y + 0.5) * scaleY - 0.5, 0.0, sh - 1.0);
+      const int y0 = static_cast<int>(fy);
+      const int y1 = std::min(sh - 1, y0 + 1);
+      const double ty = fy - y0;
+      const std::uint8_t* top = small.data() + static_cast<std::size_t>(y0) * sw * 4;
+      const std::uint8_t* bottom = small.data() + static_cast<std::size_t>(y1) * sw * 4;
+      std::uint8_t* row = pixels + static_cast<std::size_t>(y) * w * 4;
+      for (int x = 0; x < w; ++x) {
+        const int a = x0s[x];
+        const int b = x1s[x];
+        const double tx = txs[x];
+        double rgb[3];
+        for (int c = 0; c < 3; ++c) {
+          const double t = top[a + c] + (top[b + c] - top[a + c]) * tx;
+          const double u = bottom[a + c] + (bottom[b + c] - bottom[a + c]) * tx;
+          rgb[c] = t + (u - t) * ty;
+        }
+        fn(row + static_cast<std::size_t>(x) * 4, rgb);
+      }
+    }
+  });
+}
+
+// A reusable barrier, for work that is many small DEPENDENT steps.
+//
+// parallelRows above creates its threads per call, which is right for one pass
+// over a frame and wrong for reaction-diffusion: that is hundreds of steps on a
+// small grid, and paying the hand-off once per step made the effect 1.8x
+// SLOWER than running it on one core. Measured, not guessed.
+//
+// So the threads are created once and parked here between steps instead.
+class Barrier {
+ public:
+  explicit Barrier(int parties) : parties_(parties) {}
+
+  void arriveAndWait() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    const unsigned long long myGeneration = generation_;
+    if (++waiting_ == parties_) {
+      waiting_ = 0;
+      ++generation_;          // releases everyone parked on this generation
+      condition_.notify_all();
+    } else {
+      condition_.wait(lock, [&] { return generation_ != myGeneration; });
+    }
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  int parties_;
+  int waiting_ = 0;
+  unsigned long long generation_ = 0;
+};
+
+// Run `step(round, firstRow, lastRow)` for every round, split into bands, with
+// every band finished before `between(round)` runs and `between` finished
+// before the next round starts.
+//
+// The two barriers are the whole contract: the first says every band has
+// written its output, the second says the coordinator's swap has happened. A
+// band that raced past either would read a half-updated grid.
+template <typename Step, typename Between>
+inline void iteratedBands(int rounds, int rows, int minRowsPerBand,
+                          Step step, Between between) {
+  const unsigned workers = effectWorkers();
+  const int bands = static_cast<int>(std::min<long long>(
+    workers, std::max(1, rows / std::max(1, minRowsPerBand))));
+  if (rounds <= 0) {
+    return;
+  }
+  if (bands < 2) {
+    for (int round = 0; round < rounds; ++round) {
+      step(round, 0, rows);
+      between(round);
+    }
+    return;
+  }
+  const int rowsPerBand = (rows + bands - 1) / bands;
+  Barrier barrier(bands);
+  std::vector<std::thread> helpers;
+  helpers.reserve(static_cast<std::size_t>(bands - 1));
+  for (int band = 1; band < bands; ++band) {
+    const int first = std::min(rows, band * rowsPerBand);
+    const int last = std::min(rows, first + rowsPerBand);
+    helpers.emplace_back([&, first, last] {
+      for (int round = 0; round < rounds; ++round) {
+        if (first < last) {
+          step(round, first, last);
+        }
+        barrier.arriveAndWait();   // everyone has written
+        barrier.arriveAndWait();   // the coordinator has swapped
+      }
+    });
+  }
+  for (int round = 0; round < rounds; ++round) {
+    step(round, 0, std::min(rows, rowsPerBand));
+    barrier.arriveAndWait();
+    between(round);
+    barrier.arriveAndWait();
+  }
+  for (std::thread& helper : helpers) {
+    helper.join();
+  }
+}
+
+}  // namespace detail
+
+
+// ---------------------------------------------------------------------------
+// Stages shared with the video synth.
+//
+// These began life inside rebuildVideoSynthFrame and were only ever available
+// to a synth cue, which is a waste: a pixel sort is at least as interesting on
+// a face as on an oscillator. They live here now and the synth calls them, so
+// there is ONE implementation rather than two that drift.
+//
+// All of them take a raw buffer plus its dimensions, because the synth runs
+// them on its small internal raster while a cue runs them on the frame.
+// ---------------------------------------------------------------------------
+
+// Runs of bright pixels within a row, sorted by brightness. The dragged,
+// melted look: bright material slides along the row and pools against whatever
+// stops it.
+inline void applyPixelSort(std::uint8_t* pixels, int w, int h, double amount,
+                           double bias = 0.5, bool reverse = false) {
+  if (!pixels || w <= 2 || h <= 0 || amount <= 0.01) {
+    return;
+  }
+  // The threshold FALLS as the amount rises, so more of each row qualifies and
+  // the runs grow longer. Driving run length directly instead would cut spans
+  // at arbitrary points and read as banding rather than flow.
+  // bias moves the qualifying brightness up or down. At 0.5 it contributes
+  // nothing and the threshold is what amount alone decided.
+  const int threshold = std::clamp(static_cast<int>(
+    200.0 - std::clamp(amount, 0.0, 1.0) * 170.0 +
+    (std::clamp(bias, 0.0, 1.0) - 0.5) * 2.0 * 60.0), 2, 253);
+  auto luma = [&](std::size_t o) {
+    return (pixels[o + 2] * 77 + pixels[o + 1] * 151 + pixels[o + 0] * 28) >> 8;
+  };
+  // Rows are independent -- each one only ever reads and writes itself -- so
+  // this splits across cores. The run buffer moves INSIDE the band: one shared
+  // scratch vector across threads would be a race, and it is the only mutable
+  // state here.
+  detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+  std::vector<std::uint64_t> run;
+  for (int y = firstRow; y < lastRow; ++y) {
+    const std::size_t rowOff = static_cast<std::size_t>(y) * w * 4;
+    int x = 0;
+    while (x < w) {
+      if (static_cast<int>(luma(rowOff + static_cast<std::size_t>(x) * 4)) < threshold) {
+        ++x;
+        continue;
+      }
+      const int begin = x;
+      while (x < w &&
+             static_cast<int>(luma(rowOff + static_cast<std::size_t>(x) * 4)) >= threshold) {
+        ++x;
+      }
+      const int len = x - begin;
+      if (len < 3) {
+        continue;
+      }
+      run.clear();
+      run.reserve(static_cast<std::size_t>(len));
+      for (int i = 0; i < len; ++i) {
+        std::uint32_t px = 0;
+        std::memcpy(&px, pixels + rowOff + static_cast<std::size_t>(begin + i) * 4, 4);
+        // THE KEY IS BUILT ONCE PER PIXEL, NOT ONCE PER COMPARISON.
+        //
+        // The comparator below used to recompute both pixels' luma every time
+        // it was called -- six multiplies per comparison, and a sort makes
+        // about n log n of them, so a long run paid for its own luma dozens of
+        // times over. At a 4K output pixel sort measured 50.7ms a frame, the
+        // most expensive effect in the set.
+        //
+        // Luma is 16 bits (255 * 256 at most), so the whole ordering fits in
+        // one 64-bit key: luma in the high half, the pixel itself in the low
+        // half as the tiebreak that keeps the result identical on every
+        // platform. Sorting plain integers is then all the comparator has to
+        // do. Reversing flips the luma half only -- ties still break upward on
+        // the pixel, exactly as before.
+        const std::uint32_t lumaKey = static_cast<std::uint32_t>(
+          ((px >> 16) & 0xFF) * 77 + ((px >> 8) & 0xFF) * 151 + (px & 0xFF) * 28);
+        const std::uint64_t ordered = reverse ? (65535u - lumaKey) : lumaKey;
+        run.push_back((ordered << 32) | px);
+      }
+      // A TOTAL ORDER, not just a luma comparison. std::sort says nothing about
+      // how it orders elements it considers equal, and two standard libraries
+      // do not have to agree -- sorting by luma alone left every equal-luma
+      // pixel free to land anywhere, so the same cue rendered visibly
+      // differently on macOS than on Windows. Caught by diffing the two byte
+      // for byte, and invisible any other way. The pixel in the key's low half
+      // is that tiebreak, so this is a plain integer sort with the same result
+      // everywhere.
+      std::sort(run.begin(), run.end());
+      for (int i = 0; i < len; ++i) {
+        const std::uint32_t px =
+          static_cast<std::uint32_t>(run[static_cast<std::size_t>(i)] & 0xFFFFFFFFu);
+        std::memcpy(pixels + rowOff + static_cast<std::size_t>(begin + i) * 4, &px, 4);
+      }
+    }
+  }
+  });
+}
+
+// Displaced scanline bands plus red/blue separation: the corrupted-frame look.
+// Bands are whole rows because that is how real decode corruption presents --
+// a block row loses sync and the rest of the line arrives shifted.
+inline void applyBlockGlitch(std::uint8_t* pixels, int w, int h, double amount,
+                             std::uint32_t seed, double bandScale = 0.5,
+                             double tearScale = 0.0) {
+  if (!pixels || w <= 2 || h <= 0 || amount <= 0.01) {
+    return;
+  }
+  amount = std::clamp(amount, 0.0, 1.0);
+  std::uint32_t state = seed | 1u;
+  auto rnd = [&state]() {
+    state ^= state << 13; state ^= state >> 17; state ^= state << 5;
+    return state;
+  };
+  // bands scales how many tears there are, tear width how far one can slide.
+  // At 0.5 and 0 respectively both are what they were before they existed.
+  const int bands = std::max(1, static_cast<int>(
+    (1.0 + amount * 14.0) * (0.5 + std::clamp(bandScale, 0.0, 1.0))));
+  const double tearWidth = 1.0 + std::clamp(tearScale, 0.0, 1.0) * 2.0;
+  std::vector<std::uint8_t> rowCopy(static_cast<std::size_t>(w) * 4);
+  for (int b = 0; b < bands; ++b) {
+    const int y0 = static_cast<int>(rnd() % static_cast<std::uint32_t>(std::max(1, h)));
+    const int hgt = 1 + static_cast<int>(rnd() % static_cast<std::uint32_t>(
+      std::max(1, static_cast<int>(h * amount / 8) + 1)));
+    const int shift = static_cast<int>(
+      (static_cast<int>(rnd() % static_cast<std::uint32_t>(std::max(1, w / 3))) -
+       (w / 6)) * tearWidth);
+    for (int y = y0; y < std::min(h, y0 + hgt); ++y) {
+      std::uint8_t* row = pixels + static_cast<std::size_t>(y) * w * 4;
+      std::memcpy(rowCopy.data(), row, rowCopy.size());
+      // WRAPPED, not clamped: a clamped shift smears its edge pixel across the
+      // gap, which reads as a stretch. Wrapping reads as torn, which is what
+      // corruption actually looks like.
+      //
+      // A wrapped shift is a ROTATION, so it is two bulk copies rather than a
+      // four-byte memcpy per pixel. The per-pixel version moved the same bytes
+      // and cost 27ms on a 4K frame doing it.
+      const int rot = ((shift % w) + w) % w;   // dst[x] = src[(x - rot) mod w]
+      if (rot == 0) {
+        std::memcpy(row, rowCopy.data(), rowCopy.size());
+      } else {
+        const std::size_t head = static_cast<std::size_t>(rot) * 4;
+        const std::size_t tail = static_cast<std::size_t>(w - rot) * 4;
+        std::memcpy(row, rowCopy.data() + tail, head);
+        std::memcpy(row + head, rowCopy.data(), tail);
+      }
+    }
+  }
+  const int sep = static_cast<int>(amount * (w / 60.0)) + 1;
+  for (int y = 0; y < h; ++y) {
+    std::uint8_t* row = pixels + static_cast<std::size_t>(y) * w * 4;
+    std::memcpy(rowCopy.data(), row, rowCopy.size());
+    for (int x = 0; x < w; ++x) {
+      const int xr = std::clamp(x + sep, 0, w - 1);
+      const int xb = std::clamp(x - sep, 0, w - 1);
+      row[static_cast<std::size_t>(x) * 4 + 2] = rowCopy[static_cast<std::size_t>(xr) * 4 + 2];
+      row[static_cast<std::size_t>(x) * 4 + 0] = rowCopy[static_cast<std::size_t>(xb) * 4 + 0];
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// applyCueEffectStack — run the operator's stack over a BGRA/RGBA buffer.
+//
+// Pixels are 4 bytes; the first three are colour in whatever order the caller
+// uses. Every effect here is channel-symmetric except ChannelOffset, which
+// says in its own comment what it assumes.
+// ---------------------------------------------------------------------------
+inline void applyCueEffectStack(std::vector<std::uint8_t>& pixels,
+                                const std::vector<CueEffect>& stack,
+                                const CueEffectContext& ctx) {
+  if (pixels.empty() || stack.empty() || ctx.width <= 0 || ctx.height <= 0) {
+    return;
+  }
+  const std::size_t count = static_cast<std::size_t>(ctx.width) * ctx.height;
+  if (pixels.size() < count * 4) {
+    return;
+  }
+
+  for (std::size_t stackIndex = 0; stackIndex < stack.size(); ++stackIndex) {
+    const CueEffect& fx = stack[stackIndex];
+    // The scratch this effect is allowed to remember things in, or null. Keyed
+    // by POSITION in the stack, so two effects that both need memory get one
+    // each and neither can tread on the other -- which is what a single shared
+    // buffer would have meant the moment a second stateful effect existed.
+    std::vector<std::uint8_t>* state =
+      (ctx.effectState && stackIndex < ctx.effectState->size())
+        ? &(*ctx.effectState)[stackIndex] : nullptr;
+    (void) state;
+    const double amt = std::clamp(static_cast<double>(fx.amount), 0.0, 1.0);
+    // Named once. See the note on CueEffect: A=0.5, B=0, C=0, D=0 is the
+    // "as it was before this parameter existed" position for every effect.
+    const double pA = std::clamp(static_cast<double>(fx.paramA), 0.0, 1.0);
+    const double pB = std::clamp(static_cast<double>(fx.paramB), 0.0, 1.0);
+    const double pC = std::clamp(static_cast<double>(fx.paramC), 0.0, 1.0);
+    const double pD = std::clamp(static_cast<double>(fx.paramD), 0.0, 1.0);
+    (void) pC; (void) pD;
+    if (fx.kind == CueEffectKind::None || fx.bypassed || amt <= 0.0005) {
+      continue;   // zero and bypass both cost nothing
+    }
+    switch (fx.kind) {
+      case CueEffectKind::Invert: {
+        // pivot: the picture folds around pA rather than always around mid
+        // grey. At 0.5 that is 255-v, which is what this always did.
+        // spread: each channel inverts by a different amount, so the negative
+        // comes back coloured. At 0 all three match and nothing changes.
+        const double pivot = pA * 255.0;
+        std::uint8_t lut[3][256];
+        for (int c = 0; c < 3; ++c) {
+          const double channelAmt = amt * (1.0 - pB * (c * 0.5));
+          for (int v = 0; v < 256; ++v) {
+            const double folded = 2.0 * pivot - v;
+            lut[c][v] = detail::clamp8(v * (1.0 - channelAmt) + folded * channelAmt);
+          }
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              p[0] = lut[0][p[0]];
+              p[1] = lut[1][p[1]];
+              p[2] = lut[2][p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Posterise: {
+        // Amount picks the level count: 1.0 is brutal (2 levels), low amounts
+        // barely touch it. Inverted deliberately -- "more effect" should mean
+        // "fewer levels", which is not what a naive mapping gives.
+        const int levels = std::max(2, static_cast<int>(std::lround(2 + (1.0 - amt) * 30)));
+        // band curve: quantise through a gamma so the bands bunch into the
+        // shadows or the highlights. At 0.5 the exponent is 1 and the spacing
+        // is even, which is what this always did.
+        // channel skew: a different level count per channel, which is what
+        // turns posterising into false colour. At 0 all three match.
+        const double curve = std::pow(2.0, (pA - 0.5) * 2.0);
+        std::uint8_t lut[3][256];
+        for (int c = 0; c < 3; ++c) {
+          const int channelLevels = std::max(2, levels - static_cast<int>(
+            std::lround(pB * c * (levels - 2) * 0.5)));
+          const double channelStep = 255.0 / (channelLevels - 1);
+          for (int v = 0; v < 256; ++v) {
+            if (curve == 1.0) {
+              lut[c][v] = detail::clamp8(std::round(v / channelStep) * channelStep);
+            } else {
+              const double shaped = std::pow(v / 255.0, curve) * 255.0;
+              const double banded = std::round(shaped / channelStep) * channelStep;
+              lut[c][v] = detail::clamp8(
+                std::pow(std::clamp(banded / 255.0, 0.0, 1.0), 1.0 / curve) * 255.0);
+            }
+          }
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              p[0] = lut[0][p[0]];
+              p[1] = lut[1][p[1]];
+              p[2] = lut[2][p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Colour: {
+        // ASSUMES R, G, B IN THAT ORDER: the engine's CPU frames are RGBA
+        // (libav_decoder). Unlike the channel-symmetric effects round it, a
+        // hue turn and a tint have a direction -- on BGRA a red tint would
+        // come out blue -- so this one says so, as ChannelOffset does.
+        //
+        // Hue turn: the luminance-keeping rotation about the grey axis (the
+        // matrix CSS hue-rotate uses). Wash out: toward Rec 709 luma. Tint:
+        // the tint colour's chroma, its own luma taken out, laid on in
+        // proportion to how far a pixel is from black and from white, so
+        // black and white never move and the midtones take the colour.
+        const double angle = (pA - 0.5) * 2.0 * 3.14159265358979;   // half a turn either way
+        const double cosA = std::cos(angle);
+        const double sinA = std::sin(angle);
+        const double m[9] = {
+          0.2126 + cosA * 0.7874 - sinA * 0.2126, 0.7152 - cosA * 0.7152 - sinA * 0.7152,
+          0.0722 - cosA * 0.0722 + sinA * 0.9278,
+          0.2126 - cosA * 0.2126 + sinA * 0.1430, 0.7152 + cosA * 0.2848 + sinA * 0.1400,
+          0.0722 - cosA * 0.0722 - sinA * 0.2830,
+          0.2126 - cosA * 0.2126 - sinA * 0.7874, 0.7152 - cosA * 0.7152 + sinA * 0.7152,
+          0.0722 + cosA * 0.9278 + sinA * 0.0722,
+        };
+        // The tint colour, fully saturated, round the wheel from red.
+        const double sector = std::clamp(pC, 0.0, 1.0) * 6.0;
+        const double f = sector - std::floor(sector);
+        double tr = 1.0, tg = 0.0, tb = 0.0;
+        switch (static_cast<int>(std::floor(sector)) % 6) {
+          case 0: tr = 1.0; tg = f; tb = 0.0; break;
+          case 1: tr = 1.0 - f; tg = 1.0; tb = 0.0; break;
+          case 2: tr = 0.0; tg = 1.0; tb = f; break;
+          case 3: tr = 0.0; tg = 1.0 - f; tb = 1.0; break;
+          case 4: tr = f; tg = 0.0; tb = 1.0; break;
+          default: tr = 1.0; tg = 0.0; tb = 1.0 - f; break;
+        }
+        const double tintLuma = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+        const double dr = tr - tintLuma, dg = tg - tintLuma, db = tb - tintLuma;
+        const double keep = 1.0 - std::clamp(static_cast<double>(pD), 0.0, 1.0);
+        const double tint = std::clamp(static_cast<double>(pB), 0.0, 1.0);
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              const double r0 = p[0] / 255.0, g0 = p[1] / 255.0, b0 = p[2] / 255.0;
+              double r = m[0] * r0 + m[1] * g0 + m[2] * b0;
+              double g = m[3] * r0 + m[4] * g0 + m[5] * b0;
+              double b = m[6] * r0 + m[7] * g0 + m[8] * b0;
+              const double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              r = luma + (r - luma) * keep;
+              g = luma + (g - luma) * keep;
+              b = luma + (b - luma) * keep;
+              if (tint > 0.0) {
+                const double reach = std::clamp(std::min(luma, 1.0 - luma) * 2.0, 0.0, 1.0);
+                r += (luma + dr * reach - r) * tint;
+                g += (luma + dg * reach - g) * tint;
+                b += (luma + db * reach - b) * tint;
+              }
+              p[0] = detail::clamp8((r0 + (r - r0) * amt) * 255.0 + 0.5);
+              p[1] = detail::clamp8((g0 + (g - g0) * amt) * 255.0 + 0.5);
+              p[2] = detail::clamp8((b0 + (b - b0) * amt) * 255.0 + 0.5);
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::ColourReplace: {
+        // AFTER EFFECTS' "CHANGE TO COLOR", hue mode. Every colour within the
+        // range of `from` turns by the distance from `from` to `to`, so the
+        // band keeps its own variation and each pixel keeps its brightness and
+        // chroma: the shading survives the change. Greys have no hue to
+        // change, and the near-greys fade out of it, or noise on a white wall
+        // would flicker through the new colour.
+        //
+        // R, G, B in that order, as the Colour effect assumes.
+        //
+        // In float, with the divisions and the grey gate looked up by chroma
+        // (max - min, 0-255), and a colour outside the band leaves after its
+        // hue: in double with every step worked out it cost 46 ms at 4K.
+        const float from = static_cast<float>(pA);
+        const float turn = static_cast<float>(pC - pA);
+        const float halfWidth = static_cast<float>(0.03 + pB * 0.22);   // +-11 deg, up to +-90
+        const float soft = static_cast<float>(0.02 + pD * 0.2);
+        const float edge = halfWidth + soft;
+        const float invSoft = 1.0f / soft;
+        float gate[256];
+        float inverse[256];
+        for (int c = 0; c < 256; ++c) {
+          gate[c] = static_cast<float>(detail::smoothstep01(6.0, 40.0, c) * amt);
+          inverse[c] = c > 0 ? 1.0f / static_cast<float>(c) : 0.0f;
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              const int r = p[0], g = p[1], b = p[2];
+              const int mx = std::max(r, std::max(g, b));
+              const int mn = std::min(r, std::min(g, b));
+              const int c = mx - mn;
+              if (c < 6) {
+                continue;
+              }
+              float h = mx == r ? static_cast<float>(g - b) * inverse[c]
+                      : mx == g ? 2.0f + static_cast<float>(b - r) * inverse[c]
+                                : 4.0f + static_cast<float>(r - g) * inverse[c];
+              h *= 1.0f / 6.0f;
+              if (h < 0.0f) {
+                h += 1.0f;
+              }
+              float d = std::fabs(h - from);
+              if (d > 0.5f) {
+                d = 1.0f - d;
+              }
+              if (d >= edge) {
+                continue;
+              }
+              float weight = gate[c];
+              if (d > halfWidth) {
+                const float t = (d - halfWidth) * invSoft;
+                weight *= 1.0f - t * t * (3.0f - 2.0f * t);
+              }
+              // The same brightest and darkest channel at the turned hue, so
+              // brightness and chroma stay as they were.
+              float turned = h + turn;
+              turned -= std::floor(turned);
+              const float sector = turned * 6.0f;
+              const int i = std::min(5, static_cast<int>(sector));
+              const float rise = static_cast<float>(mn) + static_cast<float>(c) * (sector - static_cast<float>(i));
+              const float fall = static_cast<float>(mx) + static_cast<float>(mn) - rise;
+              const float hi = static_cast<float>(mx);
+              const float lo = static_cast<float>(mn);
+              const float nr = i == 0 || i == 5 ? hi : i == 1 ? fall : i == 4 ? rise : lo;
+              const float ng = i == 1 || i == 2 ? hi : i == 0 ? rise : i == 3 ? fall : lo;
+              const float nb = i == 3 || i == 4 ? hi : i == 2 ? rise : i == 5 ? fall : lo;
+              // Between this channel and the turned one, both inside 0-255, so
+              // no clamp is needed.
+              p[0] = static_cast<std::uint8_t>(static_cast<float>(r) + (nr - static_cast<float>(r)) * weight + 0.5f);
+              p[1] = static_cast<std::uint8_t>(static_cast<float>(g) + (ng - static_cast<float>(g)) * weight + 0.5f);
+              p[2] = static_cast<std::uint8_t>(static_cast<float>(b) + (nb - static_cast<float>(b)) * weight + 0.5f);
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Blur: {
+        // Box passes (a gaussian, near enough) on a buffer small enough that
+        // each box is a few pixels across, then back up bilinearly. A blur's
+        // whole job is to remove detail, so there is none to keep by working
+        // at full size.
+        //
+        // Stretch trades the even blur for a streak along the angle, the look
+        // of something moving past: the round part shrinks as the streak
+        // grows, so all the way up is a streak alone.
+        const double shortSide = std::min(ctx.width, ctx.height);
+        const double radius = std::max(0.6, pA * pA * 0.06 * shortSide);   // A=0.5: 1.5% of it
+        const int factor = std::clamp(static_cast<int>(radius / 3.0), 1, 16);
+        // Small, even and at full amount: blur the picture where it lies, with
+        // no copy to make and none to mix back.
+        if (factor == 1 && pB <= 0.0 && amt >= 0.9995) {
+          if (radius >= 0.25) {
+            const int box = std::max(1, static_cast<int>(std::lround(radius * 0.5)));
+            detail::boxBlurRgb(pixels.data(), ctx.width, ctx.height, box, box, 3);
+          }
+          break;
+        }
+        std::vector<std::uint8_t> small;
+        int sw = ctx.width;
+        int sh = ctx.height;
+        if (factor > 1) {
+          detail::downsampleRgba(pixels.data(), ctx.width, ctx.height, factor, small, sw, sh);
+        } else {
+          small = pixels;
+        }
+        const double r = radius / factor;
+        const double even = r * (1.0 - pB);
+        if (even >= 0.25) {
+          const int box = std::max(1, static_cast<int>(std::lround(even * 0.5)));
+          detail::boxBlurRgb(small.data(), sw, sh, box, box, 3);
+        }
+        if (pB > 0.0) {
+          const double length = r * pB * 3.0;
+          const double angle = pC * 3.14159265358979;
+          // Anticlockwise, as an angle on paper turns: rows count downward.
+          const double stepX = std::cos(angle) * length;
+          const double stepY = -std::sin(angle) * length;
+          const int taps = std::clamp(static_cast<int>(std::ceil(length * 2.0)), 2, 64);
+          std::vector<std::uint8_t> streak(small.size());
+          detail::parallelRows(sh, sw * taps, [&](int firstRow, int lastRow) {
+            for (int y = firstRow; y < lastRow; ++y) {
+              for (int x = 0; x < sw; ++x) {
+                double acc[3] = {0.0, 0.0, 0.0};
+                for (int t = 0; t < taps; ++t) {
+                  const double u = -1.0 + 2.0 * (t + 0.5) / taps;
+                  const double atX = std::clamp(x + stepX * u, 0.0, sw - 1.0);
+                  const double atY = std::clamp(y + stepY * u, 0.0, sh - 1.0);
+                  const int x0 = static_cast<int>(atX);
+                  const int y0 = static_cast<int>(atY);
+                  const int x1 = std::min(sw - 1, x0 + 1);
+                  const int y1 = std::min(sh - 1, y0 + 1);
+                  const double tx = atX - x0;
+                  const double ty = atY - y0;
+                  const std::uint8_t* a = small.data() + (static_cast<std::size_t>(y0) * sw + x0) * 4;
+                  const std::uint8_t* b = small.data() + (static_cast<std::size_t>(y0) * sw + x1) * 4;
+                  const std::uint8_t* c = small.data() + (static_cast<std::size_t>(y1) * sw + x0) * 4;
+                  const std::uint8_t* d = small.data() + (static_cast<std::size_t>(y1) * sw + x1) * 4;
+                  for (int k = 0; k < 3; ++k) {
+                    const double top = a[k] + (b[k] - a[k]) * tx;
+                    const double bottom = c[k] + (d[k] - c[k]) * tx;
+                    acc[k] += top + (bottom - top) * ty;
+                  }
+                }
+                std::uint8_t* dst = streak.data() + (static_cast<std::size_t>(y) * sw + x) * 4;
+                const std::uint8_t* here = small.data() + (static_cast<std::size_t>(y) * sw + x) * 4;
+                for (int k = 0; k < 3; ++k) {
+                  dst[k] = detail::clamp8(acc[k] / taps + 0.5);
+                }
+                dst[3] = here[3];
+              }
+            }
+          });
+          small.swap(streak);
+        }
+        if (factor == 1) {
+          detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+            for (int y = firstRow; y < lastRow; ++y) {
+              const std::size_t at = static_cast<std::size_t>(y) * ctx.width * 4;
+              std::uint8_t* p = pixels.data() + at;
+              const std::uint8_t* q = small.data() + at;
+              for (int x = 0; x < ctx.width; ++x, p += 4, q += 4) {
+                for (int k = 0; k < 3; ++k) {
+                  p[k] = detail::clamp8(p[k] + (q[k] - p[k]) * amt + 0.5);
+                }
+              }
+            }
+          });
+        } else {
+          detail::upsampleRgb(small, sw, sh, pixels.data(), ctx.width, ctx.height,
+                              [&](std::uint8_t* p, const double* rgb) {
+            for (int k = 0; k < 3; ++k) {
+              p[k] = detail::clamp8(p[k] + (rgb[k] - p[k]) * amt + 0.5);
+            }
+          });
+        }
+        break;
+      }
+      case CueEffectKind::Sharpen: {
+        // UNSHARP MASK: the picture plus the difference between it and a
+        // softened copy, which lifts every edge by how much it already stands
+        // out. Full size, because sharpening IS the fine detail the small
+        // buffer would throw away; the radius is a few pixels, and two
+        // running-sum passes cost the same whatever it is.
+        const double gain = pA * 2.0 * amt;   // A=0.5 at full amount: a mask of 1
+        const int radius = 1 + static_cast<int>(std::lround(pB * 5.0));
+        const double threshold = pC * 40.0;
+        std::vector<std::uint8_t> soft(pixels);
+        detail::boxBlurRgb(soft.data(), ctx.width, ctx.height, radius, radius, 2);
+        // Indexed by the difference + 255. Below the threshold nothing is
+        // lifted, so flat areas and their grain stay as they were.
+        double lift[511];
+        for (int i = 0; i < 511; ++i) {
+          const double diff = i - 255.0;
+          const double over = std::fabs(diff) - threshold;
+          lift[i] = over <= 0.0 ? 0.0 : (diff > 0.0 ? over : -over) * gain;
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::size_t at = static_cast<std::size_t>(y) * ctx.width * 4;
+            std::uint8_t* p = pixels.data() + at;
+            const std::uint8_t* q = soft.data() + at;
+            for (int x = 0; x < ctx.width; ++x, p += 4, q += 4) {
+              for (int k = 0; k < 3; ++k) {
+                p[k] = detail::clamp8(p[k] + lift[p[k] - q[k] + 255] + 0.5);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Glow: {
+        // The bright parts, blurred and laid back over the picture with a
+        // screen, so it brightens toward white and never past it. Worked out
+        // small, like the blur: a glow has no detail to keep.
+        const double shortSide = std::min(ctx.width, ctx.height);
+        const double radius = (0.012 + pB * 0.07) * shortSide;   // B=0: 1.2% of it
+        const int factor = std::clamp(static_cast<int>(radius / 3.0), 2, 16);
+        std::vector<std::uint8_t> small;
+        int sw = 0;
+        int sh = 0;
+        detail::downsampleRgba(pixels.data(), ctx.width, ctx.height, factor, small, sw, sh);
+        // Only what is brighter than the knee, eased in, keeps its colour.
+        const double knee = 0.95 - pA * 0.7;   // A=0.5: brighter than 60%
+        double keep[256];
+        for (int v = 0; v < 256; ++v) {
+          keep[v] = detail::smoothstep01(knee - 0.08, knee + 0.08, v / 255.0);
+        }
+        for (std::size_t i = 0; i < small.size(); i += 4) {
+          const int luma = (54 * small[i] + 183 * small[i + 1] + 19 * small[i + 2]) >> 8;
+          const double k = keep[luma];
+          small[i] = static_cast<std::uint8_t>(small[i] * k);
+          small[i + 1] = static_cast<std::uint8_t>(small[i + 1] * k);
+          small[i + 2] = static_cast<std::uint8_t>(small[i + 2] * k);
+        }
+        const int box = std::max(1, static_cast<int>(std::lround(radius / factor * 0.5)));
+        detail::boxBlurRgb(small.data(), sw, sh, box, box, 3);
+        const double strength = 1.2 * amt;
+        detail::upsampleRgb(small, sw, sh, pixels.data(), ctx.width, ctx.height,
+                            [&](std::uint8_t* p, const double* rgb) {
+          for (int k = 0; k < 3; ++k) {
+            const double light = std::min(255.0, rgb[k] * strength);
+            p[k] = detail::clamp8(255.0 - (255.0 - p[k]) * (255.0 - light) / 255.0 + 0.5);
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Mirror: {
+        // Flips, and folds: a fold keeps one side and shows its reflection on
+        // the other. `fold` moves the line from the middle toward the far
+        // edge, so more of the kept side shows. Alpha comes along with the
+        // colour, so a keyed picture folds with its key.
+        static constexpr int kWays = 8;
+        const int way = std::min(kWays - 1, static_cast<int>(pA * kWays));
+        const int w = ctx.width;
+        const int h = ctx.height;
+        const double keep = 0.5 + pB * 0.45;
+        std::vector<int> colFrom(static_cast<std::size_t>(w));
+        std::vector<int> rowFrom(static_cast<std::size_t>(h));
+        for (int x = 0; x < w; ++x) {
+          colFrom[x] = x;
+        }
+        for (int y = 0; y < h; ++y) {
+          rowFrom[y] = y;
+        }
+        // Keep the start of the line and reflect it over the end, or the other
+        // way about. Pixel centres sit at i + 0.5.
+        const auto foldOntoEnd = [keep](std::vector<int>& from, int n) {
+          const double line = n * keep;
+          for (int i = 0; i < n; ++i) {
+            if (i + 0.5 > line) {
+              from[i] = std::clamp(static_cast<int>(std::floor(2.0 * line - i - 0.5)), 0, n - 1);
+            }
+          }
+        };
+        const auto foldOntoStart = [keep](std::vector<int>& from, int n) {
+          const double line = n * (1.0 - keep);
+          for (int i = 0; i < n; ++i) {
+            if (i + 0.5 < line) {
+              from[i] = std::clamp(static_cast<int>(std::floor(2.0 * line - i - 0.5)), 0, n - 1);
+            }
+          }
+        };
+        switch (way) {
+          case 0: for (int x = 0; x < w; ++x) colFrom[x] = w - 1 - x; break;   // flip across
+          case 1: for (int y = 0; y < h; ++y) rowFrom[y] = h - 1 - y; break;   // upside down
+          case 2:                                                               // both
+            for (int x = 0; x < w; ++x) colFrom[x] = w - 1 - x;
+            for (int y = 0; y < h; ++y) rowFrom[y] = h - 1 - y;
+            break;
+          case 3: foldOntoStart(colFrom, w); break;   // right onto left
+          case 4: foldOntoEnd(colFrom, w); break;     // left onto right
+          case 5: foldOntoStart(rowFrom, h); break;   // bottom onto top
+          case 6: foldOntoEnd(rowFrom, h); break;     // top onto bottom
+          default:                                    // one corner into all four
+            foldOntoEnd(colFrom, w);
+            foldOntoEnd(rowFrom, h);
+            break;
+        }
+        const std::vector<std::uint8_t> source(pixels);
+        detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * w * 4;
+            const std::uint8_t* row = source.data() + static_cast<std::size_t>(rowFrom[y]) * w * 4;
+            for (int x = 0; x < w; ++x, p += 4) {
+              const std::uint8_t* q = row + static_cast<std::size_t>(colFrom[x]) * 4;
+              for (int k = 0; k < 4; ++k) {
+                p[k] = detail::clamp8(p[k] + (q[k] - p[k]) * amt + 0.5);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Mosaic: {
+        // Each tile filled with its own average. The gap and the rounding are
+        // one mask, the same for every tile: inside it the tile's colour,
+        // outside it black, edged by its coverage so a dot is round rather
+        // than stepped.
+        const double shortSide = std::min(ctx.width, ctx.height);
+        const int tile = std::max(2, static_cast<int>(std::lround(shortSide * (0.004 + pA * pA * 0.08))));
+        const int w = ctx.width;
+        const int h = ctx.height;
+        const int tilesX = (w + tile - 1) / tile;
+        const int tilesY = (h + tile - 1) / tile;
+        std::vector<std::uint8_t> average(static_cast<std::size_t>(tilesX) * tilesY * 4);
+        detail::parallelRows(tilesY, w * tile, [&](int firstTile, int lastTile) {
+          for (int ty = firstTile; ty < lastTile; ++ty) {
+            const int y0 = ty * tile;
+            const int y1 = std::min(h, y0 + tile);
+            for (int tx = 0; tx < tilesX; ++tx) {
+              const int x0 = tx * tile;
+              const int x1 = std::min(w, x0 + tile);
+              unsigned sum[4] = {0, 0, 0, 0};
+              for (int y = y0; y < y1; ++y) {
+                const std::uint8_t* q = pixels.data() + (static_cast<std::size_t>(y) * w + x0) * 4;
+                for (int x = x0; x < x1; ++x, q += 4) {
+                  sum[0] += q[0];
+                  sum[1] += q[1];
+                  sum[2] += q[2];
+                  sum[3] += q[3];
+                }
+              }
+              const unsigned n = static_cast<unsigned>((y1 - y0) * (x1 - x0));
+              std::uint8_t* a = average.data() + (static_cast<std::size_t>(ty) * tilesX + tx) * 4;
+              for (int k = 0; k < 4; ++k) {
+                a[k] = static_cast<std::uint8_t>(sum[k] / n);
+              }
+            }
+          }
+        });
+        const double inset = pB * 0.18 * tile;
+        const double half = tile * 0.5 - inset;
+        const double corner = pC * half;
+        std::vector<double> cover(static_cast<std::size_t>(tile) * tile, 1.0);
+        if (pB > 0.0 || pC > 0.0) {
+          for (int v = 0; v < tile; ++v) {
+            for (int u = 0; u < tile; ++u) {
+              // Signed distance to a rounded square centred in the tile.
+              const double qx = std::fabs(u + 0.5 - tile * 0.5) - (half - corner);
+              const double qy = std::fabs(v + 0.5 - tile * 0.5) - (half - corner);
+              const double outside = std::hypot(std::max(qx, 0.0), std::max(qy, 0.0));
+              const double sd = outside + std::min(std::max(qx, qy), 0.0) - corner;
+              cover[static_cast<std::size_t>(v) * tile + u] = std::clamp(0.5 - sd, 0.0, 1.0);
+            }
+          }
+        }
+        detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int ty = y / tile;
+            const double* coverRow = cover.data() + static_cast<std::size_t>(y - ty * tile) * tile;
+            const std::uint8_t* averageRow = average.data() + static_cast<std::size_t>(ty) * tilesX * 4;
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * w * 4;
+            for (int x = 0; x < w; ++x, p += 4) {
+              const int tx = x / tile;
+              const std::uint8_t* a = averageRow + static_cast<std::size_t>(tx) * 4;
+              const double c = coverRow[x - tx * tile];
+              for (int k = 0; k < 3; ++k) {
+                p[k] = detail::clamp8(p[k] + (a[k] * c - p[k]) * amt + 0.5);
+              }
+              p[3] = detail::clamp8(p[3] + (a[3] - p[3]) * amt + 0.5);
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Edges: {
+        // SOBEL on the brightness: the outline every edge filter starts from.
+        // The lines are drawn over as much of the picture as `picture` keeps
+        // (none: lines on black), in the line colour (white unless picked) or
+        // in the picture's own colours.
+        const double lineColour[3] = {
+          static_cast<double>((fx.colour >> 16) & 0xFF),
+          static_cast<double>((fx.colour >> 8) & 0xFF),
+          static_cast<double>(fx.colour & 0xFF),
+        };
+        const int w = ctx.width;
+        const int h = ctx.height;
+        std::vector<std::uint8_t> luma(static_cast<std::size_t>(w) * h);
+        detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * w * 4;
+            std::uint8_t* l = luma.data() + static_cast<std::size_t>(y) * w;
+            for (int x = 0; x < w; ++x, p += 4) {
+              l[x] = static_cast<std::uint8_t>((54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8);
+            }
+          }
+        });
+        const double gain = (0.5 + pA * 3.0) / 4.0;   // A=0.5: a 128-level step draws full white
+        detail::parallelRows(h, w, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::uint8_t* up = luma.data() + static_cast<std::size_t>(std::max(0, y - 1)) * w;
+            const std::uint8_t* mid = luma.data() + static_cast<std::size_t>(y) * w;
+            const std::uint8_t* down = luma.data() + static_cast<std::size_t>(std::min(h - 1, y + 1)) * w;
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * w * 4;
+            for (int x = 0; x < w; ++x, p += 4) {
+              const int l = std::max(0, x - 1);
+              const int r = std::min(w - 1, x + 1);
+              const int gx = (up[r] + 2 * mid[r] + down[r]) - (up[l] + 2 * mid[l] + down[l]);
+              const int gy = (down[l] + 2 * down[x] + down[r]) - (up[l] + 2 * up[x] + up[r]);
+              const double e = std::min(1.0, std::sqrt(static_cast<double>(gx * gx + gy * gy)) * gain / 255.0);
+              const double brightest = std::max({p[0], p[1], p[2], std::uint8_t {1}});
+              for (int k = 0; k < 3; ++k) {
+                const double own = p[k] * 255.0 / brightest;
+                const double line = lineColour[k] + (own - lineColour[k]) * pC;
+                const double behind = p[k] * pB;
+                const double out = behind + (line - behind) * e;
+                p[k] = detail::clamp8(p[k] + (out - p[k]) * amt + 0.5);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::LumaKey: {
+        // Brightness decides how much of each pixel stays: the dark, and with
+        // `cut bright` the bright, are taken out, so whatever the deck is over
+        // shows through -- graphics made on black, a flame on black, the white
+        // round a page. Written into alpha, as the chroma key does, so the two
+        // compose.
+        const double lowCut = pA * 0.5;   // A=0.5: everything darker than a quarter
+        const double highCut = 1.0 - pC * 0.5;
+        const double soft = 0.01 + pB * 0.25;
+        std::uint8_t keep[256];
+        for (int v = 0; v < 256; ++v) {
+          const double l = v / 255.0;
+          double k = 1.0;
+          if (lowCut > 0.0) {
+            k *= detail::smoothstep01(lowCut, lowCut + soft, l);
+          }
+          if (pC > 0.0) {
+            k *= 1.0 - detail::smoothstep01(highCut - soft, highCut, l);
+          }
+          keep[v] = detail::clamp8((1.0 - amt * (1.0 - k)) * 255.0 + 0.5);
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              const int l = (54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8;
+              p[3] = static_cast<std::uint8_t>((p[3] * keep[l] + 127) / 255);
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Strobe: {
+        // On the show's clock, the one the LFOs read, so the preview and the
+        // output flash together and the rate does not move with the frame
+        // rate. Half a flash to ten a second on a curve, so the slow end has
+        // room and it ARRIVES at about two: faster than three a second is the
+        // band that brings on photosensitive seizures, and the tip says so.
+        // (Capped at three at first; James: "Raise the strobe too".)
+        const double rate = 0.5 * std::pow(20.0, pA);
+        const double t = ctx.seconds >= 0.0 ? ctx.seconds
+                                            : static_cast<double>(ctx.frameIndex) / 30.0;
+        const double phase = t * rate - std::floor(t * rate);
+        if (phase >= 0.2 + pC * 0.6) {
+          break;
+        }
+        // The flash colour, darkened toward black by `flash to`: white with
+        // the slider anywhere is the grey it always was.
+        std::uint8_t lut[3][256];
+        for (int k = 0; k < 3; ++k) {
+          const double level = ((fx.colour >> (16 - 8 * k)) & 0xFF) * (1.0 - pB);
+          detail::buildChannelLut(lut[k], [&](int v) {
+            return detail::clamp8(v + (level - v) * amt + 0.5);
+          });
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              p[0] = lut[0][p[0]];
+              p[1] = lut[1][p[1]];
+              p[2] = lut[2][p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Levels: {
+        // Input black/white, then gamma, then the lift: the order every
+        // levels tool uses, so the controls behave the way an operator who
+        // has used one expects.
+        const double inBlack = pB * 128.0;
+        const double inWhite = 255.0 - pC * 128.0;
+        const double span = std::max(1.0, inWhite - inBlack);
+        const double gamma = std::pow(3.0, (0.5 - pA) * 2.0);   // 0.5 -> 1.0
+        const double outBlack = pD * 128.0;
+        std::uint8_t lut[256];
+        detail::buildChannelLut(lut, [&](int v) {
+          const double x = std::clamp((v - inBlack) / span, 0.0, 1.0);
+          const double y = outBlack + std::pow(x, gamma) * (255.0 - outBlack);
+          return detail::clamp8(v * (1.0 - amt) + y * amt);
+        });
+        detail::applyChannelLut(pixels.data(), ctx.width, ctx.height, lut);
+        break;
+      }
+      case CueEffectKind::Curves: {
+        const double s = (pA - 0.5) * 2.0;   // -1 flat .. 0 straight .. +1 full S
+        std::uint8_t curve[256];
+        detail::buildChannelLut(curve, [&](int v) {
+          const double x = v / 255.0;
+          const double smooth = x * x * (3.0 - 2.0 * x);
+          double y = x + s * (smooth - x);
+          // Bumps that are zero at both ends, so black and white never move.
+          y += pC * 0.25 * 6.75 * x * (1.0 - x) * (1.0 - x);
+          y -= pD * 0.25 * 6.75 * x * x * (1.0 - x);
+          return detail::clamp8(v * (1.0 - amt) + std::clamp(y, 0.0, 1.0) * 255.0 * amt);
+        });
+        // 0 = all three, then R, G, B in quarters of the slider.
+        const int channel = pB < 0.125 ? -1 : pB < 0.375 ? 0 : pB < 0.625 ? 1 : 2;
+        std::uint8_t lut[3][256];
+        for (int c = 0; c < 3; ++c) {
+          for (int v = 0; v < 256; ++v) {
+            lut[c][v] = (channel < 0 || channel == c) ? curve[v]
+                                                      : static_cast<std::uint8_t>(v);
+          }
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              p[0] = lut[0][p[0]];
+              p[1] = lut[1][p[1]];
+              p[2] = lut[2][p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Solarise: {
+        // Everything above the threshold inverts, which is the darkroom
+        // effect: highlights fold back through black.
+        const double pivot = 255.0 * std::clamp(pA, 0.05, 0.95);
+        // knee: how wide a ramp the fold takes. At 0 it is the hard crease
+        // this always had.
+        const double knee = pB * 96.0;
+        std::uint8_t lut[256];
+        detail::buildChannelLut(lut, [&](int v) {
+          double folded;
+          if (knee <= 0.5) {
+            folded = v > pivot ? (255.0 - v) : v;
+          } else {
+            const double t = std::clamp((v - (pivot - knee)) / (2.0 * knee), 0.0, 1.0);
+            const double eased = t * t * (3.0 - 2.0 * t);
+            folded = v * (1.0 - eased) + (255.0 - v) * eased;
+          }
+          return detail::clamp8(v * (1.0 - amt) + folded * amt);
+        });
+        detail::applyChannelLut(pixels.data(), ctx.width, ctx.height, lut);
+        break;
+      }
+      case CueEffectKind::Threshold: {
+        const double pivot = 255.0 * std::clamp(pA, 0.02, 0.98);
+        std::uint8_t lutLit[256], lutDark[256];
+        detail::buildChannelLut(lutLit, [&](int v) {
+          return detail::clamp8(v * (1.0 - amt) + 255.0 * amt);
+        });
+        detail::buildChannelLut(lutDark, [&](int v) {
+          return detail::clamp8(v * (1.0 - amt) + 0.0 * amt);
+        });
+        // softness: widens the decision into a ramp. At 0 it is the hard
+        // comparison this always made, and the two tables are used directly.
+        const double soft = pB * 110.0;
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              const double luma = p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114;
+              if (soft <= 0.5) {
+                const std::uint8_t* lut = luma >= pivot ? lutLit : lutDark;
+                p[0] = lut[p[0]];
+                p[1] = lut[p[1]];
+                p[2] = lut[p[2]];
+              } else {
+                const double t = std::clamp((luma - (pivot - soft)) / (2.0 * soft), 0.0, 1.0);
+                const double eased = t * t * (3.0 - 2.0 * t);
+                for (int c = 0; c < 3; ++c) {
+                  p[c] = detail::clamp8(lutDark[p[c]] * (1.0 - eased) +
+                                        lutLit[p[c]] * eased);
+                }
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Vignette: {
+        const double cx = ctx.width * 0.5;
+        const double cy = ctx.height * 0.5;
+        const double maxR = std::sqrt(cx * cx + cy * cy);
+        const double vignetteSize = std::max(0.05, pA * 2.0);
+        const double vignetteFalloff = 2.0 + pB * 6.0;
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* row = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            const double dy = y - cy;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double dx = x - cx;
+              // size: how far out the darkening starts. At 0.5 the divisor is
+              // 1 and it begins at the centre, as it always did.
+              // falloff: the exponent. At 0 it is the square this always used,
+              // which keeps the centre clean and takes the corners.
+              const double r = std::sqrt(dx * dx + dy * dy) / maxR / vignetteSize;
+              const double shaped = vignetteFalloff == 2.0
+                ? r * r : std::pow(std::clamp(r, 0.0, 4.0), vignetteFalloff);
+              const double gain = 1.0 - amt * std::clamp(shaped, 0.0, 1.0);
+              std::uint8_t* p = row + static_cast<std::size_t>(x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                p[c] = detail::clamp8(p[c] * gain);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Grain: {
+        // Hashed from position AND frame, not a running generator: the same
+        // frame must look the same however many frames have been drawn before
+        // it, or scrubbing the deck changes the grain.
+        const std::uint32_t seed =
+          static_cast<std::uint32_t>(ctx.frameIndex * 2654435761u) | 1u;
+        const double strength = amt * 64.0;
+        // grain size: hash a coarser cell so the noise clumps into film grain
+        // rather than sensor noise. At 0.5 the cell is one pixel, as before.
+        // colour: at 0 one value goes to all three channels, which is what
+        // film does and what this always did; higher gives each its own.
+        const int grainCell = 1 + static_cast<int>(std::max(0.0, pA - 0.5) * 2.0 * 7.0);
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::size_t i = static_cast<std::size_t>(y) * ctx.width;
+            std::uint8_t* p = pixels.data() + i * 4;
+            for (int x = 0; x < ctx.width; ++x, ++i, p += 4) {
+              const std::size_t cell = grainCell == 1
+                ? i
+                : static_cast<std::size_t>(y / grainCell) *
+                    static_cast<std::size_t>(ctx.width) + (x / grainCell);
+              std::uint32_t h = static_cast<std::uint32_t>(cell) ^ seed;
+              h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+              const double n = (static_cast<double>(h & 0xFFFF) / 32768.0 - 1.0) * strength;
+              if (pB <= 0.0005) {
+                p[0] = detail::clamp8(p[0] + n);
+                p[1] = detail::clamp8(p[1] + n);
+                p[2] = detail::clamp8(p[2] + n);
+              } else {
+                for (int c = 0; c < 3; ++c) {
+                  std::uint32_t hc = h ^ static_cast<std::uint32_t>(c * 0x9E3779B9u);
+                  hc ^= hc << 13; hc ^= hc >> 17; hc ^= hc << 5;
+                  const double nc =
+                    (static_cast<double>(hc & 0xFFFF) / 32768.0 - 1.0) * strength;
+                  p[c] = detail::clamp8(p[c] + n * (1.0 - pB) + nc * pB);
+                }
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Scanlines: {
+        // Every other line darkened. paramA sets the line pitch in pixels so
+        // this reads at 4K as well as at 720 -- a one-pixel line on a 2160-line
+        // raster is invisible, which is the mistake the synth's CRT made.
+        const int pitch = std::max(2, static_cast<int>(std::lround(2.0 + pA * 10.0)));
+        // darkness: how far the dark lines go. At 0 it is the 0.7 this was
+        // fixed at; all the way up is black between the lines.
+        const double lineDark = 0.7 + pB * 0.3;
+        std::uint8_t lut[256];
+        detail::buildChannelLut(lut, [&](int v) {
+          return detail::clamp8(v * (1.0 - amt * lineDark));
+        });
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            if (((y / (pitch / 2)) & 1) == 0) {
+              continue;
+            }
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              p[0] = lut[p[0]];
+              p[1] = lut[p[1]];
+              p[2] = lut[p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::ChannelOffset: {
+        // Red and blue slide apart horizontally. Assumes byte 0 and byte 2 are
+        // the outer colour channels, which holds for both BGRA and RGBA -- the
+        // direction of the fringe flips between them and neither is wrong.
+        const int shift = std::max(1, static_cast<int>(std::lround(amt * ctx.width * 0.02)));
+        // angle: which way the channels pull apart. At 0.5 the offset is
+        // purely horizontal, which is what this always did -- and the row-copy
+        // path is kept for exactly that case, because it is much faster than
+        // a two-dimensional gather.
+        // green split: drags green the opposite way, turning a two-colour
+        // fringe into a prism. At 0 green does not move, as before.
+        const double angle = (pA - 0.5) * 2.0 * 3.14159265358979323846;
+        const bool horizontal = std::fabs(angle) < 1e-6;
+        const int greenShift = static_cast<int>(std::lround(shift * pB));
+        if (horizontal && greenShift == 0) {
+          detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          std::vector<std::uint8_t> row(static_cast<std::size_t>(ctx.width) * 4);
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            std::memcpy(row.data(), dst, row.size());
+            for (int x = 0; x < ctx.width; ++x) {
+              const int xr = std::clamp(x + shift, 0, ctx.width - 1);
+              const int xb = std::clamp(x - shift, 0, ctx.width - 1);
+              dst[static_cast<std::size_t>(x) * 4 + 2] = row[static_cast<std::size_t>(xr) * 4 + 2];
+              dst[static_cast<std::size_t>(x) * 4 + 0] = row[static_cast<std::size_t>(xb) * 4 + 0];
+            }
+          }
+          });
+        } else {
+          const double ox = std::cos(angle) * shift;
+          const double oy = std::sin(angle) * shift;
+          std::vector<std::uint8_t> source(pixels.begin(),
+                                           pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+          detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+            auto tap = [&](int x, int y, int channel) {
+              const int sx = std::clamp(x, 0, ctx.width - 1);
+              const int sy = std::clamp(y, 0, ctx.height - 1);
+              return source[(static_cast<std::size_t>(sy) * ctx.width + sx) * 4 + channel];
+            };
+            for (int y = firstRow; y < lastRow; ++y) {
+              std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+              for (int x = 0; x < ctx.width; ++x) {
+                const int rx = x + static_cast<int>(std::lround(ox));
+                const int ry = y + static_cast<int>(std::lround(oy));
+                const int bx = x - static_cast<int>(std::lround(ox));
+                const int by = y - static_cast<int>(std::lround(oy));
+                dst[static_cast<std::size_t>(x) * 4 + 2] = tap(rx, ry, 2);
+                dst[static_cast<std::size_t>(x) * 4 + 0] = tap(bx, by, 0);
+                if (greenShift != 0) {
+                  dst[static_cast<std::size_t>(x) * 4 + 1] =
+                    tap(x + static_cast<int>(std::lround(oy * pB)),
+                        y - static_cast<int>(std::lround(ox * pB)), 1);
+                }
+              }
+            }
+          });
+        }
+        break;
+      }
+      case CueEffectKind::TemporalDither: {
+        // A pixel-art idea on a video substrate. Quantise hard to a tiny
+        // palette, but ADVANCE THE DITHER PATTERN EVERY FRAME: at 60Hz the eye
+        // integrates shades that are not in the palette at all, so a four
+        // colour picture reads as continuous tone -- and freezes into visible
+        // checkerboard the moment the deck is paused. The still and the moving
+        // image are deliberately different pictures.
+        // palette: scales the surviving shade count. At 0.5 the scale is 1
+        // and the count is what amount alone decided, as before.
+        // hold: how many frames a dither phase lasts. At 0 it advances every
+        // frame -- which is the whole trick, because the eye integrates it --
+        // and winding it up freezes the checkerboard into visibility.
+        const double paletteScale = 0.5 + pA;
+        const int levels = std::max(2, static_cast<int>(std::lround(
+          (2.0 + (1.0 - amt) * 6.0) * paletteScale)));
+        const double step = 255.0 / (levels - 1);
+        // Rotate the matrix through its four phases, one per frame.
+        const int holdFrames = 1 + static_cast<int>(std::lround(pB * 15.0));
+        const int phase = static_cast<int>((ctx.frameIndex / holdFrames) & 3);
+        std::uint8_t lut[16][256];
+        for (int cell = 0; cell < 16; ++cell) {
+          const double bias = (cell / 16.0 - 0.5) * step;
+          for (int v = 0; v < 256; ++v) {
+            const double q = std::round((v + bias) / step) * step;
+            lut[cell][v] = detail::clamp8(v * (1.0 - amt) + q * amt);
+          }
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* p = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x, p += 4) {
+              const std::uint8_t* cell =
+                lut[detail::bayer4(x + phase, y + (phase >> 1))];
+              p[0] = cell[p[0]];
+              p[1] = cell[p[1]];
+              p[2] = cell[p[2]];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::MotionPuppet: {
+        // ONE CLIP'S MOTION, ANOTHER'S PIXELS.
+        //
+        // The driver clip is decoded only for the per-macroblock vectors its
+        // codec already computed -- its pictures are thrown away. Those vectors
+        // displace THIS cue's pixels, so a camera feed can be puppeteered by a
+        // crowd scene, or a synth by a dancer.
+        //
+        // The field is coarse by nature: a macroblock is 16 pixels, so it is
+        // sampled bilinearly rather than pretending to per-pixel precision the
+        // data does not have. Rewriting vectors offline is mature practice;
+        // doing it live, across two sources, is the part a file-based
+        // toolchain cannot put on a cue.
+        if (!ctx.motion || ctx.motion->empty()) {
+          break;   // an I-frame, or no driver armed: leave the picture alone
+        }
+        const auto& mf = *ctx.motion;
+        // Vectors are in the DRIVER's pixels; this cue may be a different size.
+        const double sx = mf.sourceWidth > 0
+          ? static_cast<double>(ctx.width) / mf.sourceWidth : 1.0;
+        const double sy = mf.sourceHeight > 0
+          ? static_cast<double>(ctx.height) / mf.sourceHeight : 1.0;
+        const double gain = amt * 4.0;   // 1.0 reads as a shove, not a nudge
+
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        // Split across cores: every pixel reads the untouched source copy.
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double gy = (static_cast<double>(y) / std::max(1, ctx.height)) * mf.rows;
+            const int r0 = std::clamp(static_cast<int>(gy), 0, mf.rows - 1);
+            const int r1 = std::min(r0 + 1, mf.rows - 1);
+            const double fy = gy - r0;
+            std::uint8_t* dstRow = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double gx = (static_cast<double>(x) / std::max(1, ctx.width)) * mf.cols;
+              const int c0 = std::clamp(static_cast<int>(gx), 0, mf.cols - 1);
+              const int c1 = std::min(c0 + 1, mf.cols - 1);
+              const double fx2 = gx - c0;
+              auto at = [&](int r, int c, bool wantX) {
+                const std::size_t i = static_cast<std::size_t>(r) * mf.cols + c;
+                return static_cast<double>(wantX ? mf.dx[i] : mf.dy[i]);
+              };
+              const double dxv =
+                (at(r0, c0, true) * (1 - fx2) + at(r0, c1, true) * fx2) * (1 - fy) +
+                (at(r1, c0, true) * (1 - fx2) + at(r1, c1, true) * fx2) * fy;
+              const double dyv =
+                (at(r0, c0, false) * (1 - fx2) + at(r0, c1, false) * fx2) * (1 - fy) +
+                (at(r1, c0, false) * (1 - fx2) + at(r1, c1, false) * fx2) * fy;
+              // MINUS: the vector says where the block came FROM, so sampling
+              // backwards along it moves the picture the way the driver moved.
+              const int srcX = std::clamp(
+                static_cast<int>(std::lround(x - dxv * sx * gain)), 0, ctx.width - 1);
+              const int srcY = std::clamp(
+                static_cast<int>(std::lround(y - dyv * sy * gain)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(srcY) * ctx.width + srcX) * 4;
+              std::uint8_t* dp = dstRow + static_cast<std::size_t>(x) * 4;
+              dp[0] = sp[0]; dp[1] = sp[1]; dp[2] = sp[2];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::PixelSort:
+        applyPixelSort(pixels.data(), ctx.width, ctx.height, amt, pA, pB > 0.5);
+        break;
+      case CueEffectKind::BlockGlitch:
+        // Seeded from the FRAME, not a running generator, so the same frame
+        // always glitches the same way -- scrubbing back gives you the picture
+        // you saw, not a new one.
+        applyBlockGlitch(pixels.data(), ctx.width, ctx.height, amt,
+                         static_cast<std::uint32_t>(ctx.frameIndex * 2654435761u),
+                         pA, pB);
+        break;
+      case CueEffectKind::PolarWarp:
+      case CueEffectKind::LumaDisplace:
+      case CueEffectKind::Ripple:
+      case CueEffectKind::Relativistic:
+      case CueEffectKind::Kaleidoscope: {
+        // KALEIDOSCOPE'S MAP DOES NOT CHANGE BETWEEN FRAMES.
+        //
+        // Where each output pixel reads from depends only on the raster and on
+        // this effect's own parameters -- not on the picture, and not on the
+        // frame index. So the whole fold is a fixed table of source offsets,
+        // and building it once turns four million atan2/cos/sin calls a frame
+        // into a gather. MEASURED at 3840x2160: 47.5ms a frame before.
+        //
+        // The table lives in the caller's scratch slot, like every other thing
+        // an effect remembers, and carries the parameters it was built for so a
+        // knob (or an LFO on one) rebuilds it. When a parameter IS being
+        // modulated every frame the rebuild costs what the old code cost, so
+        // this is never worse, and it is a different effect entirely when the
+        // knobs are still -- which is most of the time.
+        //
+        // Only Kaleidoscope: the other kinds in this block move with the frame
+        // index and have no fixed map to cache.
+        const std::int32_t* foldMap = nullptr;
+        if (fx.kind == CueEffectKind::Kaleidoscope && state) {
+          struct FoldHeader {
+            std::int32_t magic, width, height, wedges;
+            float rotation, amount;
+          };
+          const int wedgesNow = 2 + static_cast<int>(pA * 10.0);
+          const FoldHeader want {0x4B464C44, ctx.width, ctx.height, wedgesNow,
+                                 static_cast<float>(pB), static_cast<float>(amt)};
+          const std::size_t need = sizeof(FoldHeader) + count * sizeof(std::int32_t);
+          bool rebuild = state->size() != need;
+          if (!rebuild) {
+            FoldHeader have {};
+            std::memcpy(&have, state->data(), sizeof(FoldHeader));
+            rebuild = std::memcmp(&have, &want, sizeof(FoldHeader)) != 0;
+          }
+          if (rebuild) {
+            state->assign(need, 0);
+            std::memcpy(state->data(), &want, sizeof(FoldHeader));
+            auto* map = reinterpret_cast<std::int32_t*>(state->data() + sizeof(FoldHeader));
+            const double cxm = ctx.width * 0.5;
+            const double cym = ctx.height * 0.5;
+            const double seg = 6.283185307179586 / wedgesNow;
+            detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+              for (int y = firstRow; y < lastRow; ++y) {
+                for (int x = 0; x < ctx.width; ++x) {
+                  const double nx = x - cxm;
+                  const double ny = y - cym;
+                  const double r = std::sqrt(nx * nx + ny * ny);
+                  double a = std::atan2(ny, nx) + pB * 6.283185307179586;
+                  a = std::fabs(std::fmod(a + seg * 0.5, seg) - seg * 0.5);
+                  const double fx2 = cxm + std::cos(a) * r;
+                  const double fy2 = cym + std::sin(a) * r;
+                  const int sx = std::clamp(
+                    static_cast<int>(std::lround(x * (1.0 - amt) + fx2 * amt)), 0, ctx.width - 1);
+                  const int sy = std::clamp(
+                    static_cast<int>(std::lround(y * (1.0 - amt) + fy2 * amt)), 0, ctx.height - 1);
+                  map[static_cast<std::size_t>(y) * ctx.width + x] =
+                    static_cast<std::int32_t>(sy * ctx.width + sx);
+                }
+              }
+            });
+          }
+          foldMap = reinterpret_cast<const std::int32_t*>(state->data() + sizeof(FoldHeader));
+        }
+        // These all RESAMPLE: every output pixel is fetched from somewhere else
+        // in the source, so they need an untouched copy to read from. Written
+        // as one block because the only thing that differs is where each pixel
+        // looks, and near-identical loops would drift apart.
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        const double cx = ctx.width * 0.5;
+        const double cy = ctx.height * 0.5;
+        const double maxR = std::sqrt(cx * cx + cy * cy);
+        const double t = static_cast<double>(ctx.frameIndex) * 0.08;
+        // Lightspeed's constants, hoisted: they do not vary per pixel, and a
+        // sqrt for gamma would otherwise be paid four million times at 4K.
+        const double beta = std::clamp(amt, 0.0, 1.0) * 0.995;
+        const double gamma = 1.0 / std::sqrt(std::max(1e-6, 1.0 - beta * beta));
+        const double halfFov = (12.0 + pA * 68.0) * 0.017453292519943295;
+        const double dopplerAmt = pB;
+        const double boostOffsetX = (fx.kind == CueEffectKind::Relativistic)
+          ? pC * cx * 0.8 : 0.0;
+        // Both halves of lightspeed depend on ONE thing: distance from the
+        // centre. So they are a radial lookup built once, not an acos and two
+        // cosines per pixel -- which is the difference between 11ms and under
+        // 2ms on a small frame, and between unusable and fine at 4K.
+        constexpr int kBoostTableSize = 1024;
+        std::vector<float> boostRadius, boostGain;
+        if (fx.kind == CueEffectKind::Relativistic) {
+          boostRadius.resize(kBoostTableSize);
+          boostGain.resize(kBoostTableSize);
+          for (int i = 0; i < kBoostTableSize; ++i) {
+            const double frac = static_cast<double>(i) / (kBoostTableSize - 1);
+            const double cosSeen = std::cos(frac * halfFov);
+            const double denom = 1.0 - beta * cosSeen;
+            const double cosRest = std::clamp(
+              (cosSeen - beta) / (std::fabs(denom) < 1e-6 ? 1e-6 : denom), -1.0, 1.0);
+            boostRadius[i] = static_cast<float>((std::acos(cosRest) / halfFov) * maxR);
+            const double doppler = 1.0 / std::max(1e-6, gamma * denom);
+            boostGain[i] = static_cast<float>(
+              std::tanh((doppler - 1.0) * 1.2) * dopplerAmt);
+          }
+        }
+        // The cached fold: a gather and nothing else.
+        if (foldMap != nullptr) {
+          detail::parallelRows(ctx.height, ctx.width * 4, [&](int firstRow, int lastRow) {
+            for (int y = firstRow; y < lastRow; ++y) {
+              std::uint8_t* dp = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+              const std::int32_t* row = foldMap + static_cast<std::size_t>(y) * ctx.width;
+              for (int x = 0; x < ctx.width; ++x, dp += 4) {
+                const std::uint8_t* sp = source.data() +
+                                         static_cast<std::size_t>(row[x]) * 4;
+                dp[0] = sp[0]; dp[1] = sp[1]; dp[2] = sp[2];
+              }
+            }
+          });
+          break;
+        }
+        // Split across cores: every pixel reads the untouched source copy.
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* dstRow = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              double sxf = x;
+              double syf = y;
+              switch (fx.kind) {
+                case CueEffectKind::PolarWarp: {
+                  // Read the picture as if its rows were rings and its columns
+                  // were angles. Straight lines become spirals; a face becomes a
+                  // weather system.
+                  const double nx = (x - cx) / std::max(1.0, cx);
+                  const double ny = (y - cy) / std::max(1.0, cy);
+                  const double r = std::sqrt(nx * nx + ny * ny);
+                  double a = std::atan2(ny, nx);
+                  if (a < 0.0) a += 6.283185307179586;
+                  // twist: winds the angle with the radius, so straight lines
+                  // become spirals rather than rings. At 0.5 there is no wind.
+                  // radial zoom: pushes the rings in or out. At 0 it is 1:1.
+                  a += (pA - 0.5) * 2.0 * r * 6.283185307179586;
+                  const double u = (a / 6.283185307179586) * ctx.width;
+                  const double v = r * ctx.height * (1.0 + pB * 2.0);
+                  sxf = x * (1.0 - amt) + u * amt;
+                  syf = y * (1.0 - amt) + v * amt;
+                  break;
+                }
+                case CueEffectKind::LumaDisplace: {
+                  // The picture bends by its OWN brightness -- bright regions
+                  // reach further for their colour than dark ones, so an image
+                  // distorts along its own structure rather than along a grid.
+                  const std::uint8_t* p =
+                    source.data() + (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+                  const double luma = (p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255.0;
+                  // pivot: the brightness that stays put. At 0 it is mid grey,
+                  // which is what this always used.
+                  // vertical bias: how much of the push goes downward. At 0.5
+                  // that is 0.35, the ratio this was fixed at.
+                  const double pivotLuma = 0.5 + pB * 0.5;
+                  const double push = (luma - pivotLuma) * amt * ctx.width * 0.25;
+                  sxf = x + push;
+                  syf = y + push * (0.35 + (pA - 0.5) * 2.0 * 0.65);
+                  break;
+                }
+                case CueEffectKind::Relativistic: {
+                  // What the frame looks like from something travelling into it
+                  // at a fraction of c. Relativistic aberration folds the forward
+                  // hemisphere toward the direction of travel, so the centre
+                  // opens out and the rim smears away -- which is why the view
+                  // from a near-light ship is a bright compressed disc and not a
+                  // zoom.
+                  //
+                  // The aberration formula is inverted here, because the loop
+                  // walks OUTPUT pixels and has to find where each came from:
+                  //   cos t' = (cos t + B) / (1 + B cos t)   is the forward map,
+                  //   cos t  = (cos t' - B) / (1 - B cos t') is the one wanted.
+                  // off-axis: moves the direction of travel away from the
+                  // centre of frame, so the picture rushes past rather than
+                  // straight at you. At 0 it is dead centre, as before.
+                  const double ax = x - (cx + boostOffsetX);
+                  const double ay = y - cy;
+                  const double ar = std::sqrt(ax * ax + ay * ay);
+                  if (ar < 0.5 || maxR < 1.0) {
+                    break;                        // the centre maps to itself
+                  }
+                  const double slot = std::clamp(ar / maxR, 0.0, 1.0) * (kBoostTableSize - 1);
+                  const int i0 = static_cast<int>(slot);
+                  const int i1 = std::min(kBoostTableSize - 1, i0 + 1);
+                  const double frac = slot - i0;
+                  const double srcR = boostRadius[i0] * (1.0 - frac) + boostRadius[i1] * frac;
+                  sxf = cx + ax / ar * srcR;
+                  syf = cy + ay / ar * srcR;
+                  break;
+                }
+                case CueEffectKind::Ripple: {
+                  const double dx = x - cx;
+                  const double dy = y - cy;
+                  const double r = std::sqrt(dx * dx + dy * dy);
+                  // frequency and speed. At paramA 0.5 the spacing is the 0.06
+                // this had, and at paramB 0 the rings travel at the 3.0 it had.
+                const double wave =
+                  std::sin(r * (0.06 * pA * 2.0) - t * (3.0 + pB * 9.0)) * amt * 24.0;
+                  const double inv = r > 0.001 ? 1.0 / r : 0.0;
+                  sxf = x + dx * inv * wave;
+                  syf = y + dy * inv * wave;
+                  break;
+                }
+                default: {   // Kaleidoscope
+                  // Fold the frame into wedges about its centre. paramA picks how
+                  // many, because two is a mirror and twelve is a snowflake and
+                  // they are completely different pictures.
+                  const int wedges = 2 + static_cast<int>(pA * 10.0);
+                  const double nx = x - cx;
+                  const double ny = y - cy;
+                  const double r = std::sqrt(nx * nx + ny * ny);
+                  const double seg = 6.283185307179586 / wedges;
+                  // rotation: turns the whole arrangement so the fold lines do
+                  // not sit on the same part of the picture all night. At 0 it
+                  // is where it always was.
+                  double a = std::atan2(ny, nx) + pB * 6.283185307179586;
+                  a = std::fabs(std::fmod(a + seg * 0.5, seg) - seg * 0.5);
+                  const double fx2 = cx + std::cos(a) * r;
+                  const double fy2 = cy + std::sin(a) * r;
+                  sxf = x * (1.0 - amt) + fx2 * amt;
+                  syf = y * (1.0 - amt) + fy2 * amt;
+                  break;
+                }
+              }
+              const int sx = std::clamp(static_cast<int>(std::lround(sxf)), 0, ctx.width - 1);
+              const int sy = std::clamp(static_cast<int>(std::lround(syf)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              std::uint8_t* dp = dstRow + static_cast<std::size_t>(x) * 4;
+              if (fx.kind == CueEffectKind::Relativistic && dopplerAmt > 0.0005) {
+                // The other half of the physics: light from ahead arrives
+                // blueshifted and brighter, light from the sides redshifted and
+                // dimmer. Without it the warp reads as a lens; with it, as speed.
+                const double bx = x - cx;
+                const double by = y - cy;
+                const double br = std::clamp(
+                  std::sqrt(bx * bx + by * by) / std::max(1.0, maxR), 0.0, 1.0);
+                // Already squashed through tanh when the table was built, so a
+                // high beta tints the picture instead of clipping it to blue.
+                const double shift =
+                  boostGain[static_cast<int>(br * (kBoostTableSize - 1))];
+                const double gain = 1.0 + shift * 0.6;      // the headlight effect
+                dp[0] = detail::clamp8(sp[0] * gain * (1.0 - shift * 0.55));   // R
+                dp[1] = detail::clamp8(sp[1] * gain);                          // G
+                dp[2] = detail::clamp8(sp[2] * gain * (1.0 + shift * 0.55));   // B
+              } else {
+                dp[0] = sp[0]; dp[1] = sp[1]; dp[2] = sp[2];
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::DyeAdvect: {
+        // The picture treated as dye in a fluid, and carried along the flow of
+        // its own structure.
+        //
+        // The velocity field is the PERPENDICULAR of the luma gradient, which
+        // is the part that matters: a gradient points across an edge, so its
+        // perpendicular runs ALONG one. Advecting down the gradient would only
+        // smear the picture into mush across its own boundaries; advecting
+        // along it makes colour orbit the shapes instead, and edges survive as
+        // the banks of a river. paramA bleeds the field back toward the raw
+        // gradient for when that is wanted.
+        //
+        // Each output pixel walks BACKWARD through the field for several steps
+        // and fetches from where it ends up -- semi-Lagrangian advection, the
+        // standard way to move a quantity through a velocity field without it
+        // diffusing away. Several short steps rather than one long one, because
+        // a single jump follows a straight line and the curl is the whole point.
+        //
+        // No state is kept between frames. A persistent dye buffer drifts
+        // toward its own fixed point and stops being about the picture;
+        // re-deriving the field every frame means the flow always describes
+        // what is on screen NOW, and it moves because the picture does.
+        const int gw = std::clamp(ctx.width / 8, 8, 256);
+        const int gh = std::clamp(ctx.height / 8, 8, 256);
+        std::vector<float> luma(static_cast<std::size_t>(gw) * gh, 0.0f);
+        for (int gy = 0; gy < gh; ++gy) {
+          const int sy = std::min(ctx.height - 1, gy * ctx.height / gh);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int sx = std::min(ctx.width - 1, gx * ctx.width / gw);
+            const std::uint8_t* p =
+              pixels.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+            luma[static_cast<std::size_t>(gy) * gw + gx] =
+              static_cast<float>(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255.0f;
+          }
+        }
+        const double bleed = pA;
+        // swirl: rotates the whole flow field, which turns orbiting into
+        // spiralling inward or outward. At 0 the field is untouched.
+        const double swirl = pC * 6.283185307179586;
+        const double swirlCos = std::cos(swirl);
+        const double swirlSin = std::sin(swirl);
+        std::vector<float> vx(static_cast<std::size_t>(gw) * gh, 0.0f);
+        std::vector<float> vy(static_cast<std::size_t>(gw) * gh, 0.0f);
+        for (int gy = 0; gy < gh; ++gy) {
+          const int ym = std::max(0, gy - 1), yp = std::min(gh - 1, gy + 1);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int xm = std::max(0, gx - 1), xp = std::min(gw - 1, gx + 1);
+            const float gxv = luma[static_cast<std::size_t>(gy) * gw + xp] -
+                              luma[static_cast<std::size_t>(gy) * gw + xm];
+            const float gyv = luma[static_cast<std::size_t>(yp) * gw + gx] -
+                              luma[static_cast<std::size_t>(ym) * gw + gx];
+            const std::size_t i = static_cast<std::size_t>(gy) * gw + gx;
+            // Perpendicular at bleed 0, straight down the gradient at bleed 1.
+            const double fieldX = -gyv * (1.0 - bleed) + gxv * bleed;
+            const double fieldY =  gxv * (1.0 - bleed) + gyv * bleed;
+            vx[i] = static_cast<float>(fieldX * swirlCos - fieldY * swirlSin);
+            vy[i] = static_cast<float>(fieldX * swirlSin + fieldY * swirlCos);
+          }
+        }
+        const int steps = 3 + static_cast<int>(pB * 13.0);
+        // Total travel is what the operator set; the step count only decides
+        // how CURVED the path is. Otherwise raising the detail would also raise
+        // the strength and neither control would mean anything on its own.
+        const double travel = amt * std::max(ctx.width, ctx.height) * 0.09;
+        const double stepLen = travel / steps;
+        // Fold the step length into the field once rather than multiplying by
+        // it inside the walk. The walk runs `steps` times per pixel -- twenty
+        // million multiplies on a 1080p frame at the default detail -- and the
+        // product is the same every time.
+        for (std::size_t i = 0; i < vx.size(); ++i) {
+          vx[i] = static_cast<float>(vx[i] * stepLen);
+          vy[i] = static_cast<float>(vy[i] * stepLen);
+        }
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        // Scale factors, not divisions. The inner loop runs once per step per
+        // pixel -- eleven million times on a 4K frame at the default detail --
+        // and two integer divides in there were most of the cost.
+        const double gxScale = static_cast<double>(gw) / ctx.width;
+        const double gyScale = static_cast<double>(gh) / ctx.height;
+        // Split across cores: every pixel reads the untouched source copy.
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* dstRow = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              double px = x;
+              double py = y;
+              for (int step = 0; step < steps; ++step) {
+                const int gx = std::clamp(static_cast<int>(px * gxScale), 0, gw - 1);
+                const int gy = std::clamp(static_cast<int>(py * gyScale), 0, gh - 1);
+                const std::size_t i = static_cast<std::size_t>(gy) * gw + gx;
+                px -= vx[i];
+                py -= vy[i];
+              }
+              const int sx = std::clamp(static_cast<int>(std::lround(px)), 0, ctx.width - 1);
+              const int sy = std::clamp(static_cast<int>(std::lround(py)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              std::uint8_t* dp = dstRow + static_cast<std::size_t>(x) * 4;
+              dp[0] = sp[0]; dp[1] = sp[1]; dp[2] = sp[2];
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::ReactionBloom: {
+        // Gray-Scott reaction-diffusion, seeded by the picture and grown for a
+        // few dozen iterations every frame.
+        //
+        // Two notional chemicals: U is everywhere, V is dropped wherever the
+        // picture is bright. V consumes U, both diffuse, and that single rule
+        // is enough to produce the coral, veins and dividing cells Turing
+        // predicted in 1952. The pattern is not drawn -- it GROWS, and it grows
+        // out of whatever is on screen.
+        //
+        // Re-seeded from the frame each time rather than carried forward. A
+        // persistent grid settles into its own attractor and stops having
+        // anything to do with the video; re-seeding means the growth tracks the
+        // picture, and a cut to a new shot grows a new organism.
+        // The grid stays small and the ITERATION COUNT is what the operator
+        // buys with it. Gray-Scott needs hundreds of steps before anything
+        // grows -- at a few dozen it has only blurred the seed, which is what
+        // the first version of this did, and it looked like a coloured haze
+        // because that is all it was. Cells are cheap; steps are the effect.
+        const int gw = std::clamp(ctx.width / 6, 32, 192);
+        const int gh = std::clamp(ctx.height / 6, 32, 192);
+        const std::size_t cells = static_cast<std::size_t>(gw) * gh;
+        const float seedDensity = static_cast<float>(0.30 + pC * 0.55);
+        std::vector<float> u(cells, 1.0f), v(cells, 0.0f);
+        for (int gy = 0; gy < gh; ++gy) {
+          const int sy = std::min(ctx.height - 1, gy * ctx.height / gh);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int sx = std::min(ctx.width - 1, gx * ctx.width / gw);
+            const std::uint8_t* p =
+              pixels.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+            const float l =
+              static_cast<float>(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255.0f;
+            // SPARSE seeds in a full field of U, which is what Gray-Scott
+            // needs and the reason a first attempt grew nothing. Seeding V
+            // across every bright pixel leaves those cells with no U around
+            // them to consume: U is eaten in one step, V then decays 9% a step
+            // while feed replenishes U at 3%, and the whole field is dead long
+            // before it could organise. (It was also four times SLOWER that
+            // way -- a field decaying toward zero spends its last few hundred
+            // steps in denormal arithmetic.)
+            //
+            // Scattered seeds in a full reservoir is the arrangement every
+            // working Gray-Scott uses: each one eats outward into the U around
+            // it, and the front is the pattern.
+            const std::size_t ci = static_cast<std::size_t>(gy) * gw + gx;
+            // Seeded in 2x2 BLOCKS, not single cells. A lone cell of V is
+            // mostly boundary: it diffuses into the surrounding U faster than
+            // the reaction can consume it, and the gentler presets (solitons,
+            // mitosis, worms) all died on contact. A block has an interior and
+            // survives long enough to organise.
+            std::uint32_t h = static_cast<std::uint32_t>((gx >> 1) * 374761393 +
+                                                         (gy >> 1) * 668265263);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            const float pick = static_cast<float>(h >> 8) / 16777216.0f;
+            // seed density: how much of the picture is seeded. At 0 it is
+            // the 0.30 this was fixed at.
+            v[ci] = pick < l * l * seedDensity ? 1.0f : 0.0f;
+            u[ci] = 1.0f;
+          }
+        }
+        // Feed and kill are NOT independent knobs here, and that is deliberate.
+        // Gray-Scott only produces anything over a thin curved sliver of the
+        // (F,k) plane; almost everywhere else the reaction dies out flat or
+        // floods solid, and a first attempt at this shipped a pair sitting in
+        // the dead zone -- 500 iterations of nothing, which looked like a
+        // coloured haze because that is all it was. So paramA walks ALONG the
+        // living region instead of across it: one knob, and every position on
+        // it grows something.
+        // paramA walks a curve through PRESETS THAT ARE KNOWN TO LIVE, rather
+        // than interpolating F and k independently. Two earlier attempts picked
+        // plausible-looking pairs and both died: one showed nothing at all, the
+        // other grew for a hundred steps and had vanished by nine hundred. The
+        // living region is a thin sliver and it does not run along either axis,
+        // so the only reliable way to stay inside it is to steer between points
+        // that are documented to work.
+        static const struct { float feed, kill; } kLiving[] = {
+          {0.0390f, 0.0580f},   // waves
+          {0.0460f, 0.0594f},   // labyrinth
+          {0.0545f, 0.0620f},   // coral
+          {0.0580f, 0.0650f},   // worms
+          {0.0620f, 0.0610f},   // holes, on the edge of chaos
+        };
+        const int kLivingCount = static_cast<int>(sizeof(kLiving) / sizeof(kLiving[0]));
+        const double along = pA * (kLivingCount - 1);
+        const int lo = std::min(kLivingCount - 1, static_cast<int>(along));
+        const int hi = std::min(kLivingCount - 1, lo + 1);
+        const float blend = static_cast<float>(along - lo);
+        const float feed = kLiving[lo].feed + blend * (kLiving[hi].feed - kLiving[lo].feed);
+        const float kill = kLiving[lo].kill + blend * (kLiving[hi].kill - kLiving[lo].kill);
+        // Karl Sims' weights and rates, which are the ones known to actually
+        // evolve: a 9-point laplacian normalised to a -1 centre, and diffusion
+        // an order of magnitude faster than a naive 5-point stencil can carry.
+        // The earlier 5-point version was stable but so slow that hundreds of
+        // steps moved nothing.
+        const int iters = 60 + static_cast<int>(pB * 440.0);
+        std::vector<float> un(cells), vn(cells);
+        // Hundreds of small DEPENDENT steps, so the threads are created once
+        // and parked on a barrier between them. Handing the work out per step
+        // instead -- which is what suits a single pass over a frame -- made
+        // this 1.8x SLOWER than one core, measured.
+        //
+        // Row pointers, too: recomputing gy*gw+gx nine times a cell was most
+        // of what was left after the threading.
+        detail::iteratedBands(iters, gh, 24,
+          [&](int, int firstRow, int lastRow) {
+          for (int gy = firstRow; gy < lastRow; ++gy) {
+            const int ym = std::max(0, gy - 1), yp = std::min(gh - 1, gy + 1);
+            const float* uMid = u.data() + static_cast<std::size_t>(gy) * gw;
+            const float* uUp  = u.data() + static_cast<std::size_t>(ym) * gw;
+            const float* uDn  = u.data() + static_cast<std::size_t>(yp) * gw;
+            const float* vMid = v.data() + static_cast<std::size_t>(gy) * gw;
+            const float* vUp  = v.data() + static_cast<std::size_t>(ym) * gw;
+            const float* vDn  = v.data() + static_cast<std::size_t>(yp) * gw;
+            float* uOut = un.data() + static_cast<std::size_t>(gy) * gw;
+            float* vOut = vn.data() + static_cast<std::size_t>(gy) * gw;
+            for (int gx = 0; gx < gw; ++gx) {
+              const int xm = gx > 0 ? gx - 1 : 0;
+              const int xp = gx + 1 < gw ? gx + 1 : gw - 1;
+              const float lapU = (uMid[xm] + uMid[xp] + uUp[gx] + uDn[gx]) * 0.2f +
+                                 (uUp[xm] + uUp[xp] + uDn[xm] + uDn[xp]) * 0.05f - uMid[gx];
+              const float lapV = (vMid[xm] + vMid[xp] + vUp[gx] + vDn[gx]) * 0.2f +
+                                 (vUp[xm] + vUp[xp] + vDn[xm] + vDn[xp]) * 0.05f - vMid[gx];
+              const float uvv = uMid[gx] * vMid[gx] * vMid[gx];
+              uOut[gx] = std::clamp(
+                uMid[gx] + (1.0f * lapU - uvv + feed * (1.0f - uMid[gx])), 0.0f, 1.0f);
+              const float nv = vMid[gx] + (0.5f * lapV + uvv - (feed + kill) * vMid[gx]);
+              // Flushed rather than merely clamped: a value decaying toward
+              // zero goes denormal and denormal arithmetic costs an order of
+              // magnitude, which showed up as the effect getting slower the
+              // less it had to say.
+              vOut[gx] = nv < 1e-7f ? 0.0f : std::clamp(nv, 0.0f, 1.0f);
+            }
+          }
+          },
+          [&](int) {
+            // Between steps, with every band stopped: the swap is the one
+            // moment the grid is not safe to read.
+            u.swap(un);
+            v.swap(vn);
+          });
+        // V is where the reaction ran, and that is what gets drawn: the picture
+        // folds through its own negative wherever the growth reached, so the
+        // veins read as light coming THROUGH the image rather than paint on it.
+        // Sampled bilinearly on the way out. The reaction grid is a fraction
+        // of the raster, and reading it nearest-neighbour drew the pattern as
+        // visible rectangles -- the growth is organic and it should not arrive
+        // looking like a spreadsheet.
+        // Split across cores: the reaction grid is read-only here.
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double fy = std::clamp((y + 0.5) * gh / ctx.height - 0.5, 0.0, gh - 1.0);
+            const int gy0 = static_cast<int>(fy);
+            const int gy1 = std::min(gh - 1, gy0 + 1);
+            const double wy = fy - gy0;
+            std::uint8_t* row = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double fxs = std::clamp((x + 0.5) * gw / ctx.width - 0.5, 0.0, gw - 1.0);
+              const int gx0 = static_cast<int>(fxs);
+              const int gx1 = std::min(gw - 1, gx0 + 1);
+              const double wx = fxs - gx0;
+              const double top =
+                v[static_cast<std::size_t>(gy0) * gw + gx0] * (1.0 - wx) +
+                v[static_cast<std::size_t>(gy0) * gw + gx1] * wx;
+              const double bot =
+                v[static_cast<std::size_t>(gy1) * gw + gx0] * (1.0 - wx) +
+                v[static_cast<std::size_t>(gy1) * gw + gx1] * wx;
+              const double grown =
+                std::clamp((top * (1.0 - wy) + bot * wy) * 3.2, 0.0, 1.0);
+              if (grown <= 0.002) continue;
+              const double mix = grown * amt;
+              std::uint8_t* p = row + static_cast<std::size_t>(x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                // glow: at 0 the growth folds the picture through its own
+                // negative, which is what this always did. Wound up, it lifts
+                // toward white instead, so the veins read as light on top of the
+                // picture rather than through it.
+                const double target = (255 - p[c]) * (1.0 - pD) + 255.0 * pD;
+                p[c] = detail::clamp8(p[c] * (1.0 - mix) + target * mix);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Caustics: {
+        // The picture seen through moving water -- and unlike every other
+        // "water" effect, the LIGHT is computed rather than only the bend.
+        //
+        // A refracting surface does two things at once: it displaces what you
+        // see through it, and it concentrates or spreads the light doing so.
+        // Where neighbouring rays are pushed TOWARD each other the brightness
+        // piles up, and those bright filaments are caustics -- the moving net
+        // of light on the floor of a swimming pool. Displacement alone is a
+        // wobble; the wobble plus the focusing is what the eye reads as water.
+        //
+        // The focusing term is the DIVERGENCE of the displacement field. Where
+        // it is negative the rays converge and the pixel brightens, where it is
+        // positive they spread and it dims. One finite difference per cell, and
+        // it is the whole difference between this and a ripple.
+        const int gw = std::clamp(ctx.width / 6, 16, 320);
+        const int gh = std::clamp(ctx.height / 6, 16, 320);
+        const double phase = static_cast<double>(ctx.frameIndex) * 0.05 *
+                             (0.35 + pB * 2.4);
+        // Four crossed waves at different angles and rates, which is what stops
+        // it reading as a regular grid. paramA is how fine the chop is: long
+        // ocean swell at one end, rain on a puddle at the other.
+        const double chop = 3.0 + pA * 26.0;
+        std::vector<float> height(static_cast<std::size_t>(gw) * gh, 0.0f);
+        for (int gy = 0; gy < gh; ++gy) {
+          const double v = static_cast<double>(gy) / gh;
+          for (int gx = 0; gx < gw; ++gx) {
+            const double u = static_cast<double>(gx) / gw;
+            double h = std::sin((u * chop) + phase);
+            h += std::sin((v * chop * 0.87) - phase * 1.31);
+            h += std::sin((u * 0.7 + v * 0.7) * chop * 1.19 + phase * 0.63);
+            h += std::sin((u * 0.6 - v * 0.8) * chop * 1.53 - phase * 0.41);
+            height[static_cast<std::size_t>(gy) * gw + gx] = static_cast<float>(h * 0.25);
+          }
+        }
+        // Slope gives the bend; the change in slope gives the focusing.
+        const double bend = amt * std::max(ctx.width, ctx.height) * 0.045;
+        std::vector<float> dxField(static_cast<std::size_t>(gw) * gh, 0.0f);
+        std::vector<float> dyField(static_cast<std::size_t>(gw) * gh, 0.0f);
+        std::vector<float> light(static_cast<std::size_t>(gw) * gh, 1.0f);
+        for (int gy = 0; gy < gh; ++gy) {
+          const int ym = std::max(0, gy - 1), yp = std::min(gh - 1, gy + 1);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int xm = std::max(0, gx - 1), xp = std::min(gw - 1, gx + 1);
+            const std::size_t i = static_cast<std::size_t>(gy) * gw + gx;
+            dxField[i] = height[static_cast<std::size_t>(gy) * gw + xp] -
+                         height[static_cast<std::size_t>(gy) * gw + xm];
+            dyField[i] = height[static_cast<std::size_t>(yp) * gw + gx] -
+                         height[static_cast<std::size_t>(ym) * gw + gx];
+          }
+        }
+        for (int gy = 0; gy < gh; ++gy) {
+          const int ym = std::max(0, gy - 1), yp = std::min(gh - 1, gy + 1);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int xm = std::max(0, gx - 1), xp = std::min(gw - 1, gx + 1);
+            const std::size_t i = static_cast<std::size_t>(gy) * gw + gx;
+            const double divergence =
+              (dxField[static_cast<std::size_t>(gy) * gw + xp] -
+               dxField[static_cast<std::size_t>(gy) * gw + xm]) +
+              (dyField[static_cast<std::size_t>(yp) * gw + gx] -
+               dyField[static_cast<std::size_t>(ym) * gw + gx]);
+            // Converging rays brighten, spreading rays dim.
+            //
+            // The scaling matters more than it looks. A steep tanh saturates
+            // on almost every cell, which turns the water into hard black and
+            // white bands -- it stops being light and becomes a stencil. A
+            // gentler curve, a smaller amplitude and a floor above zero keep
+            // the filaments bright while the troughs stay picture rather than
+            // going to nothing.
+            light[i] = static_cast<float>(std::clamp(
+              1.0 + std::tanh(-divergence * 5.0) * (0.10 + pC * 0.55),
+              0.35, 1.85));
+          }
+        }
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        const double gxScale = static_cast<double>(gw) / ctx.width;
+        const double gyScale = static_cast<double>(gh) / ctx.height;
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* dstRow = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            const int gy = std::clamp(static_cast<int>(y * gyScale), 0, gh - 1);
+            for (int x = 0; x < ctx.width; ++x) {
+              const int gx = std::clamp(static_cast<int>(x * gxScale), 0, gw - 1);
+              const std::size_t i = static_cast<std::size_t>(gy) * gw + gx;
+              const int sx = std::clamp(
+                static_cast<int>(std::lround(x + dxField[i] * bend)), 0, ctx.width - 1);
+              const int sy = std::clamp(
+                static_cast<int>(std::lround(y + dyField[i] * bend)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              std::uint8_t* dp = dstRow + static_cast<std::size_t>(x) * 4;
+              const double gain = light[i];
+              dp[0] = detail::clamp8(sp[0] * gain);
+              dp[1] = detail::clamp8(sp[1] * gain);
+              dp[2] = detail::clamp8(sp[2] * gain);
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Feedback: {
+        // Video feedback: a camera pointed at its own monitor, except the
+        // transform between passes is chosen rather than accidental.
+        //
+        // The whole character of feedback is what happens to the picture on its
+        // way round the loop. Scale it slightly up and the echo walks toward
+        // you as a tunnel; scale it down and it retreats; add a turn and the
+        // tunnel becomes a spiral; slide it and it smears into a comet. Those
+        // are the controls, because they are the loop.
+        //
+        // CONTROLLED, which is what makes it usable on a stage: the echo is
+        // always mixed at LESS than one, so each pass is strictly dimmer than
+        // the last and the loop cannot run away. Real feedback blows out to
+        // white the moment the gain passes unity and there is no getting it
+        // back during a show; here the worst case is a long trail.
+        if (!state) {
+          break;   // no buffer from this caller: do nothing rather than pretend
+        }
+        // TWO planes and a cursor byte, all inside the one buffer the caller
+        // carries. The obvious version allocated a whole frame every pass and
+        // copied it back afterwards -- at 1080p that is eight megabytes of
+        // allocation plus eight of memcpy per frame, and it was most of the
+        // cost. Here the previous frame is READ from one plane while the new
+        // one is written to the other and to the picture at the same time, so
+        // there is no allocation, no copy back, and the read and the write can
+        // never alias.
+        std::vector<std::uint8_t>& store = *state;
+        const std::size_t bytes = count * 4;
+        const std::size_t wanted = bytes * 2 + 1;
+        if (store.size() != wanted) {
+          // First frame, or the raster changed. Both planes start as the
+          // current picture, so the effect fades UP rather than flashing black.
+          store.assign(wanted, 0);
+          std::memcpy(store.data(), pixels.data(), bytes);
+          std::memcpy(store.data() + bytes, pixels.data(), bytes);
+          break;
+        }
+        // The cursor names the plane holding the newest frame. Stepping reads
+        // that one and writes the other, then moves the cursor; holding reads
+        // the plane the step already read, which is the one the cursor does not
+        // name, and writes nothing.
+        const bool secondPlaneIsLatest = store[bytes * 2] != 0;
+        const bool hold = ctx.stateHold;
+        const std::uint8_t* previous =
+          store.data() + ((secondPlaneIsLatest != hold) ? bytes : 0);
+        std::uint8_t* record =
+          hold ? nullptr : store.data() + (secondPlaneIsLatest ? 0 : bytes);
+        if (!hold) {
+          store[bytes * 2] = secondPlaneIsLatest ? 0 : 1;
+        }
+
+        // Capped below 1: at amount 1.0 the echo is 0.92 per pass, which is a
+        // very long trail and still strictly decaying.
+        const double echo = amt * 0.92;
+        const double zoom = 1.0 + (pA - 0.5) * 0.24;      // 0.5 holds still
+        const double spin = (pB - 0.5) * 0.12;            // radians per pass
+        const double drift = (pC - 0.5) * 0.06 * ctx.width;
+        // Per-channel decay, so a trail can change colour as it fades instead
+        // of only going dim.
+        const double bleed = pD * 0.35;
+        const double chanEcho[3] = {echo, echo * (1.0 - bleed * 0.5),
+                                    echo * (1.0 - bleed)};
+        const double cx = ctx.width * 0.5;
+        const double cy = ctx.height * 0.5;
+        const double cosSpin = std::cos(spin);
+        const double sinSpin = std::sin(spin);
+        // The echo is a fixed function of one byte, so it is three tables
+        // rather than three multiplies and a clamp per pixel -- the same trick
+        // the channel effects use, for the same reason.
+        std::uint8_t echoLut[3][256];
+        for (int c = 0; c < 3; ++c) {
+          for (int v = 0; v < 256; ++v) {
+            echoLut[c][v] = detail::clamp8(v * chanEcho[c]);
+          }
+        }
+        // The source coordinate is affine in x, so it is a start and a step
+        // per row in fixed point instead of two rotations and two lrounds per
+        // pixel. Rounding is floor(v + 0.5), which agrees with lround
+        // everywhere except an exact -0.5, and that lands outside the frame.
+        //
+        // 32 fractional bits, not 16: at 16 the step's own rounding error
+        // accumulates to about four thousandths of a pixel across a 1080p row,
+        // which is enough to flip a sample that sits near a half and moved a
+        // few dozen pixels of a colour bar. At 32 the drift across a row is
+        // under a millionth of a pixel and the result matches the plain double
+        // version byte for byte.
+        const std::int64_t kOne = static_cast<std::int64_t>(1) << 32;
+        const std::int64_t stepX =
+          static_cast<std::int64_t>(std::llround((cosSpin / zoom) * 4294967296.0));
+        const std::int64_t stepY =
+          static_cast<std::int64_t>(std::llround((sinSpin / zoom) * 4294967296.0));
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double ny = (y - cy) / zoom;
+            std::int64_t accX = static_cast<std::int64_t>(std::llround(
+              (cx - cx * cosSpin / zoom - ny * sinSpin + drift) * 4294967296.0)) +
+              kOne / 2;
+            std::int64_t accY = static_cast<std::int64_t>(std::llround(
+              (cy - cx * sinSpin / zoom + ny * cosSpin) * 4294967296.0)) + kOne / 2;
+            const std::size_t rowBase = static_cast<std::size_t>(y) * ctx.width * 4;
+            std::uint8_t* live = pixels.data() + rowBase;
+            std::uint8_t* keep = record ? record + rowBase : nullptr;
+            for (int x = 0; x < ctx.width; ++x, accX += stepX, accY += stepY) {
+              const int sx = static_cast<int>(accX >> 32);
+              const int sy = static_cast<int>(accY >> 32);
+              std::uint8_t* lp = live + static_cast<std::size_t>(x) * 4;
+              std::uint8_t* kp = keep ? keep + static_cast<std::size_t>(x) * 4 : nullptr;
+              if (sx < 0 || sy < 0 || sx >= ctx.width || sy >= ctx.height) {
+                // Off the edge is not black: there is simply no echo there, so
+                // the live picture stands alone and the frame keeps its border.
+                if (kp) {
+                  kp[0] = lp[0]; kp[1] = lp[1]; kp[2] = lp[2]; kp[3] = 255;
+                }
+                continue;
+              }
+              const std::uint8_t* pp =
+                previous + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              for (int c = 0; c < 3; ++c) {
+                // LIGHTEN, not add. This is the whole safety argument, and it
+                // was arrived at by watching the additive version turn a colour
+                // bar to white in twenty frames -- a third of a second, on
+                // stage. Adding has a fixed point at L/(1-echo), several times
+                // the input and therefore clipped white; taking the brighter of
+                // the two has its fixed point at L, so the picture can never
+                // come out brighter than the picture went in. The echo is
+                // strictly dimmer each pass, so trails decay to nothing and the
+                // loop is bounded however long it runs.
+                const std::uint8_t echoed = echoLut[c][pp[c]];
+                const std::uint8_t v = echoed > lp[c] ? echoed : lp[c];
+                lp[c] = v;
+                if (kp) kp[c] = v;
+              }
+              lp[3] = 255;
+              if (kp) kp[3] = 255;
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::FeedbackBloom: {
+        // THE OIL-SLICK LOOP. Feedback moves the echo; this one also turns its
+        // colour and distorts it, on every pass, so both compound.
+        //
+        // The buffer is Feedback's: two planes and a cursor byte in the one
+        // allocation the caller carries, read from one and written to the
+        // other so nothing aliases and nothing is allocated per frame.
+        if (!state) {
+          break;   // no buffer from this caller: do nothing rather than pretend
+        }
+        std::vector<std::uint8_t>& store = *state;
+        const std::size_t bytes = count * 4;
+        const std::size_t wanted = bytes * 2 + 1;
+        if (store.size() != wanted) {
+          store.assign(wanted, 0);
+          std::memcpy(store.data(), pixels.data(), bytes);
+          std::memcpy(store.data() + bytes, pixels.data(), bytes);
+          break;
+        }
+        const bool secondPlaneIsLatest = store[bytes * 2] != 0;
+        const bool hold = ctx.stateHold;
+        const std::uint8_t* previous =
+          store.data() + ((secondPlaneIsLatest != hold) ? bytes : 0);
+        std::uint8_t* record =
+          hold ? nullptr : store.data() + (secondPlaneIsLatest ? 0 : bytes);
+        if (!hold) {
+          store[bytes * 2] = secondPlaneIsLatest ? 0 : 1;
+        }
+
+        const double echo = amt * 0.92;
+        const double turn = (pA - 0.5) * 0.55;          // radians of hue, per pass
+        const double melt = pB * 0.05 * ctx.width;      // pixels of warp, per pass
+        const double zoom = 1.0 + (pC - 0.5) * 0.20;    // 0.5 holds still
+        const double spin = (pD - 0.5) * 0.10;
+
+        // HUE ROTATION, as a 3x3 on RGB. The standard construction: the grey
+        // axis is fixed and the plane orthogonal to it turns.
+        const double cosH = std::cos(turn), sinH = std::sin(turn);
+        const double third = 1.0 / 3.0;
+        const double rt3 = std::sqrt(1.0 / 3.0);
+        double m[3][3];
+        for (int i = 0; i < 3; ++i) {
+          for (int j = 0; j < 3; ++j) {
+            const double same = (i == j) ? 1.0 : 0.0;
+            // The cross-product term's sign depends on which way round the
+            // pair is; (i + 1) % 3 == j is the "next" direction.
+            const double cross = (i == j) ? 0.0
+                               : (((i + 1) % 3 == j) ? -rt3 : rt3);
+            m[i][j] = third + cosH * (same - third) + sinH * cross;
+          }
+        }
+        // NON-AMPLIFYING, which is the whole safety argument. Each row sums to
+        // one, so white stays white, but the rows carry negative coefficients
+        // and the POSITIVE ones can sum past one -- a channel then comes back
+        // brighter than it went in, and in a loop that is a ratchet to white.
+        // Scaling by the largest positive row sum makes every pass strictly
+        // non-amplifying at any angle.
+        double gain = 1.0;
+        for (int i = 0; i < 3; ++i) {
+          double positive = 0.0;
+          for (int j = 0; j < 3; ++j) {
+            if (m[i][j] > 0.0) positive += m[i][j];
+          }
+          if (positive > gain) gain = positive;
+        }
+        for (int i = 0; i < 3; ++i) {
+          for (int j = 0; j < 3; ++j) m[i][j] *= echo / gain;
+        }
+
+        // THE WARP IS SEPARABLE: the horizontal offset depends only on the row
+        // and the vertical only on the column, so it is two tables built once
+        // rather than two sines per pixel -- four million of each at 1080p.
+        // The phase walks with the frame index so the melt keeps moving on a
+        // held still.
+        const double phase = static_cast<double>(ctx.frameIndex) * 0.031;
+        std::vector<double> warpX(static_cast<std::size_t>(ctx.height));
+        std::vector<double> warpY(static_cast<std::size_t>(ctx.width));
+        for (int y = 0; y < ctx.height; ++y) {
+          const double v = static_cast<double>(y) / std::max(1, ctx.height);
+          warpX[static_cast<std::size_t>(y)] =
+            melt * (std::sin(v * 11.0 + phase) * 0.6 +
+                    std::sin(v * 4.3 - phase * 0.7) * 0.4);
+        }
+        for (int x = 0; x < ctx.width; ++x) {
+          const double u = static_cast<double>(x) / std::max(1, ctx.width);
+          warpY[static_cast<std::size_t>(x)] =
+            melt * (std::sin(u * 9.0 - phase * 1.3) * 0.6 +
+                    std::sin(u * 3.7 + phase * 0.5) * 0.4);
+        }
+
+        const double cx = ctx.width * 0.5;
+        const double cy = ctx.height * 0.5;
+        const double cosSpin = std::cos(spin);
+        const double sinSpin = std::sin(spin);
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double ny = (y - cy) / zoom;
+            const double dx = warpX[static_cast<std::size_t>(y)];
+            const std::size_t rowBase = static_cast<std::size_t>(y) * ctx.width * 4;
+            std::uint8_t* live = pixels.data() + rowBase;
+            std::uint8_t* keep = record ? record + rowBase : nullptr;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double nx = (x - cx);
+              const double sxf = cx + (nx * cosSpin / zoom - ny * sinSpin) + dx;
+              const double syf = cy + (nx * sinSpin / zoom + ny * cosSpin)
+                               + warpY[static_cast<std::size_t>(x)];
+              const int sx = static_cast<int>(std::lround(sxf));
+              const int sy = static_cast<int>(std::lround(syf));
+              std::uint8_t* lp = live + static_cast<std::size_t>(x) * 4;
+              std::uint8_t* kp = keep ? keep + static_cast<std::size_t>(x) * 4 : nullptr;
+              if (sx < 0 || sy < 0 || sx >= ctx.width || sy >= ctx.height) {
+                // Off the edge is not black: there is no echo there, so the
+                // live picture stands alone and the frame keeps its border.
+                if (kp) { kp[0] = lp[0]; kp[1] = lp[1]; kp[2] = lp[2]; kp[3] = 255; }
+                continue;
+              }
+              const std::uint8_t* pp =
+                previous + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              const double pr = pp[0], pg = pp[1], pb = pp[2];
+              for (int c = 0; c < 3; ++c) {
+                const double turned = m[c][0] * pr + m[c][1] * pg + m[c][2] * pb;
+                const std::uint8_t echoed = detail::clamp8(turned);
+                // LIGHTEN, not add: the fixed point is the input rather than
+                // input/(1-echo), so the loop cannot climb to white however
+                // long it runs.
+                const std::uint8_t v = echoed > lp[c] ? echoed : lp[c];
+                lp[c] = v;
+                if (kp) kp[c] = v;
+              }
+              lp[3] = 255;
+              if (kp) kp[3] = 255;
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Schlieren: {
+        // SCHLIEREN — the instrument physicists use to photograph air.
+        //
+        // You cannot see a shockwave, a candle's plume or the heat off a road,
+        // because air is transparent. Schlieren photography makes them visible
+        // anyway: light bent by a density gradient is either passed or blocked
+        // by a knife edge at the focus, so a gradient the eye could never see
+        // becomes brightness. It is how every photograph of a bullet's shockwave
+        // was taken.
+        //
+        // Here the PICTURE is the density field. What comes out is not the
+        // image and not its edges: it is the rate at which the image is
+        // changing, in one chosen direction, with everything flat turned to
+        // mid-grey. Rotating the knife swaps which features exist and which
+        // disappear entirely, which is the part that reads as an instrument
+        // rather than as a filter.
+        const double knife = pA * 6.283185307179586;   // the edge's angle
+        const double kx = std::cos(knife), ky = std::sin(knife);
+        // A real bench has a sensitivity set by focal length and knife
+        // position. This is that knob.
+        const double gain = 0.6 + pB * 14.0;
+        const double tint = pC;
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int ym = std::max(0, y - 1), yp = std::min(ctx.height - 1, y + 1);
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const int xm = std::max(0, x - 1), xp = std::min(ctx.width - 1, x + 1);
+              auto lumaAt = [&](int px, int py) {
+                const std::uint8_t* p =
+                  source.data() + (static_cast<std::size_t>(py) * ctx.width + px) * 4;
+                return (p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255.0;
+              };
+              // The gradient, projected onto the knife's normal. Only the
+              // component ACROSS the edge is passed -- light bent along it
+              // misses the knife entirely and contributes nothing, which is
+              // exactly why turning the knife changes what you can see.
+              const double gx = lumaAt(xp, y) - lumaAt(xm, y);
+              const double gy = lumaAt(x, yp) - lumaAt(x, ym);
+              const double cut = (gx * kx + gy * ky) * gain;
+              // Mid-grey is "no deflection", which is what an undisturbed
+              // schlieren image looks like: a flat grey field with only the
+              // disturbances in it.
+              const double lit = 0.5 + cut * 0.5;
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              // Colour schlieren replaces the knife with a filter, so the
+              // direction of bending reads as hue rather than as brightness.
+              const double warm = lit + cut * tint * 0.6;
+              const double cool = lit - cut * tint * 0.6;
+              const double out[3] = {warm, lit, cool};
+              for (int c = 0; c < 3; ++c) {
+                dp[c] = detail::clamp8(sp[c] * (1.0 - amt) + out[c] * 255.0 * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Chladni: {
+        // CHLADNI -- the shape a sound makes.
+        //
+        // Bow the edge of a metal plate with sand on it and the sand runs away
+        // from everywhere that is moving, piling up along the lines that happen
+        // to be standing still. Those lines are the nodes of the plate's
+        // vibration; Chladni catalogued them in 1787, and they are why violins
+        // are the shape they are.
+        //
+        // The picture is the sand. Every pixel walks DOWN the slope of the
+        // plate's amplitude until it is standing somewhere that is not moving,
+        // so the image gathers itself into the figure of whichever note the
+        // plate is being played at.
+        //
+        // The mode numbers are the note. Whole numbers give the clean classical
+        // figures; between them the plate is being driven at a frequency it
+        // does not want and the pattern is correspondingly unresolved -- which
+        // is what a real plate does, and worth keeping rather than quantising
+        // away.
+        const double m = 1.0 + pA * 8.0;
+        const double n = 1.0 + pB * 8.0;
+        const double pull = amt * std::max(ctx.width, ctx.height) * 0.06 * (0.2 + pC);
+        const double glow = pD;
+        const double kPi = 3.141592653589793;
+        // SEPARABLE, so the sines are tables rather than per-pixel work.
+        //
+        // The plate is sin(m.pi.u).sin(n.pi.v) - sin(n.pi.u).sin(m.pi.v), and
+        // the first attempt evaluated that five times per pixel to get the
+        // value and its slope: twenty sines per pixel, which cost 24ms at 1080p
+        // and was the entire effect. But u depends only on x and v only on y,
+        // so two tables of width and three rows of constants replace all of it,
+        // and the inner loop does no trigonometry at all.
+        std::vector<double> sinMu(static_cast<std::size_t>(ctx.width));
+        std::vector<double> sinNu(static_cast<std::size_t>(ctx.width));
+        const double invW = 1.0 / std::max(1, ctx.width - 1);
+        const double invH = 1.0 / std::max(1, ctx.height - 1);
+        for (int x = 0; x < ctx.width; ++x) {
+          const double u = x * invW;
+          sinMu[static_cast<std::size_t>(x)] = std::sin(m * kPi * u);
+          sinNu[static_cast<std::size_t>(x)] = std::sin(n * kPi * u);
+        }
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int yUp = std::max(0, y - 1);
+            const int yDn = std::min(ctx.height - 1, y + 1);
+            // Three rows of constants: this row and the two the vertical
+            // difference needs.
+            const double sinMv = std::sin(m * kPi * (y * invH));
+            const double sinNv = std::sin(n * kPi * (y * invH));
+            const double sinMvUp = std::sin(m * kPi * (yUp * invH));
+            const double sinNvUp = std::sin(n * kPi * (yUp * invH));
+            const double sinMvDn = std::sin(m * kPi * (yDn * invH));
+            const double sinNvDn = std::sin(n * kPi * (yDn * invH));
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const int xm = std::max(0, x - 1);
+              const int xp = std::min(ctx.width - 1, x + 1);
+              const double su = sinMu[static_cast<std::size_t>(x)];
+              const double sn = sinNu[static_cast<std::size_t>(x)];
+              const double a = su * sinNv - sn * sinMv;
+              const double mag = std::fabs(a);
+              // Downhill on |amplitude|, by one finite difference each way. A
+              // grain of sand does not know where the node is; it only knows
+              // which way is quieter, and that is enough to find it.
+              const double dx =
+                std::fabs(sinMu[static_cast<std::size_t>(xp)] * sinNv -
+                          sinNu[static_cast<std::size_t>(xp)] * sinMv) -
+                std::fabs(sinMu[static_cast<std::size_t>(xm)] * sinNv -
+                          sinNu[static_cast<std::size_t>(xm)] * sinMv);
+              const double dy = std::fabs(su * sinNvDn - sn * sinMvDn) -
+                                std::fabs(su * sinNvUp - sn * sinMvUp);
+              const double len = std::sqrt(dx * dx + dy * dy) + 1e-6;
+              // Scaled by how far from a node it is: pixels already on a line
+              // stay put and ones out in the middle of a moving region travel
+              // furthest, which is what makes the lines sharpen rather than the
+              // whole picture sliding sideways.
+              const double travel = pull * std::min(1.0, mag * 2.0);
+              const int sx = std::clamp(
+                static_cast<int>(std::lround(x - dx / len * travel)), 0, ctx.width - 1);
+              const int sy = std::clamp(
+                static_cast<int>(std::lround(y - dy / len * travel)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              // The lines themselves lit, the way a ridge of sand catches a
+              // raking light.
+              const double onNode = 1.0 - std::min(1.0, mag * 3.0);
+              const double onLine = glow * onNode * onNode * onNode;
+              for (int c = 0; c < 3; ++c) {
+                dp[c] = detail::clamp8(sp[c] + onLine * 200.0);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Wavefront: {
+        // WAVEFRONT — the wave equation, not a wobble.
+        //
+        // Every "ripple" in every video app is a sine function of distance from
+        // a point: it looks like a wave and behaves like nothing. This solves
+        // the actual equation, d2u/dt2 = c^2 * laplacian(u), on a grid seeded
+        // from the picture's own brightness. Which means it has INERTIA -- the
+        // thing sine displacement has not got.
+        //
+        // What inertia buys you: waves that leave their source and keep going;
+        // that pass THROUGH each other and interfere, adding where crests meet
+        // and cancelling where a crest meets a trough; and that reflect off the
+        // edges of the frame and come back. None of that can be faked with a
+        // sine, and all of it is what a real surface does.
+        // A coarse field on purpose: this is a WAVE, and the fronts are large
+        // compared with a pixel. A quarter-resolution grid cost 17ms at 1080p
+        // to resolve detail the wave does not have.
+        const int gw = std::clamp(ctx.width / 6, 32, 360);
+        const int gh = std::clamp(ctx.height / 6, 32, 360);
+        const std::size_t cells = static_cast<std::size_t>(gw) * gh;
+        // Courant limit: above ~0.5 for a 2D grid the integration goes
+        // unstable and the whole field explodes into noise within a few steps.
+        // This is a hard ceiling, not a taste decision.
+        const double c2 = 0.06 + pA * 0.36;
+        const int iters = 6 + static_cast<int>(pB * 54.0);
+        const double damp = 1.0 - (0.0005 + pC * 0.02);
+        std::vector<float> u(cells, 0.0f), uPrev(cells, 0.0f), uNext(cells, 0.0f);
+        // Seeded from brightness, AVERAGED over the cell it stands for and
+        // mean-removed.
+        //
+        // Point-sampling one pixel per cell seeds the plate with the picture's
+        // highest frequencies, and a wave equation handed noise gives noise
+        // back -- correctly, which is the trap. Averaging the block makes the
+        // initial displacement smooth enough that what propagates is a
+        // wavefront rather than the aliasing. Removing the mean matters too:
+        // leave it in and the whole plate starts displaced the same way and
+        // sloshes as one lump instead of rippling.
+        double mean = 0.0;
+        for (int gy = 0; gy < gh; ++gy) {
+          const int y0 = gy * ctx.height / gh;
+          const int y1 = std::max(y0 + 1, (gy + 1) * ctx.height / gh);
+          for (int gx = 0; gx < gw; ++gx) {
+            const int x0 = gx * ctx.width / gw;
+            const int x1 = std::max(x0 + 1, (gx + 1) * ctx.width / gw);
+            double sum = 0.0;
+            int n = 0;
+            for (int sy = y0; sy < y1; ++sy) {
+              const std::uint8_t* row =
+                pixels.data() + static_cast<std::size_t>(sy) * ctx.width * 4;
+              for (int sx = x0; sx < x1; ++sx) {
+                const std::uint8_t* p = row + static_cast<std::size_t>(sx) * 4;
+                sum += p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114;
+                ++n;
+              }
+            }
+            const double l = sum / (std::max(1, n) * 255.0);
+            u[static_cast<std::size_t>(gy) * gw + gx] = static_cast<float>(l);
+            mean += l;
+          }
+        }
+        mean /= static_cast<double>(cells);
+        for (float& value : u) value -= static_cast<float>(mean);
+        uPrev = u;
+        // Persistent threads on a barrier, as reaction-diffusion learned: many
+        // small DEPENDENT steps, and dispatching each one was 1.8x slower than
+        // a single core.
+        detail::iteratedBands(iters, gh, 24, [&](int, int firstRow, int lastRow) {
+          for (int gy = firstRow; gy < lastRow; ++gy) {
+            const int ym = std::max(0, gy - 1), yp = std::min(gh - 1, gy + 1);
+            const float* mid = u.data() + static_cast<std::size_t>(gy) * gw;
+            const float* up  = u.data() + static_cast<std::size_t>(ym) * gw;
+            const float* dn  = u.data() + static_cast<std::size_t>(yp) * gw;
+            const float* old = uPrev.data() + static_cast<std::size_t>(gy) * gw;
+            float* out = uNext.data() + static_cast<std::size_t>(gy) * gw;
+            for (int gx = 0; gx < gw; ++gx) {
+              const int xm = std::max(0, gx - 1), xp = std::min(gw - 1, gx + 1);
+              const float lap = mid[xm] + mid[xp] + up[gx] + dn[gx] - 4.0f * mid[gx];
+              // The two-step form: the new displacement depends on the
+              // previous TWO, which is where the memory of motion lives.
+              out[gx] = static_cast<float>(
+                (2.0 * mid[gx] - old[gx] + c2 * lap) * damp);
+            }
+          }
+        }, [&](int) { u.swap(uPrev); u.swap(uNext); });
+        // Slope displaces the picture; height lights it.
+        //
+        // The scale is small ON PURPOSE. The first version used half the frame
+        // width per unit of slope, and since the grid slopes are order 0.1 that
+        // is a hundred-pixel jump between neighbouring cells: the picture came
+        // out as speckle and looked like an unstable solver rather than what it
+        // was, an enormous displacement of a perfectly good wave.
+        const double bend = amt * std::max(ctx.width, ctx.height) * 0.02;
+        const double relief = pD;
+        const double gxScale = static_cast<double>(gw) / ctx.width;
+        const double gyScale = static_cast<double>(gh) / ctx.height;
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        // The field is read BILINEARLY, not per grid cell.
+        //
+        // Taking the nearest cell put visible square blocks across the picture
+        // — the grid showing through, which is the one thing a wave must not
+        // look like. Interpolating costs four reads instead of one and the
+        // blocks go away entirely; the wave is smooth by nature, so this is
+        // reconstructing it rather than smoothing it over.
+        // sampleX / sampleY, not fx / fy: `fx` is the CueEffect being applied,
+        // in scope for this whole function.
+        auto fieldAt = [&](double sampleX, double sampleY) {
+          sampleX = std::clamp(sampleX, 0.0, gw - 1.0);
+          sampleY = std::clamp(sampleY, 0.0, gh - 1.0);
+          const int x0 = static_cast<int>(sampleX), y0 = static_cast<int>(sampleY);
+          const int x1 = std::min(gw - 1, x0 + 1), y1 = std::min(gh - 1, y0 + 1);
+          const double tx = sampleX - x0, ty = sampleY - y0;
+          const double a = u[static_cast<std::size_t>(y0) * gw + x0];
+          const double b = u[static_cast<std::size_t>(y0) * gw + x1];
+          const double c = u[static_cast<std::size_t>(y1) * gw + x0];
+          const double e = u[static_cast<std::size_t>(y1) * gw + x1];
+          return (a * (1.0 - tx) + b * tx) * (1.0 - ty) +
+                 (c * (1.0 - tx) + e * tx) * ty;
+        };
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double fy = y * gyScale;
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double sampleX = x * gxScale;
+              const double here = fieldAt(sampleX, fy);
+              const double sx = fieldAt(sampleX + 1.0, fy) - fieldAt(sampleX - 1.0, fy);
+              const double sy = fieldAt(sampleX, fy + 1.0) - fieldAt(sampleX, fy - 1.0);
+              const int px = std::clamp(
+                static_cast<int>(std::lround(x + sx * bend)), 0, ctx.width - 1);
+              const int py = std::clamp(
+                static_cast<int>(std::lround(y + sy * bend)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(py) * ctx.width + px) * 4;
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              const double lift = 1.0 + here * relief * 3.0;
+              for (int c = 0; c < 3; ++c) {
+                dp[c] = detail::clamp8(sp[c] * lift);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Crystallise: {
+        // CRYSTALLISE — grain growth, not a mosaic.
+        //
+        // A mosaic filter divides the frame into a grid. Metal does not
+        // solidify on a grid: crystals NUCLEATE at scattered points and grow
+        // outward until they run into each other, and where they meet is a
+        // grain boundary. The cell each pixel ends up in is the one whose seed
+        // reached it first, which is a Voronoi diagram — and if the seeds grow
+        // at different speeds it stops being Voronoi and starts being the
+        // irregular, shard-like structure you see in a polished metal section.
+        //
+        // Each grain then gets a facet NORMAL from the direction back to its
+        // own seed, so the light catches it. That is what separates this from
+        // a blur into blobs: the grains have faces, and faces have angles.
+        const int cell = std::max(4, static_cast<int>(6 + pA * 90.0));
+        const double facet = pB;
+        const double wobble = pC;
+        const double edgeDark = pD;
+        // Seeds on a jittered lattice: one per cell, displaced inside it. A
+        // regular lattice gives a honeycomb, full jitter gives natural
+        // scattering, and the difference between those is what "irregularity"
+        // means here.
+        const int cols = std::max(1, ctx.width / cell + 2);
+        const int rows = std::max(1, ctx.height / cell + 2);
+        struct Seed { float x, y, speed; };
+        std::vector<Seed> seeds(static_cast<std::size_t>(cols) * rows);
+        for (int r = 0; r < rows; ++r) {
+          for (int c = 0; c < cols; ++c) {
+            std::uint32_t h = static_cast<std::uint32_t>(c * 374761393 + r * 668265263);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            const double jx = ((h >> 8) & 0xFFFF) / 65535.0 - 0.5;
+            const double jy = ((h >> 20) & 0x7FF) / 2047.0 - 0.5;
+            const double js = ((h >> 3) & 0x1F) / 31.0;
+            Seed& s = seeds[static_cast<std::size_t>(r) * cols + c];
+            s.x = static_cast<float>((c - 0.5) * cell + jx * cell * wobble);
+            s.y = static_cast<float>((r - 0.5) * cell + jy * cell * wobble);
+            // Different growth RATES are what make it crystals rather than
+            // Voronoi cells: a fast grain swallows its slower neighbours and
+            // comes out long and angular.
+            s.speed = static_cast<float>(1.0 - js * wobble * 0.75);
+          }
+        }
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            const int r0 = std::clamp(y / cell, 0, rows - 1);
+            for (int x = 0; x < ctx.width; ++x) {
+              const int c0 = std::clamp(x / cell, 0, cols - 1);
+              // Only the neighbouring lattice cells can own this pixel, so the
+              // search is nine seeds rather than all of them -- which is the
+              // difference between real time and not.
+              double best = 1e30, second = 1e30;
+              int bestIdx = -1;
+              for (int dr = 0; dr <= 2; ++dr) {
+                const int rr = std::clamp(r0 + dr - 1, 0, rows - 1);
+                for (int dc = 0; dc <= 2; ++dc) {
+                  const int cc = std::clamp(c0 + dc - 1, 0, cols - 1);
+                  const std::size_t si = static_cast<std::size_t>(rr) * cols + cc;
+                  const double ddx = x - seeds[si].x;
+                  const double ddy = y - seeds[si].y;
+                  // Divided by growth rate: "when did this grain arrive
+                  // here", not "how far away is the seed".
+                  //
+                  // Compared SQUARED. The ordering is identical because both
+                  // are positive, and it takes nine square roots per pixel out
+                  // of the inner loop -- eighteen million a frame at 1080p,
+                  // which was most of what this cost.
+                  const double sp2 = std::max(0.15f, seeds[si].speed);
+                  const double t = (ddx * ddx + ddy * ddy) / (sp2 * sp2);
+                  if (t < best) { second = best; best = t; bestIdx = static_cast<int>(si); }
+                  else if (t < second) { second = t; }
+                }
+              }
+              if (bestIdx < 0) continue;
+              const Seed& s = seeds[static_cast<std::size_t>(bestIdx)];
+              const int sx = std::clamp(static_cast<int>(std::lround(s.x)), 0, ctx.width - 1);
+              const int sy = std::clamp(static_cast<int>(std::lround(s.y)), 0, ctx.height - 1);
+              const std::uint8_t* sp =
+                source.data() + (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              // The facet: the direction from the seed out to this pixel IS
+              // the surface normal of that face, so one dot product with a
+              // fixed light gives the shading.
+              const double nx = (x - s.x) / std::max(1.0, static_cast<double>(cell));
+              const double ny = (y - s.y) / std::max(1.0, static_cast<double>(cell));
+              const double lit = 1.0 + (nx * 0.7 + ny * -0.7) * facet;
+              // Where the two nearest arrival times are close, the pixel is on
+              // a boundary -- the standard way to find a Voronoi edge without
+              // tracing one.
+              // Back to real distances for the boundary test, which is the
+              // only place the actual arrival TIME matters rather than its
+              // order. Two roots per pixel instead of nine.
+              const double edge = 1.0 - edgeDark *
+                std::exp(-std::fabs(std::sqrt(best) - std::sqrt(second)) * 0.55);
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              for (int ch = 0; ch < 3; ++ch) {
+                const double crystal = sp[ch] * lit * edge;
+                const std::uint8_t* orig =
+                  source.data() + (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+                dp[ch] = detail::clamp8(orig[ch] * (1.0 - amt) + crystal * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Scotopic: {
+        // SCOTOPIC — your own eyes, as an effect.
+        //
+        // The retina has two systems. Rods are fast, sensitive, and completely
+        // colour-blind. Cones see colour and are slow and need light. In the
+        // dark the rods take over, which is why night has no colour, why you
+        // see faint things better by not looking straight at them, and why
+        // moonlight photographs blue but never looks blue at the time.
+        //
+        // So: the brightness runs at full speed and the COLOUR lags behind it.
+        // Move something and it goes grey as it moves, its colour catching up
+        // a moment later. Nothing else in any effects rack does this, and
+        // everybody has experienced it.
+        //
+        // The Purkinje shift is the other half — as the rods take over, peak
+        // sensitivity slides from yellow-green toward blue-green, which is the
+        // real reason night reads as blue.
+        if (!state) {
+          break;   // no memory from this caller: do nothing rather than pretend
+        }
+        std::vector<std::uint8_t>& lag = *state;
+        const std::size_t bytes = count * 4;
+        if (lag.size() != bytes) {
+          // Seed and CARRY ON, rather than seeding and returning.
+          //
+          // Only the lag needs a previous frame; the rod/cone mix is a property
+          // of this frame alone and has no reason to wait. Returning here meant
+          // the first call left the picture untouched -- and on a PAUSED clip
+          // there is no second call, so the one unchanged upload was all you
+          // ever saw. The effect read as completely dead while being perfectly
+          // correct on the second frame it never got.
+          lag.assign(pixels.begin(), pixels.begin() + static_cast<std::ptrdiff_t>(bytes));
+        }
+        // How far behind the cones run. At full lag the colour takes about a
+        // second to arrive, which is roughly true of dark adaptation and is
+        // also about as long as looks intentional rather than broken.
+        const double follow = 1.0 - amt * (0.5 + pA * 0.46);
+        // How dark it has to be before the rods win.
+        const double threshold = 0.15 + pB * 0.7;
+        const double purkinje = pC;
+        const bool hold = ctx.stateHold;
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::size_t row = static_cast<std::size_t>(y) * ctx.width * 4;
+            std::uint8_t* live = pixels.data() + row;
+            std::uint8_t* slow = lag.data() + row;
+            for (int x = 0; x < ctx.width; ++x) {
+              std::uint8_t* lp = live + static_cast<std::size_t>(x) * 4;
+              std::uint8_t* mp = slow + static_cast<std::size_t>(x) * 4;
+              // The rod signal: fast, achromatic, and weighted toward the
+              // green-blue the rods are actually most sensitive to rather than
+              // the broadcast luma curve.
+              const double rod = (lp[0] * 0.18 + lp[1] * 0.55 + lp[2] * 0.27) / 255.0;
+              // How much this pixel is being seen by rods rather than cones.
+              // Smooth rather than a hard cut, so the rods take over
+              // gradually the way they actually do -- a step here would make
+              // an edge appear across the picture at one brightness.
+              const double t01 = std::clamp(rod / std::max(1e-6, threshold), 0.0, 1.0);
+              const double dark = 1.0 - t01 * t01 * (3.0 - 2.0 * t01);
+              for (int c = 0; c < 3; ++c) {
+                // The cone signal chases the live one and is what carries
+                // colour. Held rather than stepped for any consumer after the
+                // first, so two outputs cannot advance it twice.
+                const double chased = hold ? mp[c]
+                  : mp[c] + (lp[c] - mp[c]) * (1.0 - follow);
+                if (!hold) mp[c] = detail::clamp8(chased);
+                // Toward the blue-green end as the rods take over: peak
+                // sensitivity really does move about 40nm.
+                const double tilt = (c == 2 ? 1.0 + purkinje * 0.5
+                                   : c == 1 ? 1.0 + purkinje * 0.15
+                                            : 1.0 - purkinje * 0.35);
+                const double seen = rod * 255.0 * tilt;
+                const double mixed = chased * (1.0 - dark) + seen * dark;
+                lp[c] = detail::clamp8(lp[c] * (1.0 - amt) + mixed * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::GrainFlow: {
+        // GRAIN FLOW -- smeared along the picture's own grain.
+        //
+        // Line integral convolution is how a vector field gets drawn in
+        // scientific visualisation: smear noise along the field lines and the
+        // flow becomes visible. Point it at an IMAGE's own structure instead of
+        // at a fluid and every stroke follows the direction that part of the
+        // picture is already running -- along a hair, around a jaw, down the
+        // length of a shadow.
+        //
+        // The direction comes from the STRUCTURE TENSOR, which is the standard
+        // way to ask "which way is this bit of picture going": average the
+        // gradient outer product over a neighbourhood and take the eigenvector
+        // of the smaller eigenvalue. That is the direction of least change --
+        // along the feature rather than across it -- and a plain gradient
+        // cannot give it, because a gradient says which way is uphill, not
+        // which way the ridge runs.
+        //
+        // The result looks painted rather than filtered, and it comes out of
+        // the picture's own content rather than a texture laid over the top.
+        //
+        // COMPUTED AT HALF RESOLUTION. Measured at full raster this was 119ms
+        // at 1080p, and 20ms even with the stroke length turned all the way
+        // down -- so the floor alone was over a frame before any smearing
+        // happened. The stroke is a SMEAR: its whole job is to destroy detail
+        // along one axis, so computing it at half resolution and scaling the
+        // result back up loses almost nothing, while the expensive part (a
+        // scattered gather per pixel, which is what actually costs) drops by
+        // four. The same answer caustics and the video synth reached.
+        const double reach = 2.0 + pA * 22.0;
+        const double across = pB * 1.5707963267948966;   // rotate the strokes
+        const double coherence = pC;
+        const int workW = std::max(64, ctx.width / 3);
+        const int workH = std::max(64, ctx.height / 3);
+        const std::size_t workCount = static_cast<std::size_t>(workW) * workH;
+        std::vector<std::uint8_t> source(pixels.begin(),
+                                         pixels.begin() + static_cast<std::ptrdiff_t>(count * 4));
+        // The working picture, box-averaged down. Averaged rather than
+        // point-sampled so the gradients below are of the picture and not of
+        // its aliasing.
+        std::vector<std::uint8_t> small(workCount * 4, 255);
+        detail::parallelRows(workH, workW, [&](int firstRow, int lastRow) {
+          for (int wy = firstRow; wy < lastRow; ++wy) {
+            const int y0 = wy * ctx.height / workH;
+            const int y1 = std::max(y0 + 1, (wy + 1) * ctx.height / workH);
+            std::uint8_t* out = small.data() + static_cast<std::size_t>(wy) * workW * 4;
+            for (int wx = 0; wx < workW; ++wx) {
+              const int x0 = wx * ctx.width / workW;
+              const int x1 = std::max(x0 + 1, (wx + 1) * ctx.width / workW);
+              int acc[3] = {0, 0, 0};
+              int n = 0;
+              for (int sy = y0; sy < y1; ++sy) {
+                const std::uint8_t* row =
+                  source.data() + static_cast<std::size_t>(sy) * ctx.width * 4;
+                for (int sx = x0; sx < x1; ++sx) {
+                  const std::uint8_t* p = row + static_cast<std::size_t>(sx) * 4;
+                  acc[0] += p[0]; acc[1] += p[1]; acc[2] += p[2];
+                  ++n;
+                }
+              }
+              std::uint8_t* dp = out + static_cast<std::size_t>(wx) * 4;
+              n = std::max(1, n);
+              dp[0] = static_cast<std::uint8_t>(acc[0] / n);
+              dp[1] = static_cast<std::uint8_t>(acc[1] / n);
+              dp[2] = static_cast<std::uint8_t>(acc[2] / n);
+            }
+          }
+        });
+        // Luma and both gradients, ONCE.
+        //
+        // Written the obvious way -- a lambda converting RGB to luma, called
+        // from inside the 3x3 tensor loop -- each pixel converted thirty-six
+        // neighbours out of RGB, every one of which a neighbouring pixel had
+        // already converted. Two cheap passes first, and the per-pixel work
+        // drops to nine reads.
+        std::vector<float> luma(workCount), gradX(workCount), gradY(workCount);
+        detail::parallelRows(workH, workW, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::uint8_t* row = small.data() + static_cast<std::size_t>(y) * workW * 4;
+            float* out = luma.data() + static_cast<std::size_t>(y) * workW;
+            for (int x = 0; x < workW; ++x) {
+              const std::uint8_t* p = row + static_cast<std::size_t>(x) * 4;
+              out[x] = static_cast<float>(
+                (p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255.0);
+            }
+          }
+        });
+        detail::parallelRows(workH, workW, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int ym = std::max(0, y - 1), yp = std::min(workH - 1, y + 1);
+            const float* mid = luma.data() + static_cast<std::size_t>(y) * workW;
+            const float* up  = luma.data() + static_cast<std::size_t>(ym) * workW;
+            const float* dn  = luma.data() + static_cast<std::size_t>(yp) * workW;
+            float* gx = gradX.data() + static_cast<std::size_t>(y) * workW;
+            float* gy = gradY.data() + static_cast<std::size_t>(y) * workW;
+            for (int x = 0; x < workW; ++x) {
+              const int xm = std::max(0, x - 1), xp = std::min(workW - 1, x + 1);
+              gx[x] = mid[xp] - mid[xm];
+              gy[x] = dn[x] - up[x];
+            }
+          }
+        });
+        // Half the reach, because the raster is half the size and the stroke
+        // is measured in pictures rather than in pixels.
+        const int steps = std::clamp(static_cast<int>(reach) / 3, 1, 9);
+        const double spacing = 1.5;
+        // Hoisted: constant for the whole frame, and computing them per pixel
+        // was four million trig calls.
+        const double turn = std::cos(across), lift = std::sin(across);
+        std::vector<double> taper(static_cast<std::size_t>(steps) * 2 + 1);
+        double taperTotal = 0.0;
+        for (int s = -steps; s <= steps; ++s) {
+          const double t = static_cast<double>(s) / steps;
+          const double w = 1.0 - t * t;
+          taper[static_cast<std::size_t>(s + steps)] = w;
+          taperTotal += w;
+        }
+        const double taperInv = 1.0 / std::max(1e-9, taperTotal);
+        // The coherence curve as a table: std::pow with a runtime exponent,
+        // once per pixel, is a lot of calls to a function only ever asked
+        // about a value between 0 and 1.
+        double anisLut[257];
+        for (int i = 0; i <= 256; ++i) {
+          anisLut[i] = std::pow(i / 256.0, 1.0 + coherence * 4.0);
+        }
+        std::vector<std::uint8_t> stroked(workCount * 4, 255);
+        std::vector<float> weightField(workCount, 0.0f);
+        detail::parallelRows(workH, workW, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int ym = std::max(0, y - 1), yp = std::min(workH - 1, y + 1);
+            std::uint8_t* dst = stroked.data() + static_cast<std::size_t>(y) * workW * 4;
+            float* wOut = weightField.data() + static_cast<std::size_t>(y) * workW;
+            for (int x = 0; x < workW; ++x) {
+              const int xm = std::max(0, x - 1), xp = std::min(workW - 1, x + 1);
+              double jxx = 0.0, jyy = 0.0, jxy = 0.0;
+              for (int wy = ym; wy <= yp; ++wy) {
+                const float* gxRow = gradX.data() + static_cast<std::size_t>(wy) * workW;
+                const float* gyRow = gradY.data() + static_cast<std::size_t>(wy) * workW;
+                for (int wx = xm; wx <= xp; ++wx) {
+                  const double gx = gxRow[wx], gy = gyRow[wx];
+                  jxx += gx * gx;
+                  jyy += gy * gy;
+                  jxy += gx * gy;
+                }
+              }
+              const double diff = jxx - jyy;
+              const double root = std::sqrt(diff * diff + 4.0 * jxy * jxy);
+              const double lambdaBig = 0.5 * (jxx + jyy + root);
+              const double lambdaSmall = 0.5 * (jxx + jyy - root);
+              double dirX = jxy;
+              double dirY = lambdaBig - jxx;
+              const double len = std::sqrt(dirX * dirX + dirY * dirY);
+              if (len < 1e-9) {
+                dirX = 1.0;
+                dirY = 0.0;
+              } else {
+                dirX /= len;
+                dirY /= len;
+              }
+              // flowX / flowY: the stroke direction, not the effect.
+              const double flowX = dirX * turn - dirY * lift;
+              const double flowY = dirX * lift + dirY * turn;
+              // How ANISOTROPIC this neighbourhood is. A flat area has no
+              // direction worth following, and stroking it anyway is what makes
+              // a naive version look like a plain blur.
+              const double sum = lambdaBig + lambdaSmall + 1e-9;
+              const double anis = (lambdaBig - lambdaSmall) / sum;
+              wOut[x] = static_cast<float>(
+                anisLut[std::clamp(static_cast<int>(anis * 256.0), 0, 256)]);
+              double acc[3] = {0.0, 0.0, 0.0};
+              for (int s = -steps; s <= steps; ++s) {
+                const double w = taper[static_cast<std::size_t>(s + steps)];
+                const int px = std::clamp(
+                  static_cast<int>(std::lround(x + flowX * s * spacing)), 0, workW - 1);
+                const int py = std::clamp(
+                  static_cast<int>(std::lround(y + flowY * s * spacing)), 0, workH - 1);
+                const std::uint8_t* sp =
+                  small.data() + (static_cast<std::size_t>(py) * workW + px) * 4;
+                acc[0] += sp[0] * w;
+                acc[1] += sp[1] * w;
+                acc[2] += sp[2] * w;
+              }
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                dp[c] = detail::clamp8(acc[c] * taperInv);
+              }
+            }
+          }
+        });
+        // Back up to full size, bilinear, and blended against the original by
+        // how much structure there was to follow. Bilinear rather than nearest
+        // because a stroke scaled up with nearest gets a staircase along its
+        // own length, which is the one direction it must be smooth in.
+        const double sxScale = static_cast<double>(workW) / ctx.width;
+        const double syScale = static_cast<double>(workH) / ctx.height;
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double fy = std::clamp(y * syScale - 0.5, 0.0, workH - 1.0);
+            const int y0 = static_cast<int>(fy);
+            const int y1 = std::min(workH - 1, y0 + 1);
+            const double ty = fy - y0;
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            const std::uint8_t* src = source.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              const double fx2 = std::clamp(x * sxScale - 0.5, 0.0, workW - 1.0);
+              const int x0 = static_cast<int>(fx2);
+              const int x1 = std::min(workW - 1, x0 + 1);
+              const double tx = fx2 - x0;
+              const std::size_t i00 = (static_cast<std::size_t>(y0) * workW + x0);
+              const std::size_t i01 = (static_cast<std::size_t>(y0) * workW + x1);
+              const std::size_t i10 = (static_cast<std::size_t>(y1) * workW + x0);
+              const std::size_t i11 = (static_cast<std::size_t>(y1) * workW + x1);
+              const double w00 = (1.0 - tx) * (1.0 - ty), w01 = tx * (1.0 - ty);
+              const double w10 = (1.0 - tx) * ty,         w11 = tx * ty;
+              const double weight = weightField[i00] * w00 + weightField[i01] * w01 +
+                                    weightField[i10] * w10 + weightField[i11] * w11;
+              const double blend = amt * weight;
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              const std::uint8_t* here = src + static_cast<std::size_t>(x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                const double s = stroked[i00 * 4 + c] * w00 + stroked[i01 * 4 + c] * w01 +
+                                 stroked[i10 * 4 + c] * w10 + stroked[i11 * 4 + c] * w11;
+                dp[c] = detail::clamp8(here[c] * (1.0 - blend) + s * blend);
+              }
+            }
+          }
+        });
+        break;
+      }
+      case CueEffectKind::Datamosh:
+        // Deliberately nothing here. Datamosh is not a pixel operation: it
+        // works by withholding keyframes from the DECODER, so by the time a
+        // frame reaches this function the effect has already happened or it
+        // has not. It sits in this list because from where the operator
+        // stands it is an effect like any other, and having one effect
+        // permanently present while the rest had to be added was incoherent.
+        break;
+
+      case CueEffectKind::SlitScan: {
+        // SLIT SCAN — one frame holding many different moments.
+        //
+        // A film camera with a slit instead of a shutter records a different
+        // instant in every column. Here the same thing: the output is a stored
+        // frame, and only a narrow band of it is refreshed from the live
+        // picture each time, sweeping across. Everything the band has already
+        // passed is a photograph of when it passed.
+        //
+        // Move in front of it and you smear across the frame; hold still and
+        // it resolves back into an ordinary picture. That is the whole trick,
+        // and it costs one frame of memory rather than a queue of them.
+        if (!state) {
+          break;   // no memory from this caller: leave the picture alone
+        }
+        std::vector<std::uint8_t>& held = *state;
+        const std::size_t bytes = count * 4;
+        if (held.size() != bytes) {
+          held.assign(pixels.begin(), pixels.end());
+        }
+        const bool vertical = pC > 0.5;
+        const bool backwards = std::fmod(pC, 0.5) > 0.25;
+        const int span = vertical ? ctx.height : ctx.width;
+        // The slit is at least one line wide however low the parameter goes:
+        // a zero-width slit refreshes nothing and the picture freezes solid.
+        const int slit = std::max(1, static_cast<int>(span * (0.02 + pB * 0.35)));
+        const double rate = 0.15 + pA * 2.5;
+        int head = static_cast<int>(std::llround(ctx.frameIndex * rate)) % std::max(1, span);
+        if (backwards) head = span - 1 - head;
+        if (!ctx.stateHold) {
+          // Refresh the band, then hand back the whole stored frame.
+          for (int k = 0; k < slit; ++k) {
+            const int line = ((head + k) % span + span) % span;
+            if (vertical) {
+              const std::size_t row = static_cast<std::size_t>(line) * ctx.width * 4;
+              std::copy(pixels.begin() + row, pixels.begin() + row + ctx.width * 4,
+                        held.begin() + row);
+            } else {
+              for (int y = 0; y < ctx.height; ++y) {
+                const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + line) * 4;
+                held[at] = pixels[at];
+                held[at + 1] = pixels[at + 1];
+                held[at + 2] = pixels[at + 2];
+              }
+            }
+          }
+        }
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          const std::size_t from = static_cast<std::size_t>(y0) * ctx.width * 4;
+          const std::size_t to = static_cast<std::size_t>(y1) * ctx.width * 4;
+          for (std::size_t i = from; i < to; i += 4) {
+            pixels[i] = detail::clamp8(pixels[i] * (1.0 - amt) + held[i] * amt);
+            pixels[i + 1] = detail::clamp8(pixels[i + 1] * (1.0 - amt) + held[i + 1] * amt);
+            pixels[i + 2] = detail::clamp8(pixels[i + 2] * (1.0 - amt) + held[i + 2] * amt);
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Ferrofluid: {
+        // FERROFLUID — the bright parts stand up in spikes.
+        //
+        // A magnetised fluid over a magnet breaks into a field of cones,
+        // because the field pulls the surface up and gravity pulls it back and
+        // the two settle into spikes. Brightness is the field here: the lit
+        // parts of the picture lift away from the surface along spokes, the
+        // dark parts stay flat, and the whole field turns slowly.
+        const double lift = amt * (2.0 + pA * 60.0);
+        const int spikes = 3 + static_cast<int>(std::lround(pB * 21.0));
+        const double floorLuma = pC * 0.9;
+        const double turn = ctx.frameIndex * 0.004;
+        const std::vector<std::uint8_t> src(pixels);
+        const double cx = ctx.width * 0.5, cy = ctx.height * 0.5;
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            for (int x = 0; x < ctx.width; ++x) {
+              const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              const double l = (src[at] * 0.114 + src[at + 1] * 0.587 + src[at + 2] * 0.299) / 255.0;
+              double pull = (l - floorLuma) / std::max(0.05, 1.0 - floorLuma);
+              if (pull <= 0.0) { continue; }
+              pull = std::min(1.0, pull);
+              const double dx = x - cx, dy = y - cy;
+              const double ang = std::atan2(dy, dx);
+              // Along the nearest spoke, so the surface gathers into cones
+              // instead of blooming evenly outward.
+              const double spoke = std::cos(ang * spikes + turn) * 0.5 + 0.5;
+              const double d = lift * pull * spoke;
+              // The direction to pull along is the radius vector we already
+              // have, normalised -- cos(atan2(dy,dx)) IS dx/r. Two of the three
+              // trig calls per pixel were computing a number already in hand,
+              // which at 1080p is four million of them a frame.
+              const double r = std::sqrt(dx * dx + dy * dy);
+              const double ux = r > 0.0001 ? dx / r : 0.0;
+              const double uy = r > 0.0001 ? dy / r : 0.0;
+              const int sx = std::clamp(static_cast<int>(std::lround(x - ux * d)), 0, ctx.width - 1);
+              const int sy = std::clamp(static_cast<int>(std::lround(y - uy * d)), 0, ctx.height - 1);
+              const std::size_t from = (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              pixels[at] = src[from];
+              pixels[at + 1] = src[from + 1];
+              pixels[at + 2] = src[from + 2];
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Shatter: {
+        // SHATTER — the picture as a dropped pane.
+        //
+        // A grid of shards, each sliding and turning about its own centre and
+        // sampling the picture from where it USED to be. The seams are the
+        // point: a shard that has moved shows a piece of somewhere else, so
+        // the image stays readable while visibly coming apart.
+        const int shard = std::max(4, static_cast<int>(8 + (1.0 - pA) * 120.0));
+        // A DROPPED PANE IS BROKEN BEFORE ANYTHING IS ASKED OF IT. Drift and
+        // spin used to be pB and pC outright, so an effect added with its
+        // arriving values -- A=0.5, B=0, C=0 -- computed a grid of shards and
+        // then moved none of them: the operator got a picture that had not
+        // changed, and the shard size control could not do anything either,
+        // because a shard that has not moved looks the same at any size.
+        // MEASURED: shard size changed 0.00% of bytes at B=C=0 and 40.61% once
+        // something moved. The usual rule is that B=0/C=0 must reproduce what
+        // the effect did before those parameters existed -- here that was
+        // nothing at all, so there is nothing to preserve.
+        const double drift = amt * (0.18 + pB * 0.82) * shard * 1.2;
+        const double spin = amt * (0.06 + pC * 0.94) * 0.9;
+        const double t = ctx.frameIndex * 0.02;
+        const std::vector<std::uint8_t> src(pixels);
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            for (int x = 0; x < ctx.width; ++x) {
+              const int gx = x / shard, gy = y / shard;
+              // A cheap stable hash per shard: the same shard must move the
+              // same way every frame or the pane boils instead of breaking.
+              const std::uint32_t h = static_cast<std::uint32_t>(gx * 73856093) ^
+                                      static_cast<std::uint32_t>(gy * 19349663);
+              const double r1 = ((h >> 8) & 0xff) / 255.0 - 0.5;
+              const double r2 = ((h >> 16) & 0xff) / 255.0 - 0.5;
+              const double r3 = ((h >> 3) & 0xff) / 255.0 - 0.5;
+              const double ox = r1 * drift * (0.6 + 0.4 * std::sin(t + r3 * 6.0));
+              const double oy = r2 * drift * (0.6 + 0.4 * std::cos(t + r1 * 6.0));
+              const double a = r3 * spin * (0.6 + 0.4 * std::sin(t * 0.7 + r2 * 6.0));
+              const double ccx = gx * shard + shard * 0.5;
+              const double ccy = gy * shard + shard * 0.5;
+              const double rx = x - ccx, ry = y - ccy;
+              const double ca = std::cos(a), sa = std::sin(a);
+              const int sx = std::clamp(static_cast<int>(std::lround(ccx + rx * ca - ry * sa + ox)), 0, ctx.width - 1);
+              const int sy = std::clamp(static_cast<int>(std::lround(ccy + rx * sa + ry * ca + oy)), 0, ctx.height - 1);
+              const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              const std::size_t from = (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              pixels[at] = src[from];
+              pixels[at + 1] = src[from + 1];
+              pixels[at + 2] = src[from + 2];
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::EdgeIgnite: {
+        // EDGE IGNITE — the outlines catch fire.
+        //
+        // A Sobel gradient finds the edges, and everything above the catch
+        // threshold is added back as heat: dull red at the threshold, through
+        // orange, to white where the edge is hardest. The picture underneath
+        // survives, so it reads as the drawing burning rather than as an edge
+        // detector with a colour map on it.
+        const std::vector<std::uint8_t> src(pixels);
+        // MEASURED, not guessed. A Sobel over 0-1 luma scaled by 0.25 put an
+        // ordinary edge around 0.1-0.3, so a threshold that started at 0.04 and
+        // ran to 0.59 never caught anything on real material -- the sweep
+        // reported the effect as doing nothing at all, which it was.
+        const double catchAt = 0.015 + pA * 0.22;
+        const double heat = 0.4 + pB * 2.2;
+        // Always guttering a little. At pC = 0 this is a candle in a still
+        // room rather than a frozen picture, which is what the animates flag
+        // says it is; the parameter takes it up to a draught.
+        const double gutter = 0.10 + pC * 0.5;
+        // A DRAUGHT FLARES AS WELL AS GUTTERS. The swing used to hang off a
+        // mean of 1 - gutter/2, which made every setting of this control
+        // identical at the top of the cycle -- the flame reached full
+        // brightness whatever the draught, so at that instant the parameter
+        // did nothing, and a sweep that happened to sample there reported it
+        // DEAD. Letting the mean rise a little with the draught keeps the
+        // control readable at every phase and is the truer flame: more air is
+        // a brighter peak and a deeper dip, not just a deeper dip.
+        const double flick = 1.0 - gutter * 0.35
+                           + gutter * 0.5 * std::sin(ctx.frameIndex * 0.31);
+        auto luma = [&](int x, int y) {
+          const std::size_t at = (static_cast<std::size_t>(std::clamp(y, 0, ctx.height - 1)) * ctx.width
+                                + std::clamp(x, 0, ctx.width - 1)) * 4;
+          return (src[at] * 0.114 + src[at + 1] * 0.587 + src[at + 2] * 0.299) / 255.0;
+        };
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            for (int x = 0; x < ctx.width; ++x) {
+              const double gx = -luma(x - 1, y - 1) - 2 * luma(x - 1, y) - luma(x - 1, y + 1)
+                              + luma(x + 1, y - 1) + 2 * luma(x + 1, y) + luma(x + 1, y + 1);
+              const double gy = -luma(x - 1, y - 1) - 2 * luma(x, y - 1) - luma(x + 1, y - 1)
+                              + luma(x - 1, y + 1) + 2 * luma(x, y + 1) + luma(x + 1, y + 1);
+              double e = std::sqrt(gx * gx + gy * gy) * 0.5;
+              if (e < catchAt) { continue; }
+              e = std::min(1.0, (e - catchAt) / std::max(0.05, 1.0 - catchAt)) * heat * flick * amt;
+              const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              // Blue last and least, so the hot core goes white while the
+              // cooler edges stay in the reds -- a flame's own ramp.
+              pixels[at + 2] = detail::clamp8(pixels[at + 2] + e * 255.0);
+              pixels[at + 1] = detail::clamp8(pixels[at + 1] + e * e * 210.0);
+              pixels[at] = detail::clamp8(pixels[at] + e * e * e * 180.0);
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Relight: {
+        // RELIGHT — read the picture as a surface and light it from the side.
+        //
+        // Brightness is treated as height, the slope of that height gives a
+        // normal, and the normal is lit by a lamp that can walk around the
+        // frame. Flat areas go mid-grey and detail springs into relief, so a
+        // picture becomes an object with a light on it.
+        const std::vector<std::uint8_t> src(pixels);
+        const double relief = 0.5 + pA * 8.0;
+        // The lamp always drifts a little; pC is how fast it walks. A zero
+        // there used to freeze the effect outright while the header claimed it
+        // animated.
+        const double ang = pB * 6.28318530718
+                         + ctx.frameIndex * (0.0015 + 0.02 * pC);
+        const double lx = std::cos(ang), ly = std::sin(ang), lz = 0.65;
+        auto luma = [&](int x, int y) {
+          const std::size_t at = (static_cast<std::size_t>(std::clamp(y, 0, ctx.height - 1)) * ctx.width
+                                + std::clamp(x, 0, ctx.width - 1)) * 4;
+          return (src[at] * 0.114 + src[at + 1] * 0.587 + src[at + 2] * 0.299) / 255.0;
+        };
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            for (int x = 0; x < ctx.width; ++x) {
+              const double dzdx = (luma(x + 1, y) - luma(x - 1, y)) * relief;
+              const double dzdy = (luma(x, y + 1) - luma(x, y - 1)) * relief;
+              // Normal of the height field, normalised, then dotted with the
+              // lamp direction.
+              const double len = std::sqrt(dzdx * dzdx + dzdy * dzdy + 1.0);
+              const double nx = -dzdx / len, ny = -dzdy / len, nz = 1.0 / len;
+              const double lit = std::clamp(nx * lx + ny * ly + nz * lz, 0.0, 1.0);
+              const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                // Keeps the original colour and re-shades it, rather than
+                // replacing the picture with a grey relief map.
+                const double shaded = src[at + c] * (0.35 + 1.15 * lit);
+                pixels[at + c] = detail::clamp8(src[at + c] * (1.0 - amt) + shaded * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::DepthSplit: {
+        // DEPTH SPLIT — brightness read as nearness, and the eyes disagreeing.
+        //
+        // Bright is near, dark is far, and the two colour channels are shifted
+        // apart by how near each pixel is. Everything at the convergence
+        // distance sits ON the screen; nearer things come forward and further
+        // things fall behind. The slow sway is what sells it without glasses --
+        // parallax is a stronger depth cue than the colour split is.
+        const std::vector<std::uint8_t> src(pixels);
+        const double par = amt * (1.0 + pA * 40.0);
+        const double conv = pB;
+        // Parallax is the depth cue that actually works without glasses, so
+        // there is always a little of it.
+        const double sway = std::sin(ctx.frameIndex * 0.013) * (0.08 + pC);
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            const std::size_t row = static_cast<std::size_t>(y) * ctx.width;
+            for (int x = 0; x < ctx.width; ++x) {
+              const std::size_t at = (row + x) * 4;
+              const double l = (src[at] * 0.114 + src[at + 1] * 0.587 + src[at + 2] * 0.299) / 255.0;
+              const double d = (l - conv) * par * (1.0 + sway);
+              const int xr = std::clamp(static_cast<int>(std::lround(x - d)), 0, ctx.width - 1);
+              const int xb = std::clamp(static_cast<int>(std::lround(x + d)), 0, ctx.width - 1);
+              pixels[at + 2] = src[(row + xr) * 4 + 2];   // R from one eye
+              pixels[at] = src[(row + xb) * 4];           // B from the other
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::MotionMosh: {
+        // Datamosh as an EFFECT rather than as a codec trick.
+        //
+        // A codec mosh works by deleting the keyframe at a cut: the decoder
+        // then applies the incoming shot's motion vectors to the outgoing
+        // shot's pixels, and the old picture gets dragged around by the new
+        // one's movement until a keyframe arrives. That needs a transcode, so
+        // it only ever works on a file, and it cannot be dialled while it runs.
+        //
+        // Everything in that description is reproducible here. The vectors the
+        // codec would have supplied are estimated instead, by matching blocks
+        // between the previous input and this one; the "old picture" is a held
+        // frame in this effect's state slot; and the missing keyframe becomes a
+        // knob rather than an accident.
+        if (!state) {
+          break;   // no scratch from this caller — do nothing rather than pretend
+        }
+        std::vector<std::uint8_t>& store = *state;
+        const std::size_t bytes = count * 4;
+        // Layout: [held picture][previous input luma, downsampled]
+        // The luma plane is what the matcher reads, so the previous frame is
+        // kept SMALL rather than as a second full RGBA copy — at 1080p that is
+        // 130KB instead of 8MB, and the matcher wants it downsampled anyway.
+        const int mw = std::max(1, ctx.width / detail::kMoshScale);
+        const int mh = std::max(1, ctx.height / detail::kMoshScale);
+        const std::size_t lumaBytes = static_cast<std::size_t>(mw) * mh;
+        const std::size_t wanted = bytes + lumaBytes;
+        auto sampleLuma = [&](int mx, int my) -> std::uint8_t {
+          const int sx = std::min(ctx.width - 1, mx * detail::kMoshScale);
+          const int sy = std::min(ctx.height - 1, my * detail::kMoshScale);
+          const std::size_t at = (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+          // Rec.601-ish, integer: the matcher only needs a consistent ordering,
+          // not colourimetry, and this is two million samples a frame.
+          return static_cast<std::uint8_t>(
+            (pixels[at] * 77 + pixels[at + 1] * 150 + pixels[at + 2] * 29) >> 8);
+        };
+        if (store.size() != wanted) {
+          // First frame, or the raster changed. Hold the current picture and
+          // its luma, and let the picture through untouched: an effect that
+          // flashes black on its first frame is unusable on a take.
+          store.assign(wanted, 0);
+          std::memcpy(store.data(), pixels.data(), bytes);
+          for (int my = 0; my < mh; ++my) {
+            for (int mx = 0; mx < mw; ++mx) {
+              store[bytes + static_cast<std::size_t>(my) * mw + mx] = sampleLuma(mx, my);
+            }
+          }
+          break;
+        }
+        std::uint8_t* held = store.data();
+        std::uint8_t* prevLuma = store.data() + bytes;
+
+        // THE CURRENT LUMA PLANE, ONCE.
+        //
+        // The matcher below reads a candidate block's luma for every offset it
+        // tries — call it twenty million reads a frame. Computing that luma
+        // from RGBA at each read costs three multiplies and a shift per read
+        // and produces the same 130KB of answers over and over; this is the
+        // grain-flow mistake, which was converting the same neighbours out of
+        // RGB after the neighbours had already done it. Built once here, the
+        // matcher then reads two flat byte arrays.
+        std::vector<std::uint8_t> curLuma(lumaBytes);
+        for (int my = 0; my < mh; ++my) {
+          for (int mx = 0; mx < mw; ++mx) {
+            curLuma[static_cast<std::size_t>(my) * mw + mx] = sampleLuma(mx, my);
+          }
+        }
+
+        // pB picks the block: coarse blocks give the hard square edges people
+        // picture when they say datamosh, fine ones flow. In DOWNSAMPLED
+        // pixels, so a block of 4 here is 16 across the real picture.
+        const int block = 2 + static_cast<int>(pB * 6.0 + 0.5);          // 2..8
+        const int blocksX = std::max(1, (mw + block - 1) / block);
+        const int blocksY = std::max(1, (mh + block - 1) / block);
+        std::vector<std::int8_t> motion(static_cast<std::size_t>(blocksX) * blocksY * 2, 0);
+
+        // Block match: for each block, the offset that best explains where it
+        // went.
+        //
+        // THREE-STEP SEARCH rather than exhaustive. Exhaustive over ±6 is 169
+        // candidates a block and measured 88% of a 60fps frame on its own,
+        // which is most of the budget for an effect that will usually be
+        // sharing it. A three-step search starts at a coarse stride, keeps the
+        // best of nine, halves the stride and repeats — 25 candidates for the
+        // same reach. This is what real encoders do, for the same reason.
+        //
+        // It can settle into a local minimum where exhaustive would not. For a
+        // motion estimator driving a SMEAR that is not a defect: the wrong
+        // vector drags the picture somewhere slightly different, which is the
+        // texture of the effect rather than an error in it.
+        detail::parallelRows(blocksY, blocksX * 64, [&](int firstBlockRow, int lastBlockRow) {
+          for (int by = firstBlockRow; by < lastBlockRow; ++by) {
+            for (int bx = 0; bx < blocksX; ++bx) {
+              // SAD for one candidate offset, with a bias toward standing
+              // still: a tie between "nothing moved" and some offset should
+              // read as nothing moved, or flat areas pick a direction at
+              // random and the smear boils.
+              auto costAt = [&](int dx, int dy) -> long {
+                long cost = 0;
+                for (int y = 0; y < block; ++y) {
+                  const int cy2 = by * block + y;
+                  if (cy2 >= mh) break;
+                  const int py = std::clamp(cy2 + dy, 0, mh - 1);
+                  const std::uint8_t* curRow = &curLuma[static_cast<std::size_t>(cy2) * mw];
+                  const std::uint8_t* oldRow = &prevLuma[static_cast<std::size_t>(py) * mw];
+                  for (int x = 0; x < block; ++x) {
+                    const int cx2 = bx * block + x;
+                    if (cx2 >= mw) break;
+                    const int px = std::clamp(cx2 + dx, 0, mw - 1);
+                    cost += std::abs(static_cast<int>(curRow[cx2]) - static_cast<int>(oldRow[px]));
+                  }
+                }
+                return cost + (std::abs(dx) + std::abs(dy)) * block;
+              };
+              int bestDx = 0, bestDy = 0;
+              long bestCost = costAt(0, 0);
+              for (int stride = (detail::kMoshSearch + 1) / 2; stride >= 1; stride /= 2) {
+                const int centreX = bestDx, centreY = bestDy;
+                for (int oy = -1; oy <= 1; ++oy) {
+                  for (int ox = -1; ox <= 1; ++ox) {
+                    if (ox == 0 && oy == 0) continue;   // centre already held
+                    const int dx = std::clamp(centreX + ox * stride,
+                                              -detail::kMoshSearch, detail::kMoshSearch);
+                    const int dy = std::clamp(centreY + oy * stride,
+                                              -detail::kMoshSearch, detail::kMoshSearch);
+                    const long cost = costAt(dx, dy);
+                    if (cost < bestCost) {
+                      bestCost = cost;
+                      bestDx = dx;
+                      bestDy = dy;
+                    }
+                  }
+                }
+              }
+              const std::size_t at = (static_cast<std::size_t>(by) * blocksX + bx) * 2;
+              motion[at] = static_cast<std::int8_t>(bestDx);
+              motion[at + 1] = static_cast<std::int8_t>(bestDy);
+            }
+          }
+        });
+
+        // pA is how strongly the held picture refuses to be replaced, pC how
+        // often the real one is let back in. Refresh is per-frame probability
+        // expressed as a blend, so it recovers smoothly rather than snapping.
+        const double hold = 0.35 + pA * 0.64;                  // 0.35..0.99
+        const double refresh = (1.0 - hold) + pC * 0.25;
+        const int holdQ = static_cast<int>(std::clamp(hold - refresh, 0.0, 1.0) * 255.0);
+
+        // Drag the held picture along the motion, then let a little of the
+        // live picture back in. Reading the HELD buffer while writing a fresh
+        // one would need a second full frame; instead each output pixel is
+        // computed from held[] at its source position and written to pixels[],
+        // and held[] is refreshed from pixels[] afterwards.
+        detail::parallelRows(ctx.height, ctx.width, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const int my = std::min(mh - 1, y / detail::kMoshScale);
+            const int by = std::min(blocksY - 1, my / block);
+            for (int x = 0; x < ctx.width; ++x) {
+              const int mx = std::min(mw - 1, x / detail::kMoshScale);
+              const int bx = std::min(blocksX - 1, mx / block);
+              const std::size_t mAt = (static_cast<std::size_t>(by) * blocksX + bx) * 2;
+              // The motion is in downsampled pixels; scale it back up.
+              const int sx = std::clamp(x - motion[mAt] * detail::kMoshScale, 0, ctx.width - 1);
+              const int sy = std::clamp(y - motion[mAt + 1] * detail::kMoshScale, 0, ctx.height - 1);
+              const std::size_t from = (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+              const std::size_t to = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                const int dragged = held[from + c];
+                const int live = pixels[to + c];
+                pixels[to + c] = static_cast<std::uint8_t>(
+                  (dragged * holdQ + live * (255 - holdQ)) / 255);
+              }
+            }
+          }
+        });
+
+        // Hold the result and this frame's luma for the next pass — unless a
+        // second consumer is drawing the same deck this frame, in which case it
+        // must see the same picture rather than advance the smear twice.
+        if (!ctx.stateHold) {
+          std::memcpy(held, pixels.data(), bytes);
+          // The luma of what the matcher SAW this frame, which is the picture
+          // before the smear was applied — that is what the next frame must
+          // difference against. curLuma was built from exactly that.
+          std::memcpy(prevLuma, curLuma.data(), lumaBytes);
+        }
+        break;
+      }
+
+      case CueEffectKind::Databend: {
+        // THE PICTURE, PLAYED THROUGH AN AUDIO CHAIN.
+        //
+        // Not an imitation of one: the frame's colour planes are read out as a
+        // signal, sample by sample in scan order, and pushed through the same
+        // things a sound goes through -- a delay with feedback, a one-pole
+        // filter, a wavefolder -- and what comes back is painted. The look
+        // people chase by opening a JPEG in an audio editor, except it is a
+        // knob on a live cue rather than a file that has to be corrupted first.
+        //
+        // ON A REDUCED RASTER, and what is kept is the DIFFERENCE. A serial
+        // chain cannot be split across rows (that is the whole point: each
+        // sample depends on the ones before it), so at 1080p it would be eight
+        // million dependent steps a frame. Run small, the bend costs a
+        // millisecond; scaling the bent picture back up would soften the
+        // original, so the bend's DIFFERENCE is what gets scaled and added.
+        // The frame keeps its own detail and gains the damage.
+        const int bw = std::clamp(ctx.width / 4, 8, 480);
+        const int bh = std::clamp(ctx.height / 4, 8, 270);
+        const std::size_t plane = static_cast<std::size_t>(bw) * bh;
+        std::vector<float> dry(plane * 3);
+        for (int y = 0; y < bh; ++y) {
+          const int sy = y * ctx.height / bh;
+          for (int x = 0; x < bw; ++x) {
+            const int sx = x * ctx.width / bw;
+            const std::size_t at = (static_cast<std::size_t>(sy) * ctx.width + sx) * 4;
+            const std::size_t to = static_cast<std::size_t>(y) * bw + x;
+            for (int c = 0; c < 3; ++c) {
+              // Byte to signal: 0..255 becomes -1..1, because every audio
+              // process here is built around a signal that swings through zero.
+              dry[plane * c + to] = static_cast<float>(pixels[at + c]) / 127.5f - 1.0f;
+            }
+          }
+        }
+        std::vector<float> wet = dry;
+
+        // Delay in SAMPLES, which on a picture is a distance along the scan --
+        // a short one smears within a line, a long one drags the damage down
+        // the frame. Offset by the frame index so a held still keeps bending
+        // instead of freezing on one pattern.
+        const std::size_t maxDelay = std::max<std::size_t>(2, plane / 2);
+        const double smear = 2.0 + pA * pA * static_cast<double>(maxDelay - 2);
+        const std::size_t delay = std::max<std::size_t>(
+          2, static_cast<std::size_t>(smear) +
+             static_cast<std::size_t>(ctx.frameIndex % 17));
+        const double feedback = std::clamp(pB, 0.0, 1.0) * 0.95;
+        // Tone: one pole, swept from heavy lag (dark, slow damage) at 0 to
+        // almost none (all edges and grain) at 1.
+        const double pole = 1.0 - (0.02 + pC * 0.97);
+        const double drive = 1.0 + pD * 6.0;
+        auto fold = [](double v) {
+          // Triangle fold: past full scale it comes back rather than flattening,
+          // which is why a folded signal keeps its detail where a clipped one
+          // turns to mush.
+          v = std::fmod(v + 1.0, 4.0);
+          if (v < 0.0) v += 4.0;
+          return (v < 2.0 ? v : 4.0 - v) - 1.0;
+        };
+        for (int c = 0; c < 3; ++c) {
+          float* s = wet.data() + plane * c;
+          double lp = 0.0;
+          for (std::size_t i = 0; i < plane; ++i) {
+            double v = s[i];
+            if (i >= delay) {
+              v += feedback * static_cast<double>(s[i - delay]);
+            }
+            lp = lp * pole + v * (1.0 - pole);
+            v = pC >= 0.5 ? v - lp * (pC - 0.5) * 2.0 : lp + (v - lp) * (pC * 2.0);
+            if (drive > 1.0) {
+              v = fold(v * drive) ;
+            }
+            s[i] = static_cast<float>(std::clamp(v, -1.0, 1.0));
+          }
+        }
+
+        // Back up, bilinearly, as a difference. Sampling the small buffer per
+        // output pixel rather than per cell is what keeps this from drawing
+        // visible squares -- the mistake wavefront shipped with.
+        const double mix = amt;
+        detail::parallelRows(ctx.height, ctx.width * 3, [&](int firstRow, int lastRow) {
+          for (int y = firstRow; y < lastRow; ++y) {
+            const double fy = (static_cast<double>(y) + 0.5) * bh / ctx.height - 0.5;
+            const int y0 = std::clamp(static_cast<int>(std::floor(fy)), 0, bh - 1);
+            const int y1 = std::min(bh - 1, y0 + 1);
+            const double wy = std::clamp(fy - y0, 0.0, 1.0);
+            for (int x = 0; x < ctx.width; ++x) {
+              const double fxp = (static_cast<double>(x) + 0.5) * bw / ctx.width - 0.5;
+              const int x0 = std::clamp(static_cast<int>(std::floor(fxp)), 0, bw - 1);
+              const int x1 = std::min(bw - 1, x0 + 1);
+              const double wx = std::clamp(fxp - x0, 0.0, 1.0);
+              const std::size_t at = (static_cast<std::size_t>(y) * ctx.width + x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                const float* w = wet.data() + plane * c;
+                const float* d = dry.data() + plane * c;
+                auto diff = [&](int px, int py) {
+                  const std::size_t k = static_cast<std::size_t>(py) * bw + px;
+                  return static_cast<double>(w[k] - d[k]);
+                };
+                const double top = diff(x0, y0) * (1.0 - wx) + diff(x1, y0) * wx;
+                const double bot = diff(x0, y1) * (1.0 - wx) + diff(x1, y1) * wx;
+                const double delta = (top * (1.0 - wy) + bot * wy) * 127.5 * mix;
+                pixels[at + c] = detail::clamp8(pixels[at + c] + delta);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::TimeCube: {
+        // TIME CUBE -- time as a third dimension.
+        //
+        // The last few seconds are kept as a block: width, height, and time
+        // running back from the face towards you. The block is drawn turning
+        // in space. Its front is now; its top and sides are every moment at
+        // once, seen edge-on, so a person who walked across the picture is a
+        // streak through time. See-through draws the whole block as a volume.
+        //
+        // The history lives in this effect's state slot at a reduced size,
+        // and the block is ray-traced at a reduced size too, then scaled up
+        // bilinearly: a smear of time needs no more than that, and it keeps
+        // the effect inside a frame. With no state from the caller (a
+        // headless dump) the block is built from this frame alone.
+        const int W = ctx.width, H = ctx.height;
+        const int sw = std::max(16, std::min(240, W / 6));
+        const int sh = std::max(9, static_cast<int>(std::lround(sw * static_cast<double>(H) / W)));
+        const int depth = 12 + static_cast<int>(std::lround(pB * 84.0));
+        const std::size_t slice = static_cast<std::size_t>(sw) * sh * 3;
+        const std::size_t header = 16;
+        std::vector<std::uint8_t> scratch;
+        std::vector<std::uint8_t>& vol = state ? *state : scratch;
+        auto readU32 = [&](std::size_t at) {
+          std::uint32_t v = 0;
+          std::memcpy(&v, vol.data() + at, 4);
+          return v;
+        };
+        auto writeU32 = [&](std::size_t at, std::uint32_t v) { std::memcpy(vol.data() + at, &v, 4); };
+        auto shrink = [&](std::uint8_t* out) {
+          for (int y = 0; y < sh; ++y) {
+            const int sy = std::min(H - 1, static_cast<int>((y + 0.5) * H / sh));
+            for (int x = 0; x < sw; ++x) {
+              const int sx = std::min(W - 1, static_cast<int>((x + 0.5) * W / sw));
+              const std::uint8_t* s = pixels.data() + (static_cast<std::size_t>(sy) * W + sx) * 4;
+              std::uint8_t* o = out + (static_cast<std::size_t>(y) * sw + x) * 3;
+              o[0] = s[0]; o[1] = s[1]; o[2] = s[2];
+            }
+          }
+        };
+        const bool fresh = vol.size() != header + slice * depth || readU32(0) != static_cast<std::uint32_t>(sw)
+                           || readU32(4) != static_cast<std::uint32_t>(sh) || readU32(8) != static_cast<std::uint32_t>(depth);
+        if (fresh) {
+          // A new block starts full of the present, so it has a shape at once.
+          vol.assign(header + slice * depth, 0);
+          writeU32(0, sw); writeU32(4, sh); writeU32(8, depth); writeU32(12, 0);
+          shrink(vol.data() + header);
+          for (int k = 1; k < depth; ++k) {
+            std::memcpy(vol.data() + header + slice * k, vol.data() + header, slice);
+          }
+        } else if (!ctx.stateHold) {
+          // One writer per frame: a second output showing this deck reads.
+          const std::uint32_t head = readU32(12);
+          shrink(vol.data() + header + slice * head);
+          writeU32(12, (head + 1) % depth);
+        }
+        const int newest = (static_cast<int>(readU32(12)) + depth - 1) % depth;
+        const std::uint8_t* frames = vol.data() + header;
+
+        // The block: x across the picture, y up it, z from now (front) back
+        // through time. Aspect as the picture; depth set by the time held.
+        const double ax = 0.5 * W / static_cast<double>(H), ay = 0.5;
+        const double az = 0.18 + pB * 0.62;
+        const double yaw = (pA - 0.5) * 6.2831853 + 0.62;
+        const double pitch = 0.38;
+        const double zoom = 1.0 + pD * 1.3;
+        const double cyw = std::cos(yaw), syw = std::sin(yaw), cp = std::cos(pitch), sp = std::sin(pitch);
+        const double see = pC;
+        const int rw = std::max(32, std::min(480, W / 3));
+        const int rh = std::max(18, static_cast<int>(std::lround(rw * static_cast<double>(H) / W)));
+        std::vector<std::uint8_t> lowres(static_cast<std::size_t>(rw) * rh * 3, 0);
+
+        // Colour at a point of the block, (u, v) across the picture from the
+        // top left and t from now (0) to oldest (1), blending neighbouring
+        // moments so the time axis is smooth.
+        auto sampleVol = [&](double u, double v, double tt, double* rgb) {
+          const double vx = std::clamp(u, 0.0, 1.0) * (sw - 1);
+          const double vy = std::clamp(v, 0.0, 1.0) * (sh - 1);
+          const double vt = std::clamp(tt, 0.0, 1.0) * (depth - 1);
+          const int x0 = static_cast<int>(vx), y0 = static_cast<int>(vy), t0 = static_cast<int>(vt);
+          const int x1 = std::min(sw - 1, x0 + 1), y1 = std::min(sh - 1, y0 + 1), t1 = std::min(depth - 1, t0 + 1);
+          const double wx = vx - x0, wy = vy - y0, wt = vt - t0;
+          const std::uint8_t* s0 = frames + slice * ((newest - t0 + depth) % depth);
+          const std::uint8_t* s1 = frames + slice * ((newest - t1 + depth) % depth);
+          for (int c = 0; c < 3; ++c) {
+            auto at = [&](const std::uint8_t* s, int x, int y) {
+              return static_cast<double>(s[(static_cast<std::size_t>(y) * sw + x) * 3 + c]);
+            };
+            const double a = (at(s0, x0, y0) * (1 - wx) + at(s0, x1, y0) * wx) * (1 - wy)
+                           + (at(s0, x0, y1) * (1 - wx) + at(s0, x1, y1) * wx) * wy;
+            const double b = (at(s1, x0, y0) * (1 - wx) + at(s1, x1, y0) * wx) * (1 - wy)
+                           + (at(s1, x0, y1) * (1 - wx) + at(s1, x1, y1) * wx) * wy;
+            rgb[c] = a * (1 - wt) + b * wt;
+          }
+        };
+
+        // Every pixel here is a ray, many times the work of a pixel copy, so
+        // tell the splitter so: at 720p the raster alone is under its
+        // threshold and the march ran on one core.
+        detail::parallelRows(rh, rw * 16, [&](int y0, int y1) {
+          for (int py = y0; py < y1; ++py) {
+            for (int px = 0; px < rw; ++px) {
+              // A pinhole camera looking down -z at the block, then the block's
+              // turn undone so the ray is in the block's own frame.
+              const double sx = ((px + 0.5) / rw - 0.5) * 2.0 * (static_cast<double>(W) / H) * 0.62 / zoom;
+              const double sy = (0.5 - (py + 0.5) / rh) * 2.0 * 0.62 / zoom;
+              double ox = 0, oy = 0, oz = 3.2;
+              double dx = sx, dy = sy, dz = -1.6;
+              const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+              dx /= len; dy /= len; dz /= len;
+              auto unturn = [&](double& x, double& y, double& z) {
+                const double y2 = y * cp + z * sp, z2 = -y * sp + z * cp;   // undo pitch
+                const double x3 = x * cyw - z2 * syw, z3 = x * syw + z2 * cyw;  // undo yaw
+                x = x3; y = y2; z = z3;
+              };
+              unturn(ox, oy, oz);
+              unturn(dx, dy, dz);
+              // Slab intersection with the block.
+              double tn = -1e9, tf = 1e9;
+              const double o[3] = {ox, oy, oz}, d[3] = {dx, dy, dz}, e[3] = {ax, ay, az};
+              bool hit = true;
+              for (int k = 0; k < 3 && hit; ++k) {
+                if (std::fabs(d[k]) < 1e-9) {
+                  if (o[k] < -e[k] || o[k] > e[k]) hit = false;
+                } else {
+                  double t1 = (-e[k] - o[k]) / d[k], t2 = (e[k] - o[k]) / d[k];
+                  if (t1 > t2) std::swap(t1, t2);
+                  tn = std::max(tn, t1);
+                  tf = std::min(tf, t2);
+                }
+              }
+              std::uint8_t* out = lowres.data() + (static_cast<std::size_t>(py) * rw + px) * 3;
+              if (!hit || tf < std::max(tn, 0.0)) {
+                continue;   // outside the block: black, like the space around it
+              }
+              auto toUVT = [&](double t, double* u, double* v, double* tt) {
+                const double x = ox + dx * t, y = oy + dy * t, z = oz + dz * t;
+                *u = (x + ax) / (2 * ax);
+                *v = (ay - y) / (2 * ay);
+                *tt = (az - z) / (2 * az);
+              };
+              double col[3] = {0, 0, 0};
+              if (see < 0.999) {
+                // The face the ray meets, shaded a little by which face it is.
+                double u, v, tt, rgb[3];
+                toUVT(tn, &u, &v, &tt);
+                sampleVol(u, v, tt, rgb);
+                const bool front = tt < 0.004;
+                const double shade = front ? 1.0 : (v < 0.004 ? 0.92 : 0.8);
+                for (int c = 0; c < 3; ++c) col[c] = rgb[c] * shade * (1.0 - see);
+              }
+              if (see > 0.001) {
+                // Through the block: front-to-back, brighter moments more solid.
+                // Each step reads the nearest stored texel -- a dark scene never
+                // turns opaque, so every ray runs all the way through, and eight
+                // reads a step did not fit in a frame. A fixed per-pixel offset
+                // on the first step turns the banding that leaves into fine
+                // noise, which the scale back up smooths away.
+                const int steps = 28;
+                double acc[3] = {0, 0, 0}, alpha = 0;
+                const double t0 = std::max(tn, 0.0), step = (tf - t0) / steps;
+                const double jitter = static_cast<double>((px * 7 + py * 13) % 16) / 16.0;
+                for (int k = 0; k < steps && alpha < 0.97; ++k) {
+                  double u, v, tt, rgb[3];
+                  toUVT(t0 + (k + jitter) * step, &u, &v, &tt);
+                  const int nx = static_cast<int>(std::clamp(u, 0.0, 1.0) * (sw - 1) + 0.5);
+                  const int ny = static_cast<int>(std::clamp(v, 0.0, 1.0) * (sh - 1) + 0.5);
+                  const int nt = static_cast<int>(std::clamp(tt, 0.0, 1.0) * (depth - 1) + 0.5);
+                  const std::uint8_t* s = frames + slice * ((newest - nt + depth) % depth) + (static_cast<std::size_t>(ny) * sw + nx) * 3;
+                  rgb[0] = s[0]; rgb[1] = s[1]; rgb[2] = s[2];
+                  const double lum = (rgb[0] + rgb[1] + rgb[2]) / 765.0;
+                  const double a = std::min(1.0, (0.035 + lum * 0.09) * 28.0 / steps);
+                  for (int c = 0; c < 3; ++c) acc[c] += (1 - alpha) * a * rgb[c];
+                  alpha += (1 - alpha) * a;
+                }
+                for (int c = 0; c < 3; ++c) col[c] += acc[c] * see;
+              }
+              out[0] = detail::clamp8(col[0]);
+              out[1] = detail::clamp8(col[1]);
+              out[2] = detail::clamp8(col[2]);
+            }
+          }
+        });
+        // The block's twelve edges as fine lines, the far ones fainter: the
+        // corners are turned back into the camera and projected, then each
+        // edge is laid down with its brightness split between neighbouring
+        // pixels, so it stays a continuous line at the reduced size.
+        {
+          auto project = [&](double bx, double by, double bz, double* px, double* py, double* depthOut) {
+            const double x = bx * cyw + bz * syw, z2 = -bx * syw + bz * cyw;   // redo yaw
+            const double y = by * cp - z2 * sp, z = by * sp + z2 * cp;          // redo pitch
+            const double k = 1.6 / std::max(0.05, 3.2 - z);
+            const double sx = x * k, sy = y * k;
+            *px = (sx / (2.0 * (static_cast<double>(W) / H) * 0.62 / zoom) + 0.5) * rw - 0.5;
+            *py = (0.5 - sy / (2.0 * 0.62 / zoom)) * rh - 0.5;
+            *depthOut = z;
+          };
+          const double cx[2] = {-ax, ax}, cyy[2] = {-ay, ay}, cz[2] = {-az, az};
+          const int corners[12][2][3] = {
+            {{0, 0, 0}, {1, 0, 0}}, {{0, 1, 0}, {1, 1, 0}}, {{0, 0, 1}, {1, 0, 1}}, {{0, 1, 1}, {1, 1, 1}},
+            {{0, 0, 0}, {0, 1, 0}}, {{1, 0, 0}, {1, 1, 0}}, {{0, 0, 1}, {0, 1, 1}}, {{1, 0, 1}, {1, 1, 1}},
+            {{0, 0, 0}, {0, 0, 1}}, {{1, 0, 0}, {1, 0, 1}}, {{0, 1, 0}, {0, 1, 1}}, {{1, 1, 0}, {1, 1, 1}}};
+          for (const auto& e : corners) {
+            double x0, y0, d0, x1, y1, d1;
+            project(cx[e[0][0]], cyy[e[0][1]], cz[e[0][2]], &x0, &y0, &d0);
+            project(cx[e[1][0]], cyy[e[1][1]], cz[e[1][2]], &x1, &y1, &d1);
+            const double ink = (d0 + d1) * 0.5 > 0.0 ? 185.0 : 95.0;   // nearer half brighter
+            const int n = std::max(2, static_cast<int>(std::ceil(std::max(std::fabs(x1 - x0), std::fabs(y1 - y0)) * 2.0)));
+            for (int s = 0; s <= n; ++s) {
+              const double f = static_cast<double>(s) / n;
+              const double lx = x0 + (x1 - x0) * f, ly = y0 + (y1 - y0) * f;
+              const int ix = static_cast<int>(std::floor(lx)), iy = static_cast<int>(std::floor(ly));
+              const double gx = lx - ix, gy = ly - iy;
+              const double w4[4] = {(1 - gx) * (1 - gy), gx * (1 - gy), (1 - gx) * gy, gx * gy};
+              const int dx4[4] = {0, 1, 0, 1}, dy4[4] = {0, 0, 1, 1};
+              for (int q = 0; q < 4; ++q) {
+                const int qx = ix + dx4[q], qy = iy + dy4[q];
+                if (qx < 0 || qy < 0 || qx >= rw || qy >= rh) continue;
+                std::uint8_t* o = lowres.data() + (static_cast<std::size_t>(qy) * rw + qx) * 3;
+                const double cover = std::min(1.0, w4[q] * 1.4);
+                for (int c = 0; c < 3; ++c) {
+                  if (ink > o[c]) o[c] = detail::clamp8(o[c] + (ink - o[c]) * cover);
+                }
+              }
+            }
+          }
+        }
+        // Back up to full size, bilinearly, and over the picture by amount.
+        detail::parallelRows(H, W, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            const double uy = std::clamp((y + 0.5) * rh / H - 0.5, 0.0, rh - 1.0);
+            const int ya = static_cast<int>(uy), yb = std::min(rh - 1, ya + 1);
+            const double wy = uy - ya;
+            for (int x = 0; x < W; ++x) {
+              const double ux = std::clamp((x + 0.5) * rw / W - 0.5, 0.0, rw - 1.0);
+              const int xa = static_cast<int>(ux), xb = std::min(rw - 1, xa + 1);
+              const double wx = ux - xa;
+              std::uint8_t* p = pixels.data() + (static_cast<std::size_t>(y) * W + x) * 4;
+              for (int c = 0; c < 3; ++c) {
+                auto s = [&](int xx, int yy) {
+                  return static_cast<double>(lowres[(static_cast<std::size_t>(yy) * rw + xx) * 3 + c]);
+                };
+                const double v = (s(xa, ya) * (1 - wx) + s(xb, ya) * wx) * (1 - wy)
+                               + (s(xa, yb) * (1 - wx) + s(xb, yb) * wx) * wy;
+                p[c] = detail::clamp8(p[c] * (1.0 - amt) + v * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::Audioprint: {
+        // THE SOUND, DRAWN THROUGH THE PICTURE.
+        //
+        // The other direction of the same idea. The deck's recently PLAYED
+        // audio is laid down the frame -- one slice of it per row -- and each
+        // row is thrown sideways by what that slice is doing, and tinted by how
+        // loud it is. A drum hits and the picture tears on the beat, because it
+        // is the same signal that made the sound.
+        //
+        // Played audio, not decoded audio: that is what the operator is
+        // hearing, so what the picture does matches what the room does.
+        if (ctx.audioSamples == nullptr || ctx.audioSampleCount < 2) {
+          break;   // no sound offered — pass the picture through, don't invent one
+        }
+        const std::size_t have = ctx.audioSampleCount;
+        // Span: how much of the recent sound is spread down the frame. Short is
+        // one syllable stretched over the whole picture; long draws bars.
+        const std::size_t span = std::max<std::size_t>(
+          64, static_cast<std::size_t>(have * (0.03 + pB * 0.97)));
+        const std::size_t first = have - std::min(span, have);
+        const double throwPx = (0.5 + pA * pA * 24.0) * ctx.width / 640.0 * amt;
+        const double ink = pC * amt;
+        // A ROW AT A TIME, NOT A FRAME AT A TIME. Every row is displaced by
+        // one constant, so the only scratch this needs is ONE ROW -- and the
+        // first version copied the whole picture instead. At a 4K output that
+        // is a 33MB allocation and a 33MB copy every frame, which took the
+        // recorder 112 frames behind on a cue it should not have troubled.
+        detail::parallelRows(ctx.height, ctx.width * 2, [&](int firstRow, int lastRow) {
+          std::vector<std::uint8_t> row(static_cast<std::size_t>(ctx.width) * 4);
+          for (int y = firstRow; y < lastRow; ++y) {
+            const std::size_t at =
+              first + static_cast<std::size_t>(
+                        static_cast<double>(y) / std::max(1, ctx.height - 1) *
+                        static_cast<double>(have - first - 1));
+            const double sample = static_cast<double>(ctx.audioSamples[std::min(at, have - 1)]);
+            const int shift = static_cast<int>(std::lround(sample * throwPx));
+            const double lift = std::fabs(sample) * ink;
+            // The tint follows the SIGN of the sample, so the picture leans warm
+            // on one half of the waveform and cold on the other -- the shape of
+            // the sound, not just its size.
+            const double warm = sample > 0.0 ? lift : 0.0;
+            const double cool = sample < 0.0 ? lift : 0.0;
+            std::uint8_t* dst = pixels.data() + static_cast<std::size_t>(y) * ctx.width * 4;
+            std::memcpy(row.data(), dst, row.size());
+            for (int x = 0; x < ctx.width; ++x) {
+              const int sx = std::clamp(x + shift, 0, ctx.width - 1);
+              const std::uint8_t* src = row.data() + static_cast<std::size_t>(sx) * 4;
+              std::uint8_t* out = dst + static_cast<std::size_t>(x) * 4;
+              out[0] = detail::clamp8(src[0] * (1.0 + warm) - cool * 40.0);
+              out[1] = detail::clamp8(src[1] * (1.0 + lift * 0.25));
+              out[2] = detail::clamp8(src[2] * (1.0 + cool) - warm * 40.0);
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::TextMode: {
+        // The character grid, on any picture at all.
+        //
+        // The renderer is supplied by the caller (ctx.textMode) because it
+        // needs the cue's own text-mode settings -- the glyph set, the ink,
+        // the custom characters, the phrases -- and there are far more of
+        // those than four effect parameters. So the four here are the ones
+        // worth reaching for mid-set, the caller folds them into the settings
+        // it hands over, and everything else stays in the inspector next to
+        // the glyph set where it can be read.
+        //
+        // Nothing supplied means pass the picture through untouched. An
+        // effect that blacked the frame out because its host had not wired
+        // something up would be worse than one that does nothing.
+        if (!ctx.textMode) {
+          break;
+        }
+        // AMOUNT IS A MIX, not a switch. Text mode at 1.0 destroys the
+        // picture, which is the point of it; part way it sits over the
+        // original like a screen door, and that turns out to be where most of
+        // the good-looking settings are.
+        if (amt >= 0.999) {
+          ctx.textMode(pixels.data(), ctx.width, ctx.height);
+          break;
+        }
+        std::vector<std::uint8_t> celled(pixels);
+        ctx.textMode(celled.data(), ctx.width, ctx.height);
+        detail::parallelRows(ctx.height, ctx.width, [&](int y0, int y1) {
+          for (int y = y0; y < y1; ++y) {
+            std::uint8_t* dst = pixels.data() +
+              (static_cast<std::size_t>(y) * ctx.width) * 4;
+            const std::uint8_t* src = celled.data() +
+              (static_cast<std::size_t>(y) * ctx.width) * 4;
+            for (int x = 0; x < ctx.width; ++x) {
+              std::uint8_t* dp = dst + static_cast<std::size_t>(x) * 4;
+              const std::uint8_t* sp = src + static_cast<std::size_t>(x) * 4;
+              for (int ch = 0; ch < 3; ++ch) {
+                dp[ch] = detail::clamp8(dp[ch] * (1.0 - amt) + sp[ch] * amt);
+              }
+            }
+          }
+        });
+        break;
+      }
+
+      case CueEffectKind::MotionTrails: {
+        // MOTION TRAILS, the melter. A grid of cells, each the average
+        // brightness of its patch; a cell that changed since the last frame
+        // by more than the sensitivity is MOVING, and its pixels are drawn
+        // from the live picture. Every other pixel keeps what it held, eased
+        // toward the live picture only as fast as "let go" allows.
+        if (!state) break;
+        const int w = ctx.width, h = ctx.height;
+        // Columns: a quarter of the width at the left, 40 (the patch) at the
+        // right; rows keep the cells square.
+        const int fine = std::max(40, w / 4);
+        const int gw = std::clamp(static_cast<int>(std::lround(fine + (40 - fine) * pC)), 8, w);
+        const int gh = std::clamp(static_cast<int>(std::lround(static_cast<double>(gw) * h / std::max(1, w))), 4, h);
+        const std::size_t bytes = count * 4;
+        const std::size_t cells = static_cast<std::size_t>(gw) * static_cast<std::size_t>(gh);
+        std::vector<std::uint8_t>& store = *state;
+        const std::size_t wanted = bytes + cells + 8;
+        // The cell means of this frame.
+        std::vector<std::uint8_t> luma(cells);
+        for (int cy = 0; cy < gh; ++cy) {
+          const int y0 = cy * h / gh, y1 = std::max(y0 + 1, (cy + 1) * h / gh);
+          for (int cx = 0; cx < gw; ++cx) {
+            const int x0 = cx * w / gw, x1 = std::max(x0 + 1, (cx + 1) * w / gw);
+            // Two samples a side at most: enough to notice a change, a quarter of
+            // the reads of every pixel on a 4K frame.
+            const int sx = std::max(2, (x1 - x0) / 2), sy = std::max(2, (y1 - y0) / 2);
+            unsigned sum = 0, n = 0;
+            for (int y = y0; y < y1; y += sy) {
+              const std::uint8_t* row = pixels.data() + (static_cast<std::size_t>(y) * w) * 4;
+              for (int x = x0; x < x1; x += sx) {
+                const std::uint8_t* p = row + static_cast<std::size_t>(x) * 4;
+                sum += (p[0] * 77u + p[1] * 150u + p[2] * 29u) >> 8;
+                ++n;
+              }
+            }
+            luma[static_cast<std::size_t>(cy) * gw + cx] = static_cast<std::uint8_t>(n ? sum / n : 0);
+          }
+        }
+        const bool sized = store.size() == wanted &&
+                           store[bytes + cells] == static_cast<std::uint8_t>(gw & 0xFF) &&
+                           store[bytes + cells + 1] == static_cast<std::uint8_t>(gh & 0xFF);
+        if (!sized) {
+          // First frame, or the raster or grid changed: hold the picture as it
+          // is, so the effect starts from what is on screen.
+          store.assign(wanted, 0);
+          std::memcpy(store.data(), pixels.data(), bytes);
+          std::memcpy(store.data() + bytes, luma.data(), cells);
+          store[bytes + cells] = static_cast<std::uint8_t>(gw & 0xFF);
+          store[bytes + cells + 1] = static_cast<std::uint8_t>(gh & 0xFF);
+          break;
+        }
+        std::uint8_t* held = store.data();
+        std::uint8_t* lastLuma = store.data() + bytes;
+        // 4 (right) to 60 (left) levels of change count as movement.
+        const int threshold = static_cast<int>(std::lround(60.0 - 56.0 * pA));
+        std::vector<std::uint8_t> moving(cells);
+        for (std::size_t i = 0; i < cells; ++i) {
+          moving[i] = std::abs(static_cast<int>(luma[i]) - static_cast<int>(lastLuma[i])) > threshold ? 1 : 0;
+        }
+        // Squared, so the useful slow end of "let go" has room.
+        const double letGo = pB * pB * 0.5;
+        // 0 light trails, 1 the melt, 2 dark trails (D in thirds).
+        const int trail = pD < 1.0 / 3.0 ? 0 : pD < 2.0 / 3.0 ? 1 : 2;
+        // A second output showing this cue reads what the first one built and
+        // changes nothing, so the two stay identical.
+        const bool hold = ctx.stateHold;
+        // Whole numbers in 256ths: this runs on every pixel of a 4K frame.
+        const int letQ = static_cast<int>(std::lround(letGo * 256.0));
+        const int amtQ = static_cast<int>(std::lround(amt * 256.0));
+        std::vector<int> cellOfX(static_cast<std::size_t>(w));
+        for (int x = 0; x < w; ++x) cellOfX[static_cast<std::size_t>(x)] = std::min(gw - 1, x * gw / w);
+        detail::parallelRows(h, w, [&](int ya, int yb) {
+          for (int y = ya; y < yb; ++y) {
+            const std::uint8_t* moveRow = moving.data() + static_cast<std::size_t>(std::min(gh - 1, y * gh / h)) * gw;
+            std::uint8_t* live = pixels.data() + (static_cast<std::size_t>(y) * w) * 4;
+            std::uint8_t* was = held + (static_cast<std::size_t>(y) * w) * 4;
+            for (int x = 0; x < w; ++x, live += 4, was += 4) {
+              const bool fresh = moveRow[cellOfX[static_cast<std::size_t>(x)]] != 0;
+              for (int ch = 0; ch < 3; ++ch) {
+                const int l = live[ch], o = was[ch];
+                // Where it moved: the live picture, or the lighter or darker
+                // of it and what was held, so a passing thing is left behind.
+                int k;
+                if (fresh) {
+                  k = trail == 0 ? std::max(l, o) : trail == 2 ? std::min(l, o) : l;
+                } else {
+                  k = o + (((l - o) * letQ) >> 8);
+                }
+                if (!hold) was[ch] = static_cast<std::uint8_t>(k);
+                live[ch] = static_cast<std::uint8_t>((l * (256 - amtQ) + k * amtQ) >> 8);
+              }
+            }
+          }
+        });
+        if (!hold) std::memcpy(lastLuma, luma.data(), cells);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+}
+
+// Does this effect need a driver clip to do anything?
+//
+// Only motion puppet, today. Asked as a question about the KIND rather than
+// tested against it at the call sites, so a second driver-fed effect cannot be
+// added without this answering for it too.
+inline bool cueEffectNeedsDriver(CueEffectKind kind) {
+  return kind == CueEffectKind::MotionPuppet;
+}
+
+// A BYPASSED puppet still counts. Bypass is a temporary "not right now" and
+// throwing the operator's driver away because they muted an effect for a
+// moment would be losing their work to a toggle.
+inline bool cueEffectStackNeedsDriver(const std::vector<CueEffect>& stack) {
+  for (const CueEffect& fx : stack) {
+    if (cueEffectNeedsDriver(fx.kind)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+inline bool cueEffectStackAnimates(const std::vector<CueEffect>& stack) {
+  for (const CueEffect& fx : stack) {
+    if (!fx.bypassed && cueEffectKindAnimates(fx.kind)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Is anything in this stack moving on its own?
+//
+// Used to decide whether a STILL has to re-render every frame, the same way
+// cueEffectStackAnimates does for the effects that advance with the frame
+// index: an LFO on a still with no LFO-aware gate would set the parameter once
+// and then sit there.
+inline bool cueEffectStackHasLfo(const std::vector<CueEffect>& stack) {
+  for (const CueEffect& fx : stack) {
+    if (fx.bypassed) continue;
+    for (const ParamLfo& lfo : fx.lfo) {
+      if (lfo.on) return true;
+    }
+  }
+  return false;
+}
+
+// The stack as it stands THIS FRAME, with every armed LFO evaluated.
+//
+// Done here rather than inside the effects because the stack is a pure function
+// of its inputs and must stay one: it is dumped headlessly, benched, run twice,
+// and applied by both the output and the preview. An effect that read a clock
+// itself could not be any of those things. So the caller asks for a modulated
+// copy and everything downstream is unchanged.
+//
+// Returns false when nothing is modulated, so the ordinary case does not pay
+// for a copy of the stack every frame.
+inline bool modulateCueEffectStack(const std::vector<CueEffect>& stack,
+                                   double seconds, double beats01,
+                                   std::vector<CueEffect>& out,
+                                   double audio01 = 0.0) {
+  if (!cueEffectStackHasLfo(stack)) {
+    return false;
+  }
+  out = stack;
+  for (CueEffect& fx : out) {
+    if (fx.bypassed) continue;
+    float* slots[5] = {&fx.paramA, &fx.paramB, &fx.paramC, &fx.paramD, &fx.amount};
+    for (int i = 0; i < 5; ++i) {
+      *slots[i] = lfoApply(fx.lfo[i], *slots[i], seconds, beats01, audio01);
+    }
+  }
+  return true;
+}
+
+// Does this chain contain an effect that DRAWS with the deck's audio? The
+// caller only fetches the audio trace when this is true -- same rule as the
+// audio chain's picture reading in the other direction, so a cue that is not
+// using the loop pays nothing for it.
+inline bool cueEffectStackDrawsWithAudio(const std::vector<CueEffect>& stack) {
+  for (const CueEffect& fx : stack) {
+    if (fx.bypassed || fx.kind != CueEffectKind::Audioprint) {
+      continue;
+    }
+    if (fx.amount > 0.0005f || fx.lfo[4].on) {
+      return true;
+    }
+  }
+  return false;
+}
+
+inline bool cueEffectStackActive(const std::vector<CueEffect>& stack) {
+  for (const CueEffect& fx : stack) {
+    if (fx.kind == CueEffectKind::None || fx.bypassed) {
+      continue;
+    }
+    // AN AMOUNT AT ZERO WITH AN LFO ON IT IS NOT OFF. Index 4 is the amount's
+    // oscillator, and it can lift the effect in from nothing -- which is the
+    // obvious way to set up "appears with the beat" or "appears with the
+    // sound". Counting only the resting amount meant such an effect never ran
+    // at all: the compositor skipped the stack, and the decoder was told no
+    // CPU frames were needed, so there was no picture for it to act on.
+    if (fx.amount > 0.0005f || fx.lfo[4].on) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace deckboy::effects
+
+#endif  // DECKBOY_CORE_CUE_EFFECTS_HPP

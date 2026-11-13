@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deckboy vs Mitti, PlaybackPro, QLab, Millumin and vMix | Comparison</title>
+    <meta name="description" content="Compare live video playback tools by price, platform and features. Deckboy brings clips, slides and live sources into one cue list, with NDI, SDI, streaming and recording. Free on Windows, macOS and Linux.">
+    <link rel="canonical" href="https://utopian-academy.github.io/Deckboy/compare.html">
+
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Deckboy">
+    <meta property="og:title" content="Deckboy vs Mitti, PlaybackPro, QLab, Millumin and vMix">
+    <meta property="og:description" content="The free cue deck that does what the paid ones do, on Windows, macOS and Linux — and several things none of them do at all.">
+    <meta property="og:url" content="https://utopian-academy.github.io/Deckboy/compare.html">
+    <meta property="og:image" content="https://utopian-academy.github.io/Deckboy/images/social-card.png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Deckboy vs Mitti, PlaybackPro, QLab, Millumin and vMix">
+    <meta name="twitter:image" content="https://utopian-academy.github.io/Deckboy/images/social-card.png">
+
+    <link rel="stylesheet" href="style.css?v=20261024b">
+    
+    <style>
+        .prose { max-width: 860px; margin: 0 auto 4rem; padding: 0 1.5rem; }
+        .prose h2 { margin: 3rem 0 1rem; font-size: 1.6rem; }
+        .prose h3 { margin: 2rem 0 .5rem; font-size: 1.15rem; color: var(--ink); }
+        .prose p { margin-bottom: 1rem; color: var(--ink-soft); }
+        .prose ul { margin: 0 0 1rem 1.25rem; color: var(--ink-soft); }
+        .prose li { margin-bottom: .4rem; }
+        .table-wrap { overflow-x: auto; margin: 2rem 0; }
+        table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .92rem; }
+        th, td { text-align: left; padding: .7rem .8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+        th { color: var(--ink); font-weight: 600; }
+        td { color: var(--ink-soft); }
+        .yes { color: #3fb950; }
+        .no  { color: #8b949e; }
+        .callout { border-left: 3px solid var(--ink-soft); padding: 1rem 1.2rem; background: var(--panel);
+                    margin: 2rem 0; }
+        .callout p:last-child { margin-bottom: 0; }
+        tr.us td { background: rgba(252,254,31,.08); color: var(--ink); font-weight: 600; }
+        td.y { color: var(--ink); } td.n { opacity: .45; }
+        .cmp td:nth-child(2), .cmp td:nth-child(3), .cmp td:nth-child(4),
+        .cmp th:nth-child(2), .cmp th:nth-child(3), .cmp th:nth-child(4) { text-align: center; white-space: nowrap; }
+        .box { border: 2px solid var(--rule); padding: 1.2rem 1.4rem; margin: 2rem 0; }
+        .box h2 { margin-top: 0; }
+        .box ul { columns: 2 260px; column-gap: 2rem; }
+        .box li { break-inside: avoid; }
+        .small { font-size: .8rem; color: var(--ink-soft); }
+        .feat td:nth-child(2), .feat th:nth-child(2) { text-align: center; width: 6rem; }
+        .feat td.dk { color: var(--ink); font-weight: 700; background: rgba(252,254,31,.08); }
+        .feat td:first-child { color: var(--ink); }
+        .feat td .n { opacity: .55; }
+        .feat { min-width: 0; }
+        .cmp .runs { display: none; }
+        /* ── phones: each tool becomes a card, the price under its name ── */
+        @media (max-width: 640px) {
+            .table-wrap { overflow: visible; }
+            table.cmp { min-width: 0; }
+            .cmp thead { display: none; }
+            .cmp tr { display: block; border: 2px solid var(--rule); padding: .7rem .9rem; margin-bottom: .7rem; }
+            .cmp tr.us { border-color: var(--ink); }
+            .cmp td { display: block; border: 0; padding: .15rem 0; background: none !important; }
+            .cmp td:nth-child(2), .cmp td:nth-child(3), .cmp td:nth-child(4) { display: none; }
+            .cmp td:first-child { font-size: 1rem; }
+            .cmp td.runs { display: block; text-align: left !important; color: var(--ink); font-size: .8rem; margin-bottom: .35rem; }
+            .cmp td[data-label]::before { content: attr(data-label) ": "; color: var(--ink-soft); font-weight: 400; }
+            .cmp tr.us td[data-label] { color: var(--ink); }
+            .feat thead { display: none; }
+            .feat tr { display: block; border-bottom: 1px solid var(--rule); padding: .55rem 0; }
+            .feat td { display: block; border: 0; padding: .1rem 0; width: auto; }
+            .feat td:first-child { font-weight: 600; }
+            .feat td.dk { display: inline; background: none; text-align: left; }
+            .feat td.dk::before { content: "Deckboy "; }
+            .feat td[data-label="Also listed by"]::before { content: "Also: "; color: var(--ink-soft); }
+            .box { padding: 1rem; }
+            .box h2 { font-size: 1rem; line-height: 1.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-glow"></div>
+
+    <nav class="navbar">
+        <div class="logo"><a href="./" style="color:inherit;text-decoration:none">Deckboy</a></div>
+        <div class="nav-links">
+            <a href="trailer.html">Trailer</a>
+            <a href="compare.html">Compare</a>
+            <a href="manual.html">Manual</a>
+            <a href="faq.html">FAQ</a>
+            <a href="specs.html">Specs</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy">GitHub</a>
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-primary">Download Free</a>
+        </div>
+    </nav>
+
+    <header class="hero" style="min-height:auto;padding-top:4rem;padding-bottom:1rem">
+        <div class="hero-content">
+            <h1>How Deckboy compares</h1>
+            <p class="hero-subtitle">Price, platform and the tools your show needs.</p>
+        </div>
+    </header>
+
+    <div class="prose">
+        <p>Deckboy is a cue-based video playback deck: a playlist of clips, slides, pages,
+        cameras and feeds that go to air when the operator says so, out to screens, NDI, SDI and
+        streams, while it records. These are the eleven tools it sits beside on a show: first
+        what they cost and where they run, then what they do.</p>
+
+        <p>Deckboy&rsquo;s current release, <b>v0.99.422</b>, also includes a pattern tracker, sequences on one button,
+        phone control, a fixture patch, live captions, picture scopes that follow the source&rsquo;s
+        frame rate, five example shows, and a warp monitor that follows the selected output. Its Windows HDR path carries PQ/HLG
+        feeds with graphics to ST&nbsp;2110, SRT/enhanced RTMP and recording.
+        <a href="specs.html">See Deckboy&rsquo;s current specifications and platform limits.</a></p>
+
+        <div class="table-wrap">
+        <table class="cmp">
+            <thead>
+                <tr><th>Tool</th><th>Windows</th><th>macOS</th><th>Linux</th><th class="runs"></th><th>To own it</th><th>To rent it</th></tr>
+            </thead>
+            <tbody>
+                <tr class="us"><td><b>Deckboy</b></td><td class="y">&#10003;</td><td class="y">&#10003;</td><td class="y">&#10003;</td><td class="runs">Windows &middot; macOS &middot; Linux</td><td data-label="To own it">Free &mdash; every feature, every machine</td><td data-label="To rent it">Never needed</td></tr>
+                <tr><td><b>Inkue</b></td><td class="y">&#10003;</td><td class="y">&#10003;</td><td class="y">&#10003;</td><td class="runs">Windows &middot; macOS &middot; Linux</td><td data-label="To own it">Free, open source (GPL-3.0)</td><td data-label="To rent it">Never needed</td></tr>
+                <tr><td><b>Playback Joe</b></td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="runs">Windows &middot; Linux</td><td data-label="To own it">Free download; no licence published</td><td data-label="To rent it">Never needed</td></tr>
+                <tr><td><b>vMix</b></td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="runs">Windows</td><td data-label="To own it">$60&ndash;$1,200 by edition</td><td data-label="To rent it">$50 a month (MAX)</td></tr>
+                <tr><td><b>PlayDeck</b></td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="runs">Windows</td><td data-label="To own it">Annual licence, &euro;190.80&ndash;&euro;994.80 a year</td><td data-label="To rent it">&euro;26.90&ndash;&euro;139.90 a month</td></tr>
+                <tr><td><b>Resolume Avenue / Arena</b></td><td class="y">&#10003;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">Windows &middot; macOS</td><td data-label="To own it">&euro;299 / &euro;799, then renew for updates</td><td data-label="To rent it">&mdash;</td></tr>
+                <tr><td><b>Mitti</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">From $399</td><td data-label="To rent it">From $79.80</td></tr>
+                <tr><td><b>SimplePlay Pro X</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">$399; Apple Silicon only</td><td data-label="To rent it">&mdash;</td></tr>
+                <tr><td><b>Millumin</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">From &euro;399</td><td data-label="To rent it">&euro;29 a week, &euro;199 a year</td></tr>
+                <tr><td><b>ProVideoPlayer</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">$999</td><td data-label="To rent it">$199 for two weeks, $399 a month</td></tr>
+                <tr><td><b>QLab</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">$599&ndash;$1,399 by feature set; a basic free tier</td><td data-label="To rent it">$8&ndash;$15 a day</td></tr>
+                <tr><td><b>PlaybackPro Plus</b></td><td class="n">&mdash;</td><td class="y">&#10003;</td><td class="n">&mdash;</td><td class="runs">macOS</td><td data-label="To own it">$699</td><td data-label="To rent it">Through rental houses</td></tr>
+            </tbody>
+        </table>
+        <p class="small">Prices for one machine, without tax, from each vendor's own site on
+        1&nbsp;October 2026; Playback Joe from its GitHub page on 24&nbsp;October 2026.</p>
+        </div>
+
+        <h2>Feature by feature</h2>
+        <p>Sixteen things a show reaches for. Deckboy does every one of them, in the free
+        download, on all three systems. Beside each is which of the other eleven list it on
+        their own website or README.</p>
+
+        <div class="table-wrap">
+        <table class="feat">
+            <thead>
+                <tr><th>What the show needs</th><th>Deckboy</th><th>Others that list it</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>A cue list with standby and GO</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Mitti, SimplePlay Pro X, QLab, PlaybackPro Plus, Inkue, Playback Joe</td></tr>
+                <tr><td>PDF, PowerPoint and Keynote slides as cues</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Mitti (PDF only)</td></tr>
+                <tr><td>A live web page as a cue</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix, Mitti, Millumin</td></tr>
+                <tr><td>NDI in and out</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix, PlayDeck, Resolume, Mitti, SimplePlay Pro X, ProVideoPlayer, QLab</td></tr>
+                <tr><td>Blackmagic SDI out</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix, PlayDeck, Mitti, SimplePlay Pro X, ProVideoPlayer</td></tr>
+                <tr><td>SMPTE ST&nbsp;2110 out, with NMOS and PTP</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">PlayDeck</td></tr>
+                <tr><td>SRT and RTMP streams out</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix, PlayDeck</td></tr>
+                <tr><td>Records the programme while it plays</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix, PlayDeck</td></tr>
+                <tr><td>Projection mapping</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Resolume, Mitti, SimplePlay Pro X, Millumin, ProVideoPlayer, QLab</td></tr>
+                <tr><td>MIDI Show Control</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Mitti, QLab</td></tr>
+                <tr><td>Timecode</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Resolume, Mitti, SimplePlay Pro X, Millumin, ProVideoPlayer, QLab, Inkue</td></tr>
+                <tr><td>Stream Deck or Bitfocus Companion</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">PlayDeck, Mitti, SimplePlay Pro X, Millumin, QLab</td></tr>
+                <tr><td>OSC</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Resolume, Mitti, SimplePlay Pro X, Millumin, QLab, Inkue</td></tr>
+                <tr><td>Your own VST3 audio plugins</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">vMix</td></tr>
+                <tr><td>Runs on Linux</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Inkue, Playback Joe</td></tr>
+                <tr><td>Open source: read it, fix it, keep it forever</td><td class="dk" data-label="Deckboy">&#10003;</td><td data-label="Also listed by">Inkue</td></tr>
+            </tbody>
+        </table>
+        <p class="small">Read from each vendor's own product and help pages on 2&nbsp;October 2026,
+        from Inkue's README on 16&nbsp;October 2026, and from Playback Joe's README on 24&nbsp;October 2026.
+        A tool missing from a row may still do it without saying so on its site; tell us and we
+        will correct the row. Deckboy is GPL-3.0: the
+        <a href="https://github.com/Utopian-Academy/Deckboy">source</a> is all there.</p>
+        </div>
+
+        <div class="box">
+        <h2>What the free download has in it</h2>
+        <ul>
+            <li><b>One cue list for every source</b>: clips, stills, PDF, PowerPoint and Keynote slides, web pages, any window, cameras, NDI, SRT, RTMP and SDI input</li>
+            <li><b>Every output at once, while it records</b>: screens, NDI, Blackmagic SDI with key and fill, SMPTE ST&nbsp;2110 with NMOS and PTP, SRT and RTMP</li>
+            <li><b>A real running order</b>: standby and GO, pre-waits, continues, arm and disarm, audition, preload and a pre-show CHECK</li>
+            <li><b>42 video effects and 23 audio effects</b> on any cue, every dial on an oscillator, plus your own VST3 plugins</li>
+            <li><b>Projection mapping per layer</b>, in perspective, dragged on the programme monitor</li>
+            <li><b>Lower thirds, stage timers, presenter and prompter views</b>, each an output of its own</li>
+            <li><b>Driven from anything</b>: Stream Deck, Companion, MIDI Show Control, OSC, Art-Net, LTC, HyperDeck, the vMix API</li>
+            <li><b>Windows, macOS and Linux</b>, from one show file</li>
+        </ul>
+        </div>
+
+        <h2>One show file, across your machines</h2>
+        <p>Deckboy runs on Windows, macOS and Linux. Build a running order on your laptop,
+        then carry the show file and its media to the machine at the venue. Clips, slides and
+        live sources share one cue list, with the same transport and remote controls.</p>
+
+        <p>Then there is the second machine. Most of the others are licensed by the computer,
+        so a bigger rig means more licences, and several are rented by the week or the month, or
+        buy a year of updates and then ask again. Deckboy goes on the main machine, the backup
+        and the laptop in the flight case for the same price: nothing. QLab has a free
+        tier, but it only runs on a Mac, and the features a real show reaches for are licensed or
+        rented by the day on top.</p>
+
+        <p>Deckboy is free. Not a trial, not a watermark, not a feature-limited tier with the
+        useful half behind a licence server: the whole application, on all three operating
+        systems, under the GPL. The spare machine in the flight case can run it too, and so can
+        the one you are reading this on.</p>
+
+        <h2>What most of them do not give you</h2>
+        <p>Not "does it better" &mdash; mostly does not have. Every item here is in the free download,
+        on all three platforms:</p>
+        <ul>
+            <li><b>Your own VST3 effects and instruments, inside a cue.</b> The reverb you already own or the
+                channel strip your mix is built around sits in that cue's chain beside Deckboy's
+                own effects, with the plugin's controls on the rows beneath it and its settings
+                saved in the show. A plugin that cannot keep up with its block is taken out and
+                reported, rather than clicking through the PA.</li>
+            <li><b>Any window on the machine, as a cue.</b> A score bug, a timer, a rehearsal
+                tool, the spreadsheet somebody insists on &mdash; at the window's own resolution
+                whatever the display scaling is, following it as it moves, with anything in front
+                of it kept out of shot, so the operator carries on working on the same box.
+                <a href="window-cues.html">How that works</a>.</li>
+            <li><b>A web page as a cue</b>, rendered inside the programme rather than in a
+                browser window you have to keep on top.</li>
+            <li><b>Effects that are instruments rather than filters</b>: schlieren imaging,
+                Chladni figures, a real wave equation, crystal grain growth, retinal persistence,
+                structure-tensor grain flow &mdash; and two that cross between picture and sound
+                in both directions.</li>
+            <li><b>A test-pattern generator and a screen-check tool</b> in the same application
+                that plays the show, so the wall can be proved before anyone arrives.</li>
+            <li><b>It runs with no sound card at all</b> &mdash; a rack PC feeding a video wall
+                opens, plays and puts a picture out.</li>
+            <li><b>One show file on Windows, macOS and Linux.</b> Use the same running order across your show and backup machines.</li>
+        </ul>
+
+        <h2>Where Deckboy fits</h2>
+        <ul>
+            <li><b>The job is playing video cues, reliably, on the night.</b> A playlist of clips
+                with trim, fades, loops and hold-last-frame, hardware-accelerated decode, and a
+                cue that knows how long it has left, and seventeen cue-to-cue transition styles
+                &mdash; cut, crossfade, dips, four pushes, four wipes, an iris and four procedural styles.
+                If a client sends a file that will not play,
+                it converts in place without leaving the application; if they send one mastered
+                too quietly, it normalises to a chosen &minus;16, &minus;23 or &minus;24&nbsp;LUFS target. That is the day job, and everything
+                below is what happens after it is handled.</li>
+            <li><b>The show machine is a PC, or a mixture.</b> "QLab for Windows" and
+                "Mitti for Windows" are common searches for a reason. Deckboy runs natively on
+                Windows, macOS and Linux from the same show file.</li>
+            <li><b>The signal has to leave in more than one shape.</b> NDI, SRT, RTMP,
+                Blackmagic SDI and SMPTE ST 2110 can run at once, so the playback machine often
+                solves the conversion problem on the day as well.</li>
+            <li><b>It has to be driven from a surface, or from the lighting desk.</b> A Stream Deck
+                plugin and a Bitfocus Companion module, plus OSC, MIDI, Art-Net and LTC timecode.
+                MIDI Show Control lets an Eos or a grandMA fire cues by number, which is how a
+                theatre keeps video on the same GO as the lights. MIDI is in every download.</li>
+            <li><b>Slides are part of the show.</b> PDF, PowerPoint and Keynote import as one
+                cue per slide with speaker notes, and presenter and prompter views are output
+                types of their own. Most cue players do not handle slides at all.</li>
+            <li><b>Something on the machine has to go to air.</b> A window on the show PC can
+                be a cue &mdash; a score bug, a timer, a rehearsal tool, the spreadsheet somebody
+                insists on &mdash; at the window&rsquo;s own resolution whatever the display
+                scaling is, following it as it moves, with anything in front of it kept out of
+                shot, so the operator can carry on working on the same box. A web page can be a
+                cue too, rendered inside the programme rather than in a browser window you have
+                to keep on top. Most cue players send you to a capture card or a second machine
+                for either.</li>
+            <li><b>The sound needs to follow the picture.</b> Five of the twenty-three per-cue
+                audio effects read the frame they are playing under &mdash; its brightness, where
+                it sits in the raster, how long it has left. A plug-in in a desk receives samples
+                and nothing else, so it cannot. Two effects cross the other way as well:
+                <b>databend</b> plays the picture through an audio chain and paints what comes
+                back, and <b>audioprint</b> draws the sound the deck has just played through the
+                picture.</li>
+            <li><b>Budget is zero.</b> GPL-3.0, and nothing phones home.</li>
+        </ul>
+
+
+
+        <div class="cta-group" style="justify-content:flex-start;margin-top:2.5rem">
+            <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest" class="btn-large">Download Latest Release</a>
+            <a href="./" class="btn-large btn-outline">Back to Deckboy</a>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-cols">
+            <div>
+                <h4>Deckboy</h4>
+                <a href="./">What it does</a>
+                <a href="trailer.html">The trailer</a>
+                <a href="compare.html">How it compares</a>
+                <a href="qlab-alternative.html">Coming from QLab</a>
+                <a href="for-theatre.html">For theatre</a>
+                <a href="for-events.html">For live events</a>
+                <a href="for-broadcast.html">For broadcast &amp; IP video</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy/releases/latest">Download</a>
+            </div>
+            <div>
+                <h4>Using it</h4>
+                <a href="manual.html">Manual</a>
+                <a href="faq.html">FAQ</a>
+                <a href="specs.html">Specifications</a>
+                <a href="slides.html">Slides &amp; presenting</a>
+                <a href="window-cues.html">Window &amp; browser cues</a>
+                <a href="ndi.html">NDI in and out</a>
+                <a href="stream-deck.html">Stream Deck &amp; Companion</a>
+                <a href="latency.html">Where latency hides</a>
+            </div>
+            <div>
+                <h4>Tools</h4>
+                <a href="test-patterns.html">Test patterns</a>
+                <a href="led-wall.html">LED pattern generator</a>
+                <a href="led-calculator.html">LED calculator</a>
+                <a href="screen-check.html">Screen check</a>
+                <a href="databend.html">Databend</a>
+            </div>
+            <div>
+                <h4>Guides</h4>
+                <a href="shooting-led.html">Shooting an LED wall</a>
+                <a href="press.html">Press kit</a>
+                <a href="https://github.com/Utopian-Academy/Deckboy">Source on GitHub</a>
+            </div>
+        </div>
+        <p class="footer-note">Built as an open-source project by Utopian-Academy.
+        Free under the GPL-3.0.</p>
+    </footer>
+</body>
+</html>

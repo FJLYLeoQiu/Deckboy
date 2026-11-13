@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Deckboy Contributors
+// This file is part of Deckboy, a cue deck for live events.
+// See LICENSE for details.
+
+// ============================================================================
+// primitives.hpp — Low-level drawing primitives for the Deckboy UI.
+//
+// Stateless utility class providing basic 2D drawing operations used by
+// all Deckboy UI components. All methods are static — no state is held.
+//
+//   fillRect()        — solid color rectangle fill (alpha-blended)
+//   strokeRect()      — rectangle outline (1px border)
+//   drawFramedPanel() — beveled panel: fill + border + highlight/shadow edges
+//   drawSpeakerGrille() — decorative horizontal bar pattern (cosmetic detail)
+//
+// Implementation: primitives.cpp
+// Used by: waveform_renderer.cpp, app_render_*.ipp, main.cpp UI drawing.
+// ============================================================================
+
+#pragma once
+
+#include "core/sdl_compat.hpp"
+
+namespace deckboy::render {
+
+class Primitives {
+ public:
+  // Fill a rectangle with solid color (sets SDL_BLENDMODE_BLEND for alpha)
+  static void fillRect(SDL_Renderer* renderer, const SDL_Rect& rect, SDL_Color color);
+
+  // Draw 1px rectangle outline (sets SDL_BLENDMODE_BLEND for alpha)
+  static void strokeRect(SDL_Renderer* renderer, const SDL_Rect& rect, SDL_Color color);
+
+  // Draw a beveled panel: solid body fill, 1px outer border, then inset
+  // highlight/shadow edges for a raised or sunken 3D effect. The bevel
+  // direction is auto-detected: if innerBorder is brighter than body,
+  // the panel appears raised; if darker, it appears inset.
+  static void drawFramedPanel(SDL_Renderer* renderer, const SDL_Rect& rect,
+                              SDL_Color body, SDL_Color border, SDL_Color innerBorder);
+
+  // Draw a decorative speaker grille pattern: evenly-spaced horizontal bars.
+  // Each bar is 3px tall with 4px gaps (7px pitch). Used for cosmetic detail
+  // in the deck output display area.
+  static void drawSpeakerGrille(SDL_Renderer* renderer, int x, int y,
+                                int width, int bars, SDL_Color color);
+
+  // WHAT IS BEHIND A LABEL. While one renderer is being tracked, every fill
+  // it receives on the window itself (not on a texture target) is remembered
+  // for the frame, translucent ones composited over what they covered. The
+  // text path asks surfaceUnder() for the colour beneath a label so it can
+  // check the label's ink against the fill actually painted there rather than
+  // the one the call site assumed. beginSurfaceFrame() starts a frame and
+  // resets the record; nullptr stops tracking.
+  static void beginSurfaceFrame(SDL_Renderer* renderer, SDL_Color clearColor);
+  static bool surfaceUnder(SDL_Renderer* renderer, const SDL_Rect& rect, SDL_Color* out);
+
+  // WHICH CONTROL IS BEING PRESSED. Every bevelled control on the tracked
+  // renderer passes through notePressable(); the last one drawn under the held
+  // pointer is the one on top, so it is the one being pressed. A panel larger
+  // than a control that is drawn over the point afterwards (a modal, say)
+  // covers whatever was under it. The desk asks pressedTarget() at the end of
+  // the frame and draws the pressed look over it, so every button in every
+  // theme answers the moment it is pressed, without each call site knowing.
+  static void setPress(bool held, int x, int y, int maxW, int maxH);
+  static void notePressable(SDL_Renderer* renderer, const SDL_Rect& rect);
+  static bool pressedTarget(SDL_Rect* out);
+};
+
+}  // namespace deckboy::render

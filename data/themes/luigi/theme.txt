@@ -1,0 +1,20 @@
+# Deckboy Theme: Luigi
+# Family: moulded case. Sage-grey shell plastic with a lime LCD.
+# All color values are RRGGBBAA hex.
+
+shell_outer	B4BCA6FF
+shell_inner	9EA890FF
+shell_shadow	44503CFF
+screen_light	7BE04CFF
+screen_mid	3E9E28FF
+screen_dark	1E5416FF
+screen_deep	0D2209FF
+screen_ink_soft	3C7A2AFF
+button_bezel	5E7050FF
+delete_bezel	8B3A3AFF
+scanline_alpha	18
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	frog	2
+creature	firefly	2

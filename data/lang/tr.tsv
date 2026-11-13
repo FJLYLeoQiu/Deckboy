@@ -1,0 +1,2344 @@
+#name Türkçe
+#english Turkish
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC. An operator who learned the desk in
+# one country has to be able to work it in another.
+NEW	YENİ
+OPEN	AÇ
+SAVE	KAYDET
+SAVE AS	FARKLI KAYDET
+BUNDLE	PAKETLE
+IMPORT	İÇE AKTAR
+SOURCE	KAYNAK
+PATTERN	TEST DESENİ
+SETTINGS	AYARLAR
+TAKE	TAKE
+STOP	DUR
+REBOOT	YENİDEN BAŞLAT
+BLACKOUT	SİYAH
+CLEAR	TEMİZLE
+RECORD	KAYIT
+PLAYLIST	ÇALMA LİSTESİ
+TIMELINE	ZAMAN ÇİZGİSİ
+MEDIA	ORTAM
+TRANSPORT	TRANSPORT
+OUTPUT	ÇIKIŞ
+PROGRAM	PROGRAM
+WARP	BİÇİM BOZ
+LIVE	CANLI
+DECODE	ÇÖZÜCÜ
+STREAM	YAYINLA
+System	Sistem
+Audio	Ses
+Network	Ağ
+Video Outputs	Video çıkışları
+About	Hakkında
+Encoder	Kodlayıcı
+Screen	Ekran
+Geometry	Geometri
+Devices	Aygıtlar
+Streaming	Yayın
+APPEARANCE	GÖRÜNÜM
+REMOTE CONTROL	UZAKTAN KUMANDA
+INTEGRATION ADAPTERS	ENTEGRASYON ADAPTÖRLERİ
+DISCOVERY / NOTES	KEŞİF / NOTLAR
+DISPLAY & RASTER	EKRAN VE RASTER
+CONNECTED DISPLAYS	BAĞLI EKRANLAR
+EDGE FEATHERING	KENAR YUMUŞATMA
+MATTE & OVERLAY	MAT VE KAPLAMA
+AREA OF INTEREST	İLGİ ALANI
+DEFAULT TRANSITION	VARSAYILAN GEÇİŞ
+NMC IN & OUT	NMC GİRİŞ VE ÇIKIŞ
+OSC QUERY / FEEDBACK	OSC SORGUSU / GERİ BİLDİRİM
+CUE INSPECTOR	CUE DENETÇİSİ
+SELECTED CUE	SEÇİLEN CUE
+PLAYBACK	OYNATMA
+COPY	KOPYALA
+PASTE	YAPIŞTIR
+RESET	SIFIRLA
+Theme	Tema
+Language	Dil
+Resolution	Çözünürlük
+Orientation	Yönlendirme
+Toggle Fullscreen	Tam ekran
+IDENTIFY	TANIMLA
+REGION SIZE	BÖLGE BOYUTU
+POSITION	KONUM
+CENTRE	ORTALA
+FULL	TAM
+duration	süre
+transition	geçiş
+fade in	belirme
+fade out	kararma
+ON	AÇIK
+OFF	KAPALI
+Stopped	Durdu
+Playing	Oynatılıyor
+Paused	Duraklatıldı
+2-UP	2 YAN YANA
+DONE	TAMAM
+EDIT	DÜZENLE
+HELD	TUTULDU
+Mode	Mod
+PICK	SEÇ
+QUAD	DÖRT
+Rate	Oran
+STEP	ADIM
+Apply	Uygula
+CLOSE	KAPAT
+FIXED	SABİT
+Help!	Yardım!
+ORDER	SIRA
+READY	HAZIR
+TILES	KARELER
+ALL ON	HEPSİ AÇIK
+ALWAYS	HER ZAMAN
+Buffer	Arabellek
+Cancel	İptal
+Custom	Özel
+Device	Aygıt
+Folder	Klasör
+FORMAT	BİÇİM
+HIDDEN	GİZLİ
+Length	Uzunluk
+Mascot	Maskot
+Mirror	Ayna
+NATIVE	YERLİ
+PRESET	ÖNAYAR
+Sender	Gönderen
+SUMMED	TOPLANMIŞ
+TOGGLE	DEĞİŞTİR
+12 HOUR	12 SAAT
+24 HOUR	24 SAAT
+ALL OFF	HEPSİ KAPALI
+ARRANGE	YERLEŞTİR
+Channel	Kanal
+CONVERT	DÖNÜŞTÜR
+DEFAULT	VARSAYILAN
+END CUE	CUE SONU
+Key out	Key çıkışı
+LTC out	LTC çıkışı
+MISSING	EKSİK
+PRESETS	ÖNAYARLAR
+PROJECT	PROJE
+RUNNING	ÇALIŞIYOR
+Send to	Şuraya gönder
+SHUFFLE	KARIŞTIR
+UPDATES	GÜNCELLEMELER
+VJ MODE	VJ MODU
+CLOCK ON	SAAT AÇIK
+DOWNLOAD	İNDİR
+EXAMPLES	ÖRNEKLER
+Mappings	Eşlemeler
+NMC sync	NMC eşitleme
+SHOW SDP	SDP GÖSTER
+TCP port	TCP portu
+UI scale	Arayüz ölçeği
+WATCHING	İZLİYOR
+A/V delay	A/V gecikmesi
+ASIO outs	ASIO çıkışları
+BOTH AXES	HER İKİ EKSEN
+CHECK NOW	ŞİMDİ DENETLE
+CLOCK OFF	SAAT KAPALI
+Creatures	Yaratıklar
+CUE TOOLS	CUE ARAÇLARI
+Direction	Yön
+Freewheel	Serbest dönüş
+HTTP port	HTTP portu
+Jump mode	Atlama modu
+Listen on	Şurada dinle
+OSC Query	OSC sorgusu
+OUTPUT ON	ÇIKIŞ AÇIK
+Panic now	Şimdi panik
+RECORDING	KAYIT
+REMAINING	KALAN
+RESET ALL	HEPSİNİ SIFIRLA
+RUN PANIC	PANİĞİ ÇALIŞTIR
+SHOW FLOW	GÖSTERİ AKIŞI
+TIMERS ON	SAYAÇLAR AÇIK
+WHEN IDLE	BOŞTAYKEN
+ADD OUTPUT	ÇIKIŞ EKLE
+BUILT WITH	ŞUNUNLA YAPILDI
+CANCEL ALL	HEPSİNİ İPTAL ET
+colour tag	renk etiketi
+copy chain	zinciri kopyala
+Hover tips	İpuçları
+Input gain	Giriş kazancı
+Input mono	Giriş mono
+live audio	canlı ses
+Live input	Canlı giriş
+MIDI input	MIDI girişi
+no picture	görüntü yok
+no preview	önizleme yok
+OPEN SAVED	KAYITLIYI AÇ
+OUTPUT OFF	ÇIKIŞ KAPALI
+Panic fade	Panik kararması
+Tally port	Tally portu
+TIMERS OFF	SAYAÇLAR KAPALI
+Accept from	Şuradan kabul et
+ASIO driver	ASIO sürücüsü
+BACK TO TOP	BAŞA DÖN
+CANVAS MODE	TUVAL MODU
+CODE SOURCE	KOD KAYNAĞI
+Cue numbers	Cue numaraları
+Destination	Hedef
+Mirror rate	Ayna oranı
+no duration	süre yok
+NO LIVE CUE	CANLI CUE YOK
+NO PREVIOUS	ÖNCEKİ YOK
+OVERLAY BIN	KAPLAMA KUTUSU
+paste chain	zinciri yapıştır
+Sample rate	Örnekleme oranı
+SENDING OUT	GÖNDERİYOR
+Shift: snap	Shift: yakala
+THIS OUTPUT	BU ÇIKIŞ
+(no matches)	(eşleşme yok)
+(no subtext)	(alt metin yok)
+add a button	düğme ekle
+add a window	pencere ekle
+Art-Net port	Art-Net portu
+AUDIO OUTPUT	SES ÇIKIŞI
+Auto restore	Kendiliğinden geri yükle
+DECKLINK: ON	DECKLINK: AÇIK
+free running	serbest çalışıyor
+KEY+FILL: ON	KEY+FILL: AÇIK
+LISTENING IN	DİNLİYOR
+Miami cursor	Miami imleci
+MIDI CONTROL	MIDI DENETİMİ
+Mirror state	Durumu aynala
+NDI KEY: OFF	NDI KEY: KAPALI
+NDI KEY: ON	NDI KEY: AÇIK
+NO PROGRAMME	PROGRAM YOK
+ST 2110: OFF	ST 2110: KAPALI
+ST 2110: ON	ST 2110: AÇIK
+WATCH FOLDER	İZLENEN KLASÖR
+COMPOSITE CUE	BİRLEŞİK CUE
+DECKLINK: OFF	DECKLINK: KAPALI
+default route	varsayılan yol
+Every adapter	Her bağdaştırıcı
+KEY+FILL: OFF	KEY+FILL: KAPALI
+LEFT TO RIGHT	SOLDAN SAĞA
+MEDIA ENCODER	ORTAM KODLAYICI
+MSC device id	MSC aygıt kimliği
+NEW SHOW FILE	YENİ GÖSTERİ DOSYASI
+No cue loaded	Yüklü cue yok
+nothing taken	hiçbir şey alınmadı
+OPEN PREVIOUS	ÖNCEKİNİ AÇ
+Output device	Çıkış aygıtı
+Panic profile	Panik profili
+Quit Deckboy?	Deckboy'dan çıkılsın mı?
+REMOVE OUTPUT	ÇIKIŞI KALDIR
+Sound effects	Ses efektleri
+Tally address	Tally adresi
+TOP TO BOTTOM	YUKARIDAN AŞAĞIYA
+127 (all-call)	127 (genel çağrı)
+ALL INTERFACES	TÜM ARAYÜZLER
+LOCALHOST ONLY	YALNIZCA LOCALHOST
+Monitor device	Dinleme aygıtı
+no audio track	ses izi yok
+PRESENTER VIEW	SUNUCU GÖRÜNÜMÜ
+RECORD TO DISK	DİSKE KAYDET
+STOP RECORDING	KAYDI DURDUR
+STOP STREAMING	YAYINI DURDUR
+TALLY TRIGGERS	TALLY TETİKLERİ
+Device channels	Aygıt kanalları
+NDI SENDING: ON	NDI GÖNDERİM: AÇIK
+NO CUE SELECTED	CUE SEÇİLMEDİ
+Output channels	Çıkış kanalları
+preview pending	önizleme bekliyor
+START RECORDING	KAYDI BAŞLAT
+START STREAMING	YAYINI BAŞLAT
+(system default)	(sistem varsayılanı)
+Check at startup	Açılışta denetle
+Global crossfade	Genel çapraz geçiş
+Mic to recording	Mikrofon kayda
+Monitor playlist	Çalma listesini dinle
+NDI SENDING: OFF	NDI GÖNDERİM: KAPALI
+no still preview	durağan önizleme yok
+Pocket 3 / touch	Pocket 3 / dokunma
+SMPTE LTC OUTPUT	SMPTE LTC ÇIKIŞI
+the whole screen	tüm ekran
+Check for one now	Şimdi denetle
+INSTALL & RESTART	KUR VE YENİDEN BAŞLAT
+Registry: NOT SET	Kayıt defteri: AYARLANMADI
+SAFETY / TIMECODE	GÜVENLİK / TIMECODE
+esc or N to cancel	İptal için Esc veya N
+KEYBOARD SHORTCUTS	KLAVYE KISAYOLLARI
+loading preview...	önizleme yükleniyor...
+CONVERT ALL FLAGGED	İŞARETLİ OLANLARI DÖNÜŞTÜR
+dot-matrix cue deck	noktalı cue masası
+HyperDeck emulation	HyperDeck benzetimi
+locked to the tempo	tempoya kilitli
+VJ mode (two decks)	VJ modu (iki masa)
+ADD ANOTHER PLAYLIST	BAŞKA ÇALMA LİSTESİ EKLE
+Companion / OSC port	Companion / OSC portu
+Esc or click to skip	Atlamak için Esc veya tıkla
+PLAYLIST PREFERENCES	ÇALMA LİSTESİ TERCİHLERİ
+press ENTER to start	başlamak için ENTER'a bas
+ADD A SECOND PLAYLIST	İKİNCİ ÇALMA LİSTESİ EKLE
+filmstrip unavailable	film şeridi yok
+(empty — import media)	(boş – ortam içe aktar)
+Ctrl+D or Esc to close	Kapatmak için Ctrl+D veya Esc
+(no notes for this cue)	(bu cue için not yok)
+Timebase / start / fade	Zaman tabanı / başlangıç / geçiş
+No cues need conversion.	Hiçbir cue dönüştürme gerektirmiyor.
+CLICK TO SAMPLE KEY COLOR	KEY RENGİNİ ALMAK İÇİN TIKLA
+normalize loudness (R128)	gürlüğü normalleştir (R128)
+off - all channels silent	kapalı – tüm kanallar sessiz
+no video lane for this cue	bu cue için video şeridi yok
+HyperDeck emulation is off.	HyperDeck benzetimi kapalı.
+OWN SCRIPT  (click to edit)	KENDİ BETİĞİN  (düzenlemek için tıkla)
+Theme and operator feedback	Tema ve operatör geri bildirimi
+Discovery and mirrored state	Keşif ve aynalanmış durum
+FOLLOWING THE LIVE CUE NOTES	CANLI CUE NOTLARINI İZLİYOR
+Listening on all interfaces.	Tüm arayüzlerde dinliyor.
+Network-facing runtime notes	Ağa dönük çalışma notları
+Hi! Press I to import a clip.	Merhaba! Klip eklemek için I'ya bas.
+Global jump and panic behavior	Genel atlama ve panik davranışı
+Roll when the show cuts to you	Gösteri sana geçtiğinde başla
+Choose a cue to inspect it here	Burada incelemek için bir cue seç
+Defaults for newly created cues	Yeni cue'lar için varsayılanlar
+Device routing for cue playback	Cue oynatımı için aygıt yönlendirme
+Smaller buffer = lower latency.	Küçük arabellek = az gecikme.
+Emergency fade and sync behavior	Acil kararma ve eşitleme davranışı
+mixed selection: key unavailable	karışık seçim: key yok
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (DENEYSEL)
+Esc=continue with current session	Esc = bu oturumla devam et
+no per-cue settings for this type	bu tür için cue ayarı yok
+On stop: remux to an ordinary MP4	Durunca: sıradan bir MP4'e yeniden paketle
+Where RECORD writes the programme	RECORD programı nereye yazar
+dot-matrix cue deck for live events	canlı etkinlikler için noktalı cue masası
+Listening on localhost (127.0.0.1).	localhost (127.0.0.1) dinleniyor.
+three expressions: red, green, blue	üç ifade: kırmızı, yeşil, mavi
+Transport sync with another machine	Başka bir makineyle transport eşitleme
+Add slot sources in the cue inspector	Kaynakları cue denetçisinde ekle
+Ask GitHub; never installs on its own	GitHub'a sorar; kendi başına kurmaz
+Import or click a cue in the playlist	İçe aktar ya da listede bir cue'ya tıkla
+mixed selection: geometry unavailable	karışık seçim: geometri yok
+generate timecode for the rig to chase	donanımın izleyeceği timecode üret
+Lower Third and PIP fire independently	Alt bant ve PiP ayrı ayrı tetiklenir
+Panels built for a vMix rig, unchanged	vMix donanımı için yapılmış paneller, değişmedi
+Incoming transport arrives as NMCEVENT.	Gelen transport NMCEVENT olarak ulaşır.
+not in this build - saved with the show	bu yapıda yok – gösteriyle kaydedilir
+Find from the playlist, not from a modal	Listeden ara, pencereden değil
+take or select a cue to open the timeline	zaman çizgisini açmak için bir cue al ya da seç
+Optional external transport and cue control	İsteğe bağlı dış transport ve cue denetimi
+No previous show file found at startup path.	Açılışta önceki gösteri dosyası bulunamadı.
+Use Ctrl+F or type a cue id/number to search.	Aramak için Ctrl+F ya da cue kimliği/numarası yaz.
+Companion / OSC ingress and HyperDeck emulation	Companion / OSC girişi ve HyperDeck benzetimi
+A/V delay holds audio back for lagging displays.	A/V gecikmesi yavaş ekranlar için sesi bekletir.
+On stop: leave the crash-resilient file as it is	Durunca: çökmeye dayanıklı dosyayı olduğu gibi bırak
+same disk as Deckboy - a separate drive is safer	Deckboy ile aynı disk – ayrı bir sürücü daha güvenli
+A step fires one cue on each playlist, all at once.	Bir adım her listede birer cue'yu aynı anda tetikler.
+one expression: the same value in red, green and blue	tek ifade: kırmızı, yeşil ve mavide aynı değer
+NDI transport is configured per output in Video Outputs.	NDI transport'u her çıkış için Video Çıkışları'nda ayarlanır.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Transport hareket ettikçe PLAY / PAUSE / STOP / LOCATE gönderir.
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC aboneliği: denetleyicinden /deckboy/subscribe gönder.
+NMC mode / host / port are runtime-configurable for sync work.	NMC modu / konağı / portu çalışırken ayarlanabilir.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Yayına girmek cue'yu alır. Deckboy mikser'e hiçbir zaman komut göndermez.
+FPS: ON	FPS: AÇIK
+FPS: OFF	FPS: KAPALI
+NMOS: ON	NMOS: AÇIK
+NMOS: OFF	NMOS: KAPALI
+SPOUT: ON	SPOUT: AÇIK
+SPOUT: OFF	SPOUT: KAPALI
+CANVAS: ON	TUVAL: AÇIK
+CANVAS: OFF	TUVAL: KAPALI
+10-BIT: ON	10 BİT: AÇIK
+10-BIT: OFF	10 BİT: KAPALI
+EDIT...	DÜZENLE...
+FOLDER...	KLASÖR...
+ARRANGE...	YERLEŞTİR...
+ADD FILE...	DOSYA EKLE...
+RENUMBER...	YENİDEN NUMARALA...
+set a port...	bir port ayarla...
+no script	betik yok
++ OUTPUT	+ ÇIKIŞ
+Eddie's Clock	Eddie'nin Saati
+Ctrl+/ to close	Kapatmak için Ctrl+/
+(step lives here)	(adım burada durur)
+4:2:2  8-BIT	4:2:2  8 BİT
+4:2:2  10-BIT	4:2:2  10 BİT
+No outputs — click + OUTPUT to add one.	Çıkış yok – eklemek için + ÇIKIŞ'a tıkla.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, NDI tetiği, NMC, MTC, LTC, Art-Net ve Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Deckboy'un iyi oynatamadığı cue'ları H.264'e dönüştür
+a button can run any command the network protocol understands	bir düğme protokolün anladığı her komutu çalıştırabilir
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	SUNUCU GÖRÜNÜMÜNÜ YERLEŞTİR  -  taşımak için paneli, boyutlamak için köşeyi sürükle
+ANALOG	ANALOG
+PROMPTER	PROMPTER
+vMix API	vMix API
+Timecode jam sync	Timecode jam sync
+capture again - what is on now	yeniden yakala - şu an yayında olan
+change what it does...	ne yaptığını değiştir...
+decks - Stop deck...	masalar - masayı durdur...
+decks - Take deck...	masalar - masaya TAKE...
+delete step	adımı sil
+delete this button	bu düğmeyi sil
+label, command and glyph as text...	etiket, komut ve simge metin olarak...
+move down	aşağı taşı
+move up	yukarı taşı
+next colour	sonraki renk
+preset - a new preset from what is on now	preset - şu an yayında olandan yeni preset
+type a command myself...	komutu kendim yazayım...
+type a length in seconds...	saniye cinsinden süre yaz...
+wait for GO	GO bekle
+what it recalls...	neyi geri çağırır...
+when its cues end	cue'ları bittiğinde
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL tüm çalma listesini tek seferde eşitler
+back to the in point, not to zero	giriş noktasına döner, sıfıra değil
+drag to scrub. the audio follows	kaydırmak için sürükleyin. ses takip eder
+loops between the in and out points, not the file	dosyayı değil, giriş ve çıkış noktaları arasını döngüler
+(not set)	(ayarlanmadı)
+1.00x  (default 1080p)	1.00x  (varsayılan 1080p)
+1.25x  (large desktop)	1.25x  (büyük masaüstü)
+1.50x  (4K desktop)	1.50x  (4K masaüstü)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / küçük 4K)
+highest bandwidth	en yüksek bant genişliği
+lower bandwidth	daha düşük bant genişliği
+film	sinema
+CD, music rigs	CD, müzik düzenekleri
+video standard	video standardı
+every playlist	her çalma listesi
+None  (no character art)	Yok  (karakter yok)
+custom size...	özel boyut...
+Browser URL	Tarayıcı URL'si
+Camera	Kamera
+Media File / Still	Medya dosyası / durağan görüntü
+RECORD TO FILE	DOSYAYA KAYDET
+browser, with sound	tarayıcı, sesli
+Window	Pencere
+Desktop	Masaüstü
+full screen	tam ekran
+DeckLink Output	DeckLink çıkışı
+FFmpeg Stream Output	FFmpeg yayın çıkışı
+NDI Output	NDI çıkışı
+SDL Window Output	SDL pencere çıkışı
+Spout Output	Spout çıkışı
+DESK	OPERATÖR
+drop a folder in too - it reads the whole tree	bir klasör de bırakabilirsin; tüm alt klasörler okunur
+cameras, windows, NDI, screens - all live sources	kameralar, pencereler, NDI, ekranlar: hepsi canlı kaynak
+test cards and generators - no file needed	test kartları ve üreteçler: dosya gerekmez
+space bar does this too, without moving your hand	boşluk tuşu da aynısını yapar, elini oynatmana gerek yok
+stops the cue. ESC stops EVERYTHING	cue'yu durdurur. ESC HER ŞEYİ durdurur
+the safe one: audio and playback keep running	yumuşak seçenek: ses ve oynatma devam eder
+the thorough one. blackout is the reversible one	köklü çözüm. Karartmayı ise geri alabilirsin
+save as makes a new file instead	Farklı kaydet yeni bir dosya oluşturur
+for a copy before you change something risky	riskli bir değişiklikten önce kopya almak için
+this is what you carry to the venue	gösteri mekânına yanında götüreceğin şey bu
+the show on disk is untouched until you save	kaydedene kadar diskteki gösteri değişmez
+per cue. the deck has its own default too	her cue için. Deck'in de kendi varsayılanı var
+stills hold instead - a fade would dip the frame	sabit görüntüler ekranda kalır; geçiş görüntüyü karartırdı
+the frame stays up. good for slides	görüntü ekranda kalır. Slaytlar için ideal
+gain, pan and normalise live in the inspector	kazanç, pan ve normalleştirme denetçide
+this clip has no audio track to enable	bu klipte etkinleştirilecek ses kanalı yok
+Hi! I am Deckboy.	Merhaba! Ben Deckboy.
+Press I to import a clip.	Klip içe aktarmak için I tuşuna bas.
+Enter takes a cue live.	Enter bir cue'yu yayına alır.
+S stops the live cue.	S yayındaki cue'yu durdurur.
+The timeline can be resized.	Zaman çizelgesini yeniden boyutlandırabilirsin.
+Try a terminal theme in Settings.	Ayarlar'da bir terminal teması dene.
+RELINK finds media that has moved.	RELINK taşınmış medya dosyalarını bulur.
+Cues have their own gain and fades.	Cue'ların kendi kazanç ve geçiş ayarları vardır.
+Trim with Ctrl+I and Ctrl+O.	Ctrl+I ve Ctrl+O ile kırpma noktalarını belirle.
+Ctrl+/ shows every shortcut.	Ctrl+/ tüm kısayolları gösterir.
+J jumps to the live cue.	J yayındaki cue'ya gider.
+Normalize matches loudness across cues.	Normalleştirme cue'ların algılanan ses yüksekliğini eşitler.
+Esc clears the desk, then the output, then quits.	Esc önce masayı, sonra çıkışı temizler, sonra programdan çıkar.
+Stream SRT and RTMP at the same time.	Aynı anda SRT ve RTMP yayını yapabilirsin.
+CHECK lists what is broken, before doors.	CHECK kapılar açılmadan sorunları listeler.
+A cue can wait before it starts.	Bir cue başlamadan önce bekleyebilir.
+A cue can start the next one by itself.	Bir cue sonraki cue'yu kendiliğinden başlatabilir.
+Disarm a cue and GO steps over it.	Bir cue'yu devre dışı bırak; GO onu atlar.
+Audition plays a cue to you, not the room.	Ön dinleme salona değil, sana çalar.
+Preload racks the next cue warm, off air.	Ön yükleme sonraki cue'yu yayına vermeden hazırlar.
+A target cue starts or stops another cue.	Hedef cue başka bir cue'yu başlatır veya durdurur.
+A fade cue takes a deck down, then stops it.	Geçiş cue'su bir deck'i kısar, ardından durdurur.
+A master cue fires one cue on every deck.	Ana cue her deck'te bir cue başlatır.
+A MIDI cue can tell the lighting desk to go.	MIDI cue'su ışık masasına başlama komutu verebilir.
+A network cue speaks OSC, UDP or TCP.	Ağ cue'su OSC, UDP veya TCP konuşur.
+A DMX cue fades the house lights on a cue.	DMX cue'su salon ışıklarını kademeli olarak değiştirir.
+A script cue runs Deckboy's own commands.	Betik cue'su Deckboy'un kendi komutlarını çalıştırır.
+A timecode cue jams LTC to a value.	Zaman kodu cue'su LTC'yi bir değere ayarlar.
+Each output can show a different deck.	Her çıkış farklı bir deck gösterebilir.
+The matrix sends audio to any channel.	Matris sesi istediğin kanala gönderir.
+The panel map numbers every LED tile.	Panel haritası her LED modülünü numaralandırır.
+Quit it!	Yapma artık!
+Ow. That was rude.	Ah. Ayıp oluyor ama.
+I am a professional.	Ben profesyonelim, lütfen.
+Seriously?	Ciddi misin?
+This is my monitor.	Bu benim monitörüm.
+I am telling the operator.	Operatöre söyleyeceğim.
+All right. Wow.	Vay arkadaş.
+Right. That does it.	Tamam. Buraya kadar.
+I am leaving. Good luck with the show.	Ben gidiyorum. Gösteride bol şans.
+Still here? Me too.	Hâlâ burada mısın? Ben de.
+Long show, huh.	Bu gösteri yılan hikâyesine döndü.
+I could do this all day. Apparently.	Bunu bütün gün yapabilirim. Anlaşılan yapacağım da.
+You have been staring at me for hours.	Saatlerdir bana bakıyorsun.
+Has anyone seen a clock?	Saati bilen var mı, yoksa saat de mi molada?
+Is it still the same show?	Hâlâ aynı gösteride miyiz?
+I'm not tired. You're tired.	Ben yorulmadım. Sen yoruldun.
+Five more minutes. Then five more.	Beş dakika daha. Tabii, biz de yedik.
+A whole day. I need a restart.	Koca bir gün. Yeniden başlamam lazım.
+Save the show. Then let me sleep.	Gösteriyi kaydet. Sonra bırak da uyuyayım.
+Every pixel of me is tired.	Piksellerimin bile pili bitti.
+Close me. Open me. I'll be fine.	Beni kapat. Aç. Kendime gelirim.
+Hey!	Hop!
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Kolay gelsin! Çay molası sonra.
+Oh hey. It's 4:20. Take it easy.	Aa, selam. Saat 4:20. Rahatına bak.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	MERHABA
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Ben Dr. Piksel. Komşuyuz... uzun bir geçmişimiz var. Neyse. Beş dakika sonra bir şov yöneteceksin. Beni dinlersen daha da az.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Ben de Profesör Video. Önce synth'ler, sonra video. Artık çoğunlukla video. START'a bas, bağlayalım... yani başlayalım.
+TURN THE OUTPUT ON	ÇIKIŞI AÇ
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, ekran boş. Onları bekletme. MENÜ'yü aç ve ÇIKIŞ KAPALI'yı ÇIKIŞ AÇIK yap. Hadi!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Birinci ders: osilatörü... şeye, ÇIKIŞA bağlamadan hiçbir şey çıkmaz. Video bu. Biliyorum.
+BRING IN A CLIP	BİR KLİP GETİR
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Şimdi bir görüntü. I'ya bas ve bilgisayarından bir klip seç. Klip yok mu? SHOW ME, ben sana kendiminkilerden birini ödünç veririm.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Her klip çalma listesinde bir cue olur. Bir sample yüklemek gibi. İçinde resim olan bir sample.
+TAKE IT LIVE	YAYINA AL
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Klibin çalma listesinde bekliyor. Seç, sonra TAKE. Ya da Enter. Kendine güvenen operatörler Enter'a basar.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE zarfın tetiği. Yani, ıı, GO tuşu. Aynı şey, sadece içinde resim var.
+LINE UP THE NEXT ONE	SIRADAKİNİ HAZIRLA
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Başka bir cue'ya tıkla. Sen söyleyene kadar hazır bekler. Tek cue mu var? Bir tane daha içe aktar ya da SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Seçmek çalmak değildir. Seçili olan, dizideki sonraki nota. Sonraki CUE.
+CROSSFADE TO IT	ONA GEÇİŞ YAP
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Kesme amatörler içindir. Inspector'da geçiş'in + tuşuna bas, deck yerine bir süre yazsın. Sonra TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Bir geçiş! Portamento, ama görüntüler için. Her süre olur. Birkaç kez daha basarsan bir saniye. Sonra TAKE.
+CLEAR THE SCREEN	EKRANI TEMİZLE
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Sahnede bir şey mi ters gitti? BLACK'e bas, ya da B. Görüntü gider. Şov altta çalışmaya devam eder.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Hiçbir şey kaybolmaz. B'ye tekrar bas, geri gelir. Mikserdeki mute gibi. Çok rahatlatıcı.
+SAVE THE SHOW	ŞOVU KAYDET
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Şimdi kaydet. Ctrl+S ya da KAYDET. Bazı programlar işini kaybeder, sonra seni suçlar. Ben asla.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Patch'ini kaydet. ŞOVUNU yani. Şov. Bu alıştırma şovu Deckboy'un kendi klasöründe duruyor; seninki güvende.
+THAT'S A SHOW	İŞTE BİR ŞOV
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	İşte bir şov! Çıkış, cue, TAKE, geçiş, BLACK, kaydet. Nazdrave, skapi. Rakiya benden. Ama gözüm üstünde.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Ders bitti. Örnek şovlar katmanları, başlıkları ve efektleri öğretir. MENÜ > LEARN THE BASICS bunu yeniden oynatır.
+*shakes head* That means yes. Bravo.	*başını iki yana sallar* Bu evet demek. Bravo.
+Wonderful! Lovely signal flow.	Harika! Ne güzel bir sinyal akışı.
+Mm. I knew you had it in you.	Hımm. Yapabileceğini biliyordum.
+Yes! Have a gold star. It's a dot.	Evet! Al sana altın yıldız. Bir nokta.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Sonraki adıma hazır mısın? *başını aşağı yukarı sallar* ...Bulgaristan'da bu hayır demek, skapi. Parlayan. Senin için parlıyor.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Parlayan hariç her şeye tıkladın. Benim osilatörlerim bile parlayanı bulur.
+stop playback first - the lesson cannot hand a running show back as it was	önce oynatmayı durdur - ders çalışan bir şovu olduğu gibi geri veremez
+choose RECOVER or KEEP SAVED first	önce RECOVER ya da KEEP SAVED seç
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	şovun kaydedilemedi, bu yüzden ders başlamadı. Kaydet (FARKLI KAYDET) ve tekrar dene
+the practice show would not open	alıştırma şovu açılmadı
+could not start the practice show	alıştırma şovu başlatılamadı
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc çıkar, bir dahaki sefere buradan devam eder
+that's the basics - MENU > LESSONS has part two	temeller bu kadar - MENÜ > LESSONS'ta ikinci bölüm var
+tour paused - LEARN THE BASICS picks up where you left off	tur duraklatıldı - LEARN THE BASICS kaldığın yerden devam eder
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Ekranlar yansıtılmış, skapi. Bir tuşa bas ya da tıkla, Dr. Piksel geri verir.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Yanlış ekran, skapi. Bir tuşa bas ya da tıkla, Dr. Piksel geri verir.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Öbür ekran gitti, skapi. Bir tuşa bas ya da tıkla, Dr. Piksel geri verir.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Tek ekran, skapi. Bir tuşa bas ya da tıkla, Dr. Piksel geri verir.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Öbür ekran gitti, skapi, görüntü de bu ekrana döndü. Onu arkada küçük bir pencereye koydum. Tekrar tak, görüntü oraya geri gider.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Masayı yedi, skapi. Tek ekran olunca çıkış hepsini kapladı. Onu arkada küçük bir pencereye koydum. Gerçek bir şovun ikinci bir ekranı olur.
+IT ATE THE DESK	MASAYI YEDİ
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	İşte. ÇIKIŞ KAPALI yazan düğme. AÇIK yap, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Geçiş yapılacak yayında bir şey yok, skapi. Önce bir cue'yu TAKE yap, sonra diğerini seç ve süre ver.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	Bu bir kesmeydi, skapi. Hızlı, ama geçiş değil. Diğer cue'yu seç, geçiş'te +'ya bas, sonra TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Geri besleme döngüsü! Çıkış doğrudan masaya geri bağlanmış. En iyilerimizin başına gelir. Çoğunlukla benim. 1983. 1983'ten bahsetmeyiz.
+No more rakia. The rat has a problem.	Rakiya bitti. Farenin bir sorunu var.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Ninemin rakiyası, Belogradçik'ten. Ders için tek kadeh. Şişe bende kalıyor.
+Is this... is this allowed during a tutorial?	Bu... bu bir eğitim sırasında serbest mi?
+*shakes head* That means one more.	*başını iki yana sallar* Bu bir tane daha demek.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Hepinizi seviyorum. Osilatörü seviyorum. ÇIKIŞI seviyorum. Video bu. Biliyorum. BİLİYORUM.
+...and the rat took the rakia. Every time, skapi. Every single time.	...ve fare rakiyayı aldı. Her seferinde, skapi. Her seferinde.
+Was that a rat? In a hat? With a pizza?	O bir fare miydi? Şapkalı? Pizzalı?
+Stop that. I am a serious man.	Kes şunu. Ben ciddi bir adamım.
+Do not tell Dr. Pixel about this.	Bunu Dr. Piksel'e söyleme.
+This never happened. Back to the patch bay.	Bu hiç olmadı. Patch panele dönüyoruz.
+It was the eighties. Everyone had a bow tie.	Seksenlerdi. Herkesin papyonu vardı.
+LESSON LIST	DERS LİSTESİ
+OPEN EXAMPLE SHOWS	ÖRNEK ŞOVLARI AÇ
+EXIT (Esc)	ÇIKIŞ (Esc)
+Taking it on the road	Şovu yola çıkarmak
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Şov yola çıkmadan CHECK yap, bulduğunu düzelt ve medyasıyla birlikte paketle.
+Effects, oscillators and colour	Efektler, osilatörler ve renk
+An effect, a ~ on its knob, and the colour picker.	Bir efekt, düğmesinde bir ~ ve renk seçici.
+The art school crit, with Mr. Salty	Sanat okulu kritiği, Mr. Salty ile
+Patterns, synths and Draw	Desenler, synth'ler ve Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Bir test deseni, video synth ve görüntü üstüne çizim, durağan kare olarak kaydedilir.
+The telestrator booth, with Coach Marv	Telestratör kabini, Koç Marv ile
+Masks	Maskeler
+A heart from the library, the pen, invert and feather.	Kütüphaneden bir kalp, kalem, ters çevir ve yumuşat.
+The Signal Files: redact the evidence	Sinyal Dosyaları: kanıtı karart
+Warp, blend and slices	Warp, harmanlama ve dilimler
+A corner pin, two soft edges, then three slices in the Screens window.	Bir köşe sabitleme, iki yumuşak kenar, sonra Screens penceresinde üç dilim.
+The haunted lighthouse, with Keeper Rook	Perili deniz feneri, fenerci Rook ile
+GO from anywhere	Her yerden GO
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Cue numaraları, GOTO, bir kısayol ve Companion, MIDI ve OSC'nin nereden girdiği.
+The game show, with Donna Wheel	Yarışma programı, Donna Wheel ile
+Words on screen	Ekranda sözcükler
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Üstünde ad olan bir alt bant, sonra chroma yeşili zeminli bir başlık kartı.
+The kaiju weather report, with June O'Neil	Kaiju hava durumu, June O'Neil ile
+Keeping time	Zamanı tutmak
+A stage timer counting down, held, and a presenter view for the person on stage.	Geri sayan bir sahne zamanlayıcısı, duraklatılmış, ve sahnedeki kişi için bir sunucu görünümü.
+A grand day out, with Wallis and Grommet	Büyük bir gün, Wallis ve Grommet ile
+Two playlists and TAKE ALL	İki çalma listesi ve TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Katman olarak ikinci bir liste, ve iki şey aynı vuruşta değişsin diye TAKE ALL.
+The magic show, with Turnip Top	Sihirbazlık şovu, Turnip Top ile
+When it goes wrong	İşler ters gidince
+BLACK against PANIC, and getting a show back.	BLACK ve PANIC'in farkı, ve bir şovu geri almak.
+The cooking show, with Chef Bork	Yemek programı, Şef Bork ile
+Presets	Hazır ayarlar
+Capture a look on a DASH button, change everything, and get it back with one press.	Bir görünümü DASH düğmesine kaydet, her şeyi değiştir ve tek basışta geri al.
+Transitions	Geçişler
+The styles beyond the crossfade: an iris, a shatter, and their times.	Geçişin ötesindeki stiller: bir iris, bir parçalanma ve süreleri.
+The space-opera trailer, with Optimus Primetime	Uzay operası fragmanı, Optimus Primetime ile
+Sound	Ses
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Bir cue'da ses efekti, onu güzelce bozan bir bend ve patch'in nerede durduğu.
+The robot DJs, with Deft Funk	Robot DJ'ler, Deft Funk ile
+Reading the scopes	Skopları okumak
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Dalga formu, vektörskop ve sahte renk: parıltı gerçek mi, yoksa sadece fazla parlak mı?
+The Signal Files: is the glow on the horizon a craft?	Sinyal Dosyaları: ufuktaki parıltı bir araç mı?
+Out of the building	Binanın dışına
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	NDI, SDI ve ST 2110'un yeri, ve bu bilgisayarda varsa NDI'yı açmak.
+The webcam as a controller, as a game. Five rounds, a high score.	Kontrolcü olarak web kamerası, oyun olarak. Beş tur, bir rekor.
+A handheld, and bugs	Bir el konsolu ve böcekler
+The multiview	Multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	Pencereler, ... menüsü, her birinin ne gösterdiği, düzenler ve tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Cathode uzay gemisinde gizem, Tğm. Haila ve Asteğmen Jinkley ile
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: İki çalma listesi: Deckboy SUPER DECKBOY oluyor. Hak etti, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Evrimleşti! Benim osilatörlerime hiç fanfar çalınmadı.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Her şov bir tanesini hak eder. Bravo.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Güçlendirme! Daha çok liste, daha çok katman, daha çok süper.
+Intro video (left on the office PC)	Açılış videosu (ofis bilgisayarında unutuldu)
+ON THE ROAD	YOLDA
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Burada kurduğun bir şov, skapi, bu akşam başka bir yerde bir dizüstünde çalışıyor. START'a bas.
+Before it travels: check it, fix it, bundle it.	Yola çıkmadan: kontrol et, düzelt, paketle.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Üst çubukta CHECK'i görüyor musun? Sadece bir şey yanlışken çıkar. Bas.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Bir şovun takılacağı her şeyi listeler: eksik dosyalar, boş cue'lar, ulaşılamayan çıkışlar.
+FIX IT	DÜZELT
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Açılış videosu başka bir bilgisayarda. Seç ve sil, ya da dosya sende varsa RELINK yap.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Evde düzelt, kolayken. Mekânda değil, zorken.
+BUNDLE IT	PAKETLE
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	PAKETLE'ye bas ve yer seç: bir USB bellek, paylaşılan bir klasör. Şov ve tüm medyası, bir arada.
+The copy finds its media beside it, wherever the folder goes.	Kopya, klasör nereye giderse gitsin, medyasını yanında bulur.
+SAFE TRAVELS	İYİ YOLCULUKLAR
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Kontrol edildi, düzeltildi, paketlendi. Öbür makinede paketteki şovu aç: her şey yerli yerinde.
+A show file is only text, so it travels light. The media is the heavy part.	Şov dosyası sadece metin, hafif yolculuk eder. Ağır olan medya.
+Student work no. 4 (untitled)	Öğrenci çalışması no. 4 (isimsiz)
+THE CRIT	KRİTİK
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Bir sanat okulu, skapi. Bir öğrenci, bir resim, her şeyi görmüş bir eleştirmen. START'a bas.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Efektler bir görüntüyü değiştirir; osilatör onu değiştirmeye devam eder. Eleştirmen sadece ikincisini sever.
+A grey square on beige. I have seen this at every graduate show since 1987.	Bej üstünde gri bir kare. 1987'den beri her mezuniyet sergisinde gördüm bunu.
+AN EFFECT	BİR EFEKT
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Inspector'ın EFFECTS bölümünde + bir tane ekler. Edges iyi bir başlangıç: dış hatları çizer.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Onlarcası var. Her biri işlemcide birkaç milisaniyede çalışır. Çoğunlukla.
+Take a risk! Bad art is fine. Boring art is a crime.	Risk al! Kötü sanat olur. Sıkıcı sanat suçtur.
+A ~ ON ITS KNOB	DÜĞMESİNDE BİR ~
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Yanında ~ olan her kontrol bir osilatörü izleyebilir. Birine bas. Düğme nefes almaya başlar.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Düşük frekanslı osilatör: yavaş, göz takip edebilsin diye. Çeyrek hertz dört saniyelik bir nefes.
+Now it MOVES. Okay. Okay. I'm listening.	Şimdi HAREKET ediyor. Peki. Peki. Dinliyorum.
+A COLOUR OF ITS OWN	KENDİNE AİT BİR RENK
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Edges'in çizgisi gibi renk çizen efektlerin bir renk kutucuğu vardır. Seçiciyi açar: bir çark, yazılan adlar ya da ekrandan alınan bir renk.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Her rengin bir yerde bir adı vardır. Benimki 'osiloskop yeşili'. Başka kimse kullanmıyor.
+That colour is doing something. I don't know what. I love it.	O renk bir şey yapıyor. Ne bilmiyorum. Bayıldım.
+THE VERDICT	KARAR
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Bir efekt, bir ~ ve bir renk. Eleştirmen ağlıyor, skapi. Güzel bir ağlama, sanırım.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Birkaç tane üst üste koy. Her birinin her düğmede kendi ~'si var. Bir görünüm böyle performansa dönüşür.
+It's still a square. But it's YOUR square. Post it.	Hâlâ bir kare. Ama SENİN karen. Paylaş.
+THE TELESTRATOR BOOTH	TELESTRATÖR KABİNİ
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Koç Marv sporu üstüne daireler çizerek anlatır. Bir keresinde güneşi daire içine aldı. On dakika, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Bu gece: test desenleri, video synth ve görüntü üstüne çizim. START'a bas.
+Get me a picture and a pen. BOOM.	Bana bir görüntü ve bir kalem verin. BUM.
+A TEST PATTERN	BİR TEST DESENİ
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Ekranları şovdan ÖNCE hizala. Şov sırasında değil. Bunu Plovdiv'de öğrendim.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Her masanın bir test desenine ihtiyacı var. TEST DESENİ, Pocket Test ekler: gerçek ölçerlerle doğrulanmış.
+A VIDEO SYNTH	BİR VİDEO SYNTH
+He says 'no camera needed' like it is a feature. It is a feature.	'Kamera gerekmez'i bir özellikmiş gibi söylüyor. Bir özellik zaten.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	En sevdiğim. KAYNAK, sonra Video Synth: osilatörler, aynalar ve geri besleme. Kamera gerekmez.
+TAKE THE SYNTH	SYNTH'İ TAKE YAP
+Select it, then TAKE. Confident operators press Enter.	Seç, sonra TAKE. Kendine güvenen operatörler Enter'a basar.
+That's our replay. Every replay needs a pundit.	İşte tekrarımız. Her tekrarın bir yorumcusu olmalı.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	İşte tekrar. İşte oyuncu. Ve BUM, içinde.
+A SECOND PLAYLIST	İKİNCİ BİR ÇALMA LİSTESİ
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Mürekkep üste gider, kendi katmanına. Çalma listesi sekmelerinin sonundaki +'ya bas.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	İkinci liste, birincinin üstünde bir katmandır. Üste karıştırılmış ikinci bir osilatör gibi.
+A DRAW CUE	BİR DRAW CUE
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Yeni listede: KAYNAK, sonra Draw. Çizmediğin her yer şeffaf.
+A Draw cue is transparent outside the ink, so the synth shows through.	Draw cue'su mürekkebin dışında şeffaftır, synth arkadan görünür.
+TAKE THE INK	MÜREKKEBİ TAKE YAP
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Draw cue'sunu seç ve TAKE yap. İki liste, iki katman, tek görüntü.
+Now both are live: the synth underneath, the ink on top.	Şimdi ikisi de yayında: altta synth, üstte mürekkep.
+CIRCLE SOMETHING	BİR ŞEYİ DAİRE İÇİNE AL
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Inspector'da DRAW'a bas, sonra program monitörüne çiz. Fareyle, ya da varsa kalemle.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Kalemin baskısı çizgiyi kalınlaştırır. Fare hep aynı güçle basar. Benim gibi.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Onu daire içine al! Hayır, daha büyük. BUM. O bir bulut. Peki. Bulutu daire içine al.
+SAVE A STILL	DURAĞAN KARE KAYDET
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL çizimi şeffaf arka planlı bir resim olarak saklar ve listeye ekler.
+For next week's show. Coach Marv will want the cloud again.	Gelecek haftanın programı için. Koç Marv bulutu yine isteyecek.
+THAT'S THE BOOTH	KABİN BU KADAR
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Desenler, synth, bir katman, mürekkep, durağan kare. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Draw bölümünde Replay'i dene: çizgilerini çizdiğin gibi yeniden çizer.
+Same time next week. Bring a bigger pen. And a turducken.	Haftaya aynı saatte. Daha büyük bir kalem getir. Bir de kuzu tandır.
+Saucer photo (CLASSIFIED)	Uçan daire fotoğrafı (GİZLİ)
+THE SIGNAL FILES	SİNYAL DOSYALARI
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Açıklanamayan Sinyaller Bürosu. İki ajan, bir fotoğraf ve yayına çıkmamalı. START'a bas.
+Masks cut a picture into shapes. Tonight we cut evidence.	Maskeler bir görüntüyü şekillere keser. Bu gece kanıt kesiyoruz.
+That's a craft, Brandt. Look at the lights. I want to believe.	O bir araç, Brandt. Işıklara bak. İnanmak istiyorum.
+A MASK FROM THE LIBRARY	KÜTÜPHANEDEN BİR MASKE
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Inspector'ın MASK bölümünde: mask, sonra 'new heart'. Her şekil olur. Kalp daha komik.
+The library has circles, stars, hearts. Each one is points you can move.	Kütüphanede daireler, yıldızlar, kalpler var. Her biri taşıyabileceğin noktalardan oluşur.
+A heart, Hollis? The Bureau redacts with black bars.	Kalp mi, Hollis? Büro siyah bantlarla karartır.
+THE PEN	KALEM
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Aracı kaleme al, sonra monitörde dairenin etrafına tıkla. Kapatmak için ilk noktaya tıkla.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Köşeler için tıkla, eğriler için sürükle. Bézier kardeşlerin istediği gibi.
+Draw round it carefully. It might be watching.	Dikkatle çiz. İzliyor olabilir.
+INVERT	TERS ÇEVİR
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Ters çevir dışarıyı tutar, içeriyi keser. Daire gider. Gökyüzü kalır.
+The same shape, the other way round. Very useful. Slightly spooky.	Aynı şekil, tersinden. Çok kullanışlı. Biraz ürkütücü.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, gökyüzünde kalp şeklinde bir delik var.
+FEATHER	YUMUŞAT
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Yumuşatma kenarı yumuşatır, kimse kesiği görmez. feather'da +'ya bas.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Sert kenar 'burada biri vardı' der. Yumuşak olan hiçbir şey demez.
+They'll never know.	Asla bilmeyecekler.
+CASE CLOSED	DAVA KAPANDI
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Bir kütüphane şekli, kalem, ters çevir ve yumuşat. Büro teşekkür eder. Büro burada hiç olmadı.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Maskeler bir katmana, bir çıkışa ya da onun matte'ine de gider: MASK ON seçer. Ve her kontrol bir ~ alır.
+The truth is in the waveform, Hollis. Next time, the scopes.	Gerçek dalga formunda, Hollis. Bir dahaki sefere skoplar.
+The ghost	Hayalet
+THE HAUNTED LIGHTHOUSE	PERİLİ DENİZ FENERİ
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Bir deniz feneri, bir hayalet ve lambayla fazla uzun süre yalnız kalmış bir fenerci. START'a bas.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Projeksiyon haritalama: görüntüyü binaya uyacak şekilde bükmek. Warp, harmanlama, dilimler.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Hayaleti pencerelerde istiyorsunuz, he? Lambaya dikkat. Lamba BENİM.
+THE OUTPUT'S GEOMETRY	ÇIKIŞIN GEOMETRİSİ
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	MENÜ, sonra Video çıkışları, sonra Geometri. Bir çıkışın şekli burada yaşar.
+Geometry: the projector-menu word for 'what shape is the picture'.	Geometri: projektör menülerinde 'görüntü ne şekilde' demek.
+PIN A CORNER	BİR KÖŞEYİ SABİTLE
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	warp edit'e bas, sonra program monitöründe bir köşeyi sürükle. Pencere kare değil. Fenerci de değil.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Köşe sabitleme dört köşeyi oynatır. Perspektif çizgileri düz tutar, gerçek bir pencere gibi.
+LEFT! Ye call that a corner? I've seen straighter gulls.	SOLA! Buna köşe mi diyorsun? Bundan daha düz martılar gördüm.
+TWO SOFT EDGES	İKİ YUMUŞAK KENAR
+Back in Geometry: edge blend, + on the left and + on the right.	Geometri'ye dön: edge blend, solda + ve sağda +.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	İki projektör üst üste biner; her biri kenarını soldurur ki örtüşme iki kat parlak olmasın.
+THE SCREENS WINDOW	SCREENS PENCERESİ
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Geometri, SLICES, aç. Screens penceresi dilimlerin kesilip yerleştirildiği yer.
+A slice is a piece of the picture, put anywhere on the output.	Dilim, görüntünün bir parçası; çıkışta herhangi bir yere konur.
+THREE SLICES	ÜÇ DİLİM
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Screens penceresinde üç kez + SLICE, ve her kırpmayı görüntünün üçte birine sürükle.
+Three windows, three slices: left, middle and right of one picture.	Üç pencere, üç dilim: tek görüntünün solu, ortası ve sağı.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Üç pencere. Ortadaki lambanın. Ortadaki HER ZAMAN lambanın.
+THE GHOST IS PLEASED	HAYALET MEMNUN
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Warp, harmanlama, dilimler. Fenerci sonunda uyuyacak. Martılar uyumayacak.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Dilimlerin Screens penceresinde kendi warp'ı ve ağı var. Konum ve dönüşte de bir ~.
+Ye did alright, lad. Now get away from the lamp.	Fena iş çıkarmadın, evlat. Şimdi lambadan uzak dur.
+THE GAME SHOW	YARIŞMA PROGRAMI
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Bir yarışma programı, skapi. Üç yarışmacı, bir buzzer ve her yerden ateşlenen cue'lar. START'a bas.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Cue numaraları, kısayollar ve başka makinelerden GO. Herhangi bir tuştan çalınan bir sequencer gibi.
+Welcome to the show! Let's spin that wheel!	Programa hoş geldiniz! Çarkıfelek dönsün!
+A CUE NUMBER	BİR CUE NUMARASI
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Yarışmacı 3 seçili. Inspector'ın meta verisinde ona bir cue numarası ver: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Tiyatro cue'larını numaralar. Q3, Q3.5, Q12A. Deckboy hepsini okur.
+I'd like to buy a number, please.	Bir numara almak istiyorum, lütfen.
+GO TO IT	ORAYA GİT
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, numarayı yaz, Enter. Liste nerede durursa dursun yayına gider.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. Uzun bir listede en hızlı yol. Kaydırmaktan hızlı. Benden çok daha hızlı.
+And the number is... three!	Ve numara... üç!
+A BUZZER	BİR BUZZER
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Yarışmacı 1 seçili. TRIGGERS'da key'e, sonra F5'e bas. O tuş artık bu cue'yu ateşler.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1'den F10'a, F12 ya da sayı tuş takımı. Her biri bir buzzer.
+Every contestant gets a buzzer.	Her yarışmacıya bir buzzer.
+BUZZ IN	BAS!
+Press the key. The cue fires, wherever the list is standing.	Tuşa bas. Liste nerede durursa dursun cue ateşlenir.
+No mouse, no list, no looking. Just the key.	Fare yok, liste yok, bakmak yok. Sadece tuş.
+Buzz! We have a winner!	Dıııt! Bir kazananımız var!
+FROM ANYWHERE	HER YERDEN
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, bir MIDI notası, bir OSC mesajı: MENÜ, sonra Ağ, her birinin nereye bağlandığını söyler.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Yan odadaki bir Stream Deck GO'ya basabilir. Bir klavye synth de. Ben synth'i tercih ederim.
+And for our viewers at home: you can play along too.	Ve evdeki izleyicilerimiz için: siz de oynayabilirsiniz.
+THAT'S OUR SHOW	PROGRAMIMIZ BU KADAR
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Numaralar, GOTO, bir buzzer ve her yerden GO. Artık sen bir yarışma programısın, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Bir cue'nun aynı anda bir tuşu, bir MIDI notası ve bir OSC adresi olabilir. Hem kemer, hem askı, hem yedek kemer.
+Goodnight, everybody! Keep spinning!	İyi geceler herkese! Çevirmeye devam!
+Weather map	Hava durumu haritası
+THE KAIJU WEATHER	KAIJU HAVA DURUMU
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Kanal 6 hava durumu, skapi. Bir harita, bir sunucu ve çok büyük bir kertenkele. START'a bas.
+Words on screen: Lower Thirds, text, and backdrops.	Ekranda sözcükler: alt bantlar, metin ve zeminler.
+I'm June O'Neil, and nothing about this forecast is normal.	Ben June O'Neil, ve bu tahminde normal olan hiçbir şey yok.
+A LAYER FOR WORDS	SÖZCÜKLER İÇİN BİR KATMAN
+Words go on their own layer: press the + at the end of the playlist tabs.	Sözcükler kendi katmanına gider: çalma listesi sekmelerinin sonundaki +'ya bas.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	İkinci liste haritanın üstünde bir katman. Kertenkele altta kalır. Çoğunlukla.
+Words on top. Always on top.	Sözcükler üstte. Her zaman üstte.
+A LOWER THIRD	BİR ALT BANT
+In the new playlist: SOURCE, then Lower Third.	Yeni listede: KAYNAK, sonra Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Bir ad ve bir unvan, ekranın altında, kertenkelenin yolundan uzakta.
+HER NAME	ONUN ADI
+In the inspector, title: type the presenter's name. The second line is her job.	Inspector'da, title: sunucunun adını yaz. İkinci satır görevi.
+Spelling counts. The audience reads it at the speed of light.	Yazım önemli. Seyirci ışık hızında okur.
+Spell it right. Last week it said 'Jane O'Meal'.	Doğru yaz. Geçen hafta 'June O'Nail' yazıyordu.
+ON AIR	YAYINDA
+TAKE the Lower Third. Her name slides in over the map.	Alt bandı TAKE yap. Adı haritanın üstüne kayarak gelir.
+Two layers live: the weather, and the words on top of it.	İki katman yayında: hava durumu ve üstündeki sözcükler.
+Thank you. Now, about that lizard...	Teşekkürler. Şimdi, o kertenkele meselesine gelirsek...
+BREAKING NEWS	SON DAKİKA
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	KAYNAK, sonra Text: bir başlık kartı. Sonra zemin kutucuğu: chroma yeşili, görüntü mikseri key'lesin diye.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Zemin, sözcüklerin arkasını doldurur. Chroma yeşili ya da mavisi, gerisini mikser yapar.
+Breaking news: it's standing on the five-day forecast.	Son dakika: beş günlük tahminin üstünde duruyor.
+BREAKING: KAIJU	SON DAKİKA: KAIJU
+BACK TO YOU	STÜDYOYA DÖNÜYORUZ
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Bir alt bant, bir ad, bir başlık kartı, bir zemin. Kertenkele stüdyodan ayrıldı, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Alt bantlar kendi başlarına bekleyebilir, kayabilir ve çıkabilir. Bölümlerinde her ayar var.
+That's the weather. Back to you, guys. Run.	Hava durumu buydu. Stüdyoya dönüyoruz. Kaçın.
+A GRAND DAY OUT	BÜYÜK BİR GÜN
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Bodrumda yapılmış bir roket, skapi, ve peynir isteyen bir mucit. START'a bas.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Sahne zamanlayıcıları: geri sayımlar, saatler ve sahnedeki kişi için bir sunucu görünümü.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Peynir, Grommet! Ay ondan yapılmış. Bir geri sayıma ihtiyacımız var.
+A COUNTDOWN	BİR GERİ SAYIM
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	KAYNAK, sonra Stage Timer. Büyük, dostça rakamlarla geriye sayan bir saat.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Süre bittikçe renkleri değişir: beyaz, kehribar, kırmızı. Zaman için bir VU metre.
+*raises an eyebrow*	*bir kaşını kaldırır*
+LIFT OFF	KALKIŞ
+Select the timer and TAKE it. The countdown starts.	Zamanlayıcıyı seç ve TAKE yap. Geri sayım başlar.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Sıfırı geçince devam eder, aşımı sayar. Çok dürüst. Biraz kaba.
+Ten... nine... ooh, I do love a countdown.	On... dokuz... ah, geri sayıma bayılırım.
+HOLD!	DUR!
+Something's loose! Space holds the countdown. The clock shows it is held.	Bir şey gevşek! Boşluk geri sayımı duraklatır. Saat duraklatıldığını gösterir.
+A hold is not a stop. Space again, and it carries on from where it was.	Duraklatmak durdurmak değildir. Tekrar boşluk, kaldığı yerden devam eder.
+*holds up a spanner*	*bir İngiliz anahtarı kaldırır*
+THE PILOT'S VIEW	PİLOTUN GÖRÜNÜMÜ
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	MENÜ, Video çıkışları: bir çıkışın türünü PRESENTER yap. Sahnedeki kişi zamanlayıcıyı, sonraki cue'yu ve notlarını görür.
+A presenter view is an output like any other. Point it at the confidence monitor.	Sunucu görünümü de her çıkış gibi bir çıkış. Onu güven monitörüne yönelt.
+So the pilot can see the time. The pilot is Grommet.	Pilot saati görebilsin diye. Pilot Grommet.
+TO THE MOON	AYA
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Bir geri sayım, bir duraklatma ve pilot için bir görünüm. Nazdrave, skapi. Kraker getir.
+Timers can also count up, or show the time of day. Their section has the lot.	Zamanlayıcılar ileri de sayabilir ya da günün saatini gösterebilir. Bölümlerinde hepsi var.
+A grand day out, Grommet! Pass the crackers.	Ne güzel bir gün, Grommet! Krakerleri uzat.
+The trunk (closed)	Sandık (kapalı)
+The trunk (open)	Sandık (açık)
+THE MAGIC SHOW	SİHİRBAZLIK ŞOVU
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Bir sihirbazlık şovu, skapi. Bir sandık, bir aksesuar ve her şeyin birden değiştiği tek bir vuruş. START'a bas.
+Two playlists are two layers. TAKE ALL changes both together.	İki liste iki katman demek. TAKE ALL ikisini birlikte değiştirir.
+Every trick needs two things happening at once. And a rubber chicken.	Her numaranın aynı anda olan iki şeye ihtiyacı var. Bir de lastik tavuğa.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Aksesuar kendi katmanına gider. Çalma listesi sekmelerinin sonundaki +'ya bas.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Liste 2, liste 1'in üstünde durur. Tepegözdeki asetat gibi.
+Nothing up my sleeve. Everything in my trunk.	Kolumda hiçbir şey yok. Her şey sandığımda.
+THE PROP	AKSESUAR
+In the new playlist, add anything: PATTERN will do. That is the prop.	Yeni listeye herhangi bir şey ekle: TEST DESENİ olur. Aksesuar o.
+Whatever it is, it will appear the instant the trunk opens.	Ne olursa olsun, sandık açıldığı an ortaya çıkar.
+Is it a rubber chicken? It's always a rubber chicken.	Lastik tavuk mu? Hep lastik tavuktur.
+The prop (rubber chicken)	Aksesuar (lastik tavuk)
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Liste 1'de 'Sandık (açık)'ı ve liste 2'de aksesuarı seç. Sonra TAKE ALL: ikisi aynı vuruşta.
+One press, every playlist's selected cue. The audience never sees the seam.	Tek basış, her listenin seçili cue'su. Seyirci dikişi asla görmez.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaa! ...Alkış bekleyin. Bekleyin. Bekleyin.
+THE PRESTIGE	BÜYÜK NUMARA
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	İki katman, tek vuruş. Her listenin kendi opaklığı var ve herhangi bir çıkışta durabilir. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Sihirbaz sırrını asla açıklamaz. Liste açıklanmaya hiç aldırmaz.
+Thank you! I'm here all week! The chicken is here forever.	Teşekkürler! Bütün hafta buradayım! Tavuk sonsuza dek burada.
+The kitchen (on fire)	Mutfak (yanıyor)
+A lovely souffle	Nefis bir sufle
+THE COOKING SHOW	YEMEK PROGRAMI
+A cooking show, skapi. Live. Everything is on fire. Press START.	Bir yemek programı, skapi. Canlı. Her şey yanıyor. START'a bas.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK görüntüyü gizler, şov devam eder. PANIC her şeyi durdurur. Hangisine ihtiyacın olduğunu bil.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdi-flurdi, mutfak yanıyor-flurdi!
+The audience must not see this. Press BLACK, or B.	Seyirci bunu görmemeli. BLACK'e bas, ya da B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Görüntü gider. Cue altta çalmaya devam eder, geri gelmeye hazır.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. Ah, görüntü gitti.
+AND BACK	VE GERİ
+The fire's out. Press B again: the picture comes back, still running.	Yangın söndü. B'ye tekrar bas: görüntü geri gelir, hâlâ çalıyor.
+Nothing was lost. A mute on a mixer, for pictures.	Hiçbir şey kaybolmadı. Görüntüler için mikser mute'u.
+Ta-da! Still cookin'!	Ta-da! Hâlâ pişiyor!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Daha kötüsü: MENÜ, Sistem, SAFETY kartı: PANIC. Panik ayarı ne diyorsa, her şey öyle durur.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC büyük kırmızı düğme. BLACK yetmediğinde kullan. Sonra nefes al.
+GET IT BACK	GERİ AL
+Close MENU, select the souffle, and TAKE it. The show is back on.	MENÜ'yü kapat, sufleyi seç ve TAKE yap. Şov yeniden başladı.
+After a panic, the show is still there. Pick up where you meant to be.	Panikten sonra şov hâlâ orada. Olmak istediğin yerden devam et.
+Voila! De souffle, he is risen!	Voilà! Sufle, kabardı!
+BON APPETIT	AFİYET OLSUN
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	Gizlemek için BLACK, durdurmak için PANIC, geri dönmek için TAKE. Her mutfaktan sağ çıkarsın, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Panik ayarı PANIC'in ne yapacağını seçer: karartma, kesme ya da sadece çıkışlar.
+Bork bork bork! Goodnight!	Bork bork bork! İyi geceler!
+Look one	Görünüm bir
+Look two	Görünüm iki
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Hazır ayarlar, skapi. Koca bir görünüm, hatırlanmış, tek düğmeyle geri. START'a bas.
+Like the patch memory on a synth: store, then recall.	Bir synth'in patch belleği gibi: kaydet, sonra geri çağır.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	DASH'e bas: her şey için kendi düğmelerin.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D de çalışır. Çok hızlı. Çok profesyonel.
+A PRESET BUTTON	BİR HAZIR AYAR DÜĞMESİ
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	+'ya bas, sonra 'preset - a new preset from what is on now'. Düğme bu görünümü hatırlar.
+Store. Like saving the patch before the drummer leans on the synth.	Kaydet. Davulcu synth'e yaslanmadan önce patch'i kaydetmek gibi.
+CHANGE EVERYTHING	HER ŞEYİ DEĞİŞTİR
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	DASH'i kapat (Esc), sonra Görünüm iki'yi seç ve TAKE yap. Farklı bir görünüm.
+Change it all. Don't worry. It remembers.	Her şeyi değiştir. Merak etme. Hatırlıyor.
+ONE PRESS	TEK BASIŞ
+Open the DASH and press your preset button. The first look comes back.	DASH'i aç ve hazır ayar düğmene bas. İlk görünüm geri gelir.
+Recall. The patch memory, returning. Beautiful.	Geri çağır. Patch belleği geri dönüyor. Harika.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Saklanıp geri çağrılan bir görünüm. Bir hazır ayar cue'ları, konumları, efektleri, seviyeleri ve yönlendirmeyi tutabilir; hangisini tutacağını düğmesinin menüsü seçer.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Ve bir DASH düğmesi her komutu çalıştırabilir. Her komutu. Heyecanlı olanları bile.
+Opening titles	Açılış başlıkları
+The planet	Gezegen
+The battle	Savaş
+THE TRAILER	FRAGMAN
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Bir uzay operası fragmanı, skapi. Çok kalın sesli, geçişler hakkında fikirleri olan bir anlatıcı. START'a bas.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Geçiş, bir cue'nun bir sonrakine nasıl dönüştüğüdür. Çapraz geçişten çok daha fazlası var.
+In a galaxy of content... one operator... must choose a transition.	Bir içerik galaksisinde... bir operatör... bir geçiş seçmek zorunda.
+A STYLE	BİR STİL
+'The planet' is selected. In the inspector, its transition style: choose iris.	'Gezegen' seçili. Inspector'da geçiş stili: iris'i seç.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	İtmeler, silmeler, iris, beyaza dalış. Bir portal bile. Yarısını ben yazdım. Bir salı günü.
+The planet deserves... a dramatic entrance.	Gezegen... dramatik bir girişi hak ediyor.
+A TIME	BİR SÜRE
+Give it a time: + on transition until it says a second or more.	Ona süre ver: geçiş'te +, bir saniye ya da daha fazla yazana kadar.
+No time, no transition. A style needs a duration to do anything at all.	Süre yok, geçiş yok. Bir stilin bir şey yapabilmesi için süreye ihtiyacı var.
+ROLL IT	KAYIT
+TAKE the planet. Watch it arrive.	Gezegeni TAKE yap. Gelişini izle.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Geçiş gelen cue'ya aittir. Her cue kendi girişini seçer.
+Autobots... roll the transition.	Autobotlar... geçişi başlatın.
+THE BATTLE	SAVAŞ
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Şimdi 'Savaş': shatter'ı seç, süre ver ve TAKE yap.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Shatter eski görüntüyü bir cam gibi düşürür. Lütfen bunu bir cenazede yapmayın.
+Transform... and shatter out!	Dönüş... ve paramparça!
+IN CINEMAS NOW	ŞİMDİ SİNEMALARDA
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Bir stil, bir süre ve iki çok dramatik giriş. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	Bir listenin de varsayılan bir stili var, kendi stilini seçmeyen her cue için.
+Coming soon... to a desk near you.	Yakında... yakınınızdaki bir masada.
+The beat	Ritim
+THE ROBOT DJS	ROBOT DJ'LER
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	İki robot DJ, skapi. Konuşmuyorlar. Kaskları konuşuyor. START'a bas.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Her cue'nun kendi ses efekti zinciri var, bazıları sesi bilerek bozar.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> MERHABA. MİKSİNİ DÜZELTMEYE GELDİK.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Ritim seçili. AUDIO EFFECTS bölümünde + bir tane ekler. delay'i dene.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Delay, reverb, filtreler, bir kompresör. Miktar her zaman 'bundan daha az' demektir.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> BİR KEZ DAHA. EKOYLA. EKO. EKO.
+A BEND	BİR BEND
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	İkincisini ekle: crush gibi bir bend. Sesi bozuk bir dosya gibi bozar.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Bend'ler en sevdiklerim. Güneşte unutulmuş bir kaset gibi. Bilerek.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> DAHA SERT. DAHA İYİ. DAHA ÇITIR. DAHA YÜKSEK.
+THE PATCH	PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	MENÜ, sonra Ses: her listenin sesinin nereye gittiği ve adlandırılmış çıkışların patch'i.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Hoparlörler, monitörler, davulcu için kulak içi. Patch her birine kendininkini yollar.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> MİKSİN ETRAFINDA. MİKSİN ETRAFINDA. MİKSİN ETRAFINDA.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Bir efekt, bir bend ve patch. Robotlar onaylıyor, skapi. Galiba. Yüzleri kask.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Her ses efekti de bir ~'yi izleyebilir, Motion'ı bile. Delay'e el salla. Harika.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> TEŞEKKÜRLER. İYİ GECELER. BİZ ROBOTUZ.
+The glow on the horizon (evidence #2)	Ufuktaki parıltı (kanıt #2)
+EVIDENCE #2	KANIT #2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Yine Büro, skapi. Ufukta bir parıltı ve onun hakkında anlaşamayan iki ajan. START'a bas.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Skoplar bir görüntüyü ölçer: parlaklık, renk, seviyeler. Fikir değil, sayı.
+It's them, Brandt. It's a craft. Look how it glows.	Onlar, Brandt. Bir araç. Nasıl parladığına bak.
+THE REAL SIGNAL	GERÇEK SİNYAL
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Skoplar sadece gerçekten çıkanı okur, asla önizlemeyi değil. Çıkışı aç: MENÜ, Video çıkışları, ÇIKIŞ KAPALI.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Küçültülmüş önizlemeyi ölçmek fotokopi ölçmek olurdu. Biz aslını ölçeriz.
+Chain of evidence, Hollis. The real signal or nothing.	Delil zinciri, Hollis. Ya gerçek sinyal ya hiç.
+THE SCOPES	SKOPLAR
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	MENÜ'yü kapat. Monitörün üstünde PROGRAM düğmesi: SCOPES ya da BOTH yazana kadar bas.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH görüntüyü ve skoplarını yan yana gösterir. Çok medeni.
+Let the scopes decide, Hollis.	Bırak skoplar karar versin, Hollis.
+THE WAVEFORM	DALGA FORMU
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Büyütmek için dalga formuna tıkla. Parlak şeyler üstte, karanlıklar altta, soldan sağa görüntüdeki gibi.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Parıltı, tepeye yakın o sivri uç. Çok parlak. Parlak demek uzaylı demek değil.
+Look at the peak. Nothing a streetlight couldn't do.	Tepeye bak. Bir sokak lambasının yapamayacağı bir şey değil.
+THE VECTORSCOPE	VEKTÖRSKOP
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Geri dönmek için tekrar tıkla, sonra vektörskopa tıkla: renk bir çember etrafında. Doygun olan kenara koşar.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Macenta, ta kenarda. Güçlü bir renk. Güçlü yasadışı değil. Henüz.
+It's off the chart, Brandt! Literally off the chart!	Grafiğin dışında, Brandt! Kelimenin tam anlamıyla!
+FALSE COLOUR	SAHTE RENK
+And false colour: red is clipped, yellow nearly. Is the glow red?	Ve sahte renk: kırmızı kırpılmış, sarı neredeyse. Parıltı kırmızı mı?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Kırpılmış, sinyalin taşıyabileceği en parlak nokta ve ötesi kaybolmuş demek. Ayrıntı gitti.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Kırmızı. Kırpılmış. Uzaylı değil, Hollis. Sadece fazla parlak. Dava kapandı.
+THE TRUTH	GERÇEK
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Dalga formu, vektörskop, sahte renk. Skoplar karara bağladı, skapi. Ajanlar bağlamadı.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE herhangi bir çıkışı okur ve matris 709 ya da 2020 olabilir. Meraklısına.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Bir sokak lambası için fazla parlak, Brandt. Her şey için fazla parlak. ...İnanmak istiyorum.
+OUT OF THE BUILDING	BİNANIN DIŞINA
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Kabloyla ya da ağla çıkan görüntüler, skapi, sadece ekrandaki bir pencere değil. START'a bas.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	Ağ üzerinden NDI, bir DeckLink kartından SDI, yayın tesisleri için ST 2110.
+THE DEVICES PAGE	AYGITLAR SAYFASI
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	MENÜ, Video çıkışları, sonra Aygıtlar: bir çıkışın bu bilgisayardan çıkabileceği her yol.
+Each one says whether this machine can do it, and what it needs if not.	Her biri bu makinenin yapıp yapamayacağını, yapamazsa neye ihtiyacı olduğunu söyler.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Bu bilgisayarda NDI varsa NDI SENDING'i aç: görüntü ağda. Yoksa SHOW ME devam eder.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI ağda kendini bulur. Kablo yok, sadece iyi bir switch ve sabır.
+OUT THERE	DIŞARIDA
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Çıkışın kendi sayfasında gerisi var: bir DeckLink kartının SDI'ı, NMOS'lu ST 2110, Spout ve Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Hepsi sadece birer çıkış. Şov nasıl çıktığını bilmez, umursamaz.
+Nebula ahead	İleride bulutsu
+Engine room	Makine dairesi
+Deck 3: something moving	Güverte 3: bir şey hareket ediyor
+THE BRIDGE	KÖPRÜ
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Cathode uzay gemisinin köprüsü, skapi. Dört yayın, bir ana ekran, bir gizem. START'a bas.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Multiview tüm listeleri aynı anda gösterir. Osiloskoplardan bir duvar gibi, ama uzayda.
+Frequencies open, Captain. All of them. That's the problem.	Frekanslar açık, kaptan. Hepsi. Sorun da bu.
+MULTI, above the monitor: every playlist in its own window.	Monitörün üstünde MULTI: her liste kendi penceresinde.
+One window per playlist, the programme first.	Her listeye bir pencere, önce program.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Dört yayın. Ve birinde bir canavar var.
+WHAT'S NEXT	SIRADA NE VAR
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Bir pencere ekle (+), sonra onun ... menüsü: NEXT göstersin. TAKE'e bastığında yayına giden şey.
+Every window has a ... button. It chooses what that window shows.	Her pencerenin bir ... düğmesi var. O pencerenin ne göstereceğini seçer.
+I need to see who's calling before they reach the main viewer.	Ana ekrana ulaşmadan önce kimin aradığını görmeliyim.
+A CLOCK	BİR SAAT
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Ve bir pencere daha, saati gösteren. Saate bakan operatörler hiç geç kalmaz. Çoğunlukla.
+Time of day, big. Stardates are just very long timecode.	Günün saati, büyük. Yıldız tarihleri sadece çok uzun bir zaman kodu.
+The monster only shows up at midnight. We're going to need a clock.	Canavar sadece gece yarısı ortaya çıkıyor. Bir saate ihtiyacımız olacak.
+ONE BIG ONE	BİR BÜYÜK
+Any window's ... menu, then a layout: one big, the rest small.	Herhangi bir pencerenin ... menüsü, sonra bir düzen: biri büyük, gerisi küçük.
+The big window is window one. Usually the programme. Usually.	Büyük pencere birinci pencere. Genelde program. Genelde.
+Main viewer big. The captain likes it big.	Ana ekran büyük. Kaptan büyük sever.
+ON SCREEN	EKRANA
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Liste 3'te Güverte 3'ü seç ve TAKE yap. Penceresini izle.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Kırmızı çerçeve TALLY: yayında olan pencere. Uzay gemilerinde dedikleri gibi, ekrana.
+There! Feed three! Put it on screen!	Orada! Yayın üç! Ekrana ver!
+THAT'S A WRAP	ÇEKİM BİTTİ
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Pencereler, ... menüsü, NEXT, saat, bir düzen, tally. Gizem çözüldü, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Bir pencere bir çıkışı da, warp'ı ve dilimleriyle gösterebilir. Bir deniz feneri olunca işe yarar.
+And the monster was... the ship's cook, all along. Jinkys.	Ve canavar... baştan beri geminin aşçısıymış. Jinkys.
+there is no such lesson	böyle bir ders yok
+finish or leave the lesson you are in first	önce içinde olduğun dersi bitir ya da çık
+leave Bug Swat first	önce Bug Swat'tan çık
+Psst. It's me, the desk. I'll be watching. Supportively.	Pst. Benim, masa. İzliyor olacağım. Destekleyerek.
+Hi! I'm the one doing all of this, by the way.	Selam! Bu arada, bunların hepsini ben yapıyorum.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D, DASH'i açar. Öylesine söylüyorum.
+Nearly there. I can feel it in my pixels.	Az kaldı. Piksellerimde hissediyorum.
+You're good at this. I can tell. I'm the one doing it.	Bunda iyisin. Anlıyorum. Yapan benim.
+Every click, I heard. Every single one.	Her tıklamayı duydum. Her birini.
+The glowing one. I can see it from here. It's glowing for you.	Parlayan. Buradan görüyorum. Senin için parlıyor.
+lesson paused - MENU > LESSONS picks up where you left off	ders duraklatıldı - MENÜ > LESSONS kaldığın yerden devam eder
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Sinyal: görüntü neden yapılır ve nasıl bükülür. Bir ders seç.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Şovu yönetmek, skapi. Hızlı eller, sakin yüz. Bir ders seç. Ben yine de seni izliyorum.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	DERSLER  -  İKİNCİ BÖLÜM  -  KİMİ İZLİYORSUN?
+FOLLOW PROF. VIDEO	PROFESÖR VIDEO'YU İZLE
+FOLLOW DR. PIXEL	DR. PİKSEL'İ İZLE
+the signal	sinyal
+running the show	şovu yönetmek
+PICK UP	DEVAM ET
+CLOSE (Esc)	KAPAT (Esc)
+PART ONE: THE BASICS	BİRİNCİ BÖLÜM: TEMELLER
+finish or leave LEARN THE BASICS first	önce LEARN THE BASICS'i bitir ya da çık
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc çıkar ve şovun olduğu gibi geri gelir
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: şovun geri geldi. Motion kontrolleri Ayarlar > Ses'te
+TURN MOTION ON	MOTION'I AÇ
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Böcekler cue listesine doğru sürünüyor! Kameraya el sallayarak ez onları. Önce Motion: MOTION CONTROL'de ON yap ve neyi okuyacağını (READS) seç.
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	Bu NullPointer. İçi boş, hiçbir şeyi göstermez. Bir parmak içinden geçer. Bütün elini kullan, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Taksi çevirir gibi el salla! Küçük, kibar bir taksi. Düğmeler değil. Taksi.
+DRAW TWO ZONES	İKİ BÖLGE ÇİZ
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: ikizler, her biri önce kendisinin geldiğinden emin. Tek okuma ellerini ayırt edemez, o yüzden Motion görüntüsüne her yana bir tane olmak üzere iki ZONES sürükle.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	İkisine birlikte vur. Birine vurursan yer değiştirirler. Düğündeki kuzenlerim gibi.
+One hand each side. Together! Together!	Her yana bir el. Birlikte! Birlikte!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Böcek yüz değil, o küçücük fazla parça; küçük bir kıpırtı daha ince bir okuma ister. SENSITIVITY'yi %5'e düşür.
+Lower number, finer reading. Yes, I also think it is backwards.	Düşük sayı, daha ince okuma. Evet, ben de ters olduğunu düşünüyorum.
+Not the face. The little one on the end. Wiggle a finger.	Yüz değil. Ucundaki küçücük olan. Bir parmağını oynat.
+FALL 1.5 S OR MORE	FALL 1,5 SN YA DA DAHA FAZLA
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Sadece okuma yüksek kaldıkça bırakır. FALL'u uzat, 1,5 saniye ya da daha fazla, böylece savuruşların tek bir savuruşa bağlansın.
+Slow and steady, skapi. Like paying back a loan.	Yavaş ve istikrarlı, skapi. Taksit öder gibi.
+Sweep, and sweep again. Let the fall carry you between.	Savur, ve yine savur. Aradaki düşüş seni taşısın.
+MOTION X ON A TONE	BİR TONDA MOTION X
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Heisenbug! Her hareket ettiğinde soluyor. Bir ton cue'sunun perdesini Motion X'e koy ve kulağınla izle: yaklaştıkça tıkırtı hızlanır.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME tonu senin için yapar. Tiz sağ. Pes sol. Kıpırdama, geri gelir.
+Follow it. Listen. Faster ticking, closer bug.	İzle. Dinle. Daha hızlı tıkırtı, daha yakın böcek.
+Waving paw	El sallayan pati
+Heisenbug finder	Heisenbug avcısı
+FIXED! Lovely signal flow.	DÜZELDİ! Ne güzel bir sinyal akışı.
+Closed as fixed. No regressions. Probably.	Düzeltildi olarak kapatıldı. Gerileme yok. Muhtemelen.
+Squashed! Ship it.	Ezildi! Yayınla.
+One reached the cue list. It has filed a bug report about you.	Biri cue listesine ulaştı. Senin hakkında bir hata raporu açtı.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. Bu bir el konsolu. Basılmaz. El sallanır.
+The buttons are for menus. The bugs are for flailing.	Düğmeler menüler için. Böcekler kolları savurmak için.
+The D-pad is decorative. Like my diploma.	Yön tuşu süs. Diplomam gibi.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	1989'da biz de düğmelere basardık. Sonra el sallamayı keşfettik. Bir daha geri bakmadık.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Daha sert basmak işe yaramaz. Böcekler düğmeleri hissetmez. Sadece kolları.
+It's called a handheld because your hands are held... up. In the air. Waving.	Ona el konsolu deniyor çünkü eller... havaya konuyor. Havada. Sallanarak.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	Fare mi? Böcekleri FAREYLE mi eziyorsun? Bulgaristan'da fare böceklerin tarafını tutardı.
+Lovely clicking. Very crisp. The camera saw none of it.	Güzel tıklamalar. Çok net. Kamera hiçbirini görmedi.
+DONE FOR YOU - PRESS START	SENİN İÇİN YAPILDI - START'A BAS
+DONE! PRESS START	TAMAM! START'A BAS
+SELECT OPENS MOTION CONTROL	SELECT, MOTION CONTROL'Ü AÇAR
+ALL BUGS FIXED	TÜM BÖCEKLER DÜZELTİLDİ
+GAME OVER	OYUN BİTTİ
+NEW HIGH SCORE!	YENİ REKOR!
+START PLAYS AGAIN	START İLE TEKRAR OYNA
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Şimdi git gerçek böcekleri düzelt.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Bunların her biri gerçek bir Motion kontrolü. İstediğin herhangi bir ~ düğmesine koy.
+START: AGAIN	START: TEKRAR
+START: PLAY	START: OYNA
+# --- end of tutorials ---
+Splash	Açılış ekranı
+Beast mode	Canavar modu
+MIDI MAP	MIDI HARİTASI
++ ADD	+ EKLE
+LEARN	ÖĞREN
+LISTENING...	DİNLİYOR...
+BACK	GERİ
+READY-MADE...	HAZIR...
+Message	Mesaj
+Runs	Çalıştırır
+On	Üzerinde
+Now	Şimdi
+Map	Harita
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	MIDI girişi kapalı: MIDI CONTROL'den açın. OSC satırları yine de yanıt verir.
+LEARN: move a knob or press a key on the controller...	ÖĞREN: denetleyicide bir düğme çevirin veya bir tuşa basın...
+1 · WHAT COMES IN	1 · NE GELİYOR
+learn it, or say how to read it	öğret ya da nasıl okunacağını söyle
+2 · WHAT IT RUNS	2 · NEYİ ÇALIŞTIRIR
+any command, {value} is the number	herhangi bir komut, {value} sayıdır
+3 · WHAT IT RUNS ON	3 · NEYE YÖNELİR
+aimed here; the desk never moves	buraya yönelir; masa asla kıpırdamaz
+Read as	Şöyle oku
+Hold for	Basılı tut
+Command	Komut
+From	En az
+Centre	Orta
+To	En çok
+Pickup	Yakalama
+On release	Bırakınca
+Runs on	Üzerinde
+Saved with	Kaydedildiği yer
+Row	Satır
+DELETE	SİL
+THE SHOW	GÖSTERİ
+THIS COMPUTER	BU BİLGİSAYAR
+any port	her port
+the desk	masa
+the selected cue	seçili cue
+what is on air	yayında olan
+one named cue	adı verilen cue
+the focused one	odaktaki
+Test: move it on the controller	Deneme: denetleyicide oynatın
+knob 0-127	düğme 0-127
+endless encoder	sonsuz kodlayıcı
+14-bit	14 bit
+press	bas
+hold	bekle
+press + release	bas + bırak
+play	çal
+on press	basınca
+plays	çalar
+LED MAP	LED HARİTASI
+LAYOUT	YERLEŞİM
+FEEDS: pick a window, then one of these	KAYNAKLAR: bir pencere seçin, sonra bunlardan birini
++ CHOOSE A FEED	+ KAYNAK SEÇ
+audio meter	ses göstergesi
+safe areas	güvenli alanlar
++ ONE AFTER THIS	+ BUNDAN SONRA BİR TANE
+- REMOVE THIS ONE	- BUNU KALDIR
+ONE PER PLAYLIST	PLAYLIST BAŞINA BİR
+on the desk	masada
+tile width	panel genişliği
+tile height	panel yüksekliği
+LISTENS: OFF	DİNLER: KAPALI
+LISTENS: the figure follows the sound	DİNLER: şekil sesi izler
+import an SVG...	SVG içe aktar...
+the selected cue in playlist {n}	playlist {n} içindeki seçili cue
+the selected cue in the focused playlist	odaktaki playlist'in seçili cue'su
+on air in playlist {n}	playlist {n} içinde yayında olan
+on air in the focused playlist	odaktaki playlist'te yayında olan
+hold {n} s	{n} sn basılı tut
+any	her
+built in	yerleşik
+show	gösteri
+motion	hareket
+METADATA	ÜST VERİ
+generated	üretilmiş
+Fit	Sığdır
+inf	sonsuz
+NO	HAYIR
+YES	EVET
+UP	YUKARI
+DOWN	AŞAĞI
+Left	Sol
+Right	Sağ
+Top	Üst
+Bottom	Alt
+add	ekle
+all	tümü
+none	yok
+Cut	Kesme
+Fade	Solma
+Load	Yükle
+Pause	Duraklat
+Resume	Sürdür
+Start	Başlat
+Skip	Atla
+Arm	Hazırla
+Disarm	Devre dışı
+ONE	BİR
+ONCE	BİR KEZ
+Size	Boyut
+Width	Genişlik
+amount	miktar
+brightness	parlaklık
+contrast	kontrast
+saturation	doygunluk
+hue	renk tonu
+level	seviye
+speed	hız
+style	stil
+title	başlık
+subtitle	alt başlık
+notes	notlar
+font	yazı tipi
+frame	kare
+type	tür
+state	durum
+blend	karışım
+align	hizala
+line	çizgi
+box	dikdörtgen
+oval	oval
+brush	fırça
+eraser	silgi
+mask	maske
+grow	genişlet
+subtract	çıkar
+split	böl
+stacked	yığılmış
+soft	yumuşak
+tolerance	tolerans
+curve	eğri
+Linear	Doğrusal
+Ease in	Yumuşak giriş
+Ease out	Yumuşak çıkış
+S-curve	S eğrisi
+Position X	Konum X
+Position Y	Konum Y
+Deck volume	Deck ses düzeyi
+Deck opacity	Deck opaklığı
+Master dimmer	Ana karartıcı
+Cue brightness	Cue parlaklığı
+Cue contrast	Cue kontrastı
+Cue saturation	Cue doygunluğu
+Cue hue	Cue renk tonu
+no effects	efekt yok
+no audio effects	ses efekti yok
+nothing yet	henüz yok
+no output	çıkış yok
+no window	pencere yok
+source missing	kaynak eksik
+waiting for a picture	görüntü bekleniyor
+clear frame	kareyi temizle
+undo stroke	çizgiyi geri al
+save still	resmi kaydet
+save animation	animasyonu kaydet
+export	dışa aktar
+repeats	tekrarlar
+hold last	son kareyi tut
+end action	bitiş eylemi
+cue id	cue kimliği
+goto target	atlama hedefi
+set	ayarla
+send	gönder
+run	çalıştır
+idle	boşta
+standby	hazır
+Loop	Döngü
+loop forever	sonsuz döngü
+PATCH	PATCH
+OUTPUTS	ÇIKIŞLAR
+SECTIONS	BÖLÜMLER
+Video Synth	Video sentezleyici
+Browser	Tarayıcı
+Browser Cue	Tarayıcı cue
+Window Source	Pencere kaynağı
+Camera Source	Kamera kaynağı
+NDI Source	NDI kaynağı
+DeckLink Input	DeckLink girişi
+Syphon/Spout Source	Syphon/Spout kaynağı
+Live stream cue	Canlı yayın cue
+Composite	Kompozit
+Composite scene cue	Birleşik sahne cue
+Lower Third	Alt bant
+Lower Third overlay cue	Alt bant cue
+PIP overlay cue	PIP katman cue
+MIDI File	MIDI dosyası
+Master	Master
+Memo	Not
+Mic	Mikrofon
+Timer	Zamanlayıcı
+Tone	Ton
+Script	Betik
+Target	Hedef
+Draw	Çizim
+Code	Kod
+Clouds	Bulutlar
+Swirl	Girdap
+Moire	Hare
+Picture	Resim
+Placement	Yerleşim
+Frame lock	Kare kilidi
+Suspend	Askıya al
+Seam	Birleşim
+High pass	Yüksek geçiren
+Low pass	Alçak geçiren
+Tilt EQ	Eğim EQ
+Compressor	Kompresör
+Gate	Kapı
+Delay	Gecikme
+Reverb	Yankı
+Binaural	Binaural
+Crush	Ezme
+Word	Sözcük
+Scrub	Sürükle
+Short	Kısa
+Shatter	Parçalama
+Pulse	Darbe
+Crawl	Kayan yazı
+Typewriter	Daktilo
+Oscilloscope	Osiloskop
+Spectrum	Spektrum
+Level Meters	Seviye ölçerler
+Waveform	Dalga biçimi
+EFFECTS	EFEKTLER
+TRIGGERS	TETİKLEYİCİLER
+SEQUENCE	SEKANS
+MOTION CONTROL	HAREKET KONTROLÜ
+THIS CUE	BU CUE
+FUNCTIONS	İŞLEVLER
+VALUES	DEĞERLER
+KEYS	TUŞLAR
+FREEZE	DONDUR
+FROZEN	DONMUŞ
+BYPASSED	ATLANDI
+BYPASS ALL	TÜMÜNÜ ATLA
+DEFAULTS	VARSAYILANLAR
+CHANGE	DEĞİŞTİR
+CHOOSE	SEÇ
+Stop all	Tümünü durdur
+Pause all	Tümünü duraklat
+Resume all	Tümünü sürdür
+Do not continue	Devam etme
+Auto-continue	Otomatik devam
+Auto-follow	Bitince devam
+END HOLD	SON TUT
+END LOOP	SON DÖNGÜ
+END NEXT	SON SONRAKİ
+END STOP	SON DUR
+OUTPUT EFFECTS	ÇIKIŞ EFEKTLERİ
+LIVE CAPTIONS	CANLI ALTYAZI
+captions	altyazılar
+Name Card	İsim kartı
+TEST CARD	TEST KARTI
+TEST CARD ON	TEST KARTI AÇIK
+EXPORT CARD	KARTI DIŞA AKTAR
+EXPORTING...	AKTARILIYOR...
+LOW LATENCY	DÜŞÜK GECİKME
+WEB MONITOR	WEB MONİTÖRÜ
+PHONE & TABLET	TELEFON VE TABLET
+SCAN TO PAIR	EŞLEŞTİRMEK İÇİN TARA
+WITH SOUND	SESLİ
+THE NETWORK	AĞ
+FIXTURES	ARMATÜRLER
+ADD FIXTURE	ARMATÜR EKLE
+Dimmer	Dimmer
+Dimmer + RGB	Dimmer + RGB
+Dimmer + temperature	Dimmer + sıcaklık
+QR CODE	QR KODU
+loop	döngü
+inherit	devral
+Fill	Doldur
+Stretch	Uzat
+Dissolve	Geçiş
+Pattern	Desen
+mixed	karışık
+selected cue lane  |  TAKE to make it live	seçili cue şeridi  |  TAKE canlıya alır
+Dip to black	Siyahtan
+Dip to white	Beyazdan
+Iris	İris
+Push left	Sola it
+Push right	Sağa it
+Push up	Yukarı it
+Push down	Aşağı it
+Wipe left	Sola sil
+Wipe right	Sağa sil
+Wipe up	Yukarı sil
+Wipe down	Aşağı sil
+Still	Durağan
+Timecode	Zaman kodu
+address	adres
+auto next	otomatik sonraki
+continue	devam
+fire	tetikle
+in	giriş
+out	çıkış
+routing	yönlendirme
+trim	kırp
+0-63, the hardware's own gain range.	0-63, donanımın kendi kazancı.
+1-16, as the desk counts them	1-16, masanın saydığı gibi
+7-segment, blocky, or a real font	7 segment, köşeli veya gerçek bir yazı tipi
+[ / ] keys — fade-in duration	[ / ] tuşları: giriş süresi
+a camera moves the ~ controls	bir kamera kontrolleri hareket ettirir ~
+a chain on a device, after the mix	bir aygıtta zincir, miksten sonra
+a comment	bir yorum
+Act now, without taking the cue	Cue'yu almadan şimdi yap
+Add a light	Işık ekle
+add a second output to pair	eşlemek için ikinci bir çıkış ekle
+add shape	şekil ekle
+all driven by the cue's own transport	hepsi cue'nun oynatımıyla sürülür
+All interfaces; trusted machines only.	Tüm arayüzler; yalnızca güvenilen makineler.
+all to 0	hepsi 0
+An audio effect's knob	Bir ses efekti düğmesi
+An effect's knob	Bir efekt düğmesi
+any channel	herhangi bir kanal
+any window, any screen	herhangi bir pencere, herhangi bir ekran
+arcade	atari
+Arm this cue as the one GO will fire	Bu cue'yu sonraki GO için hazırla
+Art-Net port address, 0-32767	Art-Net port adresi, 0-32767
+Attached overlays fire on TAKE only	Bağlı kaplamalar yalnızca TAKE ile başlar
+BACK TO BUG SWAT	BUG SWAT'A DÖN
+backdrop	arka plan
+bar	çubuk
+bg alpha	arka plan alfası
+black lift	siyah yükseltme
+blend gamma	karışım gaması
+blueprint	mavi kopya
+boxes	kutular
+bracket	köşeli ayraçlar
+bulletin	bülten
+by density	yoğunluğa göre
+BY FIXTURE	ARMATÜRE GÖRE
+capsule	kapsül
+caption	alt yazı
+card	kart
+CARD OFF ALL	KART HEPSİ KAPALI
+CARD ON ALL	KART HEPSİ AÇIK
+cartridge	kartuş
+cassette	kaset
+Ceiling	Tavan
+Chain	Zincir
+Changing this re-prepares the cue.	Değiştirmek cue'yu yeniden hazırlar.
+channel list is not readable	kanal listesi okunamıyor
+CHANNELS	KANALLAR
+channels on your interfaces, by name	arayüzlerinden kanallar, ada göre
+Checkerboard	Dama tahtası
+chime amber	kehribar uyarısı
+chime red	kırmızı uyarısı
+chime zero	sıfır uyarısı
+Choose startup mode:	Başlangıç modunu seç:
+circle, heart, star...	daire, kalp, yıldız...
+circuit	devre
+CLASSIC VIEW	KLASİK GÖRÜNÜM
+clear driver	sürücüyü temizle
+Clear in/out trim points	Giriş/çıkış noktalarını temizle
+CLEAR OVERLAY  [Backspace]	KAPLAMAYI TEMİZLE  [Backspace]
+Clear the active Lower Third overlay now	Canlı Lower Third'ü şimdi kaldır
+Clear the live PIP overlay now	PIP kaplamasını şimdi kaldır
+CLICK ANYWHERE...	HERHANGİ BİR YERE TIKLA...
+click or Esc to close	kapatmak için tıkla veya Esc
+click this window	bu pencereye tıkla
+Click to edit cue notes	Cue notlarını düzenlemek için tıkla
+click to open the grid	ızgarayı açmak için tıkla
+Click to seek — drag to scrub	Gitmek için tıkla, sarmak için sürükle
+Click to type it	Yazmak için tıkla
+comic	çizgi roman
+Companion passphrase	Companion parolası
+confetti	konfeti
+Connections at once	Eşzamanlı bağlantılar
+count up	ileri say
+Countdown, count up, or wall clock	Geri sayım, ileri sayım veya saat
+credit	jenerik
+crossfade	geçiş çubuğu
+crosshair	artı işareti
+Crosshatch	Çapraz tarama
+Cue has no audio	Cue'nun sesi yok
+cue number	cue numarası
+Cycle end action for selected cues	Seçili cue'ların bitiş eylemini değiştir
+Cycle which slot drives scene audio	Sahnenin sesini veren yuvayı değiştir
+dateline	tarih satırı
+decoder spin-up	çözücü başlatma
+Default App Feed	Varsayılan uygulama kaynağı
+Default Camera	Varsayılan kamera
+Delay before the continue fires	Devam etmeden önce gecikme
+Delay between GO and this cue starting	GO ile cue başlangıcı arasındaki gecikme
+depth 1 turns it all the way round	derinlik 1 tam dönüş yapar
+Digit colour once amber is reached	Kehribarda rakam rengi
+Digit colour while there is time in hand	Bol zamanda rakam rengi
+diskette	disket
+Do it now, without taking the cue	Cue'yu almadan şimdi yap
+dossier	dosya
+dotmatrix	nokta vuruşlu
+Double-GO guard	Çift GO koruması
+draw on the monitor	monitörde çiz
+driver speed	sürücü hızı
+EDGE BLEND	KENAR KARIŞIMI
+EDIT is on: typing changes the show	EDIT açık: yazmak gösteriyi değiştirir
+edit on the monitor	monitörde düzenle
+Edit the main Lower Third title	Lower Third başlığını düzenle
+Edit the secondary Lower Third line	Lower Third'ün ikinci satırını düzenle
+eq band	EQ bandı
+equalizer	ekolayzır
+Esc cancels	Esc iptal eder
+Esc cancels, arrows nudge	Esc iptal eder, oklar taşır
+Esc to close	kapatmak için Esc
+even grid	düzenli ızgara
+EXAMPLE SHOWS	ÖRNEK GÖSTERİ
+EXIT  Esc	ÇIK  Esc
+face	yüz
+factory settings	fabrika ayarları
+Fade+LoadNext	Kararma+Sonrakini Yükle
+Fade+Pause	Kararma+Duraklat
+Fade+Rewind	Kararma+Başa Sar
+Fade-in duration	Giriş süresi
+Fade-in duration for this cue	Bu cue'nun girişi
+Fade-out duration	Çıkış süresi
+Fade-out duration before next cue	Sonraki cue'dan önce çıkış
+Fade-out duration for this cue	Bu cue'nun çıkışı
+Fall	Düşüş
+false colour reads SDR pictures	yanlış renkler SDR görüntü okur
+fill the frame	kareyi doldur
+find a named colour	ada göre renk bul
+fires cues	cue'ları başlat
+first available	ilk boş olan
+Fit/Fill/Stretch/Unscaled	Sığdır/Doldur/Uzat/Ölçeksiz
+Fixed repeat count — 0 = infinite	Sabit tekrar sayısı: 0 = sonsuz
+Fixed repeat count — 0 = loop forever	Sabit tekrar sayısı: 0 = sonsuza dek
+FIXED!	DÜZELDİ!
+flag	bayrak
+FORGET MY DEFAULTS	VARSAYILANLARIMI UNUT
+Frames a second	Saniyedeki kare
+from exactly this routing	doğrudan bu yönlendirmeden
+Full Black	Tam siyah
+Full Blue	Tam mavi
+Full Green	Tam yeşil
+Full Red	Tam kırmızı
+Full White	Tam beyaz
+garden	bahçe
+Ghastly	Hayaletimsi
+glass	cam
+glitch down	glitch aşağı
+glitch drift	glitch kayması
+glitch reach	glitch menzili
+glitch through	glitch yana
+glitch up	glitch yukarı
+GO steps over it	GO bunu atlar
+hairline	çizgi
+Haptics	Titreme
+HDR input	HDR girişi
+Hex, e.g. 90 3C 7F	Hex, örn. 90 3C 7F
+HOLDING OFF AIR	YAYIN DIŞI DURDUR
+Home — skip to start	Home: başa
+Horizontal output offset in pixels	Yatay çıkış kayması, piksel
+How many features fit on screen.	Ekrana kaç tane sığar.
+how much of this effect	bu efektten ne kadar
+How solid the ink is	Mürekkep örtücülüğü
+How tall the logo is above the clock	Saatin üstündeki logo yüksekliği
+In-point: cue starts playback here	Giriş noktası: cue burada başlar
+index	dizin
+initializing webview	webview başlatma
+install Tailscale here and on the phone	Tailscale'i buraya ve telefona kur
+INSTALLING...	KURULUYOR...
+Its amount, or one of its knobs A to D	Miktarı veya A-D arası bir düğme
+J jump to row	J: satıra git
+jam to	eşitle
+Jump the driver back to its first frame	Sürücüyü ilk kareye geri al
+K — cycle cue color tag	K: cue rengini değiştir
+Keep counting past zero, or stop dead	Sıfırı geçerek say veya dur
+key	tuş
+Key edge softness	Kilit kenar yumuşaklığı
+knob	düğme
+L - loop this cue continuously	L: bu cue'yu döngüye al
+last reading	son okuma
+Last refused	Son reddedilen
+Learn it	Öğret
+LEARN THE BASICS	TEMELLERİ ÖĞREN
+ledger	defter
+Left — skip back 10s	Sol: 10 sn geri
+Left, centre or right	Sol, orta veya sağ
+LESSONS	DERSLER
+Levels	Seviyeler
+Limiter	Sınırlayıcı
+Limiting	Sınırlama
+line  |  Enter: apply	satır  |  Enter: uygula
+LINEAR - a feather, not a blend	DOĞRUSAL: bir gradyan, karışım değil
+Linear, ease in, ease out or S-curve	Doğrusal, giriş, çıkış veya S eğrisi
+Lines	Çizgiler
+link aspect	en boyu bağla
+Listen to	Dinle
+listener	dinleyici
+LIVE - every assigned deck matches	LIVE: atanan tüm deck'ler eşleşiyor
+lock to screen	ekrana kilitle
+logo size	logo boyutu
+look at it	ona bak
+lower 3rd	Lower Third
+marquee	kayan yazı tabelası
+mask on	maske etkin
+Master oscillator rate.	Ana osilatörün hızı.
+Maximum quality	En yüksek kalite
+MIDI and OSC monitor	MIDI ve OSC monitörü
+midi in	MIDI girişi
+MIDI note	MIDI notası
+move points	noktaları taşı
+Move the height on its own oscillator	Perdeyi osilatörle hareket ettir
+name or number...	ad veya numara...
+name, from anywhere	ad, her yerden
+NDI source cue	NDI kaynak cue'su
+needs file-backed video	video dosyası gerekir
+new paths	yeni yollar
+New shows start from	Yeni gösteriler şununla başlar
+next xfade	sonraki kararma
+no effects for this cue type	bu cue türü için efekt yok
+nobody	yok
+none - click to learn	yok: öğretmek için tıkla
+none - click to set some	yok: ayarlamak için tıkla
+none - click to write some	yok: yazmak için tıkla
+none yet	henüz yok
+none: the one picture	yok: tek görüntü
+none: the whole picture	yok: tüm görüntü
+notebook	defter
+nothing	hiçbir şey
+nothing assigned yet	hiçbir şey atanmadı
+nothing follows	hiçbir şeyi izlemez
+Nothing here with this filter.	Bu filtreyle hiçbir şey yok.
+nothing set - this cue sends nothing	hiçbir şey ayarlı değil: bu cue hiçbir şey göndermez
+nothing targeted yet	hedef yok
+Nothing to see here. Probably.	Burada görülecek bir şey yok. Herhalde.
+nothing to send - check the message	gönderilecek bir şey yok: iletiyi kontrol et
+offset X	kayma X
+offset Y	kayma Y
+on any channel	herhangi bir kanalda
+on the header to add another	daha fazlası için başlıkta
+on the monitor	monitörde
+one big on top, the rest below	biri üstte büyük, gerisi altta
+one big, the rest beside it	biri büyük, gerisi yanında
+onion off	aydınger kapalı
+onion on	aydınger açık
+only this computer	yalnızca bu bilgisayar
+Open a .deckboy show file	Bir .deckboy dosyası aç
+open the monitor	monitörü aç
+or your own bytes	veya kendi baytların
+ORDER - cues advance down the list	SIRA: cue'lar listede aşağı iner
+Out-point: cue stops playback here	Çıkış noktası: cue burada biter
+output already has	çıkışta zaten var
+Outputs Off	Çıkışlar kapalı
+outs	çıkışlar
+over budget - video will drop frames	sınırın üstünde: video kare kaybedecek
+over the picture	görüntünün üstünde
+PAIR	EŞLE
+Pair a phone	Telefon eşle
+Pair overlap	Çift bindirmesi
+Paired phones	Eşlenmiş telefonlar
+Passphrase	Parola
+Pattern motion toggle	Desen hareketi
+pause begin	başta duraklat
+pennant	flama
+Per-cue transition duration override	Bu cue'nun geçiş süresi
+Perspective	Perspektif
+PHASE	FAZ
+Phone access	Telefon erişimi
+Phone control	Telefon kontrolü
+phrase hold	cümle uzunluğu
+PICK FROM SCREEN	EKRANDAN AL
+Pitch, in semitones.	Perde, yarım ton olarak.
+PIXEL FOR PIXEL, TOP-LEFT	PİKSELİ PİKSELİNE, SOL ÜST
+placard	tabela
+play a note...	bir nota çal...
+PLAY BUG SWAT, a game	BUG SWAT OYNA
+Play the out move now, then take it off	Çıkışı şimdi oynat, sonra kaldır
+Playback speed: 0.25–4.0×	Hız: 0,25–4,0×
+playlists into the named outputs	oynatma listesi adlı çıkışlara
+plays synth	sentezi çal
+plugin	eklenti
+PNG matte	PNG matı
+podium	kürsü
+press a key...	bir tuşa bas...
+PRESS AGAIN TO FORGET	UNUTMAK İÇİN YİNE BAS
+Previous show file:	Önceki dosya:
+prog bar	ilerleme ç.
+programme	program
+Programme with sound in any browser	Her tarayıcıda sesli program
+PROJECTOR - gamma matched	PROJEKSİYON: gama uyumlu
+Projector gamma	Projeksiyon gaması
+put it on a button	bir düğmeye koy
+Put the brush's opacity on an oscillator	Fırça örtücülüğünü osilatöre bağla
+Put the brush's size on an oscillator	Fırça boyutunu osilatöre bağla
+Put this control on an oscillator	Bu kontrolü osilatöre bağla
+rack it	yükle
+RACKED, WARM	YÜKLENDİ, HAZIR
+rail	ray
+rain	yağmur
+Reads	Okur
+reads the same on any screen	her ekranda aynı okunur
+recent and in this show	son kullanılanlar ve bu gösteride
+Recent shows:	Son gösteriler:
+red at	kırmızı:
+red col	kırmızı süt.
+render height	işleme yüksekliği
+render width	işleme genişliği
+REPORT A PROBLEM	SORUN BİLDİR
+reported rather than swapped	bildirildi, değiştirilmedi
+restart driver now	sürücüyü şimdi yeniden başlat
+restart on take	take'te yeniden başla
+restore at end	sonda geri yükle
+ribbon	şerit
+Right — skip forward 10s	Sağ: 10 sn ileri
+Right-click turns them off.	Sağ tık onları kapatır.
+Rise	Yükseliş
+rise, slide or wipe	yüksel, kaydır veya perde
+Rotation speed, degrees per second.	Dönme hızı, saniyede derece.
+rounded rect	yuvarlak dikd.
+row turns the matrix off again	satır matrisi yine kapatır
+Run it now, without taking the cue	Cue'yu almadan şimdi çalıştır
+Run the show from a phone	Gösteriyi telefondan yönet
+runs off the show thread	gösteri iş parçacığının dışında
+sACN universe, 1-63999	sACN evreni, 1-63999
+SAVE AS MY DEFAULTS	VARSAYILAN OLARAK KAYDET
+says	der
+SCALED TO FILL	DOLDURMAK İÇİN ÖLÇEKLENDİ
+Scene dwell time — 0 = hold	Sahne süresi: 0 = tut
+Scene fade-in duration	Sahne girişi
+Scene fade-out duration	Sahne çıkışı
+scoreboard	skor tablosu
+SCREENS	EKRANLAR
+scroll	kaydırma
+Scroll up	Yukarı kaydır
+sea	deniz
+SELECT: MOTION	SEÇİM: HAREKET
+Send now, without taking the cue	Cue'yu almadan şimdi gönder
+sends	gönder
+Sensitivity	Hassasiyet
+Set browser URL/path	Tarayıcı URL'sini/yolunu ayarla
+set by	ayarlayan
+Set capture source from the cue menu	Kaynağı cue menüsünden ayarla
+Set cue ID for selected cues	Seçili cue'ların kimliğini ayarla
+Set cue token to jump to when cue ends	Sonda atlanacak cue'yu ayarla
+Set goto target for selected cues	Seçili cue'ların hedefini ayarla
+Set Lower Third background alpha	Lower Third arka plan alfası
+Set per-cue transition duration	Cue geçiş süresi
+Set playback speed for selected cues	Seçili cue'ların hızı
+Set repeat count for selected cues	Seçili cue'ların tekrarı
+Set short cue id for search/goto	Arama/atlama için kısa kimlik
+Set short cue label for search/goto	Arama/atlama için kısa ad
+Set the NDI source name to receive	Alınacak NDI kaynağının adı
+Shift+[ / ] — fade-out duration	Shift+[ / ]: çıkış süresi
+SHOW ME	GÖSTER BANA
+Show on	Şurada göster
+Shows	Göster
+sideline	yan çizgi
+sketch	eskiz
+slide	kaydır
+slide from left	soldan kaydır
+slide from right	sağdan kaydır
+SMOOTH	YUMUŞAK
+snow	kar
+SOS. Kidding. The show is fine.	SOS. Şaka. Gösteri iyi.
+Sound when the clock turns amber	Saat kehribar olunca ses
+Sound when the clock turns red	Saat kırmızı olunca ses
+Sound when time is up	Süre bitince ses
+Space — pause	Boşluk: duraklat
+Space — play	Boşluk: oynat
+span	yayılım
+sparkle	parıltı
+Speech models	Konuşma modelleri
+Speed, like tape	Hız, bant gibi
+stamp	damga
+Start NEW from factory	YENİ'yi fabrikadan başlat
+starting browser	tarayıcı başlatma
+starting capture	yakalama başlatma
+starting xvfb	xvfb başlatma
+sticky	yapışkan not
+stop at 0	0'da dur
+Stop puppeteering this cue	Bu cue'yu sürmeyi bırak
+STRAIGHT	DÜZ
+survey	kabartma
+SVG paths	SVG yolları
+tab	sekme
+tag	etiket
+TAP	DOKUN
+text mode	metin modu
+the file cannot be read	dosya okunamıyor
+The name	Ad
+The OSC path, e.g. /cue/1/start	OSC yolu, örn. /cue/1/start
+the playlist's PATCH	oynatma listesinin PATCH'i
+The role, or leave it empty	Rol veya boş bırak
+the system output	sistem çıkışı
+The text this cue puts on screen	Bu cue'nun gösterdiği metin
+theatre	tiyatro
+then stop	sonra dur
+they have	var
+things that are oscillating	salınan şeyler
+this cue lives on	bu cue şurada
+This show's setup, no cues	Bu gösterinin ayarları, cue'lar olmadan
+ticket	bilet
+tile h	panel y
+Tile height in pixels.	Piksel olarak panel yüksekliği.
+tile w	panel g
+time of day	günün saati
+Toggle audio enable for selected cues	Seçili cue'ların sesi
+Toggle chroma key	Krom anahtarı aç/kapat
+Toggle cue audio	Cue sesi
+Toggle cue audio track for this cue	Bu cue'nun ses izi
+Toggle fade in	Giriş
+Toggle fade out	Çıkış
+Toggle hold on last frame	Son kareyi tut
+Toggle hold-at-end for selected cues	Seçili cue'larda sonda tut
+Toggle loop	Döngü
+Toggle loop for selected cues	Seçili cue'ların döngüsü
+Toggle the live input's audio	Canlı giriş sesi
+Total time	Toplam süre
+transcoding - plays clean until ready	dönüştürme: sonuna kadar temiz oynar
+transparent: put its playlist on a layer	saydam: oynatma listesini bir katmana koy
+Trusted controllers	Güvenilen kontrolcüler
+TURN OFF	KAPAT
+turn phone control on	telefon kontrolünü aç
+two big on top, the rest below	ikisi üstte büyük, gerisi altta
+type a cue number	bir cue numarası yaz
+Typing needs EDIT on	Yazmak için EDIT açık olmalı
+Use GEOMETRY for exact placement	Tam yerleşim için GEOMETRİ kullan
+value to type one	yazılacak değer
+Vertical output offset in pixels	Dikey çıkış kayması, piksel
+VIDEO DIP: OFF	VİDEO GEÇİŞİ: HAYIR
+VIDEO DIP: ON	VİDEO GEÇİŞİ: EVET
+walk the outputs one at a time.	çıkışları tek tek gez.
+walks every output in turn	her çıkışı gezer
+WHAT DECKBOY DID	DECKBOY NE YAPTI
+what is on air in a playlist	oynatma listesinde canlı olan
+What NEW starts from, never this show	YENİ'nin başladığı yer, asla bu gösteri
+whatever the style says	stilin dediği gibi
+Where the ramp ends	Rampanın bittiği yer
+Which deck the cue it acts on lives on	Hedef cue hangi deck'te
+Which frame you draw on	Hangi kareye çizdiğin
+Who can see it	Kim görebilir
+whole network	tüm ağ
+will not open	açılmıyor
+window and recording outputs only	yalnızca pencere ve kayıt çıkışları
+wipe	perde
+Wobble	Salınım
+wobble by	şu kadar salla
+words	sözcükler
+X — cycle end action	X: bitiş eylemini değiştir
+X — cycle end action: stop / next / loop	X: bitiş eylemi: dur / sonr. / döngü
+Zones	Bölgeler
+~ makes the level breathe	~ seviyeyi nefes aldırır
+a note or an address becomes that cue's trigger	bir nota veya adres cue'nun tetikleyicisi olur
+acts on every deck; deck and cue are ignored	tüm deck'lere etki eder; deck ve cue yok sayılır
+Add an output above, then send playlists to it here.	Yukarıda bir çıkış ekle, sonra oynatma listelerini buraya gönder.
+Ancient cypher, modern video desk. Respect.	Eski yazı, modern masa. Saygı.
+Any font on this computer, Deckboy's own, or a font file	Bilgisayar yazı tipi, Deckboy'unki veya bir dosya
+Apply fade-in to selected video/audio cues	Seçili video/ses cue'larında giriş
+Apply fade-out to selected video/audio cues	Seçili video/ses cue'larında çıkış
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net veya sACN (E1.31): ışık sisteminin dinlediği
+Auto-advance duration — 0 = hold until taken	Otomatik ilerleme: 0 = take'e kadar tut
+Bypass: this master leaves that deck alone	Bypass: bu master o deck'e dokunmaz
+Characters across. Fewer means bigger cells.	Satır başına karakter. Az olması hücreleri büyütür.
+Choose a mask from this show's library, or start a new one from a shape	Kitaplıktan bir maske seç veya şekilden yap
+Click a value to change it. A red address overlaps another fixture.	Değiştirmek için bir değere tıkla. Kırmızı adres başka bir armatürle çakışır.
+Click to show or hide this cue's captions	Cue altyazılarını göstermek veya gizlemek için tıkla
+Copy the show AND its media into one portable folder	Gösteriyi VE medyayı taşınabilir bir klasöre kopyala
+Ctrl+S - write back over the show that is open	Ctrl+S: açık gösteriye kaydet
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: YENİ dosyaya kaydet
+Device output pair this cue's audio plays on	Bu cue'nun sesi için çıkış çifti
+E - freeze on last frame instead of stopping	E: durmak yerine son karede kal
+Edit title/subtitle here or fire it live with TAKE	Başlığı/alt başlığı burada düzenle veya TAKE ile başlat
+Every channel on every universe this session has touched	Bu oturumda dokunulan her evrenin her kanalı
+generator is off - a START cue turns it on	üreteç kapalı: bir START cue'su onu açar
+How long the note takes to reach full level.	Notanın tam seviyeye ulaşma süresi.
+How much it throws off; 0 is a clean burn	Ne kadar pul pul dökülür; 0 temiz yanar
+INPUT: the programme. Drag a crop to move it, its corners to size it.	GİRİŞ: program. Taşımak için kesimi, boyut için köşeleri sürükle.
+Keep the outside and cut the inside instead	Dışını tut, içini kes
+LED panel height in pixels. Click to type it	Piksel olarak LED panel yüksekliği. Yazmak için tıkla
+Legacy target mode — switch type to convert	Eski hedef modu: dönüştürmek için türü değiştir
+Lissajous, spectrum, meters or a name card	Lissajous, spektrum, göstergeler veya ad etiketi
+Load the cue and hold first frame when taken	Cue'yu yükle ve take'e kadar ilk kareyi tut
+no fixtures patched - Settings > Network > FIXTURES	yamalı armatür yok: Ayarlar > Ağ > FIXTURES
+Nothing here changes the show that is open.	Burada hiçbir şey açık gösteriyi değiştirmez.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Cue sesi: aç/kapat, trim, pan, mono, geçişler, normalleştir
+Phone control is in PHONE & TABLET, below	Telefon kontrolü aşağıda, PHONE & TABLET içinde
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Maskeyi çıkış boyutunda gri PNG kaydet: beyaz tutar, siyah keser
+Seconds REMAINING when the clock turns amber	Saat kehribar olunca KALAN saniye
+Seconds REMAINING when the clock turns red	Saat kırmızı olunca KALAN saniye
+Shown to the operator when GO reaches this cue	GO bu cue'ya gelince operatöre gösterilir
+SHUFFLE - the next cue is picked at random	RASTGELE: sonraki cue kurayla seçilir
+Slots are self-contained sources in this first pass	Yuvalar bu sürümde bağımsız kaynaklardır
+that output's whole picture, or its matte	o çıkışın tüm görüntüsü veya matı
+The cue number on the other desk, e.g. 12.5	Diğer masadaki cue numarası, örn. 12.5
+Toggle pause-at-beginning for selected cues	Seçili cue'larda başta duraklat
+Toggle transition-to-next for selected cues	Seçili cue'larda sonrakine geçiş
+transparent outside the blobs: put it on a layer	lekelerin dışı saydam: bir katmana koy
+transparent outside the ink: put it on a layer	mürekkebin dışı saydam: bir katmana koy
+what is said, on screen, made on this computer	söylenenler, ekranda, bu bilgisayarda yapıldı
+What this cue does when it ends - click to change	Bu cue'nun sonda ne yaptığı: değiştirmek için tıkla
+Whether the next shape or pen path adds or cuts	Sonraki şekil veya yol ekler mi keser mi
+shape	şekil
+palette	palet
+scale	ölçek
+feedback	geri besleme
+RED	KIRMIZI
+do it	uygula
+(empty)	(boş)
+(unset)	(ayarlanmamış)
+English	İngilizce
+amber at	sarı eşiği
++ section	+ bölüm
++pause pt	+ durak
+a-fade in	ses giriş
+amber col	sarı renk
+(no notes)	(not yok)
+a-fade out	ses çıkış
+gain (each)	kazanç (her)
+% of the height	yüksekliğin %'si
++  a first step	+  ilk adım
++ ADD AN EFFECT	+ EFEKT EKLE
+(none playing now)	(şu an çalan yok)
+Keep a transcript (.srt)	Dökümü sakla (.srt)
+Key tolerance (RGB distance)	Key toleransı (RGB uzaklığı)
+Contrast multiplier (0.0-2.0x)	Kontrast çarpanı (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	Parlaklık çarpanı (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	Doygunluk çarpanı (0.0–2.0x)
+Output rotation angle (-180..180)	Çıkış döndürme açısı (-180..180)
+Hue rotation (-180 to +180 degrees)	Ton döndürme (-180 ile +180 derece)
+Lower Third background opacity (0-255)	Alt bant arka plan opaklığı (0–255)
+0-127; 127 addresses every device on the line	0–127; 127 hattaki tüm aygıtlara seslenir
+GO shows the note; picture and sound carry on	GO notu gösterir; görüntü ve ses sürer
+How fast it moves; no effect when it is still	Hareket hızı; sabitken etkisiz
+Fires when incoming timecode passes this point	Gelen zaman kodu bu noktayı geçince tetiklenir
+Source pixels, independent of output placement	Çıkış yerleşiminden bağımsız kaynak pikselleri
+Stereo balance, applied live (snaps to center)	Canlı stereo dengesi (ortaya yapışır)
+bypassed: nothing here is processed or limited	atlanıyor: işleme veya sınırlama yok
+Per-cue audio trim: -40 to +40 dB, applied live	Cue kazancı: -40 ile +40 dB, canlı uygulanır
+Show the message in red - the wrap up NOW state	Mesajı kırmızı göster: ŞİMDİ bitir durumu
+The brush's width, as % of the picture's height	Fırça genişliği, görüntü yüksekliğinin yüzdesi
+What the stream carries: SDR, PQ (HDR10) or HLG	Akış içeriği: SDR, PQ (HDR10) veya HLG
+Digit colour once red is reached, and in overtime	Kırmızı eşiğinde ve süre aşımında rakam rengi
+Downmix this cue to mono (mono sources / mono PA)	Cue'yu monoya karıştır (mono kaynak / mono PA)
+Drag to scrub (shift = fine), click to type exact	Tarama için sürükle (Shift: hassas), kesin değer için tıkla
+Hand this to an oscillator so it moves on its own	Kendiliğinden hareket etmesi için osilatöre bağla
+Changing width also scales height (and vice versa)	Genişlik değişince yükseklik de ölçeklenir; tersi de geçerli
+How long the levels take to arrive; zero is a snap	Seviyelere ulaşma süresi; sıfır anında değiştirir
+Set the self-contained PIP source for this overlay	Bu katmanın bağımsız PIP kaynağını ayarla
+Take the newest shape or pen path out of this mask	Maskeden son şekli veya kalem yolunu çıkar
+An address sent to Deckboy's OSC port fires this cue	Deckboy OSC portuna gelen bu adres cue'yu tetikler
+Hold on the last composite frame when the scene ends	Sahne bitince son birleşik kareyi tut
+How long it takes; zero is a snap rather than a fade	Süre; sıfır geçişsiz, anında değiştirir
+Set still/pattern/browser duration for selected cues	Seçili cue'ların resim/desen/tarayıcı süresini ayarla
+Start the LTC carrier, stop it, or jam it to a value	LTC taşıyıcısını başlat, durdur veya bir değere eşitle
+Which cue on that deck; step off the end to clear it	O deck'teki cue; sona geçerek seçimi temizle
+Bob up and down. Depth 1 is half the frame either way	Yukarı aşağı. Derinlik 1: her yönde yarım kare
+Output width in pixels | click value to type exact px	Çıkış genişliği, piksel; kesin değer için tıkla
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Akış URL'sini ayarla (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	Her gün bilgisayar saatine göre bu saatte tetiklenir
+Output height in pixels | click value to type exact px	Çıkış yüksekliği, piksel; kesin değer için tıkla
+Bar across the foot - readable further back than digits	Alttaki çubuk: rakamlardan daha uzaktan okunur
+OUTPUT: drag a slice to move it, its corners to size it.	ÇIKIŞ: dilimi taşımak için sürükle, boyut için köşelerini sürükle
+Choose a Lower Third from the overlay bin to fire on TAKE	TAKE ile başlatılacak alt bandı katman kutusundan seç
+Choose a PIP overlay from the overlay bin to fire on TAKE	TAKE ile başlatılacak PIP'i katman kutusundan seç
+OUTPUT: drag a slice to move it, its corners to pin them.	ÇIKIŞ: dilimi taşımak için sürükle, köşeleri sabitlemek için sürükle
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 veya sayısal tuş takımı cue'yu her yerden tetikler
+Use transition when auto-advancing or goto-taking next cue	Otomatik ilerleme veya sonraki cue'ya GOTO sırasında geçiş kullan
+Nothing has arrived yet. Press something on the controller.	Henüz sinyal gelmedi. Denetleyicide bir kontrolü kullan.
+Audio fade-in: follow visual fade, none, or explicit seconds	Ses açılışı: görüntü geçişini izle, yok veya belirtilen saniye
+Audio fade-out: follow visual fade, none, or explicit seconds	Ses kapanışı: görüntü geçişini izle, yok veya belirtilen saniye
+Add a library shape to this mask; its points are yours to move	Maskeye kitaplıktan şekil ekle; noktalarını taşıyabilirsin
+No slices: this output shows its one picture. + SLICE to start.	Dilim yok: çıkış kendi görüntüsünü gösterir. + SLICE ile başla.
+Open and close this edge on an oscillator -- a wipe that breathes	Kenarı osilatörle açıp kapat: nefes alan bir silme geçişi
+(none)	(yok)
+(nothing yet)	(henüz yok)
++ ADD AN OUTPUT	+ ÇIKIŞ EKLE
+>LIVE	>CANLI
+(no media source)	(medya kaynağı yok)
+snap	anında
+this deck	bu deck
+protocol	protokol
+does	eylem
+signal	sinyal
+sine	sinüs
+freq	frekans
+visuals	görsel
+black	siyah
+green	yeşil
+blue	mavi
+Pause at start	Başta durakla
+Pause at end	Sonda durakla
+Transition to next	Sonraki geçiş
+Hardware display	Ekran
+Raster mode	Raster modu
+Refresh rate	Yenileme
+Bit depth	Bit derinliği
+SDR material at	SDR düzeyi
+HDR signal	HDR sinyali
+Fullscreen	Tam ekran
+Matte aspect	Mat oranı
+Bar opacity	Çubuk opakl.
+Output mask	Çıkış maskesi
+Overlay still	Sabit katman
+Overlay opacity	Katman opakl.
+Overlay image	Katman resmi
+Place it	Yerleştir
+Corner pin	Köşe sabitle
+Slices	Dilimler
+choose...	seç...
+not configured	ayarlanmamış
+(default system device)	(varsayılan sistem aygıtı)
+(no monitor)	(monitör yok)
+System audio (SDL)	Sistem sesi (SDL)
+Not watching a folder	İzlenen klasör yok
+anyone	herkes
+When taken off air	Yayından alındığında
+browser cue added	tarayıcı cue eklendi
+source cue added	kaynak cue eklendi
+text added	metin eklendi
+tone cue added	ton cue eklendi
+gain	kazanç
+follow	izle
+moves	hareket
+overtime	süre aşımı
+chime	çan sesi
+bell	çan
+load a sprite sheet from a file...	dosyadan sprite sayfası yükle...
+Run the clock	Saati başlat
+What fires this cue besides GO	GO dışında bu cue'yu ne tetikler
+center	Orta
+visual	görsel
+JAM	EŞLE
+MIX	MİKS
+CLIP	KLİP
+Port	Bağlantı noktası
+TEXT	METİN
+KEY L	KEY S
+MULTI	ÇOKLU
+VIDEO	VİDEO
+WACKY	ÇILGIN
+COLOUR	RENK
+DARKEN	KOYULAŞTIR
+COMPARE	KARŞILAŞTIR
+LIGHTEN	AÇIKLAŞTIR
+DASHBOARD	PANO
+deck fader	deck fader'ı
+29.97 fps (NTSC)	29,97 fps (NTSC)
+Pocket Test (day)	Pocket testi (gündüz)
+Dark Detail (0-12%)	Gölge ayrıntısı (%0-12)
+Frame Count (emoji)	Kare sayacı (emoji)
+PLUGE (black level)	PLUGE (siyah seviyesi)
+Pocket Test (night)	Pocket testi (gece)
+Pocket Test (storm)	Pocket testi (fırtına)
+Marks stacked BELOW.	İşaretler ALTA yığılı.
+Panel Map (animated)	Panel haritası (hareketli)
+Pocket Test (sunset)	Pocket testi (gün batımı)
+Boresight (alignment)	Nişangâh (hizalama)
+SMPTE 75% Colour Bars	SMPTE %75 renk çubukları
+(projector curve only)	(yalnızca projektör eğrisi)
+Multiburst (bandwidth)	Multiburst (bant genişliği)
+Convergence (fine grid)	Yakınsama (ince ızgara)
+Greyscale Steps (gamma)	Gri basamaklar (gama)
+Uniformity (flat fields)	Tekdüzelik (düz alanlar)
+MULTIVIEW carries this too.	MULTIVIEW de bunu taşır.
+Test Clock (sync + latency)	Test saati (eşleme + gecikme)
+auto (reads the common two)	otomatik (yaygın ikisini okur)
+Panel Map (LED tile numbers)	Panel haritası (LED panel numaraları)
+Portal (blobs of deep space)	Portal (derin uzay kabarcıkları)
+Terrarium (living ecosystem)	Teraryum (canlı ekosistem)
+Window 10% (peak brightness)	Pencere %10 (tepe parlaklık)
+Window 50% (peak at mid APL)	Pencere %50 (orta APL'de tepe)
+Frame Count (drops + latency)	Kare sayacı (kayıplar + gecikme)
+Terrarium Pico (1px per cell)	Teraryum Pico (hücre başına 1 px)
+Banding Ramps (real bit depth)	Bantlaşma rampaları (gerçek bit derinliği)
+Fireside (a hearth that burns)	Ocak başı (yanan bir şömine)
+HLG - live broadcast (BT.2100)	HLG - canlı yayın (BT.2100)
+Test Bars (motion diagnostics)	Test çubukları (hareket teşhisi)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (bir şey ölçekliyor mu?)
+Pocket Test (test card + scene cycle)	Pocket testi (test kartı + sahne döngüsü)
+Critters (pixel-exact scaling, animated)	Critters (piksel kesinliğinde ölçek, hareketli)
+headphones, desk sounds and LTC stay out of it	kulaklıklar, masa sesleri ve LTC dışarıda kalır
+Above 1 tunnels inward, below 1 blooms outward.	1'in üstünde tünel içe çeker, altında dışa açılır.
+Read everything right to left. Yes, everything.	Her şeyi sağdan sola oku. Evet, her şeyi.
+Amber is closest to the 1976 single-phosphor look.	Kehribar, 1976'nın tek fosforlu görünümüne en yakın olandır.
+Greetings, primitive. Your "slideshow" amuses us.	Selamlar, ilkel. "Slayt gösterin" bizi eğlendiriyor.
+Sway sideways. Depth 1 is half the frame either way	Yana salın. Derinlik 1, her yöne yarım kare
+Draw the diagnostic over the card, or just the text.	Teşhisi test kartının üstüne çiz, ya da yalnızca metni.
+All interfaces, but only this computer is trusted yet.	Tüm arayüzler, ama şimdilik yalnızca bu bilgisayara güveniliyor.
+Choose the legacy cue token to show inside the PIP window	PIP penceresinde gösterilecek eski cue belirtecini seç
+ASIO carries the show's sound, and these are not on it yet	ASIO gösterinin sesini taşır ve bunlar henüz onun üzerinde değil
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=yeni  Enter/P=önceki  O=kayıtlıyı aç  E=örnekler  L=öğren
+Hand this parameter to an oscillator so it moves on its own	Bu parametreyi bir osilatöre ver, kendi kendine hareket etsin
+How long the finished drawing stays before it is drawn again	Biten çizimin yeniden çizilmeden önce ne kadar kalacağı
+How it comes on and goes off: none, fade, rise, slide or wipe	Nasıl girer ve çıkar: yok, solma, yükselme, kayma ya da silme
+The 64-step wavetable, quantised to 6 bits like the hardware.	64 adımlı dalga tablosu, donanım gibi 6 bite nicemlenmiş.
+Vary tile size per cell, so the grid stops looking like a grid.	Döşeme boyutunu hücreye göre değiştir, ızgara ızgaraya benzemesin.
+Which output channel carries the signal. 'all' feeds every one.	Sinyali hangi çıkış kanalı taşır. 'all' hepsini besler.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Ne gönderilir. Ters bölü n, r, t ve 0 bu karakterlere dönüşür
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Deckboy'un kendi uzaktan protokol komutları, satır başına bir tane; # yorumdur
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Modülatör hızı notanın oranı olarak, böylece bükme perdeyi izler.
+Play this cue to the preview only; the outputs keep what they have	Bu cue'yu yalnızca önizlemede çal; çıkışlar sahip olduklarını korur
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Perdeyi bir osilatöre ver: Motion X onu theremin gibi süpürür
+A disarmed cue stays in the list and does nothing; GO steps over it	Silahsızlandırılmış cue listede kalır ve hiçbir şey yapmaz; GO onu atlar
+Where the clock reads from this cue on; click the value to type one	Saatin bu cue'dan itibaren nereden okuduğu; yazmak için değere tıkla
+Add a dashboard button that fires this master by name, from anywhere	Bu master'ı adıyla her yerden başlatan bir pano düğmesi ekle
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Yeni misin? TEMELLERİ ÖĞREN beş dakika sürer. Sana etrafı gösterelim.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	Bir IPv4 adresi ya da tüm ağa yayın için 255.255.255.255
+How much playing audio widens and brightens the pattern. 0 free-runs.	Çalan sesin deseni ne kadar genişletip aydınlattığı. 0 serbest çalışır.
+LED panel width in pixels - what one tile really is. Click to type it	LED panel genişliği piksel olarak: bir döşemenin gerçek boyu. Yazmak için tıkla
+Which deck it acts on; step off the end for the one this cue lives on	Hangi deck üzerinde etki eder; bu cue'nun deck'i için sonun ötesine geç
+only one playlist - use the routing chip on the header to add another	tek bir çalma listesi: başlıktaki yönlendirme çipi bir tane daha ekler
+Which cue this master fires on that deck; step off the end to clear it	Bu master'ın o deck'te hangi cue'yu başlattığı; temizlemek için sonun ötesine geç
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Program monitörüne fare ya da kalemle çiz (DRAW). Esc durdurur
+How long the move takes, each way. 0 is instant whatever the style says	Hareketin her yönde ne kadar sürdüğü. Stil ne derse desin 0 anlıktır
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Rampa varınca o deck'i durdur: alışılmış kıs-ve-durdur
+Which of the file's sound tracks plays: a second language, a commentary	Dosyanın hangi ses izi çalar: ikinci bir dil, bir yorum
+An oscillator on the colour: depth is how far round the wheel it travels	Renkte bir osilatör: derinlik, çark üzerinde ne kadar döndüğüdür
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Bu cue'yu duraklatılmış ve yayın dışı yükle, GO onu kod çözücü beklemesi olmadan başlatsın
+Note, control change, program change, MIDI Show Control, or your own bytes	Nota, control change, program change, MIDI Show Control ya da kendi baytların
+Black behind the words. Zero leaves it over whatever the output already has	Kelimelerin arkasında siyah. Sıfır onları çıkışta zaten olanın üstünde bırakır
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Modülatörün perdeyi ne kadar büktüğü. 0-63, donanımın kendi kazanç aralığı.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	bu cue'nun ekrana koyduğu kelimeler  |  Shift+Enter: yeni satır  |  Enter: uygula
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC ve UDP gönder-ve-unut; TCP bağlanır, bu yüzden gösteri iş parçacığının dışında çalışır
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Seviyeyi bir osilatöre ver: Motion onu sen hareket ettikçe açılan bir kapıya çevirir
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Karakterlerin ÜSTÜNE yığılı işaretler, satırdan taşan birleşik aksanlar gibi.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Hangi zil. Değiştirmek onu ÇALAR, böylece adına göre değil kulakla seçilir.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Satır yok. + EKLE ya da ÖĞREN bir tane oluşturur; MIDIMAP RESET yerleşik satırları geri getirir.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Maskenin yollarını SVG olarak kaydet, Illustrator ve onları okuyan her şey için
+Which MIDI output; a named port that is missing is reported rather than swapped	Hangi MIDI çıkışı; eksik adlı bir bağlantı noktası değiştirilmez, bildirilir
+An oscillator on the level, running after GO until a later cue sets this fixture	Seviyede bir osilatör, GO'dan sonra çalışır, ta ki sonraki bir cue bu armatürü ayarlayana dek
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Üçte bir oktav adımları, çünkü kulak oranlarla çalışır. 1 kHz gelenektir.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Hücrenin BOYUNCA çizgiler, karakteri süslemek yerine bozan.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Gelen MIDI notalarının bu synth'i mi çalacağı yoksa her zamanki gibi cue mu başlatacağı.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Bir nota numarası, ya da LEARN yaz ve çal. Hiçbir cue'nun sahiplenmediği notalar yine cue N+1'e gider
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Düz bir stereo çift. Tam bu yönlendirmeden başlayarak matrisi açmak için tıkla
+Folding is what turns an arbitrary pattern into something that reads as designed.	Katlama, rastgele bir deseni tasarlanmış görünen bir şeye çevirir.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Kanal=seviye, virgülle ayrılmış. Aralıklar da: 1=255, 10-14=64. Kanallar 1'den sayılır
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Seçili her cue'nun trim'ini aynı dB kadar kaydırır; bir değer yazmak hepsini ona ayarlar
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Taşıyıcının PERDESİNİ onunla karışmak yerine büker. FDS'yi hırlatan budur.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	TEMELLERİ ÖĞREN'in yarısındasın. L'ye bas, kaldığın yerden devam edelim, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Piksel yerine 16 renkli dizinli paletle bir karakter ızgarası olarak çiz.
+Which MIDI output this file plays to; step past the end for the first one available	Bu dosyanın hangi MIDI çıkışına çaldığı; ilk boştaki için sonun ötesine geç
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	Bir IPv4 adresi ya da evrenin çoklu yayın grubu için 255.255.255.255 (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Bir hücreyi dolaştırmak için tıkla: kapalı, tam, -3, -6, -12. Bu satır matrisi yeniden kapatır
+How long each phrase stays before it moves. Zero hides them without losing the list.	Her ifadenin hareket etmeden önce ne kadar kaldığı. Sıfır, listeyi kaybetmeden onları gizler.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Atak sonrası sönmenin ne kadar sürdüğü. Yalnızca yeniden tetikleme açıkken duyulur.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Kapalı, baştan (bu başlayınca sonraki cue başlar) ya da sondan (bu bitince)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Bir satırın yüksekliği rasterin yüzdesi olarak, böylece kart her ekranda aynı okunur
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Yuva kaynağını media:/yol, browser:url, window:ad, camera:ad ya da syphon:ad olarak ayarla
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Kısa LFSR modu. Periyot, hışırtı yerine akortlu metal gibi duyulacak kadar kısa.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Beyaz, sıcak, kırmızı, kehribar, yeşil, camgöbeği, mavi, macenta. ~ onu renk çarkında döndürür
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Zarfı bu sıklıkta yeniden vur. Hold tek bir notayı tutar, bir drone'un istediği de budur.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond, Atari Video Music'in keskin kenarlı kafesidir; halkalar geri besleme yakınlaştırmasıyla güzel tünel yapar.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Salla ya da döndür. Derinlik 1 her yöne yarım tur; derinlik 1'de testere dişi tam tur döndürür
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	DECK çalma seviyesi (canlı, cue ile kaydedilmez) - cue başına trim, SES bölümündeki kazançtır
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Sabit, belirme, daktilo, yukarı kaydırma, kayan yazı ya da nabız, hepsi cue'nun kendi aktarımıyla yürür
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	İşlenen kare başına alan. 1 bire bir, 0,5 her alanı iki kare tutar, 0 dondurur.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Bu cue çalarken ne gösterir: dalga biçimi, skop, Lissajous, spektrum, ölçerler ya da isim kartı
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 resim okunabilsin diye döşemeleri parlaklığa göre seçer. 1 rastgele seçer, ızgara dokuya dönüşür.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Yarım ses olarak ne kadar gider. Yukarı varış, aşağı ayrılış gibi duyulur, sıfır vurulmuş bir notadır.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	Bir IPv4 adresi. Adlar çözülmez: DNS sorgusu engelleyici bir çağrıdır ve GO bunu yapmamalı
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Döşeme genişliği piksel olarak. Sayfanın ızgarasına uymalı, yoksa dilimler komşu sprite'ların üstüne düşer.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Hücre konumuna göre dönüşümlü aynalar; rastgele çevirmenin gürültü gibi okunduğu yerde desen gibi okunur.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 onları hücrelerine kaynak yapar, oyulmuş gibi. Üstünde yeniden çekilirler, kaynıyormuş gibi.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L sol girişi iki hoparlörde de çalar: çoğu arayüzde mikrofon 1. STEREO hat kaynağı içindir.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Hareketin tamamı. Cue'nun süresi BUDUR: jingle buradaki biten tek üretilmiş sinyaldir.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Bu armatürü göndermek ya da son cue'nun bıraktığı yerde bırakmak için değere tıkla. ~ seviyeyi nefes aldırır
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS bir modülatörün büktüğü dalga tablosudur. 2A03 çoğu chiptune'un yapıldığı puls/üçgen/gürültü setidir.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Hangi glifin hangi parlaklık olduğunu karıştır. Aynı set, farklı el yazısı. Tohumlu, yani yerinde kalır.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Piksel sıralama: bir satırdaki piksel dizileri parlaklığa göre sıralanır, datamosh'a erimiş görünümü veren budur.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	İşaretlerin kaç hücre tırmanabileceği. Gittikçe seyrelirler, böylece yüksek erişim ikilenmek yerine iz bırakır.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue eyl değ  -  G al  S dur  F sönerek çık (değ = saniyenin onda biri)  V ses  O opaklık  J satıra atla
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Harmonik ağırlık: sıfırda saf bir zil, tamda bakır nefesliler. Ping ile fanfar arasındaki fark budur.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Bu bilgisayarın girişlerinde dolaşır. 'Settings input', Ayarlar > Ses'te seçilen girişi izler.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Közden gürleyen ateşe. Her ayarda kabarır ve yatışır: hareket etmeyen bir ateş fotoğraf gibi görünür
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Referans perde. 440 modern standart, 432 yaygın alternatif, eski çalgılar ise daha da alçaktaydı.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Jingle'ın başladığı yer. Bir sesin altında yoldan çekilmeli; bir salonun üstünde delip geçmeli.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Girişte dijital kazanç, -40 ile +40 dB arası. Önce arayüzün kendi ön yükselticisini ayarla; bu son birkaç dB için.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Boyutu titreştir. Tek başına genişlik VE yüksekliği birlikte hareket ettirir; ezip uzatmak için yüksekliğe kendi ~'ini ver
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Kart kareyi doldurur; alt bant bir isim ve bir unvandır, saydam bir karenin altında, girişi ve çıkışıyla
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held son kaydırmayı kaldırmak yerine tutar: resim, sürücünün bıraktığı gibi bükük kalır.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12,5 ve 25 ince ve genizden, 50 boş. 75, 25 ile aynı duyulur: tracker'lar sunduğu için burada.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Çıkışı donanım gibi nicemle. Basamaklar SESİN TA KENDİSİDİR; onları yumuşatmak çipi taklit eden bir synth yapar.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Seçili her cue'nun trim'ini farklarını koruyarak aynı dB kadar kaydırır; bir değer yazmak hepsini ona ayarlar
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Çalma listesinin çapraz noktalarının onu nereye gönderdiği (Ayarlar > Ses). Tam o yönlendirmeden başlayarak matrisi adıyla açmak için tıkla
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	değerleri  d = ...;  ile adlandır, tek bir ifadeyle ya da kırmızı yeşil mavi için üçüyle bitir  |  Shift+Enter: yeni satır  |  Enter: uygula
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Rampa varınca (durduktan sonra) başladığı şeyi geri koy: sonraki cue'suna hazır bir deck, bırakan bir kabarma
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Altyazıları hangi konuşma modeli yapar: İngilizce, herhangi bir dil, ya da daha yavaş ve daha doğru çift. Her biri bir kez indirilir
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Maskenin kestiği: çaldığı her yerde bu cue, odaktaki çıkışta bu çalma listesi, o çıkışın tüm resmi ya da onun matte'ı
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Ekranın hızı %0,2 içindeyse (60'ta 59,94) o hızda çal: her kare bir kez gösterilir, ses en fazla 3,5 sent tiz ya da pes
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Çeyrek turlar kesindir ve net kalır. Döndürme açılı örnekler, bu da piksel sanatını yırtar: bazen istenen tam da budur.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Her take kuklacılığı aynı şekilde başlatır, böylece prova edilmiş bir görünüm uygulamanın ne kadar açık kaldığına bağlı olmadan tekrarlanır.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Her eğimi neyin yönlendirdiği: kendi konumu, karakterler resim gibi eğilsin diye resmin luma gradyanı, ya da hücrenin tonu.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Bir kanala ya da çifte bir kez ad ver. Çalma listeleri ada gönderir, böylece farklı bir arayüz her cue'yu değil buradaki adları değiştirmek demektir.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Bir çapraz noktayı dolaştırmak için tıkla: kapalı, 0, -3, -6, -12 dB. Herhangi bir seviye için yana sürükle. Noktası olmayan çalma listesi kendi cihazına çalar.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	data/sprites içinde kurulu sprite setleri. Her klasör bir settir; değiştirmek birini seçer ve hiçbirine geri döner. Sağ tık onları kapatır.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	İç çözünürlük, 1 en kaba, 5 en ince. Bu bir hız kadar estetik ayarıdır: 8 bit görünüm büyük piksellerden gelir.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture rengi resimden alır. Yeşil, kehribar ve camgöbeği terminal fosforlarıdır. Palette metni seçili donanım paletine kilitler.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE kendi kendini onarır (H.264). CLASSIC gerçek bulaşmadır (MPEG-4). EXTREME daha kabadır ve sürekli bulaşır. Bunu değiştirmek cue'yu yeniden hazırlar.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Hizalama için sinüs, PA ayarı için pembe, tıkırtı bulmak için beyaz, salonun nerede çınladığını duymak için tarama, çıkışları tek tek dolaşmak için identify.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Bu tetiklendiğinde o deck'in çaldığı cue'nun yığınındaki yerine göre hangi efekt. Orada bir şey yoksa solma bunu söyler ve hiçbir şey yapmaz
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Her kare bir sonrakine karışır. Bu Hypno imzasıdır: 0'da bir desen üretecidir, üstünde resim kendini beslemeye başlar.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Ocak duvarındaki pencereden ne görünür: bir bahçe, yağmur, kar ya da deniz. Dışarıda hava olan bir oda duvar değil bir yer gibi okunur
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	ARMATÜRE GÖRE: patch'teki ışıklar (Ayarlar > Ağ > ARMATÜRLER), adıyla. KANALLAR: elle kanal=seviye. Bir cue ikisini de taşıyabilir; kanallar en son gelir
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Her karakter eğilen bir kart gibi sallanır. Her hücrenin kendi fazı vardır, böylece ızgara tek bir yaprak gibi kaymak yerine nefes alır.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Kalem: köşeler için tıkla, eğriler için sürükle, kapatmak için ilk noktaya tıkla (P). Noktalar: sürükle, eklemek için kontura tıkla, kaldırmak için Alt-tık ya da Delete
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Çipin üç kanalı. Türce farklıdırlar: üçgenin donanımda ses denetimi yoktur ve gürültü bir osilatör değil kaydırma yazmacıdır.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Seçilmiş sembol ve emoji setleri: yıldızlar, notalar, çiçekler, oklar, hava, runlar, yüzler. Birini seçmek aşağıdaki özel glifleri doldurur, düzenlenebilir kalırlar.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Bilgisayar klavyesinden çal, Ableton düzeni: A W S E D F T G Y H U J, oktav için Z ve X. Bu AÇIKKEN o tuşlar cue başlatmak yerine nota çalar.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Deck opaklığı, deck sesi, ana karartıcı, etkin cue'nun parlaklık / kontrast / doygunluk / tonu, ya da efektlerinden veya ses efektlerinden birinin düğmesi
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Tarama çizgileri, fosfor parlaması ve RGB saçakları. Önemli olan parlamadır: fosfor yana taşar, bu yüzden CRT ışık yayıyor gibi görünür.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Yırtık satır bantları ve RGB ayrımı. Metin modunda HÜCRELERİ de bozar: tüm satırlar tek bir tekrarlanan karaktere kilitlenir, eşlemesini kaybeden gerçek bir metin ekranı gibi.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still bulunduğun kareyi tutar. Flipbook kareleri sırayla oynatır. Replay ilk kareyi çizildiği gibi fırça fırça çizer, sonra tutar ve yeniden başlar
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (başlatmadan hazırla), Arm, Disarm ya da Devamp (döngü turunu bitirip sona erer); ya da Stop all, Pause all, Resume all: her deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope biçimi ve kırpmayı gösterir. Lissajous ilk iki kanal arasındaki fazı ve kutupluluğu gösterir: ters yönde bir köşegen birinin ters olduğu anlamına gelir. Spectrum üçte bir oktav çubuklarıdır.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 parlaklığın istediği glifi, 1 setteki herhangi bir glifi seçer. Tüm alfabeyi görmek için yükselt: kesin olarak mürekkebe göre sıralanınca düz bir alan tek işaret seçer ve gerisi hiç görünmez.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Bloklar ve dither yoğunluk olarak okunur; ASCII rampası metin olarak; semboller enkaz olarak. Bunu değiştirmek özel glif dizesini temizler, çünkü onu geçersiz kılardı; ön ayar satırı birini geri koyar.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Eşit akort, her aralığın biraz yanlış olması pahasına serbest modülasyon satın alır. Saf ve Pisagor akortları tek bir tonda tam akortludur. Bohlen-Pierce bir on ikiliyi böler, bu yüzden oktavı yoktur.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+trans	geçiş
+TRACKER	İZLEYİCİ
+Motion: Bug Swat	Hareket: Bug Swat
+Passphrase (shared)	Parola cümlesi (paylaşılan)
+, — skip to previous cue	, — önceki cue'ya git
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  o çalma listesinde hiçbir şey yapmaz  -  (M) adımın kendi çalma listesi
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS EBU hizalamasıdır, -20 SMPTE. 0'ın altında sınırlı: bu canlı bir PA'yı besler.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  o çalma listesinde hiçbir şey yapmaz  -  (M) adımın kendi çalma listesi  -  EDIT açık: yazmak gösteriyi değiştirir
+pan	pan
+pop	pop
+deck	deck
+logo	logo
+neon	neon
+TA-DA	TA-DA
+STEREO	STEREO
+terminal	terminal
+cue "{n}"	cue "{n}"
+Bork bork BORK!	Bork bork BORK!
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	DECK 2'Yİ SEÇ
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Şimdi sekmesine tıkla, Deck 2. Yeni bir liste, sen tıklayana kadar seçili olmaz.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Yanan sekme, KAYNAK'ın şeyleri koyduğu yerdir. Bunu atla, mürekkep synth'in altına düşer.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	O sekmeyi görüyor musun? Tıkla. Artık Deck 2'desin. BUM. Temel bilgiler.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Sekmesine tıkla, Deck 2. Yanan sekme, KAYNAK'ın eklediği listedir.
+Skip this and the words go under the map. With the lizard.	Bunu atla, kelimeler haritanın altına gider. Kertenkeleyle birlikte.
+Nine years of live weather. Always click the tab.	Dokuz yıl canlı hava durumu. Sekmeye her zaman tıkla.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Sekmesine tıkla, Deck 2. Yeni liste, sen seçene kadar bekler.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Yanan sekme sıradaki cue'yu alır. Projektöre hangi slaytın gireceğini seçmek gibi.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Bir deste seçin. Herhangi biri. ...Deck 2. Deck 2'yi seçin.
+MENU	MENÜ
+VOLUME	SES
++ step	+ adım
+< BACK	< GERİ
+ATEM switcher	ATEM mikseri
+AUDIO: DEFAULT	SES: VARSAYILAN
+Animated GIF	Hareketli GIF
+Arrows	Oklar
+CLICKER	SUNUM KUMANDASI
+Copyright	Telif hakkı
+DEST...	HEDEF...
+Datamosh - classic	Datamosh – klasik
+Datamosh - extreme	Datamosh – aşırı
+Datamosh - subtle	Datamosh – hafif
+Deckboy is input	Deckboy girişi
+Device: None	Aygıt: yok
+Drag	Sürükle
+Drop media here	Medyayı buraya bırakın
+Enter Take  Space Play/Pause	Enter Take  Space Oynat/Duraklat
+FFmpeg / libav  (in-process)	FFmpeg / libav  (süreç içi)
+FPS: SOURCE	FPS: KAYNAK
+Fonts	Yazı tipleri
+Free software. You may use, study, share	Özgür yazılım. Kullanabilir, inceleyebilir,
+GO / BACK	GO / GERİ
+GO / BACK (clicker)	GO / GERİ (kumanda)
+Key out: None - fill only	Key çıkışı: yok – yalnız fill
+LTC in	LTC girişi
+Licence	Lisans
+MATCH SOURCE	KAYNAKLA AYNI
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> aktarım
+MOSH: SUBTLE	MOSH: HAFİF
+MSC Trigger -> cue by id	MSC Trigger -> kimliğe göre cue
+MTC in	MTC girişi
+Mode: CALLER	Mod: CALLER
+NDI receiver	NDI alıcısı
+NDI trigger	NDI tetikleyici
+NO STEPS YET	HENÜZ ADIM YOK
+No PTP lock, wide-model pacing - will not genlock to plant sources	PTP kilidi yok, kaba zamanlama – stüdyo kaynaklarına genlock olmaz
+ONCE  |  ORDER	BİR KEZ  |  SIRA
+Optional	İsteğe bağlı
+PNG sequence	PNG dizisi
+Press A to take cue	Cue'yu almak için A'ya basın
+RATE: AUTO	HIZ: OTOMATİK
+S Stop   C Clear   Esc Panic	S Dur   C Temizle   Esc Panik
+SIZE: SOURCE	BOYUT: KAYNAK
+SPOUT TEXTURE SHARE	SPOUT DOKU PAYLAŞIMI
+Session	Oturum
+TSL tally out	TSL tally çıkışı
+Thanks	Teşekkürler
+Timecode chase	Timecode takip
+Timecode run	Timecode çalıştır
+Toolkit	Araç takımı
+Trigger	Tetikle
+WAV (audio only)	WAV (yalnız ses)
+Warranty	Garanti
+address...	adres...
+and modify it; derivatives stay GPL.	paylaşabilir ve değiştirebilirsiniz; türevler GPL kalır.
+auto	otomatik
+clear the cell	hücreyi temizle
+companion ping	Companion pingi
+fire this row	bu satırı ateşle
+insert a row	satır ekle
+live lane  |  I/O set trim  |  click or drag to seek	canlı şerit  |  I/O kırpmayı ayarlar  |  aramak için tıklayın veya sürükleyin
+media in	medya içeri
+move the cursor	imleci taşı
+mute / solo a column	sütunu sustur / solo
+off -- edit on monitor	kapalı -- monitörde düzenle
+off: no camera is open. Drag on the picture to draw a zone.	kapalı: açık kamera yok. Bir bölge çizmek için resmin üzerinde sürükleyin.
+open the code editor	kod düzenleyicisini aç
+play / stop	oynat / durdur
+stop, fade, vol, opacity	dur, geçiş, ses, opaklık
+the FFmpeg, SDL and FreeType projects,	FFmpeg, SDL ve FreeType projelerine,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion'a ve x42/libltc'ye.
+Keys	Tuşlar
+None. See LICENSE sections 15-16.	Yok. LICENSE, bölüm 15-16'ya bakın.
+none compiled in	hiçbiri derlenmedi
+Alpha	Alfa
+Group	Grup
+Remote	Uzak
+lesson	ders
+Bitrate	Bit hızı
+Latency	Gecikme
+OUT {n}	ÇIKIŞ {n}
+Out {n}	Çıkış {n}
+{n} row	{n} satır
+Key name	Tuş adı
+Keyframe	Ana kare
+Registry	Kayıt Defteri
+fade {n}	solma {n}
+{n} rows	{n} satır
+Node port	Düğüm bağlantı noktası
+Stream ID	Yayın kimliği
+added {1}	eklendi: {1}
+start {n}	başlangıç {n}
+still {n}	durağan {n}
+FADE {n} s	SOLMA {n} sn
+LAYER {n}%	KATMAN %{n}
+Output {n}	Çıkış {n}
+PTP domain	PTP alanı
+Stream key	Yayın anahtarı
+[ASSIGNED]	[ATANDI]
+audio only	yalnızca ses
+to Out {n}	çıkış {n} hedefine
+{n} of {n}	{n}/{n}
+Display {n}	Ekran {n}
+active jobs	etkin işler
+local clock	yerel saat
+not running	çalışmıyor
+click to set	ayarlamak için tıkla
+full {n}x{n}	tam {n}x{n}
+running v{n}	v{n} çalışıyor
+the other one	diğeri
+DELIVERY H.{n}	TESLİM H.{n}
+Output {n} mix	Çıkış {n} miksi
+made by Deckboy	Deckboy ile yapıldı
+{1} plays to {2}	{1}, {2} üzerinde çalar
+the picture {1} plays	{1} tarafından çalınan resim
+New media joins {1} by itself	Yeni ortam kendiliğinden {1} içine katılır
+Press Win+P and choose Extend	Win+P'ye bas ve Genişlet'i seç
+{n} patched - DMX cues set them by name	{n} patch'lendi - DMX cue'ları bunları adla ayarlar
+Set them to extend in your display settings	Ekran ayarlarından genişletmeye ayarla
+lesson: {1}. Esc leaves, and it picks up here next time	ders: {1}. Esc çıkar, bir dahaki sefere buradan devam eder
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	ATEM Software Control'e {1} adresinde TCP 9993 üzerinden deck olarak yanıt verir
+In System Settings > Displays, use it as an extended display	Sistem Ayarları > Ekranlar bölümünde onu genişletilmiş ekran olarak kullan
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Masayı yedi, skapi. {1} ekranın var: MENÜ'deki çıkışın EKRAN ayarı resmi başka birine taşır.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Masayı yedi, skapi. İki ekranın var: MENÜ'deki çıkışın EKRAN ayarı resmi diğerine taşır.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} ekran, skapi. Masa bunda kalır, resim şuraya gider: {2}. MENÜ'yü aç ve ÇIKIŞ KAPALI'yı ÇIKIŞ AÇIK yap.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	İki ekran, skapi. Masa bunda kalır, resim diğerine gider: {1}. MENÜ'yü aç ve ÇIKIŞ KAPALI'yı ÇIKIŞ AÇIK yap.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Masayı yedi, skapi. Yansıtılan ekranlar resmi ikisinde de gösterir, o yüzden onu arkada küçük bir pencereye koydum. {1}, böylece kendi ekranı olur.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Ekranların yansıtılıyor, skapi: {1} bununla aynı şeyi gösteriyor, yani resim ikisinde de masayı kaplayacak. {2}, ben de resmi kendi ekranına koyayım. Ya da MENÜ'yü aç ve ÇIKIŞ KAPALI'yı ÇIKIŞ AÇIK yap.

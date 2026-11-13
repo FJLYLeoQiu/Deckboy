@@ -1,0 +1,25 @@
+# Deckboy Theme: super-famicom
+# Family: tinted chassis -- dark enough for a booth, but a real coloured body
+# rather than true black, so it reads as its own machine.
+# v0.79.3 terminal roles (screen_fg / screen_fg_soft / screen_tile).
+# All color values are RRGGBBAA hex.
+
+shell_outer	2A2734FF
+shell_inner	343040FF
+shell_shadow	14121AFF
+screen_light	B0A6D8FF
+screen_mid	6A5E9EFF
+screen_dark	3A3260FF
+screen_deep	141220FF
+screen_ink_soft	C9C3EAFF
+screen_fg	CFC6F0FF
+screen_fg_soft	BCB8FFFF
+screen_tile	1E1C2CFF
+button_bezel	5E568AFF
+delete_bezel	C0503AFF
+scanline_alpha	14
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	mouse	2
+creature	moth	1

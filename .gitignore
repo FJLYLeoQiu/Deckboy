@@ -1,0 +1,101 @@
+# Build output
+build/
+dist/
+builds/
+*.o
+*.d
+
+# Project data (user-specific)
+data/*.deckboy
+# The rollback copy saveProject writes before it first overwrites a show.
+# A show holds absolute media paths, so this is as private as the show is,
+# and .bak does not match the rule above.
+*.deckboy.bak
+data/project.json
+data/posters/
+data/last_project.txt
+# The splash's recent-shows list (v0.99.331). Same reasoning as last_project:
+# it holds absolute paths to whatever shows this machine has opened, so it is
+# as private as the shows are, and it is per-machine state rather than an
+# asset. It appeared untracked and would otherwise have been committed.
+data/recent_projects.txt
+
+# Local screenshots
+/Deckboy Screenshots/
+/lt_sheets/
+
+# Media converter output (portable per-show cache)
+_converted/
+
+# Runtime logs. The show log records real cue NAMES from real shows, so this is
+# a privacy rule, not just hygiene -- never let one reach the repo. In a portable
+# install stateDir() IS data/, which is why they land there.
+*.log
+data/deckboy-*.log
+# The live text check's snapshot of the control window: a picture of whatever
+# show was on the desk, so the same privacy rule as the show log.
+data/deckboy-live-frame.bmp
+# Captions made on this machine: the downloaded speech model, captions for
+# media with no writable folder, scratch audio, a hand-placed whisper-cli.
+data/models/
+data/captions/
+data/captions-work/
+data/whisper/
+
+# Python bytecode from tools/
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+compile_commands.json
+
+# Node (companion module)
+node_modules/
+
+# Dev screenshots and reference images in root
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.mp4
+/*.bmp
+
+# Old version snapshots
+Deckboy_0.55/
+
+# UI playground (dev scratch)
+UI Playground/
+
+# Local fork reference (not part of this repo)
+playboy/
+
+# Working roadmap notes — kept locally, not part of the published repo
+Notes
+
+# Program recordings and the first-run marker — runtime output, not source
+/data/recordings/
+/data/deckboy-first-run
+/data/mini-containment
+/data/mini-containment.saving
+
+# Private notes: internal engineering material, kept off the public
+# repository on purpose. See private-notes/README.md.
+private-notes/
+# A build's own extras (see native/core/private_extras.hpp).
+private-extras/
+
+# Installers the in-app updater downloads. Large binaries, machine-local,
+# and never part of the source: a stray `git add -A` put a 90MB setup.exe
+# into the public repo once.
+data/updates/

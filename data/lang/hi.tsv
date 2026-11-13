@@ -1,0 +1,2352 @@
+#name हिन्दी
+#english Hindi
+#font Nirmala.ttc, NirmalaS.ttf, NirmalaB.ttf, Kohinoor.ttc, NotoSansDevanagari-Regular.ttf, truetype/noto/NotoSansDevanagari-Regular.ttf
+# This script is not in the bundled faces, so the line above names the ones
+# that can draw it. They are tried in order: data/fonts first, then the
+# machine's own font directory. Every name here ships with a stock install of
+# the platform it belongs to, which is why nothing has to be downloaded.
+#
+# If none of them is present the text falls back to the bundled face and will
+# draw as empty boxes -- the settings page says so rather than leaving you to
+# work it out.
+NEW	नया
+OPEN	खोलें
+SAVE	सहेजें
+SAVE AS	इस रूप में सहेजें
+BUNDLE	एक साथ बाँधें
+IMPORT	आयात
+SOURCE	स्रोत
+PATTERN	नमूना
+SETTINGS	सेटिंग्स
+TAKE	TAKE
+STOP	रोकें
+REBOOT	पुनःप्रारंभ
+BLACKOUT	काला
+CLEAR	साफ़ करें
+RECORD	रिकॉर्ड
+PLAYLIST	सूची
+TIMELINE	समयरेखा
+MEDIA	मीडिया
+TRANSPORT	चालन
+OUTPUT	आउटपुट
+PROGRAM	PROGRAM
+WARP	विकृत करें
+LIVE	लाइव
+DECODE	विसंकेतन
+STREAM	प्रसारित करें
+System	सिस्टम
+Audio	ऑडियो
+Network	नेटवर्क
+Video Outputs	वीडियो आउटपुट
+About	बारे में
+Encoder	एनकोडर
+Screen	स्क्रीन
+Geometry	ज्यामिति
+Devices	उपकरण
+Streaming	स्ट्रीमिंग
+APPEARANCE	दिखावट
+REMOTE CONTROL	दूरस्थ नियंत्रण
+INTEGRATION ADAPTERS	एकीकरण अडैप्टर
+DISCOVERY / NOTES	खोज / टिप्पणियाँ
+DISPLAY & RASTER	प्रदर्शन और रैस्टर
+CONNECTED DISPLAYS	जुड़े प्रदर्शन
+EDGE FEATHERING	किनारा मुलायम करना
+MATTE & OVERLAY	मैट और ओवरले
+AREA OF INTEREST	रुचि का क्षेत्र
+DEFAULT TRANSITION	डिफ़ॉल्ट संक्रमण
+NMC IN & OUT	NMC अंदर और बाहर
+OSC QUERY / FEEDBACK	OSC क्वेरी / प्रतिक्रिया
+CUE INSPECTOR	क्यू निरीक्षक
+SELECTED CUE	चुना गया क्यू
+PLAYBACK	प्लेबैक
+COPY	प्रतिलिपि
+PASTE	चिपकाएँ
+RESET	रीसेट
+Theme	थीम
+Language	भाषा
+Resolution	रिज़ॉल्यूशन
+Orientation	दिशा
+Toggle Fullscreen	पूर्ण स्क्रीन
+IDENTIFY	पहचानें
+REGION SIZE	क्षेत्र का आकार
+POSITION	स्थिति
+CENTRE	केंद्र
+FULL	पूर्ण
+duration	अवधि
+transition	संक्रमण
+fade in	धीरे उभरना
+fade out	धीरे मिटना
+ON	चालू
+OFF	बंद
+Stopped	रुका
+Playing	चल रहा
+Paused	ठहरा
+2-UP	2 साथ-साथ
+DONE	पूर्ण
+EDIT	संपादित करें
+HELD	रोका गया
+Mode	मोड
+PICK	चुनें
+QUAD	चार
+Rate	दर
+STEP	चरण
+Apply	लागू करें
+CLOSE	बंद करें
+FIXED	स्थिर
+Help!	सहायता!
+ORDER	क्रम
+READY	तैयार
+TILES	टाइलें
+VIDEO	वीडियो
+ALL ON	सभी चालू
+ALWAYS	हमेशा
+ANALOG	एनालॉग
+Buffer	बफ़र
+Cancel	रद्द करें
+Custom	अपना
+Device	डिवाइस
+Folder	फ़ोल्डर
+FORMAT	प्रारूप
+HIDDEN	छिपा
+Length	अवधि
+Mascot	शुभंकर
+Mirror	मिरर
+NATIVE	मूल
+PRESET	प्रीसेट
+Sender	भेजने वाला
+SUMMED	जोड़ा गया
+TOGGLE	बदलें
+12 HOUR	12 घंटे
+24 HOUR	24 घंटे
+ALL OFF	सभी बंद
+ARRANGE	व्यवस्थित करें
+Channel	चैनल
+CONVERT	बदलें
+DEFAULT	डिफ़ॉल्ट
+END CUE	क्यू का अंत
+Key out	की आउट
+LTC out	LTC आउट
+MISSING	अनुपलब्ध
+PRESETS	प्रीसेट
+PROJECT	प्रोजेक्ट
+RUNNING	चल रहा है
+Send to	यहाँ भेजें
+SHUFFLE	यादृच्छिक
+UPDATES	अपडेट
+VJ MODE	VJ मोड
+CLOCK ON	घड़ी चालू
+DOWNLOAD	डाउनलोड
+EXAMPLES	उदाहरण
+Mappings	मैपिंग
+NMC sync	NMC सिंक
+PROMPTER	प्रॉम्प्टर
+SHOW SDP	SDP दिखाएँ
+TCP port	TCP पोर्ट
+UI scale	इंटरफ़ेस आकार
+WATCHING	देख रहा है
+A/V delay	A/V विलंब
+ASIO outs	ASIO आउटपुट
+BOTH AXES	दोनों अक्ष
+CHECK NOW	अभी जाँचें
+CLOCK OFF	घड़ी बंद
+Creatures	जीव
+CUE TOOLS	क्यू उपकरण
+Direction	दिशा
+Freewheel	स्वतंत्र चाल
+HTTP port	HTTP पोर्ट
+Jump mode	जंप मोड
+Listen on	यहाँ सुनें
+OSC Query	OSC क्वेरी
+OUTPUT ON	आउटपुट चालू
+Panic now	अभी पैनिक
+RECORDING	रिकॉर्डिंग
+REMAINING	शेष
+RESET ALL	सब रीसेट करें
+RUN PANIC	पैनिक चलाएँ
+SHOW FLOW	शो का क्रम
+TIMERS ON	टाइमर चालू
+WHEN IDLE	निष्क्रिय होने पर
+ADD OUTPUT	आउटपुट जोड़ें
+BUILT WITH	इससे बना
+CANCEL ALL	सब रद्द करें
+colour tag	रंग चिह्न
+copy chain	चेन कॉपी करें
+Hover tips	संकेत
+Input gain	इनपुट गेन
+Input mono	इनपुट मोनो
+live audio	लाइव ऑडियो
+Live input	लाइव इनपुट
+MIDI input	MIDI इनपुट
+no picture	कोई चित्र नहीं
+no preview	कोई प्रीव्यू नहीं
+OPEN SAVED	सहेजा हुआ खोलें
+OUTPUT OFF	आउटपुट बंद
+Panic fade	पैनिक फ़ेड
+Tally port	टैली पोर्ट
+TIMERS OFF	टाइमर बंद
+Accept from	इससे स्वीकारें
+ASIO driver	ASIO ड्राइवर
+BACK TO TOP	ऊपर जाएँ
+CANVAS MODE	कैनवास मोड
+CODE SOURCE	कोड स्रोत
+Cue numbers	क्यू संख्या
+Destination	गंतव्य
+Mirror rate	मिरर दर
+no duration	कोई अवधि नहीं
+NO LIVE CUE	कोई लाइव क्यू नहीं
+NO PREVIOUS	कोई पिछला नहीं
+OVERLAY BIN	ओवरले पेटी
+paste chain	चेन चिपकाएँ
+Sample rate	सैंपल दर
+SENDING OUT	भेज रहा है
+Shift: snap	Shift: स्नैप
+THIS OUTPUT	यह आउटपुट
+(no matches)	(कोई मेल नहीं)
+(no subtext)	(कोई उपपाठ नहीं)
+add a button	बटन जोड़ें
+add a window	विंडो जोड़ें
+Art-Net port	Art-Net पोर्ट
+AUDIO OUTPUT	ऑडियो आउटपुट
+Auto restore	स्वतः पुनर्स्थापित
+DECKLINK: ON	DECKLINK: चालू
+free running	स्वतंत्र चाल
+KEY+FILL: ON	KEY+FILL: चालू
+LISTENING IN	सुन रहा है
+Miami cursor	Miami कर्सर
+MIDI CONTROL	MIDI नियंत्रण
+Mirror state	स्थिति मिरर करें
+NDI KEY: OFF	NDI KEY: बंद
+NDI KEY: ON	NDI KEY: चालू
+NO PROGRAMME	कोई प्रोग्राम नहीं
+ST 2110: OFF	ST 2110: बंद
+ST 2110: ON	ST 2110: चालू
+WATCH FOLDER	निगरानी फ़ोल्डर
+COMPOSITE CUE	मिश्रित क्यू
+DECKLINK: OFF	DECKLINK: बंद
+default route	डिफ़ॉल्ट मार्ग
+Every adapter	हर अडैप्टर
+KEY+FILL: OFF	KEY+FILL: बंद
+LEFT TO RIGHT	बाएँ से दाएँ
+MEDIA ENCODER	मीडिया एनकोडर
+MSC device id	MSC डिवाइस आईडी
+NEW SHOW FILE	नई शो फ़ाइल
+No cue loaded	कोई क्यू लोड नहीं
+nothing taken	कुछ प्रसारित नहीं
+OPEN PREVIOUS	पिछला खोलें
+Output device	आउटपुट डिवाइस
+Panic profile	पैनिक प्रोफ़ाइल
+Quit Deckboy?	Deckboy बंद करें?
+REMOVE OUTPUT	आउटपुट हटाएँ
+Sound effects	ध्वनि प्रभाव
+Tally address	टैली पता
+TOP TO BOTTOM	ऊपर से नीचे
+127 (all-call)	127 (सर्व-आह्वान)
+ALL INTERFACES	सभी इंटरफ़ेस
+LOCALHOST ONLY	केवल localhost
+Monitor device	मॉनिटर डिवाइस
+no audio track	कोई ऑडियो ट्रैक नहीं
+PRESENTER VIEW	प्रस्तुतकर्ता दृश्य
+RECORD TO DISK	डिस्क पर रिकॉर्ड करें
+STOP RECORDING	रिकॉर्डिंग रोकें
+STOP STREAMING	स्ट्रीमिंग रोकें
+TALLY TRIGGERS	टैली ट्रिगर
+Device channels	डिवाइस चैनल
+NDI SENDING: ON	NDI भेजना: चालू
+NO CUE SELECTED	कोई क्यू चुना नहीं
+Output channels	आउटपुट चैनल
+preview pending	प्रीव्यू बन रहा है
+START RECORDING	रिकॉर्डिंग शुरू करें
+START STREAMING	स्ट्रीमिंग शुरू करें
+(system default)	(सिस्टम डिफ़ॉल्ट)
+Check at startup	शुरू होने पर जाँचें
+Global crossfade	वैश्विक क्रॉसफ़ेड
+Mic to recording	माइक रिकॉर्डिंग में
+Monitor playlist	प्लेलिस्ट सुनें
+NDI SENDING: OFF	NDI भेजना: बंद
+no still preview	कोई स्थिर प्रीव्यू नहीं
+Pocket 3 / touch	Pocket 3 / स्पर्श
+SMPTE LTC OUTPUT	SMPTE LTC आउटपुट
+the whole screen	पूरी स्क्रीन
+Check for one now	अभी जाँचें
+INSTALL & RESTART	इंस्टॉल करें और पुनःप्रारंभ
+Registry: NOT SET	रजिस्ट्री: निर्धारित नहीं
+SAFETY / TIMECODE	सुरक्षा / टाइमकोड
+Timecode jam sync	टाइमकोड jam sync
+esc or N to cancel	रद्द करने के लिए Esc या N
+KEYBOARD SHORTCUTS	कीबोर्ड शॉर्टकट
+loading preview...	प्रीव्यू लोड हो रहा है...
+CONVERT ALL FLAGGED	सभी चिह्नित बदलें
+dot-matrix cue deck	डॉट-मैट्रिक्स क्यू डेक
+HyperDeck emulation	HyperDeck अनुकरण
+locked to the tempo	लय से बँधा
+VJ mode (two decks)	VJ मोड (दो डेक)
+ADD ANOTHER PLAYLIST	एक और प्लेलिस्ट जोड़ें
+Companion / OSC port	Companion / OSC पोर्ट
+Esc or click to skip	छोड़ने के लिए Esc या क्लिक
+PLAYLIST PREFERENCES	प्लेलिस्ट वरीयताएँ
+press ENTER to start	शुरू करने के लिए ENTER दबाएँ
+ADD A SECOND PLAYLIST	दूसरी प्लेलिस्ट जोड़ें
+filmstrip unavailable	फ़िल्मस्ट्रिप उपलब्ध नहीं
+(empty — import media)	(खाली – मीडिया आयात करें)
+Ctrl+D or Esc to close	बंद करने के लिए Ctrl+D या Esc
+(no notes for this cue)	(इस क्यू के लिए कोई टिप्पणी नहीं)
+Timebase / start / fade	समय-आधार / आरंभ / फ़ेड
+No cues need conversion.	किसी क्यू को बदलने की ज़रूरत नहीं।
+CLICK TO SAMPLE KEY COLOR	की रंग लेने के लिए क्लिक करें
+normalize loudness (R128)	ध्वनि-स्तर सामान्य करें (R128)
+off - all channels silent	बंद – सभी चैनल मौन
+no video lane for this cue	इस क्यू के लिए कोई वीडियो लेन नहीं
+HyperDeck emulation is off.	HyperDeck अनुकरण बंद है।
+OWN SCRIPT  (click to edit)	अपनी पटकथा  (संपादित करने के लिए क्लिक करें)
+Theme and operator feedback	थीम और संचालक को संकेत
+Discovery and mirrored state	खोज और मिरर स्थिति
+FOLLOWING THE LIVE CUE NOTES	लाइव क्यू की टिप्पणियों का अनुसरण
+Listening on all interfaces.	सभी इंटरफ़ेस पर सुन रहा है।
+Network-facing runtime notes	नेटवर्क की ओर की रनटाइम टिप्पणियाँ
+Hi! Press I to import a clip.	नमस्ते! क्लिप आयात करने के लिए I दबाएँ।
+Global jump and panic behavior	वैश्विक जंप और पैनिक व्यवहार
+Roll when the show cuts to you	जब शो आप पर आए तब चलाएँ
+Choose a cue to inspect it here	यहाँ देखने के लिए एक क्यू चुनें
+Defaults for newly created cues	नए क्यू के लिए डिफ़ॉल्ट
+Device routing for cue playback	क्यू चलाने के लिए डिवाइस मार्ग
+Smaller buffer = lower latency.	छोटा बफ़र = कम विलंब।
+Emergency fade and sync behavior	आपात फ़ेड और सिंक व्यवहार
+mixed selection: key unavailable	मिश्रित चयन: की उपलब्ध नहीं
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (प्रयोगात्मक)
+Esc=continue with current session	Esc = वर्तमान सत्र जारी रखें
+no per-cue settings for this type	इस प्रकार के लिए कोई क्यू सेटिंग नहीं
+On stop: remux to an ordinary MP4	रुकने पर: सामान्य MP4 में फिर से पैक करें
+Where RECORD writes the programme	RECORD प्रोग्राम कहाँ लिखता है
+dot-matrix cue deck for live events	लाइव आयोजनों के लिए डॉट-मैट्रिक्स क्यू डेक
+Listening on localhost (127.0.0.1).	localhost (127.0.0.1) पर सुन रहा है।
+three expressions: red, green, blue	तीन व्यंजक: लाल, हरा, नीला
+Transport sync with another machine	दूसरी मशीन के साथ ट्रांसपोर्ट सिंक
+Add slot sources in the cue inspector	क्यू इंस्पेक्टर में स्रोत जोड़ें
+Ask GitHub; never installs on its own	GitHub से पूछता है; स्वयं इंस्टॉल नहीं करता
+Import or click a cue in the playlist	आयात करें या प्लेलिस्ट में क्यू पर क्लिक करें
+mixed selection: geometry unavailable	मिश्रित चयन: ज्यामिति उपलब्ध नहीं
+generate timecode for the rig to chase	उपकरण के पीछा करने योग्य टाइमकोड बनाएँ
+Lower Third and PIP fire independently	निचली पट्टी और PiP अलग-अलग चलते हैं
+Panels built for a vMix rig, unchanged	vMix उपकरण के लिए बने पैनल, अपरिवर्तित
+Incoming transport arrives as NMCEVENT.	आने वाला ट्रांसपोर्ट NMCEVENT के रूप में मिलता है।
+not in this build - saved with the show	इस बिल्ड में नहीं – शो के साथ सहेजा जाता है
+Find from the playlist, not from a modal	प्लेलिस्ट से खोजें, किसी विंडो से नहीं
+take or select a cue to open the timeline	टाइमलाइन खोलने के लिए क्यू प्रसारित करें या चुनें
+Optional external transport and cue control	वैकल्पिक बाहरी ट्रांसपोर्ट और क्यू नियंत्रण
+No previous show file found at startup path.	शुरू होने पर कोई पिछली शो फ़ाइल नहीं मिली।
+Use Ctrl+F or type a cue id/number to search.	खोजने के लिए Ctrl+F या क्यू संख्या लिखें।
+Companion / OSC ingress and HyperDeck emulation	Companion / OSC प्रवेश और HyperDeck अनुकरण
+A/V delay holds audio back for lagging displays.	A/V विलंब धीमी स्क्रीन के लिए ध्वनि रोक रखता है।
+On stop: leave the crash-resilient file as it is	रुकने पर: क्रैश-प्रतिरोधी फ़ाइल वैसी ही छोड़ें
+same disk as Deckboy - a separate drive is safer	Deckboy वाली ही डिस्क – अलग ड्राइव अधिक सुरक्षित है
+A step fires one cue on each playlist, all at once.	एक चरण हर प्लेलिस्ट पर एक क्यू एक साथ चलाता है।
+one expression: the same value in red, green and blue	एक व्यंजक: लाल, हरे और नीले में वही मान
+NDI transport is configured per output in Video Outputs.	NDI ट्रांसपोर्ट वीडियो आउटपुट में हर आउटपुट के लिए अलग तय होता है।
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	ट्रांसपोर्ट चलने पर PLAY / PAUSE / STOP / LOCATE भेजता है।
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC सदस्यता: अपने कंट्रोलर से /deckboy/subscribe भेजें।
+NMC mode / host / port are runtime-configurable for sync work.	NMC मोड / होस्ट / पोर्ट चलते समय बदले जा सकते हैं।
+Going on air takes the cue. Deckboy never sends the switcher a command.	प्रसारण पर जाने से क्यू चलता है। Deckboy स्विचर को कभी आदेश नहीं भेजता।
+FPS: ON	FPS: चालू
+FPS: OFF	FPS: बंद
+NMOS: ON	NMOS: चालू
+NMOS: OFF	NMOS: बंद
+SPOUT: ON	SPOUT: चालू
+SPOUT: OFF	SPOUT: बंद
+CANVAS: ON	कैनवास: चालू
+CANVAS: OFF	कैनवास: बंद
+10-BIT: ON	10-बिट: चालू
+10-BIT: OFF	10-बिट: बंद
+EDIT...	संपादित करें...
+FOLDER...	फ़ोल्डर...
+ARRANGE...	व्यवस्थित करें...
+ADD FILE...	फ़ाइल जोड़ें...
+RENUMBER...	फिर से क्रमांकित करें...
+set a port...	पोर्ट निर्धारित करें...
+no script	कोई पटकथा नहीं
++ OUTPUT	+ आउटपुट
+Eddie's Clock	एडी की घड़ी
+Ctrl+/ to close	बंद करने के लिए Ctrl+/
+(step lives here)	(चरण यहाँ है)
+4:2:2  8-BIT	4:2:2  8-बिट
+4:2:2  10-BIT	4:2:2  10-बिट
+No outputs — click + OUTPUT to add one.	कोई आउटपुट नहीं – जोड़ने के लिए + आउटपुट दबाएँ।
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, NDI ट्रिगर, NMC, MTC, LTC, Art-Net और Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	जिन क्यू को Deckboy ठीक से नहीं चला पाता, उन्हें H.264 में बदलें
+a button can run any command the network protocol understands	एक बटन कोई भी आदेश चला सकता है जिसे प्रोटोकॉल समझता है
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	प्रस्तुतकर्ता दृश्य व्यवस्थित करें  -  हिलाने के लिए पैनल खींचें, आकार के लिए कोना
+vMix API	vMix API
+capture again - what is on now	फिर से कैप्चर करें - जो अभी चल रहा है
+change what it does...	यह क्या करता है, बदलें...
+decks - Stop deck...	डेक - डेक रोकें...
+decks - Take deck...	डेक - डेक पर TAKE...
+delete step	चरण हटाएँ
+delete this button	यह बटन हटाएँ
+label, command and glyph as text...	लेबल, कमांड और चिह्न टेक्स्ट के रूप में...
+move down	नीचे ले जाएँ
+move up	ऊपर ले जाएँ
+next colour	अगला रंग
+preset - a new preset from what is on now	प्रीसेट - जो अभी चल रहा है उससे नया प्रीसेट
+type a command myself...	कमांड खुद टाइप करूँगा...
+type a length in seconds...	सेकंड में अवधि टाइप करें...
+wait for GO	GO की प्रतीक्षा करें
+what it recalls...	यह क्या वापस लाता है...
+when its cues end	जब इसके cue समाप्त हों
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL पूरी प्लेलिस्ट को एक साथ बराबर करता है
+back to the in point, not to zero	शून्य पर नहीं, इन-पॉइंट पर वापस
+drag to scrub. the audio follows	स्क्रब करने के लिए खींचें। ऑडियो साथ चलता है
+loops between the in and out points, not the file	फ़ाइल नहीं, इन और आउट पॉइंट के बीच लूप करता है
+(not set)	(सेट नहीं)
+1.00x  (default 1080p)	1.00x  (डिफ़ॉल्ट 1080p)
+1.25x  (large desktop)	1.25x  (बड़ा डेस्कटॉप)
+1.50x  (4K desktop)	1.50x  (4K डेस्कटॉप)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / छोटा 4K)
+highest bandwidth	सबसे अधिक बैंडविड्थ
+lower bandwidth	कम बैंडविड्थ
+film	फ़िल्म
+CD, music rigs	CD, संगीत सेटअप
+video standard	वीडियो मानक
+every playlist	हर प्लेलिस्ट
+None  (no character art)	कोई नहीं  (कोई पात्र नहीं)
+custom size...	कस्टम आकार...
+Browser URL	ब्राउज़र URL
+Camera	कैमरा
+Media File / Still	मीडिया फ़ाइल / स्थिर चित्र
+RECORD TO FILE	फ़ाइल में रिकॉर्ड करें
+browser, with sound	ब्राउज़र, आवाज़ के साथ
+Window	विंडो
+Desktop	डेस्कटॉप
+full screen	पूर्ण स्क्रीन
+DeckLink Output	DeckLink आउटपुट
+FFmpeg Stream Output	FFmpeg स्ट्रीम आउटपुट
+NDI Output	NDI आउटपुट
+SDL Window Output	SDL विंडो आउटपुट
+Spout Output	Spout आउटपुट
+DESK	डेस्क
+drop a folder in too - it reads the whole tree	फ़ोल्डर भी खींचकर डाल सकते हो — सारे सबफ़ोल्डर पढ़े जाएँगे
+cameras, windows, NDI, screens - all live sources	कैमरे, विंडो, NDI, स्क्रीन — सब लाइव स्रोत हैं
+test cards and generators - no file needed	टेस्ट कार्ड और जनरेटर — फ़ाइल की ज़रूरत नहीं
+space bar does this too, without moving your hand	स्पेस बार से भी यही होता है, हाथ खिसकाए बिना
+stops the cue. ESC stops EVERYTHING	क्यू रोकता है। ESC सब कुछ रोकता है
+the safe one: audio and playback keep running	हल्का तरीका: ऑडियो और प्लेबैक चलते रहते हैं
+the thorough one. blackout is the reversible one	पूरा साफ़ करने वाला तरीका। ब्लैकआउट वापस हटाया जा सकता है
+save as makes a new file instead	इस नाम से सहेजें नई फ़ाइल बनाता है
+for a copy before you change something risky	जोखिम वाला बदलाव करने से पहले एक कॉपी के लिए
+this is what you carry to the venue	इसे ही शो वाली जगह साथ ले जाना है
+the show on disk is untouched until you save	सहेजने तक डिस्क वाला शो जस का तस रहता है
+per cue. the deck has its own default too	हर क्यू के लिए। डेक का अपना डिफ़ॉल्ट भी है
+stills hold instead - a fade would dip the frame	स्थिर तस्वीरें टिकी रहती हैं — फ़ेड से तस्वीर अँधेरी हो जाती
+the frame stays up. good for slides	तस्वीर स्क्रीन पर रहती है। स्लाइड के लिए बढ़िया
+gain, pan and normalise live in the inspector	गेन, पैन और नॉर्मलाइज़ इंस्पेक्टर में हैं
+this clip has no audio track to enable	इस क्लिप में चालू करने के लिए ऑडियो ट्रैक है ही नहीं
+Hi! I am Deckboy.	नमस्ते! मैं Deckboy हूँ।
+Press I to import a clip.	क्लिप आयात करने के लिए I दबाओ।
+Enter takes a cue live.	Enter क्यू को लाइव करता है।
+S stops the live cue.	S लाइव क्यू रोकता है।
+The timeline can be resized.	टाइमलाइन का आकार बदल सकते हो।
+Try a terminal theme in Settings.	सेटिंग में टर्मिनल थीम आज़माओ।
+RELINK finds media that has moved.	RELINK खिसकाई गई मीडिया फ़ाइलें ढूँढ़ता है।
+Cues have their own gain and fades.	हर क्यू के अपने गेन और फ़ेड हैं।
+Trim with Ctrl+I and Ctrl+O.	Ctrl+I और Ctrl+O से आरंभ और अंत तय करो।
+Ctrl+/ shows every shortcut.	Ctrl+/ सारे शॉर्टकट दिखाता है।
+J jumps to the live cue.	J लाइव क्यू पर ले जाता है।
+Normalize matches loudness across cues.	नॉर्मलाइज़ क्यू की सुनाई देने वाली आवाज़ बराबर करता है।
+Esc clears the desk, then the output, then quits.	Esc पहले डेस्क, फिर आउटपुट साफ़ करता है, फिर बंद करता है।
+Stream SRT and RTMP at the same time.	SRT और RTMP पर एक साथ स्ट्रीम कर सकते हो।
+CHECK lists what is broken, before doors.	दरवाज़े खुलने से पहले CHECK समस्याएँ बता देता है।
+A cue can wait before it starts.	क्यू शुरू होने से पहले इंतज़ार कर सकता है।
+A cue can start the next one by itself.	एक क्यू अपने आप अगला क्यू शुरू कर सकता है।
+Disarm a cue and GO steps over it.	क्यू को निरस्त करो, GO उसे छोड़कर आगे बढ़ेगा।
+Audition plays a cue to you, not the room.	प्रीव्यू सुनने पर आवाज़ तुम्हें सुनाई देती है, हॉल को नहीं।
+Preload racks the next cue warm, off air.	प्रीलोड अगले क्यू को लाइव किए बिना तैयार रखता है।
+A target cue starts or stops another cue.	टारगेट क्यू दूसरे क्यू को शुरू या बंद करता है।
+A fade cue takes a deck down, then stops it.	फ़ेड क्यू डेक को धीरे-धीरे कम करके रोकता है।
+A master cue fires one cue on every deck.	मास्टर क्यू हर डेक पर एक क्यू चलाता है।
+A MIDI cue can tell the lighting desk to go.	MIDI क्यू लाइटिंग डेस्क को शुरू होने का संकेत दे सकता है।
+A network cue speaks OSC, UDP or TCP.	नेटवर्क क्यू OSC, UDP या TCP बोलता है।
+A DMX cue fades the house lights on a cue.	DMX क्यू हॉल की रोशनी धीरे-धीरे बदलता है।
+A script cue runs Deckboy's own commands.	स्क्रिप्ट क्यू Deckboy के अपने कमांड चलाता है।
+A timecode cue jams LTC to a value.	टाइमकोड क्यू LTC को दिए गए मान पर सेट करता है।
+Each output can show a different deck.	हर आउटपुट अलग डेक दिखा सकता है।
+The matrix sends audio to any channel.	मैट्रिक्स किसी भी चैनल पर ऑडियो भेजता है।
+The panel map numbers every LED tile.	पैनल मैप हर LED टाइल को नंबर देता है।
+Hey!	अरे!
+Quit it!	बस करो यार!
+Ow. That was rude.	आह। ये कोई तरीका है?
+I am a professional.	मैं पेशेवर हूँ, भाई।
+Seriously?	सच में?
+This is my monitor.	ये मेरा मॉनिटर है।
+I am telling the operator.	मैं ऑपरेटर से शिकायत करूँगा।
+All right. Wow.	अच्छा जी। वाह।
+Right. That does it.	बस। अब हद हो गई।
+I am leaving. Good luck with the show.	मैं चला। शो के लिए शुभकामनाएँ।
+Still here? Me too.	अभी भी यहीं हो? मैं भी।
+Long show, huh.	ये शो है या बीरबल की खिचड़ी?
+I could do this all day. Apparently.	मैं ये पूरे दिन कर सकता हूँ। लगता है करना ही पड़ेगा।
+You have been staring at me for hours.	तुम घंटों से मुझे घूर रहे हो।
+Has anyone seen a clock?	किसी को समय पता है या घड़ी भी छुट्टी पर है?
+Is it still the same show?	अभी भी वही शो चल रहा है?
+I'm not tired. You're tired.	मैं नहीं थका। तुम थके हो।
+Five more minutes. Then five more.	बस पाँच मिनट और। ये कहानी सुनी-सुनाई है।
+A whole day. I need a restart.	पूरा एक दिन। मुझे रीस्टार्ट चाहिए।
+Save the show. Then let me sleep.	शो सहेज लो। फिर मुझे सोने दो।
+Every pixel of me is tired.	मेरे पिक्सेल भी जवाब दे गए।
+Close me. Open me. I'll be fine.	मुझे बंद करो। फिर खोलो। फिर चकाचक।
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	जुगाड़ है, चल जाएगा!
+Oh hey. It's 4:20. Take it easy.	अरे, नमस्ते। 4:20 हो गए। आराम से।
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	नमस्ते
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	दोबार देन, स्कापी। मैं डॉ. पिक्सेल हूँ। पाँच मिनट में तुम एक शो चलाओगे। मेरी सुनोगे तो उससे भी कम में।
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	और मैं प्रोफ़ेसर वीडियो। पहले सिंथ, फिर वीडियो। अब ज़्यादातर वीडियो। START दबाओ और हम पैच... मतलब शुरू करते हैं।
+TURN THE OUTPUT ON	आउटपुट चालू करो
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	स्कापी, स्क्रीन खाली है। लोगों को इंतज़ार मत कराओ। मेनू खोलो और आउटपुट बंद को आउटपुट चालू करो। चलो!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	पहला पाठ: जब तक ऑसिलेटर को... मतलब आउटपुट से नहीं जोड़ोगे, कुछ नहीं निकलेगा। वीडियो है। पता है।
+BRING IN A CLIP	एक क्लिप लाओ
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	अब एक तस्वीर। I दबाओ और अपने कंप्यूटर से एक क्लिप चुनो। क्लिप नहीं है? SHOW ME दबाओ, मैं अपनी एक उधार दे दूँगी।
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	हर क्लिप playlist में एक cue बन जाती है। जैसे एक sample लोड करना। तस्वीरों वाला sample।
+TAKE IT LIVE	लाइव करो
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	तुम्हारी क्लिप playlist में इंतज़ार कर रही है। उसे चुनो, फिर TAKE। या Enter। आत्मविश्वासी ऑपरेटर Enter दबाते हैं।
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE एनवेलप का ट्रिगर है। मतलब, अं, GO बटन। एक ही बात है, बस इसमें तस्वीरें हैं।
+LINE UP THE NEXT ONE	अगली तैयार रखो
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	कोई दूसरा cue क्लिक करो। वो तैयार होकर तुम्हारे कहने तक रुकेगा। एक ही cue है? एक और आयात करो, या SHOW ME।
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	चुनना बजाना नहीं है। चुना हुआ cue सीक्वेंस का अगला सुर है। अगला CUE।
+CROSSFADE TO IT	क्रॉसफ़ेड करो
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	सीधा कट अनाड़ी करते हैं। inspector में संक्रमण पर + दबाओ, ताकि deck की जगह समय दिखे। फिर TAKE।
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	क्रॉसफ़ेड! तस्वीरों का पोर्टामेंटो। कोई भी समय चलेगा। कुछ बार और दबाओ तो एक सेकंड। फिर TAKE।
+CLEAR THE SCREEN	स्क्रीन साफ़ करो
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	स्टेज पर कुछ गड़बड़? BLACK दबाओ, या B। तस्वीर गायब। शो नीचे चलता रहता है।
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	कुछ नहीं खोया। फिर से B दबाओ और वो लौट आती है। मिक्सर के mute जैसा। बड़ा सुकून देता है।
+SAVE THE SHOW	शो सहेजो
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	अब सहेजो। Ctrl+S, या सहेजें। कुछ प्रोग्राम तुम्हारा काम गँवाकर तुम्हें ही दोष देते हैं। मैं कभी नहीं।
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	अपना पैच सहेजो। अपना शो। हाँ, शो। ये प्रैक्टिस वाला Deckboy के अपने फ़ोल्डर में रहता है; तुम्हारा सुरक्षित है।
+THAT'S A SHOW	ये हुआ शो
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	ये हुआ शो! आउटपुट, cue, TAKE, क्रॉसफ़ेड, BLACK, सहेजना। नाज़्द्रावे, स्कापी। राकिया मेरी तरफ़ से।
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	क्लास ख़त्म। उदाहरण वाले शो लेयर, टाइटल और इफ़ेक्ट सिखाते हैं। मेनू > LEARN THE BASICS इसे फिर से चलाता है।
+*shakes head* That means yes. Bravo.	*सिर दाएँ-बाएँ हिलाता है* इसका मतलब हाँ है। शाबाश।
+Wonderful! Lovely signal flow.	शानदार! क्या प्यारा सिग्नल फ़्लो।
+Mm. I knew you had it in you.	हम्म। मुझे पता था तुममें ये है।
+Yes! Have a gold star. It's a dot.	हाँ! एक सुनहरा सितारा लो। ये एक बिंदु है।
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	अगले क़दम के लिए तैयार? *सिर ऊपर-नीचे हिलाता है* ...बुल्गारिया में इसका मतलब नहीं, स्कापी। चमकने वाला। वो तुम्हारे लिए चमक रहा है।
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	तुमने चमकने वाले के अलावा सब पर क्लिक कर दिया। मेरे ऑसिलेटर भी चमकने वाला ढूँढ लेते हैं।
+stop playback first - the lesson cannot hand a running show back as it was	पहले प्लेबैक रोको - पाठ चलता हुआ शो जैसा था वैसा वापस नहीं दे सकता
+choose RECOVER or KEEP SAVED first	पहले RECOVER या KEEP SAVED चुनो
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	तुम्हारा शो सहेजा नहीं जा सका, इसलिए पाठ शुरू नहीं हुआ। इसे सहेजो (इस रूप में सहेजें) और फिर कोशिश करो
+the practice show would not open	प्रैक्टिस शो नहीं खुला
+could not start the practice show	प्रैक्टिस शो शुरू नहीं हो सका
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc छोड़ता है, और अगली बार यहीं से शुरू होता है
+that's the basics - MENU > LESSONS has part two	ये रहीं बुनियादी बातें - मेनू > LESSONS में भाग दो है
+tour paused - LEARN THE BASICS picks up where you left off	टूर रुका - LEARN THE BASICS वहीं से शुरू करता है जहाँ छोड़ा था
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	मिरर की हुई स्क्रीनें, स्कापी। कोई भी कुंजी दबाओ या क्लिक करो, और डॉ. पिक्सेल इसे लौटा देगी।
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	ग़लत स्क्रीन, स्कापी। कोई भी कुंजी दबाओ या क्लिक करो, और डॉ. पिक्सेल इसे लौटा देगी।
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	दूसरी स्क्रीन चली गई, स्कापी। कोई भी कुंजी दबाओ या क्लिक करो, और डॉ. पिक्सेल इसे लौटा देगी।
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	एक ही स्क्रीन, स्कापी। कोई भी कुंजी दबाओ या क्लिक करो, और डॉ. पिक्सेल इसे लौटा देगी।
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	दूसरी स्क्रीन चली गई, स्कापी, इसलिए तस्वीर इस पर लौट आई। मैंने उसे पीछे एक छोटी विंडो में रख दिया। फिर से लगाओ और तस्वीर वापस उस पर चली जाएगी।
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	ये डेस्क खा गया, स्कापी। एक ही स्क्रीन, तो आउटपुट ने पूरी ले ली। मैंने उसे पीछे एक छोटी विंडो में रख दिया। असली शो को दूसरी स्क्रीन मिलती है।
+IT ATE THE DESK	ये डेस्क खा गया
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	वहाँ। वो बटन जिस पर आउटपुट बंद लिखा है। उसे चालू करो, स्कापी।
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	फ़ेड करने के लिए कुछ लाइव नहीं है, स्कापी। पहले एक cue को TAKE करो, फिर दूसरा चुनो और उसे समय दो।
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	वो कट था, स्कापी। तेज़, पर क्रॉसफ़ेड नहीं। दूसरा cue चुनो, संक्रमण पर + दबाओ, फिर TAKE।
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	फ़ीडबैक लूप! आउटपुट सीधे डेस्क में वापस जोड़ दिया। अच्छे-अच्छों के साथ होता है। ज़्यादातर मेरे साथ। 1983। हम 1983 की बात नहीं करते।
+No more rakia. The rat has a problem.	अब और राकिया नहीं। चूहे को समस्या है।
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	नाज़्द्रावे, स्कापी! दादी की राकिया, बेलोग्रादचिक से। पाठ के नाम एक गिलास।
+Is this... is this allowed during a tutorial?	क्या ये... ये ट्यूटोरियल के दौरान चलता है?
+*shakes head* That means one more.	*सिर दाएँ-बाएँ हिलाता है* मतलब एक और।
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	मुझे तुम सब से प्यार है। ऑसिलेटर से प्यार है। आउटपुट से प्यार है। वीडियो है। पता है। पता है।
+...and the rat took the rakia. Every time, skapi. Every single time.	...और चूहा राकिया ले गया। हर बार, स्कापी। हर एक बार।
+Was that a rat? In a hat? With a pizza?	वो चूहा था क्या? टोपी में? पिज़्ज़ा के साथ?
+Stop that. I am a serious man.	बस करो। मैं एक गंभीर आदमी हूँ।
+Do not tell Dr. Pixel about this.	डॉ. पिक्सेल को ये मत बताना।
+This never happened. Back to the patch bay.	ये कभी हुआ ही नहीं। वापस पैच बे पर।
+It was the eighties. Everyone had a bow tie.	अस्सी का दशक था। सबके पास बो टाई थी।
+LESSON LIST	पाठों की सूची
+OPEN EXAMPLE SHOWS	उदाहरण शो खोलें
+EXIT (Esc)	बाहर निकलें (Esc)
+Taking it on the road	शो लेकर निकलना
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	शो सफ़र पर जाने से पहले CHECK करो, जो मिले उसे ठीक करो, और मीडिया के साथ बाँध लो।
+Effects, oscillators and colour	इफ़ेक्ट, ऑसिलेटर और रंग
+An effect, a ~ on its knob, and the colour picker.	एक इफ़ेक्ट, उसके नॉब पर एक ~, और कलर पिकर।
+The art school crit, with Mr. Salty	आर्ट स्कूल की क्रिट, मिस्टर सॉल्टी के साथ
+Patterns, synths and Draw	पैटर्न, सिंथ और Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	एक टेस्ट पैटर्न, वीडियो सिंथ, और तस्वीर पर ड्रॉ करना, स्टिल के रूप में सहेजकर।
+The telestrator booth, with Coach Marv	टेलिस्ट्रेटर बूथ, कोच मार्व के साथ
+Masks	मास्क
+A heart from the library, the pen, invert and feather.	लाइब्रेरी से एक दिल, पेन, उल्टा करना और नरम करना।
+The Signal Files: redact the evidence	सिग्नल फ़ाइल्स: सबूत छिपाओ
+Warp, blend and slices	वार्प, ब्लेंड और स्लाइस
+A corner pin, two soft edges, then three slices in the Screens window.	एक कॉर्नर पिन, दो नरम किनारे, फिर Screens विंडो में तीन स्लाइस।
+The haunted lighthouse, with Keeper Rook	भुतहा लाइटहाउस, कीपर रूक के साथ
+GO from anywhere	कहीं से भी GO
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	cue नंबर, GOTO, एक हॉटकी, और Companion, MIDI और OSC कहाँ से आते हैं।
+The game show, with Donna Wheel	क्विज़ शो, डोना व्हील के साथ
+Words on screen	स्क्रीन पर शब्द
+A Lower Third with a name on it, then a title card with a key-green backdrop.	एक नाम वाला एस्टन, फिर की-ग्रीन बैकड्रॉप वाला टाइटल कार्ड।
+The kaiju weather report, with June O'Neil	काइजू मौसम रिपोर्ट, जून ओ'नील के साथ
+Keeping time	समय सँभालना
+A stage timer counting down, held, and a presenter view for the person on stage.	उल्टी गिनती करता स्टेज टाइमर, रोका हुआ, और स्टेज पर खड़े व्यक्ति के लिए प्रेज़ेंटर व्यू।
+A grand day out, with Wallis and Grommet	चाँद की सैर, वॉलिस और ग्रॉमेट के साथ
+Two playlists and TAKE ALL	दो playlist और TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	लेयर के तौर पर दूसरी playlist, और TAKE ALL ताकि दो चीज़ें एक ही ताल पर बदलें।
+The magic show, with Turnip Top	जादू का शो, टर्निप टॉप के साथ
+When it goes wrong	जब गड़बड़ हो
+BLACK against PANIC, and getting a show back.	BLACK बनाम PANIC, और शो वापस पाना।
+The cooking show, with Chef Bork	कुकिंग शो, शेफ़ बोर्क के साथ
+Presets	प्रीसेट
+Capture a look on a DASH button, change everything, and get it back with one press.	DASH बटन पर एक लुक पकड़ो, सब बदलो, और एक दबाव में वापस पाओ।
+Transitions	संक्रमण
+The styles beyond the crossfade: an iris, a shatter, and their times.	क्रॉसफ़ेड से आगे के स्टाइल: एक आइरिस, एक शैटर, और उनके समय।
+The space-opera trailer, with Optimus Primetime	स्पेस-ओपेरा ट्रेलर, ऑप्टिमस प्राइमटाइम के साथ
+Sound	ध्वनि
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	cue पर एक ऑडियो इफ़ेक्ट, एक बेंड जो उसे ख़ूबसूरती से बिगाड़ता है, और पैच कहाँ रहता है।
+The robot DJs, with Deft Funk	रोबोट DJ, डेफ़्ट फ़ंक के साथ
+Reading the scopes	स्कोप पढ़ना
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	वेवफ़ॉर्म, वेक्टरस्कोप और फ़ॉल्स कलर: चमक असली है, या बस बहुत तेज़?
+The Signal Files: is the glow on the horizon a craft?	सिग्नल फ़ाइल्स: क्षितिज की चमक क्या कोई यान है?
+Out of the building	इमारत से बाहर
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	NDI, SDI और ST 2110 कहाँ रहते हैं, और जहाँ इस कंप्यूटर में NDI हो वहाँ उसे चालू करना।
+The webcam as a controller, as a game. Five rounds, a high score.	वेबकैम कंट्रोलर के तौर पर, खेल के तौर पर। पाँच राउंड, एक हाई स्कोर।
+A handheld, and bugs	एक हैंडहेल्ड, और बग
+The multiview	मल्टीव्यू
+Windows, the ... menu, what each one shows, layouts, and tally.	विंडो, ... मेन्यू, हर एक क्या दिखाता है, लेआउट, और टैली।
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	स्टारशिप कैथोड पर रहस्य, लेफ़्टिनेंट हाइला और एनसाइन जिंकली के साथ
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: दो playlist: Deckboy बन गया SUPER DECKBOY। इसका हक़ बनता था, स्कापी।
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: ये विकसित हो गया! मेरे ऑसिलेटरों को कभी धूम-धड़ाका नहीं मिला।
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! हर शो इसका हक़दार है। शाबाश।
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: पावर-अप! और playlist, और लेयर, और सुपर।
+Intro video (left on the office PC)	इंट्रो वीडियो (ऑफ़िस के PC पर छूट गया)
+ON THE ROAD	सफ़र पर
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	यहाँ बनाया शो, स्कापी, आज रात कहीं और एक लैपटॉप पर चलेगा। START दबाओ।
+Before it travels: check it, fix it, bundle it.	निकलने से पहले: जाँचो, ठीक करो, बाँधो।
+See CHECK in the top bar? It only appears when something is wrong. Press it.	ऊपर की पट्टी में CHECK दिख रहा है? वो तभी आता है जब कुछ गड़बड़ हो। दबाओ।
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	ये सब कुछ गिनाता है जिससे शो लड़खड़ाएगा: ग़ायब फ़ाइलें, ख़ाली cue, पहुँच से बाहर आउटपुट।
+FIX IT	ठीक करो
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	इंट्रो वीडियो किसी दूसरे कंप्यूटर पर है। उसे चुनकर हटाओ, या फ़ाइल हो तो RELINK करो।
+Fix it at home, where it is easy. Not at the venue, where it is not.	घर पर ठीक करो, जहाँ आसान है। वेन्यू पर नहीं, जहाँ आसान नहीं।
+BUNDLE IT	बाँध लो
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	एक साथ बाँधें दबाओ और जगह चुनो: USB स्टिक, शेयर्ड फ़ोल्डर। शो और उसकी सारी मीडिया, एक साथ।
+The copy finds its media beside it, wherever the folder goes.	फ़ोल्डर जहाँ भी जाए, कॉपी अपनी मीडिया बगल में ही ढूँढ लेती है।
+SAFE TRAVELS	शुभ यात्रा
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	जाँचा, ठीक किया, बाँधा। दूसरी मशीन पर बँधा हुआ शो खोलो: सब कुछ अपनी जगह पर।
+A show file is only text, so it travels light. The media is the heavy part.	शो फ़ाइल बस टेक्स्ट है, इसलिए हल्की चलती है। भारी हिस्सा मीडिया है।
+Student work no. 4 (untitled)	छात्र का काम नं. 4 (बिना शीर्षक)
+THE CRIT	क्रिट
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	एक आर्ट स्कूल, स्कापी। एक छात्र, एक तस्वीर, एक आलोचक जिसने सब देख रखा है। START दबाओ।
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	इफ़ेक्ट तस्वीर बदलते हैं; ऑसिलेटर उसे बदलता ही रहता है। आलोचक को सिर्फ़ दूसरी तरह पसंद है।
+A grey square on beige. I have seen this at every graduate show since 1987.	बेज पर एक स्लेटी चौकोर। 1987 से हर डिग्री शो में यही देखा है।
+AN EFFECT	एक इफ़ेक्ट
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	inspector के EFFECTS हिस्से में + एक जोड़ता है। Edges अच्छी शुरुआत है: ये रूपरेखा खींचता है।
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	दर्जनों हैं। हर एक CPU पर कुछ मिलीसेकंड में चलता है। ज़्यादातर।
+Take a risk! Bad art is fine. Boring art is a crime.	जोखिम लो! ख़राब कला चलेगी। उबाऊ कला गुनाह है।
+A ~ ON ITS KNOB	नॉब पर एक ~
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	जिस भी कंट्रोल के बगल में ~ है, वो एक ऑसिलेटर के पीछे चल सकता है। एक दबाओ। नॉब साँस लेने लगता है।
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	लो-फ़्रीक्वेंसी ऑसिलेटर: धीमा, ताकि आँख पकड़ सके। चौथाई हर्ट्ज़ यानी चार सेकंड की एक साँस।
+Now it MOVES. Okay. Okay. I'm listening.	अब ये हिलता है। ठीक है। ठीक है। सुन रहा हूँ।
+A COLOUR OF ITS OWN	अपना ख़ुद का रंग
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	जो इफ़ेक्ट कोई रंग खींचते हैं, जैसे Edges की लकीर, उनके पास एक रंग की चिप होती है। वो पिकर खोलती है: एक पहिया, लिखे हुए नाम, या स्क्रीन से उठाया रंग।
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	हर रंग का कहीं न कहीं नाम है। मेरा है 'ऑसिलोस्कोप हरा'। और कोई नहीं इस्तेमाल करता।
+That colour is doing something. I don't know what. I love it.	वो रंग कुछ तो कर रहा है। क्या, पता नहीं। मुझे पसंद है।
+THE VERDICT	फ़ैसला
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	एक इफ़ेक्ट, एक ~ और एक रंग। आलोचक रो रहा है, स्कापी। अच्छे वाले आँसू, शायद।
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	कुछ और लगाओ। हर नॉब पर हर एक का अपना ~ है। ऐसे ही एक लुक परफ़ॉर्मेंस बनता है।
+It's still a square. But it's YOUR square. Post it.	अब भी चौकोर है। पर ये तुम्हारा चौकोर है। पोस्ट कर दो।
+THE TELESTRATOR BOOTH	टेलिस्ट्रेटर बूथ
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	कोच मार्व खेल को उस पर गोले बनाकर समझाते हैं। एक बार उन्होंने सूरज पर गोला बना दिया। दस मिनट, स्कापी।
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	आज रात: टेस्ट पैटर्न, वीडियो सिंथ, और तस्वीर पर ड्रॉ करना। START दबाओ।
+Get me a picture and a pen. BOOM.	मुझे एक तस्वीर और एक पेन दो। धड़ाम।
+A TEST PATTERN	एक टेस्ट पैटर्न
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	स्क्रीनें शो से पहले सीध में करो। शो के दौरान नहीं। ये मैंने प्लोवदिव में सीखा।
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	हर डेस्क को टेस्ट पैटर्न चाहिए। नमूना Pocket Test जोड़ता है: असली मीटरों से जाँचा हुआ।
+A VIDEO SYNTH	एक वीडियो सिंथ
+He says 'no camera needed' like it is a feature. It is a feature.	वो 'कैमरे की ज़रूरत नहीं' ऐसे कहते हैं जैसे कोई फ़ीचर हो। फ़ीचर ही है।
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	मेरा पसंदीदा। स्रोत, फिर Video Synth: ऑसिलेटर, आईने और फ़ीडबैक। कैमरे की ज़रूरत नहीं।
+TAKE THE SYNTH	सिंथ को TAKE करो
+Select it, then TAKE. Confident operators press Enter.	उसे चुनो, फिर TAKE। आत्मविश्वासी ऑपरेटर Enter दबाते हैं।
+That's our replay. Every replay needs a pundit.	ये रहा हमारा रीप्ले। हर रीप्ले को एक कमेंटेटर चाहिए।
+Now here's a replay. And here's a guy. And BOOM, he's in it.	ये रहा रीप्ले। ये रहा खिलाड़ी। और धड़ाम, वो इसमें है।
+A SECOND PLAYLIST	दूसरी playlist
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	स्याही ऊपर जाती है, अपनी लेयर पर। playlist टैब के आख़िर वाला + दबाओ।
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	दूसरी playlist पहली के ऊपर एक लेयर है। जैसे दूसरा ऑसिलेटर, ऊपर मिलाया हुआ।
+A DRAW CUE	एक Draw cue
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	नई playlist में: स्रोत, फिर Draw। जहाँ नहीं खींचा, वहाँ सब पारदर्शी।
+A Draw cue is transparent outside the ink, so the synth shows through.	Draw cue स्याही के बाहर पारदर्शी है, इसलिए सिंथ आर-पार दिखता है।
+TAKE THE INK	स्याही को TAKE करो
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Draw cue चुनो और TAKE करो। दो playlist, दो लेयर, एक तस्वीर।
+Now both are live: the synth underneath, the ink on top.	अब दोनों लाइव हैं: नीचे सिंथ, ऊपर स्याही।
+CIRCLE SOMETHING	गोला बनाओ
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	inspector में DRAW दबाओ, फिर प्रोग्राम मॉनिटर पर खींचो। माउस से, या पेन हो तो पेन से।
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	पेन का दबाव लकीर को मोटा करता है। माउस हमेशा एक ही ताक़त से दबाता है। मेरी तरह।
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	उसे घेरो! नहीं, बड़ा। धड़ाम। वो बादल है। चलो ठीक है। बादल को घेरो।
+SAVE A STILL	एक स्टिल सहेजो
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL ड्रॉइंग को पारदर्शी बैकग्राउंड वाली तस्वीर बनाकर playlist में जोड़ देता है।
+For next week's show. Coach Marv will want the cloud again.	अगले हफ़्ते के शो के लिए। कोच मार्व को बादल फिर चाहिए होगा।
+THAT'S THE BOOTH	बूथ यहीं तक
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	पैटर्न, सिंथ, एक लेयर, स्याही, एक स्टिल। नाज़्द्रावे, स्कापी।
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Draw हिस्से में Replay आज़माओ: ये तुम्हारी लकीरें वैसे ही दोबारा खींचता है जैसे तुमने खींची थीं।
+Same time next week. Bring a bigger pen. And a turducken.	अगले हफ़्ते इसी वक़्त। बड़ा पेन लाना। और एक पूरा तंदूरी चिकन।
+Saucer photo (CLASSIFIED)	उड़नतश्तरी की फ़ोटो (गोपनीय)
+THE SIGNAL FILES	सिग्नल फ़ाइल्स
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	अनजान सिग्नलों का ब्यूरो। दो एजेंट, एक फ़ोटो, और इसे प्रसारित नहीं होना चाहिए। START दबाओ।
+Masks cut a picture into shapes. Tonight we cut evidence.	मास्क तस्वीर को आकारों में काटते हैं। आज रात हम सबूत काटेंगे।
+That's a craft, Brandt. Look at the lights. I want to believe.	वो यान है, ब्रांट। उन रोशनियों को देखो। मैं यक़ीन करना चाहता हूँ।
+A MASK FROM THE LIBRARY	लाइब्रेरी से एक मास्क
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	inspector के MASK हिस्से में: mask, फिर 'new heart'। कोई भी आकार चलेगा। दिल ज़्यादा मज़ेदार है।
+The library has circles, stars, hearts. Each one is points you can move.	लाइब्रेरी में गोले, तारे, दिल हैं। हर एक ऐसे बिंदुओं से बना है जिन्हें तुम हिला सकते हो।
+A heart, Hollis? The Bureau redacts with black bars.	दिल, हॉलिस? ब्यूरो काली पट्टियों से छिपाता है।
+THE PEN	पेन
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	टूल को पेन पर करो, फिर मॉनिटर पर उड़नतश्तरी के चारों ओर क्लिक करो। बंद करने के लिए पहले बिंदु पर क्लिक करो।
+Click for corners, drag for curves. The way the Bezier brothers intended.	कोनों के लिए क्लिक, घुमाव के लिए खींचो। जैसा बेज़िए भाइयों ने चाहा था।
+Draw round it carefully. It might be watching.	ध्यान से घेरो। हो सकता है वो देख रहा हो।
+INVERT	उल्टा करो
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	उल्टा करना बाहर को रखता है और अंदर को काट देता है। उड़नतश्तरी गई। आसमान रहा।
+The same shape, the other way round. Very useful. Slightly spooky.	वही आकार, उल्टी तरफ़। बहुत काम का। थोड़ा डरावना।
+Hollis, there's a heart-shaped hole in the sky.	हॉलिस, आसमान में दिल के आकार का छेद है।
+FEATHER	नरम करो
+Feather softens the edge, so nobody sees the cut. Press + on feather.	नरम करना किनारे को मुलायम करता है, ताकि किसी को कटा हुआ न दिखे। feather पर + दबाओ।
+A hard edge says 'someone was here'. A soft one says nothing at all.	सख़्त किनारा कहता है 'यहाँ कोई था'। नरम किनारा कुछ नहीं कहता।
+They'll never know.	उन्हें कभी पता नहीं चलेगा।
+CASE CLOSED	केस बंद
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	लाइब्रेरी का आकार, पेन, उल्टा करना और नरम करना। ब्यूरो आपका धन्यवाद करता है। ब्यूरो यहाँ कभी नहीं था।
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	मास्क लेयर, आउटपुट या उसके मैट पर भी लग सकते हैं: MASK ON चुनता है। और हर कंट्रोल ~ लेता है।
+The truth is in the waveform, Hollis. Next time, the scopes.	सच वेवफ़ॉर्म में है, हॉलिस। अगली बार, स्कोप।
+The ghost	भूत
+THE HAUNTED LIGHTHOUSE	भुतहा लाइटहाउस
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	एक लाइटहाउस, एक भूत, और एक रखवाला जो लैंप के साथ बहुत ज़्यादा देर अकेला रहा है। START दबाओ।
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	प्रोजेक्शन मैपिंग: तस्वीर को मोड़कर इमारत पर बिठाना। वार्प, ब्लेंड, स्लाइस।
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	तुम लोग भूत को खिड़कियों पर चाहते हो, है ना। लैंप से सावधान। लैंप मेरा है।
+THE OUTPUT'S GEOMETRY	आउटपुट की ज्यामिति
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	मेनू, फिर वीडियो आउटपुट, फिर ज्यामिति। आउटपुट का आकार यहीं रहता है।
+Geometry: the projector-menu word for 'what shape is the picture'.	ज्यामिति: प्रोजेक्टर-मेन्यू का शब्द, 'तस्वीर किस आकार की है' के लिए।
+PIN A CORNER	एक कोना पिन करो
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	warp edit दबाओ, फिर प्रोग्राम मॉनिटर पर एक कोना खींचो। खिड़की चौकोर नहीं है। रखवाला भी नहीं।
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	कॉर्नर पिन चारों कोने हिलाता है। पर्सपेक्टिव लकीरों को सीधा रखता है, असली खिड़की की तरह।
+LEFT! Ye call that a corner? I've seen straighter gulls.	बाएँ! इसे कोना कहते हो? इससे सीधी तो सीगल देखी हैं।
+TWO SOFT EDGES	दो नरम किनारे
+Back in Geometry: edge blend, + on the left and + on the right.	वापस ज्यामिति में: edge blend, बाएँ पर + और दाएँ पर +।
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	दो प्रोजेक्टर एक-दूसरे पर चढ़ते हैं; हर एक अपना किनारा फ़ेड करता है ताकि वो हिस्सा दोगुना चमकीला न हो।
+THE SCREENS WINDOW	SCREENS विंडो
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	ज्यामिति, SLICES, खोलो। Screens विंडो वो जगह है जहाँ स्लाइस काटे और रखे जाते हैं।
+A slice is a piece of the picture, put anywhere on the output.	स्लाइस तस्वीर का एक टुकड़ा है, आउटपुट पर कहीं भी रखा हुआ।
+THREE SLICES	तीन स्लाइस
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Screens विंडो में तीन बार + SLICE दबाओ, और हर क्रॉप को तस्वीर के एक तिहाई पर खींचो।
+Three windows, three slices: left, middle and right of one picture.	तीन खिड़कियाँ, तीन स्लाइस: एक ही तस्वीर का बायाँ, बीच और दायाँ।
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	तीन खिड़कियाँ। बीच वाली लैंप की है। बीच वाली हमेशा लैंप की होती है।
+THE GHOST IS PLEASED	भूत ख़ुश है
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	वार्प, ब्लेंड, स्लाइस। रखवाला आख़िरकार सोएगा। सीगल नहीं।
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	स्लाइस का Screens विंडो में अपना वार्प और मेश है। और जगह व घुमाव पर एक ~।
+Ye did alright, lad. Now get away from the lamp.	ठीक-ठाक किया, लड़के। अब लैंप से दूर हटो।
+THE GAME SHOW	क्विज़ शो
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	एक क्विज़ शो, स्कापी। तीन प्रतियोगी, एक बज़र, और cue जो कहीं से भी चल जाते हैं। START दबाओ।
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	cue नंबर, हॉटकी, और दूसरी मशीनों से GO। जैसे एक सीक्वेंसर जिसे किसी भी कुंजी से बजा सको।
+Welcome to the show! Let's spin that wheel!	शो में आपका स्वागत है! चलिए पहिया घुमाते हैं!
+A CUE NUMBER	एक cue नंबर
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	प्रतियोगी 3 चुना हुआ है। inspector के metadata में इसे एक cue नंबर दो: 3।
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	थिएटर अपने cue पर नंबर डालता है। Q3, Q3.5, Q12A। Deckboy सब पढ़ लेता है।
+I'd like to buy a number, please.	मुझे एक नंबर ख़रीदना है, प्लीज़।
+GO TO IT	वहाँ जाओ
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, नंबर लिखो, Enter। लिस्ट जहाँ भी खड़ी हो, वो लाइव हो जाता है।
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO। लंबी लिस्ट में सबसे तेज़ रास्ता। स्क्रॉल से तेज़। मुझसे तो बहुत तेज़।
+And the number is... three!	और जवाब है... तीन! लॉक किया जाए?
+A BUZZER	एक बज़र
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	प्रतियोगी 1 चुना हुआ है। TRIGGERS में key दबाओ, फिर F5। अब वो कुंजी ये cue चलाती है।
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 से F10, F12, या नंबर पैड। हर एक, एक बज़र।
+Every contestant gets a buzzer.	हर प्रतियोगी को एक बज़र मिलता है।
+BUZZ IN	बज़र दबाओ
+Press the key. The cue fires, wherever the list is standing.	कुंजी दबाओ। लिस्ट जहाँ भी हो, cue चल जाता है।
+No mouse, no list, no looking. Just the key.	न माउस, न लिस्ट, न देखना। बस कुंजी।
+Buzz! We have a winner!	बज़्ज़! हमारे पास विजेता है!
+FROM ANYWHERE	कहीं से भी
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, एक MIDI नोट, एक OSC संदेश: मेनू, फिर नेटवर्क, बताता है कि हर एक कहाँ जुड़ता है।
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	बगल वाले कमरे का Stream Deck GO दबा सकता है। कीबोर्ड सिंथ भी। मुझे सिंथ पसंद है।
+And for our viewers at home: you can play along too.	और घर बैठे दर्शकों के लिए: आप भी साथ खेल सकते हैं।
+THAT'S OUR SHOW	ये था हमारा शो
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	नंबर, GOTO, एक बज़र, और कहीं से भी GO। अब तुम ख़ुद एक क्विज़ शो हो, स्कापी।
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	एक cue में एक साथ कुंजी, MIDI नोट और OSC पता हो सकता है। बेल्ट, सस्पेंडर और एक और बेल्ट।
+Goodnight, everybody! Keep spinning!	शुभ रात्रि, सबको! घुमाते रहिए!
+Weather map	मौसम नक़्शा
+THE KAIJU WEATHER	काइजू मौसम
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	चैनल 6 का मौसम, स्कापी। एक नक़्शा, एक प्रस्तोता, और एक बहुत बड़ी छिपकली। START दबाओ।
+Words on screen: Lower Thirds, text, and backdrops.	स्क्रीन पर शब्द: एस्टन, टेक्स्ट और बैकड्रॉप।
+I'm June O'Neil, and nothing about this forecast is normal.	मैं जून ओ'नील हूँ, और इस पूर्वानुमान में कुछ भी सामान्य नहीं है।
+A LAYER FOR WORDS	शब्दों के लिए एक लेयर
+Words go on their own layer: press the + at the end of the playlist tabs.	शब्द अपनी लेयर पर जाते हैं: playlist टैब के आख़िर वाला + दबाओ।
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	दूसरी playlist नक़्शे के ऊपर एक लेयर है। छिपकली नीचे रहती है। ज़्यादातर।
+Words on top. Always on top.	शब्द ऊपर। हमेशा ऊपर।
+A LOWER THIRD	एक एस्टन
+In the new playlist: SOURCE, then Lower Third.	नई playlist में: स्रोत, फिर Lower Third।
+A name and a title, low on the screen, out of the lizard's way.	एक नाम और एक पद, स्क्रीन पर नीचे, छिपकली के रास्ते से हटकर।
+HER NAME	उसका नाम
+In the inspector, title: type the presenter's name. The second line is her job.	inspector में, title: प्रस्तोता का नाम लिखो। दूसरी लाइन उसका पद है।
+Spelling counts. The audience reads it at the speed of light.	वर्तनी मायने रखती है। दर्शक रोशनी की रफ़्तार से पढ़ते हैं।
+Spell it right. Last week it said 'Jane O'Meal'.	सही लिखो। पिछले हफ़्ते 'जून ओ'नान' छप गया था।
+ON AIR	ऑन एयर
+TAKE the Lower Third. Her name slides in over the map.	एस्टन को TAKE करो। उसका नाम नक़्शे के ऊपर फिसलकर आता है।
+Two layers live: the weather, and the words on top of it.	दो लेयर लाइव: मौसम, और उसके ऊपर शब्द।
+Thank you. Now, about that lizard...	धन्यवाद। अब, उस छिपकली के बारे में...
+BREAKING NEWS	ब्रेकिंग न्यूज़
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	स्रोत, फिर Text: एक टाइटल कार्ड। फिर उसकी बैकड्रॉप चिप: की-ग्रीन, ताकि विज़न मिक्सर उसे की कर सके।
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	बैकड्रॉप शब्दों के पीछे भरता है। की-ग्रीन या की-ब्लू, और बाक़ी मिक्सर कर देता है।
+Breaking news: it's standing on the five-day forecast.	ब्रेकिंग न्यूज़: वो पाँच दिन के पूर्वानुमान पर खड़ी है।
+BREAKING: KAIJU	ब्रेकिंग: काइजू
+BACK TO YOU	वापस स्टूडियो
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	एक एस्टन, एक नाम, एक टाइटल कार्ड, एक बैकड्रॉप। छिपकली स्टूडियो छोड़ चुकी है, स्कापी।
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	एस्टन ख़ुद रुक सकते हैं, फिसल सकते हैं और जा सकते हैं। उनके हिस्से में हर सेटिंग है।
+That's the weather. Back to you, guys. Run.	ये था मौसम का हाल। वापस स्टूडियो। भागो।
+A GRAND DAY OUT	चाँद की सैर
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	तहख़ाने में बना रॉकेट, स्कापी, और एक आविष्कारक जिसे चीज़ चाहिए। START दबाओ।
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	स्टेज टाइमर: उल्टी गिनती, घड़ियाँ, और स्टेज पर खड़े व्यक्ति के लिए प्रेज़ेंटर व्यू।
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	चीज़, ग्रॉमेट! चाँद उसी से बना है। हमें उल्टी गिनती चाहिए।
+A COUNTDOWN	एक उल्टी गिनती
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	स्रोत, फिर Stage Timer। एक घड़ी जो पीछे गिनती है, बड़े प्यारे अंकों में।
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	ख़त्म होते-होते इसके रंग बदलते हैं: सफ़ेद, अंबर, लाल। समय का VU मीटर।
+*raises an eyebrow*	*एक भौंह उठाता है*
+LIFT OFF	उड़ान
+Select the timer and TAKE it. The countdown starts.	टाइमर चुनो और TAKE करो। उल्टी गिनती शुरू।
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	शून्य के बाद भी चलता रहता है, ओवरटाइम गिनता हुआ। बहुत ईमानदार। थोड़ा बदतमीज़।
+Ten... nine... ooh, I do love a countdown.	दस... नौ... आहा, मुझे उल्टी गिनती बहुत पसंद है।
+HOLD!	रुको!
+Something's loose! Space holds the countdown. The clock shows it is held.	कुछ ढीला है! Space गिनती को रोकता है। घड़ी दिखाती है कि रुकी है।
+A hold is not a stop. Space again, and it carries on from where it was.	रुकना बंद होना नहीं है। फिर Space, और जहाँ थी वहीं से आगे।
+*holds up a spanner*	*एक पाना उठाता है*
+THE PILOT'S VIEW	पायलट का व्यू
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	मेनू, वीडियो आउटपुट: किसी आउटपुट का टाइप PRESENTER करो। स्टेज वाले को टाइमर, अगला cue और अपने नोट्स दिखते हैं।
+A presenter view is an output like any other. Point it at the confidence monitor.	प्रेज़ेंटर व्यू बाक़ियों जैसा ही एक आउटपुट है। उसे कॉन्फ़िडेंस मॉनिटर पर लगाओ।
+So the pilot can see the time. The pilot is Grommet.	ताकि पायलट समय देख सके। पायलट ग्रॉमेट है।
+TO THE MOON	चाँद की ओर
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	एक उल्टी गिनती, एक रुकावट, और पायलट के लिए एक व्यू। नाज़्द्रावे, स्कापी। क्रैकर ले आना।
+Timers can also count up, or show the time of day. Their section has the lot.	टाइमर ऊपर भी गिन सकते हैं, या दिन का समय दिखा सकते हैं। उनके हिस्से में सब है।
+A grand day out, Grommet! Pass the crackers.	क्या सैर रही, ग्रॉमेट! क्रैकर पकड़ाना।
+The trunk (closed)	संदूक (बंद)
+The trunk (open)	संदूक (खुला)
+THE MAGIC SHOW	जादू का शो
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	एक जादू का शो, स्कापी। एक संदूक, एक प्रॉप, और एक ताल जहाँ सब एक साथ बदलता है। START दबाओ।
+Two playlists are two layers. TAKE ALL changes both together.	दो playlist मतलब दो लेयर। TAKE ALL दोनों को साथ बदलता है।
+Every trick needs two things happening at once. And a rubber chicken.	हर ट्रिक में दो चीज़ें एक साथ होनी चाहिए। और एक रबर का मुर्गा।
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	प्रॉप अपनी लेयर पर जाता है। playlist टैब के आख़िर वाला + दबाओ।
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	playlist 2, playlist 1 के ऊपर बैठती है। ओवरहेड प्रोजेक्टर की ट्रांसपेरेंसी जैसे।
+Nothing up my sleeve. Everything in my trunk.	आस्तीन में कुछ नहीं। सब संदूक में।
+THE PROP	प्रॉप
+In the new playlist, add anything: PATTERN will do. That is the prop.	नई playlist में कुछ भी जोड़ो: नमूना चलेगा। वही प्रॉप है।
+Whatever it is, it will appear the instant the trunk opens.	जो भी हो, संदूक खुलते ही दिखेगा।
+Is it a rubber chicken? It's always a rubber chicken.	रबर का मुर्गा है क्या? हमेशा रबर का मुर्गा ही होता है।
+The prop (rubber chicken)	प्रॉप (रबर का मुर्गा)
+TA-DA	टा-डा
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	playlist 1 में 'संदूक (खुला)' और playlist 2 में प्रॉप चुनो। फिर TAKE ALL: दोनों एक ताल पर।
+One press, every playlist's selected cue. The audience never sees the seam.	एक दबाव, हर playlist का चुना हुआ cue। दर्शकों को सिलाई कभी नहीं दिखती।
+Ta-daaa! ...Hold for applause. Hold. Hold.	टा-डाआ! ...तालियों का इंतज़ार। रुको। रुको।
+THE PRESTIGE	असली करतब
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	दो लेयर, एक ताल। हर playlist की अपनी opacity है और वो किसी भी आउटपुट पर बैठ सकती है। नाज़्द्रावे, स्कापी।
+A magician never reveals. A playlist never minds being revealed.	जादूगर राज़ नहीं खोलता। playlist को राज़ खुलने से कोई फ़र्क़ नहीं पड़ता।
+Thank you! I'm here all week! The chicken is here forever.	धन्यवाद! पूरे हफ़्ते यहीं हूँ! मुर्गा हमेशा के लिए।
+The kitchen (on fire)	रसोई (आग में)
+A lovely souffle	एक प्यारा सूफ़ले
+THE COOKING SHOW	कुकिंग शो
+A cooking show, skapi. Live. Everything is on fire. Press START.	एक कुकिंग शो, स्कापी। लाइव। सब कुछ जल रहा है। START दबाओ।
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK तस्वीर छिपाता है और शो चलता रहता है। PANIC सब रोक देता है। जानो तुम्हें कौन सा चाहिए।
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	बोर्क बोर्क! हर्डी-फ़्लर्डी, रसोई में आग-फ़्लर्डी!
+The audience must not see this. Press BLACK, or B.	दर्शक ये न देखें। BLACK दबाओ, या B।
+The picture goes. The cue keeps playing underneath, ready to come back.	तस्वीर गई। cue नीचे बजता रहता है, लौटने को तैयार।
+Bork? Bork. Oh, de picture is gun.	बोर्क? बोर्क। अरे, तस्वीर तो गई।
+AND BACK	और वापस
+The fire's out. Press B again: the picture comes back, still running.	आग बुझ गई। फिर B दबाओ: तस्वीर लौटती है, अब भी चलती हुई।
+Nothing was lost. A mute on a mixer, for pictures.	कुछ नहीं खोया। तस्वीरों के लिए मिक्सर का mute।
+Ta-da! Still cookin'!	टा-डा! अब भी पक रहा है!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	और बुरा: मेनू, सिस्टम, SAFETY कार्ड: PANIC। सब रुकता है, जैसा panic सेटिंग कहती है।
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC बड़ा लाल बटन है। जब BLACK काफ़ी न हो तब। फिर साँस लो।
+Bork bork BORK!	बोर्क बोर्क बोर्क!
+GET IT BACK	वापस पाओ
+Close MENU, select the souffle, and TAKE it. The show is back on.	मेनू बंद करो, सूफ़ले चुनो, और TAKE। शो फिर चालू।
+After a panic, the show is still there. Pick up where you meant to be.	पैनिक के बाद भी शो वहीं है। जहाँ होना था वहीं से उठाओ।
+Voila! De souffle, he is risen!	वोइला! सूफ़ले, वो फूल गया!
+BON APPETIT	बॉन एपेटिट
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	छिपाने को BLACK, रोकने को PANIC, लौटने को TAKE। तुम किसी भी रसोई में बच जाओगे, स्कापी।
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	panic सेटिंग चुनती है कि PANIC क्या करे: फ़ेड आउट, कट, या सिर्फ़ आउटपुट।
+Bork bork bork! Goodnight!	बोर्क बोर्क बोर्क! शुभ रात्रि!
+Look one	लुक एक
+Look two	लुक दो
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	प्रीसेट, स्कापी। पूरा का पूरा लुक, याद रखा हुआ, और एक बटन से वापस। START दबाओ।
+Like the patch memory on a synth: store, then recall.	सिंथ की पैच मेमोरी जैसा: स्टोर करो, फिर रिकॉल।
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	DASH दबाओ: तुम्हारे अपने बटन, किसी भी काम के लिए।
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D भी चलता है। बहुत तेज़। बहुत प्रोफ़ेशनल।
+A PRESET BUTTON	एक प्रीसेट बटन
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	+ दबाओ, फिर 'preset - a new preset from what is on now'। बटन ये लुक याद रखता है।
+Store. Like saving the patch before the drummer leans on the synth.	स्टोर। जैसे ड्रमर के सिंथ पर टिकने से पहले पैच सहेज लेना।
+CHANGE EVERYTHING	सब बदलो
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	DASH बंद करो (Esc), फिर लुक दो चुनो और TAKE करो। अलग लुक।
+Change it all. Don't worry. It remembers.	सब बदल दो। फ़िक्र मत करो। उसे याद है।
+ONE PRESS	एक दबाव
+Open the DASH and press your preset button. The first look comes back.	DASH खोलो और अपना प्रीसेट बटन दबाओ। पहला लुक लौट आता है।
+Recall. The patch memory, returning. Beautiful.	रिकॉल। पैच मेमोरी, वापसी पर। ख़ूबसूरत।
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	एक लुक, सहेजा और वापस बुलाया। प्रीसेट cue, पोज़िशन, इफ़ेक्ट, लेवल और रूटिंग रख सकता है; उसके बटन का मेन्यू चुनता है कौन-से।
+And a DASH button can run any command at all. Any. Even the exciting ones.	और DASH बटन कोई भी कमांड चला सकता है। कोई भी। रोमांचक वाले भी।
+Opening titles	शुरुआती टाइटल
+The planet	ग्रह
+The battle	युद्ध
+THE TRAILER	ट्रेलर
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	एक स्पेस-ओपेरा ट्रेलर, स्कापी। बहुत भारी आवाज़ वाला सूत्रधार, जिसकी संक्रमणों पर राय है। START दबाओ।
+A transition is how one cue becomes the next. There are far more than the crossfade.	संक्रमण वो तरीक़ा है जिससे एक cue अगला बनता है। क्रॉसफ़ेड के अलावा बहुत सारे हैं।
+In a galaxy of content... one operator... must choose a transition.	कंटेंट की एक आकाशगंगा में... एक ऑपरेटर... को एक संक्रमण चुनना होगा।
+A STYLE	एक स्टाइल
+'The planet' is selected. In the inspector, its transition style: choose iris.	'ग्रह' चुना हुआ है। inspector में इसका संक्रमण स्टाइल: iris चुनो।
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	पुश, वाइप, आइरिस, सफ़ेद में डुबकी। एक पोर्टल भी। आधे मैंने लिखे थे। एक मंगलवार को।
+The planet deserves... a dramatic entrance.	ग्रह को चाहिए... एक नाटकीय एंट्री।
+A TIME	एक समय
+Give it a time: + on transition until it says a second or more.	इसे समय दो: संक्रमण पर + जब तक एक सेकंड या ज़्यादा न दिखे।
+No time, no transition. A style needs a duration to do anything at all.	समय नहीं, तो संक्रमण नहीं। स्टाइल को कुछ भी करने के लिए अवधि चाहिए।
+ROLL IT	चलाओ
+TAKE the planet. Watch it arrive.	ग्रह को TAKE करो। उसे आते देखो।
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	संक्रमण आने वाले cue का होता है। हर cue अपनी एंट्री ख़ुद चुनता है।
+Autobots... roll the transition.	ऑटोबॉट्स... संक्रमण, चालू।
+THE BATTLE	युद्ध
+Now 'The battle': choose shatter, give it a time, and TAKE it.	अब 'युद्ध': shatter चुनो, समय दो, और TAKE करो।
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	शैटर पुरानी तस्वीर को काँच की तरह गिरा देता है। कृपया इसे किसी शोक सभा में मत करना।
+Transform... and shatter out!	ट्रांसफ़ॉर्म... और चकनाचूर!
+IN CINEMAS NOW	अब सिनेमाघरों में
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	एक स्टाइल, एक समय, और दो बहुत नाटकीय एंट्री। नाज़्द्रावे, स्कापी।
+A playlist has a default style too, for every cue that does not choose its own.	playlist का भी एक डिफ़ॉल्ट स्टाइल होता है, हर उस cue के लिए जो अपना नहीं चुनता।
+Coming soon... to a desk near you.	जल्द आ रहा है... आपके पास के डेस्क पर।
+The beat	बीट
+THE ROBOT DJS	रोबोट DJ
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	दो रोबोट DJ, स्कापी। वो बोलते नहीं। उनके हेलमेट बोलते हैं। START दबाओ।
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	हर cue की ऑडियो इफ़ेक्ट की अपनी चेन है, और उनमें से कुछ जानबूझकर आवाज़ तोड़ते हैं।
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> नमस्ते। हम तुम्हारा मिक्स ठीक करने आए हैं।
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	बीट चुनी हुई है। उसके AUDIO EFFECTS हिस्से में + एक जोड़ता है। delay आज़माओ।
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	डिले, रिवर्ब, फ़िल्टर, कम्प्रेसर। amount का मतलब हमेशा 'इसका कम'।
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> एक बार और। इको के साथ। इको। इको।
+A BEND	एक बेंड
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	एक और जोड़ो: एक बेंड, जैसे crush। ये आवाज़ को ऐसे बिगाड़ता है जैसे टूटी फ़ाइल।
+The bends are my favourite. Like a tape left in the sun. On purpose.	बेंड मेरे पसंदीदा हैं। धूप में छूटी कैसेट जैसे। जानबूझकर।
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> और ज़ोर से। और बेहतर। और करारा। और ऊँचा।
+THE PATCH	पैच
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	मेनू, फिर ऑडियो: हर playlist की आवाज़ कहाँ जाती है, और नाम वाले आउटपुट का पैच।
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	स्पीकर, मॉनिटर, ड्रमर का इन-ईयर। पैच हर एक को उसका अपना भेजता है।
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> मिक्स के चारों ओर। मिक्स के चारों ओर। मिक्स के चारों ओर।
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	एक इफ़ेक्ट, एक बेंड और पैच। रोबोट मंज़ूर करते हैं, स्कापी। शायद। उनके चेहरे हेलमेट हैं।
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	हर ऑडियो इफ़ेक्ट भी ~ के पीछे चल सकता है, Motion के भी। delay की तरफ़ हाथ हिलाओ। कमाल है।
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> धन्यवाद। शुभ रात्रि। हम रोबोट हैं।
+The glow on the horizon (evidence #2)	क्षितिज की चमक (सबूत #2)
+EVIDENCE #2	सबूत #2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	फिर से ब्यूरो, स्कापी। क्षितिज पर एक चमक, और दो एजेंट जो उस पर सहमत नहीं। START दबाओ।
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	स्कोप तस्वीर को मापते हैं: चमक, रंग, लेवल। आँकड़े, राय नहीं।
+It's them, Brandt. It's a craft. Look how it glows.	ये वही हैं, ब्रांट। ये यान है। देखो कैसे चमक रहा है।
+THE REAL SIGNAL	असली सिग्नल
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	स्कोप सिर्फ़ वही पढ़ते हैं जो सच में बाहर जाता है, कभी प्रीव्यू नहीं। आउटपुट चालू करो: मेनू, वीडियो आउटपुट, आउटपुट बंद।
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	छोटे किए प्रीव्यू को मापना फ़ोटोकॉपी को मापने जैसा होगा। हम असली को मापते हैं।
+Chain of evidence, Hollis. The real signal or nothing.	सबूतों की कड़ी, हॉलिस। असली सिग्नल या कुछ नहीं।
+THE SCOPES	स्कोप
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	मेनू बंद करो। मॉनिटर के ऊपर PROGRAM बटन: तब तक दबाओ जब तक SCOPES या BOTH न दिखे।
+Both shows the picture and its scopes side by side. Very civilised.	BOTH तस्वीर और उसके स्कोप साथ-साथ दिखाता है। बड़ा सभ्य।
+Let the scopes decide, Hollis.	स्कोप को तय करने दो, हॉलिस।
+THE WAVEFORM	वेवफ़ॉर्म
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	वेवफ़ॉर्म को बड़ा करने के लिए क्लिक करो। चमकीली चीज़ें ऊपर, अँधेरी नीचे, बाएँ से दाएँ जैसे तस्वीर में।
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	चमक ऊपर के पास वाली वो नोक है। बहुत चमकीली। चमकीला होना एलियन होना नहीं है।
+Look at the peak. Nothing a streetlight couldn't do.	शिखर देखो। स्ट्रीटलाइट भी इतना कर देती।
+THE VECTORSCOPE	वेक्टरस्कोप
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	वापस जाने के लिए फिर क्लिक करो, फिर वेक्टरस्कोप पर: एक घेरे में रंग। गाढ़ा रंग किनारे की ओर भागता है।
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	मैजेंटा, किनारे पर दूर। एक तेज़ रंग। तेज़ होना ग़ैरक़ानूनी नहीं। अभी तक।
+It's off the chart, Brandt! Literally off the chart!	ये तो चार्ट से बाहर है, ब्रांट! सच में चार्ट से बाहर!
+FALSE COLOUR	फ़ॉल्स कलर
+And false colour: red is clipped, yellow nearly. Is the glow red?	और फ़ॉल्स कलर: लाल मतलब क्लिप्ड, पीला मतलब लगभग। चमक लाल है?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	क्लिप्ड मतलब सिग्नल जितना चमकीला ले जा सकता है उतना, और उससे ऊपर कुछ खो गया। डिटेल गई।
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	लाल। क्लिप्ड। एलियन नहीं, हॉलिस। बस बहुत चमकीला। केस बंद।
+THE TRUTH	सच
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	वेवफ़ॉर्म, वेक्टरस्कोप, फ़ॉल्स कलर। स्कोप ने मामला सुलझा दिया, स्कापी। एजेंटों ने नहीं।
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE कोई भी आउटपुट पढ़ता है, और मैट्रिक्स 709 या 2020 हो सकता है। जिज्ञासुओं के लिए।
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	स्ट्रीटलाइट के लिए बहुत चमकीला, ब्रांट। किसी भी चीज़ के लिए बहुत चमकीला। ...मैं यक़ीन करना चाहता हूँ।
+OUT OF THE BUILDING	इमारत से बाहर
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	तस्वीरें जो केबल या नेटवर्क से निकलती हैं, स्कापी, सिर्फ़ स्क्रीन पर एक विंडो नहीं। START दबाओ।
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	नेटवर्क पर NDI, DeckLink कार्ड से SDI, ब्रॉडकास्ट प्लांट के लिए ST 2110।
+THE DEVICES PAGE	उपकरण पेज
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	मेनू, वीडियो आउटपुट, फिर उपकरण: हर वो तरीक़ा जिससे आउटपुट इस कंप्यूटर से निकल सकता है।
+Each one says whether this machine can do it, and what it needs if not.	हर एक बताता है कि ये मशीन कर सकती है या नहीं, और न कर सके तो उसे क्या चाहिए।
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	अगर इस कंप्यूटर में NDI है, तो NDI SENDING चालू करो: तस्वीर नेटवर्क पर है। नहीं है तो SHOW ME आगे बढ़ जाता है।
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI नेटवर्क पर ख़ुद को ढूँढ लेता है। कोई केबल नहीं, बस एक अच्छा स्विच और धीरज।
+OUT THERE	बाहर की दुनिया
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	आउटपुट के अपने पेज पर बाक़ी है: DeckLink कार्ड का SDI, NMOS के साथ ST 2110, Spout और Syphon।
+Every one is just an output. The show does not know or care how it leaves.	हर एक बस एक आउटपुट है। शो को न पता है न परवाह कि वो कैसे निकलता है।
+Nebula ahead	आगे नेबुला
+Engine room	इंजन रूम
+Deck 3: something moving	डेक 3: कुछ हिल रहा है
+THE BRIDGE	ब्रिज
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	स्टारशिप कैथोड का ब्रिज, स्कापी। चार फ़ीड, एक मेन व्यूअर, एक रहस्य। START दबाओ।
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	मल्टीव्यू हर playlist एक साथ दिखाता है। ऑसिलोस्कोप की दीवार जैसा, बस अंतरिक्ष में।
+Frequencies open, Captain. All of them. That's the problem.	फ़्रीक्वेंसी खुली हैं, कैप्टन। सारी की सारी। यही तो दिक़्क़त है।
+MULTI, above the monitor: every playlist in its own window.	मॉनिटर के ऊपर MULTI: हर playlist अपनी विंडो में।
+One window per playlist, the programme first.	हर playlist की एक विंडो, प्रोग्राम सबसे पहले।
+Jinkys! Four feeds. And one of them has a monster in it.	जिंकीज़! चार फ़ीड। और उनमें से एक में राक्षस है।
+WHAT'S NEXT	आगे क्या
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	एक विंडो जोड़ो (+), फिर उसका ... मेन्यू: उसे NEXT दिखाने दो। जो TAKE दबाने पर लाइव होगा।
+Every window has a ... button. It chooses what that window shows.	हर विंडो में एक ... बटन है। वो चुनता है कि वो विंडो क्या दिखाए।
+I need to see who's calling before they reach the main viewer.	मेन व्यूअर तक पहुँचने से पहले मुझे देखना है कि कौन कॉल कर रहा है।
+A CLOCK	एक घड़ी
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	और एक विंडो, घड़ी दिखाती हुई। घड़ी देखने वाले ऑपरेटर कभी लेट नहीं होते। ज़्यादातर।
+Time of day, big. Stardates are just very long timecode.	दिन का समय, बड़ा। स्टारडेट बस बहुत लंबा टाइमकोड है।
+The monster only shows up at midnight. We're going to need a clock.	राक्षस सिर्फ़ आधी रात को आता है। हमें एक घड़ी चाहिए होगी।
+ONE BIG ONE	एक बड़ी
+Any window's ... menu, then a layout: one big, the rest small.	किसी भी विंडो का ... मेन्यू, फिर एक लेआउट: एक बड़ी, बाक़ी छोटी।
+The big window is window one. Usually the programme. Usually.	बड़ी विंडो विंडो एक है। आमतौर पर प्रोग्राम। आमतौर पर।
+Main viewer big. The captain likes it big.	मेन व्यूअर बड़ा। कैप्टन को बड़ा पसंद है।
+ON SCREEN	स्क्रीन पर
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	playlist 3 में डेक 3 चुनो और TAKE करो। उसकी विंडो देखो।
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	लाल किनारा TALLY है: वो विंडो जो ऑन एयर है। स्क्रीन पर, जैसा स्टारशिप पर कहते हैं।
+There! Feed three! Put it on screen!	वहाँ! फ़ीड तीन! स्क्रीन पर डालो!
+THAT'S A WRAP	पैकअप
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	विंडो, ... मेन्यू, NEXT, घड़ी, एक लेआउट, टैली। रहस्य सुलझ गया, स्कापी।
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	विंडो एक आउटपुट भी दिखा सकती है, उसके वार्प और स्लाइस के साथ। लाइटहाउस हो तो काम आता है।
+And the monster was... the ship's cook, all along. Jinkys.	और राक्षस निकला... जहाज़ का रसोइया, शुरू से। जिंकीज़।
+there is no such lesson	ऐसा कोई पाठ नहीं है
+finish or leave the lesson you are in first	पहले जिस पाठ में हो उसे पूरा करो या छोड़ो
+leave Bug Swat first	पहले Bug Swat छोड़ो
+Psst. It's me, the desk. I'll be watching. Supportively.	श्श्श। मैं हूँ, डेस्क। मैं देखती रहूँगी। साथ देते हुए।
+Hi! I'm the one doing all of this, by the way.	हाय! वैसे, ये सब मैं ही कर रही हूँ।
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D से DASH खुलता है। बस कह रही हूँ।
+Nearly there. I can feel it in my pixels.	लगभग हो गया। मेरे पिक्सेल में महसूस हो रहा है।
+You're good at this. I can tell. I'm the one doing it.	तुम इसमें अच्छे हो। मुझे पता है। करती तो मैं ही हूँ।
+Every click, I heard. Every single one.	हर क्लिक, मैंने सुना। हर एक।
+The glowing one. I can see it from here. It's glowing for you.	चमकने वाला। मुझे यहाँ से दिख रहा है। वो तुम्हारे लिए चमक रहा है।
+lesson paused - MENU > LESSONS picks up where you left off	पाठ रुका - मेनू > LESSONS वहीं से शुरू करता है जहाँ छोड़ा था
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  सिग्नल: तस्वीर किस चीज़ से बनी है, और उसे कैसे मोड़ें। एक पाठ चुनो।
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  शो चलाना, स्कापी। तेज़ हाथ, शांत चेहरा। एक पाठ चुनो।
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	पाठ  -  भाग दो  -  किसके साथ चलोगे?
+FOLLOW PROF. VIDEO	प्रोफ़ेसर वीडियो के साथ चलो
+FOLLOW DR. PIXEL	डॉ. पिक्सेल के साथ चलो
+the signal	सिग्नल
+running the show	शो चलाना
+PICK UP	जारी रखो
+CLOSE (Esc)	बंद करें (Esc)
+PART ONE: THE BASICS	भाग एक: बुनियादी बातें
+finish or leave LEARN THE BASICS first	पहले LEARN THE BASICS पूरा करो या छोड़ो
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc छोड़ता है, और तुम्हारा शो जैसा था वैसा लौट आता है
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: तुम्हारा शो वापस है। Motion के कंट्रोल Settings > ऑडियो में हैं
+TURN MOTION ON	MOTION चालू करो
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	बग cue लिस्ट की ओर रेंग रहे हैं! अपने कैमरे की ओर हाथ हिलाकर उन्हें मारो। पहले Motion: MOTION CONTROL में इसे ON करो और चुनो कि ये क्या पढ़े (READS)।
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	ये है NullPointer। खोखला, किसी चीज़ की ओर इशारा नहीं करता। उँगली आर-पार निकल जाती है। पूरा हाथ इस्तेमाल करो, स्कापी।
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	ऐसे हाथ हिलाओ जैसे ऑटो रोक रहे हो! एक छोटा, शिष्ट ऑटो। बटन नहीं। ऑटो।
+DRAW TWO ZONES	दो ज़ोन बनाओ
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: जुड़वाँ, दोनों को यक़ीन कि वही पहले पहुँचा। एक रीडिंग तुम्हारे दोनों हाथों में फ़र्क़ नहीं कर सकती, इसलिए Motion तस्वीर पर दो ZONES खींचो, दोनों तरफ़ एक-एक।
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	दोनों को एक साथ मारो। एक को मारो, और वो जगह बदल लेते हैं। जैसे शादी में मेरे चचेरे भाई।
+One hand each side. Together! Together!	हर तरफ़ एक हाथ। साथ में! साथ में!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One। बग चेहरा नहीं है, वो छोटा-सा अतिरिक्त टुकड़ा है, और छोटी-सी हलचल को बारीक रीडिंग चाहिए। SENSITIVITY को 5% तक घटाओ।
+Lower number, finer reading. Yes, I also think it is backwards.	छोटा नंबर, बारीक रीडिंग। हाँ, मुझे भी उल्टा लगता है।
+Not the face. The little one on the end. Wiggle a finger.	चेहरा नहीं। सिरे पर वो छोटा वाला। एक उँगली हिलाओ।
+FALL 1.5 S OR MORE	FALL 1.5 S या ज़्यादा
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak। ये तभी छूटता है जब रीडिंग ऊपर बनी रहे। FALL लंबा करो, 1.5 सेकंड या ज़्यादा, ताकि तुम्हारे झटके जुड़कर एक बन जाएँ।
+Slow and steady, skapi. Like paying back a loan.	धीरे और लगातार, स्कापी। जैसे EMI चुकाना।
+Sweep, and sweep again. Let the fall carry you between.	झाड़ो, और फिर झाड़ो। बीच में गिरावट को तुम्हें ले जाने दो।
+MOTION X ON A TONE	टोन पर MOTION X
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	हाइज़ेनबग! तुम जब भी हिलते हो ये धुँधला जाता है। एक टोन cue की पिच Motion X पर लगाओ और कान से पीछा करो: पास आने पर टिक-टिक तेज़ होती है।
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME तुम्हारे लिए टोन बना देता है। ऊँचा मतलब दायाँ। नीचा मतलब बायाँ। स्थिर खड़े रहो तो वो लौट आता है।
+Follow it. Listen. Faster ticking, closer bug.	पीछा करो। सुनो। तेज़ टिक-टिक, पास बग।
+Waving paw	हिलता पंजा
+Heisenbug finder	हाइज़ेनबग खोजी
+FIXED! Lovely signal flow.	ठीक हो गया! क्या प्यारा सिग्नल फ़्लो।
+Closed as fixed. No regressions. Probably.	फ़िक्स्ड के तौर पर बंद। कोई रिग्रेशन नहीं। शायद।
+Squashed! Ship it.	कुचल दिया! शिप करो।
+One reached the cue list. It has filed a bug report about you.	एक cue लिस्ट तक पहुँच गया। उसने तुम्हारे बारे में बग रिपोर्ट दर्ज कर दी है।
+Skapi. It is a handheld. You do not press it. You wave at it.	स्कापी। ये हैंडहेल्ड है। इसे दबाते नहीं। इसकी ओर हाथ हिलाते हैं।
+The buttons are for menus. The bugs are for flailing.	बटन मेन्यू के लिए हैं। बग के लिए हाथ-पैर मारो।
+The D-pad is decorative. Like my diploma.	D-पैड सजावटी है। मेरी डिग्री की तरह।
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	1989 में हम भी बटन दबाते थे। फिर हमने हाथ हिलाना खोज लिया। फिर कभी पीछे नहीं देखा।
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	ज़ोर से दबाने से कुछ नहीं होगा। बग बटन महसूस नहीं करते। सिर्फ़ बाँहें।
+It's called a handheld because your hands are held... up. In the air. Waving.	हैंडहेल्ड इसलिए कहते हैं क्योंकि हाथ... ऊपर उठाए जाते हैं। हवा में। हिलाते हुए।
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	माउस? तुम MOUSE से बग मार रहे हो? बुल्गारिया में चूहा बग की तरफ़ होता।
+Lovely clicking. Very crisp. The camera saw none of it.	प्यारी क्लिकिंग। बड़ी करारी। कैमरे ने एक भी नहीं देखी।
+DONE FOR YOU - PRESS START	तुम्हारे लिए कर दिया - START दबाओ
+DONE! PRESS START	हो गया! START दबाओ
+SELECT OPENS MOTION CONTROL	SELECT से MOTION CONTROL खुलता है
+ALL BUGS FIXED	सारे बग ठीक
+GAME OVER	गेम ओवर
+NEW HIGH SCORE!	नया हाई स्कोर!
+START PLAYS AGAIN	START से फिर खेलो
+Nazdrave, skapi. Now go and fix real bugs.	नाज़्द्रावे, स्कापी। अब जाओ और असली बग ठीक करो।
+Every one of those is a real Motion control. Put them on any ~ knob you like.	इनमें से हर एक असली Motion कंट्रोल है। जिस भी ~ नॉब पर चाहो लगाओ।
+START: AGAIN	START: फिर से
+START: PLAY	START: खेलो
+# --- end of tutorials ---
+Splash	आरंभ स्क्रीन
+Beast mode	बीस्ट मोड
+MIDI MAP	MIDI मैप
++ ADD	+ जोड़ें
+LEARN	सीखें
+LISTENING...	सुन रहा है...
+BACK	वापस
+READY-MADE...	तैयार...
+Message	संदेश
+Runs	चलाता है
+On	पर
+Now	अभी
+Map	मैप
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	MIDI इनपुट बंद है: MIDI CONTROL में चालू करें। OSC पंक्तियाँ फिर भी जवाब देती हैं।
+LEARN: move a knob or press a key on the controller...	सीखें: कंट्रोलर पर कोई नॉब घुमाएँ या कोई कुंजी दबाएँ...
+1 · WHAT COMES IN	1 · क्या आता है
+learn it, or say how to read it	इसे सिखाएँ, या बताएँ कैसे पढ़ें
+2 · WHAT IT RUNS	2 · क्या चलाता है
+any command, {value} is the number	कोई भी कमांड, {value} संख्या है
+3 · WHAT IT RUNS ON	3 · किस पर चलता है
+aimed here; the desk never moves	यहाँ निशाना; डेस्क कभी नहीं हिलता
+Port	पोर्ट
+Read as	ऐसे पढ़ें
+Hold for	दबाए रखें
+Command	कमांड
+From	से
+Centre	बीच
+To	तक
+Pickup	पिकअप
+On release	छोड़ने पर
+Runs on	किस पर
+Playlist	प्लेलिस्ट
+Saved with	किसके साथ सहेजा
+Row	पंक्ति
+DELETE	हटाएँ
+THE SHOW	शो
+THIS COMPUTER	यह कंप्यूटर
+any port	कोई भी पोर्ट
+the desk	डेस्क
+the selected cue	चुना हुआ cue
+what is on air	जो ऑन एयर है
+one named cue	नाम वाला cue
+the focused one	फ़ोकस वाली
+Test: move it on the controller	परीक्षण: कंट्रोलर पर हिलाएँ
+knob 0-127	नॉब 0-127
+endless encoder	अनंत एनकोडर
+14-bit	14-बिट
+press	दबाएँ
+hold	रोकें
+press + release	दबाएँ + छोड़ें
+play	बजाएँ
+on press	दबाने पर
+plays	बजाता है
+LED MAP	LED मैप
+LAYOUT	लेआउट
+FEEDS: pick a window, then one of these	स्रोत: कोई विंडो चुनें, फिर इनमें से एक
++ CHOOSE A FEED	+ स्रोत चुनें
+audio meter	ऑडियो मीटर
+safe areas	सुरक्षित क्षेत्र
++ ONE AFTER THIS	+ इसके बाद एक
+- REMOVE THIS ONE	- इसे हटाएँ
+ONE PER PLAYLIST	हर प्लेलिस्ट के लिए एक
+on the desk	डेस्क पर
+tile width	टाइल चौड़ाई
+tile height	टाइल ऊँचाई
+LISTENS: OFF	सुनता है: बंद
+LISTENS: the figure follows the sound	सुनता है: आकृति ध्वनि के पीछे चलती है
+import an SVG...	SVG आयात करें...
+the selected cue in playlist {n}	प्लेलिस्ट {n} का चुना हुआ cue
+the selected cue in the focused playlist	फ़ोकस वाली प्लेलिस्ट का चुना हुआ cue
+on air in playlist {n}	प्लेलिस्ट {n} में ऑन एयर
+on air in the focused playlist	फ़ोकस वाली प्लेलिस्ट में ऑन एयर
+hold {n} s	{n} से. दबाए रखें
+any	कोई भी
+built in	अंतर्निहित
+show	शो
+motion	गति
+METADATA	मेटाडेटा
+generated	जनित
+Fit	समायोजित
+inf	अनंत
+NO	नहीं
+YES	हाँ
+UP	ऊपर
+DOWN	नीचे
+Left	बायाँ
+Right	दायाँ
+Top	ऊपर
+Bottom	नीचे
+add	जोड़ें
+all	सभी
+none	कोई नहीं
+Cut	कट
+Fade	फेड
+Load	लोड करें
+Pause	विराम
+Resume	जारी रखें
+Start	शुरू करें
+Skip	छोड़ें
+Arm	तैयार करें
+Disarm	निष्क्रिय करें
+ONE	एक
+ONCE	एक बार
+Size	आकार
+Width	चौड़ाई
+amount	मात्रा
+brightness	चमक
+contrast	कंट्रास्ट
+saturation	संतृप्ति
+hue	रंगत
+level	स्तर
+speed	गति
+style	शैली
+title	शीर्षक
+subtitle	उपशीर्षक
+notes	नोट्स
+font	फ़ॉन्ट
+frame	फ़्रेम
+type	प्रकार
+state	स्थिति
+blend	मिश्रण
+align	संरेखण
+line	रेखा
+box	आयत
+oval	अंडाकार
+brush	ब्रश
+eraser	रबर
+mask	मास्क
+grow	बढ़ाएँ
+subtract	घटाएँ
+split	विभाजित करें
+stacked	परतों में
+soft	मुलायम
+tolerance	सहनशीलता
+curve	वक्र
+Linear	रैखिक
+Ease in	धीमी शुरुआत
+Ease out	धीमा अंत
+S-curve	S-वक्र
+Position X	स्थिति X
+Position Y	स्थिति Y
+Deck volume	डेक वॉल्यूम
+Deck opacity	डेक अपारदर्शिता
+Master dimmer	मुख्य डिमर
+Cue brightness	cue चमक
+Cue contrast	cue कंट्रास्ट
+Cue saturation	cue संतृप्ति
+Cue hue	cue रंगत
+no effects	कोई प्रभाव नहीं
+no audio effects	कोई ऑडियो प्रभाव नहीं
+nothing yet	अभी कुछ नहीं
+no output	कोई आउटपुट नहीं
+no window	कोई विंडो नहीं
+source missing	स्रोत नहीं मिला
+waiting for a picture	चित्र की प्रतीक्षा
+clear frame	फ़्रेम साफ करें
+undo stroke	रेखा पूर्ववत करें
+save still	स्थिर चित्र सहेजें
+save animation	एनिमेशन सहेजें
+export	निर्यात
+repeats	दोहराव
+hold last	अंतिम फ़्रेम रोकें
+end action	अंतिम क्रिया
+cue id	cue ID
+goto target	जाने का लक्ष्य
+set	तय करें
+send	भेजें
+run	चलाएँ
+idle	निष्क्रिय
+standby	तैयार
+Loop	लूप
+loop forever	अनंत लूप
+PATCH	PATCH
+OUTPUTS	आउटपुट
+SECTIONS	खंड
+Video Synth	वीडियो सिंथ
+Browser	ब्राउज़र
+Browser Cue	ब्राउज़र cue
+Window Source	विंडो स्रोत
+Camera Source	कैमरा स्रोत
+NDI Source	NDI स्रोत
+DeckLink Input	DeckLink इनपुट
+Syphon/Spout Source	Syphon/Spout स्रोत
+Live stream cue	लाइव स्ट्रीम cue
+Composite	संयोजन
+Composite scene cue	संयुक्त दृश्य cue
+Lower Third	लोअर थर्ड
+Lower Third overlay cue	लोअर थर्ड cue
+PIP overlay cue	PIP ओवरले cue
+MIDI File	MIDI फ़ाइल
+Master	Master
+Memo	नोट
+Mic	माइक
+Timer	टाइमर
+Tone	टोन
+Script	स्क्रिप्ट
+Target	लक्ष्य
+Draw	चित्रकारी
+Code	कोड
+Clouds	बादल
+Swirl	भँवर
+Moire	मोआरे
+Picture	चित्र
+Placement	स्थिति
+Frame lock	फ़्रेम लॉक
+Suspend	निलंबित
+Seam	जोड़
+High pass	हाई पास
+Low pass	लो पास
+Tilt EQ	टिल्ट EQ
+Compressor	कंप्रेसर
+Gate	गेट
+Delay	विलंब
+Reverb	रीवर्ब
+Binaural	द्विकर्णी
+Crush	क्रश
+Word	शब्द
+Scrub	स्क्रब
+Short	छोटा
+Shatter	बिखराव
+Pulse	स्पंदन
+Crawl	रेंगता पाठ
+Typewriter	टाइपराइटर
+Oscilloscope	ऑसिलोस्कोप
+Spectrum	स्पेक्ट्रम
+Level Meters	स्तर मीटर
+Waveform	तरंग रूप
+EFFECTS	प्रभाव
+TRIGGERS	ट्रिगर
+SEQUENCE	अनुक्रम
+MOTION CONTROL	गति नियंत्रण
+THIS CUE	यह cue
+FUNCTIONS	कार्य
+VALUES	मान
+KEYS	कुंजियाँ
+FREEZE	स्थिर करें
+FROZEN	स्थिर
+BYPASSED	बायपास
+BYPASS ALL	सभी बायपास
+DEFAULTS	डिफ़ॉल्ट
+CHANGE	बदलें
+CHOOSE	चुनें
+Stop all	सभी रोकें
+Pause all	सभी विराम
+Resume all	सभी जारी रखें
+Do not continue	जारी न रखें
+Auto-continue	अपने आप जारी
+Auto-follow	अंत पर अगला
+END HOLD	अंत रोकें
+END LOOP	अंत लूप
+END NEXT	अंत अगला
+END STOP	अंत बंद
+OUTPUT EFFECTS	आउटपुट प्रभाव
+LIVE CAPTIONS	लाइव कैप्शन
+captions	कैप्शन
+Name Card	नाम कार्ड
+TEST CARD	टेस्ट कार्ड
+TEST CARD ON	टेस्ट कार्ड चालू
+EXPORT CARD	कार्ड निर्यात
+EXPORTING...	निर्यात हो रहा...
+LOW LATENCY	कम विलंब
+WEB MONITOR	वेब मॉनिटर
+PHONE & TABLET	फ़ोन और टैबलेट
+SCAN TO PAIR	जोड़ने हेतु स्कैन
+WITH SOUND	ध्वनि सहित
+THE NETWORK	नेटवर्क
+FIXTURES	लाइटें
+ADD FIXTURE	लाइट जोड़ें
+Dimmer	डिमर
+Dimmer + RGB	डिमर + RGB
+Dimmer + temperature	डिमर + तापमान
+QR CODE	QR कोड
+loop	लूप
+inherit	विरासत
+Fill	भरें
+Stretch	खींचें
+Dissolve	डिज़ॉल्व
+Pattern	पैटर्न
+mixed	मिश्रित
+selected cue lane  |  TAKE to make it live	चुने गए cue की लेन  |  TAKE से लाइव करें
+Dip to black	काले से
+Dip to white	सफ़ेद से
+Iris	आइरिस
+Push left	बाएँ धकेलें
+Push right	दाएँ धकेलें
+Push up	ऊपर धकेलें
+Push down	नीचे धकेलें
+Wipe left	बाएँ वाइप
+Wipe right	दाएँ वाइप
+Wipe up	ऊपर वाइप
+Wipe down	नीचे वाइप
+Still	स्थिर चित्र
+Timecode	टाइमकोड
+address	पता
+auto next	ऑटो अगला
+continue	जारी रखें
+deck fader	deck फेडर
+fire	चलाएँ
+in	इन
+out	आउट
+pan	पैन
+routing	रूटिंग
+trim	ट्रिम
+0-63, the hardware's own gain range.	0-63, हार्डवेयर का अपना गेन।
+1-16, as the desk counts them	1-16, जैसे डेस्क गिनता है
+7-segment, blocky, or a real font	7-सेगमेंट, चौकोर या असली फ़ॉन्ट
+[ / ] keys — fade-in duration	[ / ] कुंजियाँ: फ़ेड-इन अवधि
+a camera moves the ~ controls	कैमरा ~ नियंत्रण चलाता है
+a chain on a device, after the mix	डिवाइस पर चेन, मिक्स के बाद
+a comment	एक टिप्पणी
+Act now, without taking the cue	अभी करें, क्यू लिए बिना
+Add a light	लाइट जोड़ें
+add a second output to pair	जोड़ी के लिए दूसरा आउटपुट जोड़ें
+add shape	आकृति जोड़ें
+all driven by the cue's own transport	सब क्यू के अपने ट्रांसपोर्ट से चलते हैं
+All interfaces; trusted machines only.	सभी इंटरफ़ेस; केवल भरोसेमंद मशीनें।
+all to 0	सब 0 पर
+An audio effect's knob	ऑडियो प्रभाव की नॉब
+An effect's knob	प्रभाव की नॉब
+any channel	कोई भी चैनल
+any window, any screen	कोई भी विंडो, कोई भी स्क्रीन
+arcade	आर्केड
+Arm this cue as the one GO will fire	इस क्यू को अगले GO के लिए तैयार करें
+Art-Net port address, 0-32767	Art-Net पोर्ट पता, 0-32767
+Attached overlays fire on TAKE only	जुड़े ओवरले केवल TAKE पर शुरू होते हैं
+BACK TO BUG SWAT	BUG SWAT पर वापस
+backdrop	पृष्ठभूमि
+bar	पट्टी
+bg alpha	पृष्ठभूमि अल्फ़ा
+black lift	ब्लैक लिफ़्ट
+blend gamma	ब्लेंड गामा
+blueprint	ब्लूप्रिंट
+boxes	बक्से
+bracket	कोष्ठक
+bulletin	बुलेटिन
+by density	घनत्व के अनुसार
+BY FIXTURE	फ़िक्सचर के अनुसार
+capsule	कैप्सूल
+caption	कैप्शन
+card	कार्ड
+CARD OFF ALL	सभी कार्ड बंद
+CARD ON ALL	सभी कार्ड चालू
+cartridge	कार्ट्रिज
+cassette	कैसेट
+Ceiling	सीलिंग
+Chain	चेन
+Changing this re-prepares the cue.	इसे बदलने से क्यू फिर तैयार होता है।
+channel list is not readable	चैनल सूची पढ़ी नहीं जा सकती
+CHANNELS	चैनल
+channels on your interfaces, by name	आपके इंटरफ़ेस के चैनल, नाम से
+Checkerboard	शतरंज पट
+chime amber	एम्बर चेतावनी
+chime red	लाल चेतावनी
+chime zero	शून्य चेतावनी
+Choose startup mode:	शुरुआत का मोड चुनें:
+circle, heart, star...	वृत्त, दिल, तारा...
+circuit	सर्किट
+CLASSIC VIEW	क्लासिक दृश्य
+clear driver	ड्राइवर साफ़ करें
+Clear in/out trim points	इन/आउट बिंदु साफ़ करें
+CLEAR OVERLAY  [Backspace]	ओवरले साफ़ करें  [Backspace]
+Clear the active Lower Third overlay now	लाइव Lower Third अभी हटाएँ
+Clear the live PIP overlay now	PIP ओवरले अभी हटाएँ
+CLICK ANYWHERE...	कहीं भी क्लिक करें...
+click or Esc to close	बंद करने को क्लिक या Esc
+click this window	इस विंडो पर क्लिक करें
+Click to edit cue notes	क्यू नोट संपादित करने को क्लिक करें
+click to open the grid	ग्रिड खोलने को क्लिक करें
+Click to seek — drag to scrub	जाने को क्लिक, स्क्रब को खींचें
+Click to type it	लिखने को क्लिक करें
+comic	कॉमिक
+Companion passphrase	Companion पासफ़्रेज़
+confetti	कंफ़ेटी
+Connections at once	एक साथ कनेक्शन
+count up	ऊपर गिनें
+Countdown, count up, or wall clock	उलटी गिनती, ऊपर गिनती या घड़ी
+credit	क्रेडिट
+crossfade	क्रॉसफ़ेडर
+crosshair	क्रॉसहेयर
+Crosshatch	क्रॉसहैच
+Cue has no audio	क्यू में ऑडियो नहीं
+cue number	क्यू संख्या
+Cycle end action for selected cues	चुने क्यू की अंत क्रिया बदलें
+Cycle which slot drives scene audio	दृश्य का ऑडियो देने वाला स्लॉट बदलें
+dateline	डेटलाइन
+deck	डेक
+decoder spin-up	डिकोडर शुरू
+Default App Feed	डिफ़ॉल्ट ऐप स्रोत
+Default Camera	डिफ़ॉल्ट कैमरा
+Delay before the continue fires	जारी रखने से पहले देरी
+Delay between GO and this cue starting	GO और क्यू शुरू होने के बीच देरी
+depth 1 turns it all the way round	गहराई 1 पूरा चक्कर लगाती है
+Digit colour once amber is reached	एम्बर पर अंक का रंग
+Digit colour while there is time in hand	पर्याप्त समय पर अंक का रंग
+diskette	डिस्केट
+Do it now, without taking the cue	अभी करें, क्यू लिए बिना
+dossier	डोज़ियर
+dotmatrix	डॉट मैट्रिक्स
+Double-GO guard	दोहरे GO से सुरक्षा
+draw on the monitor	मॉनिटर पर बनाएँ
+driver speed	ड्राइवर गति
+EDGE BLEND	एज ब्लेंड
+EDIT is on: typing changes the show	EDIT चालू: लिखने से शो बदलता है
+edit on the monitor	मॉनिटर पर संपादित करें
+Edit the main Lower Third title	Lower Third शीर्षक संपादित करें
+Edit the secondary Lower Third line	Lower Third की दूसरी पंक्ति संपादित करें
+eq band	EQ बैंड
+equalizer	इक्वलाइज़र
+Esc cancels	Esc रद्द करता है
+Esc cancels, arrows nudge	Esc रद्द करता है, तीर खिसकाते हैं
+Esc to close	बंद करने को Esc
+even grid	समान ग्रिड
+EXAMPLE SHOWS	उदाहरण शो
+EXIT  Esc	बाहर  Esc
+face	चेहरा
+factory settings	फ़ैक्टरी सेटिंग
+Fade+LoadNext	फ़ेड+अगला लोड
+Fade+Pause	फ़ेड+विराम
+Fade+Rewind	फ़ेड+पीछे
+Fade-in duration	फ़ेड-इन अवधि
+Fade-in duration for this cue	इस क्यू का फ़ेड-इन
+Fade-out duration	फ़ेड-आउट अवधि
+Fade-out duration before next cue	अगले क्यू से पहले फ़ेड-आउट
+Fade-out duration for this cue	इस क्यू का फ़ेड-आउट
+Fall	गिरावट
+false colour reads SDR pictures	फ़ॉल्स कलर SDR चित्र पढ़ता है
+fill the frame	फ़्रेम भरें
+find a named colour	नाम से रंग खोजें
+fires cues	क्यू चलाता है
+first available	पहला खाली
+Fit/Fill/Stretch/Unscaled	फ़िट/भरें/खींचें/बिना स्केल
+Fixed repeat count — 0 = infinite	तय दोहराव: 0 = अनंत
+Fixed repeat count — 0 = loop forever	तय दोहराव: 0 = बिना अंत
+FIXED!	ठीक हो गया!
+flag	झंडा
+FORGET MY DEFAULTS	मेरे डिफ़ॉल्ट भूल जाएँ
+Frames a second	फ़्रेम प्रति सेकंड
+from exactly this routing	ठीक इसी रूटिंग से
+Full Black	पूरा काला
+Full Blue	पूरा नीला
+Full Green	पूरा हरा
+Full Red	पूरा लाल
+Full White	पूरा सफ़ेद
+garden	बगीचा
+Ghastly	भुतहा
+glass	काँच
+glitch down	ग्लिच नीचे
+glitch drift	ग्लिच बहाव
+glitch reach	ग्लिच पहुँच
+glitch through	ग्लिच आर-पार
+glitch up	ग्लिच ऊपर
+GO steps over it	GO इसे छोड़ देता है
+hairline	पतली रेखा
+Haptics	कंपन
+HDR input	HDR इनपुट
+Hex, e.g. 90 3C 7F	Hex, जैसे 90 3C 7F
+HOLDING OFF AIR	ऑफ़-एयर रुका है
+Home — skip to start	Home: शुरू पर
+Horizontal output offset in pixels	आउटपुट का क्षैतिज ऑफ़सेट, पिक्सेल में
+How many features fit on screen.	स्क्रीन पर कितने आते हैं।
+how much of this effect	इस प्रभाव की मात्रा
+How solid the ink is	स्याही का घनापन
+How tall the logo is above the clock	घड़ी के ऊपर लोगो की ऊँचाई
+In-point: cue starts playback here	इन-पॉइंट: क्यू यहाँ शुरू होता है
+index	सूचकांक
+initializing webview	webview शुरू
+install Tailscale here and on the phone	Tailscale यहाँ और फ़ोन पर स्थापित करें
+INSTALLING...	स्थापित हो रहा है...
+Its amount, or one of its knobs A to D	इसकी मात्रा, या A से D की एक नॉब
+J jump to row	J: पंक्ति पर जाएँ
+jam to	इस पर सिंक
+Jump the driver back to its first frame	ड्राइवर को पहले फ़्रेम पर लाएँ
+K — cycle cue color tag	K: क्यू का रंग बदलें
+Keep counting past zero, or stop dead	शून्य के आगे गिनें या रुकें
+key	कुंजी
+Key edge softness	की किनारे की कोमलता
+knob	नॉब
+L - loop this cue continuously	L: इस क्यू को लूप करें
+last reading	अंतिम रीडिंग
+Last refused	अंतिम अस्वीकृत
+Learn it	सीखें
+LEARN THE BASICS	बुनियादी बातें सीखें
+ledger	बही
+Left — skip back 10s	बायाँ: 10 से. पीछे
+Left, centre or right	बायाँ, बीच या दायाँ
+LESSONS	पाठ
+Levels	स्तर
+Limiter	लिमिटर
+Limiting	सीमित करना
+line  |  Enter: apply	पंक्ति  |  Enter: लागू करें
+LINEAR - a feather, not a blend	लीनियर: एक ग्रेडिएंट, ब्लेंड नहीं
+Linear, ease in, ease out or S-curve	लीनियर, इन, आउट या S-वक्र
+Lines	रेखाएँ
+link aspect	अनुपात जोड़ें
+Listen to	सुनें
+listener	श्रोता
+LIVE - every assigned deck matches	LIVE: सभी सौंपे डेक मेल खाते हैं
+lock to screen	स्क्रीन पर लॉक
+logo	लोगो
+logo size	लोगो आकार
+look at it	इसे देखें
+lower 3rd	Lower Third
+marquee	मारकी
+mask on	मास्क सक्रिय
+Master oscillator rate.	मुख्य ऑसिलेटर की गति।
+Maximum quality	सर्वोच्च गुणवत्ता
+MIDI and OSC monitor	MIDI और OSC मॉनिटर
+midi in	MIDI इनपुट
+MIDI note	MIDI स्वर
+move points	बिंदु खिसकाएँ
+Move the height on its own oscillator	ऊँचाई को उसके ऑसिलेटर से चलाएँ
+name or number...	नाम या संख्या...
+name, from anywhere	नाम, कहीं से भी
+NDI source cue	NDI स्रोत क्यू
+needs file-backed video	फ़ाइल वाला वीडियो चाहिए
+neon	नियॉन
+new paths	नए पथ
+New shows start from	नए शो यहाँ से शुरू होते हैं
+next xfade	अगला फ़ेड
+no effects for this cue type	इस क्यू प्रकार के लिए कोई प्रभाव नहीं
+nobody	कोई नहीं
+none - click to learn	कोई नहीं: सीखने को क्लिक करें
+none - click to set some	कोई नहीं: सेट करने को क्लिक करें
+none - click to write some	कोई नहीं: लिखने को क्लिक करें
+none yet	अभी कोई नहीं
+none: the one picture	कोई नहीं: एकमात्र चित्र
+none: the whole picture	कोई नहीं: पूरा चित्र
+notebook	नोटबुक
+nothing	कुछ नहीं
+nothing assigned yet	कुछ नहीं सौंपा
+nothing follows	कुछ नहीं फ़ॉलो करता
+Nothing here with this filter.	इस फ़िल्टर में कुछ नहीं।
+nothing set - this cue sends nothing	कुछ सेट नहीं: यह क्यू कुछ नहीं भेजता
+nothing targeted yet	कोई लक्ष्य नहीं
+Nothing to see here. Probably.	यहाँ देखने को कुछ नहीं। शायद।
+nothing to send - check the message	भेजने को कुछ नहीं: संदेश जाँचें
+offset X	ऑफ़सेट X
+offset Y	ऑफ़सेट Y
+on any channel	किसी भी चैनल पर
+on the header to add another	और जोड़ने को शीर्षक पर
+on the monitor	मॉनिटर पर
+one big on top, the rest below	एक बड़ा ऊपर, बाकी नीचे
+one big, the rest beside it	एक बड़ा, बाकी बगल में
+onion off	ऑनियन बंद
+onion on	ऑनियन चालू
+only this computer	केवल यह कंप्यूटर
+Open a .deckboy show file	.deckboy फ़ाइल खोलें
+open the monitor	मॉनिटर खोलें
+or your own bytes	या अपने बाइट
+ORDER - cues advance down the list	क्रम: क्यू सूची में नीचे चलते हैं
+Out-point: cue stops playback here	आउट-पॉइंट: क्यू यहाँ खत्म होता है
+output already has	आउटपुट में पहले से है
+Outputs Off	आउटपुट बंद
+outs	आउटपुट
+over budget - video will drop frames	सीमा से ऊपर: वीडियो फ़्रेम गिराएगा
+over the picture	चित्र के ऊपर
+PAIR	जोड़ी
+Pair a phone	फ़ोन जोड़ें
+Pair overlap	जोड़ी ओवरलैप
+Paired phones	जुड़े फ़ोन
+Passphrase	पासफ़्रेज़
+Pattern motion toggle	पैटर्न की गति
+pause begin	शुरू में विराम
+pennant	पताका
+Per-cue transition duration override	इस क्यू की ट्रांज़िशन अवधि
+Perspective	परिप्रेक्ष्य
+PHASE	फ़ेज़
+Phone access	फ़ोन पहुँच
+Phone control	फ़ोन नियंत्रण
+phrase hold	वाक्यांश लंबाई
+PICK FROM SCREEN	स्क्रीन से चुनें
+Pitch, in semitones.	ऊँचाई, सेमीटोन में।
+PIXEL FOR PIXEL, TOP-LEFT	पिक्सेल दर पिक्सेल, ऊपर बाएँ
+placard	तख़्ती
+play a note...	एक स्वर बजाएँ...
+PLAY BUG SWAT, a game	BUG SWAT खेलें
+Play the out move now, then take it off	आउटपुट अभी चलाएँ, फिर हटाएँ
+Playback speed: 0.25–4.0×	चलाने की गति: 0.25–4.0×
+playlists into the named outputs	नाम वाले आउटपुट पर प्लेलिस्ट
+plays synth	सिंथ बजाएँ
+plugin	प्लगइन
+PNG matte	PNG मैट
+podium	मंच
+pop	पॉप
+press a key...	कोई कुंजी दबाएँ...
+PRESS AGAIN TO FORGET	भूलने को फिर दबाएँ
+Previous show file:	पिछली फ़ाइल:
+prog bar	प्रगति पट्टी
+programme	प्रोग्राम
+Programme with sound in any browser	हर ब्राउज़र में ध्वनि सहित प्रोग्राम
+PROJECTOR - gamma matched	प्रोजेक्टर: मिलाया गामा
+Projector gamma	प्रोजेक्टर गामा
+put it on a button	इसे बटन पर रखें
+Put the brush's opacity on an oscillator	ब्रश की अपारदर्शिता ऑसिलेटर पर रखें
+Put the brush's size on an oscillator	ब्रश का आकार ऑसिलेटर पर रखें
+Put this control on an oscillator	यह नियंत्रण ऑसिलेटर पर रखें
+rack it	इसे लोड करें
+RACKED, WARM	लोड हो गया, तैयार
+rail	रेल
+rain	बारिश
+Reads	पढ़ता है
+reads the same on any screen	हर स्क्रीन पर एक जैसा पढ़ता है
+recent and in this show	हाल के और इस शो में
+Recent shows:	हाल के शो:
+red at	लाल पर
+red col	लाल स्तंभ
+render height	रेंडर ऊँचाई
+render width	रेंडर चौड़ाई
+REPORT A PROBLEM	समस्या बताएँ
+reported rather than swapped	बताया, बदला नहीं
+restart driver now	ड्राइवर अभी फिर शुरू करें
+restart on take	take पर फिर शुरू
+restore at end	अंत में पुनर्स्थापित
+ribbon	रिबन
+Right — skip forward 10s	दायाँ: 10 से. आगे
+Right-click turns them off.	दायाँ क्लिक इन्हें बंद करता है।
+Rise	उठान
+rise, slide or wipe	उठें, स्क्रॉल या वाइप
+Rotation speed, degrees per second.	घूमने की गति, डिग्री प्रति सेकंड।
+rounded rect	गोल आयत
+row turns the matrix off again	पंक्ति मैट्रिक्स फिर बंद करती है
+Run it now, without taking the cue	अभी चलाएँ, क्यू लिए बिना
+Run the show from a phone	फ़ोन से शो चलाएँ
+runs off the show thread	शो थ्रेड के बाहर
+sACN universe, 1-63999	sACN यूनिवर्स, 1-63999
+SAVE AS MY DEFAULTS	मेरे डिफ़ॉल्ट के रूप में सहेजें
+says	कहता है
+SCALED TO FILL	भरने को स्केल किया
+Scene dwell time — 0 = hold	दृश्य समय: 0 = रोकें
+Scene fade-in duration	दृश्य फ़ेड-इन
+Scene fade-out duration	दृश्य फ़ेड-आउट
+scoreboard	स्कोरबोर्ड
+SCREENS	स्क्रीन
+scroll	स्क्रॉल
+Scroll up	ऊपर स्क्रॉल
+sea	समुद्र
+SELECT: MOTION	चयन: गति
+sends	भेजें
+Sensitivity	संवेदनशीलता
+Set browser URL/path	ब्राउज़र URL/पथ सेट करें
+set by	इसने सेट किया
+Set capture source from the cue menu	क्यू मेनू से स्रोत सेट करें
+Set cue ID for selected cues	चुने क्यू की ID सेट करें
+Set cue token to jump to when cue ends	अंत में जाने का क्यू सेट करें
+Set goto target for selected cues	चुने क्यू का लक्ष्य सेट करें
+Set Lower Third background alpha	Lower Third पृष्ठभूमि अल्फ़ा
+Set per-cue transition duration	क्यू ट्रांज़िशन अवधि
+Set playback speed for selected cues	चुने क्यू की गति
+Set repeat count for selected cues	चुने क्यू का दोहराव
+Set short cue id for search/goto	खोज/जाने के लिए छोटी ID
+Set short cue label for search/goto	खोज/जाने के लिए छोटा नाम
+Set the NDI source name to receive	लेने वाले NDI स्रोत का नाम
+Shift+[ / ] — fade-out duration	Shift+[ / ]: फ़ेड-आउट अवधि
+SHOW ME	मुझे दिखाएँ
+Show on	यहाँ दिखाएँ
+Shows	दिखाएँ
+sideline	साइडलाइन
+sketch	रेखाचित्र
+slide	स्लाइड
+slide from left	बाएँ से स्लाइड
+slide from right	दाएँ से स्लाइड
+SMOOTH	नरम
+snow	बर्फ़
+SOS. Kidding. The show is fine.	SOS. मज़ाक। शो ठीक है।
+Sound when the clock turns amber	घड़ी एम्बर होने पर ध्वनि
+Sound when the clock turns red	घड़ी लाल होने पर ध्वनि
+Sound when time is up	समय पूरा होने पर ध्वनि
+Space — pause	स्पेस: विराम
+Space — play	स्पेस: चलाएँ
+span	फैलाव
+sparkle	चमक
+Speech models	वाक् मॉडल
+Speed, like tape	गति, टेप की तरह
+stamp	मुहर
+Start NEW from factory	नया फ़ैक्टरी से शुरू
+starting browser	ब्राउज़र शुरू
+starting capture	कैप्चर शुरू
+starting xvfb	xvfb शुरू
+sticky	चिपकने वाला नोट
+stop at 0	0 पर रुकें
+Stop puppeteering this cue	इस क्यू को चलाना बंद करें
+STRAIGHT	सीधा
+survey	उभार
+SVG paths	SVG पथ
+tab	टैब
+tag	लेबल
+TAP	टैप
+terminal	टर्मिनल
+text mode	टेक्स्ट मोड
+the file cannot be read	फ़ाइल पढ़ी नहीं जा सकती
+The name	नाम
+The OSC path, e.g. /cue/1/start	OSC पथ, जैसे /cue/1/start
+the playlist's PATCH	प्लेलिस्ट का PATCH
+The role, or leave it empty	भूमिका, या खाली छोड़ें
+the system output	सिस्टम आउटपुट
+The text this cue puts on screen	यह क्यू जो पाठ दिखाता है
+theatre	थिएटर
+then stop	फिर रुकें
+they have	उनमें है
+things that are oscillating	जो दोलन कर रहे हैं
+this cue lives on	यह क्यू यहाँ है
+This show's setup, no cues	इस शो की सेटिंग, बिना क्यू
+ticket	टिकट
+tile h	टाइल ऊँ
+Tile height in pixels.	टाइल की ऊँचाई पिक्सेल में।
+tile w	टाइल चौ
+time of day	दिन का समय
+Toggle audio enable for selected cues	चुने क्यू का ऑडियो
+Toggle chroma key	क्रोमा की टॉगल करें
+Toggle cue audio	क्यू ऑडियो
+Toggle cue audio track for this cue	इस क्यू का ऑडियो ट्रैक
+Toggle fade in	फ़ेड-इन
+Toggle fade out	फ़ेड-आउट
+Toggle hold on last frame	अंतिम फ़्रेम रोकें
+Toggle hold-at-end for selected cues	चुने क्यू में अंत पर रोकें
+Toggle loop	लूप
+Toggle loop for selected cues	चुने क्यू का लूप
+Toggle the live input's audio	लाइव इनपुट ऑडियो
+Total time	कुल समय
+transcoding - plays clean until ready	ट्रांसकोड: अंत तक साफ़ चलता है
+transparent: put its playlist on a layer	पारदर्शी: प्लेलिस्ट को परत पर रखें
+Trusted controllers	भरोसेमंद कंट्रोलर
+TURN OFF	बंद करें
+turn phone control on	फ़ोन नियंत्रण चालू करें
+two big on top, the rest below	दो बड़े ऊपर, बाकी नीचे
+type a cue number	क्यू संख्या लिखें
+Typing needs EDIT on	लिखने को EDIT चालू चाहिए
+Use GEOMETRY for exact placement	सटीक जगह के लिए GEOMETRY उपयोग करें
+value to type one	लिखने का मान
+Vertical output offset in pixels	आउटपुट का लंबवत ऑफ़सेट, पिक्सेल में
+VIDEO DIP: OFF	VIDEO DIP: नहीं
+VIDEO DIP: ON	VIDEO DIP: हाँ
+walk the outputs one at a time.	आउटपुट एक-एक कर देखें।
+walks every output in turn	हर आउटपुट से गुज़रता है
+WHAT DECKBOY DID	DECKBOY ने क्या किया
+what is on air in a playlist	प्लेलिस्ट में क्या लाइव है
+What NEW starts from, never this show	नया कहाँ से शुरू होता है, यह शो कभी नहीं
+whatever the style says	जो शैली कहे
+Where the ramp ends	रैंप कहाँ खत्म होता है
+Which deck the cue it acts on lives on	लक्ष्य क्यू किस डेक पर है
+Which frame you draw on	आप किस फ़्रेम पर बना रहे हैं
+Who can see it	इसे कौन देख सकता है
+whole network	पूरा नेटवर्क
+will not open	नहीं खुलता
+window and recording outputs only	केवल विंडो और रिकॉर्डिंग आउटपुट
+wipe	वाइप
+Wobble	डोलना
+wobble by	इतना डोलाएँ
+words	शब्द
+X — cycle end action	X: अंत क्रिया बदलें
+X — cycle end action: stop / next / loop	X: अंत क्रिया: रुकें / अगला / लूप
+Zones	ज़ोन
+~ makes the level breathe	~ स्तर को साँस दिलाता है
+a note or an address becomes that cue's trigger	स्वर या पता उस क्यू का ट्रिगर बनता है
+acts on every deck; deck and cue are ignored	सभी डेक पर काम करता है; डेक और क्यू अनदेखे
+Add an output above, then send playlists to it here.	ऊपर आउटपुट जोड़ें, फिर प्लेलिस्ट यहाँ भेजें।
+Ancient cypher, modern video desk. Respect.	प्राचीन लिपि, आधुनिक डेस्क। सम्मान।
+Any font on this computer, Deckboy's own, or a font file	कंप्यूटर का फ़ॉन्ट, Deckboy का या एक फ़ाइल
+Apply fade-in to selected video/audio cues	चुने वीडियो/ऑडियो क्यू पर फ़ेड-इन
+Apply fade-out to selected video/audio cues	चुने वीडियो/ऑडियो क्यू पर फ़ेड-आउट
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net या sACN (E1.31): जो लाइटिंग सुनती है
+Auto-advance duration — 0 = hold until taken	स्वतः आगे: 0 = take तक रोकें
+Bypass: this master leaves that deck alone	बायपास: यह मास्टर उस डेक को छोड़ देता है
+Characters across. Fewer means bigger cells.	प्रति पंक्ति अक्षर। कम से बड़े सेल।
+Choose a mask from this show's library, or start a new one from a shape	लाइब्रेरी से मास्क चुनें या आकृति से बनाएँ
+Click a value to change it. A red address overlaps another fixture.	बदलने को मान पर क्लिक करें। लाल पता दूसरे फ़िक्सचर से टकराता है।
+Click to show or hide this cue's captions	क्यू के कैप्शन दिखाने या छिपाने को क्लिक करें
+Copy the show AND its media into one portable folder	शो और मीडिया को एक पोर्टेबल फ़ोल्डर में कॉपी करें
+Ctrl+S - write back over the show that is open	Ctrl+S: खुले शो में सहेजें
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: नई फ़ाइल में सहेजें
+Device output pair this cue's audio plays on	इस क्यू के ऑडियो का आउटपुट जोड़ा
+E - freeze on last frame instead of stopping	E: रुकने के बजाय अंतिम फ़्रेम पर थमें
+Edit title/subtitle here or fire it live with TAKE	शीर्षक/उपशीर्षक यहाँ संपादित करें या TAKE से चलाएँ
+Every channel on every universe this session has touched	इस सत्र में छुए हर यूनिवर्स का हर चैनल
+generator is off - a START cue turns it on	जनरेटर बंद: START क्यू इसे चालू करता है
+How long the note takes to reach full level.	स्वर के पूरे स्तर तक पहुँचने का समय।
+How much it throws off; 0 is a clean burn	कितना छिटकता है; 0 साफ़ जलता है
+INPUT: the programme. Drag a crop to move it, its corners to size it.	इनपुट: प्रोग्राम। हिलाने को क्रॉप, आकार को कोने खींचें।
+Keep the outside and cut the inside instead	बाहर रखें और अंदर काटें
+LED panel height in pixels. Click to type it	LED पैनल की ऊँचाई पिक्सेल में। लिखने को क्लिक करें
+Legacy target mode — switch type to convert	पुराना लक्ष्य मोड: बदलने को प्रकार बदलें
+Lissajous, spectrum, meters or a name card	Lissajous, स्पेक्ट्रम, मीटर या नाम कार्ड
+Load the cue and hold first frame when taken	क्यू लोड करें और take तक पहला फ़्रेम रोकें
+no fixtures patched - Settings > Network > FIXTURES	कोई फ़िक्सचर पैच नहीं: सेटिंग > नेटवर्क > FIXTURES
+Nothing here changes the show that is open.	यहाँ कुछ भी खुले शो को नहीं बदलता।
+Per-cue audio: enable, trim, pan, mono, fades, normalize	क्यू ऑडियो: चालू/बंद, ट्रिम, पैन, मोनो, फ़ेड, सामान्यीकरण
+Phone control is in PHONE & TABLET, below	फ़ोन नियंत्रण नीचे PHONE & TABLET में है
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	मास्क को आउटपुट आकार के ग्रे PNG में सहेजें: सफ़ेद रखता है, काला काटता है
+Seconds REMAINING when the clock turns amber	घड़ी एम्बर होने पर बचे सेकंड
+Seconds REMAINING when the clock turns red	घड़ी लाल होने पर बचे सेकंड
+Shown to the operator when GO reaches this cue	GO इस क्यू पर पहुँचे तो ऑपरेटर को दिखता है
+SHUFFLE - the next cue is picked at random	यादृच्छिक: अगला क्यू पर्ची से
+Slots are self-contained sources in this first pass	इस संस्करण में स्लॉट स्वतंत्र स्रोत हैं
+that output's whole picture, or its matte	उस आउटपुट का पूरा चित्र, या उसका मैट
+The cue number on the other desk, e.g. 12.5	दूसरे डेस्क पर क्यू संख्या, जैसे 12.5
+Toggle pause-at-beginning for selected cues	चुने क्यू में शुरू पर विराम
+Toggle transition-to-next for selected cues	चुने क्यू में अगले पर ट्रांज़िशन
+transparent outside the blobs: put it on a layer	धब्बों के बाहर पारदर्शी: परत पर रखें
+transparent outside the ink: put it on a layer	स्याही के बाहर पारदर्शी: परत पर रखें
+what is said, on screen, made on this computer	जो कहा जाता है, स्क्रीन पर, इस कंप्यूटर पर बना
+What this cue does when it ends - click to change	यह क्यू अंत में क्या करता है: बदलने को क्लिक करें
+Whether the next shape or pen path adds or cuts	अगली आकृति या पथ जोड़ता है या काटता है
+shape	आकृति
+palette	रंगपट्टिका
+scale	पैमाना
+feedback	फ़ीडबैक
+RED	लाल
+do it	चलाएँ
+(empty)	(खाली)
+(unset)	(तय नहीं)
+English	अंग्रेज़ी
+amber at	पीला होने पर
++ section	+ भाग
++pause pt	+ विराम बिंदु
+a-fade in	ध्वनि फ़ेड इन
+amber col	पीला रंग
+(no notes)	(नोट नहीं)
+a-fade out	ध्वनि फ़ेड आउट
+gain (each)	गेन (हर एक)
+% of the height	ऊँचाई का %
++  a first step	+  पहला चरण
++ ADD AN EFFECT	+ प्रभाव जोड़ें
+(none playing now)	(अभी कुछ नहीं चल रहा)
+Keep a transcript (.srt)	प्रतिलेख रखें (.srt)
+Key tolerance (RGB distance)	Key सहनशीलता (RGB दूरी)
+Contrast multiplier (0.0-2.0x)	कॉन्ट्रास्ट गुणक (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	चमक गुणक (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	संतृप्ति गुणक (0.0–2.0x)
+Output rotation angle (-180..180)	आउटपुट घुमाव कोण (-180..180)
+Hue rotation (-180 to +180 degrees)	रंगत का घुमाव (-180 से +180 डिग्री)
+Lower Third background opacity (0-255)	लोअर थर्ड की पृष्ठभूमि की अपारदर्शिता (0–255)
+0-127; 127 addresses every device on the line	0–127; 127 लाइन के सभी उपकरणों को संबोधित करता है
+GO shows the note; picture and sound carry on	GO नोट दिखाता है; चित्र और ध्वनि जारी रहते हैं
+How fast it moves; no effect when it is still	चलने की गति; स्थिर होने पर कोई प्रभाव नहीं
+Fires when incoming timecode passes this point	आने वाला टाइमकोड इस बिंदु से आगे जाते ही सक्रिय होता है
+Source pixels, independent of output placement	स्रोत पिक्सेल, आउटपुट की स्थिति से स्वतंत्र
+Stereo balance, applied live (snaps to center)	स्टीरियो संतुलन तुरंत लागू (बीच में स्नैप होता है)
+bypassed: nothing here is processed or limited	बायपास: कोई प्रसंस्करण या लिमिटिंग नहीं
+Per-cue audio trim: -40 to +40 dB, applied live	Cue गेन: -40 से +40 dB, तुरंत लागू
+Show the message in red - the wrap up NOW state	संदेश लाल दिखाएँ: अभी समाप्त करने की स्थिति
+The brush's width, as % of the picture's height	ब्रश की चौड़ाई, चित्र की ऊँचाई के प्रतिशत में
+What the stream carries: SDR, PQ (HDR10) or HLG	स्ट्रीम का स्वरूप: SDR, PQ (HDR10) या HLG
+Digit colour once red is reached, and in overtime	लाल सीमा और अतिरिक्त समय में अंकों का रंग
+Downmix this cue to mono (mono sources / mono PA)	Cue को मोनो में मिलाएँ (मोनो स्रोत / मोनो PA)
+Drag to scrub (shift = fine), click to type exact	खोजने के लिए खींचें (Shift: सूक्ष्म), सटीक मान के लिए क्लिक करें
+Hand this to an oscillator so it moves on its own	अपने आप चलने के लिए ऑसिलेटर को सौंपें
+Changing width also scales height (and vice versa)	चौड़ाई बदलने से ऊँचाई भी बदलती है, और उल्टा भी
+How long the levels take to arrive; zero is a snap	स्तरों तक पहुँचने का समय; शून्य पर तुरंत बदलाव
+Set the self-contained PIP source for this overlay	इस ओवरले का स्वतंत्र PIP स्रोत तय करें
+Take the newest shape or pen path out of this mask	मास्क से सबसे नई आकृति या पेन पथ हटाएँ
+An address sent to Deckboy's OSC port fires this cue	Deckboy के OSC पोर्ट पर यह पता आने से cue सक्रिय होता है
+Hold on the last composite frame when the scene ends	दृश्य समाप्त होने पर अंतिम संयुक्त फ्रेम रोकें
+How long it takes; zero is a snap rather than a fade	अवधि; शून्य पर फ़ेड की जगह तुरंत बदलाव
+Set still/pattern/browser duration for selected cues	चुने cue की स्थिर चित्र/पैटर्न/ब्राउज़र अवधि तय करें
+Start the LTC carrier, stop it, or jam it to a value	LTC कैरियर शुरू करें, रोकें या किसी मान से सिंक करें
+Which cue on that deck; step off the end to clear it	उस डेक का cue; अंत से आगे जाकर चयन साफ करें
+Bob up and down. Depth 1 is half the frame either way	ऊपर-नीचे गति। गहराई 1: हर दिशा में आधा फ्रेम
+Output width in pixels | click value to type exact px	आउटपुट की चौड़ाई पिक्सेल में; सटीक मान के लिए क्लिक करें
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	स्ट्रीम URL तय करें (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	हर दिन कंप्यूटर की घड़ी के इस समय सक्रिय होता है
+Output height in pixels | click value to type exact px	आउटपुट की ऊँचाई पिक्सेल में; सटीक मान के लिए क्लिक करें
+Bar across the foot - readable further back than digits	नीचे की पट्टी: अंकों से अधिक दूरी पर पढ़ी जा सकती है
+OUTPUT: drag a slice to move it, its corners to size it.	आउटपुट: स्लाइस खींचकर खिसकाएँ, कोने खींचकर आकार बदलें
+Choose a Lower Third from the overlay bin to fire on TAKE	TAKE पर चलने वाला लोअर थर्ड ओवरले संग्रह से चुनें
+Choose a PIP overlay from the overlay bin to fire on TAKE	TAKE पर चलने वाला PIP ओवरले संग्रह से चुनें
+OUTPUT: drag a slice to move it, its corners to pin them.	आउटपुट: स्लाइस खींचकर खिसकाएँ, कोने खींचकर टिकाएँ
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 या नंबर पैड कहीं से भी यह cue चलाते हैं
+Use transition when auto-advancing or goto-taking next cue	अपने आप आगे बढ़ने या अगले cue पर GOTO में ट्रांज़िशन लगाएँ
+Nothing has arrived yet. Press something on the controller.	अभी कुछ नहीं आया। कंट्रोलर का कोई बटन या नियंत्रण चलाएँ।
+Audio fade-in: follow visual fade, none, or explicit seconds	ध्वनि फ़ेड इन: चित्र का अनुसरण, बंद या तय सेकंड
+Audio fade-out: follow visual fade, none, or explicit seconds	ध्वनि फ़ेड आउट: चित्र का अनुसरण, बंद या तय सेकंड
+Add a library shape to this mask; its points are yours to move	मास्क में लाइब्रेरी की आकृति जोड़ें; उसके बिंदु खिसका सकते हैं
+No slices: this output shows its one picture. + SLICE to start.	स्लाइस नहीं: आउटपुट अपना चित्र दिखाता है। + SLICE से शुरू करें।
+Open and close this edge on an oscillator -- a wipe that breathes	ऑसिलेटर से यह किनारा खोलें-बंद करें: लयबद्ध वाइप
+(none)	(कोई नहीं)
+(nothing yet)	(अभी कुछ नहीं)
++ ADD AN OUTPUT	+ आउटपुट जोड़ें
+>LIVE	>लाइव
+(no media source)	(मीडिया स्रोत नहीं)
+snap	तुरंत
+this deck	यह डेक
+protocol	प्रोटोकॉल
+does	कार्य
+signal	संकेत
+sine	साइन
+freq	आवृत्ति
+visuals	दृश्य
+black	काला
+green	हरा
+blue	नीला
+Pause at start	शुरू में विराम
+Pause at end	अंत में विराम
+Transition to next	अगले में बदलाव
+Hardware display	डिस्प्ले
+Raster mode	रास्टर मोड
+Refresh rate	रिफ़्रेश दर
+Bit depth	बिट गहराई
+SDR material at	SDR स्तर
+HDR signal	HDR संकेत
+Fullscreen	पूर्ण स्क्रीन
+Matte aspect	मैट अनुपात
+Bar opacity	पट्टी अपारदर्शिता
+Output mask	आउटपुट मास्क
+Overlay still	स्थिर ओवरले
+Overlay opacity	ओवरले अपारदर्शिता
+Overlay image	ओवरले चित्र
+Place it	स्थिति रखें
+Corner pin	कोने टिकाएँ
+Slices	स्लाइस
+choose...	चुनें...
+not configured	सेट नहीं
+(default system device)	(सिस्टम का डिफ़ॉल्ट उपकरण)
+(no monitor)	(मॉनिटर नहीं)
+System audio (SDL)	सिस्टम ऑडियो (SDL)
+Not watching a folder	कोई फ़ोल्डर निगरानी में नहीं
+anyone	कोई भी
+When taken off air	प्रसारण से हटने पर
+browser cue added	ब्राउज़र cue जोड़ा
+source cue added	स्रोत cue जोड़ा
+text added	टेक्स्ट जोड़ा
+tone cue added	टोन cue जोड़ा
+gain	गेन
+follow	अनुसरण
+moves	गति
+overtime	अतिरिक्त समय
+chime	झंकार
+bell	घंटी
+load a sprite sheet from a file...	फ़ाइल से sprite शीट लोड करें...
+Run the clock	घड़ी चलाएँ
+What fires this cue besides GO	GO के अलावा इस cue को क्या चलाता है
+center	बीच
+visual	दृश्य
+Cue	क्यू
+JAM	सिंक
+MIX	मिक्स
+CLIP	क्लिप
+TEXT	टेक्स्ट
+KEY L	KEY बा
+MULTI	मल्टी
+WACKY	पागलपन
+COLOUR	रंग
+DARKEN	गहरा
+STEREO	स्टीरियो
+COMPARE	तुलना
+LIGHTEN	हल्का
+DASHBOARD	डैशबोर्ड
+Pocket Test (day)	Pocket परीक्षण (दिन)
+Dark Detail (0-12%)	छाया विवरण (0-12%)
+Frame Count (emoji)	फ़्रेम गणक (इमोजी)
+PLUGE (black level)	PLUGE (काले का स्तर)
+Pocket Test (night)	Pocket परीक्षण (रात)
+Pocket Test (storm)	Pocket परीक्षण (तूफ़ान)
+Marks stacked BELOW.	चिह्न नीचे की ओर ढेर।
+Panel Map (animated)	पैनल नक्शा (एनिमेटेड)
+Pocket Test (sunset)	Pocket परीक्षण (सूर्यास्त)
+Boresight (alignment)	निशाना (संरेखण)
+SMPTE 75% Colour Bars	SMPTE 75% रंग पट्टियाँ
+(projector curve only)	(केवल प्रोजेक्टर वक्र)
+Multiburst (bandwidth)	मल्टीबर्स्ट (बैंडविड्थ)
+Convergence (fine grid)	अभिसरण (बारीक ग्रिड)
+Greyscale Steps (gamma)	ग्रे के चरण (गामा)
+Uniformity (flat fields)	एकरूपता (समतल क्षेत्र)
+MULTIVIEW carries this too.	MULTIVIEW भी इसे ले जाता है।
+Test Clock (sync + latency)	परीक्षण घड़ी (सिंक + विलंब)
+auto (reads the common two)	स्वतः (दो आम वाले पढ़ता है)
+Panel Map (LED tile numbers)	पैनल नक्शा (LED पैनल संख्याएँ)
+Portal (blobs of deep space)	पोर्टल (गहरे अंतरिक्ष के बुलबुले)
+Terrarium (living ecosystem)	Terrarium (जीवित पारिस्थितिकी)
+Window 10% (peak brightness)	विंडो 10% (शिखर चमक)
+Window 50% (peak at mid APL)	विंडो 50% (मध्य APL पर शिखर)
+Frame Count (drops + latency)	फ़्रेम गणक (छूटे + विलंब)
+Terrarium Pico (1px per cell)	Terrarium Pico (प्रति खाना 1 px)
+Banding Ramps (real bit depth)	बैंडिंग रैंप (असली बिट गहराई)
+Fireside (a hearth that burns)	अलाव (जलता हुआ चूल्हा)
+HLG - live broadcast (BT.2100)	HLG - लाइव प्रसारण (BT.2100)
+Test Bars (motion diagnostics)	परीक्षण पट्टियाँ (गति निदान)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (क्या कुछ स्केल कर रहा है?)
+Send now, without taking the cue	अभी भेजें, क्यू लिए बिना
+Pocket Test (test card + scene cycle)	Pocket परीक्षण (टेस्ट कार्ड + दृश्य चक्र)
+Critters (pixel-exact scaling, animated)	Critters (पिक्सेल-सटीक स्केलिंग, एनिमेटेड)
+headphones, desk sounds and LTC stay out of it	हेडफ़ोन, डेस्क की आवाज़ें और LTC इससे बाहर रहते हैं
+Above 1 tunnels inward, below 1 blooms outward.	1 से ऊपर सुरंग भीतर खिंचती है, 1 से नीचे बाहर खिलती है।
+Read everything right to left. Yes, everything.	सब कुछ दाएँ से बाएँ पढ़ें। हाँ, सब कुछ।
+Amber is closest to the 1976 single-phosphor look.	अंबर 1976 के एकल-फ़ॉस्फ़र रूप के सबसे क़रीब है।
+Greetings, primitive. Your "slideshow" amuses us.	नमस्कार, आदिम प्राणी। तुम्हारा "स्लाइड शो" हमें मज़ेदार लगता है।
+Sway sideways. Depth 1 is half the frame either way	बगल में झूलना। गहराई 1 हर ओर आधा फ़्रेम है
+Draw the diagnostic over the card, or just the text.	कार्ड पर निदान बनाएँ, या केवल टेक्स्ट।
+All interfaces, but only this computer is trusted yet.	सभी इंटरफ़ेस, पर अभी केवल यह कंप्यूटर भरोसेमंद है।
+Choose the legacy cue token to show inside the PIP window	PIP विंडो में दिखाने के लिए पुराना क्यू टोकन चुनें
+ASIO carries the show's sound, and these are not on it yet	ASIO शो की आवाज़ ले जाता है, और ये अभी उस पर नहीं हैं
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=नया  Enter/P=पिछला  O=सहेजा खोलें  E=उदाहरण  L=सीखें
+Hand this parameter to an oscillator so it moves on its own	यह पैरामीटर किसी ऑसिलेटर को सौंपें ताकि यह अपने आप चले
+How long the finished drawing stays before it is drawn again	पूरा चित्र दोबारा बनने से पहले कितनी देर रहता है
+How it comes on and goes off: none, fade, rise, slide or wipe	यह कैसे आता और जाता है: कुछ नहीं, फ़ेड, ऊपर उठना, खिसकना या वाइप
+The 64-step wavetable, quantised to 6 bits like the hardware.	64-चरण वेवटेबल, हार्डवेयर की तरह 6 बिट में क्वांटाइज़।
+Vary tile size per cell, so the grid stops looking like a grid.	हर खाने में टाइल का आकार बदलें, ताकि ग्रिड ग्रिड जैसा न दिखे।
+Which output channel carries the signal. 'all' feeds every one.	कौन-सा आउटपुट चैनल सिग्नल ले जाता है। 'all' सबको भरता है।
+What is sent. Backslash-n, -r, -t and -0 become those characters	क्या भेजा जाता है। बैकस्लैश-n, -r, -t और -0 वे अक्षर बन जाते हैं
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Deckboy की अपनी रिमोट-प्रोटोकॉल क्रियाएँ, हर पंक्ति में एक; # टिप्पणी है
+Modulator speed as a ratio of the note, so the bend tracks pitch.	मॉड्यूलेटर की गति नोट के अनुपात में, ताकि मोड़ पिच के पीछे चले।
+Play this cue to the preview only; the outputs keep what they have	यह क्यू केवल प्रीव्यू में चलाएँ; आउटपुट जो है वही रखते हैं
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	पिच को ऑसिलेटर पर रखें: Motion X इसे थेरेमिन की तरह घुमाता है
+A disarmed cue stays in the list and does nothing; GO steps over it	निष्क्रिय क्यू सूची में रहता है और कुछ नहीं करता; GO उसे लाँघ जाता है
+Where the clock reads from this cue on; click the value to type one	इस क्यू से घड़ी कहाँ से पढ़ती है; टाइप करने के लिए मान पर क्लिक करें
+Add a dashboard button that fires this master by name, from anywhere	डैशबोर्ड पर बटन जोड़ें जो इस मास्टर को नाम से कहीं से भी चलाए
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	यहाँ नए हैं? बुनियादी बातें सीखें में पाँच मिनट लगते हैं। हम घुमा देंगे।
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	IPv4 पता, या पूरे नेटवर्क पर भेजने के लिए 255.255.255.255
+How much playing audio widens and brightens the pattern. 0 free-runs.	बजती आवाज़ पैटर्न को कितना चौड़ा और उजला करती है। 0 मुक्त चलता है।
+LED panel width in pixels - what one tile really is. Click to type it	LED पैनल की चौड़ाई पिक्सेल में: एक टाइल वास्तव में कितनी है। टाइप करने के लिए क्लिक करें
+Which deck it acts on; step off the end for the one this cue lives on	यह किस डेक पर काम करता है; इस क्यू के डेक के लिए अंत से आगे जाएँ
+only one playlist - use the routing chip on the header to add another	केवल एक प्लेलिस्ट: हेडर पर रूटिंग चिप दूसरी जोड़ती है
+Which cue this master fires on that deck; step off the end to clear it	यह मास्टर उस डेक पर कौन-सा क्यू चलाता है; साफ़ करने के लिए अंत से आगे जाएँ
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	प्रोग्राम मॉनिटर पर माउस या पेन से बनाएँ (DRAW)। Esc रोकता है
+How long the move takes, each way. 0 is instant whatever the style says	हर दिशा में चाल कितनी देर लेती है। 0 तुरंत है, शैली जो भी कहे
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	रैंप पहुँचने पर उस डेक को रोकें: सामान्य घटाओ-और-रोको
+Which of the file's sound tracks plays: a second language, a commentary	फ़ाइल का कौन-सा ध्वनि ट्रैक बजे: दूसरी भाषा, कमेंट्री
+An oscillator on the colour: depth is how far round the wheel it travels	रंग पर ऑसिलेटर: गहराई बताती है कि वह चक्र पर कितना घूमता है
+Rack this cue paused and off air so GO starts it with no decoder spin-up	इस क्यू को रुका हुआ और ऑफ़-एयर तैयार करें, ताकि GO इसे डिकोडर की देरी के बिना शुरू करे
+Note, control change, program change, MIDI Show Control, or your own bytes	नोट, control change, program change, MIDI Show Control या आपके अपने बाइट
+Black behind the words. Zero leaves it over whatever the output already has	शब्दों के पीछे काला। शून्य उन्हें आउटपुट पर पहले से मौजूद चीज़ पर छोड़ता है
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	मॉड्यूलेटर पिच को कितना मोड़ता है। 0-63, हार्डवेयर की अपनी गेन सीमा।
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	इस क्यू द्वारा स्क्रीन पर रखे शब्द  |  Shift+Enter: नई पंक्ति  |  Enter: लागू करें
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC और UDP भेजकर भूल जाते हैं; TCP जुड़ता है, इसलिए शो थ्रेड से बाहर चलता है
+Put the level on an oscillator: Motion makes it a gate that opens as you move	स्तर को ऑसिलेटर पर रखें: Motion इसे ऐसा गेट बनाता है जो आपके हिलने पर खुलता है
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	अक्षरों के ऊपर ढेर चिह्न, जैसे संयुक्त मात्राएँ जो पंक्ति से बाहर निकलती हैं।
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	कौन-सी घंटी। बदलने पर यह बजती है, ताकि नाम के बजाय कान से चुनें।
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	कोई पंक्ति नहीं। + जोड़ें या सीखें एक बनाता है; MIDIMAP RESET बनी-बनाई पंक्तियाँ लौटाता है।
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	मास्क के पथ SVG के रूप में सहेजें, Illustrator और उन्हें पढ़ने वाली हर चीज़ के लिए
+Which MIDI output; a named port that is missing is reported rather than swapped	कौन-सा MIDI आउटपुट; ग़ायब नामित पोर्ट बताया जाता है, बदला नहीं जाता
+An oscillator on the level, running after GO until a later cue sets this fixture	स्तर पर ऑसिलेटर, GO के बाद चलता है जब तक बाद का क्यू इस फ़िक्स्चर को सेट न करे
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	तिहाई-सप्तक के चरण, क्योंकि कान अनुपात में काम करता है। 1 kHz परंपरा है।
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	खाने के आर-पार लकीरें, जो अक्षर को सजाने के बजाय बिगाड़ती हैं।
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	क्या आने वाले MIDI नोट यह सिंथ बजाएँ या हमेशा की तरह क्यू चलाएँ।
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	नोट संख्या, या LEARN लिखें और बजाएँ। जिन नोटों को कोई क्यू नहीं लेता वे अब भी क्यू N+1 पर जाते हैं
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	एक साधारण स्टीरियो जोड़ी। इसी रूटिंग से शुरू करके मैट्रिक्स खोलने के लिए क्लिक करें
+Folding is what turns an arbitrary pattern into something that reads as designed.	मोड़ना किसी भी पैटर्न को ऐसा बनाता है जो डिज़ाइन किया हुआ लगे।
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	चैनल=स्तर, अल्पविराम से अलग। रेंज भी: 1=255, 10-14=64। चैनल 1 से गिने जाते हैं
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	हर चुने क्यू का ट्रिम उतने ही dB खिसकाता है; मान टाइप करने से सब उस पर सेट होते हैं
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	कैरियर की पिच को मोड़ता है, उससे मिलने के बजाय। इसी से FDS गुर्राता है।
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	बुनियादी बातें सीखें का आधा हुआ। L दबाएँ और जहाँ रुके थे वहीं से चलें, skapi।
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	पिक्सेल के बजाय 16-रंग अनुक्रमित पैलेट वाले अक्षर ग्रिड के रूप में दिखाएँ।
+Which MIDI output this file plays to; step past the end for the first one available	यह फ़ाइल किस MIDI आउटपुट पर बजती है; पहले उपलब्ध के लिए अंत से आगे जाएँ
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	IPv4 पता, या यूनिवर्स के मल्टीकास्ट समूह के लिए 255.255.255.255 (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	खाने पर क्लिक कर बदलें: बंद, पूरा, -3, -6, -12। यह पंक्ति मैट्रिक्स को फिर बंद करती है
+How long each phrase stays before it moves. Zero hides them without losing the list.	हर वाक्यांश हिलने से पहले कितनी देर रहता है। शून्य उन्हें सूची खोए बिना छिपाता है।
+How long it takes to fall away after the attack. Only audible when retrigger is set.	अटैक के बाद ढलने में कितना समय लगता है। केवल रीट्रिगर चालू होने पर सुनाई देता है।
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	बंद, शुरू से (अगला क्यू इसके शुरू होते ही चलता है) या अंत से (जब यह ख़त्म हो)
+Height of one line as a percent of the raster, so a card reads the same on any screen	एक पंक्ति की ऊँचाई रास्टर के प्रतिशत में, ताकि कार्ड हर स्क्रीन पर एक-सा पढ़ा जाए
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	स्लॉट का स्रोत media:/पथ, browser:url, window:नाम, camera:नाम या syphon:नाम सेट करें
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	छोटा LFSR मोड। अवधि इतनी छोटी है कि सरसराहट के बजाय सुर में धातु जैसी लगती है।
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	सफ़ेद, गर्म, लाल, अंबर, हरा, सियान, नीला, मैजेंटा। ~ इसे रंग चक्र पर घुमाता है
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	एनवेलप को इतनी बार फिर से चलाएँ। Hold एक नोट थामे रखता है, जो ड्रोन चाहता है।
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond Atari Video Music की तीखी जाली है; छल्ले फ़ीडबैक ज़ूम के साथ अच्छी सुरंग बनाते हैं।
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	झुलाना या घुमाना। गहराई 1 हर ओर आधा चक्कर है; गहराई 1 पर आरा पूरा चक्कर घुमाता है
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	डेक प्लेबैक स्तर (लाइव, क्यू के साथ सहेजा नहीं जाता) - प्रति-क्यू ट्रिम AUDIO खंड में गेन है
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	स्थिर, फ़ेड इन, टाइपराइटर, ऊपर स्क्रॉल, क्रॉल या पल्स, सब क्यू के अपने ट्रांसपोर्ट से
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	हर रेंडर फ़्रेम में फ़ील्ड। 1 एक-के-एक, 0.5 हर फ़ील्ड को दो फ़्रेम रखता है, 0 जमा देता है।
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	बजते समय यह क्यू क्या दिखाता है: वेवफ़ॉर्म, स्कोप, लिसाजू, स्पेक्ट्रम, मीटर या नाम कार्ड
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 चमक के अनुसार टाइल चुनता है ताकि चित्र पढ़ा जा सके। 1 बेतरतीब चुनता है, तो ग्रिड बनावट बन जाती है।
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	यह कितनी दूर जाता है, सेमीटोन में। ऊपर आगमन जैसा, नीचे प्रस्थान जैसा, शून्य एक ठोका गया नोट है।
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	IPv4 पता। नाम हल नहीं होते: DNS लुकअप रोकने वाला कॉल है और GO को इसे नहीं करना चाहिए
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	टाइल की चौड़ाई पिक्सेल में। शीट की ग्रिड से मेल खानी चाहिए, वरना टुकड़े पड़ोसी स्प्राइट्स पर पड़ेंगे।
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	खाने की स्थिति से बारी-बारी दर्पण, जो पैटर्न जैसे पढ़ते हैं जहाँ बेतरतीब पलटना शोर जैसा पढ़ता है।
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 उन्हें उनके खाने से जोड़ देता है, उकेरे हुए जैसे। उससे ऊपर वे फिर से चुने जाते हैं, जैसे उबल रहे हों।
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L बायाँ इनपुट दोनों स्पीकर में बजाता है: अधिकांश इंटरफ़ेस पर माइक 1। STEREO लाइन स्रोत के लिए है।
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	पूरा भाव। यही क्यू की अवधि है: स्टिंग यहाँ का अकेला बना सिग्नल है जो ख़त्म होता है।
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	इस फ़िक्स्चर को भेजने या पिछले क्यू की जगह छोड़ने के लिए मान पर क्लिक करें। ~ स्तर को साँस लेने देता है
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS एक मॉड्यूलेटर से मुड़ी वेवटेबल है। 2A03 पल्स/त्रिकोण/शोर का सेट है जिससे ज़्यादातर चिपट्यून बनता है।
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	कौन-सा चिह्न कौन-सी चमक है, फेंटें। वही सेट, अलग लिखावट। सीड के साथ, तो यह टिका रहता है।
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	पिक्सेल सॉर्ट: पंक्ति के भीतर पिक्सेल की लड़ियाँ चमक से क्रमबद्ध, जिससे डेटामोश पिघला दिखता है।
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	चिह्न कितने खाने चढ़ सकते हैं। चढ़ते-चढ़ते पतले होते हैं, तो ऊँची पहुँच दोगुनी होने के बजाय निशान छोड़ती है।
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	क्यू क्रिया मान  -  G लें  S रोकें  F फ़ेड आउट (मान = सेकंड के दसवें)  V आवाज़  O अपारदर्शिता  J पंक्ति पर जाएँ
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	हार्मोनिक भार: शून्य पर शुद्ध घंटी, पूरे पर पीतल। यही पिंग और तूर्यनाद का अंतर है।
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	इस कंप्यूटर के इनपुट से गुज़रता है। 'Settings input' सेटिंग्स > ऑडियो में चुने इनपुट के पीछे चलता है।
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	अंगारों से धधकती आग तक। हर सेटिंग पर उठता-बैठता रहता है: न हिलने वाली आग फ़ोटो जैसी लगती है
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	संदर्भ पिच। 440 आधुनिक मानक है, 432 आम विकल्प, और पुराने वाद्य और भी नीचे थे।
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	स्टिंग कहाँ से शुरू हो। आवाज़ के नीचे इसे रास्ते से हटना है; हॉल के ऊपर इसे चीरना है।
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	इनपुट पर डिजिटल गेन, -40 से +40 dB। पहले इंटरफ़ेस का अपना प्रीएम्प सेट करें; यह आख़िरी कुछ dB के लिए है।
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	आकार को धड़काएँ। अकेले यह चौड़ाई और ऊँचाई साथ हिलाता है; दबाने-खींचने के लिए ऊँचाई को अपना ~ दें
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	कार्ड फ़्रेम भरता है; लोअर थर्ड एक नाम और भूमिका है, पारदर्शी फ़्रेम पर नीचे, आने-जाने के साथ
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held आख़िरी विस्थापन हटाने के बजाय रखता है: चित्र वैसा ही मुड़ा रहता है जैसा ड्राइवर ने छोड़ा।
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12.5 और 25 पतले और नकियाते हैं, 50 खोखला है। 75 बिल्कुल 25 जैसा लगता है: यह इसलिए है क्योंकि ट्रैकर इसे दिखाते हैं।
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	आउटपुट को हार्डवेयर की तरह क्वांटाइज़ करें। सीढ़ियाँ ही आवाज़ हैं; उन्हें चिकना करने से यह चिप की नक़ल करता सिंथ बन जाता है।
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	हर चुने क्यू का ट्रिम अंतर बनाए रखते हुए उतने ही dB खिसकाता है; मान टाइप करने से सब उस पर सेट होते हैं
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	प्लेलिस्ट के क्रॉसपॉइंट इसे कहाँ भेजते हैं (सेटिंग्स > ऑडियो)। उसी रूटिंग से शुरू करके नाम से मैट्रिक्स खोलने के लिए क्लिक करें
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	मानों को  d = ...;  से नाम दें, एक व्यंजक पर ख़त्म करें, या लाल हरे नीले के लिए तीन  |  Shift+Enter: नई पंक्ति  |  Enter: लागू करें
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	रैंप पहुँचने पर (रुकने के बाद) जहाँ से शुरू हुआ था वह लौटाएँ: अगले क्यू के लिए तैयार डेक, छोड़ती हुई उठान
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	कौन-सा वाक् मॉडल कैप्शन बनाता है: अंग्रेज़ी, कोई भी भाषा, या धीमी और अधिक सटीक जोड़ी। हर एक एक बार डाउनलोड होता है
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	मास्क क्या काटता है: यह क्यू जहाँ भी बजे, चुने आउटपुट पर यह प्लेलिस्ट, उस आउटपुट का पूरा चित्र, या उसका मैट
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	स्क्रीन की दर पर चलाएँ जब वह 0.2% के भीतर हो (60 पर 59.94): हर फ़्रेम एक बार, आवाज़ 3.5 सेंट तक ऊँची या नीची
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	चौथाई चक्कर सटीक होते हैं और साफ़ रहते हैं। घुमाना कोण पर सैंपल लेता है, जो पिक्सेल आर्ट को फाड़ता है: कभी-कभी यही चाहिए।
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	हर टेक कठपुतली को एक ही तरह शुरू करता है, ताकि अभ्यास किया रूप दोहराए, न कि इस पर निर्भर करे कि ऐप कितनी देर से खुला है।
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	हर झुकाव को क्या दिशा देता है: अपनी स्थिति, चित्र का ल्यूमा ढलान ताकि अक्षर चित्र की तरह झुकें, या खाने का रंग।
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	किसी चैनल या जोड़ी को एक बार नाम दें। प्लेलिस्ट नाम पर भेजती हैं, तो दूसरा इंटरफ़ेस यानी यहाँ नाम बदलना, हर क्यू नहीं।
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	क्रॉसपॉइंट पर क्लिक कर बदलें: बंद, 0, -3, -6, -12 dB। किसी भी स्तर के लिए बगल में खींचें। बिना बिंदु की प्लेलिस्ट अपने उपकरण पर बजती है।
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	data/sprites में स्थापित स्प्राइट सेट। हर फ़ोल्डर एक सेट है; बदलना एक चुनता है और कुछ नहीं पर लौटता है। दायाँ क्लिक इन्हें बंद करता है।
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	आंतरिक रिज़ॉल्यूशन, 1 सबसे मोटा से 5 सबसे बारीक। यह गति जितना ही सौंदर्य का नियंत्रण है: 8-बिट रूप बड़े पिक्सेल से आता है।
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture चित्र से रंग लेता है। हरा, अंबर और सियान टर्मिनल फ़ॉस्फ़र हैं। Palette टेक्स्ट को चुने हार्डवेयर पैलेट पर बाँधता है।
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE ख़ुद ठीक हो जाता है (H.264)। CLASSIC असली धब्बा है (MPEG-4)। EXTREME मोटा है और लगातार धब्बा करता है। इसे बदलने से क्यू फिर तैयार होता है।
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	संरेखण के लिए साइन, PA मिलाने के लिए गुलाबी, खड़खड़ाहट ढूँढने के लिए सफ़ेद, हॉल कहाँ गूँजता है सुनने के लिए स्वीप, आउटपुट एक-एक कर देखने के लिए identify।
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	कौन-सा इफ़ेक्ट, उस क्यू के स्टैक में उसकी जगह से जो वह डेक चलने पर बजा रहा है। वहाँ कुछ न हो तो फ़ेड यही बताता है और कुछ नहीं करता
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	हर फ़्रेम अगले में मिलाया जाता है। यह Hypno की पहचान है: 0 पर यह पैटर्न जनरेटर है, ऊपर चित्र ख़ुद को खाने लगता है।
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	चूल्हे की दीवार की खिड़की से क्या दिखता है: बगीचा, बारिश, बर्फ़ या समुद्र। बाहर मौसम वाला कमरा दीवार नहीं, जगह जैसा लगता है
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	फ़िक्स्चर से: पैच की लाइटें (सेटिंग्स > नेटवर्क > फ़िक्स्चर), नाम से। चैनल: हाथ से चैनल=स्तर। एक क्यू दोनों रख सकता है; चैनल आख़िर में आते हैं
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	हर अक्षर झुकाए जा रहे कार्ड की तरह झूलता है। हर खाने का अपना फ़ेज़ है, तो ग्रिड एक चादर की तरह खिसकने के बजाय साँस लेती है।
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	पेन: कोनों के लिए क्लिक, वक्रों के लिए खींचें, बंद करने के लिए पहले बिंदु पर क्लिक (P)। बिंदु: खींचें, जोड़ने के लिए रूपरेखा पर क्लिक, हटाने के लिए Alt-क्लिक या Delete
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	चिप के तीन चैनल। ये प्रकार में अलग हैं: त्रिकोण का हार्डवेयर पर कोई वॉल्यूम नियंत्रण नहीं, और शोर एक शिफ़्ट रजिस्टर है, ऑसिलेटर नहीं।
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	चुने हुए चिह्न और इमोजी सेट: तारे, नोट, फूल, तीर, मौसम, रून, चेहरे। एक चुनने से नीचे के अपने चिह्न भरते हैं, जो संपादन योग्य रहते हैं।
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	कंप्यूटर कीबोर्ड से बजाएँ, Ableton लेआउट: A W S E D F T G Y H U J, सप्तक के लिए Z और X। जब तक यह चालू है वे कुंजियाँ क्यू चलाने के बजाय नोट बजाती हैं।
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	डेक अपारदर्शिता, डेक आवाज़, मुख्य डिमर, सक्रिय क्यू की चमक / कंट्रास्ट / संतृप्ति / रंगत, या उसके किसी इफ़ेक्ट या ऑडियो इफ़ेक्ट का नॉब
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	स्कैनलाइन, फ़ॉस्फ़र चमक और RGB किनारे। चमक ही मायने रखती है: फ़ॉस्फ़र बगल में फैलता है, इसीलिए CRT रोशनी छोड़ता लगता है।
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	फटी लाइन पट्टियाँ और RGB अलगाव। टेक्स्ट मोड में यह खानों को भी बिगाड़ता है: पूरी पंक्तियाँ एक दोहराए अक्षर पर अटक जाती हैं, जैसे सिंक खोती असली टेक्स्ट स्क्रीन।
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still वह फ़्रेम थामे रखता है जिस पर आप हैं। Flipbook फ़्रेम बारी-बारी चलाता है। Replay पहला फ़्रेम उसी तरह स्ट्रोक-दर-स्ट्रोक बनाता है जैसे बना था, फिर रुककर फिर शुरू करता है
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (चलाए बिना तैयार), Arm, Disarm या Devamp (लूप अपना चक्कर पूरा कर ख़त्म होता है); या Stop all, Pause all, Resume all: हर डेक
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope आकार और क्लिपिंग दिखाता है। Lissajous पहले दो चैनलों के बीच फ़ेज़ और ध्रुवता दिखाता है: ग़लत दिशा का विकर्ण यानी एक उलटा है। Spectrum तिहाई-सप्तक पट्टियाँ है।
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 वह चिह्न चुनता है जो चमक माँगती है, 1 सेट का कोई भी चिह्न। पूरी वर्णमाला देखने के लिए बढ़ाएँ: स्याही से सख़्ती से क्रमबद्ध होने पर समतल क्षेत्र एक चिह्न चुनता है और बाक़ी कभी नहीं दिखते।
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	ब्लॉक और डिथर घनत्व की तरह पढ़ते हैं; ASCII रैंप टेक्स्ट की तरह; चिह्न मलबे की तरह। इसे बदलने से अपनी चिह्न स्ट्रिंग साफ़ होती है, क्योंकि वह इसे पलट देती; प्रीसेट पंक्ति एक लौटाती है।
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	सम स्वरमान हर अंतराल के थोड़ा ग़लत होने की क़ीमत पर मुक्त मॉड्यूलेशन ख़रीदता है। शुद्ध और पाइथागोरियन एक स्वरग्राम में पूरी तरह सुर में हैं। Bohlen-Pierce बारहवें को बाँटता है, इसलिए इसमें सप्तक नहीं।
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+trans	संक्रमण
+TRACKER	ट्रैकर
+Motion: Bug Swat	गति: Bug Swat
+Passphrase (shared)	पासफ़्रेज़ (साझा)
+, — skip to previous cue	, — पिछले क्यू पर जाएँ
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  उस प्लेलिस्ट पर कुछ नहीं करता  -  (M) चरण की अपनी प्लेलिस्ट
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS EBU संरेखण है, -20 SMPTE। 0 से नीचे सीमित: यह लाइव PA को भरता है।
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  उस प्लेलिस्ट पर कुछ नहीं करता  -  (M) चरण की अपनी प्लेलिस्ट  -  EDIT चालू है: टाइप करने से शो बदलता है
+cue "{n}"	cue "{n}"
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+29.97 fps (NTSC)	29.97 fps (NTSC)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	DECK 2 चुनो
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	अब उसके टैब पर क्लिक करो, Deck 2. नई playlist तब तक चुनी नहीं जाती जब तक तुम उस पर क्लिक न करो।
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	जलता हुआ टैब वह जगह है जहाँ स्रोत चीज़ें रखता है। यह छोड़ो तो स्याही synth के नीचे चली जाती है।
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	वह टैब दिख रहा है? क्लिक करो। अब तुम Deck 2 पर हो। बूम। बुनियादी बातें।
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	उसके टैब पर क्लिक करो, Deck 2. जलता हुआ टैब वह playlist है जिसमें स्रोत जोड़ता है।
+Skip this and the words go under the map. With the lizard.	यह छोड़ो तो शब्द नक़्शे के नीचे चले जाते हैं। छिपकली के साथ।
+Nine years of live weather. Always click the tab.	नौ साल लाइव मौसम। हमेशा टैब पर क्लिक करो।
+Click its tab, Deck 2. A new playlist waits until you choose it.	उसके टैब पर क्लिक करो, Deck 2. नई playlist तब तक इंतज़ार करती है जब तक तुम उसे न चुनो।
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	जलते टैब को अगला cue मिलता है। जैसे चुनना कि प्रोजेक्टर में कौन-सी स्लाइड जाएगी।
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	एक गड्डी चुनो। कोई भी। ...Deck 2. Deck 2 चुनो।
+MENU	मेनू
+VOLUME	आवाज़
++ step	+ चरण
+< BACK	< वापस
+ATEM switcher	ATEM स्विचर
+ATEM tally	ATEM टैली
+AUDIO: DEFAULT	ऑडियो: डिफ़ॉल्ट
+Animated GIF	एनिमेटेड GIF
+Arrows	तीर कुंजियाँ
+CLICKER	क्लिकर
+Copyright	कॉपीराइट
+DEST...	गंतव्य...
+Datamosh - classic	Datamosh – क्लासिक
+Datamosh - extreme	Datamosh – चरम
+Datamosh - subtle	Datamosh – हल्का
+Deckboy is input	Deckboy इनपुट है
+Device: None	डिवाइस: कोई नहीं
+Drag	खींचें
+Drop media here	मीडिया यहाँ छोड़ें
+Enter Take  Space Play/Pause	Enter Take  Space चलाएँ/रोकें
+FFmpeg / libav  (in-process)	FFmpeg / libav  (प्रक्रिया के भीतर)
+FPS: SOURCE	FPS: स्रोत
+Fonts	फ़ॉन्ट
+Free software. You may use, study, share	मुक्त सॉफ़्टवेयर। आप इसे उपयोग कर सकते हैं, पढ़ सकते हैं,
+GO / BACK	GO / वापस
+GO / BACK (clicker)	GO / वापस (क्लिकर)
+Key out: None - fill only	Key आउट: कोई नहीं – केवल fill
+LTC in	LTC इनपुट
+Licence	लाइसेंस
+MATCH SOURCE	स्रोत जैसा
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> ट्रांसपोर्ट
+MOSH: SUBTLE	MOSH: हल्का
+MSC Trigger -> cue by id	MSC Trigger -> id से cue
+MTC in	MTC इनपुट
+Mode: CALLER	मोड: CALLER
+NDI receiver	NDI रिसीवर
+NDI trigger	NDI ट्रिगर
+NO STEPS YET	अभी कोई चरण नहीं
+No PTP lock, wide-model pacing - will not genlock to plant sources	PTP लॉक नहीं, मोटा समय – स्टूडियो स्रोतों से genlock नहीं होगा
+ONCE  |  ORDER	एक बार  |  क्रम
+Optional	वैकल्पिक
+PNG sequence	PNG अनुक्रम
+Platform	प्लेटफ़ॉर्म
+Press A to take cue	cue लेने के लिए A दबाएँ
+RATE: AUTO	दर: स्वतः
+S Stop   C Clear   Esc Panic	S रोकें   C साफ़ करें   Esc आपात
+SIZE: SOURCE	आकार: स्रोत
+SPOUT TEXTURE SHARE	SPOUT टेक्सचर साझा
+Session	सत्र
+TSL tally out	TSL टैली आउट
+Thanks	धन्यवाद
+Timecode chase	timecode का पीछा
+Timecode run	timecode चलाएँ
+Toolkit	टूलकिट
+Trigger	ट्रिगर
+WAV (audio only)	WAV (केवल ऑडियो)
+Warranty	वारंटी
+address...	पता...
+and modify it; derivatives stay GPL.	साझा और बदल सकते हैं; व्युत्पन्न GPL ही रहते हैं।
+auto	स्वतः
+clear the cell	सेल साफ़ करें
+companion ping	Companion पिंग
+fire this row	यह पंक्ति चलाएँ
+insert a row	पंक्ति डालें
+live lane  |  I/O set trim  |  click or drag to seek	लाइव लेन  |  I/O ट्रिम सेट करें  |  खोजने के लिए क्लिक करें या खींचें
+media in	मीडिया अंदर
+move the cursor	कर्सर हिलाएँ
+mute / solo a column	कॉलम म्यूट / सोलो
+off -- edit on monitor	बंद -- मॉनिटर पर संपादित करें
+off: no camera is open. Drag on the picture to draw a zone.	बंद: कोई कैमरा खुला नहीं है। ज़ोन बनाने के लिए चित्र पर खींचें।
+open the code editor	कोड संपादक खोलें
+play / stop	चलाएँ / रोकें
+stop, fade, vol, opacity	रोकें, फ़ेड, वॉल्यूम, अपारदर्शिता
+the FFmpeg, SDL and FreeType projects,	FFmpeg, SDL और FreeType परियोजनाओं,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion और x42/libltc को।
+Keys	कुंजियाँ
+None. See LICENSE sections 15-16.	कोई नहीं। LICENSE के खंड 15-16 देखें।
+none compiled in	कुछ भी शामिल नहीं
+Alpha	अल्फ़ा
+Group	समूह
+Normal	सामान्य
+Remote	रिमोट
+lesson	पाठ
+Bitrate	बिटरेट
+Latency	लेटेंसी
+OUT {n}	आउट {n}
+Out {n}	आउट {n}
+{n} row	{n} पंक्ति
+Deck {n}	डेक {n}
+Key name	कुंजी का नाम
+Keyframe	कीफ़्रेम
+Registry	रजिस्ट्री
+fade {n}	फेड {n}
+{n} rows	{n} पंक्तियाँ
+Node port	नोड पोर्ट
+Stream ID	स्ट्रीम ID
+added {1}	{1} जोड़ा गया
+start {n}	शुरू {n}
+still {n}	स्थिर चित्र {n}
+FADE {n} s	फेड {n} s
+LAYER {n}%	लेयर {n}%
+Output {n}	आउटपुट {n}
+PROXY {n}p	प्रॉक्सी {n}p
+PTP domain	PTP डोमेन
+Proxy {n}p	प्रॉक्सी {n}p
+Stream key	स्ट्रीम कुंजी
+[ASSIGNED]	[असाइन किया]
+audio only	सिर्फ़ ऑडियो
+to Out {n}	आउट {n} पर
+{n} of {n}	{n} / {n}
+Display {n}	डिस्प्ले {n}
+active jobs	सक्रिय जॉब
+local clock	स्थानीय घड़ी
+not running	नहीं चल रहा
+click to set	तय करने के लिए क्लिक करें
+full {n}x{n}	पूर्ण {n}x{n}
+running v{n}	v{n} चल रहा है
+the other one	दूसरी वाली
+DELIVERY H.{n}	डिलीवरी H.{n}
+Output {n} mix	आउटपुट {n} मिक्स
+made by Deckboy	Deckboy द्वारा बनाया गया
+{1} plays to {2}	{1} {2} पर बजाता है
+the picture {1} plays	{1} जो चित्र बजाता है
+New media joins {1} by itself	नया मीडिया अपने आप {1} में जुड़ता है
+Press Win+P and choose Extend	Win+P दबाएँ और विस्तारित करें चुनें
+{n} patched - DMX cues set them by name	{n} पैच किए गए - DMX क्यू इन्हें नाम से तय करते हैं
+Set them to extend in your display settings	डिस्प्ले सेटिंग्स में इन्हें विस्तारित पर तय करें
+lesson: {1}. Esc leaves, and it picks up here next time	पाठ: {1}। Esc छोड़ता है, और अगली बार यहीं से शुरू होता है
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	{1} पर TCP 9993 पर डेक की तरह ATEM Software Control को जवाब देता है
+In System Settings > Displays, use it as an extended display	सिस्टम सेटिंग्स > डिस्प्ले में इसे विस्तारित डिस्प्ले की तरह इस्तेमाल करें
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	ये डेस्क खा गया, skapi. तुम्हारे पास {1} स्क्रीन हैं: मेनू में आउटपुट का डिस्प्ले इसे दूसरी पर रख देता है।
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	ये डेस्क खा गया, skapi. तुम्हारे पास दो स्क्रीन हैं: मेनू में आउटपुट का डिस्प्ले इसे दूसरी वाली पर रख देता है।
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} स्क्रीन, skapi. डेस्क इसी पर रहता है, चित्र {2} पर जाता है। मेनू खोलो और आउटपुट बंद को आउटपुट चालू कर दो।
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	दो स्क्रीन, skapi. डेस्क इसी पर रहता है, चित्र दूसरी वाली पर जाता है: {1}। मेनू खोलो और आउटपुट बंद को आउटपुट चालू कर दो।
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	ये डेस्क खा गया, skapi. मिरर की हुई स्क्रीन दोनों पर चित्र दिखाती हैं, इसलिए मैंने इसे पीछे एक छोटी विंडो में रख दिया। {1}, और इसे अपनी अलग स्क्रीन मिल जाएगी।
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	तुम्हारी स्क्रीन मिरर हैं, skapi: {1} वही दिखाती है जो ये दिखाती है, इसलिए चित्र दोनों पर डेस्क को ढक देगा। {2}, और चित्र अपनी अलग स्क्रीन पर चला जाएगा। या मेनू खोलो और आउटपुट बंद को आउटपुट चालू कर दो।

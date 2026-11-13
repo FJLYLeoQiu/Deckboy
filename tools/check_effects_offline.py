@@ -1,0 +1,533 @@
+#!/usr/bin/env python3
+"""Render every effect through `--effect-dump` and check it changed the picture.
+
+The other two sweeps drive the running app. They are worth having -- one proves
+an effect reaches the recording, the other proves it reaches the preview -- but
+neither is any use while WRITING an effect, because each case launches the app,
+takes a cue and screenshots it, so a run costs minutes and the comparison is at
+the mercy of which frame the seek landed on. Two effects were called working on
+that evidence when they were doing nothing at all.
+
+This calls the effect maths directly on one picture. A run is a couple of
+seconds, it is exactly repeatable, and it can also write a contact sheet so the
+question "does it change the picture" can be followed by the one that matters,
+which is "does it look like anything".
+
+    python3 tools/check_effects_offline.py
+    python3 tools/check_effects_offline.py --sheet sheet.png --source my.png
+
+Needs ffmpeg only to make the source and the sheet; the effects themselves run
+in the app binary.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deckboy_testroot  # noqa: E402
+
+# token: the amount:paramA:paramB to exercise it at. Kept here rather than
+# derived, so adding an effect and forgetting this list fails loudly instead of
+# quietly shrinking the sweep.
+EFFECTS = [
+    ("ferrofluid",      "0.9:0.5:0.5"),
+    ("shatter",         "0.9:0.5:0.5"),
+    ("edge_ignite",     "0.9:0.5:0.5"),
+    ("relight",         "0.9:0.5:0.5"),
+    ("depth_split",     "0.9:0.5:0.5"),
+    ("invert",          "0.9:0.5:0.5"),
+    ("posterise",       "0.9:0.5:0.5"),
+    ("solarise",        "0.9:0.5:0.5"),
+    ("threshold",       "0.9:0.5:0.5"),
+    ("vignette",        "0.9:0.5:0.5"),
+    ("grain",           "0.9:0.5:0.5"),
+    ("scanlines",       "0.9:0.5:0.5"),
+    ("channel_offset",  "0.9:0.5:0.5"),
+    ("temporal_dither", "0.9:0.5:0.5"),
+    ("pixel_sort",      "0.9:0.5:0.5"),
+    ("block_glitch",    "0.9:0.5:0.5"),
+    ("polar_warp",      "0.9:0.5:0.5"),
+    ("luma_displace",   "0.9:0.5:0.5"),
+    ("ripple",          "0.9:0.5:0.5"),
+    ("kaleidoscope",    "0.9:0.5:0.5"),
+    ("dye_advect",      "0.9:0.0:0.6"),
+    ("reaction_bloom",  "0.85:0.5:0.6"),
+    ("relativistic",    "0.85:0.55:0.8"),
+    ("caustics",        "0.8:0.45:0.4:0.7"),
+    ("feedback",        "1.0:0.85:0.62:0.62:0.4"),
+    ("feedback_bloom",  "1.0:0.78:0.55:0.62:0.62"),
+    ("schlieren",       "0.95:0.12:0.55:0.5"),
+    ("chladni",         "0.9:0.45:0.7:0.6:0.5"),
+    ("wavefront",       "0.9:0.5:0.45:0.3:0.4"),
+    ("crystallise",     "0.95:0.22:0.6:0.7:0.5"),
+    ("scotopic",        "0.95:0.7:0.6:0.6"),
+    ("grain_flow",      "0.95:0.5:0.0:0.4"),
+    ("databend",        "0.9:0.55:0.6:0.5:0.55"),
+    ("time_cube",       "1.0:0.35:0.5:0.4:0.2"),
+    # Off neutral on every slot, so the dump shows each one doing something.
+    ("levels",          "1.0:0.7:0.2:0.15:0.1"),
+    # The S-curve alone: lift and roll-off pull the other way and would
+    # mostly cancel it in a single dump.
+    ("curves",          "1.0:0.9:0.0:0.0:0.0"),
+    # A hue turn, a tint toward green and a little washed out: off neutral
+    # on every slot.
+    ("colour",          "1.0:0.8:0.5:0.35:0.3"),
+    # The basics added 2026-10-29. Colour replace takes the warm half of the
+    # wheel (from red, +-90 deg) to blue, which the fractal has plenty of.
+    ("colour_replace",  "1.0:0.0:1.0:0.6:0.3"),
+    ("blur",            "1.0:0.5:0.0"),
+    ("sharpen",         "1.0:0.7:0.2"),
+    ("glow",            "1.0:0.6:0.4"),
+    ("mirror",          "1.0:0.5:0.0"),
+    ("mosaic",          "1.0:0.5:0.3:0.5"),
+    ("edges",           "1.0:0.5:0.0:0.0"),
+    ("luma_key",        "1.0:0.6:0.1"),
+    # Half a flash a second, so frame 7 (0.23 s) is inside the first flash.
+    ("strobe",          "1.0:0.0:0.0"),
+]
+
+# Effects whose whole subject is what happens ACROSS frames need more than one
+# application before there is anything to look at: feedback's first pass only
+# fills the buffer it will later echo. --effect-dump takes a pass count for
+# exactly this, and running the rest more than once would only measure them
+# chewing on their own output.
+# Feedback bloom is the same argument as feedback: the first pass is the
+# picture with a faint tinted copy on it, and the hue walk and the melt
+# only exist once the loop has gone round enough times to compound.
+PASSES = {"feedback": 12, "feedback_bloom": 12, "scotopic": 6}
+
+# Effects that look different from one frame to the next on an unchanging
+# picture -- mirroring cueEffectKindAnimates in cue_effects.hpp, which the
+# render paths use to decide whether a STILL cue must re-run its stack. Get
+# this wrong in the header and a time-based effect freezes on a still (or every
+# still pays for a full-raster re-render it does not need), and neither shows up
+# in any other check. --animation renders each effect at nine frame indices and
+# fails if the pixels disagree with this list.
+#
+# feedback and motion_puppet move by carrying STATE rather than by reading the
+# frame index, so they animate in the app while rendering identically here.
+# They are listed as state-driven rather than measured.
+ANIMATES_BY_INDEX = {"grain", "temporal_dither", "block_glitch", "ripple",
+                     "caustics",
+                     # Added 2026-09-05.
+                     "ferrofluid", "shatter", "edge_ignite", "relight",
+                     "depth_split",
+                     # Added 2026-09-17: the delay offset moves with the
+                     # frame, so a held still keeps bending.
+                     "databend",
+                     # Flashes on the clock; a dump's clock is the frame
+                     # index at thirty a second.
+                     "strobe"}
+ANIMATES_BY_STATE = {"feedback", "feedback_bloom", "motion_puppet",
+                    "scotopic", "text_mode",
+                     # Holds the swept frame between calls.
+                     "slit_scan",
+                     # Holds the smeared picture AND the previous frame's luma,
+                     # so it keeps evolving on a still cue.
+                     "motion_mosh",
+                     # Holds the last few seconds as a block of time.
+                     "time_cube",
+                     # Holds the picture it built and the last motion grid.
+                     "motion_trails"}
+
+# Every named parameter slot, mirroring cueEffectParamLabel in cue_effects.hpp.
+# Kept here rather than parsed, so the two diverging fails loudly: --params
+# checks that each one actually moves the picture, which is the dead-control
+# bug this codebase keeps producing, applied to effect parameters.
+# Effects that draw CueEffect::colour (cueEffectColourSlot in cue_effects.hpp).
+COLOUR_EFFECTS = ["strobe", "edges"]
+
+PARAM_SLOTS = {
+    "slit_scan":       ["sweep speed", "slit width", "direction"],
+    "ferrofluid":      ["spike length", "spike count", "threshold"],
+    "shatter":         ["shard size", "drift", "rotation"],
+    "edge_ignite":     ["catch", "heat", "flicker"],
+    "relight":         ["relief", "light angle", "orbit speed"],
+    "depth_split":     ["parallax", "convergence", "sway"],
+    "motion_mosh":     ["hold", "block size", "refresh"],
+    "invert":          ["pivot", "channel spread"],
+    "posterise":       ["band curve", "channel skew"],
+    "solarise":        ["fold point", "knee"],
+    "threshold":       ["pivot", "softness"],
+    "vignette":        ["size", "falloff"],
+    "grain":           ["grain size", "colour"],
+    "scanlines":       ["pitch", "darkness"],
+    "channel_offset":  ["angle", "green split"],
+    "temporal_dither": ["palette", "hold"],
+    "pixel_sort":      ["threshold", "reverse"],
+    "block_glitch":    ["bands", "tear width"],
+    "polar_warp":      ["twist", "radial zoom"],
+    "luma_displace":   ["vertical bias", "pivot"],
+    "ripple":          ["frequency", "speed"],
+    "kaleidoscope":    ["wedges", "rotation"],
+    "dye_advect":      ["bleed", "curl detail", "swirl"],
+    "reaction_bloom":  ["feed rate", "growth", "seed density", "glow"],
+    "relativistic":    ["field of view", "doppler", "off-axis"],
+    "caustics":        ["chop", "swell speed", "focus"],
+    "feedback":        ["zoom", "spin", "drift", "colour bleed"],
+    "feedback_bloom":  ["hue turn", "melt", "zoom", "swirl"],
+    "levels":          ["midtones", "black point", "white point", "lift"],
+    "curves":          ["s-curve", "channel", "shadow lift", "highlight roll"],
+    "colour":          ["hue turn", "tint", "tint colour", "wash out"],
+    "colour_replace":  ["from", "range", "to", "softness"],
+    "blur":            ["size", "stretch", "angle"],
+    "sharpen":         ["strength", "radius", "threshold"],
+    "glow":            ["reach", "size"],
+    "mirror":          ["way", "fold"],
+    "mosaic":          ["tile size", "gap", "round"],
+    "edges":           ["strength", "picture", "line colour"],
+    "luma_key":        ["cut dark", "softness", "cut bright"],
+    "strobe":          ["rate", "flash to", "flash length"],
+    "motion_trails":   ["sensitivity", "let go", "blocks", "trail"],
+    "schlieren":       ["knife angle", "sensitivity", "colour"],
+    "chladni":         ["mode", "second mode", "gather", "line glow"],
+    "wavefront":       ["stiffness", "steps", "damping", "relief"],
+    "crystallise":     ["grain size", "facet light", "irregularity", "edges"],
+    "scotopic":        ["colour lag", "rod bias", "purkinje"],
+    "grain_flow":      ["stroke", "across the grain", "coherence"],
+    "text_mode":       ["columns", "corruption", "glyph set", "ink"],
+    "motion_puppet":   ["spring", "memory"],
+    "databend":        ["smear", "feedback", "tone", "fold"],
+    "audioprint":      ["throw", "span", "ink"],
+    "time_cube":       ["turn", "depth", "see through", "zoom"],
+}
+
+# What a show saved before a parameter existed carries, and what it must still
+# mean. Moving one of these breaks every show that already used the effect.
+NEUTRAL = [0.5, 0.0, 0.0, 0.0]
+
+# Where a parameter can only do anything once ANOTHER one is engaged, the check
+# starts from here instead of from neutral.
+#
+# scotopic's purkinje shift only acts where the rods have taken over, and at
+# neutral rod bias almost nothing in a normal picture is dark enough for that.
+# Testing it from neutral asks whether a night-vision tint works in daylight,
+# gets "no", and calls a working control dead.
+PARAM_BASE = {
+    # Curves' channel picks WHICH channel the curve bends, so on a straight
+    # curve every channel is the same nothing. Start from a bent (flattened)
+    # curve -- not an S, which is where the s-curve slot is moved TO.
+    "curves": [0.2, 0.0, 0.0, 0.0],
+    # The tint colour only shows once there is some tint.
+    "colour": [0.5, 0.6, 0.0, 0.0],
+    # The band has to hold colours the fractal has, or every slot moves
+    # nothing: the warm half of the wheel, from red.
+    "colour_replace": [0.0, 1.0, 0.6, 0.0],
+    # The angle is the streak's, and there is no streak until stretch is up.
+    "blur": [0.5, 0.6, 0.0, 0.0],
+    # A slightly longer flash, so the rate moved to 0.9 (7.4 a second) puts
+    # frame 13 inside a flash the arrival rate does not.
+    "strobe": [0.5, 0.0, 0.1, 0.0],
+    "scotopic": [0.5, 0.85, 0.0, 0.0],
+    # Databend's smear is a DELAY TIME, and the delayed signal is only mixed
+    # back in through the feedback. At neutral feedback nothing is fed back, so
+    # moving the delay moves nothing -- measured, 0.0% -- and the sweep would
+    # report a working control dead. Engage the feedback and the smear is what
+    # decides how far the damage drags.
+    "databend": [0.5, 0.6, 0.0, 0.0],
+}
+
+# Parameters whose whole subject is what happens BETWEEN frames, on a picture
+# that is CHANGING. This harness renders one still picture repeatedly, so a
+# value that controls how fast the effect catches up with a new picture has
+# nothing to catch up with: every pass converges to the same place whatever the
+# rate. Covered instead by the oscillator checks in --smoke and by watching a
+# moving clip.
+TEMPORAL_PARAMS = {
+    ("scotopic", "colour lag"),
+}
+MOVED = [0.9, 0.8, 0.8, 0.8]
+
+# Neither is a pixel operation, so neither can be dumped. Datamosh happens at
+# the DECODER and motion puppet needs a driver clip's vectors.
+NOT_PIXEL_EFFECTS = [
+    ("datamosh", "happens at decode, not on the pixels"),
+    ("motion_puppet", "needs a driver clip's motion vectors"),
+    # Audioprint IS a pixel operation, but what it draws is the deck's
+    # recently PLAYED audio, and a headless dump plays nothing. With no
+    # sound offered it passes the picture through deliberately, so a
+    # "changes the picture" sweep would fail it for the right reason and
+    # the wrong one -- the motion-puppet trap again. It animates in the
+    # app by following the sound, which is why it is absent from both
+    # ANIMATES_ sets rather than listed in either: neither the frame
+    # index nor carried state is what moves it.
+    ("audioprint", "needs the deck's played audio; there is none in a headless dump"),
+    # Motion mosh IS a pixel operation, but it works by dragging a held picture
+    # along the motion BETWEEN two frames. This harness renders one still
+    # picture, so the matcher correctly finds no motion and the effect
+    # correctly passes the picture through. Sweeping it here would not measure
+    # the effect, it would measure the harness, and report a working effect
+    # dead — the exact shape of the motion-puppet gate that nobody read.
+    ("motion_mosh", "needs a moving picture; a still frame has no motion"),
+    # Motion trails the same: it draws where the picture MOVED between two
+    # frames, and holds everything else. tools/check_motion.py runs it on a
+    # moving clip.
+    ("motion_trails", "needs a moving picture; a still frame has no motion"),
+    # Text mode IS a pixel operation, but the renderer that draws the character
+    # grid lives on the media engine (it owns the sprite-sheet state) and the
+    # settings that drive it live on the cue, so the stack is handed a callback
+    # rather than doing the work itself. Headless there is no engine to hand it
+    # one, and the effect correctly passes the picture through instead of
+    # pretending. Verified by looking at it on a real clip, not by this sweep.
+    ("text_mode", "needs the engine's character-grid renderer"),
+    # Slit scan holds a frame and refreshes a moving band of it, so on a
+    # SINGLE frame every column is the same moment and the output is the
+    # input -- identical by construction, not broken. It is checked by the
+    # --animation pass and by looking at it on a moving clip.
+    ("slit_scan", "identical on one frame; needs successive ones"),
+]
+
+
+def raster(path):
+    """The pixel bytes of a binary PPM, without its header."""
+    with open(path, "rb") as handle:
+        data = handle.read()
+    return data[data.index(b"255\n") + 4:]
+
+
+def check_params(exe, src, base, work):
+    """Every named parameter should change the picture, and the neutral
+    position should leave it exactly as it was."""
+    def base_for(token):
+        return list(PARAM_BASE.get(token, NEUTRAL))
+
+    def render(token, params, frame=7):
+        out = os.path.join(work, "param.ppm")
+        spec = "%s:0.9:%g:%g:%g:%g" % ((token,) + tuple(params))
+        subprocess.run([exe, "--effect-dump", spec, src, out, str(frame),
+                        str(PASSES.get(token, 1))], capture_output=True)
+        return raster(out) if os.path.exists(out) else b""
+
+    dead = 0
+    # The same exemption the main sweep uses. Without it this check reported
+    # motion puppet's two parameters as dead on every run -- they are not, it
+    # simply has no motion vectors to work from when it is called directly --
+    # and a gate that always fails is a gate nobody reads.
+    undumpable = dict(NOT_PIXEL_EFFECTS)
+    print("%-16s %-15s %-6s %s" % ("effect", "parameter", "verdict", "detail"))
+    for token, names in PARAM_SLOTS.items():
+        if token in undumpable:
+            print("%-16s %-15s %-6s %s"
+                  % (token, "-", "n/a", undumpable[token]))
+            continue
+        base = base_for(token)
+        neutral = render(token, base)
+        if not neutral:
+            print("%-16s %-15s %-6s %s" % (token, "-", "FAIL", "no render"))
+            dead += 1
+            continue
+        for slot, name in enumerate(names):
+            if (token, name) in TEMPORAL_PARAMS:
+                print("%-16s %-15s %-6s %s"
+                      % (token, name, "n/a",
+                         "only shows on a picture that is changing"))
+                continue
+            params = base_for(token)
+            params[slot] = MOVED[slot]
+            # A parameter on an effect that moves with the frame index has to
+            # be compared at more than one frame. Edge ignite's flicker is an
+            # OSCILLATION, and frame 7 -- the single frame this check used to
+            # render -- happens to sit where flicker 0 and flicker 1 almost
+            # coincide: 0.16% of the picture there, 4.53% at frame 13, with
+            # peak differences of 23 and 199 levels. One frame called a working
+            # control dead, and the reading it gave was true and useless. Take
+            # the frame where the parameter shows most.
+            frames = (0, 7, 13) if token in ANIMATES_BY_INDEX else (7,)
+            pct = -1.0
+            bad = False
+            for frame in frames:
+                shot = render(token, params, frame)
+                reference = neutral if frame == 7 else render(token, base_for(token), frame)
+                if len(shot) != len(reference) or not shot:
+                    bad = True
+                    break
+                changed = sum(1 for a, b in zip(reference[::53], shot[::53])
+                              if abs(a - b) > 6)
+                pct = max(pct, 100.0 * changed / len(reference[::53]))
+            if bad:
+                print("%-16s %-15s %-6s %s" % (token, name, "FAIL", "bad render"))
+                dead += 1
+                continue
+            verdict = "ok" if pct >= 0.5 else "DEAD"
+            if verdict == "DEAD":
+                dead += 1
+            print("%-16s %-15s %-6s %.1f%% of the picture moved"
+                  % (token, name, verdict, pct))
+    # The colour chip (CueEffect::colour) is a control too. White must be
+    # exactly the effect as it was before it had one, and another colour must
+    # move the picture.
+    for token in COLOUR_EFFECTS:
+        def coloured(colour, frame):
+            out = os.path.join(work, "param.ppm")
+            spec = "%s:0.9:%g:%g:%g:%g:%s" % ((token,) + tuple(base_for(token)) + (colour,))
+            subprocess.run([exe, "--effect-dump", spec, src, out, str(frame)],
+                           capture_output=True)
+            return raster(out) if os.path.exists(out) else b""
+        pct = 0.0
+        same = True
+        for frame in (0, 7, 13):
+            reference = render(token, base_for(token), frame)
+            if coloured("ffffff", frame) != reference:
+                same = False
+            shot = coloured("ff2040", frame)
+            if shot and len(shot) == len(reference):
+                changed = sum(1 for a, b in zip(reference[::53], shot[::53]) if abs(a - b) > 6)
+                pct = max(pct, 100.0 * changed / len(reference[::53]))
+        verdict = "ok" if pct >= 0.5 and same else "DEAD" if same else "FAIL"
+        if verdict != "ok":
+            dead += 1
+        print("%-16s %-15s %-6s %.1f%% of the picture moved%s"
+              % (token, "colour", verdict, pct, "" if same else "; WHITE CHANGED THE OLD LOOK"))
+    summary = ("FAIL: %d parameter(s) do nothing" % dead if dead else
+               "every named parameter changes the picture")
+    print()
+    print(summary)
+    return 1 if dead else 0
+
+
+def check_animation(exe, src, work):
+    """Does each effect move over time exactly when the header says it does?"""
+    frames = (0, 1, 2, 3, 5, 8, 13, 40, 97)
+    wrong = 0
+    print("%-16s %-10s %s" % ("effect", "verdict", "detail"))
+    for token, params in EFFECTS:
+        if token in ANIMATES_BY_STATE:
+            print("%-16s %-10s %s"
+                  % (token, "state", "moves by carrying state, not by the index"))
+            continue
+        seen = set()
+        for frame in frames:
+            out = os.path.join(work, "anim.ppm")
+            subprocess.run([exe, "--effect-dump", "%s:%s" % (token, params),
+                            src, out, str(frame), str(PASSES.get(token, 1))],
+                           capture_output=True)
+            seen.add(raster(out) if os.path.exists(out) else b"")
+        moves = len(seen) > 1
+        listed = token in ANIMATES_BY_INDEX
+        if moves == listed:
+            print("%-16s %-10s %s"
+                  % (token, "ok", "moves" if moves else "still, as listed"))
+        else:
+            wrong += 1
+            print("%-16s %-10s %s"
+                  % (token, "WRONG",
+                     "the pixels move and the header says they do not"
+                     if moves else
+                     "the header says it animates and the pixels do not"))
+    print()
+    print("FAIL: %d effect(s) misfiled in cueEffectKindAnimates" % wrong if wrong
+          else "the animating effects are exactly the ones the header lists")
+    return 1 if wrong else 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--exe", default=os.path.join(
+        REPO, "build", "windows", "Release", "Deckboy.exe"))
+    parser.add_argument("--source", help="picture to run the effects on "
+                                         "(default: a generated fractal)")
+    parser.add_argument("--frame", type=int, default=7,
+                        help="frame index, for the effects that advance with time")
+    parser.add_argument("--sheet", help="write a contact sheet here (PNG)")
+    parser.add_argument("--params", action="store_true",
+                        help="check every named parameter moves the picture")
+    parser.add_argument("--animation", action="store_true",
+                        help="check cueEffectKindAnimates matches the pixels")
+    args = parser.parse_args()
+
+    exe = os.path.abspath(args.exe)
+    if not os.path.exists(exe):
+        print("no binary at %s" % exe)
+        return 1
+    deckboy_testroot.warn_if_stale(exe)
+
+    work = tempfile.mkdtemp(prefix="deckboy-fx-offline-")
+    src = os.path.join(work, "src.ppm")
+    if args.source:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", args.source,
+                        "-frames:v", "1", "-pix_fmt", "rgb24", src], check=True)
+    else:
+        # Something with structure at every scale. Flat colour bars are a poor
+        # test for anything that reacts to image content, and they made a dead
+        # reaction-diffusion look identical to a live one.
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                        "-i", "mandelbrot=size=640x360:rate=1",
+                        "-frames:v", "1", "-pix_fmt", "rgb24", src], check=True)
+    base = raster(src)
+
+    if args.animation:
+        return check_animation(exe, src, work)
+    if args.params:
+        return check_params(exe, src, base, work)
+
+    rows, outputs, failures = [], [], 0
+    for token, params in EFFECTS:
+        out = os.path.join(work, token + ".ppm")
+        proc = subprocess.run([exe, "--effect-dump", "%s:%s" % (token, params),
+                               src, out, str(args.frame),
+                               str(PASSES.get(token, 1))],
+                              capture_output=True, text=True)
+        if proc.returncode != 0 or not os.path.exists(out):
+            rows.append((token, "FAIL", (proc.stderr or proc.stdout).strip()[:70]))
+            failures += 1
+            continue
+        shot = raster(out)
+        if len(shot) != len(base):
+            rows.append((token, "FAIL", "wrong size out"))
+            failures += 1
+            continue
+        # Sampled rather than exhaustive: a stride keeps this instant on a 4K
+        # source and no real effect changes only the bytes a stride skips.
+        changed = sum(1 for a, b in zip(base[::97], shot[::97]) if abs(a - b) > 8)
+        pct = 100.0 * changed / len(base[::97])
+        ms = ""
+        for word in proc.stdout.split():
+            if word.endswith("ms"):
+                ms = " " + word
+        if pct < 0.5:
+            rows.append((token, "NO CHANGE", "identical to the source"))
+            failures += 1
+        else:
+            rows.append((token, "ok", "%.1f%% of bytes changed%s" % (pct, ms)))
+        outputs.append(out)
+
+    if args.sheet and outputs:
+        cols = 3
+        inputs = []
+        for path in [src] + outputs:
+            inputs += ["-i", path]
+        scaled = "".join("[%d]scale=426:-1[s%d];" % (i, i)
+                         for i in range(len(outputs) + 1))
+        stacks, row_labels = "", []
+        for start in range(0, len(outputs) + 1, cols):
+            group = list(range(start, min(start + cols, len(outputs) + 1)))
+            if len(group) < cols:
+                break                      # drop a ragged last row
+            name = "r%d" % start
+            stacks += "".join("[s%d]" % i for i in group) + "hstack=%d[%s];" % (cols, name)
+            row_labels.append(name)
+        graph = scaled + stacks + "".join("[%s]" % n for n in row_labels) + \
+            "vstack=%d" % len(row_labels)
+        subprocess.run(["ffmpeg", "-y", "-v", "error"] + inputs +
+                       ["-filter_complex", graph, args.sheet], check=False)
+        print("contact sheet: %s (source first, then %s)"
+              % (args.sheet, ", ".join(t for t, _ in EFFECTS)))
+
+    print()
+    print("%-18s %-10s %s" % ("effect", "verdict", "detail"))
+    for token, verdict, detail in rows:
+        print("%-18s %-10s %s" % (token, verdict, detail))
+    for token, why in NOT_PIXEL_EFFECTS:
+        print("%-18s %-10s %s" % (token, "n/a", why))
+    print("\n%s" % ("FAIL" if failures else
+                    "every effect changes the picture"))
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

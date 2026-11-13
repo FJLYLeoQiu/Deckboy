@@ -1,0 +1,2346 @@
+#name Suomi
+#english Finnish
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	UUSI
+OPEN	AVAA
+SAVE	TALLENNA
+SAVE AS	TALLENNA NIMELLÄ
+BUNDLE	NIPUTA
+IMPORT	TUO
+SOURCE	LÄHDE
+PATTERN	TESTIKUVA
+SETTINGS	ASETUKSET
+TAKE	TAKE
+STOP	SEIS
+REBOOT	UUDELLEENKÄYNNISTYS
+BLACKOUT	MUSTA
+CLEAR	TYHJENNÄ
+RECORD	TALLENNUS
+PLAYLIST	SOITTOLISTA
+TIMELINE	AIKAJANA
+MEDIA	MEDIA
+TRANSPORT	KULJETIN
+OUTPUT	ULOSTULO
+PROGRAM	PROGRAM
+WARP	VÄÄNNÄ
+LIVE	SUORA
+DECODE	PURA
+STREAM	LÄHETÄ
+System	Järjestelmä
+Audio	Ääni
+Network	Verkko
+Video Outputs	Videolähdöt
+About	Tietoja
+Encoder	Enkooderi
+Screen	Näyttö
+Geometry	Geometria
+Devices	Laitteet
+Streaming	Suoratoisto
+APPEARANCE	ULKOASU
+REMOTE CONTROL	KAUKO-OHJAUS
+INTEGRATION ADAPTERS	INTEGRAATIOSOVITTIMET
+DISCOVERY / NOTES	LÖYTÄMINEN / MUISTIINPANOT
+DISPLAY & RASTER	NÄYTTÖ JA RASTERI
+CONNECTED DISPLAYS	KYTKETYT NÄYTÖT
+EDGE FEATHERING	REUNAN PEHMENNYS
+MATTE & OVERLAY	MATTA JA PÄÄLLYS
+AREA OF INTEREST	KIINNOSTUSALUE
+DEFAULT TRANSITION	OLETUSSIIRTYMÄ
+NMC IN & OUT	NMC SISÄÄN JA ULOS
+OSC QUERY / FEEDBACK	OSC-KYSELY / VASTAUS
+CUE INSPECTOR	CUE-TARKASTELIJA
+SELECTED CUE	VALITTU CUE
+PLAYBACK	TOISTO
+COPY	KOPIOI
+PASTE	LIITÄ
+RESET	NOLLAA
+Theme	Teema
+Language	Kieli
+Resolution	Tarkkuus
+Orientation	Suunta
+Toggle Fullscreen	Koko näyttö
+IDENTIFY	TUNNISTA
+REGION SIZE	ALUEEN KOKO
+POSITION	SIJAINTI
+CENTRE	KESKITÄ
+FULL	TÄYSI
+duration	kesto
+transition	siirtymä
+fade in	häivytä sisään
+fade out	häivytä ulos
+ON	PÄÄLLÄ
+OFF	POIS
+Stopped	Pysäytetty
+Playing	Toistaa
+Paused	Tauolla
+2-UP	2 RINNAKKAIN
+DONE	VALMIS
+EDIT	MUOKKAA
+HELD	PIDOSSA
+Mode	Tila
+PICK	VALITSE
+QUAD	NELJÄ
+Rate	Taajuus
+STEP	ASKEL
+Apply	Käytä
+CLOSE	SULJE
+FIXED	KIINTEÄ
+Help!	Apua!
+ORDER	JÄRJESTYS
+READY	VALMIS
+TILES	RUUDUT
+ALL ON	KAIKKI PÄÄLLE
+ALWAYS	AINA
+ANALOG	ANALOGINEN
+Buffer	Puskuri
+Cancel	Peruuta
+Custom	Oma
+Device	Laite
+Folder	Kansio
+FORMAT	MUOTO
+HIDDEN	PIILOSSA
+Length	Pituus
+Mascot	Maskotti
+Mirror	Peili
+NATIVE	NATIIVI
+PRESET	ESIASETUS
+Sender	Lähetin
+SUMMED	SUMMATTU
+TOGGLE	VAIHDA
+12 HOUR	12 TUNTIA
+24 HOUR	24 TUNTIA
+ALL OFF	KAIKKI POIS
+ARRANGE	ASETTELE
+Channel	Kanava
+CONVERT	MUUNNA
+DEFAULT	OLETUS
+END CUE	CUEN LOPPU
+Key out	Key-ulostulo
+LTC out	LTC-ulostulo
+MISSING	PUUTTUU
+PRESETS	ESIASETUKSET
+PROJECT	PROJEKTI
+RUNNING	KÄYNNISSÄ
+Send to	Lähetä
+SHUFFLE	SEKOITA
+UPDATES	PÄIVITYKSET
+VJ MODE	VJ-TILA
+CLOCK ON	KELLO PÄÄLLE
+DOWNLOAD	LATAA
+EXAMPLES	ESIMERKIT
+Mappings	Määritykset
+NMC sync	NMC-tahdistus
+PROMPTER	PROMPTERI
+SHOW SDP	NÄYTÄ SDP
+TCP port	TCP-portti
+UI scale	Käyttöliittymän koko
+vMix API	vMix-API
+WATCHING	VALVOTAAN
+A/V delay	A/V-viive
+ASIO outs	ASIO-ulostulot
+BOTH AXES	MOLEMMAT AKSELIT
+CHECK NOW	TARKISTA NYT
+CLOCK OFF	KELLO POIS
+Creatures	Olennot
+CUE TOOLS	CUE-TYÖKALUT
+Direction	Suunta
+Freewheel	Vapaakäynti
+HTTP port	HTTP-portti
+Jump mode	Hyppytila
+Listen on	Kuuntele
+OSC Query	OSC-kysely
+OUTPUT ON	ULOSTULO PÄÄLLE
+Panic now	Paniikki nyt
+RECORDING	TALLENNUS
+REMAINING	JÄLJELLÄ
+RESET ALL	NOLLAA KAIKKI
+RUN PANIC	AJA PANIIKKI
+SHOW FLOW	SHOWN KULKU
+TIMERS ON	AJASTIMET PÄÄLLE
+WHEN IDLE	JOUTOKÄYNNILLÄ
+ADD OUTPUT	LISÄÄ ULOSTULO
+BUILT WITH	RAKENNETTU
+CANCEL ALL	PERUUTA KAIKKI
+colour tag	värimerkki
+copy chain	kopioi ketju
+Hover tips	Vinkit
+Input gain	Tulon vahvistus
+Input mono	Tulo mono
+live audio	suora ääni
+Live input	Suora tulo
+MIDI input	MIDI-tulo
+no picture	ei kuvaa
+no preview	ei esikatselua
+OPEN SAVED	AVAA TALLENNETTU
+OUTPUT OFF	ULOSTULO POIS
+Panic fade	Paniikkihäivytys
+Tally port	Tally-portti
+TIMERS OFF	AJASTIMET POIS
+Accept from	Hyväksy
+ASIO driver	ASIO-ajuri
+BACK TO TOP	YLÖS
+CANVAS MODE	KANGASTILA
+CODE SOURCE	KOODILÄHDE
+Cue numbers	Cue-numerot
+Destination	Kohde
+Mirror rate	Peilaustaajuus
+no duration	ei kestoa
+NO LIVE CUE	EI SUORAA CUETA
+NO PREVIOUS	EI EDELLISTÄ
+OVERLAY BIN	PÄÄLLYSKORI
+paste chain	liitä ketju
+Sample rate	Näytteenottotaajuus
+SENDING OUT	LÄHETTÄÄ
+Shift: snap	Shift: nappaa
+THIS OUTPUT	TÄMÄ ULOSTULO
+(no matches)	(ei osumia)
+(no subtext)	(ei alatekstiä)
+add a button	lisää painike
+add a window	lisää ikkuna
+Art-Net port	Art-Net-portti
+AUDIO OUTPUT	ÄÄNIULOSTULO
+Auto restore	Palauta itse
+DECKLINK: ON	DECKLINK: PÄÄLLÄ
+free running	vapaasti käyvä
+KEY+FILL: ON	KEY+FILL: PÄÄLLÄ
+LISTENING IN	KUUNTELEE
+Miami cursor	Miami-osoitin
+MIDI CONTROL	MIDI-OHJAUS
+Mirror state	Peilaa tila
+NDI KEY: OFF	NDI KEY: POIS
+NDI KEY: ON	NDI KEY: PÄÄLLÄ
+NO PROGRAMME	EI PROGRAMIA
+ST 2110: OFF	ST 2110: POIS
+ST 2110: ON	ST 2110: PÄÄLLÄ
+WATCH FOLDER	VALVOTTU KANSIO
+COMPOSITE CUE	YHDISTELMÄCUE
+DECKLINK: OFF	DECKLINK: POIS
+default route	oletusreitti
+Every adapter	Kaikki sovittimet
+KEY+FILL: OFF	KEY+FILL: POIS
+LEFT TO RIGHT	VASEMMALTA OIKEALLE
+MEDIA ENCODER	MEDIAKOODAIN
+MSC device id	MSC-laitetunnus
+NEW SHOW FILE	UUSI SHOW-TIEDOSTO
+No cue loaded	Ei ladattua cueta
+nothing taken	ei otettu mitään
+OPEN PREVIOUS	AVAA EDELLINEN
+Output device	Ulostulolaite
+Panic profile	Paniikkiprofiili
+Quit Deckboy?	Lopetetaanko Deckboy?
+REMOVE OUTPUT	POISTA ULOSTULO
+Sound effects	Äänitehosteet
+Tally address	Tally-osoite
+TOP TO BOTTOM	YLHÄÄLTÄ ALAS
+127 (all-call)	127 (yleiskutsu)
+ALL INTERFACES	KAIKKI LIITÄNNÄT
+LOCALHOST ONLY	VAIN LOCALHOST
+Monitor device	Kuuntelulaite
+no audio track	ei ääniraitaa
+PRESENTER VIEW	ESITTÄJÄN NÄKYMÄ
+RECORD TO DISK	TALLENNA LEVYLLE
+STOP RECORDING	LOPETA TALLENNUS
+STOP STREAMING	LOPETA LÄHETYS
+TALLY TRIGGERS	TALLY-LIIPAISIMET
+Device channels	Laitteen kanavat
+NDI SENDING: ON	NDI-LÄHETYS: PÄÄLLÄ
+NO CUE SELECTED	EI VALITTUA CUETA
+Output channels	Ulostulokanavat
+preview pending	esikatselu kesken
+START RECORDING	ALOITA TALLENNUS
+START STREAMING	ALOITA LÄHETYS
+(system default)	(järjestelmän oletus)
+Check at startup	Tarkista käynnistyksessä
+Global crossfade	Yleinen ristihäivytys
+Mic to recording	Mikrofoni tallenteeseen
+Monitor playlist	Kuuntele soittolistaa
+NDI SENDING: OFF	NDI-LÄHETYS: POIS
+no still preview	ei kuvan esikatselua
+Pocket 3 / touch	Pocket 3 / kosketus
+SMPTE LTC OUTPUT	SMPTE LTC -ULOSTULO
+the whole screen	koko näyttö
+Check for one now	Tarkista nyt
+INSTALL & RESTART	ASENNA JA KÄYNNISTÄ
+Registry: NOT SET	Rekisteri: EI ASETETTU
+SAFETY / TIMECODE	TURVA / AIKAKOODI
+Timecode jam sync	Aikakoodin jam sync
+esc or N to cancel	Esc tai N peruuttaa
+KEYBOARD SHORTCUTS	NÄPPÄINOIKOTIET
+loading preview...	ladataan esikatselua...
+CONVERT ALL FLAGGED	MUUNNA KAIKKI MERKITYT
+dot-matrix cue deck	matriisi-cuepöytä
+HyperDeck emulation	HyperDeck-emulointi
+locked to the tempo	lukittu tempoon
+VJ mode (two decks)	VJ-tila (kaksi deckiä)
+ADD ANOTHER PLAYLIST	LISÄÄ SOITTOLISTA
+Companion / OSC port	Companion- / OSC-portti
+Esc or click to skip	Esc tai napsauta ohittaaksesi
+PLAYLIST PREFERENCES	SOITTOLISTAN ASETUKSET
+press ENTER to start	paina ENTER aloittaaksesi
+ADD A SECOND PLAYLIST	LISÄÄ TOINEN SOITTOLISTA
+filmstrip unavailable	filmiliuska ei saatavilla
+(empty — import media)	(tyhjä – tuo mediaa)
+Ctrl+D or Esc to close	Ctrl+D tai Esc sulkee
+(no notes for this cue)	(ei muistiinpanoja tälle cuelle)
+Timebase / start / fade	Aikaperusta / aloitus / häivytys
+No cues need conversion.	Mikään cue ei vaadi muunnosta.
+CLICK TO SAMPLE KEY COLOR	NAPSAUTA POIMIAKSESI KEY-VÄRIN
+normalize loudness (R128)	normalisoi äänenvoimakkuus (R128)
+off - all channels silent	pois – kaikki kanavat hiljaa
+no video lane for this cue	ei videoraitaa tälle cuelle
+HyperDeck emulation is off.	HyperDeck-emulointi on pois.
+OWN SCRIPT  (click to edit)	OMA KÄSIKIRJOITUS  (napsauta muokataksesi)
+Theme and operator feedback	Teema ja käyttäjän palaute
+Discovery and mirrored state	Löytäminen ja peilattu tila
+FOLLOWING THE LIVE CUE NOTES	SEURAA SUORAN CUEN MUISTIINPANOJA
+Listening on all interfaces.	Kuuntelee kaikkia liitäntöjä.
+Network-facing runtime notes	Verkkoon näkyvät ajonaikaiset tiedot
+Hi! Press I to import a clip.	Hei! Paina I tuodaksesi klipin.
+Global jump and panic behavior	Yleinen hyppy- ja paniikkitoiminta
+Roll when the show cuts to you	Käynnisty kun lähetys leikkaa sinuun
+Choose a cue to inspect it here	Valitse cue tarkastellaksesi sitä
+Defaults for newly created cues	Oletukset uusille cueille
+Device routing for cue playback	Laitereititys cuen toistoon
+Smaller buffer = lower latency.	Pienempi puskuri = pienempi viive.
+Emergency fade and sync behavior	Hätähäivytys ja tahdistus
+mixed selection: key unavailable	sekavalinta: key ei saatavilla
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (KOKEELLINEN)
+Esc=continue with current session	Esc = jatka nykyistä istuntoa
+no per-cue settings for this type	ei cue-asetuksia tälle tyypille
+On stop: remux to an ordinary MP4	Pysäytyksessä: remuxaa tavalliseksi MP4:ksi
+Where RECORD writes the programme	Minne RECORD kirjoittaa programin
+dot-matrix cue deck for live events	matriisi-cuepöytä live-tapahtumiin
+Listening on localhost (127.0.0.1).	Kuuntelee localhostia (127.0.0.1).
+three expressions: red, green, blue	kolme lauseketta: punainen, vihreä, sininen
+Transport sync with another machine	Kuljetuksen tahdistus toiseen koneeseen
+Add slot sources in the cue inspector	Lisää lähteet cue-tarkastelijassa
+Ask GitHub; never installs on its own	Kysyy GitHubilta; ei asenna itse
+Import or click a cue in the playlist	Tuo tai napsauta cueta soittolistalla
+mixed selection: geometry unavailable	sekavalinta: geometria ei saatavilla
+generate timecode for the rig to chase	tuota aikakoodi jota kalusto seuraa
+Lower Third and PIP fire independently	Alapalkki ja PiP laukeavat erikseen
+Panels built for a vMix rig, unchanged	vMix-kalustoon tehdyt paneelit, ennallaan
+Incoming transport arrives as NMCEVENT.	Saapuva kuljetus tulee NMCEVENT-muodossa.
+not in this build - saved with the show	ei tässä versiossa – tallennettu shown mukana
+Find from the playlist, not from a modal	Etsi soittolistalta, ei ikkunasta
+take or select a cue to open the timeline	ota tai valitse cue avataksesi aikajanan
+Optional external transport and cue control	Valinnainen ulkoinen kuljetus ja cue-ohjaus
+No previous show file found at startup path.	Edellistä show-tiedostoa ei löytynyt.
+Use Ctrl+F or type a cue id/number to search.	Käytä Ctrl+F tai kirjoita cuen tunnus/numero.
+Companion / OSC ingress and HyperDeck emulation	Companion- / OSC-tulo ja HyperDeck-emulointi
+A/V delay holds audio back for lagging displays.	A/V-viive hidastaa ääntä viiveisille näytöille.
+On stop: leave the crash-resilient file as it is	Pysäytyksessä: jätä kaatumisvarma tiedosto sellaisenaan
+same disk as Deckboy - a separate drive is safer	sama levy kuin Deckboy – erillinen on turvallisempi
+A step fires one cue on each playlist, all at once.	Askel laukaisee yhden cuen jokaisella soittolistalla yhtä aikaa.
+one expression: the same value in red, green and blue	yksi lauseke: sama arvo punaisessa, vihreässä ja sinisessä
+NDI transport is configured per output in Video Outputs.	NDI-kuljetus asetetaan ulostulokohtaisesti Videoulostuloissa.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Lähettää PLAY / PAUSE / STOP / LOCATE kuljetuksen liikkuessa.
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC-tilaus: lähetä /deckboy/subscribe ohjaimeltasi.
+NMC mode / host / port are runtime-configurable for sync work.	NMC-tila / isäntä / portti ovat säädettävissä ajon aikana.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Lähetykseen meno ottaa cuen. Deckboy ei koskaan lähetä mikserille käskyä.
+FPS: ON	FPS: PÄÄLLÄ
+FPS: OFF	FPS: POIS
+NMOS: ON	NMOS: PÄÄLLÄ
+NMOS: OFF	NMOS: POIS
+SPOUT: ON	SPOUT: PÄÄLLÄ
+SPOUT: OFF	SPOUT: POIS
+CANVAS: ON	KANGAS: PÄÄLLÄ
+CANVAS: OFF	KANGAS: POIS
+10-BIT: ON	10-BITTIÄ: PÄÄLLÄ
+10-BIT: OFF	10-BITTIÄ: POIS
+EDIT...	MUOKKAA...
+FOLDER...	KANSIO...
+ARRANGE...	ASETTELE...
+ADD FILE...	LISÄÄ TIEDOSTO...
+RENUMBER...	NUMEROI UUDELLEEN...
+set a port...	aseta portti...
+no script	ei käsikirjoitusta
++ OUTPUT	+ ULOSTULO
+Eddie's Clock	Eddien kello
+Ctrl+/ to close	Ctrl+/ sulkee
+(step lives here)	(askel on täällä)
+4:2:2  8-BIT	4:2:2  8 BITTIÄ
+4:2:2  10-BIT	4:2:2  10 BITTIÄ
+No outputs — click + OUTPUT to add one.	Ei ulostuloja – napsauta + ULOSTULO.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, NDI-liipaisin, NMC, MTC, LTC, Art-Net ja Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Muunna H.264:ksi ne cuet joita Deckboy ei toista hyvin
+a button can run any command the network protocol understands	painike voi ajaa mitä tahansa protokollan ymmärtämää käskyä
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	ASETTELE ESITTÄJÄN NÄKYMÄ  -  raahaa paneelia siirtääksesi, kulmaa muuttaaksesi kokoa
+VIDEO	VIDEO
+capture again - what is on now	kaappaa uudelleen - se mitä nyt näkyy
+change what it does...	muuta toimintoa...
+decks - Stop deck...	deckit - pysäytä deck...
+decks - Take deck...	deckit - TAKE deckille...
+delete step	poista vaihe
+delete this button	poista tämä painike
+label, command and glyph as text...	nimi, komento ja symboli tekstinä...
+move down	siirrä alas
+move up	siirrä ylös
+next colour	seuraava väri
+preset - a new preset from what is on now	esiasetus - uusi esiasetus siitä mitä nyt näkyy
+type a command myself...	kirjoitan komennon itse...
+type a length in seconds...	kirjoita kesto sekunteina...
+wait for GO	odota GO
+what it recalls...	mitä se palauttaa...
+when its cues end	kun sen cuet päättyvät
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL tasaa koko soittolistan kerralla
+back to the in point, not to zero	takaisin alkupisteeseen, ei nollaan
+drag to scrub. the audio follows	vedä selataksesi. ääni seuraa
+loops between the in and out points, not the file	toistaa alku- ja loppupisteen välillä, ei koko tiedostoa
+(not set)	(ei asetettu)
+1.00x  (default 1080p)	1.00x  (oletus 1080p)
+1.25x  (large desktop)	1.25x  (suuri työpöytä)
+1.50x  (4K desktop)	1.50x  (4K-työpöytä)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / pieni 4K)
+highest bandwidth	suurin kaistanleveys
+lower bandwidth	pienempi kaistanleveys
+film	elokuva
+CD, music rigs	CD, musiikkilaitteistot
+video standard	videostandardi
+every playlist	jokainen soittolista
+None  (no character art)	Ei mitään  (ei hahmoa)
+custom size...	oma koko...
+Browser URL	Selaimen URL
+Camera	Kamera
+Media File / Still	Mediatiedosto / still-kuva
+RECORD TO FILE	TALLENNA TIEDOSTOON
+browser, with sound	selain, äänen kanssa
+Window	Ikkuna
+Desktop	Työpöytä
+full screen	koko näyttö
+DeckLink Output	DeckLink-lähtö
+FFmpeg Stream Output	FFmpeg-striimilähtö
+NDI Output	NDI-lähtö
+SDL Window Output	SDL-ikkunalähtö
+Spout Output	Spout-lähtö
+DESK	PÖYTÄ
+drop a folder in too - it reads the whole tree	raahaa kansiokin mukaan — kaikki alikansiot luetaan
+cameras, windows, NDI, screens - all live sources	kamerat, ikkunat, NDI, näytöt — kaikki ovat suoria lähteitä
+test cards and generators - no file needed	testikuvat ja generaattorit — tiedostoa ei tarvita
+space bar does this too, without moving your hand	välilyönti tekee saman, kättä siirtämättä
+stops the cue. ESC stops EVERYTHING	pysäyttää cuen. ESC pysäyttää KAIKEN
+the safe one: audio and playback keep running	lempeä vaihtoehto: ääni ja toisto jatkuvat
+the thorough one. blackout is the reversible one	perusteellinen vaihtoehto. Pimennyksen voi kumota
+save as makes a new file instead	Tallenna nimellä luo uuden tiedoston
+for a copy before you change something risky	kopio talteen ennen riskialtista muutosta
+this is what you carry to the venue	tämän otat mukaan tapahtumapaikalle
+the show on disk is untouched until you save	levyllä oleva esitys säilyy ennallaan, kunnes tallennat
+per cue. the deck has its own default too	cuekohtainen. Deckillä on myös oma oletusarvonsa
+stills hold instead - a fade would dip the frame	still-kuvat jäävät näkyviin — häivytys himmentäisi kuvaa
+the frame stays up. good for slides	kuva jää näkyviin. Kätevää dioille
+gain, pan and normalise live in the inspector	vahvistus, panorointi ja normalisointi löytyvät tarkastelupaneelista
+this clip has no audio track to enable	tässä klipissä ei ole ääniraitaa kytkettäväksi
+Hi! I am Deckboy.	Moi! Olen Deckboy.
+Press I to import a clip.	Tuo klippi painamalla I.
+Enter takes a cue live.	Enter vie cuen lähetykseen.
+S stops the live cue.	S pysäyttää lähetyksessä olevan cuen.
+The timeline can be resized.	Aikajanan kokoa voi muuttaa.
+Try a terminal theme in Settings.	Kokeile pääteteemaa Asetuksista.
+RELINK finds media that has moved.	RELINK löytää siirretyt mediatiedostot.
+Cues have their own gain and fades.	Jokaisella cuella on oma vahvistus ja omat häivytykset.
+Trim with Ctrl+I and Ctrl+O.	Rajaa klippi näppäimillä Ctrl+I ja Ctrl+O.
+Ctrl+/ shows every shortcut.	Ctrl+/ näyttää kaikki pikanäppäimet.
+J jumps to the live cue.	J siirtyy lähetyksessä olevaan cueen.
+Normalize matches loudness across cues.	Normalisointi tasaa cueiden koettua äänekkyyttä.
+Esc clears the desk, then the output, then quits.	Esc tyhjentää pöydän, sitten ulostulon ja lopuksi sulkee ohjelman.
+Stream SRT and RTMP at the same time.	Lähetä SRT- ja RTMP-virtaa yhtä aikaa.
+CHECK lists what is broken, before doors.	CHECK näyttää ongelmat ennen ovien avaamista.
+A cue can wait before it starts.	Cue voi odottaa ennen käynnistymistä.
+A cue can start the next one by itself.	Cue voi käynnistää seuraavan itsestään.
+Disarm a cue and GO steps over it.	Poista cue valmiudesta, niin GO ohittaa sen.
+Audition plays a cue to you, not the room.	Esikuuntelu soittaa sinulle, ei salille.
+Preload racks the next cue warm, off air.	Esilataus valmistelee seuraavan cuen lähetyksen ulkopuolella.
+A target cue starts or stops another cue.	Kohdecue käynnistää tai pysäyttää toisen cuen.
+A fade cue takes a deck down, then stops it.	Häivytyscue vaimentaa deckin ja pysäyttää sen.
+A master cue fires one cue on every deck.	Master-cue käynnistää yhden cuen jokaisella deckillä.
+A MIDI cue can tell the lighting desk to go.	MIDI-cue voi antaa valopöydälle lähtömerkin.
+A network cue speaks OSC, UDP or TCP.	Verkkocue puhuu OSC:tä, UDP:tä tai TCP:tä.
+A DMX cue fades the house lights on a cue.	DMX-cue häivyttää salin valoja.
+A script cue runs Deckboy's own commands.	Skripticue suorittaa Deckboyn omia komentoja.
+A timecode cue jams LTC to a value.	Aikakoodicue asettaa LTC:n annettuun arvoon.
+Each output can show a different deck.	Jokainen ulostulo voi näyttää eri deckiä.
+The matrix sends audio to any channel.	Matriisi lähettää ääntä mille tahansa kanavalle.
+The panel map numbers every LED tile.	Paneelikartta numeroi jokaisen LED-laatan.
+Hey!	Hei!
+Quit it!	Lopetas nyt!
+Ow. That was rude.	Ai. Olipa kohteliasta.
+I am a professional.	Olen sentään ammattilainen.
+Seriously?	Ihanko totta?
+This is my monitor.	Tämä on minun monitorini.
+I am telling the operator.	Kerron tästä käyttäjälle.
+All right. Wow.	No niin. Justiinsa.
+Right. That does it.	Nyt riitti.
+I am leaving. Good luck with the show.	Minä lähden. Onnea esitykseen.
+Still here? Me too.	Vielä täällä? Niin minäkin.
+Long show, huh.	Tämähän venyy kuin nälkävuosi.
+I could do this all day. Apparently.	Voisin tehdä tätä koko päivän. Näköjään teenkin.
+You have been staring at me for hours.	Olet tuijottanut minua jo tuntikausia.
+Has anyone seen a clock?	Onko kellään kelloa, vai mennäänkö mutulla?
+Is it still the same show?	Onko tämä yhä sama esitys?
+I'm not tired. You're tired.	En minä ole väsynyt. Sinä olet.
+Five more minutes. Then five more.	Vielä viisi minuuttia. Ja lehmät lentää.
+A whole day. I need a restart.	Kokonainen vuorokausi. Tarvitsen uudelleenkäynnistyksen.
+Save the show. Then let me sleep.	Tallenna esitys. Sitten pää tyynyyn.
+Every pixel of me is tired.	Jokainen pikselini on ihan poikki.
+Close me. Open me. I'll be fine.	Sulje minut. Avaa minut. Kyllä se siitä.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Sisulla mennään! Sauna odottaa.
+Oh hey. It's 4:20. Take it easy.	Ai, moi. Kello on 4:20. Ota rauhallisesti.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	HEI
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Olen tohtori Pixel. Viisi minuuttia, ja ajat showta. Vähemmän, jos kuuntelet minua.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Ja minä olen professori Video. Ensin syntikat, sitten video. Nyt lähinnä video. Paina START, niin kytketään... aloitetaan.
+TURN THE OUTPUT ON	KYTKE ULOSTULO PÄÄLLE
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, ruutu on tyhjä. Älä anna heidän odottaa. Avaa VALIKKO ja tee ULOSTULO POIS -kohdasta ULOSTULO PÄÄLLE. Hajde!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Ensimmäinen oppitunti: mitään ei tule ulos, ennen kuin kytket oskillaattorin... ULOSTULOON. Se on videota. Tiedän.
+BRING IN A CLIP	TUO KLIPPI
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	Nyt kuva. Paina I ja valitse klippi tietokoneeltasi. Eikö ole klippiä? SHOW ME, niin lainaan sinulle yhden omistani.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Jokaisesta klipistä tulee cue soittolistaan. Kuin lataisi samplen. Samplen, jossa on kuvia.
+TAKE IT LIVE	LÄHETYKSEEN
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Klippisi odottaa soittolistalla. Valitse se ja sitten TAKE. Tai Enter. Itsevarmat operaattorit painavat Enteriä.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKE on verhokäyrän liipaisin. Siis, öö, GO-nappi. Sama asia, siinä on vain kuvia.
+LINE UP THE NEXT ONE	VALMISTELE SEURAAVA
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Napsauta toista cueta. Se odottaa valmiina, kunnes sanot. Vain yksi cue? Tuo toinen tai SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Valitseminen ei ole toistamista. Valittu on sekvenssin seuraava nuotti. Seuraava CUE.
+CROSSFADE TO IT	RISTIHÄIVYTÄ SIIHEN
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Kovat leikkaukset ovat amatöörien juttu. Paina inspectorissa + siirtymä-kohdassa, niin että siinä lukee aika eikä deck. Sitten TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Ristihäivytys! Portamento, mutta kuville. Mikä tahansa aika käy. Muutama painallus lisää, ja se on sekunti. Sitten TAKE.
+CLEAR THE SCREEN	TYHJENNÄ RUUTU
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Meneekö lavalla jokin pieleen? Paina BLACK tai B. Kuva katoaa. Show jatkuu alla.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Mitään ei katoa. Paina B uudelleen, ja se palaa. Kuin miksauspöydän mute. Hyvin rauhoittavaa.
+SAVE THE SHOW	TALLENNA SHOW
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	Tallenna nyt. Ctrl+S tai TALLENNA. Jotkin ohjelmat hukkaavat työsi ja syyttävät sitten sinua. Minä en koskaan.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Tallenna patchisi. SHOW'si. Show. Tämä harjoitusshow asuu Deckboyn omassa kansiossa; omasi on turvassa.
+THAT'S A SHOW	TÄMÄ ON SHOW
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	Tämä on show! Ulostulo, cue, TAKE, ristihäivytys, BLACK, tallennus. Nazdrave, skapi. Rakia on minun piikkiini.
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Tunti päättyi. Esimerkkishowt opettavat tasoja, otsikoita ja efektejä. VALIKKO > LEARN THE BASICS ajaa tämän uudelleen.
+*shakes head* That means yes. Bravo.	*pudistaa päätään* Se tarkoittaa kyllä. Bravo.
+Wonderful! Lovely signal flow.	Upeaa! Ihana signaalinkulku.
+Mm. I knew you had it in you.	Mm. Tiesin, että sinusta on tähän.
+Yes! Have a gold star. It's a dot.	Kyllä! Ota kultatähti. Se on piste.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Valmis seuraavaan vaiheeseen? *nyökkää* ...Se tarkoittaa ei, skapi. Se hehkuva. Se hehkuu sinulle.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Olet napsauttanut kaikkea paitsi sitä hehkuvaa. Oskillaattorinikin löytävät sen hehkuvan.
+stop playback first - the lesson cannot hand a running show back as it was	pysäytä toisto ensin - oppitunti ei voi palauttaa käynnissä olevaa showta sellaisenaan
+choose RECOVER or KEEP SAVED first	valitse ensin RECOVER tai KEEP SAVED
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	showtasi ei voitu tallentaa, joten oppitunti ei alkanut. Tallenna se (TALLENNA NIMELLÄ) ja yritä uudelleen
+the practice show would not open	harjoitusshow ei auennut
+could not start the practice show	harjoitusshowta ei voitu käynnistää
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: Esc poistuu, ja ensi kerralla jatketaan tästä
+that's the basics - MENU > LESSONS has part two	siinä perusteet - VALIKKO > LESSONS sisältää osan kaksi
+tour paused - LEARN THE BASICS picks up where you left off	kierros tauolla - LEARN THE BASICS jatkaa siitä, mihin jäit
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Peilatut näytöt, skapi. Paina mitä tahansa näppäintä tai napsauta, niin tohtori Pixel antaa sen takaisin.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Väärä näyttö, skapi. Paina mitä tahansa näppäintä tai napsauta, niin tohtori Pixel antaa sen takaisin.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Toinen näyttö katosi, skapi. Paina mitä tahansa näppäintä tai napsauta, niin tohtori Pixel antaa sen takaisin.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Yksi näyttö, skapi. Paina mitä tahansa näppäintä tai napsauta, niin tohtori Pixel antaa sen takaisin.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Toinen näyttö katosi, skapi, joten kuva palasi tähän. Laitoin sen pieneen ikkunaan, taakse. Kytke näyttö takaisin, niin kuva palaa sille.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Se söi pöydän, skapi. Yksi näyttö, joten ulostulo vei sen kokonaan. Laitoin sen pieneen ikkunaan, taakse. Oikea show saa toisen näytön.
+IT ATE THE DESK	SE SÖI PÖYDÄN
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	Tuossa. Nappi, jossa lukee ULOSTULO POIS. Tee siitä PÄÄLLE, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Mitään ei ole lähetyksessä, mistä häivyttää, skapi. Tee ensin TAKE yhdelle cuelle, valitse sitten toinen ja anna sille aika.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	Tuo oli leikkaus, skapi. Nopea, mutta ei ristihäivytys. Valitse toinen cue, paina + siirtymä-kohdassa, sitten TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Takaisinkytkentäsilmukka! Ulostulo kytketty suoraan takaisin pöytään. Sattuu parhaillekin. Lähinnä minulle. 1983. Vuodesta 1983 ei puhuta.
+No more rakia. The rat has a problem.	Ei enää rakiaa. Rotalla on ongelma.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Mummon rakiaa, Belogradtšikista. Yksi lasi, oppitunnin kunniaksi.
+Is this... is this allowed during a tutorial?	Onko tämä... onko tämä sallittua opetusohjelman aikana?
+*shakes head* That means one more.	*pudistaa päätään* Se tarkoittaa vielä yksi.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Rakastan teitä kaikkia. Rakastan oskillaattoria. Rakastan ULOSTULOA. Se on videota. Tiedän. TIEDÄN.
+...and the rat took the rakia. Every time, skapi. Every single time.	...ja rotta vei rakian. Joka kerta, skapi. Joka ikinen kerta.
+Was that a rat? In a hat? With a pizza?	Oliko tuo rotta? Hatussa? Pizzan kanssa?
+Stop that. I am a serious man.	Lopeta. Olen vakava mies.
+Do not tell Dr. Pixel about this.	Älä kerro tästä tohtori Pixelille.
+This never happened. Back to the patch bay.	Tätä ei koskaan tapahtunut. Takaisin kytkentäpaneelille.
+It was the eighties. Everyone had a bow tie.	Oli kasarit. Kaikilla oli rusetti.
+LESSON LIST	OPPITUNTILISTA
+OPEN EXAMPLE SHOWS	AVAA ESIMERKKISHOWT
+EXIT (Esc)	POISTU (Esc)
+Taking it on the road	Show kiertueelle
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	Tee CHECK ennen kuin show matkustaa, korjaa mitä se löytää ja niputa se mediansa kanssa.
+Effects, oscillators and colour	Efektit, oskillaattorit ja väri
+An effect, a ~ on its knob, and the colour picker.	Efekti, ~ sen nupissa ja värinvalitsin.
+The art school crit, with Mr. Salty	Taidekoulun kritiikki, Mr. Saltyn kanssa
+Patterns, synths and Draw	Testikuvat, syntikat ja Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Testikuva, videosyntikka ja kuvan päälle piirtäminen, tallennettuna pysäytyskuvana.
+The telestrator booth, with Coach Marv	Telestraattorikoppi, Coach Marvin kanssa
+Masks	Maskit
+A heart from the library, the pen, invert and feather.	Sydän kirjastosta, kynä, käänteistys ja pehmennys.
+The Signal Files: redact the evidence	Signaalikansiot: hävitä todiste
+Warp, blend and slices	Vääristys, sulautus ja viipaleet
+A corner pin, two soft edges, then three slices in the Screens window.	Kulmakiinnitys, kaksi pehmeää reunaa, sitten kolme viipaletta Screens-ikkunassa.
+The haunted lighthouse, with Keeper Rook	Kummitusmajakka, majakanvartija Rookin kanssa
+GO from anywhere	GO mistä tahansa
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Cue-numerot, GOTO, pikanäppäin, ja mistä Companion, MIDI ja OSC tulevat sisään.
+The game show, with Donna Wheel	Visailu, Donna Wheelin kanssa
+Words on screen	Sanoja ruudulla
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Nimiplanssi nimellä, sitten otsikkokortti avainvihreällä taustalla.
+The kaiju weather report, with June O'Neil	Kaijusää, June O'Neilin kanssa
+Keeping time	Ajassa pysyminen
+A stage timer counting down, held, and a presenter view for the person on stage.	Lavan ajastin, joka laskee alaspäin, pysäytettynä, ja esiintyjänäkymä lavalla olevalle.
+A grand day out, with Wallis and Grommet	Suuri retki, Wallisin ja Grommetin kanssa
+Two playlists and TAKE ALL	Kaksi soittolistaa ja TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Toinen soittolista tasona, ja TAKE ALL, jotta kaksi asiaa vaihtuu samalla iskulla.
+The magic show, with Turnip Top	Taikashow, Turnip Topin kanssa
+When it goes wrong	Kun menee pieleen
+BLACK against PANIC, and getting a show back.	BLACK vastaan PANIC, ja shown takaisin saaminen.
+The cooking show, with Chef Bork	Ruokaohjelma, kokki Borkin kanssa
+Presets	Esiasetukset
+Capture a look on a DASH button, change everything, and get it back with one press.	Tallenna look DASH-nappiin, muuta kaikki ja saa se takaisin yhdellä painalluksella.
+Transitions	Siirtymät
+The styles beyond the crossfade: an iris, a shatter, and their times.	Tyylit ristihäivytyksen tuolla puolen: iiris, sirpaloituminen ja niiden ajat.
+The space-opera trailer, with Optimus Primetime	Avaruusoopperan traileri, Optimus Primetimen kanssa
+Sound	Ääni
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Ääniefekti cuessa, bendi, joka vahingoittaa sitä kauniisti, ja missä patch asuu.
+The robot DJs, with Deft Funk	Robotti-DJ:t, Deft Funkin kanssa
+Reading the scopes	Skooppien lukeminen
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	Aaltomuoto, vektoriskooppi ja väärä väri: onko hehku aito vai vain liian kirkas?
+The Signal Files: is the glow on the horizon a craft?	Signaalikansiot: onko horisontin hehku alus?
+Out of the building	Ulos rakennuksesta
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Missä NDI, SDI ja ST 2110 asuvat, ja NDI päälle, jos tässä koneessa sellainen on.
+The webcam as a controller, as a game. Five rounds, a high score.	Webkamera ohjaimena, pelinä. Viisi kierrosta, ennätys.
+A handheld, and bugs	Käsikonsoli ja bugeja
+The multiview	Multiview
+Windows, the ... menu, what each one shows, layouts, and tally.	Ikkunat, ...-valikko, mitä kukin näyttää, asettelut ja tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Mysteeri tähtialus Cathodella, luutnantti Hailan ja vänrikki Jinkleyn kanssa
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Kaksi soittolistaa: Deckboysta tulee SUPER DECKBOY. Se ansaitsi sen, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Se kehittyi! Oskillaattoreilleni ei ikinä soitettu fanfaaria.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Jokainen show ansaitsee sellaisen. Bravo.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: Power-up! Enemmän soittolistoja, enemmän tasoja, enemmän superia.
+Intro video (left on the office PC)	Introvideo (unohtui toimiston koneelle)
+ON THE ROAD	KIERTUEELLA
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Täällä rakentamasi show, skapi, pyörii tänä iltana läppärillä jossain muualla. Paina START.
+Before it travels: check it, fix it, bundle it.	Ennen matkaa: tarkista, korjaa, niputa.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Näetkö CHECKin yläpalkissa? Se näkyy vain, kun jokin on vialla. Paina sitä.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Se luettelee kaiken, mihin show kompastuisi: puuttuvat tiedostot, tyhjät cuet, ulottumattomat ulostulot.
+FIX IT	KORJAA SE
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Introvideo on toisella koneella. Valitse ja poista se tai tee RELINK, jos sinulla on tiedosto.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Korjaa kotona, missä se on helppoa. Ei paikan päällä, missä se ei ole.
+BUNDLE IT	NIPUTA SE
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Paina NIPUTA ja valitse minne: USB-tikku, jaettu kansio. Show ja kaikki sen media, yhdessä.
+The copy finds its media beside it, wherever the folder goes.	Kopio löytää mediansa vierestään, minne kansio sitten meneekin.
+SAFE TRAVELS	HYVÄÄ MATKAA
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Tarkistettu, korjattu, niputettu. Avaa toisella koneella nipun show: kaikki on paikallaan.
+A show file is only text, so it travels light. The media is the heavy part.	Show-tiedosto on pelkkää tekstiä, joten se matkustaa kevyesti. Painava osa on media.
+Student work no. 4 (untitled)	Opiskelijatyö nro 4 (nimetön)
+THE CRIT	KRITIIKKI
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Taidekoulu, skapi. Yksi opiskelija, yksi kuva, yksi kriitikko, joka on nähnyt kaiken. Paina START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Efektit muuttavat kuvaa; oskillaattori muuttaa sitä jatkuvasti. Kriitikko pitää vain jälkimmäisestä.
+A grey square on beige. I have seen this at every graduate show since 1987.	Harmaa neliö beigellä. Olen nähnyt tämän jokaisessa lopputyönäyttelyssä vuodesta 1987.
+AN EFFECT	EFEKTI
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Inspectorin EFFECTS-osiossa + lisää efektin. Edges on hyvä alku: se piirtää ääriviivat.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Niitä on kymmeniä. Jokainen pyörii prosessorilla muutamassa millisekunnissa. Yleensä.
+Take a risk! Bad art is fine. Boring art is a crime.	Ota riski! Huono taide on ok. Tylsä taide on rikos.
+A ~ ON ITS KNOB	~ NUPPIIN
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Jokainen säädin, jonka vieressä on ~, voi seurata oskillaattoria. Paina yhtä. Nuppi alkaa hengittää.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Matalataajuinen oskillaattori: hidas, jotta silmä pysyy perässä. Neljännes hertsiä on neljän sekunnin hengenveto.
+Now it MOVES. Okay. Okay. I'm listening.	Nyt se LIIKKUU. Okei. Okei. Kuuntelen.
+A COLOUR OF ITS OWN	OMA VÄRI
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Efekteillä, jotka piirtävät värillä, kuten Edgesin viivalla, on värilaatta. Se avaa valitsimen: kehän, kirjoitetut nimet tai värin suoraan ruudulta.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Jokaisella värillä on jossain nimi. Minun on 'oskilloskooppivihreä'. Kukaan muu ei käytä sitä.
+That colour is doing something. I don't know what. I love it.	Tuo väri tekee jotain. En tiedä mitä. Ihastuin.
+THE VERDICT	TUOMIO
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Efekti, ~ ja väri. Kriitikko itkee, skapi. Liikutuksesta, luulisin.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Pinoa muutama. Jokaisella on oma ~ jokaisessa nupissa. Näin lookista tulee esitys.
+It's still a square. But it's YOUR square. Post it.	Se on yhä neliö. Mutta SINUN neliösi. Julkaise se.
+THE TELESTRATOR BOOTH	TELESTRAATTORIKOPPI
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Coach Marv selittää urheilua piirtämällä siihen ympyröitä. Kerran hän ympyröi auringon. Kymmenen minuuttia, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	Tänä iltana: testikuvat, videosyntikka ja kuvan päälle piirtäminen. Paina START.
+Get me a picture and a pen. BOOM.	Antakaa minulle kuva ja kynä. PUM.
+A TEST PATTERN	TESTIKUVA
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Kohdista ruudut ENNEN showta. Ei sen aikana. Opin tämän Plovdivissa.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Jokainen pöytä tarvitsee testikuvan. TESTIKUVA lisää Pocket Testin: tarkistettu oikeilla mittareilla.
+A VIDEO SYNTH	VIDEOSYNTIKKA
+He says 'no camera needed' like it is a feature. It is a feature.	Hän sanoo 'kameraa ei tarvita' kuin se olisi ominaisuus. Se on ominaisuus.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Suosikkini. LÄHDE, sitten Video Synth: oskillaattoreita, peilejä ja takaisinkytkentää. Kameraa ei tarvita.
+TAKE THE SYNTH	TAKE SYNTIKALLE
+Select it, then TAKE. Confident operators press Enter.	Valitse se, sitten TAKE. Itsevarmat operaattorit painavat Enteriä.
+That's our replay. Every replay needs a pundit.	Siinä on uusintamme. Jokainen uusinta tarvitsee asiantuntijan.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Tässä uusinta. Tässä pelaaja. Ja PUM, hän on siinä.
+A SECOND PLAYLIST	TOINEN SOITTOLISTA
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Muste menee päälle, omalle tasolleen. Paina + soittolistavälilehtien lopussa.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	Toinen soittolista on taso ensimmäisen päällä. Kuin toinen oskillaattori päälle miksattuna.
+A DRAW CUE	DRAW-CUE
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Uudessa soittolistassa: LÄHDE, sitten Draw. Läpinäkyvä kaikkialla, mihin et ole piirtänyt.
+A Draw cue is transparent outside the ink, so the synth shows through.	Draw-cue on läpinäkyvä musteen ulkopuolella, joten syntikka näkyy läpi.
+TAKE THE INK	TAKE MUSTEELLE
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Valitse Draw-cue ja tee TAKE. Kaksi soittolistaa, kaksi tasoa, yksi kuva.
+Now both are live: the synth underneath, the ink on top.	Nyt molemmat ovat lähetyksessä: syntikka alla, muste päällä.
+CIRCLE SOMETHING	YMPYRÖI JOTAIN
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Paina inspectorissa DRAW ja piirrä ohjelmamonitoriin. Hiirellä, tai kynällä, jos sinulla on.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Kynän paine paksuntaa viivaa. Hiiri painaa aina yhtä lujaa. Kuten minä.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Ympyröi hänet! Ei, isommin. PUM. Tuo on pilvi. Hyvä on. Ympyröi pilvi.
+SAVE A STILL	TALLENNA PYSÄYTYSKUVA
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILL säilyttää piirroksen kuvana, jonka tausta on läpinäkyvä, ja lisää sen soittolistaan.
+For next week's show. Coach Marv will want the cloud again.	Ensi viikon lähetykseen. Coach Marv haluaa pilven taas.
+THAT'S THE BOOTH	SE OLI KOPPI
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Testikuvat, syntikka, taso, muste, pysäytyskuva. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Kokeile Draw-osion Replayta: se piirtää viivasi uudelleen niin kuin piirsit ne.
+Same time next week. Bring a bigger pen. And a turducken.	Sama aika ensi viikolla. Tuo isompi kynä. Ja kattilallinen karjalanpaistia.
+Saucer photo (CLASSIFIED)	Lautaskuva (SALAINEN)
+THE SIGNAL FILES	SIGNAALIKANSIOT
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Selittämättömien signaalien virasto. Kaksi agenttia, yksi kuva, eikä sitä saa lähettää. Paina START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Maskit leikkaavat kuvan muodoiksi. Tänä iltana leikkaamme todisteita.
+That's a craft, Brandt. Look at the lights. I want to believe.	Se on alus, Brandt. Katso valoja. Haluan uskoa.
+A MASK FROM THE LIBRARY	MASKI KIRJASTOSTA
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Inspectorin MASK-osiossa: mask, sitten 'new heart'. Mikä tahansa muoto käy. Sydän on hauskempi.
+The library has circles, stars, hearts. Each one is points you can move.	Kirjastossa on ympyröitä, tähtiä, sydämiä. Jokainen on pisteitä, joita voit siirtää.
+A heart, Hollis? The Bureau redacts with black bars.	Sydän, Hollis? Virasto sensuroi mustilla palkeilla.
+THE PEN	KYNÄ
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Aseta työkaluksi kynä ja napsauttele lautasen ympäri monitorissa. Sulje napsauttamalla ensimmäistä pistettä.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Napsautus kulmille, veto kaarille. Niin kuin Bézierin veljekset tarkoittivat.
+Draw round it carefully. It might be watching.	Piirrä huolella sen ympäri. Se saattaa katsoa.
+INVERT	KÄÄNNÄ
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Käänteistys pitää ulkopuolen ja leikkaa sisäpuolen pois. Lautanen katoaa. Taivas jää.
+The same shape, the other way round. Very useful. Slightly spooky.	Sama muoto, toisin päin. Hyvin hyödyllistä. Vähän aavemaista.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, taivaalla on sydämenmuotoinen reikä.
+FEATHER	PEHMENNÄ
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Pehmennys tekee reunasta pehmeän, niin ettei kukaan näe leikkausta. Paina + kohdassa feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Kova reuna sanoo 'täällä oli joku'. Pehmeä ei sano mitään.
+They'll never know.	He eivät saa ikinä tietää.
+CASE CLOSED	TAPAUS SULJETTU
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Kirjaston muoto, kynä, käänteistys ja pehmennys. Virasto kiittää. Virasto ei koskaan ollut täällä.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Maskit menevät myös tasolle, ulostuloon tai sen mattaan: MASK ON valitsee. Ja jokainen säädin ottaa ~:n.
+The truth is in the waveform, Hollis. Next time, the scopes.	Totuus on aaltomuodossa, Hollis. Ensi kerralla skoopit.
+The ghost	Kummitus
+THE HAUNTED LIGHTHOUSE	KUMMITUSMAJAKKA
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Majakka, kummitus ja majakanvartija, joka on ollut liian kauan yksin lampun kanssa. Paina START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Projisointimappaus: kuvan taivuttaminen rakennukseen sopivaksi. Vääristys, sulautus, viipaleet.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Kummitusta te ikkunoihin haluatte, häh? Varokaa lamppua. Lamppu on MINUN.
+THE OUTPUT'S GEOMETRY	ULOSTULON GEOMETRIA
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	VALIKKO, sitten Videolähdöt, sitten Geometria. Siellä asuu ulostulon muoto.
+Geometry: the projector-menu word for 'what shape is the picture'.	Geometria: projektorivalikoiden sana sille, 'minkä muotoinen kuva on'.
+PIN A CORNER	KIINNITÄ KULMA
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Paina warp edit ja vedä kulmaa ohjelmamonitorissa. Ikkuna ei ole neliö. Eikä vartijakaan.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Kulmakiinnitys siirtää neljää kulmaa. Perspektiivi pitää viivat suorina, kuin oikeassa ikkunassa.
+LEFT! Ye call that a corner? I've seen straighter gulls.	VASEMMALLE! Sitäkö sinä kulmaksi sanot? Olen nähnyt suorempia lokkeja.
+TWO SOFT EDGES	KAKSI PEHMEÄÄ REUNAA
+Back in Geometry: edge blend, + on the left and + on the right.	Takaisin Geometriaan: edge blend, + vasemmalle ja + oikealle.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Kaksi projektoria menee päällekkäin; kumpikin häivyttää reunansa, jottei päällekkäisalue ole kaksi kertaa kirkkaampi.
+THE SCREENS WINDOW	SCREENS-IKKUNA
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Geometria, SLICES, avaa. Screens-ikkunassa viipaleet leikataan ja asetellaan.
+A slice is a piece of the picture, put anywhere on the output.	Viipale on pala kuvaa, joka voidaan sijoittaa minne tahansa ulostuloon.
+THREE SLICES	KOLME VIIPALETTA
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Paina Screens-ikkunassa kolmesti + SLICE ja vedä jokainen rajaus kuvan kolmannekseen.
+Three windows, three slices: left, middle and right of one picture.	Kolme ikkunaa, kolme viipaletta: yhden kuvan vasen, keskikohta ja oikea.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Kolme ikkunaa. Lamppu saa keskimmäisen. Lamppu saa AINA keskimmäisen.
+THE GHOST IS PLEASED	KUMMITUS ON TYYTYVÄINEN
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Vääristys, sulautus, viipaleet. Vartija nukkuu vihdoin. Lokit eivät.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Viipaleilla on Screens-ikkunassa omat vääristyksensä ja verkkonsa. Ja ~ paikalle ja kierrolle.
+Ye did alright, lad. Now get away from the lamp.	Hyvin meni, poika. Mene nyt pois lampun luota.
+THE GAME SHOW	VISAILU
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Visailu, skapi. Kolme kilpailijaa, yksi summeri ja cuet, jotka laukeavat mistä tahansa. Paina START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Cue-numerot, pikanäppäimet ja GO muilta koneilta. Kuin sekvensseri, jota soitat millä tahansa näppäimellä.
+Welcome to the show! Let's spin that wheel!	Tervetuloa ohjelmaan! Pyöräytetään Onnenpyörää!
+A CUE NUMBER	CUE-NUMERO
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Kilpailija 3 on valittuna. Anna sille inspectorin metatiedoissa cue-numero: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Teatteri numeroi cuensa. Q3, Q3.5, Q12A. Deckboy lukee ne kaikki.
+I'd like to buy a number, please.	Ostaisin numeron, kiitos.
+GO TO IT	MENE SINNE
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, kirjoita numero, Enter. Se menee lähetykseen, missä lista sitten seisookin.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. Nopein reitti pitkässä listassa. Nopeampi kuin vieritys. Paljon nopeampi kuin minä.
+And the number is... three!	Ja numero on... kolme!
+A BUZZER	SUMMERI
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Kilpailija 1 on valittuna. Paina TRIGGERS-kohdassa key, sitten F5. Se näppäin laukaisee nyt tämän cuen.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1–F10, F12 tai numeronäppäimistö. Jokainen on summeri.
+Every contestant gets a buzzer.	Jokainen kilpailija saa summerin.
+BUZZ IN	PAINA SUMMERIA!
+Press the key. The cue fires, wherever the list is standing.	Paina näppäintä. Cue laukeaa, missä lista sitten seisookin.
+No mouse, no list, no looking. Just the key.	Ei hiirtä, ei listaa, ei katsomista. Pelkkä näppäin.
+Buzz! We have a winner!	Bzzzt! Meillä on voittaja!
+FROM ANYWHERE	MISTÄ TAHANSA
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, MIDI-nuotti, OSC-viesti: VALIKKO, sitten Verkko, kertoo, mihin kukin yhdistää.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Viereisen huoneen Stream Deck voi painaa GO:ta. Niin voi koskettimistosyntikkakin. Minä otan syntikan.
+And for our viewers at home: you can play along too.	Ja kotikatsojille: tekin voitte pelata mukana.
+THAT'S OUR SHOW	SE OLI OHJELMAMME
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Numerot, GOTO, summeri ja GO mistä tahansa. Nyt olet itse visailu, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Cuella voi olla yhtä aikaa näppäin, MIDI-nuotti ja OSC-osoite. Vyö, henkselit ja toinen vyö.
+Goodnight, everybody! Keep spinning!	Hyvää yötä kaikille! Jatkakaa pyörittämistä!
+Weather map	Sääkartta
+THE KAIJU WEATHER	KAIJUSÄÄ
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Kanava 6:n sää, skapi. Kartta, juontaja ja hyvin iso lisko. Paina START.
+Words on screen: Lower Thirds, text, and backdrops.	Sanoja ruudulla: nimiplanssit, teksti ja taustat.
+I'm June O'Neil, and nothing about this forecast is normal.	Olen June O'Neil, eikä mikään tässä ennusteessa ole normaalia.
+A LAYER FOR WORDS	TASO SANOILLE
+Words go on their own layer: press the + at the end of the playlist tabs.	Sanat menevät omalle tasolleen: paina + soittolistavälilehtien lopussa.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	Toinen soittolista on taso kartan päällä. Lisko pysyy alla. Yleensä.
+Words on top. Always on top.	Sanat päälle. Aina päälle.
+A LOWER THIRD	NIMIPLANSSI
+In the new playlist: SOURCE, then Lower Third.	Uudessa soittolistassa: LÄHDE, sitten Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Nimi ja titteli, ruudun alalaidassa, poissa liskon tieltä.
+HER NAME	HÄNEN NIMENSÄ
+In the inspector, title: type the presenter's name. The second line is her job.	Kirjoita inspectorin title-kohtaan juontajan nimi. Toinen rivi on hänen tehtävänsä.
+Spelling counts. The audience reads it at the speed of light.	Oikeinkirjoitus ratkaisee. Yleisö lukee valon nopeudella.
+Spell it right. Last week it said 'Jane O'Meal'.	Kirjoita se oikein. Viime viikolla siinä luki 'June O'Neilikäinen'.
+ON AIR	LÄHETYKSESSÄ
+TAKE the Lower Third. Her name slides in over the map.	TAKE nimiplanssille. Hänen nimensä liukuu kartan päälle.
+Two layers live: the weather, and the words on top of it.	Kaksi tasoa lähetyksessä: sää ja sanat sen päällä.
+Thank you. Now, about that lizard...	Kiitos. No niin, siitä liskosta...
+BREAKING NEWS	ERIKOISLÄHETYS
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	LÄHDE, sitten Text: otsikkokortti. Sitten sen taustalaatta: avainvihreä, jotta kuvamikseri voi avaimittaa sen pois.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Tausta täyttää sanojen takana. Avainvihreä tai avainsininen, ja mikseri hoitaa loput.
+Breaking news: it's standing on the five-day forecast.	Erikoistiedote: se seisoo viiden päivän ennusteen päällä.
+BREAKING: KAIJU	TIEDOTE: KAIJU
+BACK TO YOU	TAKAISIN STUDIOON
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Nimiplanssi, nimi, otsikkokortti, tausta. Lisko on poistunut studiosta, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Nimiplanssit osaavat odottaa, liukua ja poistua itse. Niiden osiossa on kaikki asetukset.
+That's the weather. Back to you, guys. Run.	Siinä oli sää. Takaisin studioon. Juoskaa.
+A GRAND DAY OUT	SUURI RETKI
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Kellarissa rakennettu raketti, skapi, ja keksijä, joka haluaa juustoa. Paina START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Lavan ajastimet: lähtölaskennat, kellot ja esiintyjänäkymä lavalla olevalle.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Juustoa, Grommet! Kuu on tehty siitä. Tarvitsemme lähtölaskennan.
+A COUNTDOWN	LÄHTÖLASKENTA
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	LÄHDE, sitten Stage Timer. Kello, joka laskee taaksepäin, isoilla ystävällisillä numeroilla.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Värit vaihtuvat ajan loppuessa: valkoinen, keltainen, punainen. Kuin VU-mittari ajalle.
+*raises an eyebrow*	*kohottaa kulmaansa*
+LIFT OFF	LAUKAISU
+Select the timer and TAKE it. The countdown starts.	Valitse ajastin ja tee TAKE. Lähtölaskenta alkaa.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Nollan jälkeen se jatkaa ja laskee yliajan. Hyvin rehellistä. Vähän tylyä.
+Ten... nine... ooh, I do love a countdown.	Kymmenen... yhdeksän... voi, rakastan lähtölaskentaa.
+HOLD!	SEIS!
+Something's loose! Space holds the countdown. The clock shows it is held.	Jokin on löysällä! Välilyönti pysäyttää laskennan. Kello näyttää, että se on pysäytetty.
+A hold is not a stop. Space again, and it carries on from where it was.	Pysäytys ei ole lopetus. Välilyönti uudelleen, ja se jatkaa siitä, mihin jäi.
+*holds up a spanner*	*nostaa jakoavaimen*
+THE PILOT'S VIEW	LENTÄJÄN NÄKYMÄ
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	VALIKKO, Videolähdöt: tee jonkin ulostulon tyypiksi PRESENTER. Lavalla oleva saa ajastimen, seuraavan cuen ja muistiinpanonsa.
+A presenter view is an output like any other. Point it at the confidence monitor.	Esiintyjänäkymä on ulostulo siinä missä muutkin. Suuntaa se paluumonitoriin.
+So the pilot can see the time. The pilot is Grommet.	Jotta lentäjä näkee ajan. Lentäjä on Grommet.
+TO THE MOON	KUUHUN
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Lähtölaskenta, pysäytys ja näkymä lentäjälle. Nazdrave, skapi. Tuo keksejä.
+Timers can also count up, or show the time of day. Their section has the lot.	Ajastimet laskevat myös ylöspäin tai näyttävät kellonajan. Niiden osiossa on kaikki.
+A grand day out, Grommet! Pass the crackers.	Mikä retki, Grommet! Ojenna keksit.
+The trunk (closed)	Arkku (kiinni)
+The trunk (open)	Arkku (auki)
+THE MAGIC SHOW	TAIKASHOW
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Taikashow, skapi. Arkku, rekvisiitta ja yksi isku, jolla kaikki vaihtuu kerralla. Paina START.
+Two playlists are two layers. TAKE ALL changes both together.	Kaksi soittolistaa ovat kaksi tasoa. TAKE ALL vaihtaa molemmat yhdessä.
+Every trick needs two things happening at once. And a rubber chicken.	Jokainen temppu tarvitsee kaksi asiaa yhtä aikaa. Ja kumikanan.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Rekvisiitta menee omalle tasolleen. Paina + soittolistavälilehtien lopussa.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Soittolista 2 on soittolistan 1 päällä. Kuin kalvo piirtoheittimellä.
+Nothing up my sleeve. Everything in my trunk.	Ei mitään hihassa. Kaikki arkussa.
+THE PROP	REKVISIITTA
+In the new playlist, add anything: PATTERN will do. That is the prop.	Lisää uuteen soittolistaan mitä tahansa: TESTIKUVA käy. Se on rekvisiitta.
+Whatever it is, it will appear the instant the trunk opens.	Mitä ikinä se onkin, se ilmestyy sillä hetkellä, kun arkku aukeaa.
+Is it a rubber chicken? It's always a rubber chicken.	Onko se kumikana? Se on aina kumikana.
+The prop (rubber chicken)	Rekvisiitta (kumikana)
+TA-DA	TADAA
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Valitse 'Arkku (auki)' soittolistasta 1 ja rekvisiitta soittolistasta 2. Sitten TAKE ALL: molemmat samalla iskulla.
+One press, every playlist's selected cue. The audience never sees the seam.	Yksi painallus, jokaisen soittolistan valittu cue. Yleisö ei koskaan näe saumaa.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Tadaaa! ...Odota aplodeja. Odota. Odota.
+THE PRESTIGE	SUURI TEMPPU
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Kaksi tasoa, yksi isku. Jokaisella soittolistalla on oma peittävyytensä, ja se voi olla missä tahansa ulostulossa. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Taikuri ei koskaan paljasta. Soittolistaa ei haittaa tulla paljastetuksi.
+Thank you! I'm here all week! The chicken is here forever.	Kiitos! Olen täällä koko viikon! Kana on täällä ikuisesti.
+The kitchen (on fire)	Keittiö (tulessa)
+A lovely souffle	Ihana kohokas
+THE COOKING SHOW	RUOKAOHJELMA
+A cooking show, skapi. Live. Everything is on fire. Press START.	Ruokaohjelma, skapi. Suorana. Kaikki on tulessa. Paina START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACK piilottaa kuvan, ja show jatkuu. PANIC pysäyttää kaiken. Tiedä, kumpaa tarvitset.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, keittiö on tulessa-flurdy!
+The audience must not see this. Press BLACK, or B.	Yleisö ei saa nähdä tätä. Paina BLACK tai B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Kuva katoaa. Cue soi alla, valmiina palaamaan.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. Oho, kuva meni.
+AND BACK	JA TAKAISIN
+The fire's out. Press B again: the picture comes back, still running.	Tuli on sammunut. Paina B uudelleen: kuva palaa, yhä käynnissä.
+Nothing was lost. A mute on a mixer, for pictures.	Mitään ei menetetty. Miksauspöydän mute, kuville.
+Ta-da! Still cookin'!	Tadaa! Yhä kokataan!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Pahempaa: VALIKKO, Järjestelmä, SAFETY-kortti: PANIC. Kaikki pysähtyy niin kuin paniikkiasetus sanoo.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANIC on iso punainen nappi. Käytä sitä, kun BLACK ei riitä. Hengitä sitten.
+GET IT BACK	HAE SE TAKAISIN
+Close MENU, select the souffle, and TAKE it. The show is back on.	Sulje VALIKKO, valitse kohokas ja tee TAKE. Show on taas käynnissä.
+After a panic, the show is still there. Pick up where you meant to be.	Paniikin jälkeen show on yhä siellä. Jatka siitä, missä halusit olla.
+Voila! De souffle, he is risen!	Voilà! Kohokas, se kohosi!
+BON APPETIT	HYVÄÄ RUOKAHALUA
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK piilottaa, PANIC pysäyttää, TAKE palauttaa. Selviät mistä tahansa keittiöstä, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Paniikkiasetus valitsee, mitä PANIC tekee: häivytyksen, leikkauksen tai vain ulostulot.
+Bork bork bork! Goodnight!	Bork bork bork! Hyvää yötä!
+Look one	Look yksi
+Look two	Look kaksi
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Esiasetukset, skapi. Kokonainen look, muistettuna, ja takaisin yhdellä napilla. Paina START.
+Like the patch memory on a synth: store, then recall.	Kuin syntikan patch-muisti: tallenna ja hae.
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	Paina DASH: omia nappeja, mihin tahansa.
+Ctrl+D also works. Very fast. Very professional.	Ctrl+D toimii myös. Hyvin nopeaa. Hyvin ammattimaista.
+A PRESET BUTTON	ESIASETUSNAPPI
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Paina +, sitten 'preset - a new preset from what is on now'. Nappi muistaa tämän lookin.
+Store. Like saving the patch before the drummer leans on the synth.	Tallenna. Kuin tallentaisi patchin ennen kuin rumpali nojaa syntikkaan.
+CHANGE EVERYTHING	MUUTA KAIKKI
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Sulje DASH (Esc), valitse sitten Look kaksi ja tee TAKE. Eri look.
+Change it all. Don't worry. It remembers.	Muuta kaikki. Älä huoli. Se muistaa.
+ONE PRESS	YKSI PAINALLUS
+Open the DASH and press your preset button. The first look comes back.	Avaa DASH ja paina esiasetusnappiasi. Ensimmäinen look palaa.
+Recall. The patch memory, returning. Beautiful.	Haku. Patch-muisti palaa. Kaunista.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Look, tallennettu ja haettu. Esiasetus voi säilyttää cuet, sijainnit, efektit, tasot ja reitityksen; sen napin valikko valitsee mitkä.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Ja DASH-nappi voi ajaa minkä tahansa komennon. Minkä tahansa. Jännittävätkin.
+Opening titles	Alkutekstit
+The planet	Planeetta
+The battle	Taistelu
+THE TRAILER	TRAILERI
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Avaruusoopperan traileri, skapi. Kertoja, jolla on hyvin syvä ääni ja mielipiteitä siirtymistä. Paina START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	Siirtymä on se, miten yhdestä cuesta tulee seuraava. Niitä on paljon muitakin kuin ristihäivytys.
+In a galaxy of content... one operator... must choose a transition.	Sisällön galaksissa... yhden operaattorin... on valittava siirtymä.
+A STYLE	TYYLI
+'The planet' is selected. In the inspector, its transition style: choose iris.	'Planeetta' on valittuna. Inspectorissa sen siirtymätyyli: valitse iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Työnnöt, pyyhkäisyt, iiris, valkoisen kautta. Jopa portaali. Puolet kirjoitin itse. Eräänä tiistaina.
+The planet deserves... a dramatic entrance.	Planeetta ansaitsee... dramaattisen sisääntulon.
+A TIME	AIKA
+Give it a time: + on transition until it says a second or more.	Anna sille aika: + siirtymä-kohdassa, kunnes siinä lukee sekunti tai enemmän.
+No time, no transition. A style needs a duration to do anything at all.	Ei aikaa, ei siirtymää. Tyyli tarvitsee keston tehdäkseen mitään.
+ROLL IT	KÄYNTIIN
+TAKE the planet. Watch it arrive.	TAKE planeetalle. Katso, kun se saapuu.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Siirtymä kuuluu saapuvalle cuelle. Jokainen cue valitsee oman sisääntulonsa.
+Autobots... roll the transition.	Autobotit... siirtymä käyntiin.
+THE BATTLE	TAISTELU
+Now 'The battle': choose shatter, give it a time, and TAKE it.	Nyt 'Taistelu': valitse shatter, anna aika ja tee TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Shatter pudottaa vanhan kuvan kuin lasiruudun. Älkää tehkö näin hautajaisissa.
+Transform... and shatter out!	Muutu... ja säpäleiksi!
+IN CINEMAS NOW	NYT ELOKUVISSA
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Tyyli, aika ja kaksi hyvin dramaattista sisääntuloa. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	Soittolistallakin on oletustyyli jokaiselle cuelle, joka ei valitse omaansa.
+Coming soon... to a desk near you.	Tulossa pian... lähelläsi olevaan pöytään.
+The beat	Biitti
+THE ROBOT DJS	ROBOTTI-DJ:T
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Kaksi robotti-DJ:tä, skapi. He eivät puhu. Heidän kypäränsä puhuvat. Paina START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Jokaisella cuella on oma ääniefektiketjunsa, ja jotkin rikkovat äänen tahallaan.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> HEI. TULIMME KORJAAMAAN MIKSAUKSESI.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Biitti on valittuna. Sen AUDIO EFFECTS -osiossa + lisää efektin. Kokeile delayta.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Delay, kaiku, suotimet, kompressori. Määrä tarkoittaa aina 'vähemmän tätä'.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> VIELÄ KERRAN. KAIULLA. KAIULLA. KAIULLA.
+A BEND	BENDI
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Lisää toinen: bendi, kuten crush. Se vahingoittaa ääntä kuin rikkinäinen tiedosto.
+The bends are my favourite. Like a tape left in the sun. On purpose.	Bendit ovat suosikkejani. Kuin aurinkoon unohtunut kasetti. Tahallaan.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> KOVEMPAA. PAREMPAA. RAPEAMPAA. LUJEMPAA.
+THE PATCH	PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	VALIKKO, sitten Ääni: minne kunkin soittolistan ääni menee, ja nimettyjen ulostulojen patch.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Kaiuttimet, monitorit, rumpalin korvamonitori. Patch lähettää kullekin omansa.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> MIKSIN YMPÄRI. MIKSIN YMPÄRI. MIKSIN YMPÄRI.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Efekti, bendi ja patch. Robotit hyväksyvät, skapi. Luulisin. Heidän kasvonsa ovat kypäriä.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Jokainen ääniefekti voi myös seurata ~:tä, jopa Motionia. Vilkuta delaylle. Se on ihanaa.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> KIITOS. HYVÄÄ YÖTÄ. OLEMME ROBOTTEJA.
+The glow on the horizon (evidence #2)	Hehku horisontissa (todiste nro 2)
+EVIDENCE #2	TODISTE NRO 2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Virasto taas, skapi. Hehku horisontissa ja kaksi agenttia, jotka ovat siitä eri mieltä. Paina START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Skoopit mittaavat kuvaa: kirkkautta, väriä, tasoja. Lukuja, ei mielipiteitä.
+It's them, Brandt. It's a craft. Look how it glows.	Se on heitä, Brandt. Se on alus. Katso miten se hehkuu.
+THE REAL SIGNAL	OIKEA SIGNAALI
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Skoopit lukevat vain sen, mikä oikeasti lähtee ulos, ei koskaan esikatselua. Kytke ulostulo: VALIKKO, Videolähdöt, ULOSTULO POIS.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Pienennetyn esikatselun mittaaminen olisi kuin valokopion mittaamista. Me mittaamme alkuperäisen.
+Chain of evidence, Hollis. The real signal or nothing.	Todisteketju, Hollis. Oikea signaali tai ei mitään.
+THE SCOPES	SKOOPIT
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Sulje VALIKKO. Monitorin yläpuolella PROGRAM-nappi: paina, kunnes siinä lukee SCOPES tai BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	BOTH näyttää kuvan ja sen skoopit rinnakkain. Hyvin sivistynyttä.
+Let the scopes decide, Hollis.	Annetaan skooppien päättää, Hollis.
+THE WAVEFORM	AALTOMUOTO
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Napsauta aaltomuotoa suurentaaksesi sen. Kirkkaat asiat ovat ylhäällä, tummat alhaalla, vasemmalta oikealle kuten kuvassa.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	Hehku on tuo piikki lähellä yläreunaa. Hyvin kirkas. Kirkas ei ole sama kuin avaruusolento.
+Look at the peak. Nothing a streetlight couldn't do.	Katso huippua. Ei mitään, mihin katulamppu ei pystyisi.
+THE VECTORSCOPE	VEKTORISKOOPPI
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Napsauta uudelleen palataksesi ja napsauta sitten vektoriskooppia: väri ympyrän ympäri. Kylläinen juoksee reunalle.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Magenta, kaukana reunalla. Vahva väri. Vahva ei ole laitonta. Vielä.
+It's off the chart, Brandt! Literally off the chart!	Se on asteikon ulkopuolella, Brandt! Kirjaimellisesti!
+FALSE COLOUR	VÄÄRÄ VÄRI
+And false colour: red is clipped, yellow nearly. Is the glow red?	Ja väärä väri: punainen on leikkautunut, keltainen melkein. Onko hehku punainen?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Leikkautunut tarkoittaa kirkkainta, mitä signaali voi kantaa, ja jotain sen yli on hukassa. Yksityiskohta on mennyt.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Punainen. Leikkautunut. Ei avaruusolento, Hollis. Vain liian kirkas. Tapaus suljettu.
+THE TRUTH	TOTUUS
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Aaltomuoto, vektoriskooppi, väärä väri. Skoopit ratkaisivat sen, skapi. Agentit eivät.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCE lukee minkä tahansa ulostulon, ja matriisi voi olla 709 tai 2020. Uteliaille.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Liian kirkas katulampuksi, Brandt. Liian kirkas mihinkään. ...Haluan uskoa.
+OUT OF THE BUILDING	ULOS RAKENNUKSESTA
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Kuvat, jotka lähtevät kaapelia tai verkkoa pitkin, skapi, eivät vain ikkuna ruudulla. Paina START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI verkon yli, SDI DeckLink-kortilta, ST 2110 lähetyskeskuksille.
+THE DEVICES PAGE	LAITESIVU
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	VALIKKO, Videolähdöt, sitten Laitteet: kaikki tavat, joilla ulostulo voi lähteä tästä koneesta.
+Each one says whether this machine can do it, and what it needs if not.	Jokainen kertoo, pystyykö tämä kone siihen, ja mitä se tarvitsee, jos ei.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Jos tässä koneessa on NDI, kytke NDI SENDING päälle: kuva on verkossa. Jos ei, SHOW ME jatkaa eteenpäin.
+NDI finds itself on the network. No cables, only a good switch and patience.	NDI löytää itsensä verkosta. Ei kaapeleita, vain hyvä kytkin ja kärsivällisyyttä.
+OUT THERE	SIELLÄ ULKONA
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Ulostulon omalla sivulla on loput: DeckLink-kortin SDI, ST 2110 NMOSin kanssa, Spout ja Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Jokainen on vain ulostulo. Show ei tiedä eikä välitä, miten se lähtee.
+Nebula ahead	Sumu edessä
+Engine room	Konehuone
+Deck 3: something moving	Kansi 3: jokin liikkuu
+THE BRIDGE	KOMENTOSILTA
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Tähtialus Cathoden komentosilta, skapi. Neljä syötettä, yksi päänäyttö, yksi mysteeri. Paina START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Multiview näyttää kaikki soittolistat kerralla. Kuin seinä täynnä oskilloskooppeja, mutta avaruudessa.
+Frequencies open, Captain. All of them. That's the problem.	Taajuudet auki, kapteeni. Kaikki. Siinä se ongelma.
+MULTI, above the monitor: every playlist in its own window.	MULTI, monitorin yläpuolella: jokainen soittolista omassa ikkunassaan.
+One window per playlist, the programme first.	Yksi ikkuna soittolistaa kohden, ohjelma ensin.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Neljä syötettä. Ja yhdessä niistä on hirviö.
+WHAT'S NEXT	MITÄ SEURAAVAKSI
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Lisää ikkuna (+), sitten sen ...-valikko: laita se näyttämään NEXT. Se, mikä menee lähetykseen, kun painat TAKE.
+Every window has a ... button. It chooses what that window shows.	Jokaisessa ikkunassa on ...-nappi. Se valitsee, mitä ikkuna näyttää.
+I need to see who's calling before they reach the main viewer.	Minun on nähtävä, kuka kutsuu, ennen kuin he pääsevät päänäytölle.
+A CLOCK	KELLO
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Ja vielä yksi ikkuna, jossa on kello. Kelloa katsovat operaattorit eivät koskaan myöhästy. Yleensä.
+Time of day, big. Stardates are just very long timecode.	Kellonaika, isona. Tähtipäivämäärät ovat vain hyvin pitkää aikakoodia.
+The monster only shows up at midnight. We're going to need a clock.	Hirviö ilmestyy vain keskiyöllä. Tarvitsemme kellon.
+ONE BIG ONE	YKSI ISO
+Any window's ... menu, then a layout: one big, the rest small.	Minkä tahansa ikkunan ...-valikko, sitten asettelu: yksi iso, loput pieniä.
+The big window is window one. Usually the programme. Usually.	Iso ikkuna on ikkuna yksi. Yleensä ohjelma. Yleensä.
+Main viewer big. The captain likes it big.	Päänäyttö isoksi. Kapteeni pitää isosta.
+ON SCREEN	RUUDULLE
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Valitse Kansi 3 soittolistasta 3 ja tee TAKE. Katso sen ikkunaa.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	Punainen kehys on TALLY: ikkuna, joka on lähetyksessä. Ruudulle, kuten tähtialuksilla sanotaan.
+There! Feed three! Put it on screen!	Tuolla! Syöte kolme! Ruudulle!
+THAT'S A WRAP	PURKISSA
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Ikkunat, ...-valikko, NEXT, kello, asettelu, tally. Mysteeri ratkaistu, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Ikkuna voi näyttää myös ulostulon vääristyksineen ja viipaleineen. Kätevää, kun kyseessä on majakka.
+And the monster was... the ship's cook, all along. Jinkys.	Ja hirviö oli... aluksen kokki, koko ajan. Jinkys.
+there is no such lesson	sellaista oppituntia ei ole
+finish or leave the lesson you are in first	lopeta tai poistu ensin oppitunnilta, jolla olet
+leave Bug Swat first	poistu ensin Bug Swatista
+Psst. It's me, the desk. I'll be watching. Supportively.	Pst. Minä täällä, pöytä. Katselen. Kannustavasti.
+Hi! I'm the one doing all of this, by the way.	Hei! Minä muuten teen tämän kaiken.
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+D avaa DASHin. Sanonpahan vain.
+Nearly there. I can feel it in my pixels.	Melkein. Tunnen sen pikseleissäni.
+You're good at this. I can tell. I'm the one doing it.	Olet hyvä tässä. Näen sen. Minä sen teen.
+Every click, I heard. Every single one.	Jokaisen napsautuksen kuulin. Jokaisen.
+The glowing one. I can see it from here. It's glowing for you.	Se hehkuva. Näen sen täältä. Se hehkuu sinulle.
+lesson paused - MENU > LESSONS picks up where you left off	oppitunti tauolla - VALIKKO > LESSONS jatkaa siitä, mihin jäit
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  Signaali: mistä kuva on tehty ja miten sitä taivutetaan. Valitse oppitunti.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  Shown ajaminen, skapi. Nopeat kädet, rauhalliset kasvot. Valitse oppitunti.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	OPPITUNNIT  -  OSA KAKSI  -  KETÄ SEURAAT?
+FOLLOW PROF. VIDEO	SEURAA PROF. VIDEOTA
+FOLLOW DR. PIXEL	SEURAA DR. PIXELIÄ
+the signal	signaali
+running the show	shown ajaminen
+PICK UP	JATKA
+CLOSE (Esc)	SULJE (Esc)
+PART ONE: THE BASICS	OSA YKSI: PERUSTEET
+finish or leave LEARN THE BASICS first	lopeta tai poistu ensin LEARN THE BASICSista
+bug swat: Esc leaves, and your show comes back as it was	bug swat: Esc poistuu, ja showsi palaa ennalleen
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: showsi on palannut. Motionin säätimet ovat kohdassa Asetukset > Ääni
+TURN MOTION ON	KYTKE MOTION PÄÄLLE
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Bugit ryömivät cue-listaa kohti! Läimi ne vilkuttamalla kameralle. Ensin Motion: kytke MOTION CONTROL ON-tilaan ja valitse, mitä se lukee (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	Tämä on NullPointer. Ontto, osoittaa ei mihinkään. Sormi menee suoraan läpi. Käytä koko kättä, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Vilkuta kuin pysäyttäisit taksin! Pienen, kohteliaan taksin. Ei nappeja. Taksi.
+DRAW TWO ZONES	PIIRRÄ KAKSI ALUETTA
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: kaksoset, kumpikin varma, että ehti ensin. Yksi lukema ei erota käsiäsi toisistaan, joten vedä Motion-kuvaan kaksi ZONES-aluetta, yksi kummallekin puolelle.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Lyö molempia yhtä aikaa. Lyö yhtä, ja ne vaihtavat paikkaa. Kuin serkkuni häissä.
+One hand each side. Together! Together!	Yksi käsi kummallakin puolella. Yhdessä! Yhdessä!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Bugi ei ole kasvot, vaan se pikkuruinen ylimääräinen pala, ja pieni heilutus vaatii tarkemman lukeman. Laske SENSITIVITY 5 %:iin.
+Lower number, finer reading. Yes, I also think it is backwards.	Pienempi luku, tarkempi lukema. Niin, minustakin se on väärinpäin.
+Not the face. The little one on the end. Wiggle a finger.	Ei kasvoja. Se pikkuinen lopussa. Heiluta sormea.
+FALL 1.5 S OR MORE	FALL 1,5 S TAI ENEMMÄN
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Se päästää irti vain niin kauan kuin lukema pysyy ylhäällä. Pidennä FALLia, 1,5 sekuntia tai enemmän, jotta pyyhkäisysi liittyvät yhdeksi.
+Slow and steady, skapi. Like paying back a loan.	Hitaasti mutta varmasti, skapi. Kuin asuntolainaa lyhentäisi.
+Sweep, and sweep again. Let the fall carry you between.	Pyyhkäise, ja pyyhkäise uudelleen. Anna laskun kantaa sinut välissä.
+MOTION X ON A TONE	MOTION X SÄVELEEN
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Heisenbugi! Se haalistuu aina, kun liikut. Laita sävel-cuen sävelkorkeus Motion X:ään ja seuraa sitä korvalla: tikitys kiihtyy, kun lähestyt.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW ME tekee sävelen puolestasi. Korkea on oikealla. Matala on vasemmalla. Seiso paikallasi, niin se palaa.
+Follow it. Listen. Faster ticking, closer bug.	Seuraa sitä. Kuuntele. Nopeampi tikitys, lähempänä bugi.
+Waving paw	Vilkuttava tassu
+Heisenbug finder	Heisenbugin löytäjä
+FIXED! Lovely signal flow.	KORJATTU! Ihana signaalinkulku.
+Closed as fixed. No regressions. Probably.	Suljettu korjattuna. Ei regressioita. Luultavasti.
+Squashed! Ship it.	Liiskattu! Julkaise.
+One reached the cue list. It has filed a bug report about you.	Yksi pääsi cue-listaan asti. Se teki sinusta bugiraportin.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. Se on käsikonsoli. Sitä ei paineta. Sille vilkutetaan.
+The buttons are for menus. The bugs are for flailing.	Napit ovat valikoita varten. Bugit ovat käsien huitomista varten.
+The D-pad is decorative. Like my diploma.	Ristiohjain on koriste. Kuten tutkintotodistukseni.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	Vuonna 1989 mekin painoimme nappeja. Sitten keksimme vilkuttamisen. Emme ole katsoneet taaksepäin.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Kovempaa painaminen ei auta. Bugit eivät tunne nappeja. Vain käsiä.
+It's called a handheld because your hands are held... up. In the air. Waving.	Sitä kutsutaan käsikonsoliksi, koska kädet nostetaan... ylös. Ilmaan. Vilkuttaen.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	Hiiri? Läimitkö bugeja HIIRELLÄ? Bulgariassa hiiri olisi bugien puolella.
+Lovely clicking. Very crisp. The camera saw none of it.	Ihanaa napsuttelua. Hyvin rapeaa. Kamera ei nähnyt siitä mitään.
+DONE FOR YOU - PRESS START	TEHTY PUOLESTASI - PAINA START
+DONE! PRESS START	VALMIS! PAINA START
+SELECT OPENS MOTION CONTROL	SELECT AVAA MOTION CONTROLIN
+ALL BUGS FIXED	KAIKKI BUGIT KORJATTU
+GAME OVER	PELI OHI
+NEW HIGH SCORE!	UUSI ENNÄTYS!
+START PLAYS AGAIN	START PELAA UUDELLEEN
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. Mene nyt korjaamaan oikeita bugeja.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	Jokainen niistä on oikea Motion-säädin. Laita ne mihin tahansa ~-nuppiin.
+START: AGAIN	START: UUDELLEEN
+START: PLAY	START: PELAA
+# --- end of tutorials ---
+Splash	Aloituskuva
+Beast mode	Petotila
+MIDI MAP	MIDI-KARTTA
++ ADD	+ LISÄÄ
+LEARN	OPI
+LISTENING...	KUUNTELEE...
+BACK	TAKAISIN
+READY-MADE...	VALMIIT...
+Message	Viesti
+Runs	Ajaa
+On	Kohde
+Now	Nyt
+Map	Kartta
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	MIDI-tulo on pois: kytke se päälle MIDI CONTROLissa. OSC-rivit vastaavat silti.
+LEARN: move a knob or press a key on the controller...	OPI: käännä nuppia tai paina näppäintä ohjaimessa...
+1 · WHAT COMES IN	1 · MITÄ TULEE
+learn it, or say how to read it	opeta se tai kerro, miten se luetaan
+2 · WHAT IT RUNS	2 · MITÄ SE AJAA
+any command, {value} is the number	mikä tahansa komento, {value} on luku
+3 · WHAT IT RUNS ON	3 · MIHIN SE KOHDISTUU
+aimed here; the desk never moves	tähdätty tänne; pöytä ei koskaan liiku
+Port	Portti
+Read as	Lue näin
+Hold for	Pidä
+Command	Komento
+From	Mistä
+Centre	Keskikohta
+To	Mihin
+Pickup	Nouto
+On release	Irrotettaessa
+Runs on	Kohde
+Playlist	Soittolista
+Saved with	Tallennettu
+Row	Rivi
+DELETE	POISTA
+THE SHOW	ESITYKSEEN
+THIS COMPUTER	TÄHÄN KONEESEEN
+any port	mikä tahansa portti
+the desk	pöytä
+the selected cue	valittu cue
+what is on air	lähetyksessä oleva
+one named cue	nimetty cue
+the focused one	aktiivinen
+Test: move it on the controller	Testi: liikuta sitä ohjaimessa
+knob 0-127	nuppi 0-127
+endless encoder	päättymätön enkooderi
+14-bit	14-bittinen
+press	paina
+hold	pidä
+press + release	paina + irrota
+play	soita
+on press	painettaessa
+plays	soittaa
+LED MAP	LED-KARTTA
+LAYOUT	ASETTELU
+FEEDS: pick a window, then one of these	LÄHTEET: valitse ikkuna, sitten yksi näistä
++ CHOOSE A FEED	+ VALITSE LÄHDE
+audio meter	äänimittari
+safe areas	turva-alueet
++ ONE AFTER THIS	+ YKSI TÄMÄN JÄLKEEN
+- REMOVE THIS ONE	- POISTA TÄMÄ
+ONE PER PLAYLIST	YKSI SOITTOLISTAA KOHDEN
+on the desk	pöydällä
+tile width	laatan leveys
+tile height	laatan korkeus
+LISTENS: OFF	KUUNTELEE: EI
+LISTENS: the figure follows the sound	KUUNTELEE: kuvio seuraa ääntä
+import an SVG...	tuo SVG...
+the selected cue in playlist {n}	valittu cue soittolistassa {n}
+the selected cue in the focused playlist	valittu cue aktiivisessa soittolistassa
+on air in playlist {n}	lähetyksessä soittolistassa {n}
+on air in the focused playlist	lähetyksessä aktiivisessa soittolistassa
+hold {n} s	pidä {n} s
+any	mikä tahansa
+built in	sisäänrakennettu
+show	esitys
+motion	liike
+METADATA	METATIEDOT
+generated	luotu
+Fit	Sovita
+inf	ääretön
+NO	EI
+YES	KYLLÄ
+UP	YLÖS
+DOWN	ALAS
+Left	Vasen
+Right	Oikea
+Top	Ylä
+Bottom	Ala
+add	lisää
+all	kaikki
+none	ei mitään
+Cut	Leikkaus
+Fade	Häivytys
+Load	Lataa
+Pause	Tauko
+Resume	Jatka
+Start	Aloita
+Skip	Ohita
+Arm	Viritä
+Disarm	Poista viritys
+ONE	YKSI
+ONCE	KERRAN
+Size	Koko
+Width	Leveys
+amount	määrä
+brightness	kirkkaus
+contrast	kontrasti
+saturation	kylläisyys
+hue	sävy
+level	taso
+speed	nopeus
+style	tyyli
+title	otsikko
+subtitle	alaotsikko
+notes	muistiinpanot
+font	fontti
+frame	ruutu
+type	tyyppi
+state	tila
+blend	sekoitus
+align	kohdista
+line	viiva
+box	suorakulmio
+oval	soikio
+brush	sivellin
+eraser	pyyhekumi
+mask	maski
+grow	laajenna
+subtract	vähennä
+split	jaa
+stacked	pinottu
+soft	pehmeä
+tolerance	toleranssi
+curve	käyrä
+Linear	Lineaarinen
+Ease in	Pehmeä alku
+Ease out	Pehmeä loppu
+S-curve	S-käyrä
+Position X	Sijainti X
+Position Y	Sijainti Y
+Deck volume	Deckin voimakkuus
+Deck opacity	Deckin peittävyys
+Master dimmer	Päähimmennin
+Cue brightness	Cuen kirkkaus
+Cue contrast	Cuen kontrasti
+Cue saturation	Cuen kylläisyys
+Cue hue	Cuen sävy
+no effects	ei tehosteita
+no audio effects	ei äänitehosteita
+nothing yet	ei vielä mitään
+no output	ei ulostuloa
+no window	ei ikkunaa
+source missing	lähde puuttuu
+waiting for a picture	odotetaan kuvaa
+clear frame	tyhjennä ruutu
+undo stroke	kumoa veto
+save still	tallenna kuva
+save animation	tallenna animaatio
+export	vie
+repeats	toistot
+hold last	pidä viimeinen
+end action	lopputoiminto
+cue id	cue-tunnus
+goto target	hyppykohde
+set	aseta
+send	lähetä
+run	suorita
+idle	jouten
+standby	valmiina
+Loop	Silmukka
+loop forever	toista loputtomiin
+PATCH	PATCH
+OUTPUTS	ULOSTULOT
+SECTIONS	OSIOT
+Video Synth	Videosyntetisaattori
+Browser	Selain
+Browser Cue	Selain-cue
+Window Source	Ikkunalähde
+Camera Source	Kameralähde
+NDI Source	NDI-lähde
+DeckLink Input	DeckLink-tulo
+Syphon/Spout Source	Syphon/Spout-lähde
+Live stream cue	Suoratoisto-cue
+Composite	Kooste
+Composite scene cue	Koostekohtaus-cue
+Lower Third	Nimipalkki
+Lower Third overlay cue	Nimipalkki-cue
+PIP overlay cue	PIP-peittokuva-cue
+MIDI File	MIDI-tiedosto
+Master	Master
+Memo	Muistio
+Mic	Mikrofoni
+Timer	Ajastin
+Tone	Ääni
+Script	Skripti
+Target	Kohde
+Draw	Piirros
+Code	Koodi
+Clouds	Pilvet
+Swirl	Pyörre
+Moire	Moiré
+Picture	Kuva
+Placement	Sijoittelu
+Frame lock	Kuvalukko
+Suspend	Keskeytä
+Seam	Sauma
+High pass	Ylipäästö
+Low pass	Alipäästö
+Tilt EQ	Kallistus-EQ
+Compressor	Kompressori
+Gate	Portti
+Delay	Viive
+Reverb	Kaiku
+Binaural	Binauraalinen
+Crush	Murskaus
+Word	Sana
+Scrub	Selaus
+Short	Lyhyt
+Shatter	Sirpaleet
+Pulse	Pulssi
+Crawl	Vaakavieritys
+Typewriter	Kirjoituskone
+Oscilloscope	Oskilloskooppi
+Spectrum	Spektri
+Level Meters	Tasomittarit
+Waveform	Aaltomuoto
+EFFECTS	TEHOSTEET
+TRIGGERS	LAUKAISIMET
+SEQUENCE	SEKVENSSI
+MOTION CONTROL	LIIKEOHJAUS
+THIS CUE	TÄMÄ CUE
+FUNCTIONS	TOIMINNOT
+VALUES	ARVOT
+KEYS	NÄPPÄIMET
+FREEZE	JÄÄDYTÄ
+FROZEN	JÄÄDYTETTY
+BYPASSED	OHITETTU
+BYPASS ALL	OHITA KAIKKI
+DEFAULTS	OLETUKSET
+CHANGE	VAIHDA
+CHOOSE	VALITSE
+Stop all	Pysäytä kaikki
+Pause all	Tauota kaikki
+Resume all	Jatka kaikkia
+Do not continue	Älä jatka
+Auto-continue	Jatka autom.
+Auto-follow	Seuraa lopussa
+END HOLD	LOPPU PITO
+END LOOP	LOPPU SILMUKKA
+END NEXT	LOPPU SEURAAVA
+END STOP	LOPPU SEIS
+OUTPUT EFFECTS	ULOSTULON TEHOSTEET
+LIVE CAPTIONS	SUORATEKSTITYS
+captions	tekstitys
+Name Card	Nimikortti
+TEST CARD	TESTIKUVA
+TEST CARD ON	TESTIKUVA PÄÄLLÄ
+EXPORT CARD	VIE TESTIKUVA
+EXPORTING...	VIEDÄÄN...
+LOW LATENCY	PIENI VIIVE
+WEB MONITOR	WEBMONITORI
+PHONE & TABLET	PUHELIN JA TABLETTI
+SCAN TO PAIR	SKANNAA PARIKSI
+WITH SOUND	ÄÄNEN KANSSA
+THE NETWORK	VERKKO
+FIXTURES	VALAISIMET
+ADD FIXTURE	LISÄÄ VALAISIN
+Dimmer	Himmennin
+Dimmer + RGB	Himmennin + RGB
+Dimmer + temperature	Himmennin + lämpötila
+QR CODE	QR-KOODI
+loop	silmukka
+inherit	peri
+Fill	Täytä
+Stretch	Venytä
+Dissolve	Häivytys
+Pattern	Kuvio
+mixed	sekalainen
+selected cue lane  |  TAKE to make it live	valitun cuen raita  |  TAKE vie sen lähetykseen
+Dip to black	Mustan kautta
+Dip to white	Valkoisen kautta
+Iris	Iiris
+Push left	Työnnä vasemmalle
+Push right	Työnnä oikealle
+Push up	Työnnä ylös
+Push down	Työnnä alas
+Wipe left	Pyyhi vasemmalle
+Wipe right	Pyyhi oikealle
+Wipe up	Pyyhi ylös
+Wipe down	Pyyhi alas
+Still	Pysäytyskuva
+Timecode	Aikakoodi
+address	osoite
+auto next	auto seuraava
+continue	jatka
+deck fader	deckin liukusäädin
+fire	käynnistä
+in	sisään
+out	ulos
+routing	reititys
+trim	rajaus
+0-63, the hardware's own gain range.	0-63, laitteen oma vahvistus.
+1-16, as the desk counts them	1-16, kuten pöytä ne laskee
+7-segment, blocky, or a real font	7-segmentti, kulmikas tai oikea fontti
+[ / ] keys — fade-in duration	[ / ]-näppäimet: sisäänhäivytyksen kesto
+a camera moves the ~ controls	kamera liikuttaa ~-säätimiä
+a chain on a device, after the mix	ketju laitteessa, miksauksen jälkeen
+a comment	kommentti
+Act now, without taking the cue	Tee nyt, ottamatta cuea
+Add a light	Lisää valo
+add a second output to pair	lisää toinen ulostulo pariksi
+add shape	lisää muoto
+all driven by the cue's own transport	kaikkia ohjaa cuen oma toisto
+All interfaces; trusted machines only.	Kaikki liitännät; vain luotetut koneet.
+all to 0	kaikki nollaan
+An audio effect's knob	Äänitehosteen säädin
+An effect's knob	Tehosteen säädin
+any channel	mikä tahansa kanava
+any window, any screen	mikä tahansa ikkuna, mikä tahansa näyttö
+Arm this cue as the one GO will fire	Viritä tämä cue seuraavaan GO:hon
+Art-Net port address, 0-32767	Art-Net-portin osoite, 0-32767
+Attached overlays fire on TAKE only	Liitetyt peitot käynnistyvät vain TAKE:lla
+BACK TO BUG SWAT	TAKAISIN BUG SWATIIN
+backdrop	tausta
+bar	palkki
+bg alpha	taustan alfa
+black lift	mustan nosto
+blend gamma	sekoituksen gamma
+blueprint	sinikopio
+boxes	laatikot
+bracket	hakasulkeet
+bulletin	tiedote
+by density	tiheyden mukaan
+BY FIXTURE	VALAISIMEN MUKAAN
+capsule	kapseli
+caption	kuvateksti
+card	kortti
+CARD OFF ALL	KORTTI POIS KAIKKI
+CARD ON ALL	KORTTI PÄÄLLE KAIKKI
+cartridge	kasetti
+cassette	nauha
+Ceiling	Katto
+Chain	Ketju
+Changing this re-prepares the cue.	Muutos valmistelee cuen uudelleen.
+channel list is not readable	kanavaluetteloa ei voi lukea
+CHANNELS	KANAVAT
+channels on your interfaces, by name	liitäntöjesi kanavat nimen mukaan
+Checkerboard	Shakkiruudukko
+chime amber	varoitus keltainen
+chime red	varoitus punainen
+chime zero	varoitus nolla
+Choose startup mode:	Valitse käynnistystila:
+circle, heart, star...	ympyrä, sydän, tähti...
+circuit	piiri
+CLASSIC VIEW	KLASSINEN NÄKYMÄ
+clear driver	tyhjennä ohjain
+Clear in/out trim points	Tyhjennä sisään-/ulospisteet
+CLEAR OVERLAY  [Backspace]	TYHJENNÄ PEITTO  [Backspace]
+Clear the active Lower Third overlay now	Poista aktiivinen Lower Third nyt
+Clear the live PIP overlay now	Poista PIP-peitto nyt
+CLICK ANYWHERE...	NAPSAUTA MISSÄ TAHANSA...
+click or Esc to close	sulje napsauttamalla tai Esc
+click this window	napsauta tätä ikkunaa
+Click to edit cue notes	Muokkaa cuen muistiinpanoja napsauttamalla
+click to open the grid	avaa ruudukko napsauttamalla
+Click to seek — drag to scrub	Napsauta siirtyäksesi, vedä selataksesi
+Click to type it	Kirjoita napsauttamalla
+comic	sarjakuva
+Companion passphrase	Companion-tunnuslause
+confetti	konfetti
+Connections at once	Samanaikaiset yhteydet
+count up	laske ylös
+Countdown, count up, or wall clock	Alaslasku, ylöslasku tai kello
+credit	lopputekstit
+crossfade	ristihäivytin
+crosshair	hiusristikko
+Crosshatch	Ristiviivoitus
+Cue has no audio	Cuessa ei ole ääntä
+cue number	cue-numero
+Cycle end action for selected cues	Vaihda valittujen cuejen lopputoiminto
+Cycle which slot drives scene audio	Vaihda paikka, joka antaa kohtauksen äänen
+dateline	päiväysrivi
+decoder spin-up	dekooderi käynnistyy
+Default App Feed	Oletussovelluslähde
+Default Camera	Oletuskamera
+Delay before the continue fires	Viive ennen jatkamista
+Delay between GO and this cue starting	Viive GO:n ja cuen alun välillä
+depth 1 turns it all the way round	syvyys 1 kääntää täyden kierroksen
+Digit colour once amber is reached	Numeroiden väri keltaisella
+Digit colour while there is time in hand	Numeroiden väri, kun aikaa on
+diskette	levyke
+Do it now, without taking the cue	Tee nyt, ottamatta cuea
+dossier	kansio
+dotmatrix	pistematriisi
+Double-GO guard	Kaksois-GO-suoja
+draw on the monitor	piirrä monitoriin
+driver speed	ohjaimen nopeus
+EDGE BLEND	REUNASEKOITUS
+EDIT is on: typing changes the show	EDIT päällä: kirjoitus muuttaa esitystä
+edit on the monitor	muokkaa monitorissa
+Edit the main Lower Third title	Muokkaa Lower Thirdin otsikkoa
+Edit the secondary Lower Third line	Muokkaa Lower Thirdin toista riviä
+eq band	EQ-kaista
+equalizer	taajuuskorjain
+Esc cancels	Esc peruuttaa
+Esc cancels, arrows nudge	Esc peruuttaa, nuolet siirtävät
+Esc to close	sulje Escillä
+even grid	tasainen ruudukko
+EXAMPLE SHOWS	ESIMERKKIESITYS
+EXIT  Esc	POISTU  Esc
+face	kasvot
+factory settings	tehdasasetukset
+Fade+LoadNext	Häivytys+Lataa seur.
+Fade+Pause	Häivytys+Tauko
+Fade+Rewind	Häivytys+Kelaa
+Fade-in duration	Sisäänhäivytyksen kesto
+Fade-in duration for this cue	Tämän cuen sisäänhäivytys
+Fade-out duration	Ulos häivytyksen kesto
+Fade-out duration before next cue	Häivytys ennen seuraavaa cuea
+Fade-out duration for this cue	Tämän cuen ulos häivytys
+Fall	Lasku
+false colour reads SDR pictures	väärät värit lukevat SDR-kuvaa
+fill the frame	täytä ruutu
+find a named colour	etsi väri nimellä
+fires cues	käynnistää cueja
+first available	ensimmäinen vapaa
+Fit/Fill/Stretch/Unscaled	Sovita/Täytä/Venytä/Skaalaamaton
+Fixed repeat count — 0 = infinite	Kiinteä toistomäärä: 0 = loputon
+Fixed repeat count — 0 = loop forever	Kiinteä toistomäärä: 0 = ilman loppua
+FIXED!	KORJATTU!
+flag	lippu
+FORGET MY DEFAULTS	UNOHDA OLETUKSENI
+Frames a second	Kuvaa sekunnissa
+from exactly this routing	suoraan tästä reitityksestä
+Full Black	Täysi musta
+Full Blue	Täysi sininen
+Full Green	Täysi vihreä
+Full Red	Täysi punainen
+Full White	Täysi valkoinen
+garden	puutarha
+Ghastly	Aavemainen
+glass	lasi
+glitch down	glitch alas
+glitch drift	glitch-ajautuma
+glitch reach	glitch-ulottuvuus
+glitch through	glitch läpi
+glitch up	glitch ylös
+GO steps over it	GO ohittaa sen
+hairline	hiusviiva
+Haptics	Värinä
+HDR input	HDR-sisääntulo
+Hex, e.g. 90 3C 7F	Hex, esim. 90 3C 7F
+HOLDING OFF AIR	PIDOSSA EI LÄHETYKSESSÄ
+Home — skip to start	Home: alkuun
+Horizontal output offset in pixels	Ulostulon vaakasiirto pikseleinä
+How many features fit on screen.	Montako mahtuu näytölle.
+how much of this effect	kuinka paljon tätä tehostetta
+How solid the ink is	Musteen peitto
+How tall the logo is above the clock	Logon korkeus kellon yllä
+In-point: cue starts playback here	Sisäänpiste: cue alkaa tästä
+index	hakemisto
+initializing webview	webview käynnistyy
+install Tailscale here and on the phone	asenna Tailscale tänne ja puhelimeen
+INSTALLING...	ASENNETAAN...
+Its amount, or one of its knobs A to D	Sen määrä tai säädin A:sta D:hen
+J jump to row	J: siirry riville
+jam to	synkkaa arvoon
+Jump the driver back to its first frame	Palauta ohjain ensimmäiseen kuvaan
+K — cycle cue color tag	K: vaihda cuen väri
+Keep counting past zero, or stop dead	Laske nollan ohi tai pysähdy
+key	näppäin
+Key edge softness	Avaimen reunan pehmeys
+knob	säädin
+L - loop this cue continuously	L: toista tämä cue
+last reading	viimeisin lukema
+Last refused	Viimeksi hylätty
+Learn it	Opeta
+LEARN THE BASICS	OPI PERUSTEET
+ledger	tilikirja
+Left — skip back 10s	Vasen: 10 s taakse
+Left, centre or right	Vasen, keski tai oikea
+LESSONS	OPPITUNNIT
+Levels	Tasot
+Limiter	Rajoitin
+Limiting	Rajoitus
+line  |  Enter: apply	rivi  |  Enter: käytä
+LINEAR - a feather, not a blend	LINEAARINEN: liukuväri, ei sekoitus
+Linear, ease in, ease out or S-curve	Lineaarinen, sisään, ulos tai S-käyrä
+Lines	Viivat
+link aspect	lukitse suhde
+Listen to	Kuuntele
+listener	kuuntelija
+LIVE - every assigned deck matches	LIVE: kaikki määritetyt deckit täsmäävät
+lock to screen	lukitse näyttöön
+logo size	logon koko
+look at it	katso sitä
+lower 3rd	Lower Third
+marquee	valotaulu
+mask on	maski käytössä
+Master oscillator rate.	Pääoskillaattorin nopeus.
+Maximum quality	Paras laatu
+MIDI and OSC monitor	MIDI- ja OSC-monitori
+midi in	MIDI-sisääntulo
+MIDI note	MIDI-nuotti
+move points	siirrä pisteitä
+Move the height on its own oscillator	Liikuta korkeutta omalla oskillaattorilla
+name or number...	nimi tai numero...
+name, from anywhere	nimi, mistä tahansa
+NDI source cue	NDI-lähde-cue
+needs file-backed video	tarvitsee videotiedoston
+new paths	uudet polut
+New shows start from	Uudet esitykset alkavat
+next xfade	seuraava häivytys
+no effects for this cue type	ei tehosteita tälle cue-tyypille
+nobody	ei mitään
+none - click to learn	ei mitään: opeta napsauttamalla
+none - click to set some	ei mitään: aseta napsauttamalla
+none - click to write some	ei mitään: kirjoita napsauttamalla
+none yet	ei vielä mitään
+none: the one picture	ei mitään: ainoa kuva
+none: the whole picture	ei mitään: koko kuva
+notebook	muistikirja
+nothing	ei mitään
+nothing assigned yet	mitään ei ole määritetty
+nothing follows	ei seuraa mitään
+Nothing here with this filter.	Ei mitään tällä suodattimella.
+nothing set - this cue sends nothing	ei asetettu: tämä cue ei lähetä mitään
+nothing targeted yet	ei kohdetta
+Nothing to see here. Probably.	Täällä ei ole mitään nähtävää. Luultavasti.
+nothing to send - check the message	ei lähetettävää: tarkista viesti
+offset X	siirto X
+offset Y	siirto Y
+on any channel	millä tahansa kanavalla
+on the header to add another	otsikossa lisätäksesi
+on the monitor	monitorissa
+one big on top, the rest below	yksi iso ylhäällä, muut alla
+one big, the rest beside it	yksi iso, muut vieressä
+onion off	sipuli pois
+onion on	sipuli päällä
+only this computer	vain tämä tietokone
+Open a .deckboy show file	Avaa .deckboy-tiedosto
+open the monitor	avaa monitori
+or your own bytes	tai omat tavusi
+ORDER - cues advance down the list	JÄRJESTYS: cuet kulkevat listaa alas
+Out-point: cue stops playback here	Ulospiste: cue päättyy tähän
+output already has	ulostulossa on jo
+Outputs Off	Ulostulot pois
+outs	ulostulot
+over budget - video will drop frames	yli rajan: video pudottaa kuvia
+over the picture	kuvan päällä
+PAIR	PARI
+Pair a phone	Yhdistä puhelin
+Pair overlap	Parin limitys
+Paired phones	Yhdistetyt puhelimet
+Passphrase	Tunnuslause
+Pattern motion toggle	Kuvion liike
+pause begin	tauko alussa
+pennant	viiri
+Per-cue transition duration override	Tämän cuen siirtymän kesto
+Perspective	Perspektiivi
+PHASE	VAIHE
+Phone access	Puhelinkäyttö
+Phone control	Puhelinohjaus
+phrase hold	fraasin pituus
+PICK FROM SCREEN	POIMI NÄYTÖLTÄ
+Pitch, in semitones.	Korkeus puolina sävelaskelina.
+PIXEL FOR PIXEL, TOP-LEFT	PIKSELI PIKSELILTÄ, YLÄVASEN
+placard	kyltti
+play a note...	soita nuotti...
+PLAY BUG SWAT, a game	PELAA BUG SWATIA
+Play the out move now, then take it off	Toista ulostulo nyt ja poista se
+Playback speed: 0.25–4.0×	Toistonopeus: 0,25–4,0×
+playlists into the named outputs	soittolista nimetyille ulostuloille
+plays synth	soita syntikkaa
+plugin	liitännäinen
+PNG matte	PNG-maski
+podium	palkintokoroke
+press a key...	paina näppäintä...
+PRESS AGAIN TO FORGET	PAINA UUDELLEEN UNOHTAAKSESI
+Previous show file:	Edellinen tiedosto:
+prog bar	edistymispalkki
+programme	ohjelma
+Programme with sound in any browser	Ohjelma äänineen joka selaimessa
+PROJECTOR - gamma matched	PROJEKTORI: sovitettu gamma
+Projector gamma	Projektorin gamma
+put it on a button	laita se painikkeeseen
+Put the brush's opacity on an oscillator	Laita siveltimen peitto oskillaattoriin
+Put the brush's size on an oscillator	Laita siveltimen koko oskillaattoriin
+Put this control on an oscillator	Laita tämä säädin oskillaattoriin
+rack it	lataa se
+RACKED, WARM	LADATTU, VALMIS
+rail	kisko
+rain	sade
+Reads	Lukee
+reads the same on any screen	lukee samoin joka näytöllä
+recent and in this show	viimeisimmät ja tässä esityksessä
+Recent shows:	Viimeisimmät esitykset:
+red at	punainen kohdassa
+red col	pun. sarake
+render height	renderöinnin korkeus
+render width	renderöinnin leveys
+REPORT A PROBLEM	ILMOITA ONGELMASTA
+reported rather than swapped	ilmoitettu, ei vaihdettu
+restart driver now	käynnistä ohjain nyt uudelleen
+restart on take	aloita alusta takella
+restore at end	palauta lopussa
+ribbon	nauha
+Right — skip forward 10s	Oikea: 10 s eteen
+Right-click turns them off.	Oikea napsautus sammuttaa ne.
+Rise	Nousu
+rise, slide or wipe	nouse, vieritä tai pyyhi
+Rotation speed, degrees per second.	Pyörimisnopeus, astetta sekunnissa.
+rounded rect	pyöreä suorak.
+row turns the matrix off again	rivi sammuttaa matriisin taas
+Run it now, without taking the cue	Aja nyt, ottamatta cuea
+Run the show from a phone	Aja esitystä puhelimesta
+runs off the show thread	esityssäikeen ulkopuolella
+sACN universe, 1-63999	sACN-universumi, 1-63999
+SAVE AS MY DEFAULTS	TALLENNA OLETUKSEKSI
+says	sanoo
+SCALED TO FILL	SKAALATTU TÄYTTÄMÄÄN
+Scene dwell time — 0 = hold	Kohtauksen kesto: 0 = pidä
+Scene fade-in duration	Kohtauksen sisäänhäivytys
+Scene fade-out duration	Kohtauksen ulos häivytys
+scoreboard	tulostaulu
+SCREENS	NÄYTÖT
+scroll	vieritys
+Scroll up	Vieritä ylös
+sea	meri
+SELECT: MOTION	VALINTA: LIIKE
+sends	lähetä
+Sensitivity	Herkkyys
+Set browser URL/path	Aseta selaimen URL/polku
+set by	asettanut
+Set capture source from the cue menu	Aseta lähde cue-valikosta
+Set cue ID for selected cues	Aseta valittujen cuejen tunnus
+Set cue token to jump to when cue ends	Aseta cue, johon lopussa hypätään
+Set goto target for selected cues	Aseta valittujen cuejen kohde
+Set Lower Third background alpha	Lower Thirdin taustan alfa
+Set per-cue transition duration	Cuen siirtymän kesto
+Set playback speed for selected cues	Valittujen cuejen nopeus
+Set repeat count for selected cues	Valittujen cuejen toistot
+Set short cue id for search/goto	Lyhyt tunnus hakuun/hyppyyn
+Set short cue label for search/goto	Lyhyt nimi hakuun/hyppyyn
+Set the NDI source name to receive	Vastaanotettavan NDI-lähteen nimi
+Shift+[ / ] — fade-out duration	Shift+[ / ]: ulos häivytyksen kesto
+SHOW ME	NÄYTÄ MINULLE
+Show on	Näytä kohteessa
+Shows	Näytä
+sideline	sivuviiva
+sketch	luonnos
+slide	liuku
+slide from left	liuku vasemmalta
+slide from right	liuku oikealta
+SMOOTH	PEHMEÄ
+snow	lumi
+SOS. Kidding. The show is fine.	SOS. Vitsi. Esitys voi hyvin.
+Sound when the clock turns amber	Ääni, kun kello muuttuu keltaiseksi
+Sound when the clock turns red	Ääni, kun kello muuttuu punaiseksi
+Sound when time is up	Ääni, kun aika on lopussa
+Space — pause	Välilyönti: tauko
+Space — play	Välilyönti: toista
+span	levitys
+sparkle	kimallus
+Speech models	Puhemallit
+Speed, like tape	Nopeus, kuin nauha
+stamp	leima
+Start NEW from factory	Aloita UUSI tehtaasta
+starting browser	selain käynnistyy
+starting capture	kaappaus käynnistyy
+starting xvfb	xvfb käynnistyy
+sticky	muistilappu
+stop at 0	pysähdy nollaan
+Stop puppeteering this cue	Lopeta tämän cuen ohjaaminen
+STRAIGHT	SUORA
+survey	kohouma
+SVG paths	SVG-polut
+tab	välilehti
+tag	tunniste
+TAP	NAPAUTA
+terminal	pääte
+text mode	tekstitila
+the file cannot be read	tiedostoa ei voi lukea
+The name	Nimi
+The OSC path, e.g. /cue/1/start	OSC-polku, esim. /cue/1/start
+the playlist's PATCH	soittolistan PATCH
+The role, or leave it empty	Rooli, tai jätä tyhjäksi
+the system output	järjestelmän ulostulo
+The text this cue puts on screen	Teksti, jonka tämä cue näyttää
+theatre	teatteri
+then stop	sitten pysähdy
+they have	niillä on
+things that are oscillating	värähtelevät asiat
+this cue lives on	tämä cue on kohteessa
+This show's setup, no cues	Tämän esityksen asetukset, ilman cueja
+ticket	lippu
+tile h	ruutu k
+Tile height in pixels.	Ruudun korkeus pikseleinä.
+tile w	ruutu l
+time of day	kellonaika
+Toggle audio enable for selected cues	Valittujen cuejen ääni
+Toggle chroma key	Kromaavain päälle/pois
+Toggle cue audio	Cuen ääni
+Toggle cue audio track for this cue	Tämän cuen ääniraita
+Toggle fade in	Sisäänhäivytys
+Toggle fade out	Ulos häivytys
+Toggle hold on last frame	Pidä viimeinen kuva
+Toggle hold-at-end for selected cues	Pidä lopussa valituissa cueissa
+Toggle loop	Silmukka
+Toggle loop for selected cues	Valittujen cuejen silmukka
+Toggle the live input's audio	Live-sisääntulon ääni
+Total time	Kokonaisaika
+transcoding - plays clean until ready	transkoodaus: soi puhtaasti loppuun
+transparent: put its playlist on a layer	läpinäkyvä: laita soittolista kerrokselle
+Trusted controllers	Luotetut ohjaimet
+TURN OFF	SAMMUTA
+turn phone control on	laita puhelinohjaus päälle
+two big on top, the rest below	kaksi isoa ylhäällä, muut alla
+type a cue number	kirjoita cue-numero
+Typing needs EDIT on	Kirjoitus vaatii EDIT päällä
+Use GEOMETRY for exact placement	Käytä GEOMETRIAA tarkkaan sijoitukseen
+value to type one	kirjoitettava arvo
+Vertical output offset in pixels	Ulostulon pystysiirto pikseleinä
+VIDEO DIP: OFF	VIDEO-DIP: EI
+VIDEO DIP: ON	VIDEO-DIP: KYLLÄ
+walk the outputs one at a time.	käy ulostulot läpi yksi kerrallaan.
+walks every output in turn	käy läpi joka ulostulon
+WHAT DECKBOY DID	MITÄ DECKBOY TEKI
+what is on air in a playlist	mikä on livenä soittolistalla
+What NEW starts from, never this show	Mistä UUSI alkaa, ei koskaan tästä esityksestä
+whatever the style says	mitä tyyli sanookin
+Where the ramp ends	Mihin ramppi päättyy
+Which deck the cue it acts on lives on	Millä deckillä kohde-cue on
+Which frame you draw on	Mihin kuvaan piirrät
+Who can see it	Kuka voi nähdä sen
+whole network	koko verkko
+will not open	ei avaudu
+window and recording outputs only	vain ikkuna- ja tallennusulostulot
+wipe	pyyhkäisy
+Wobble	Huojunta
+wobble by	huoju määrällä
+words	sanat
+X — cycle end action	X: vaihda lopputoiminto
+X — cycle end action: stop / next / loop	X: lopputoiminto: seis / seur. / silmukka
+Zones	Vyöhykkeet
+~ makes the level breathe	~ saa tason hengittämään
+a note or an address becomes that cue's trigger	nuotista tai osoitteesta tulee cuen laukaisin
+acts on every deck; deck and cue are ignored	vaikuttaa kaikkiin deckeihin; deck ja cue ohitetaan
+Add an output above, then send playlists to it here.	Lisää ulostulo yllä ja lähetä sitten soittolistat tänne.
+Ancient cypher, modern video desk. Respect.	Muinainen kirjoitus, moderni pöytä. Kunnioitus.
+Any font on this computer, Deckboy's own, or a font file	Tietokoneen fontti, Deckboyn oma tai tiedosto
+Apply fade-in to selected video/audio cues	Sisäänhäivytys valittuihin video-/äänicueihin
+Apply fade-out to selected video/audio cues	Ulos häivytys valittuihin video-/äänicueihin
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net tai sACN (E1.31): mitä valot kuuntelevat
+Auto-advance duration — 0 = hold until taken	Automaattinen eteneminen: 0 = pidä takeen asti
+Bypass: this master leaves that deck alone	Ohitus: tämä master jättää sen deckin rauhaan
+Characters across. Fewer means bigger cells.	Merkkejä rivillä. Vähemmän antaa isommat solut.
+Choose a mask from this show's library, or start a new one from a shape	Valitse maski kirjastosta tai tee muodosta
+Click a value to change it. A red address overlaps another fixture.	Muuta arvoa napsauttamalla. Punainen osoite menee toisen valaisimen päälle.
+Click to show or hide this cue's captions	Näytä tai piilota cuen tekstitykset napsauttamalla
+Copy the show AND its media into one portable folder	Kopioi esitys JA media yhteen siirrettävään kansioon
+Ctrl+S - write back over the show that is open	Ctrl+S: tallenna avoimeen esitykseen
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S: tallenna UUTEEN tiedostoon
+Device output pair this cue's audio plays on	Ulostulopari tämän cuen äänelle
+E - freeze on last frame instead of stopping	E: jäädytä viimeiseen kuvaan pysähtymisen sijaan
+Edit title/subtitle here or fire it live with TAKE	Muokkaa otsikkoa/alaotsikkoa tässä tai laukaise TAKE:lla
+Every channel on every universe this session has touched	Jokainen kanava joka universumissa, johon tämä istunto on koskenut
+generator is off - a START cue turns it on	generaattori pois: START-cue laittaa sen päälle
+How long the note takes to reach full level.	Aika, jossa nuotti saavuttaa täyden tason.
+How much it throws off; 0 is a clean burn	Kuinka paljon se hilseilee; 0 palaa puhtaasti
+INPUT: the programme. Drag a crop to move it, its corners to size it.	SISÄÄNTULO: ohjelma. Vedä rajausta siirtääksesi, kulmia skaalataksesi.
+Keep the outside and cut the inside instead	Pidä ulkopuoli ja leikkaa sisäpuoli
+LED panel height in pixels. Click to type it	LED-paneelin korkeus pikseleinä. Kirjoita napsauttamalla
+Legacy target mode — switch type to convert	Vanha kohdetila: muunna vaihtamalla tyyppi
+Lissajous, spectrum, meters or a name card	Lissajous, spektri, mittarit tai nimikortti
+Load the cue and hold first frame when taken	Lataa cue ja pidä ensimmäinen kuva takeen asti
+no fixtures patched - Settings > Network > FIXTURES	ei valaisimia patchattu: Asetukset > Verkko > FIXTURES
+Nothing here changes the show that is open.	Mikään täällä ei muuta avointa esitystä.
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Cuen ääni: päällä/pois, trim, pan, mono, häivytykset, normalisointi
+Phone control is in PHONE & TABLET, below	Puhelinohjaus on kohdassa PHONE & TABLET alempana
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Tallenna maski harmaana PNG:nä ulostulon koossa: valkoinen pitää, musta leikkaa
+Seconds REMAINING when the clock turns amber	Sekunteja JÄLJELLÄ, kun kello muuttuu keltaiseksi
+Seconds REMAINING when the clock turns red	Sekunteja JÄLJELLÄ, kun kello muuttuu punaiseksi
+Shown to the operator when GO reaches this cue	Näytetään operaattorille, kun GO saapuu tähän cueen
+SHUFFLE - the next cue is picked at random	SATUNNAINEN: seuraava cue arvotaan
+Slots are self-contained sources in this first pass	Paikat ovat tässä versiossa itsenäisiä lähteitä
+that output's whole picture, or its matte	sen ulostulon koko kuva tai sen maski
+The cue number on the other desk, e.g. 12.5	Cue-numero toisella pöydällä, esim. 12.5
+Toggle pause-at-beginning for selected cues	Tauko alussa valituissa cueissa
+Toggle transition-to-next for selected cues	Siirtymä seuraavaan valituissa cueissa
+transparent outside the blobs: put it on a layer	läpinäkyvä läiskien ulkopuolella: laita kerrokselle
+transparent outside the ink: put it on a layer	läpinäkyvä musteen ulkopuolella: laita kerrokselle
+what is said, on screen, made on this computer	mitä sanotaan, näytöllä, tehty tällä tietokoneella
+What this cue does when it ends - click to change	Mitä tämä cue tekee lopussa: vaihda napsauttamalla
+Whether the next shape or pen path adds or cuts	Lisääkö vai leikkaako seuraava muoto tai polku
+shape	muoto
+palette	paletti
+scale	skaala
+feedback	takaisinkytk.
+RED	PUNAINEN
+do it	suorita
+(empty)	(tyhjä)
+(unset)	(ei asetettu)
+English	Englanti
+amber at	keltainen kun
++ section	+ osio
++pause pt	+ taukokohta
+a-fade in	äänen alku
+amber col	kelt. väri
+(no notes)	(ei muistiinpanoja)
+a-fade out	äänen loppu
+gain (each)	vahv. (kukin)
+% of the height	% korkeudesta
++  a first step	+  ensi askel
++ ADD AN EFFECT	+ LISÄÄ TEHOSTE
+(none playing now)	(ei toistoa nyt)
+Keep a transcript (.srt)	Tallenna litterointi (.srt)
+Key tolerance (RGB distance)	Key-toleranssi (RGB-etäisyys)
+Contrast multiplier (0.0-2.0x)	Kontrastikerroin (0.0–2.0x)
+Brightness multiplier (0.0-2.0x)	Kirkkauskerroin (0.0–2.0x)
+Saturation multiplier (0.0-2.0x)	Kylläisyyskerroin (0.0–2.0x)
+Output rotation angle (-180..180)	Ulostulon kiertokulma (-180..180)
+Hue rotation (-180 to +180 degrees)	Sävyn kierto (-180...+180 astetta)
+Lower Third background opacity (0-255)	Alatekstin taustan peittävyys (0–255)
+0-127; 127 addresses every device on the line	0–127; 127 osoittaa kaikkia linjan laitteita
+GO shows the note; picture and sound carry on	GO näyttää muistiinpanon; kuva ja ääni jatkuvat
+How fast it moves; no effect when it is still	Liikenopeus; ei vaikutusta paikallaan
+Fires when incoming timecode passes this point	Laukeaa saapuvan aikakoodin ohittaessa tämän kohdan
+Source pixels, independent of output placement	Lähdepikselit, riippumatta ulostulon sijoittelusta
+Stereo balance, applied live (snaps to center)	Stereotasapaino reaaliajassa (napsahtaa keskelle)
+bypassed: nothing here is processed or limited	ohitettu: ei käsittelyä eikä rajoitusta
+Per-cue audio trim: -40 to +40 dB, applied live	Cuen vahvistus: -40...+40 dB, reaaliajassa
+Show the message in red - the wrap up NOW state	Viesti punaisena: lopetettava NYT
+The brush's width, as % of the picture's height	Siveltimen leveys prosentteina kuvan korkeudesta
+What the stream carries: SDR, PQ (HDR10) or HLG	Virran sisältö: SDR, PQ (HDR10) tai HLG
+Digit colour once red is reached, and in overtime	Numeroiden väri punaisen rajan jälkeen ja yliajalla
+Downmix this cue to mono (mono sources / mono PA)	Sekoita cue monoksi (monolähde / mono-PA)
+Drag to scrub (shift = fine), click to type exact	Selaa vetämällä (Shift: tarkasti), syötä arvo napsauttamalla
+Hand this to an oscillator so it moves on its own	Anna oskillaattorin liikuttaa tätä automaattisesti
+Changing width also scales height (and vice versa)	Leveyden muutos skaalaa myös korkeutta ja päinvastoin
+How long the levels take to arrive; zero is a snap	Aika tavoitetasoihin; nolla vaihtaa heti
+Set the self-contained PIP source for this overlay	Aseta tämän peittokuvan itsenäinen PIP-lähde
+Take the newest shape or pen path out of this mask	Poista maskin uusin muoto tai kynäpolku
+An address sent to Deckboy's OSC port fires this cue	Tämä osoite Deckboyn OSC-portissa laukaisee cuen
+Hold on the last composite frame when the scene ends	Pidä viimeinen yhdistelmäkuva kohtauksen päättyessä
+How long it takes; zero is a snap rather than a fade	Kesto; nolla vaihtaa heti ilman häivytystä
+Set still/pattern/browser duration for selected cues	Aseta valittujen kuva-/kuvio-/selaincueiden kesto
+Start the LTC carrier, stop it, or jam it to a value	Käynnistä tai pysäytä LTC-kantoaalto tai tahdista arvoon
+Which cue on that deck; step off the end to clear it	Cue kyseisellä dekillä; tyhjennä siirtymällä lopun yli
+Bob up and down. Depth 1 is half the frame either way	Ylös ja alas. Syvyys 1: puoli kuvaa kumpaankin suuntaan
+Output width in pixels | click value to type exact px	Ulostulon leveys pikseleinä; napsauta syöttääksesi tarkan arvon
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Aseta virran URL (srt://, rtmp://, rtsp://, udp://)
+Fires at this time on this computer's clock, every day	Laukeaa päivittäin tähän aikaan tietokoneen kellon mukaan
+Output height in pixels | click value to type exact px	Ulostulon korkeus pikseleinä; napsauta syöttääksesi tarkan arvon
+Bar across the foot - readable further back than digits	Alapalkki: näkyy kauemmas kuin numerot
+OUTPUT: drag a slice to move it, its corners to size it.	ULOSTULO: siirrä viipaletta vetämällä, muuta kokoa kulmista
+Choose a Lower Third from the overlay bin to fire on TAKE	Valitse peittokuvista alateksti, jonka TAKE käynnistää
+Choose a PIP overlay from the overlay bin to fire on TAKE	Valitse peittokuvista PIP, jonka TAKE käynnistää
+OUTPUT: drag a slice to move it, its corners to pin them.	ULOSTULO: siirrä viipaletta vetämällä, kiinnitä kulmat vetämällä
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10, F12 tai numeronäppäimistö laukaisee cuen kaikkialta
+Use transition when auto-advancing or goto-taking next cue	Käytä siirtymää automaattisessa etenemisessä tai GOTO-hypyssä
+Nothing has arrived yet. Press something on the controller.	Mitään ei ole saapunut. Käytä ohjaimen säädintä.
+Audio fade-in: follow visual fade, none, or explicit seconds	Äänen sisäänhäivytys: seuraa kuvaa, ei mitään tai määritetyt sekunnit
+Audio fade-out: follow visual fade, none, or explicit seconds	Äänen uloshäivytys: seuraa kuvaa, ei mitään tai määritetyt sekunnit
+Add a library shape to this mask; its points are yours to move	Lisää kirjastomuoto maskiin; voit siirtää sen pisteitä
+No slices: this output shows its one picture. + SLICE to start.	Ei viipaleita: ulostulo näyttää oman kuvansa. Aloita: + SLICE.
+Open and close this edge on an oscillator -- a wipe that breathes	Avaa ja sulje reuna oskillaattorilla: hengittävä pyyhkäisy
+(none)	(ei mitään)
+(nothing yet)	(ei vielä mitään)
++ ADD AN OUTPUT	+ LISÄÄ ULOSTULO
+>LIVE	>SUORA
+(no media source)	(ei medialähdettä)
+snap	heti
+this deck	tämä dekki
+protocol	protokolla
+does	toiminto
+signal	signaali
+sine	sini
+freq	taajuus
+visuals	kuva
+black	musta
+green	vihreä
+blue	sininen
+Pause at start	Alkutauko
+Pause at end	Lopputauko
+Transition to next	Siirtymä seur.
+Hardware display	Näyttölaite
+Raster mode	Rasteritila
+Refresh rate	Virkistys
+Bit depth	Bittisyvyys
+SDR material at	SDR-taso
+HDR signal	HDR-signaali
+Fullscreen	Koko näyttö
+Matte aspect	Maskin suhde
+Bar opacity	Palkin peitto
+Output mask	Ulost. maski
+Overlay still	Päällyskuva
+Overlay opacity	Peittokyky
+Overlay image	Peittokuva
+Place it	Sijoita
+Corner pin	Kulmapisteet
+Slices	Viipaleet
+choose...	valitse...
+not configured	ei määritetty
+(default system device)	(järjestelmän oletuslaite)
+(no monitor)	(ei monitoria)
+System audio (SDL)	Järjestelmä-ääni (SDL)
+Not watching a folder	Ei seurattavaa kansiota
+anyone	kuka tahansa
+When taken off air	Kun poistuu lähetyksestä
+browser cue added	selaincue lisätty
+source cue added	lähdecue lisätty
+text added	teksti lisätty
+tone cue added	äänicue lisätty
+gain	vahvistus
+follow	seuraa
+moves	liike
+overtime	yliaika
+chime	äänimerkki
+bell	kello
+load a sprite sheet from a file...	lataa spritearkki tiedostosta...
+Run the clock	Käynnistä kello
+What fires this cue besides GO	Mikä laukaisee cuen GO:n lisäksi
+center	Keskikohta
+visual	kuva
+JAM	TAHDISTA
+MIX	MIKSAUS
+CLIP	KLIPPI
+TEXT	TEKSTI
+KEY L	KEY V
+WACKY	HULLUT
+COLOUR	VÄRI
+DARKEN	TUMMENNA
+COMPARE	VERTAA
+LIGHTEN	VAALENNA
+DASHBOARD	KOJELAUTA
+29.97 fps (NTSC)	29,97 fps (NTSC)
+Pocket Test (day)	Pocket-testi (päivä)
+Dark Detail (0-12%)	Varjojen yksityiskohdat (0-12 %)
+Frame Count (emoji)	Ruutulaskuri (emoji)
+PLUGE (black level)	PLUGE (mustan taso)
+Pocket Test (night)	Pocket-testi (yö)
+Pocket Test (storm)	Pocket-testi (myrsky)
+Marks stacked BELOW.	Merkit pinottuina ALLE.
+Panel Map (animated)	Paneelikartta (animoitu)
+Pocket Test (sunset)	Pocket-testi (auringonlasku)
+Boresight (alignment)	Tähtäin (kohdistus)
+SMPTE 75% Colour Bars	SMPTE 75 % väripalkit
+(projector curve only)	(vain projektorikäyrä)
+Multiburst (bandwidth)	Multiburst (kaistanleveys)
+Convergence (fine grid)	Konvergenssi (tiheä ruudukko)
+Greyscale Steps (gamma)	Harmaaportaat (gamma)
+Uniformity (flat fields)	Tasaisuus (tasaiset kentät)
+MULTIVIEW carries this too.	MULTIVIEW kantaa myös tämän.
+Test Clock (sync + latency)	Testikello (tahdistus + viive)
+auto (reads the common two)	auto (lukee kaksi tavallista)
+Panel Map (LED tile numbers)	Paneelikartta (LED-paneelien numerot)
+Portal (blobs of deep space)	Portaali (syvän avaruuden kuplia)
+Terrarium (living ecosystem)	Terraario (elävä ekosysteemi)
+Window 10% (peak brightness)	Ikkuna 10 % (huippukirkkaus)
+Window 50% (peak at mid APL)	Ikkuna 50 % (huippu keskimääräisellä APL:llä)
+Frame Count (drops + latency)	Ruutulaskuri (pudotukset + viive)
+Terrarium Pico (1px per cell)	Terraario Pico (1 px solua kohden)
+Banding Ramps (real bit depth)	Raitaramppi (todellinen bittisyvyys)
+Fireside (a hearth that burns)	Takkatuli (palava tulisija)
+HLG - live broadcast (BT.2100)	HLG - suora lähetys (BT.2100)
+Test Bars (motion diagnostics)	Testipalkit (liikediagnostiikka)
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (skaalaako jokin?)
+Send now, without taking the cue	Lähetä nyt ottamatta cueta
+Pocket Test (test card + scene cycle)	Pocket-testi (testikuva + kohtausten kierto)
+Critters (pixel-exact scaling, animated)	Critters (pikselintarkka skaalaus, animoitu)
+headphones, desk sounds and LTC stay out of it	kuulokkeet, pöydän äänet ja LTC pysyvät poissa
+Above 1 tunnels inward, below 1 blooms outward.	Yli 1 tunneli imee sisään, alle 1 se aukeaa ulos.
+Read everything right to left. Yes, everything.	Lue kaikki oikealta vasemmalle. Kyllä, kaikki.
+Amber is closest to the 1976 single-phosphor look.	Meripihka on lähinnä vuoden 1976 yksifosforista ilmettä.
+Greetings, primitive. Your "slideshow" amuses us.	Tervehdys, alkukantainen. ”Diaesityksesi” huvittaa meitä.
+Sway sideways. Depth 1 is half the frame either way	Heilu sivuttain. Syvyys 1 on puoli kuvaa kumpaankin suuntaan
+Draw the diagnostic over the card, or just the text.	Piirrä diagnostiikka testikuvan päälle, tai vain teksti.
+All interfaces, but only this computer is trusted yet.	Kaikki liitännät, mutta vain tähän tietokoneeseen luotetaan vielä.
+Choose the legacy cue token to show inside the PIP window	Valitse vanha cue-tunnus, joka näytetään PIP-ikkunassa
+ASIO carries the show's sound, and these are not on it yet	ASIO kantaa esityksen äänen, eikä näitä ole siinä vielä
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=uusi  Enter/P=edellinen  O=avaa tallennettu  E=esimerkit  L=opi
+Hand this parameter to an oscillator so it moves on its own	Anna tämä parametri oskillaattorille, niin se liikkuu itsestään
+How long the finished drawing stays before it is drawn again	Kuinka kauan valmis piirros pysyy ennen kuin se piirretään uudelleen
+How it comes on and goes off: none, fade, rise, slide or wipe	Miten se tulee ja lähtee: ei mitään, häivytys, nousu, liuku tai pyyhkäisy
+The 64-step wavetable, quantised to 6 bits like the hardware.	64-portainen aaltotaulukko, kvantisoitu 6 bittiin kuten laitteistossa.
+Vary tile size per cell, so the grid stops looking like a grid.	Vaihtele laatan kokoa soluittain, ettei ruudukko enää näytä ruudukolta.
+Which output channel carries the signal. 'all' feeds every one.	Mikä lähtökanava kantaa signaalin. 'all' syöttää kaikkia.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Mitä lähetetään. Kenoviiva-n, -r, -t ja -0 muuttuvat näiksi merkeiksi
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Deckboyn omat etäprotokollan verbit, yksi riville; # on kommentti
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Modulaattorin nopeus suhteessa säveleen, joten taivutus seuraa sävelkorkeutta.
+Play this cue to the preview only; the outputs keep what they have	Toista tämä cue vain esikatselussa; lähdöt pitävät sen mitä niillä on
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Laita sävelkorkeus oskillaattorille: Motion X pyyhkii sitä kuin thereminiä
+A disarmed cue stays in the list and does nothing; GO steps over it	Aseistamaton cue pysyy listassa eikä tee mitään; GO ohittaa sen
+Where the clock reads from this cue on; click the value to type one	Mistä kello lukee tästä cuesta eteenpäin; napsauta arvoa kirjoittaaksesi
+Add a dashboard button that fires this master by name, from anywhere	Lisää kojelautaan painike, joka käynnistää tämän masterin nimellä mistä tahansa
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Uusi täällä? OPI PERUSTEET vie viisi minuuttia. Näytämme paikat.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	IPv4-osoite, tai 255.255.255.255 lähettääksesi koko verkkoon
+How much playing audio widens and brightens the pattern. 0 free-runs.	Kuinka paljon soiva ääni levittää ja vaalentaa kuviota. 0 käy vapaasti.
+LED panel width in pixels - what one tile really is. Click to type it	LED-paneelin leveys pikseleinä: mitä yksi laatta oikeasti on. Napsauta kirjoittaaksesi
+Which deck it acts on; step off the end for the one this cue lives on	Mihin deckiin se vaikuttaa; mene lopun yli tämän cuen omaan
+only one playlist - use the routing chip on the header to add another	vain yksi playlist: otsikon reitityssiru lisää toisen
+Which cue this master fires on that deck; step off the end to clear it	Minkä cuen tämä master laukaisee siinä deckissä; mene lopun yli tyhjentääksesi
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Piirrä ohjelmamonitoriin hiirellä tai kynällä (DRAW). Esc lopettaa
+How long the move takes, each way. 0 is instant whatever the style says	Kuinka kauan liike kestää, kumpaankin suuntaan. 0 on välitön tyylistä riippumatta
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Pysäytä se deck, kun ramppi päättyy: tavallinen laske-ja-pysäytä
+Which of the file's sound tracks plays: a second language, a commentary	Mikä tiedoston ääniraita soi: toinen kieli, selostus
+An oscillator on the colour: depth is how far round the wheel it travels	Oskillaattori värissä: syvyys on se, kuinka pitkälle se kiertää väripyörää
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Valmistele tämä cue tauolle ja pois lähetyksestä, niin GO käynnistää sen ilman dekooderin käynnistysviivettä
+Note, control change, program change, MIDI Show Control, or your own bytes	Nuotti, control change, program change, MIDI Show Control tai omat tavusi
+Black behind the words. Zero leaves it over whatever the output already has	Mustaa sanojen taakse. Nolla jättää ne sen päälle, mitä lähdössä jo on
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Kuinka paljon modulaattori taivuttaa sävelkorkeutta. 0-63, laitteiston oma vahvistusalue.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	sanat, jotka tämä cue tuo ruudulle  |  Shift+Enter: uusi rivi  |  Enter: käytä
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSC ja UDP lähetetään ja unohdetaan; TCP yhdistää, joten se ajetaan esityssäikeen ulkopuolella
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Laita taso oskillaattorille: Motion tekee siitä portin, joka aukeaa kun liikut
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Merkit pinottuina merkkien YLLE, kuten yhdistyvät aksentit, jotka valuvat rivin yli.
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Mikä kello. Vaihtaminen SOITTAA sen, joten sen voi valita korvalla eikä nimellä.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Ei rivejä. + LISÄÄ tai OPI tekee yhden; MIDIMAP RESET palauttaa sisäänrakennetut rivit.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Tallenna maskin polut SVG:nä Illustratoria ja kaikkea niitä lukevaa varten
+Which MIDI output; a named port that is missing is reported rather than swapped	Mikä MIDI-lähtö; puuttuva nimetty portti ilmoitetaan eikä sitä vaihdeta
+An oscillator on the level, running after GO until a later cue sets this fixture	Oskillaattori tasossa, käynnissä GO:n jälkeen, kunnes myöhempi cue asettaa tämän valaisimen
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Askeleet terssioktaaveina, koska korva toimii suhteissa. 1 kHz on käytäntö.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Viivat solun POIKKI, jotka vahingoittavat merkkiä sen sijaan että koristaisivat.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Soittavatko saapuvat MIDI-nuotit tätä syntetisaattoria vai laukaisevatko ne cueja kuten aina.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Nuotin numero, tai kirjoita LEARN ja soita se. Nuotit, joita mikään cue ei ota, menevät cuelle N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Tavallinen stereopari. Napsauta avataksesi matriisin, tasan tästä reitityksestä alkaen
+Folding is what turns an arbitrary pattern into something that reads as designed.	Taittelu tekee mielivaltaisesta kuviosta jotain, mikä näyttää suunnitellulta.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Kanava=taso, pilkuilla erotettuna. Myös välit: 1=255, 10-14=64. Kanavat lasketaan ykkösestä
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Siirtää jokaisen valitun cuen trimmiä saman dB-määrän; arvon kirjoittaminen asettaa ne kaikki siihen
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Taivuttaa kantoaallon SÄVELKORKEUTTA sen sijaan että sekoittuisi siihen. Tämä saa FDS:n murisemaan.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	Puolivälissä OPI PERUSTEET -kierrosta. Paina L, niin jatketaan siitä mihin jäit, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Piirrä merkkiruudukkona 16-värisellä indeksoidulla paletilla, pikselien sijaan.
+Which MIDI output this file plays to; step past the end for the first one available	Mihin MIDI-lähtöön tämä tiedosto soittaa; mene lopun yli ensimmäiseen vapaaseen
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	IPv4-osoite, tai 255.255.255.255 universumin multicast-ryhmälle (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Napsauta solua käydäksesi sen läpi: pois, täysi, -3, -6, -12. Tämä rivi sammuttaa matriisin taas
+How long each phrase stays before it moves. Zero hides them without losing the list.	Kuinka kauan kukin fraasi pysyy ennen siirtymistä. Nolla piilottaa ne kadottamatta listaa.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Kuinka kauan vaimeneminen kestää iskun jälkeen. Kuuluu vain, kun uudelleenliipaisu on päällä.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Pois, alusta (seuraava cue alkaa, kun tämä alkaa) tai lopusta (kun tämä päättyy)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Yhden rivin korkeus prosentteina rasterista, jotta kortti näyttää samalta joka ruudulla
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Aseta paikan lähde: media:/polku, browser:url, window:nimi, camera:nimi tai syphon:nimi
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Lyhyt LFSR-tila. Jakso on niin lyhyt, että se kuulostaa viritetyltä metallilta eikä kohinalta.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Valkoinen, lämmin, punainen, meripihka, vihreä, syaani, sininen, magenta. ~ kierrättää sitä väripyörällä
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Iske verhokäyrä uudelleen näin usein. Hold pitää yhtä säveltä, mitä drone haluaa.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond on Atari Video Musicin teräväreunainen hila; renkaat tunneloivat hyvin feedback-zoomin kanssa.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Keinu tai pyöri. Syvyys 1 on puoli kierrosta kumpaankin suuntaan; saha syvyydellä 1 kiertää koko kierroksen
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	DECKin toistotaso (live, ei tallennu cueen) - cuekohtainen trimmi on vahvistus AUDIO-osiossa
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Paikallaan, häivytys sisään, kirjoituskone, vieritys ylös, ryömintä tai syke, kaikki cuen oman siirron ohjaamana
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Kentät renderöityä kuvaa kohden. 1 on yksi yhteen, 0,5 pitää kutakin kenttää kaksi kuvaa, 0 jäädyttää.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Mitä tämä cue näyttää soidessaan: aaltomuoto, skooppi, Lissajous, spektri, mittarit tai nimikortti
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0 valitsee laatat kirkkauden mukaan, jotta kuva erottuu. 1 valitsee satunnaisesti, jolloin ruudukosta tulee pintaa.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Kuinka pitkälle se kulkee, puolisävelaskelina. Ylös kuulostaa saapumiselta, alas lähdöltä, nolla on lyöty sävel.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	IPv4-osoite. Nimiä ei selvitetä: DNS-haku on estävä kutsu, eikä GO saa tehdä sellaista
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Laatan leveys pikseleinä. Sen on vastattava arkin ruudukkoa, muuten palat osuvat naapurisprittien yli.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Vuorottelevat peilit solun paikan mukaan, mikä luetaan kuviona, kun satunnainen kääntö luetaan kohinana.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0 hitsaa ne soluunsa, kaiverretun näköisiksi. Sen yli ne arvotaan uudelleen, kuin kiehuisivat.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L soittaa vasemman tulon molemmista kaiuttimista: mikki 1 useimmissa liitännöissä. STEREO on linjalähteelle.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	Koko ele. Tämä ON cuen kesto: tunnari on ainoa tässä luotu signaali, joka päättyy.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Napsauta arvoa lähettääksesi tämän valaisimen tai jättääksesi sen siihen, mihin edellinen cue sen jätti. ~ saa tason hengittämään
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS on modulaattorin taivuttama aaltotaulukko. 2A03 on pulssi/kolmio/kohina-sarja, josta useimmat chiptunet tehdään.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Sekoita, mikä merkki tarkoittaa mitäkin kirkkautta. Sama sarja, eri käsiala. Siemenellä, joten se pysyy paikallaan.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Pikselilajittelu: rivin pikselijonot lajiteltuna kirkkauden mukaan, mikä saa datamoshin näyttämään sulaneelta.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	Kuinka monta solua merkit saavat kiivetä. Ne harvenevat noustessaan, joten pitkä ulottuma jättää vanan eikä tuplaa.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue toim arv  -  G ota  S pysäytä  F häivytä ulos (arv = sekunnin kymmenyksiä)  V äänenvoimakkuus  O peittävyys  J hyppää riville
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Harmoninen paino: puhdas kello nollassa, vaskea täysillä. Tämä on ero piippauksen ja fanfaarin välillä.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Käy läpi tämän tietokoneen tulot. 'Settings input' seuraa tuloa, joka on valittu kohdassa Asetukset > Ääni.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Hiilloksesta roihuun. Se nousee ja laskee joka asetuksella: tuli, joka ei liiku, näyttää valokuvalta
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Viritystaajuus. 440 on nykystandardi, 432 yleinen vaihtoehto, ja vanhemmat soittimet olivat vielä alempana.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Mistä tunnari alkaa. Puheen alla sen pitää pysyä poissa tieltä; salin yllä sen pitää leikata läpi.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Digitaalinen vahvistus tuloon, -40 ... +40 dB. Säädä ensin liitännän oma esivahvistin; tämä on viimeisille desibeleille.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Sykitä kokoa. Yksinään tämä liikuttaa leveyttä JA korkeutta yhdessä; anna korkeudelle oma ~ litistämään ja venyttämään
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Kortti täyttää kuvan; Lower Third on nimi ja rooli, alhaalla läpinäkyvällä pohjalla, sisääntulolla ja poistumisella
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held pitää viimeisen siirtymän sen sijaan että poistaisi sen: kuva jää taipuneeksi niin kuin ajuri sen jätti.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12,5 ja 25 ovat ohuita ja nenäisiä, 50 on ontto. 75 kuulostaa samalta kuin 25: se on tässä, koska trackerit tarjoavat sen.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Kvantisoi lähtö kuten laitteisto. Portaat OVAT ääni; niiden tasoittaminen tekee siitä sirua jäljittelevän syntikan.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Siirtää jokaisen valitun cuen trimmiä saman dB-määrän säilyttäen erot; arvon kirjoittaminen asettaa ne kaikki siihen
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Minne playlistin ristipisteet sen lähettävät (Asetukset > Ääni). Napsauta avataksesi matriisin nimellä, tasan siitä reitityksestä alkaen
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	nimeä arvot  d = ...;  lopeta yhdellä lausekkeella, tai kolmella punaiselle vihreälle siniselle  |  Shift+Enter: uusi rivi  |  Enter: käytä
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Palauta lähtötilanne, kun ramppi päättyy (pysäytyksen jälkeen): deck valmiina seuraavaan cueen, paisunta joka päästää irti
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Mikä puhemalli tekee tekstitykset: englanti, mikä tahansa kieli, tai hitaampi ja tarkempi pari. Kukin ladataan kerran
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Mitä maski leikkaa: tämän cuen missä tahansa se soi, tämän playlistin valitussa lähdössä, sen lähdön koko kuvan tai sen matten
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Toista ruudun taajuudella, kun se on 0,2 %:n sisällä (59,94 vs 60): jokainen kuva näytetään kerran, ääni enintään 3,5 senttiä ylä- tai alavireessä
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Neljänneskierrokset ovat tarkkoja ja pysyvät terävinä. Pyöritys näytteistää vinosti, mikä repii pikselitaidetta: joskus juuri sitä halutaan.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Jokainen otto aloittaa nukketeatterin samoin, jotta harjoiteltu ilme toistuu eikä riipu siitä, kauanko sovellus on ollut auki.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Mikä suuntaa kunkin kallistuksen: oma paikka, kuvan luma-gradientti niin että merkit kallistuvat kuten kuva, tai solun sävy.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Nimeä kanava tai pari kerran. Playlistit lähettävät nimelle, joten eri liitäntä tarkoittaa nimien muuttamista täällä, ei jokaista cueta.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Napsauta ristipistettä käydäksesi sen läpi: pois, 0, -3, -6, -12 dB. Vedä sivulle mihin tahansa tasoon. Playlist ilman ristipisteitä soittaa omaan laitteeseensa.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Sprittisarjat asennettuna kansioon data/sprites. Jokainen kansio on sarja; kierto valitsee yhden ja palaa tyhjään. Oikea napsautus sammuttaa ne.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Sisäinen resoluutio, 1 karkein ja 5 hienoin. Tämä on yhtä paljon esteettinen kuin nopeussäädin: 8-bittinen ilme tulee isoista pikseleistä.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture ottaa värin kuvasta. Vihreä, meripihka ja syaani ovat päätteiden fosforeja. Palette lukitsee tekstin valittuun laitteistopalettiin.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE korjaa itsensä (H.264). CLASSIC on aito suttu (MPEG-4). EXTREME on karkeampi ja suttaa jatkuvasti. Tämän vaihtaminen valmistelee cuen uudelleen.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Sini linjaukseen, vaaleanpunainen PA:n soinnin säätöön, valkoinen rämisevän etsimiseen, pyyhkäisy kuulemaan missä huone soi, identify käymään lähdöt läpi yksi kerrallaan.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Mikä efekti, paikkansa mukaan siinä pinossa, jota deckin cue soittaa tämän lauetessa. Jos siellä ei ole mitään, häivytys kertoo sen eikä tee mitään
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Jokainen kuva sekoitetaan seuraavaan. Tämä on Hypnon tunnusmerkki: nollassa se on kuviogeneraattori, sen yli kuva alkaa syödä itseään.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Mitä tulisijan seinän ikkunasta näkyy: puutarha, sade, lumi tai meri. Huone, jonka ulkona on sää, tuntuu paikalta eikä seinältä
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	VALAISIMITTAIN: patchin valot (Asetukset > Verkko > VALAISIMET), nimellä. KANAVAT: kanava=taso käsin. Cuessa voi olla molemmat; kanavat tulevat viimeisinä
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Jokainen merkki keinuu kuin kallistettava kortti. Jokaisella solulla on oma vaiheensa, joten ruudukko hengittää eikä liu'u yhtenä levynä.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Kynä: napsauta kulmat, vedä kaaret, napsauta ensimmäistä pistettä sulkeaksesi (P). Pisteet: vedä, napsauta reunaa lisätäksesi, Alt-napsautus tai Delete poistaa
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Sirun kolme kanavaa. Ne eroavat lajiltaan: kolmiolla ei ole äänenvoimakkuutta laitteistossa, ja kohina on siirtorekisteri eikä oskillaattori.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Valikoidut symboli- ja emojisarjat: tähdet, nuotit, kukat, nuolet, sää, riimut, kasvot. Yhden valitseminen täyttää alla olevat omat merkit, jotka pysyvät muokattavina.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Soita tietokoneen näppäimistöllä, Ableton-asettelu: A W S E D F T G Y H U J, Z ja X oktaaville. Kun tämä on PÄÄLLÄ, ne näppäimet soittavat säveliä eivätkä laukaise cueja.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Deckin peittävyys, deckin äänenvoimakkuus, päähimmennin, aktiivisen cuen kirkkaus / kontrasti / kylläisyys / sävy, tai sen jonkin efektin tai ääniefektin säädin
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Juovat, fosforin hehku ja RGB-reunukset. Hehku on tärkein: fosfori leviää sivuille, ja siksi CRT näyttää säteilevän valoa.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Revenneet juovakaistat ja RGB-erottelu. Tekstitilassa se korruptoi myös SOLUJA: kokonaiset rivit lukittuvat yhteen toistuvaan merkkiin, kuin oikea tekstiruutu, joka kadottaa tahdistuksen.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still pitää kuvan, jossa olet. Flipbook toistaa kuvat vuorotellen. Replay piirtää ensimmäisen kuvan veto vedolta, kuten se piirrettiin, pysähtyy ja aloittaa alusta
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (valmiiksi laukaisematta), Arm, Disarm tai Devamp (silmukka soittaa kierroksensa loppuun ja päättyy); tai Stop all, Pause all, Resume all: jokainen deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope näyttää muodon ja leikkautumisen. Lissajous näyttää vaiheen ja napaisuuden kahden ensimmäisen kanavan välillä: väärinpäin oleva diagonaali tarkoittaa, että toinen on käännetty. Spectrum on terssioktaavipalkit.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0 valitsee merkin, jota kirkkaus pyytää, 1 mitä tahansa sarjan merkkiä. Nosta nähdäksesi koko aakkoston: tiukasti musteen mukaan järjestettynä tasainen alue valitsee yhden merkin, eikä muita näy koskaan.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Lohkot ja rasterointi luetaan tiheytenä; ASCII-ramppi tekstinä; symbolit hylkyinä. Tämän vaihtaminen tyhjentää oman merkkijonon, koska se ohittaisi sen; esiasetusrivi palauttaa yhden.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Tasavireisyys ostaa vapaan modulaation sillä hinnalla, että jokainen intervalli on hieman väärin. Puhdas ja pythagoralainen ovat täysin vireessä yhdessä sävellajissa. Bohlen-Pierce jakaa duodesimin, joten siinä ei ole oktaaveja.
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+pan	panorointi
+trans	siirt.
+arcade	pelihalli
+TRACKER	SEURANTA
+Motion: Bug Swat	Liike: Bug Swat
+Passphrase (shared)	Tunnuslause (jaettu)
+, — skip to previous cue	, — edelliseen cueen
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  ei tee mitään sillä playlistillä  -  (M) askeleen oma playlist
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS on EBU-linjaus, -20 SMPTE. Rajattu alle 0: tämä syöttää live-PA:ta.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  ei tee mitään sillä playlistillä  -  (M) askeleen oma playlist  -  EDIT on päällä: kirjoittaminen muuttaa esitystä
+pop	pop
+deck	deck
+logo	logo
+neon	neon
+MULTI	MULTI
+STEREO	STEREO
+cue "{n}"	cue "{n}"
+Bork bork BORK!	Bork bork BORK!
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	VALITSE DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	Klikkaa nyt sen välilehteä, Deck 2. Uusi soittolista ei ole valittuna ennen kuin klikkaat sitä.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Valaistu välilehti on se, mihin LÄHDE laittaa asiat. Ohita tämä, niin muste päätyy syntikan alle.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	Näetkö tuon välilehden? Klikkaa sitä. Nyt olet Deck 2:ssa. PUM. Perusasiat.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Klikkaa sen välilehteä, Deck 2. Valaistu välilehti on soittolista, johon LÄHDE lisää.
+Skip this and the words go under the map. With the lizard.	Ohita tämä, niin sanat menevät kartan alle. Liskon luo.
+Nine years of live weather. Always click the tab.	Yhdeksän vuotta suoraa säätä. Klikkaa aina välilehteä.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Klikkaa sen välilehteä, Deck 2. Uusi soittolista odottaa, kunnes valitset sen.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Valaistu välilehti saa seuraavan cuen. Kuin valitsisi, mikä dia menee projektoriin.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Valitse pakka. Mikä tahansa. ...Deck 2. Valitse Deck 2.
+MENU	VALIKKO
+VOLUME	VOIMAKKUUS
++ step	+ vaihe
+< BACK	< TAKAISIN
+ATEM switcher	ATEM-kuvamikseri
+ATEM tally	ATEM-tally
+AUDIO: DEFAULT	ÄÄNI: OLETUS
+Animated GIF	Animoitu GIF
+Arrows	Nuolet
+CLICKER	ESITYSOHJAIN
+Copyright	Tekijänoikeus
+DEST...	KOHDE...
+Datamosh - classic	Datamosh – klassinen
+Datamosh - extreme	Datamosh – äärimmäinen
+Datamosh - subtle	Datamosh – hienovarainen
+Deckboy is input	Deckboy on tulo
+Device: None	Laite: ei mitään
+Drag	Vedä
+Drop media here	Pudota media tähän
+Enter Take  Space Play/Pause	Enter Take  Space Toista/Tauko
+FFmpeg / libav  (in-process)	FFmpeg / libav  (prosessin sisällä)
+FPS: SOURCE	FPS: LÄHDE
+Fonts	Fontit
+Free software. You may use, study, share	Vapaa ohjelmisto. Saat käyttää, tutkia,
+GO / BACK	GO / TAKAISIN
+GO / BACK (clicker)	GO / TAKAISIN (esitysohjain)
+Key out: None - fill only	Key-lähtö: ei mitään – vain fill
+LTC in	LTC-tulo
+Licence	Lisenssi
+MATCH SOURCE	KUTEN LÄHDE
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> siirto
+MOSH: SUBTLE	MOSH: HIENOVARAINEN
+MSC Trigger -> cue by id	MSC Trigger -> cue tunnisteella
+MTC in	MTC-tulo
+Mode: CALLER	Tila: CALLER
+NDI receiver	NDI-vastaanotin
+NDI trigger	NDI-laukaisin
+NO STEPS YET	EI VIELÄ VAIHEITA
+No PTP lock, wide-model pacing - will not genlock to plant sources	Ei PTP-lukitusta, karkea ajoitus – ei genlockia studion lähteisiin
+ONCE  |  ORDER	KERRAN  |  JÄRJESTYS
+Optional	Valinnainen
+PNG sequence	PNG-sarja
+Platform	Alusta
+Press A to take cue	Paina A ottaaksesi cuen
+RATE: AUTO	TAAJUUS: AUTO
+S Stop   C Clear   Esc Panic	S Seis   C Tyhjennä   Esc Paniikki
+SIZE: SOURCE	KOKO: LÄHDE
+SPOUT TEXTURE SHARE	SPOUT-TEKSTUURIN JAKO
+Session	Istunto
+TSL tally out	TSL-tally-lähtö
+Thanks	Kiitokset
+Timecode chase	Seuraa aikakoodia
+Timecode run	Aja aikakoodia
+Toolkit	Työkalupakki
+Trigger	Laukaise
+WAV (audio only)	WAV (vain ääni)
+Warranty	Takuu
+address...	osoite...
+and modify it; derivatives stay GPL.	jakaa ja muokata; johdannaiset pysyvät GPL:nä.
+clear the cell	tyhjennä solu
+companion ping	Companion-ping
+fire this row	laukaise tämä rivi
+insert a row	lisää rivi
+live lane  |  I/O set trim  |  click or drag to seek	livekaista  |  I/O asettaa trimmin  |  napsauta tai vedä hakeaksesi
+media in	media sisään
+move the cursor	siirrä kohdistinta
+mute / solo a column	mykistä / soolo sarake
+off -- edit on monitor	pois -- muokkaa monitorissa
+off: no camera is open. Drag on the picture to draw a zone.	pois: kameraa ei ole auki. Vedä kuvan päällä piirtääksesi alueen.
+open the code editor	avaa koodieditori
+play / stop	toista / pysäytä
+stop, fade, vol, opacity	seis, häivytys, vol, peittävyys
+the FFmpeg, SDL and FreeType projects,	FFmpeg-, SDL- ja FreeType-projekteille,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companionille ja x42/libltc:lle.
+Keys	Näppäimet
+None. See LICENSE sections 15-16.	Ei mitään. Katso LICENSE, kohdat 15-16.
+none compiled in	ei mitään käännetty mukaan
+Alpha	Alfa
+Group	Ryhmä
+Normal	Normaali
+Remote	Etäohjaus
+lesson	oppitunti
+Bitrate	Bittinopeus
+Latency	Viive
+OUT {n}	ULOS {n}
+Out {n}	Ulos {n}
+{n} row	{n} rivi
+Key name	Näppäimen nimi
+Keyframe	Avainkuva
+Registry	Rekisteri
+fade {n}	häivytys {n}
+{n} rows	{n} riviä
+Node port	Solmun portti
+Stream ID	Virran ID
+added {1}	lisätty {1}
+start {n}	aloita {n}
+still {n}	pysäytyskuva {n}
+FADE {n} s	HÄIVYTYS {n} s
+LAYER {n}%	TASO {n}%
+Output {n}	Ulostulo {n}
+PTP domain	PTP-toimialue
+Stream key	Lähetysavain
+[ASSIGNED]	[MÄÄRITETTY]
+audio only	vain ääni
+to Out {n}	kohteeseen Ulos {n}
+{n} of {n}	{n}/{n}
+Display {n}	Näyttö {n}
+active jobs	aktiiviset työt
+local clock	paikallinen kello
+not running	ei käynnissä
+click to set	aseta napsauttamalla
+full {n}x{n}	täysi {n}x{n}
+running v{n}	käynnissä v{n}
+the other one	toinen
+DELIVERY H.{n}	TOIMITUS H.{n}
+Output {n} mix	Ulostulon {n} miksaus
+made by Deckboy	tehty Deckboylla
+{1} plays to {2}	{1} soittaa kohteeseen {2}
+the picture {1} plays	kuva, jota {1} soittaa
+New media joins {1} by itself	Uusi media liittyy kohteeseen {1} itsestään
+Press Win+P and choose Extend	Paina Win+P ja valitse Laajenna
+{n} patched - DMX cues set them by name	{n} patchattu - DMX-cuet asettavat ne nimen mukaan
+Set them to extend in your display settings	Aseta ne laajennetuiksi näyttöasetuksista
+lesson: {1}. Esc leaves, and it picks up here next time	oppitunti: {1}. Esc poistuu, ja ensi kerralla jatketaan tästä
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Vastaa ATEM Software Controlille deckinä TCP 9993:ssa osoitteessa {1}
+In System Settings > Displays, use it as an extended display	Kohdassa Järjestelmäasetukset > Näytöt käytä sitä laajennettuna näyttönä
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Se söi pöydän, skapi. Sinulla on {1} näyttöä: VALIKKO > ulostulon NÄYTTÖ siirtää sen toiselle.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Se söi pöydän, skapi. Sinulla on kaksi näyttöä: VALIKKO > ulostulon NÄYTTÖ siirtää sen toiselle.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} näyttöä, skapi. Pöytä pysyy tässä, kuva menee näytölle {2}. Avaa VALIKKO ja muuta ULOSTULO POIS muotoon ULOSTULO PÄÄLLE.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Kaksi näyttöä, skapi. Pöytä pysyy tässä, kuva menee toiseen: {1}. Avaa VALIKKO ja muuta ULOSTULO POIS muotoon ULOSTULO PÄÄLLE.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Se söi pöydän, skapi. Peilatut näytöt näyttävät kuvan molemmissa, joten laitoin sen pieneen ikkunaan taakse. {1}, niin se saa oman näytön.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Näyttösi on peilattu, skapi: {1} näyttää saman kuin tämä, joten kuva peittää pöydän molemmissa. {2}, niin laitan kuvan omalle näytölleen. Tai avaa VALIKKO ja muuta ULOSTULO POIS muotoon ULOSTULO PÄÄLLE.

@@ -1,0 +1,4647 @@
+// ============================================================================
+// app_project_state.ipp — Project save/load and file management.
+//
+// Implements .deckboy project file I/O using tab-delimited format:
+//
+//   Project file resolution:
+//     defaultProjectFile()     — resolve DECKBOY_PROJECT env or default path
+//     startupProjectFile()     — last-opened project or default
+//     lastOpenedProjectPointerFile() — persists the most recently opened file
+//
+//   Save/load:
+//     saveProject()            — serialize project to .deckboy file
+//     loadProject()            — deserialize project from .deckboy file
+//     flushDirtyProject()      — the periodic auto-save: writes 300ms after
+//                                the project is marked dirty, via persistProject()
+//     markProjectDirty()       — flag unsaved changes
+//
+//   Import/export:
+//     importProjectFile()      — merge cues from another project
+//     exportProjectBundleTo()  — export project + media as a portable bundle
+//     importMediaFiles()       — batch import media files as new cues
+//
+//   Field serialization:
+//     Tab-delimited format with escape sequences for special characters.
+//     Backward compatibility: guard `if (fields.size() >= N)` for new fields.
+//     See escapeField() / unescapeField() in main.cpp for the encoding.
+//
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+// ============================================================================
+
+  // Returns the default project file path (from DECKBOY_PROJECT env or default).
+  fs::path defaultProjectFile() const {
+    const char* envPath = std::getenv("DECKBOY_PROJECT");
+    if (envPath && *envPath) {
+      std::error_code ec;
+      return Paths::normalizeProjectPath(fs::absolute(envPath, ec));
+    }
+    return Paths::defaultProjectFile();
+  }
+
+  fs::path lastOpenedProjectPointerFile() const {
+    return Paths::stateDir() / "last_project.txt";
+  }
+
+  // The last few shows, newest first.
+  //
+  // last_project.txt remembers exactly one, which is all "OPEN PREVIOUS"
+  // needs. An operator running several shows off one machine -- a venue with
+  // a house show, a rehearsal file and last night's -- has to go through the
+  // file picker for every one of them except the most recent. Kept beside the
+  // pointer file rather than inside it: the pointer is read at startup before
+  // anything else and its one-line format is not worth changing.
+  fs::path recentProjectsFile() const {
+    return Paths::stateDir() / "recent_projects.txt";
+  }
+
+  static constexpr std::size_t kRecentProjectsKept = 8;
+
+  // Filtered by existence at READ time, not at write time. A show on a drive
+  // that is not mounted right now has not stopped being recent, and dropping
+  // it the moment the drive is unplugged is how a recents list quietly empties
+  // itself. It just does not appear until the path is there again.
+  std::vector<fs::path> loadRecentProjects(bool existingOnly = true) const {
+    std::vector<fs::path> out;
+    std::ifstream input(recentProjectsFile(), std::ios::binary);
+    if (!input) {
+      return out;
+    }
+    std::string line;
+    while (std::getline(input, line) && out.size() < kRecentProjectsKept) {
+      fs::path candidate = normalizeProjectPath(trim(line));
+      if (candidate.empty()) {
+        continue;
+      }
+      if (existingOnly && !fs::exists(candidate) && newerProjectRecoveryFile(candidate).empty()) {
+        continue;
+      }
+      bool seen = false;
+      for (const fs::path& have : out) {
+        if (have == candidate) { seen = true; break; }
+      }
+      if (!seen) {
+        out.push_back(candidate);
+      }
+    }
+    return out;
+  }
+
+  // What the SPLASH offers: the recents, minus the show that already has its
+  // own button.
+  //
+  // The previous show was named twice on the startup screen -- once as
+  // "Previous show file", once as recent number 1 -- because it is both. They
+  // are not the same action (OPEN PREVIOUS continues the show already loaded
+  // at the startup path; the row opens a file) but they are the same file, and
+  // an operator reading a list does not care about that distinction. So the
+  // heading keeps it and the list drops it, which also buys the list a slot:
+  // five OTHER shows to switch to, rather than four plus the one already on a
+  // button.
+  //
+  // The render, the click and the number keys all come through here. Filtering
+  // in the drawing code alone would leave the click handler reading the
+  // unfiltered list, and every row would open the show one place above it.
+  bool startupProjectAvailable() const {
+    return !currentProjectFile_.empty() &&
+           (fs::exists(currentProjectFile_) || !pendingProjectRecoveryFile_.empty());
+  }
+
+  std::vector<fs::path> startupRecentShows() const {
+    std::vector<fs::path> recents = loadRecentProjects();
+    if (startupProjectAvailable()) {
+      const fs::path current = normalizeProjectPath(currentProjectFile_);
+      recents.erase(std::remove(recents.begin(), recents.end(), current),
+                    recents.end());
+    }
+    return recents;
+  }
+
+  void noteRecentProject(const fs::path& projectFile) const {
+    if (projectFile.empty()) {
+      return;
+    }
+    fs::path normalized = normalizeProjectPath(projectFile);
+    // Read unfiltered: a rewrite must not silently drop the entries whose
+    // drive happens to be absent while we are writing.
+    std::vector<fs::path> kept = loadRecentProjects(false);
+    kept.erase(std::remove(kept.begin(), kept.end(), normalized), kept.end());
+    kept.insert(kept.begin(), normalized);
+    if (kept.size() > kRecentProjectsKept) {
+      kept.resize(kRecentProjectsKept);
+    }
+    std::error_code ec;
+    fs::create_directories(recentProjectsFile().parent_path(), ec);
+    std::ofstream output(recentProjectsFile(), std::ios::binary | std::ios::trunc);
+    if (!output) {
+      return;
+    }
+    for (const fs::path& entry : kept) {
+      output << entry.string() << "\n";
+    }
+  }
+
+  fs::path startupProjectFile() const {
+    const char* envPath = std::getenv("DECKBOY_PROJECT");
+    if (envPath && *envPath) {
+      return defaultProjectFile();
+    }
+
+    std::ifstream input(lastOpenedProjectPointerFile(), std::ios::binary);
+    if (input) {
+      std::string storedPath;
+      std::getline(input, storedPath);
+      fs::path remembered = normalizeProjectPath(trim(storedPath));
+      if (!remembered.empty() && (fs::exists(remembered) || !newerProjectRecoveryFile(remembered).empty())) {
+        return remembered;
+      }
+    }
+    return Paths::defaultProjectFile();
+  }
+
+  void rememberLastOpenedProjectFile(const fs::path& projectFile) const {
+    if (projectFile.empty()) {
+      return;
+    }
+    // Every path that remembers "the last one" is a path that has just opened
+    // or saved a show, so the recents list is maintained from the same three
+    // call sites rather than a fourth set that could miss one.
+    noteRecentProject(projectFile);
+    fs::path normalized = normalizeProjectPath(projectFile);
+    std::error_code ec;
+    fs::create_directories(lastOpenedProjectPointerFile().parent_path(), ec);
+    std::ofstream output(lastOpenedProjectPointerFile(), std::ios::binary | std::ios::trunc);
+    if (!output) {
+      return;
+    }
+    output << normalized.string();
+  }
+
+  fs::path normalizeProjectPath(fs::path path) const {
+    return Paths::normalizeProjectPath(path);
+  }
+
+  // True while the show lives only in the scratch file: a new show, or the
+  // one that opens on a first launch. Every edit is autosaved there, so the
+  // show is never "dirty" for long -- but it has no home of its own, and the
+  // next NEW reuses the same file. DECKBOY_PROJECT names a real file on
+  // purpose, so it is not scratch.
+  bool projectIsInScratchFile() const {
+    return isScratchProjectFile(currentProjectFile_);
+  }
+
+  static bool isScratchProjectFile(const fs::path& file) {
+    if (file.empty()) {
+      return true;
+    }
+    const fs::path scratch = Paths::defaultProjectFile();
+    std::error_code ec;
+    if (fs::equivalent(file, scratch, ec) && !ec) {
+      return true;
+    }
+    return file.lexically_normal() == scratch.lexically_normal();
+  }
+
+  bool projectHasCues() const {
+    for (const auto& deck : project_.decks) {
+      if (!deck.cues.empty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  std::string currentProjectLabel() const {
+    if (currentProjectFile_.empty()) {
+      return "default.deckboy";
+    }
+    return currentProjectFile_.filename().string();
+  }
+
+  std::string currentAudioOutputLabel() const {
+    return focusedDeck().audioOutputDeviceName.empty() ? "system default" : focusedDeck().audioOutputDeviceName;
+  }
+
+  std::string currentNdiOutputLabel() const {
+    if (project_.outputs.empty()) {
+      return "off";
+    }
+    int outputIndex = std::clamp(project_.focusedOutputIndex, 0, static_cast<int>(project_.outputs.size()) - 1);
+    const OutputTarget& output = project_.outputs[outputIndex];
+    std::string source = output.ndiSourceName.empty()
+      ? defaultOutputNdiSourceName(output, outputIndex)
+      : output.ndiSourceName;
+    std::string keySource = output.ndiKeySourceName.empty()
+      ? defaultOutputNdiKeySourceName(output, outputIndex)
+      : output.ndiKeySourceName;
+    if (!output.ndiEnabled) {
+      return "off";
+    }
+#if defined(DECKBOY_HAS_NDI_SDK)
+    const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+    bool live = runtime && runtime->ndiSender;
+    bool keyLive = runtime && runtime->ndiKeySender;
+    int listeners = ndiConnectionCountForOutput(outputIndex);
+    int keyListeners = ndiKeyConnectionCountForOutput(outputIndex);
+    std::string suffix = live ? "on" : "pending";
+    if (listeners > 0) {
+      suffix += " (" + std::to_string(listeners) + " rx)";
+    }
+    std::string label = suffix + " / fill:" + source;
+    if (output.ndiKeyEnabled) {
+      std::string keySuffix = keyLive ? "on" : "pending";
+      if (keyListeners > 0) {
+        keySuffix += " (" + std::to_string(keyListeners) + " rx)";
+      }
+      label += "  key:" + keySource + " [" + keySuffix + "]";
+    }
+    return label;
+#else
+    return "unavailable";
+#endif
+  }
+
+  std::string currentTransitionLabel() const {
+    const Deck& deck = focusedDeck();
+    return transitionStyleToken(parseTransitionStyleToken(deck.transitionStyle)) + " " + formatSeconds(deck.transitionSeconds);
+  }
+
+  std::string currentTimecodeLabel() const {
+    const Deck& deck = focusedDeck();
+    return formatTimecode(deck.timecodeCurrentSeconds, deck.timecodeFps) +
+           " @" + std::to_string(static_cast<int>(std::round(deck.timecodeFps))) +
+           (deck.timecodeChaseEnabled ? " chase" : " free");
+  }
+
+  std::string deckSummaryLabel() const {
+    return focusedDeckLabel() + "  (" + std::to_string(project_.focusedDeckIndex + 1) + "/" + std::to_string(project_.decks.size()) + ")";
+  }
+
+  std::string deckStatusSummary(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "offline";
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    std::ostringstream output;
+    output << (deck.name.empty() ? deckDefaultName(deckIndex) : deck.name) << " | " << transportStatusLabel(deckIndex);
+    if (activeCue) {
+      output << " | " << activeCue->name;
+    } else {
+      output << " | idle";
+    }
+    if (engine) {
+      output << " | " << formatSeconds(engine->position()) << "/" << formatSeconds(engine->duration());
+    }
+    output << " | " << deckOutputRoutingLabel(deckIndex);
+    if (deck.timecodeChaseEnabled) {
+      output << " | tc:" << formatTimecode(deck.timecodeCurrentSeconds, deck.timecodeFps);
+    }
+    return output.str();
+  }
+
+  std::string cueNumberLabelForStatus(const Deck& deck, int cueIndex) const {
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "";
+    }
+    return cueDisplayToken(deck.cues[cueIndex], cueIndex);
+  }
+
+  std::string cueIdForStatus(const Deck& deck, int cueIndex) const {
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return "";
+    }
+    return deck.cues[cueIndex].id;
+  }
+
+  // THE WARP THAT APPLIES TO THIS DECK, which lives on the output its
+  // picture lands on. Reported under the deck because that is the shape
+  // every control surface already parses; a deck on no output reports the
+  // neutral values, because nothing is warping a picture nobody can see.
+  const OutputTarget& warpSourceForDeck(int deckIndex) const {
+    static const OutputTarget kNone {};
+    auto outputIndex = primaryOutputIndexForDeck(deckIndex);
+    if (!outputIndex || *outputIndex < 0 ||
+        *outputIndex >= static_cast<int>(project_.outputs.size())) {
+      return kNone;
+    }
+    return project_.outputs[*outputIndex];
+  }
+
+  // WHERE THIS MACHINE'S FRAME TIME GOES, every deck together (running
+  // totals, microseconds): diff two STATUS readings and divide by the counts.
+  // decode includes convert. On a Pi 3 this split showed in one run that
+  // reading the decoder's buffers, not decoding, was what could not keep up.
+  static std::string stageTimingStatusFields() {
+    const deckboy::libav::StageTimings& t = deckboy::libav::stageTimings();
+    std::ostringstream out;
+    out << " decode_us=" << t.decodeNs.load() / 1000 << " convert_us=" << t.convertNs.load() / 1000
+        << " decoded=" << t.decoded.load() << " upload_us=" << t.uploadNs.load() / 1000
+        << " uploads=" << t.uploads.load();
+    return out.str();
+  }
+
+  std::string buildCueProgrammingSnapshot() const {
+    std::ostringstream output;
+    output << "DECKBOY_0.01 cues"
+           << " focus=" << (project_.focusedDeckIndex + 1)
+           << " decks=" << project_.decks.size();
+    if (!lastCueFindToken_.empty() && !lastCueFindMatches_.empty()) {
+      int cursor = std::clamp(lastCueFindCursor_, 0, static_cast<int>(lastCueFindMatches_.size()) - 1);
+      output << " find=\"" << lastCueFindToken_ << "\""
+             << " match=" << (cursor + 1) << "/" << lastCueFindMatches_.size()
+             << " find_deck=" << (lastCueFindDeckIndex_ >= 0 ? lastCueFindDeckIndex_ + 1 : 0);
+    } else {
+      output << " find=none";
+    }
+    output << '\n';
+
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      const Deck& deck = project_.decks[deckIndex];
+      std::string selectedNum = cueNumberLabelForStatus(deck, deck.selectedIndex);
+      std::string selectedId = cueIdForStatus(deck, deck.selectedIndex);
+      std::string activeNum = cueNumberLabelForStatus(deck, deck.activeIndex);
+      std::string activeId = cueIdForStatus(deck, deck.activeIndex);
+      output << "CUEDECK " << (deckIndex + 1)
+             << " name=\"" << (deck.name.empty() ? deckDefaultName(deckIndex) : deck.name) << "\""
+             << " selected_num=\"" << selectedNum << "\""
+             << " selected_id=\"" << selectedId << "\""
+             << " active_num=\"" << activeNum << "\""
+             << " active_id=\"" << activeId << "\"";
+      if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+        output << " selected_name=\"" << deck.cues[deck.selectedIndex].name << "\"";
+      }
+      if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size())) {
+        output << " active_name=\"" << deck.cues[deck.activeIndex].name << "\"";
+      }
+      output << '\n';
+    }
+    return output.str();
+  }
+
+  // WHAT THE OUTPUT ACTUALLY PRESENTS: the window in pixels, the swapchain the
+  // renderer draws into, and whether it is fullscreen. A swapchain that does
+  // not match the screen pixel for pixel is scaled by the compositor every
+  // refresh, and then anything else updating on that screen can cost the
+  // programme a frame.
+  std::string outputPresentGeometryStatus(int outputIndex) const {
+    const OutputRuntime* rt = runtimeForOutput(outputIndex);
+    if (!rt || !rt->outputWindow || !rt->outputRenderer) {
+      return " window_px=0x0 render_px=0x0 fullscreen=0" + outputPresentClockStatus(rt);
+    }
+    int ww = 0, wh = 0, rw = 0, rh = 0;
+    SDL_GetWindowSizeInPixels(rt->outputWindow, &ww, &wh);
+    SDL_GetCurrentRenderOutputSize(rt->outputRenderer, &rw, &rh);
+    const bool fs = (SDL_GetWindowFlags(rt->outputWindow) & SDL_WINDOW_FULLSCREEN) != 0;
+    return " window_px=" + std::to_string(ww) + "x" + std::to_string(wh) +
+           " render_px=" + std::to_string(rw) + "x" + std::to_string(rh) +
+           " fullscreen=" + (fs ? "1" : "0") + outputPresentClockStatus(rt);
+  }
+
+  // The clock its presents kept and, on Windows, how they reach the screen
+  // (checkOutputPresentClock): paced_hz against target_hz is the question.
+  static std::string outputPresentClockStatus(const OutputRuntime* rt) {
+    const deckboy::platform::PresentPathInfo none;
+    const deckboy::platform::PresentPathInfo& path = rt ? rt->presentPath : none;
+    char fields[240];
+    std::snprintf(fields, sizeof(fields),
+                  " paced_hz=%.3f compositor_hz=%.3f dxgi_mode=%s same_gpu=%s covers_screen=%d windows_above=%d"
+                  " on_top=%d raised=%llu",
+                  rt ? rt->presentPacedHz : 0.0, path.compositorHz,
+                  deckboy::platform::dxgiPresentationModeName(path.dxgiMode),
+                  path.sameAdapter == 1 ? "yes" : (path.sameAdapter == 0 ? "no" : "unknown"),
+                  path.coversScreen, path.windowsAbove, rt && rt->onTop ? 1 : 0,
+                  static_cast<unsigned long long>(rt ? rt->onTopRaises : 0));
+    return fields;
+  }
+
+  std::string buildStatusSnapshot() const {
+    std::ostringstream output;
+    output << "DECKBOY_0.01"
+           << " focus=" << (project_.focusedDeckIndex + 1)
+           << " decks=" << project_.decks.size()
+           << " focused_output=" << (project_.focusedOutputIndex + 1)
+           << " outputs=" << project_.outputs.size()
+           << " panic_profile=" << normalizePanicProfileToken(project_.panicProfile)
+           << " panic_fade_s=" << project_.panicFadeSeconds
+           << " panic_restore=" << (project_.panicAutoRestore ? "on" : "off")
+           << " find=\"" << lastCueFindToken_ << "\""
+           << " find_matches=" << lastCueFindMatches_.size()
+           << " find_cursor=" << (lastCueFindCursor_ >= 0 ? lastCueFindCursor_ + 1 : 0)
+           << " find_deck=" << (lastCueFindDeckIndex_ >= 0 ? lastCueFindDeckIndex_ + 1 : 0)
+           << " video_mode=" << (project_.outputFollowDisplay ? "native" : "fixed")
+           << " video_hz=" << formatRefreshRateLabel(project_.outputRefreshRateHz)
+           << " video_depth=" << outputBitDepthModeLabel()
+           << " canvas=" << (project_.outputCanvasEnabled
+                ? (std::to_string(project_.outputCanvasWidth) + "x" + std::to_string(project_.outputCanvasHeight))
+                : "off")
+           << " integrations=\"" << integrationBackendRouteSummary() << "\""
+           << " master_dimmer=" << static_cast<int>(std::round(std::clamp(masterDimmerTarget_, 0.0, 1.0) * 100.0))
+           << " blackout=" << (masterDimmerTarget_ <= 0.001 ? "on" : "off")
+           << " master_vol=" << static_cast<int>(std::round(std::clamp(project_.masterVolume, 0.0, 2.0) * 100.0))
+           << stageTimingStatusFields()
+           << '\n';
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      const Deck& deck = project_.decks[deckIndex];
+      auto outputIndexOpt = primaryOutputIndexForDeck(deckIndex);
+      int outputIndex = outputIndexOpt ? *outputIndexOpt : -1;
+      int displayIndex = outputIndex >= 0 ? outputDisplayIndex(outputIndex) : deck.outputDisplayIndex;
+      int layerIndex = primaryLayerIndexForDeck(deckIndex);
+      std::string routeLabel = outputIndex >= 0 ? std::to_string(outputIndex + 1) : "--";
+      std::string rasterLabel = outputIndex >= 0 ? outputResolutionLabelForOutput(outputIndex) : outputResolutionLabel(deckIndex);
+      std::string depthLabel = outputIndex >= 0 ? outputBitDepthActiveLabelForOutput(outputIndex) : outputBitDepthActiveLabel(deckIndex);
+      const Cue* activeCue = activeCuePtr(deckIndex);
+      const Cue* selectedCue = selectedCuePtr(deckIndex);
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      std::string decodeFps = deckDecodeFpsLabel(deckIndex);
+      std::string selectedNum = cueNumberLabelForStatus(deck, deck.selectedIndex);
+      std::string selectedId = cueIdForStatus(deck, deck.selectedIndex);
+      std::string activeNum = cueNumberLabelForStatus(deck, deck.activeIndex);
+      std::string activeId = cueIdForStatus(deck, deck.activeIndex);
+      output << "DECK " << (deckIndex + 1)
+             << " name=\"" << (deck.name.empty() ? deckDefaultName(deckIndex) : deck.name) << "\""
+             << " status=" << transportStatusLabel(deckIndex)
+             << " selected=" << (deck.selectedIndex >= 0 ? deck.selectedIndex + 1 : 0)
+             << " active=" << (deck.activeIndex >= 0 ? deck.activeIndex + 1 : 0)
+             << " selected_num=\"" << selectedNum << "\""
+             << " selected_id=\"" << selectedId << "\""
+             << " active_num=\"" << activeNum << "\""
+             << " active_id=\"" << activeId << "\""
+             // How much of this deck reaches the output. A live value a fade
+             // cue moves, so anything showing deck state needs to see it.
+             << " opacity=" << static_cast<int>(std::lround(
+                  std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * 100.0f))
+             // Held off its output so the operator can look at it. A deck that
+             // is playing but deliberately invisible is exactly the state a
+             // control surface must not have to guess at.
+             << " audition=" << (deckIsAuditioning(deckIndex) ? "on" : "off")
+             // Racked, warm, and waiting off air. Same reason as audition: a
+             // deck holding a cue nobody can see is a state a control surface
+             // must not have to infer.
+             << " preload=" << (deckIsPreloading(deckIndex) ? "on" : "off")
+             << " display=" << (displayIndex + 1)
+             << " route=" << routeLabel
+             << " layer=" << layerIndex
+             << " raster=" << rasterLabel
+             << " depth=" << depthLabel
+             << " audio=\"" << (deck.audioOutputDeviceName.empty() ? "system default" : deck.audioOutputDeviceName) << "\""
+             << " overlay=" << (deck.timeOverlayEnabled ? "on" : "off")
+             << " view=" << deck.canvasViewX << "," << deck.canvasViewY
+             << " warp=" << (warpSourceForDeck(deckIndex).warpEnabled ? "on" : "off")
+             << " warp_mode=" << normalizeWarpMode(warpSourceForDeck(deckIndex).warpMode)
+             << " blend=" << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendLeft * 100.0f))
+             << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendRight * 100.0f))
+             << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendTop * 100.0f))
+             << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendBottom * 100.0f))
+             << " transition=" << transitionStyleToken(parseTransitionStyleToken(deck.transitionStyle))
+             << " transition_s=" << deck.transitionSeconds
+             << " tc=" << formatTimecode(deck.timecodeCurrentSeconds, deck.timecodeFps)
+             << " tc_chase=" << (deck.timecodeChaseEnabled ? "on" : "off")
+             << " tc_run=" << (deck.timecodeRunEnabled ? "on" : "off")
+             << " tc_trigger=" << (deck.timecodeTriggerEnabled ? "on" : "off")
+             << " tc_jam=" << (deck.timecodeJamSyncEnabled ? "on" : "off")
+             << " tc_freewheel_s=" << deck.timecodeFreewheelSeconds
+             << " cue=\"" << (activeCue ? activeCue->name : (selectedCue ? selectedCue->name : "")) << "\"";
+      if (activeCue) {
+        output << " cue_id=\"" << activeCue->id << "\""
+               << " in=" << formatSeconds(activeCue->inPointSeconds)
+               << " out=" << formatSeconds(activeCue->outPointSeconds > 0.0 ? activeCue->outPointSeconds : activeCue->duration)
+               << " tc_mark=" << (activeCue->triggerTimecodeSeconds >= 0.0 ? formatTimecode(activeCue->triggerTimecodeSeconds, deck.timecodeFps) : "--:--:--:--");
+      }
+      if (engine) {
+        output << " pos=" << formatSeconds(engine->position())
+               << " dur=" << formatSeconds(engine->duration())
+               << " vol=" << static_cast<int>(std::round(engine->volume() * 100.0f))
+               << " decode_fps=" << decodeFps
+               // The frames the scheduler has skipped or held to stay on the
+               // clock, and lock-to-screen's speed trim (1.00000 = none).
+               << " cadence_skips=" << engine->cadenceSkips()
+               << " cadence_holds=" << engine->cadenceHolds()
+               << " screen_lock=" << std::fixed << std::setprecision(5) << engine->screenLockTrim()
+               << std::defaultfloat << std::setprecision(6)
+               << " screen_lock_state=" << engine->screenLockState()
+             // What this deck is sounding, 0-100 on the VU scale -- so "is the
+             // sound arriving?" can be asked over the wire, not only by ear.
+             << " audio_level=" << static_cast<int>(std::lround(engine->programAudioLevel01() * 100.0))
+               // Frames this deck put NOTHING on the output -- see the note on
+               // the other status builder. A run of these between two cues is
+               // the black flash, measured rather than filmed.
+               << " blank_frames=" << engine->blankFrameCount()
+               // Whether the engine thinks a transition is running. The output
+               // composites from currentFrame() and does its own thing, so this
+               // is the only way to see whether the two agree.
+               << " transition_running=" << (engine->transitionRunning() ? 1 : 0)
+               // The transition the OUTPUT draws: the held outgoing picture and
+               // how far through it is, or "none". transition_running above is
+               // the engine's old render() state and reads 0 for every take;
+               // this is the one to test against.
+               << " outgoing=" << [engine] {
+                    const double prog = engine->outgoingProgress01();
+                    if (!engine->outgoingFrame() || prog >= 1.0) return std::string("none");
+                    return deckboy::core::utils::transitionStyleToken(engine->outgoingStyle()) + "@" +
+                           std::to_string(static_cast<int>(prog * 100.0));
+                  }()
+               // The engine's own lip-sync view, as in the other builder. It
+               // was first added there only, and the drift tool reads THIS
+               // one, so a whole hour of drift telemetry came back without it.
+               << " av_err_ms=" << std::lround(engine->avSyncErrorSeconds() * 10000.0) / 10.0
+               << " clock_trim_ppm=" << std::lround((engine->clockTrimRatio() - 1.0) * 1e7) / 10.0;
+      }
+      output << '\n';
+    }
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      const OutputTarget& out = project_.outputs[outputIndex];
+      int hostDeckIndex = std::clamp(out.hostDeckIndex, 0, std::max(0, static_cast<int>(project_.decks.size()) - 1));
+      int layerCount = 1; // Single-deck: always one layer
+      std::string type = normalizeOutputType(out.outputType);
+      std::string protocol = normalizeOutputStreamProtocol(out.streamProtocol);
+      std::string mirror = out.mirrorSourceOutputIndex >= 0 ? std::to_string(out.mirrorSourceOutputIndex + 1) : "off";
+      std::string url = trim(out.streamUrl);
+      int alphaPct = static_cast<int>(std::lround(std::clamp(out.outputAlpha, 0.0f, 1.0f) * 100.0f));
+      std::string backendRoute = outputBackendRouteSummary(outputIndex);
+      std::string ndiSource = trim(out.ndiSourceName).empty() ? defaultOutputNdiSourceName(out, outputIndex) : out.ndiSourceName;
+      std::string ndiKeySource = trim(out.ndiKeySourceName).empty() ? defaultOutputNdiKeySourceName(out, outputIndex) : out.ndiKeySourceName;
+      std::string health = outputHealthLabel(outputIndex);
+      std::string healthReason = outputHealthReason(outputIndex);
+      std::string outputFps = outputFpsLabel(outputIndex);
+      std::string streamFps = outputStreamFpsLabel(outputIndex);
+      std::uint64_t streamQueued = 0;
+      std::uint64_t streamWritten = 0;
+      std::uint64_t streamVideoBytes = 0;
+      std::uint64_t streamAudioBytes = 0;
+      if (const OutputRuntime* runtime = runtimeForOutput(outputIndex); runtime && runtime->streamWriter) {
+        std::lock_guard<std::mutex> lock(runtime->streamWriter->mutex);
+        streamQueued = runtime->streamWriter->packetsQueued;
+        streamWritten = runtime->streamWriter->packetsWritten;
+        streamVideoBytes = runtime->streamWriter->videoBytesWritten;
+        streamAudioBytes = runtime->streamWriter->audioBytesWritten;
+      }
+      if (url.empty()) {
+        url = defaultOutputStreamUrl(protocol, outputIndex);
+      }
+      output << "OUTPUT " << (outputIndex + 1)
+             << " name=\"" << (out.name.empty() ? outputDefaultName(outputIndex) : out.name) << "\""
+             << " id=\"" << out.outputId << "\""
+             << " enabled=" << (out.enabled ? "on" : "off")
+             << " health=" << toLower(health)
+             << " type=" << type
+             << " host=" << (hostDeckIndex + 1)
+             << " display=" << (outputDisplayIndex(outputIndex) + 1)
+             << " layers=" << layerCount
+             << " mirror=" << mirror
+             << " stream=" << (out.streamEnabled ? "on" : "off")
+             << " proto=" << protocol
+             << " bitrate=" << out.streamBitrateKbps
+             << " url=\"" << url << "\""
+             << " ndi=" << (out.ndiEnabled ? "on" : "off")
+             << " ndi_name=\"" << ndiSource << "\""
+             << " ndi_rx=" << ndiConnectionCountForOutput(outputIndex)
+             << " ndi_key=" << (out.ndiKeyEnabled ? "on" : "off")
+             << " ndi_key_name=\"" << ndiKeySource << "\""
+             << " ndi_key_rx=" << ndiKeyConnectionCountForOutput(outputIndex)
+             << " alpha=" << alphaPct
+             << " delay_ms=" << std::clamp(out.outputDelayMs, 0, 5000)
+             << " overlay=" << (out.outputTimeOverlayEnabled ? "on" : "off")
+             << " color_space=" << normalizeOutputColorSpace(out.outputColorSpace)
+             << " layout=" << normalizeOutputLayoutMode(out.outputLayoutMode)
+             << " orientation=" << normalizeOutputOrientationDegrees(out.outputOrientationDegrees)
+             << " test_card=" << (out.outputTestCardEnabled ? "on" : "off")
+             << " output_fps=" << outputFps
+             << " presents=" << (runtimeForOutput(outputIndex)
+                                   ? runtimeForOutput(outputIndex)->presentsCounted : 0)
+             << " hitches=" << (runtimeForOutput(outputIndex)
+                                  ? runtimeForOutput(outputIndex)->presentHitches : 0)
+             << " missed=" << (runtimeForOutput(outputIndex)
+                                 ? runtimeForOutput(outputIndex)->presentsMissed : 0)
+             << " target_hz=" << (runtimeForOutput(outputIndex)
+                                    ? runtimeForOutput(outputIndex)->presentTargetHz : 0.0)
+             << " worst_gap_ms=" << static_cast<int>(std::lround(runtimeForOutput(outputIndex)
+                                  ? runtimeForOutput(outputIndex)->worstPresentGapMs : 0.0))
+             << outputPresentGeometryStatus(outputIndex)
+             << " stream_fps=" << streamFps
+             << " stream_q=" << streamQueued
+             << " stream_sent=" << streamWritten
+             << " stream_vbytes=" << streamVideoBytes
+             << " stream_abytes=" << streamAudioBytes
+             << " backend=" << backendRoute
+             << (healthReason.empty() ? "" : (" health_reason=\"" + healthReason + "\""))
+             << '\n';
+    }
+    return output.str();
+  }
+
+  std::string buildDeckStatusSnapshot(int deckIndex) const {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return "DECK offline\n";
+    }
+    std::ostringstream output;
+    const Deck& deck = project_.decks[deckIndex];
+    auto outputIndexOpt = primaryOutputIndexForDeck(deckIndex);
+    int outputIndex = outputIndexOpt ? *outputIndexOpt : -1;
+    int displayIndex = outputIndex >= 0 ? outputDisplayIndex(outputIndex) : deck.outputDisplayIndex;
+    int layerIndex = primaryLayerIndexForDeck(deckIndex);
+    std::string routeLabel = outputIndex >= 0 ? std::to_string(outputIndex + 1) : "--";
+    std::string rasterLabel = outputIndex >= 0 ? outputResolutionLabelForOutput(outputIndex) : outputResolutionLabel(deckIndex);
+    std::string depthLabel = outputIndex >= 0 ? outputBitDepthActiveLabelForOutput(outputIndex) : outputBitDepthActiveLabel(deckIndex);
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    const Cue* selectedCue = selectedCuePtr(deckIndex);
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    std::string decodeFps = deckDecodeFpsLabel(deckIndex);
+    std::string selectedNum = cueNumberLabelForStatus(deck, deck.selectedIndex);
+    std::string selectedId = cueIdForStatus(deck, deck.selectedIndex);
+    std::string activeNum = cueNumberLabelForStatus(deck, deck.activeIndex);
+    std::string activeId = cueIdForStatus(deck, deck.activeIndex);
+    output << "DECKBOY_0.01"
+           << " focus=" << (project_.focusedDeckIndex + 1)
+           << " decks=" << project_.decks.size()
+           << " desk_presents=" << deskPresents_
+           << " desk_hitches=" << deskHitches_
+           << " desk_worst_gap_ms=" << static_cast<int>(std::lround(deskWorstGapMs_))
+           << " desk_layout_ms=" << std::lround(deskLayoutMsAvg_ * 10.0) / 10.0
+           << " panic_profile=" << normalizePanicProfileToken(project_.panicProfile)
+           << " panic_fade_s=" << project_.panicFadeSeconds
+           << " panic_restore=" << (project_.panicAutoRestore ? "on" : "off")
+           << " find=\"" << lastCueFindToken_ << "\""
+           << " find_matches=" << lastCueFindMatches_.size()
+           << " find_cursor=" << (lastCueFindCursor_ >= 0 ? lastCueFindCursor_ + 1 : 0)
+           << " find_deck=" << (lastCueFindDeckIndex_ >= 0 ? lastCueFindDeckIndex_ + 1 : 0)
+           << " video_mode=" << (project_.outputFollowDisplay ? "native" : "fixed")
+           << " video_hz=" << formatRefreshRateLabel(project_.outputRefreshRateHz)
+           << " video_depth=" << outputBitDepthModeLabel()
+           << " canvas=" << (project_.outputCanvasEnabled
+                ? (std::to_string(project_.outputCanvasWidth) + "x" + std::to_string(project_.outputCanvasHeight))
+                : "off")
+           << " integrations=\"" << integrationBackendRouteSummary() << "\""
+           << stageTimingStatusFields()
+           << '\n';
+    output << "DECK " << (deckIndex + 1)
+           << " name=\"" << (deck.name.empty() ? deckDefaultName(deckIndex) : deck.name) << "\""
+           << " status=" << transportStatusLabel(deckIndex)
+           << " selected=" << (deck.selectedIndex >= 0 ? deck.selectedIndex + 1 : 0)
+           << " active=" << (deck.activeIndex >= 0 ? deck.activeIndex + 1 : 0)
+           << " selected_num=\"" << selectedNum << "\""
+           << " selected_id=\"" << selectedId << "\""
+           << " active_num=\"" << activeNum << "\""
+           << " active_id=\"" << activeId << "\""
+           // How much of this deck reaches the output. A live value a fade cue
+           // moves, so anything showing deck state needs to be able to see it.
+           << " opacity=" << static_cast<int>(std::lround(
+                std::clamp(deck.playlistOpacity, 0.0f, 1.0f) * 100.0f))
+           << " display=" << (displayIndex + 1)
+           << " route=" << routeLabel
+           << " layer=" << layerIndex
+           << " raster=" << rasterLabel
+           << " depth=" << depthLabel
+           << " audio=\"" << (deck.audioOutputDeviceName.empty() ? "system default" : deck.audioOutputDeviceName) << "\""
+           << " overlay=" << (deck.timeOverlayEnabled ? "on" : "off")
+           << " view=" << deck.canvasViewX << "," << deck.canvasViewY
+           << " warp=" << (warpSourceForDeck(deckIndex).warpEnabled ? "on" : "off")
+           << " warp_mode=" << normalizeWarpMode(warpSourceForDeck(deckIndex).warpMode)
+           << " blend=" << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendLeft * 100.0f))
+           << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendRight * 100.0f))
+           << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendTop * 100.0f))
+           << "," << static_cast<int>(std::lround(warpSourceForDeck(deckIndex).edgeBlendBottom * 100.0f))
+           << " transition=" << transitionStyleToken(parseTransitionStyleToken(deck.transitionStyle))
+           << " transition_s=" << deck.transitionSeconds
+           << " tc=" << formatTimecode(deck.timecodeCurrentSeconds, deck.timecodeFps)
+           << " tc_chase=" << (deck.timecodeChaseEnabled ? "on" : "off")
+           << " tc_run=" << (deck.timecodeRunEnabled ? "on" : "off")
+           << " tc_trigger=" << (deck.timecodeTriggerEnabled ? "on" : "off")
+           << " tc_jam=" << (deck.timecodeJamSyncEnabled ? "on" : "off")
+           << " tc_freewheel_s=" << deck.timecodeFreewheelSeconds
+           << " cue=\"" << (activeCue ? activeCue->name : (selectedCue ? selectedCue->name : "")) << "\"";
+    if (activeCue) {
+      output << " cue_id=\"" << activeCue->id << "\""
+             << " in=" << formatSeconds(activeCue->inPointSeconds)
+             << " out=" << formatSeconds(activeCue->outPointSeconds > 0.0 ? activeCue->outPointSeconds : activeCue->duration)
+             << " tc_mark=" << (activeCue->triggerTimecodeSeconds >= 0.0 ? formatTimecode(activeCue->triggerTimecodeSeconds, deck.timecodeFps) : "--:--:--:--");
+    }
+    // The SELECTED cue's trim, which is the one an operator is editing.
+    // in=/out= above are the LIVE cue's, so trimming a cue that had not been
+    // taken yet was invisible over the wire -- a surface could set it and had
+    // no way to read it back, and finding that out took a screenshot.
+    if (selectedCue) {
+      output << " sel_in=" << formatSeconds(selectedCue->inPointSeconds)
+             << " sel_out=" << formatSeconds(selectedCue->outPointSeconds > 0.0
+                                               ? selectedCue->outPointSeconds
+                                               : selectedCue->duration);
+    }
+    if (engine) {
+      output << " pos=" << formatSeconds(engine->position())
+             << " dur=" << formatSeconds(engine->duration())
+             << " vol=" << static_cast<int>(std::round(engine->volume() * 100.0f))
+             << " decode_fps=" << decodeFps
+             << " cadence_skips=" << engine->cadenceSkips()
+             << " cadence_holds=" << engine->cadenceHolds()
+             << " screen_lock=" << std::fixed << std::setprecision(5) << engine->screenLockTrim()
+             << std::defaultfloat << std::setprecision(6)
+             << " screen_lock_state=" << engine->screenLockState()
+             // What this deck is sounding, 0-100 on the VU scale -- so "is the
+             // sound arriving?" can be asked over the wire, not only by ear.
+             << " audio_level=" << static_cast<int>(std::lround(engine->programAudioLevel01() * 100.0))
+             // Frames this deck put NOTHING on the output. A cut that drops the
+             // outgoing picture before the incoming one decodes shows up here as
+             // a run, which on a slide deck is the black flash between pages.
+             << " blank_frames=" << engine->blankFrameCount()
+             // The engine's own lip-sync view: smoothed picture-minus-sound
+             // error and the clock trim correcting it (ppm, + = running fast).
+             << " av_err_ms=" << std::lround(engine->avSyncErrorSeconds() * 10000.0) / 10.0
+             << " clock_trim_ppm=" << std::lround((engine->clockTrimRatio() - 1.0) * 1e7) / 10.0;
+    }
+    output << '\n';
+    return output.str();
+  }
+
+  std::string buildStatusSnapshotJson() const {
+    IntegrationBackendRuntimeRoute integrationRoute = resolveIntegrationBackendRuntimeRoute();
+    std::ostringstream output;
+    output << "{"
+           << "\"app\":\"DECKBOY_0.01\","
+           << "\"focusedDeck\":" << (project_.focusedDeckIndex + 1) << ","
+           // What the desk's window says, and where the programme's OUTPUT
+           // chip is, for the checks that read the title and click the chip.
+           << "\"windowTitle\":\"" << escapeJson(windowTitle_) << "\","
+           << "\"settingsOpen\":" << (settingsOpen_ ? "true" : "false") << ","
+           << "\"outputChipRect\":[" << outputBadgeRect_.x << "," << outputBadgeRect_.y << ","
+           << outputBadgeRect_.w << "," << outputBadgeRect_.h << "],"
+           << colourPickerStatusJson()
+           << const_cast<App*>(this)->maskEditorStatusJson()   // reads only; its helpers are not const
+           << dropdownStatusJson()
+           // The screens, and the one the desk is on (1-based), for the
+           // check that walks the tour on whatever rig it finds.
+           << "\"displayCount\":" << deckboyGetNumVideoDisplays() << ","
+           << "\"deskDisplay\":" << (controlWindow_ ? deckboyGetWindowDisplayIndex(controlWindow_) + 1 : 0) << ","
+           << "\"deckCount\":" << project_.decks.size() << ","
+           << "\"focusedOutput\":" << (project_.focusedOutputIndex + 1) << ","
+           << "\"outputCount\":" << project_.outputs.size() << ","
+           << "\"panicProfile\":\"" << escapeJson(normalizePanicProfileToken(project_.panicProfile)) << "\","
+           << "\"panicFadeSeconds\":" << project_.panicFadeSeconds << ","
+           << "\"panicAutoRestore\":" << (project_.panicAutoRestore ? "true" : "false") << ","
+           << "\"masterDimmer\":" << static_cast<int>(std::round(std::clamp(masterDimmerTarget_, 0.0, 1.0) * 100.0)) << ","
+           << "\"blackout\":" << (masterDimmerTarget_ <= 0.001 ? "true" : "false") << ","
+           << "\"masterVolume\":" << static_cast<int>(std::round(std::clamp(project_.masterVolume, 0.0, 2.0) * 100.0)) << ","
+           // The sound's pitch as the audio-pitch ~ reads it, 0-1 across C2-C6.
+           << "\"audioPitch\":" << deckboy::effects::lfoAudioPitchSignal().load(std::memory_order_relaxed) << ","
+           << "\"findToken\":\"" << escapeJson(lastCueFindToken_) << "\","
+           << "\"findMatchCount\":" << lastCueFindMatches_.size() << ","
+           << "\"findCursor\":" << (lastCueFindCursor_ >= 0 ? lastCueFindCursor_ + 1 : 0) << ","
+           << "\"findDeck\":" << (lastCueFindDeckIndex_ >= 0 ? lastCueFindDeckIndex_ + 1 : 0) << ","
+           << "\"outputMode\":\"" << (project_.outputFollowDisplay ? "native" : "fixed") << "\","
+           << "\"outputRefreshHz\":" << project_.outputRefreshRateHz << ","
+           << "\"outputBitDepthMode\":\"" << escapeJson(outputBitDepthModeLabel()) << "\","
+           << "\"outputCanvasEnabled\":" << (project_.outputCanvasEnabled ? "true" : "false") << ","
+           << "\"outputCanvasWidth\":" << project_.outputCanvasWidth << ","
+           << "\"outputCanvasHeight\":" << project_.outputCanvasHeight << ","
+           << "\"integrationRoute\":\"" << escapeJson(integrationRoute.summary) << "\","
+           << "\"integrations\":{"
+           << "\"atem\":" << (project_.atemTriggerEnabled ? "true" : "false") << ","
+           << "\"ndiTrigger\":" << (project_.ndiTriggerEnabled ? "true" : "false") << ","
+           << "\"nmc\":" << (project_.nmcSyncEnabled ? "true" : "false") << ","
+           << "\"nmcMode\":\"" << escapeJson(integrationRoute.nmcSyncMode.empty() ? resolvedNmcSyncMode() : integrationRoute.nmcSyncMode) << "\","
+           << "\"nmcRuntime\":\"" << escapeJson(describeNmcSyncRuntime()) << "\","
+           << "\"mtc\":" << (project_.mtcIngestEnabled ? "true" : "false") << ","
+           << "\"ltc\":" << (project_.ltcIngestEnabled ? "true" : "false") << ","
+           << "\"dmxArtNet\":" << (project_.dmxArtNetEnabled ? "true" : "false") << ","
+           << "\"artNetPort\":" << project_.artNetPort << ","
+           << "\"atemSupported\":" << (integrationRoute.atemSupported ? "true" : "false") << ","
+           << "\"ndiTriggerSupported\":" << (integrationRoute.ndiTriggerSupported ? "true" : "false") << ","
+           << "\"nmcSupported\":" << (integrationRoute.nmcSyncSupported ? "true" : "false") << ","
+           << "\"mtcSupported\":" << (integrationRoute.mtcIngestSupported ? "true" : "false") << ","
+           << "\"ltcSupported\":" << (integrationRoute.ltcIngestSupported ? "true" : "false") << ","
+           << "\"dmxArtNetSupported\":" << (integrationRoute.dmxArtNetSupported ? "true" : "false")
+           << "},"
+           << "\"outputs\":[";
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      if (outputIndex > 0) {
+        output << ",";
+      }
+      const OutputTarget& out = project_.outputs[outputIndex];
+      int hostDeckIndex = std::clamp(out.hostDeckIndex, 0, std::max(0, static_cast<int>(project_.decks.size()) - 1));
+      int layerCount = 1; // Single-deck: always one layer
+      std::string type = normalizeOutputType(out.outputType);
+      std::string protocol = normalizeOutputStreamProtocol(out.streamProtocol);
+      std::string url = trim(out.streamUrl);
+      int alphaPct = static_cast<int>(std::lround(std::clamp(out.outputAlpha, 0.0f, 1.0f) * 100.0f));
+      std::string backendRoute = outputBackendRouteSummary(outputIndex);
+      std::string ndiSource = trim(out.ndiSourceName).empty() ? defaultOutputNdiSourceName(out, outputIndex) : out.ndiSourceName;
+      std::string ndiKeySource = trim(out.ndiKeySourceName).empty() ? defaultOutputNdiKeySourceName(out, outputIndex) : out.ndiKeySourceName;
+      std::string health = outputHealthLabel(outputIndex);
+      std::string healthReason = outputHealthReason(outputIndex);
+      const OutputRuntime* runtime = runtimeForOutput(outputIndex);
+      double outputFps = outputFpsNow(outputIndex);
+      double streamFps = runtime ? runtime->streamFpsMeasured : 0.0;
+      if (url.empty()) {
+        url = defaultOutputStreamUrl(protocol, outputIndex);
+      }
+      output << "{"
+             << "\"index\":" << (outputIndex + 1) << ","
+             << "\"name\":\"" << escapeJson(out.name.empty() ? outputDefaultName(outputIndex) : out.name) << "\","
+             << "\"outputId\":\"" << escapeJson(out.outputId) << "\","
+             << "\"type\":\"" << escapeJson(type) << "\","
+             << "\"hostDeck\":" << (hostDeckIndex + 1) << ","
+             << "\"display\":" << (outputDisplayIndex(outputIndex) + 1) << ","
+             << "\"enabled\":" << (out.enabled ? "true" : "false") << ","
+             << "\"health\":\"" << escapeJson(health) << "\","
+             << "\"healthReason\":\"" << escapeJson(healthReason) << "\","
+             << "\"mirrorSourceOutput\":" << (out.mirrorSourceOutputIndex >= 0 ? out.mirrorSourceOutputIndex + 1 : 0) << ","
+             << "\"layerCount\":" << layerCount << ","
+             << "\"streamEnabled\":" << (out.streamEnabled ? "true" : "false") << ","
+             << "\"streamProtocol\":\"" << escapeJson(protocol) << "\","
+             << "\"streamUrl\":\"" << escapeJson(url) << "\","
+             << "\"streamBitrateKbps\":" << out.streamBitrateKbps << ","
+             << "\"ndiEnabled\":" << (out.ndiEnabled ? "true" : "false") << ","
+             << "\"ndiName\":\"" << escapeJson(ndiSource) << "\","
+             << "\"ndiReceivers\":" << ndiConnectionCountForOutput(outputIndex) << ","
+             << "\"ndiKeyEnabled\":" << (out.ndiKeyEnabled ? "true" : "false") << ","
+             << "\"ndiKeyName\":\"" << escapeJson(ndiKeySource) << "\","
+             << "\"ndiKeyReceivers\":" << ndiKeyConnectionCountForOutput(outputIndex) << ","
+             << "\"outputAlphaPercent\":" << alphaPct << ","
+             << "\"outputDelayMs\":" << std::clamp(out.outputDelayMs, 0, 5000) << ","
+             << "\"outputTimeOverlay\":" << (out.outputTimeOverlayEnabled ? "true" : "false") << ","
+             << "\"outputColorSpace\":\"" << escapeJson(normalizeOutputColorSpace(out.outputColorSpace)) << "\","
+             << "\"outputLayoutMode\":\"" << escapeJson(normalizeOutputLayoutMode(out.outputLayoutMode)) << "\","
+             << "\"outputOrientation\":" << normalizeOutputOrientationDegrees(out.outputOrientationDegrees) << ","
+             << "\"outputTestCard\":" << (out.outputTestCardEnabled ? "true" : "false") << ","
+             << "\"fullscreen\":" << (outputWindowIsFullscreen(outputIndex) ? "true" : "false") << ","
+             << "\"outputFps\":" << outputFps << ","
+             << "\"streamFps\":" << streamFps << ","
+             << "\"backendRoute\":\"" << escapeJson(backendRoute) << "\""
+             << "}";
+    }
+    output << "],"
+           << "\"decks\":[";
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (deckIndex > 0) {
+        output << ",";
+      }
+      const Deck& deck = project_.decks[deckIndex];
+      auto outputIndexOpt = primaryOutputIndexForDeck(deckIndex);
+      int outputIndex = outputIndexOpt ? *outputIndexOpt : -1;
+      int displayIndex = outputIndex >= 0 ? outputDisplayIndex(outputIndex) : deck.outputDisplayIndex;
+      int layerIndex = primaryLayerIndexForDeck(deckIndex);
+      std::string rasterLabel = outputIndex >= 0 ? outputResolutionLabelForOutput(outputIndex) : outputResolutionLabel(deckIndex);
+      std::string depthLabel = outputIndex >= 0 ? outputBitDepthActiveLabelForOutput(outputIndex) : outputBitDepthActiveLabel(deckIndex);
+      const Cue* activeCue = activeCuePtr(deckIndex);
+      const Cue* selectedCue = selectedCuePtr(deckIndex);
+      const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      double decodeFps = engine ? engine->mediaFpsMeasured() : 0.0;
+      std::string selectedNum = cueNumberLabelForStatus(deck, deck.selectedIndex);
+      std::string selectedId = cueIdForStatus(deck, deck.selectedIndex);
+      std::string activeNum = cueNumberLabelForStatus(deck, deck.activeIndex);
+      std::string activeId = cueIdForStatus(deck, deck.activeIndex);
+      // Every cue an inspector edit would change, 1-based: one cue unless the
+      // operator chose more.
+      std::string editSelection;
+      for (int index : selectedCueIndices(deck)) {
+        editSelection += (editSelection.empty() ? "" : ",") + std::to_string(index + 1);
+      }
+      output << "{"
+             << "\"index\":" << (deckIndex + 1) << ","
+             << "\"name\":\"" << escapeJson(deck.name.empty() ? deckDefaultName(deckIndex) : deck.name) << "\","
+             << "\"status\":\"" << escapeJson(transportStatusLabel(deckIndex)) << "\","
+             << "\"selected\":" << (deck.selectedIndex >= 0 ? deck.selectedIndex + 1 : 0) << ","
+             << "\"editSelection\":[" << editSelection << "],"
+             << "\"active\":" << (deck.activeIndex >= 0 ? deck.activeIndex + 1 : 0) << ","
+             << "\"selectedCueNumber\":\"" << escapeJson(selectedNum) << "\","
+             << "\"selectedCueId\":\"" << escapeJson(selectedId) << "\","
+             << "\"activeCueNumber\":\"" << escapeJson(activeNum) << "\","
+             << "\"activeCueId\":\"" << escapeJson(activeId) << "\","
+             << "\"display\":" << (displayIndex + 1) << ","
+             << "\"routeOutput\":" << (outputIndex + 1) << ","
+             << "\"layer\":" << layerIndex << ","
+             << "\"raster\":\"" << rasterLabel << "\","
+             << "\"outputDepth\":\"" << depthLabel << "\","
+             << "\"audio\":\"" << escapeJson(deck.audioOutputDeviceName.empty() ? "system default" : deck.audioOutputDeviceName) << "\","
+             << "\"timeOverlay\":" << (deck.timeOverlayEnabled ? "true" : "false") << ","
+             << "\"canvasViewX\":" << deck.canvasViewX << ","
+             << "\"canvasViewY\":" << deck.canvasViewY << ","
+             << "\"warpEnabled\":" << (warpSourceForDeck(deckIndex).warpEnabled ? "true" : "false") << ","
+             << "\"warpMode\":\"" << escapeJson(normalizeWarpMode(warpSourceForDeck(deckIndex).warpMode)) << "\","
+             << "\"warpTopLeftX\":" << warpSourceForDeck(deckIndex).warpTopLeftX << ","
+             << "\"warpTopLeftY\":" << warpSourceForDeck(deckIndex).warpTopLeftY << ","
+             << "\"warpTopRightX\":" << warpSourceForDeck(deckIndex).warpTopRightX << ","
+             << "\"warpTopRightY\":" << warpSourceForDeck(deckIndex).warpTopRightY << ","
+             << "\"warpBottomRightX\":" << warpSourceForDeck(deckIndex).warpBottomRightX << ","
+             << "\"warpBottomRightY\":" << warpSourceForDeck(deckIndex).warpBottomRightY << ","
+             << "\"warpBottomLeftX\":" << warpSourceForDeck(deckIndex).warpBottomLeftX << ","
+             << "\"warpBottomLeftY\":" << warpSourceForDeck(deckIndex).warpBottomLeftY << ","
+             << "\"edgeBlendLeft\":" << warpSourceForDeck(deckIndex).edgeBlendLeft << ","
+             << "\"edgeBlendRight\":" << warpSourceForDeck(deckIndex).edgeBlendRight << ","
+             << "\"edgeBlendTop\":" << warpSourceForDeck(deckIndex).edgeBlendTop << ","
+             << "\"edgeBlendBottom\":" << warpSourceForDeck(deckIndex).edgeBlendBottom << ","
+             << "\"transitionStyle\":\"" << escapeJson(transitionStyleToken(parseTransitionStyleToken(deck.transitionStyle))) << "\","
+             << "\"transitionSeconds\":" << deck.transitionSeconds << ","
+             << "\"timecode\":\"" << escapeJson(formatTimecode(deck.timecodeCurrentSeconds, deck.timecodeFps)) << "\","
+             << "\"timecodeFps\":" << deck.timecodeFps << ","
+             << "\"timecodeChase\":" << (deck.timecodeChaseEnabled ? "true" : "false") << ","
+             << "\"timecodeRun\":" << (deck.timecodeRunEnabled ? "true" : "false") << ","
+             << "\"timecodeTrigger\":" << (deck.timecodeTriggerEnabled ? "true" : "false") << ","
+             << "\"timecodeJam\":" << (deck.timecodeJamSyncEnabled ? "true" : "false") << ","
+             << "\"timecodeFreewheelSeconds\":" << deck.timecodeFreewheelSeconds << ","
+             << "\"cue\":\"" << escapeJson(activeCue ? activeCue->name : (selectedCue ? selectedCue->name : "")) << "\"";
+      if (activeCue) {
+        output << ",\"cueId\":\"" << escapeJson(activeCue->id) << "\""
+               << ",\"cueIn\":\"" << escapeJson(formatSeconds(activeCue->inPointSeconds)) << "\""
+               << ",\"cueOut\":\"" << escapeJson(formatSeconds(activeCue->outPointSeconds > 0.0 ? activeCue->outPointSeconds : activeCue->duration)) << "\""
+               << ",\"cueTriggerTc\":\"" << (activeCue->triggerTimecodeSeconds >= 0.0 ? escapeJson(formatTimecode(activeCue->triggerTimecodeSeconds, deck.timecodeFps)) : std::string("")) << "\"";
+      }
+      if (engine) {
+        output << ",\"position\":\"" << escapeJson(formatSeconds(engine->position())) << "\""
+               << ",\"duration\":\"" << escapeJson(formatSeconds(engine->duration())) << "\""
+               << ",\"volume\":" << static_cast<int>(std::round(engine->volume() * 100.0f))
+               << ",\"decodeFps\":" << decodeFps;
+      }
+      output << "}";
+    }
+    output << "]}\n";
+    return output.str();
+  }
+
+  void updateStatusSnapshot() {
+    // The vMix document is built here too, and for the same reason this
+    // function exists: the project belongs to the main thread, and a server
+    // thread walking the playlists while a cue is being imported is a data
+    // race. It takes its own mutex, so it is outside the lock below.
+    refreshVmixSnapshots();
+    std::lock_guard<std::mutex> lock(statusSnapshotMutex_);
+    statusSnapshot_ = buildStatusSnapshot();
+    statusSnapshotJson_ = buildStatusSnapshotJson();
+    statusEncoderSnapshot_ = buildEncoderStatusSnapshot();
+    statusCueSnapshot_ = buildCueProgrammingSnapshot();
+    statusDeckSnapshots_.clear();
+    statusDeckSnapshots_.reserve(project_.decks.size());
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      statusDeckSnapshots_.push_back(buildDeckStatusSnapshot(deckIndex));
+    }
+    hyperDeckSnapshot_.transport = "stopped";
+    if (const MediaEngine* engine = mediaEngineForDeck(project_.focusedDeckIndex)) {
+      if (engine->state() == TransportState::Playing) {
+        hyperDeckSnapshot_.transport = "play";
+      } else if (engine->state() == TransportState::Paused) {
+        hyperDeckSnapshot_.transport = "paused";
+      }
+    }
+    const Deck& focused = focusedDeck();
+    hyperDeckSnapshot_.clipId = focused.activeIndex + 1;
+    hyperDeckSnapshot_.loop = focused.playlistLoop;
+    hyperDeckSnapshot_.clips.clear();
+    hyperDeckSnapshot_.clips.reserve(focused.cues.size());
+    for (const Cue& cue : focused.cues) {
+      hyperDeckSnapshot_.clips.emplace_back(cue.name, formatSeconds(cue.duration));
+    }
+  }
+
+  void disarmAllOutputsForStartup() {
+    normalizeProject(project_);
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      output.enabled = false;
+      stopOutputStream(outputIndex);
+      setOutputHealthState(outputIndex, OutputHealthState::Off);
+    }
+  }
+
+  bool jumpTriggersPlayback() const {
+    return normalizeJumpModeToken(project_.jumpMode) == "trigger";
+  }
+
+  void setJumpModeToken(const std::string& token) {
+    std::string normalized = normalizeJumpModeToken(token);
+    if (project_.jumpMode == normalized) {
+      triggerToast("jump mode: " + jumpModeLabelFromToken(project_.jumpMode));
+      return;
+    }
+    project_.jumpMode = normalized;
+    triggerToast("jump mode: " + jumpModeLabelFromToken(project_.jumpMode));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleJumpMode() {
+    setJumpModeToken(jumpTriggersPlayback() ? "load" : "trigger");
+  }
+
+  void setJumpTransitionEnabled(bool enabled) {
+    if (project_.jumpTransitionEnabled == enabled) {
+      triggerToast(std::string("jump transition: ") + (project_.jumpTransitionEnabled ? "on" : "off"));
+      return;
+    }
+    project_.jumpTransitionEnabled = enabled;
+    triggerToast(std::string("jump transition: ") + (project_.jumpTransitionEnabled ? "on" : "off"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void cyclePanicProfile(int direction) {
+    static const std::array<std::string, 4> kProfiles {
+      "outputs_off", "fade_pause", "fade_rewind", "fade_load_next"
+    };
+    std::string current = normalizePanicProfileToken(project_.panicProfile);
+    int currentIndex = 0;
+    for (int i = 0; i < static_cast<int>(kProfiles.size()); ++i) {
+      if (kProfiles[i] == current) {
+        currentIndex = i;
+        break;
+      }
+    }
+    int nextIndex = (currentIndex + direction + static_cast<int>(kProfiles.size())) % static_cast<int>(kProfiles.size());
+    project_.panicProfile = kProfiles[nextIndex];
+    triggerToast("panic profile: " + panicProfileLabelFromToken(project_.panicProfile));
+    playUiSound(UiSoundEffect::Navigate);
+    markProjectDirty();
+  }
+
+  void setPanicFadeSeconds(double seconds) {
+    double next = std::clamp(std::isfinite(seconds) ? seconds : 0.9, 0.1, 5.0);
+    if (std::abs(project_.panicFadeSeconds - next) < 0.001) {
+      std::ostringstream msg;
+      msg << std::fixed << std::setprecision(1) << next;
+      triggerToast("panic fade " + msg.str() + "s");
+      return;
+    }
+    project_.panicFadeSeconds = next;
+    std::ostringstream msg;
+    msg << std::fixed << std::setprecision(1) << project_.panicFadeSeconds;
+    triggerToast("panic fade " + msg.str() + "s");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void adjustPanicFadeSeconds(double deltaSeconds) {
+    setPanicFadeSeconds(project_.panicFadeSeconds + deltaSeconds);
+  }
+
+  void setPanicAutoRestoreEnabled(bool enabled) {
+    if (project_.panicAutoRestore == enabled) {
+      triggerToast(std::string("panic auto restore: ") + (enabled ? "on" : "off"));
+      return;
+    }
+    project_.panicAutoRestore = enabled;
+    triggerToast(std::string("panic auto restore: ") + (enabled ? "on" : "off"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setOscQueryEnabled(bool enabled) {
+    normalizeProject(project_);
+    // This used to refuse outright under _WIN32 and toast "osc query:
+    // unavailable" without trying. That guard was stale: the OSC Query server
+    // is the same cross-platform socket code Companion control already runs on
+    // Windows (createBoundSocket / select / accept / recv / send), with only an
+    // errno==EINTR check platform-guarded. Nothing about it is POSIX-only, so
+    // the primary platform was being denied a feature it supports. If the bind
+    // genuinely fails, startOscQueryServer below reports it the same way it
+    // does everywhere else.
+    if (project_.oscQueryEnabled == enabled) {
+      triggerToast(std::string("osc query: ") + (enabled ? "on" : "off"));
+      return;
+    }
+    project_.oscQueryEnabled = enabled;
+    if (project_.oscQueryEnabled) {
+      if (!startOscQueryServer()) {
+        project_.oscQueryEnabled = false;
+        triggerToast("osc query: unavailable");
+        playUiSound(UiSoundEffect::Toggle);
+        return;
+      }
+    } else {
+      stopOscQueryServer();
+    }
+    triggerToast(std::string("osc query: ") + (project_.oscQueryEnabled ? "on" : "off"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setOscQueryPort(int port) {
+    normalizeProject(project_);
+    int normalized = normalizeOscQueryPort(port);
+    if (project_.oscQueryPort == normalized) {
+      triggerToast("osc query port: " + std::to_string(project_.oscQueryPort));
+      return;
+    }
+    project_.oscQueryPort = normalized;
+    if (project_.oscQueryEnabled) {
+      stopOscQueryServer();
+      startOscQueryServer();
+    }
+    triggerToast("osc query port: " + std::to_string(project_.oscQueryPort));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // ── The vMix-compatible surface ───────────────────────────────────────────
+  //
+  // Same shape as the OSC query server above: flipping it on starts the
+  // listeners and a bind failure turns the setting back off rather than
+  // leaving it claiming to be on. A setting that says "on" while nothing is
+  // listening is the fault this codebase keeps finding.
+  void setVmixApiEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.vmixApiEnabled == enabled) {
+      triggerToast(std::string("vmix api: ") + (enabled ? "on" : "off"));
+      return;
+    }
+    project_.vmixApiEnabled = enabled;
+    if (project_.vmixApiEnabled) {
+      if (!startVmixServer()) {
+        project_.vmixApiEnabled = false;
+        triggerToast("vmix api: neither port could be opened");
+        playUiSound(UiSoundEffect::Toggle);
+        return;
+      }
+      // The document has to exist before the first client asks: a panel that
+      // connects and gets an empty XML decides the desk is broken.
+      refreshVmixSnapshots();
+    } else {
+      stopVmixServer();
+    }
+    triggerToast(std::string("vmix api: ") +
+                 (project_.vmixApiEnabled
+                    ? ("on, http " + std::to_string(project_.vmixHttpPort) +
+                       " tcp " + std::to_string(project_.vmixTcpPort))
+                    : std::string("off")));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setVmixPorts(int httpPort, int tcpPort) {
+    normalizeProject(project_);
+    const int http = std::clamp(httpPort, 1, 65535);
+    const int tcp = std::clamp(tcpPort, 1, 65535);
+    if (http == tcp) {
+      triggerToast("vmix api: the two ports must differ");
+      return;
+    }
+    if (project_.vmixHttpPort == http && project_.vmixTcpPort == tcp) return;
+    project_.vmixHttpPort = http;
+    project_.vmixTcpPort = tcp;
+    if (project_.vmixApiEnabled) {
+      stopVmixServer();
+      startVmixServer();
+      refreshVmixSnapshots();
+    }
+    triggerToast("vmix api: http " + std::to_string(http) +
+                 " tcp " + std::to_string(tcp));
+    markProjectDirty();
+  }
+
+  void setOscFeedbackMirrorEnabled(bool enabled) {
+    normalizeProject(project_);
+    if (project_.oscFeedbackMirrorEnabled == enabled) {
+      triggerToast(std::string("osc feedback mirror: ") + (enabled ? "on" : "off"));
+      return;
+    }
+    project_.oscFeedbackMirrorEnabled = enabled;
+    lastOscMirrorFeedbackPayload_.clear();
+    lastOscMirrorFeedbackBroadcastMs_ = 0;
+    triggerToast(std::string("osc feedback mirror: ") + (enabled ? "on" : "off"));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void setOscFeedbackRateMs(int rateMs) {
+    normalizeProject(project_);
+    int normalized = normalizeOscFeedbackRateMs(rateMs);
+    if (project_.oscFeedbackRateMs == normalized) {
+      triggerToast("osc feedback rate: " + std::to_string(project_.oscFeedbackRateMs) + " ms");
+      return;
+    }
+    project_.oscFeedbackRateMs = normalized;
+    triggerToast("osc feedback rate: " + std::to_string(project_.oscFeedbackRateMs) + " ms");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  bool isIntegrationBackendSupported(const std::string& backendId) const {
+    auto list = integrationBackendCatalog().list();
+    auto it = std::find_if(list.begin(), list.end(), [&](const auto& info) {
+      return info.id == backendId;
+    });
+    return it != list.end() && it->supported;
+  }
+
+  void setIntegrationAdapterEnabled(const std::string& adapterToken, bool enabled) {
+    normalizeProject(project_);
+    bool* target = nullptr;
+    std::string label;
+    std::string backendId;
+    std::string token = toUpper(trim(adapterToken));
+    if (token == "ATEM") {
+      target = &project_.atemTriggerEnabled;
+      label = "atem trigger";
+      backendId = "atem";
+    } else if (token == "NDI" || token == "NDITRIGGER" || token == "NDI_TRIGGER") {
+      target = &project_.ndiTriggerEnabled;
+      label = "ndi trigger";
+      backendId = "ndi-trigger";
+    } else if (token == "NMC") {
+      target = &project_.nmcSyncEnabled;
+      label = "nmc sync";
+      backendId = "nmc";
+    } else if (token == "MTC") {
+      target = &project_.mtcIngestEnabled;
+      label = "mtc ingest";
+      backendId = "mtc";
+    } else if (token == "LTC") {
+      target = &project_.ltcIngestEnabled;
+      label = "ltc ingest";
+      backendId = "ltc";
+    } else if (token == "ARTNET" || token == "DMX" || token == "DMXARTNET" || token == "DMX_ARTNET") {
+      target = &project_.dmxArtNetEnabled;
+      label = "dmx/artnet";
+      backendId = "dmx-artnet";
+    }
+    if (!target) {
+      return;
+    }
+    if (*target == enabled) {
+      bool supported = isIntegrationBackendSupported(backendId);
+      triggerToast(label + ": " + (enabled ? "on" : "off") + (enabled && !supported ? " (stub)" : ""));
+      return;
+    }
+    *target = enabled;
+    if (backendId == "atem" && enabled && !atemTallyBridge_.running()) {
+      startAtemBridgeListener();
+    } else if (backendId == "nmc") {
+      refreshNmcSyncState();
+    } else if (backendId == "ndi-trigger") {
+      refreshNdiTriggerBridgeState();
+    } else if (backendId == "dmx-artnet" && enabled) {
+      restartArtNetBridgeListener();
+    }
+    bool supported = isIntegrationBackendSupported(backendId);
+    triggerToast(label + ": " + (enabled ? "on" : "off") + (enabled && !supported ? " (stub)" : ""));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+    if (backendId == "ltc") {
+      refreshLtcCaptureState();
+    }
+  }
+
+  void setAllIntegrationAdaptersEnabled(bool enabled) {
+    normalizeProject(project_);
+    bool changed = false;
+    auto apply = [&](bool& value) {
+      if (value != enabled) {
+        value = enabled;
+        changed = true;
+      }
+    };
+    apply(project_.atemTriggerEnabled);
+    apply(project_.ndiTriggerEnabled);
+    apply(project_.nmcSyncEnabled);
+    apply(project_.mtcIngestEnabled);
+    apply(project_.ltcIngestEnabled);
+    apply(project_.dmxArtNetEnabled);
+    if (enabled && project_.atemTriggerEnabled && !atemTallyBridge_.running()) {
+      startAtemBridgeListener();
+    }
+    refreshNmcSyncState();
+    refreshNdiTriggerBridgeState();
+    if (enabled && project_.dmxArtNetEnabled) {
+      restartArtNetBridgeListener();
+    }
+    triggerToast(std::string("integrations: ") + (enabled ? "on" : "off"));
+    if (changed) {
+      playUiSound(UiSoundEffect::Toggle);
+      markProjectDirty();
+    }
+    refreshLtcCaptureState();
+  }
+
+  void setArtNetPort(int port) {
+    normalizeProject(project_);
+    int normalized = normalizeArtNetPort(port);
+    if (project_.artNetPort == normalized) {
+      triggerToast("artnet port: " + std::to_string(project_.artNetPort));
+      return;
+    }
+    project_.artNetPort = normalized;
+    restartArtNetBridgeListener();
+    triggerToast("artnet port: " + std::to_string(project_.artNetPort));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  bool runPanicOutputsOff(bool requireSafetyContext, Uint32 sourceWindowId, bool feedback = true) {
+    // Panic is THE event you want in a show log: it means something went wrong
+    // enough that the operator hit the big button.
+    showLog("PANIC", "outputs off, engines stopped");
+    normalizeProject(project_);
+
+    bool fromOutputWindow = outputIndexForWindowId(sourceWindowId).has_value();
+    bool anyWindowOutputEnabled = false;
+    for (const auto& output : project_.outputs) {
+      if (output.enabled && normalizeOutputType(output.outputType) == "window") {
+        anyWindowOutputEnabled = true;
+        break;
+      }
+    }
+    if (requireSafetyContext && !fromOutputWindow && !anyWindowOutputEnabled) {
+      return false;
+    }
+
+    bool anyEnabled = false;
+    for (int outputIndex = 0; outputIndex < static_cast<int>(project_.outputs.size()); ++outputIndex) {
+      OutputTarget& output = project_.outputs[outputIndex];
+      if (output.enabled) {
+        anyEnabled = true;
+      }
+	      output.enabled = false;
+	      setOutputRecoveryPausedByEscape(outputIndex, false);
+	      stopOutputStream(outputIndex);
+	      setOutputHealthState(outputIndex, OutputHealthState::Off);
+	      applyOutputDisplaySelection(outputIndex, true);
+	    }
+
+    // Outputs-off must also silence the decks: audio does not route through
+    // the video outputs, so leaving the engines playing after a panic keeps
+    // sound running against a dark program — the operator hit panic to kill
+    // everything AV.
+    cancelAllPendingTakes();
+    vjTakePending_ = false;
+    fadeRuns_.clear();
+    clearPreload();
+    endAudition(false);
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      stopBrowserCue(deckIndex);
+      if (auto* engine = mediaEngineForDeck(deckIndex)) {
+        engine->stop(true);
+      }
+    }
+
+    panicProfilePending_ = false;
+    pendingPanicProfileToken_.clear();
+    panicProfileRequestedAt_ = 0;
+    SDL_RaiseWindow(controlWindow_);
+    if (feedback) {
+      triggerToast(anyEnabled ? "panic: outputs off" : "panic: outputs already off");
+      playUiSound(UiSoundEffect::Panic);
+    }
+    if (anyEnabled) {
+      markProjectDirty();
+    }
+    return true;
+  }
+
+  bool emergencyDisarmOutputsFromEsc(Uint32 sourceWindowId) {
+    return runPanicOutputsOff(true, sourceWindowId);
+  }
+
+  void executePanicDeckAction(const std::string& token) {
+    std::string profile = normalizePanicProfileToken(token);
+    int savedFocus = project_.focusedDeckIndex;
+    bool changed = false;
+    if (profile == "fade_pause") {
+      for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+        if (const Cue* activeCue = activeCuePtr(deckIndex); activeCue && activeCue->kind == CueKind::Browser) {
+          stopBrowserCue(deckIndex);
+          changed = true;
+        }
+        if (auto* engine = mediaEngineForDeck(deckIndex)) {
+          engine->pause();
+          changed = true;
+        }
+      }
+    } else if (profile == "fade_rewind") {
+      for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+        stopBrowserCue(deckIndex);
+        if (auto* engine = mediaEngineForDeck(deckIndex)) {
+          engine->stop();
+          changed = true;
+        }
+      }
+    } else if (profile == "fade_load_next") {
+      for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+        Deck& deck = project_.decks[deckIndex];
+        if (deck.cues.empty()) {
+          continue;
+        }
+        int nextIndex = deck.selectedIndex < 0
+          ? 0
+          : std::clamp(deck.selectedIndex + 1, 0, static_cast<int>(deck.cues.size()) - 1);
+        if (deck.selectedIndex != nextIndex) {
+          selectOnlyCue(deck, nextIndex);
+          changed = true;
+        }
+        project_.focusedDeckIndex = deckIndex;
+        takeSelected(false, false);
+        changed = true;
+      }
+    }
+    project_.focusedDeckIndex = savedFocus;
+    onSelectionChanged();
+    if (project_.panicAutoRestore) {
+      masterDimmerTarget_ = std::clamp(panicRestoreDimmerTarget_, 0.0, 1.0);
+    }
+    triggerToast("panic: " + panicProfileLabelFromToken(profile));
+    playUiSound(UiSoundEffect::Stop);
+    if (changed) {
+      markProjectDirty();
+    }
+  }
+
+  void triggerPanicProfile(std::optional<std::string> overrideProfile = std::nullopt) {
+    normalizeProject(project_);
+    std::string profile = overrideProfile
+      ? normalizePanicProfileToken(*overrideProfile)
+      : normalizePanicProfileToken(project_.panicProfile);
+    if (profile == "outputs_off") {
+      runPanicOutputsOff(false, 0);
+      return;
+    }
+    pendingPanicProfileToken_ = profile;
+    panicProfilePending_ = true;
+    panicProfileRequestedAt_ = SDL_GetTicks();
+    panicRestoreDimmerTarget_ = std::clamp(masterDimmerTarget_, 0.0, 1.0);
+    masterDimmerTarget_ = 0.0;
+    triggerToast("panic arm: " + panicProfileLabelFromToken(profile));
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  // WHAT THE PLUGIN KNOWS THAT THE SHOW FILE DOES NOT.
+  //
+  // A cue stores which plugin and four mapped controls. Everything else a
+  // plugin has been set to -- and for a reverb or a channel strip that is most
+  // of it -- lives inside the plugin, and the only way to get it is to ask
+  // while the thing is loaded. So the live cues are asked, once, on the way to
+  // disk. A cue that is not playing keeps the state it was loaded with, which
+  // is the right answer: nothing has touched it.
+  void captureLiveAudioPluginState() {
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size());
+         ++deckIndex) {
+      Deck& deck = project_.decks[deckIndex];
+      if (deck.activeIndex < 0 ||
+          deck.activeIndex >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      MediaEngine* engine = mediaEngineForDeck(deckIndex);
+      if (!engine) {
+        continue;
+      }
+      Cue& cue = deck.cues[deck.activeIndex];
+      for (int i = 0; i < static_cast<int>(cue.audioEffects.size()); ++i) {
+        if (cue.audioEffects[i].kind != deckboy::audiofx::AudioEffectKind::Plugin) {
+          continue;
+        }
+        if (auto instance = engine->audioPluginForSlot(i)) {
+          std::string state = instance->saveState();
+          // Only when there IS one. A plugin that keeps no chunk state returns
+          // nothing, and overwriting a good saved state with nothing would
+          // lose the work on the next save.
+          if (!state.empty()) {
+            cue.audioEffects[i].pluginState = std::move(state);
+          }
+        }
+      }
+    }
+  }
+
+  bool saveProjectNow(bool withToast = true, bool patient = true) {
+    if (!pendingProjectRecoveryFile_.empty()) {
+      triggerToast("choose RECOVER or KEEP SAVED before saving", ToastKind::Warning, kToastReadableMs);
+      return false;
+    }
+    captureLiveAudioPluginState();
+    normalizeProject(project_);
+    if (currentProjectFile_.empty()) {
+      currentProjectFile_ = defaultProjectFile();
+    }
+    bool ok = saveProject(currentProjectFile_, project_, patient);
+    if (ok) {
+      rememberLastOpenedProjectFile(currentProjectFile_);
+      projectDirty_ = false;
+      projectSaveFailed_ = false;
+      projectSaveRetryAt_ = {};
+      // Only the saves the operator asked for (they are the ones that say so);
+      // the autosave passes false and must not tick the tour's save step.
+      if (withToast) ++projectSaveCount_;
+      if (withToast) {
+        triggerToast("saved " + currentProjectLabel());
+      }
+    } else {
+      // A failed explicit save must become dirty too (including Save As).
+      markProjectDirty();
+      projectSaveRetryAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      if (withToast || !projectSaveFailed_) {
+        triggerToast("save failed - retrying", ToastKind::Warning, kToastReadableMs);
+      }
+      projectSaveFailed_ = true;
+    }
+    return ok;
+  }
+
+  int bundlesWritten_ = 0;   // this session, for the "on the road" lesson
+
+  bool exportProjectBundleTo(const fs::path& destinationFile, bool withToast = true) {
+    normalizeProject(project_);
+
+    fs::path bundleProjectFile = normalizeProjectPath(destinationFile);
+    if (bundleProjectFile.empty()) {
+      if (withToast) {
+        triggerToast("bundle export failed");
+      }
+      return false;
+    }
+    if (bundleProjectFile.extension().empty()) {
+      bundleProjectFile += ".deckboy";
+    }
+
+    std::error_code ec;
+    if (bundleProjectFile.has_parent_path()) {
+      fs::create_directories(bundleProjectFile.parent_path(), ec);
+      if (ec) {
+        if (withToast) {
+          triggerToast("bundle folder failed");
+        }
+        return false;
+      }
+    }
+
+    Project bundledProject = project_;
+    fs::path mediaDirName = bundleProjectFile.stem().string() + "_media";
+    fs::path mediaDirPath = bundleProjectFile.parent_path() / mediaDirName;
+    fs::create_directories(mediaDirPath, ec);
+    if (ec) {
+      if (withToast) {
+        triggerToast("bundle media failed");
+      }
+      return false;
+    }
+
+    std::unordered_map<std::string, std::string> copiedRelativeBySource;
+    int copiedCount = 0;
+    int reusedCount = 0;
+    int missingCount = 0;
+
+    for (auto& deck : bundledProject.decks) {
+      for (auto& cue : deck.cues) {
+        if (!cueUsesFilesystemMedia(cue)) {
+          continue;
+        }
+
+        auto sourcePath = resolveCueFilesystemPath(cue, currentProjectFile_);
+        if (!sourcePath || sourcePath->empty()) {
+          continue;
+        }
+        if (!fs::exists(*sourcePath)) {
+          ++missingCount;
+          continue;
+        }
+
+        std::string sourceKey = sourcePath->string();
+        auto copiedIt = copiedRelativeBySource.find(sourceKey);
+        if (copiedIt != copiedRelativeBySource.end()) {
+          cue.path = copiedIt->second;
+          ++reusedCount;
+          continue;
+        }
+
+        std::string stem = sanitizeBundleFilenameStem(sourcePath->stem().string());
+        std::string extension = sourcePath->extension().string();
+        if (extension.empty() && cue.kind == CueKind::Audio) {
+          extension = ".wav";
+        }
+
+        fs::path relativeAssetPath;
+        fs::path destinationAssetPath;
+        for (int suffix = 0;; ++suffix) {
+          std::string candidateName = stem;
+          if (suffix > 0) {
+            candidateName += "_" + std::to_string(suffix + 1);
+          }
+          candidateName += extension;
+          relativeAssetPath = mediaDirName / candidateName;
+          destinationAssetPath = bundleProjectFile.parent_path() / relativeAssetPath;
+
+          bool collision = false;
+          for (const auto& [existingSource, existingRelative] : copiedRelativeBySource) {
+            if (existingRelative == relativeAssetPath.generic_string() && existingSource != sourceKey) {
+              collision = true;
+              break;
+            }
+          }
+          if (!collision) {
+            break;
+          }
+        }
+
+        bool sameFile = false;
+        if (fs::exists(destinationAssetPath, ec)) {
+          std::error_code eqEc;
+          sameFile = fs::equivalent(*sourcePath, destinationAssetPath, eqEc);
+        }
+        if (!sameFile) {
+          fs::copy_file(*sourcePath, destinationAssetPath, fs::copy_options::overwrite_existing, ec);
+          if (ec) {
+            ++missingCount;
+            continue;
+          }
+          ++copiedCount;
+        } else {
+          ++reusedCount;
+        }
+
+        std::string relativeString = relativeAssetPath.generic_string();
+        copiedRelativeBySource[sourceKey] = relativeString;
+        cue.path = relativeString;
+      }
+    }
+
+    if (!saveProject(bundleProjectFile, bundledProject)) {
+      if (withToast) {
+        triggerToast("bundle save failed");
+      }
+      return false;
+    }
+
+    if (withToast) {
+      std::ostringstream message;
+      message << "bundle exported";
+      if (copiedCount > 0 || reusedCount > 0 || missingCount > 0) {
+        message << " " << copiedCount << " copied";
+        if (reusedCount > 0) {
+          message << " " << reusedCount << " reused";
+        }
+        if (missingCount > 0) {
+          message << " " << missingCount << " missing";
+        }
+      }
+      triggerToast(message.str());
+    }
+    ++bundlesWritten_;   // the lessons watch this
+    return true;
+  }
+
+  void exportProjectBundleFromPicker() {
+    showSaveFileDialog(deckboyProjectFilters(),
+                       [this](std::vector<std::string> files) {
+                         if (files.empty()) {
+                           return;
+                         }
+                         fs::path chosen = normalizeProjectPath(fs::path(files[0]));
+                         if (chosen.extension() != ".deckboy") {
+                           chosen += ".deckboy";
+                         }
+                         exportProjectBundleTo(chosen, true);
+                       });
+  }
+
+  // Missing-media scan: flags file-backed cues whose media can't be found on
+  // disk right now. Runtime-only state — never serialized. One fs::exists per
+  // file cue, so it's cheap enough to re-run after load, import, and relink
+  // rather than cached (network paths only pay the cost at those moments,
+  // not per frame). Returns the missing count and mirrors it into
+  // missingMediaCount_ for the toolbar RELINK button.
+  int scanProjectMediaPresence() {
+    int missing = 0;
+    for (auto& deck : project_.decks) {
+      for (auto& cue : deck.cues) {
+        cue.mediaMissing = false;
+        if (!cueUsesFilesystemMedia(cue)) {
+          continue;
+        }
+        auto sourcePath = resolveCueFilesystemPath(cue, currentProjectFile_);
+        if (!sourcePath || sourcePath->empty()) {
+          continue;
+        }
+        std::error_code ec;
+        cue.mediaMissing = !fs::exists(*sourcePath, ec);
+        if (cue.mediaMissing) {
+          ++missing;
+        }
+      }
+    }
+    missingMediaCount_ = missing;
+    return missing;
+  }
+
+  // Async variant for boot and project open. The sync scan stats every file
+  // cue — seconds on a big playlist living on USB — and used to run before
+  // the first frame was ever presented, so the "black window" at boot grew
+  // with the playlist. The worker resolves + stats off-thread; results are
+  // applied on the update tick by cue id (cues may move or vanish meanwhile).
+  void startMediaPresenceScanAsync(bool announceMissing) {
+    struct Item { std::string id; std::string path; CueKind kind; };
+    std::vector<Item> items;
+    for (const auto& deck : project_.decks) {
+      for (const auto& cue : deck.cues) {
+        if (cueUsesFilesystemMedia(cue)) {
+          items.push_back({cue.id, cue.path, cue.kind});
+        }
+      }
+    }
+    std::uint64_t gen = mediaScanGeneration_.fetch_add(1) + 1;
+    if (mediaScanThread_.joinable()) {
+      mediaScanThread_.join();  // superseded worker bails at its next gen check
+    }
+    mediaScanReady_.store(false);
+    mediaScanAnnounce_ = announceMissing;
+    mediaScanThread_ = std::thread(
+        [this, gen, projectFile = currentProjectFile_, items = std::move(items)]() {
+      std::vector<std::pair<std::string, bool>> results;
+      results.reserve(items.size());
+      for (const Item& item : items) {
+        if (mediaScanGeneration_.load() != gen) {
+          return;  // a newer scan started — this one's results are stale
+        }
+        Cue probe;
+        probe.id = item.id;
+        probe.path = item.path;
+        probe.kind = item.kind;
+        auto resolved = resolveCueFilesystemPath(probe, projectFile);
+        bool missing = false;
+        if (resolved && !resolved->empty()) {
+          std::error_code ec;
+          missing = !fs::exists(*resolved, ec);
+        }
+        results.emplace_back(item.id, missing);
+      }
+      std::lock_guard<std::mutex> lock(mediaScanMutex_);
+      if (mediaScanGeneration_.load() != gen) {
+        return;
+      }
+      mediaScanResults_ = std::move(results);
+      mediaScanResultsGeneration_ = gen;
+      mediaScanReady_.store(true);
+    });
+  }
+
+  // Update-tick half of the async scan: fold results into the live cues.
+  void pollMediaPresenceScan() {
+    if (!mediaScanReady_.load()) {
+      return;
+    }
+    std::vector<std::pair<std::string, bool>> results;
+    {
+      std::lock_guard<std::mutex> lock(mediaScanMutex_);
+      if (mediaScanResultsGeneration_ != mediaScanGeneration_.load()) {
+        mediaScanReady_.store(false);
+        return;
+      }
+      results = std::move(mediaScanResults_);
+      mediaScanResults_.clear();
+    }
+    mediaScanReady_.store(false);
+    std::unordered_map<std::string, bool> byId;
+    byId.reserve(results.size());
+    for (auto& [id, missing] : results) {
+      byId.emplace(std::move(id), missing);
+    }
+    int missingCount = 0;
+    for (auto& deck : project_.decks) {
+      for (auto& cue : deck.cues) {
+        auto it = byId.find(cue.id);
+        if (it != byId.end()) {
+          cue.mediaMissing = it->second;
+        }
+        if (cue.mediaMissing) {
+          ++missingCount;
+        }
+      }
+    }
+    missingMediaCount_ = missingCount;
+    if (mediaScanAnnounce_ && missingCount > 0) {
+      triggerToast(std::to_string(missingCount) + " media missing (RELINK)");
+      playUiSound(UiSoundEffect::Error);
+    }
+  }
+
+  // Relink: given a folder the operator picked, re-point every missing cue at
+  // a file with the same name found anywhere under that folder. When several
+  // candidates share the name, an exact file-size match (cue.sizeBytes from
+  // the original probe) wins; otherwise the first hit is taken. Returns how
+  // many cues were relinked.
+  int relinkMissingMediaFromFolder(const fs::path& root) {
+    std::error_code ec;
+    if (root.empty() || !fs::is_directory(root, ec)) {
+      triggerToast("relink: folder not found");
+      return 0;
+    }
+
+    // Index the folder once: lowercase filename → full paths. Capped so a
+    // mistaken pick of C:\ can't hang the app for minutes.
+    constexpr int kMaxIndexEntries = 200000;
+    std::unordered_map<std::string, std::vector<fs::path>> byName;
+    int indexed = 0;
+    auto it = fs::recursive_directory_iterator(
+      root, fs::directory_options::skip_permission_denied, ec);
+    auto end = fs::recursive_directory_iterator();
+    for (; !ec && it != end && indexed < kMaxIndexEntries; it.increment(ec)) {
+      if (!it->is_regular_file(ec)) {
+        continue;
+      }
+      byName[toLower(it->path().filename().string())].push_back(it->path());
+      ++indexed;
+    }
+
+    pushUndoSnapshot();
+    int stillMissing = 0;
+    int relinked = 0;
+    for (auto& deck : project_.decks) {
+      for (auto& cue : deck.cues) {
+        if (!cue.mediaMissing) {
+          continue;
+        }
+        std::string wantedName = fs::path(cue.path).filename().string();
+        auto found = byName.find(toLower(wantedName));
+        if (wantedName.empty() || found == byName.end() || found->second.empty()) {
+          ++stillMissing;
+          continue;
+        }
+        const fs::path* pick = &found->second.front();
+        if (cue.sizeBytes > 0 && found->second.size() > 1) {
+          for (const auto& candidate : found->second) {
+            std::error_code sizeEc;
+            if (fs::file_size(candidate, sizeEc) == cue.sizeBytes && !sizeEc) {
+              pick = &candidate;
+              break;
+            }
+          }
+        }
+        cue.path = pick->generic_string();
+        cue.mediaMissing = false;
+        ++relinked;
+      }
+    }
+    missingMediaCount_ = stillMissing;
+
+    if (relinked > 0) {
+      markProjectDirty();
+    }
+    std::ostringstream message;
+    message << "relinked " << relinked << " cue" << (relinked == 1 ? "" : "s");
+    if (stillMissing > 0) {
+      message << ", " << stillMissing << " still missing";
+    }
+    triggerToast(message.str());
+    return relinked;
+  }
+
+  void relinkMediaFromPicker() {
+    showFolderDialog([this](std::vector<std::string> folders) {
+      if (!folders.empty()) {
+        relinkMissingMediaFromFolder(fs::path(folders[0]));
+      }
+    });
+  }
+
+  // Is this deck RUNNING, as opposed to merely holding an active cue? The
+  // distinction matters to the NEW guard: activeIndex survives a stop, so
+  // asking it alone means every show that was ever taken stays "live" until it
+  // is reloaded, and the confirmation starts firing when there is nothing to
+  // protect. Same three cases transportStatusLabel splits on.
+  bool deckIsRunning(int deckIndex) const {
+    const Cue* activeCue = activeCuePtr(deckIndex);
+    if (!activeCue) {
+      return false;
+    }
+    if (activeCue->kind == CueKind::Browser) {
+      const DeckRuntime* runtime = runtimeForDeck(deckIndex);
+      return runtime && runtime->browserCueLive;
+    }
+    const MediaEngine* engine = mediaEngineForDeck(deckIndex);
+    if (!engine) {
+      return false;
+    }
+    if (isSourceCueKind(activeCue->kind)) {
+      return engine->isSourceCapturing();
+    }
+    return engine->state() == TransportState::Playing;
+  }
+
+  // Is anything actually on air? NEW empties both decks and disarms every
+  // output in one frame, so the guard below only fires when that would cost
+  // something: an armed output (the picture is leaving the building, whatever
+  // the transport is doing -- a held still and a paused video are both on
+  // screen) or a deck that is genuinely running. A cold NEW stays one click.
+  bool showIsLive() const {
+    for (const auto& output : project_.outputs) {
+      if (output.enabled) {
+        return true;
+      }
+    }
+    for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
+      if (deckIsRunning(deckIndex)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void clearPendingNewShowConfirmation() {
+    pendingNewShowConfirmMessage_.clear();
+    pendingNewShowConfirmUntilMs_ = 0;
+  }
+
+  // Undo was never a way back from NEW: it pushed no snapshot and cleared
+  // nothing, so Ctrl+Z restored whatever stale mid-edit state was on the stack
+  // rather than the show that had just been replaced.
+  //
+  // The snapshot goes on with its outputs already disarmed. Undo owns show
+  // CONTENT -- no output toggle anywhere pushes a snapshot -- so restoring
+  // enabled outputs would put arming back in the project with no window or
+  // stream behind it. Ctrl+Z gives every cue back; the operator re-arms.
+  void pushUndoSnapshotForShowReplace() {
+    Project snapshot = project_;
+    for (auto& output : snapshot.outputs) {
+      output.enabled = false;
+    }
+    undoStack_.push_back(UndoStep {std::move(snapshot), currentProjectFile_, true});
+    if (static_cast<int>(undoStack_.size()) > kMaxUndoLevels) {
+      undoStack_.erase(undoStack_.begin());
+    }
+    redoStack_.clear();
+  }
+
+  // The press-again guard NEW never had. It is the most destructive control on
+  // the toolbar -- both decks cleared, every output dark -- and it sits one 8px
+  // gap from OPEN, which is what an operator reaches for at the top of a show.
+  // Same 2.5s shape as the live-cue delete guard, for the same reason.
+  bool requestNewShow(bool withToast = true) {
+    // showIsLive() alone missed the ordinary accident: a show built and
+    // edited but never armed live still has everything in it to lose, and
+    // NEW wiped it with no guard at all -- reported as no warning prompt
+    // appearing before a session opened over whatever was there. Unsaved
+    // changes now trip the same guard, worded for which one is actually
+    // true: a prompt claiming outputs go dark when nothing was live is its
+    // own kind of wrong.
+    const bool live = showIsLive();
+    // Autosave clears projectDirty_ within 300ms, so on its own this almost
+    // never tripped. A show that only exists in the scratch file is unsaved
+    // however clean it looks: NEW is about to reuse that file.
+    const bool unsaved = projectDirty_ || (projectIsInScratchFile() && projectHasCues());
+    if (live || unsaved) {
+      Uint64 now = SDL_GetTicks();
+      bool confirmed = !pendingNewShowConfirmMessage_.empty() &&
+                       now <= pendingNewShowConfirmUntilMs_;
+      if (!confirmed) {
+        pendingNewShowConfirmMessage_ = live
+          ? "NEW SHOW? OUTPUTS GO DARK  -  PRESS NEW AGAIN"
+          : "NEW SHOW? UNSAVED CHANGES ARE LOST  -  PRESS NEW AGAIN";
+        pendingNewShowConfirmUntilMs_ = now + 2500;
+        triggerToast(live ? "new show disarms all outputs: press new again"
+                          : "unsaved changes will be lost: press new again");
+        return false;
+      }
+    }
+    pushUndoSnapshotForShowReplace();
+    return startNewShow(withToast);
+  }
+
+  // ── MY DEFAULTS ───────────────────────────────────────────────────────
+  //
+  // What a new show starts from: this computer's own show file with no cues
+  // in it. Everything else a show carries comes with it -- theme, language,
+  // sounds, scale, the network, audio, recording, captions, the outputs and
+  // their screens, the decks with their routing and fades, DASH and the
+  // fixture patch (James, 2026-10-16). It lives in the state folder, never in
+  // a show, so passing a show on does not pass on how this desk is set up.
+  fs::path showDefaultsFile() const { return Paths::stateDir() / "defaults.deckboy"; }
+
+  bool haveShowDefaults() const {
+    std::error_code ec;
+    return fs::is_regular_file(showDefaultsFile(), ec);
+  }
+
+  // When the defaults were saved, as the card shows it, or empty.
+  std::string showDefaultsSavedLabel() const {
+    std::error_code ec;
+    const auto when = fs::last_write_time(showDefaultsFile(), ec);
+    if (ec) return {};
+    const auto system = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+      when - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
+    const std::time_t t = std::chrono::system_clock::to_time_t(system);
+    std::tm local {};
+#ifdef _WIN32
+    localtime_s(&local, &t);
+#else
+    localtime_r(&t, &local);
+#endif
+    char text[32];
+    std::strftime(text, sizeof(text), "%d %b %H:%M", &local);
+    return text;
+  }
+
+  bool saveShowDefaults() {
+    Project defaults = project_;
+    defaults.tabletopUnlocked = false;
+    for (auto& deck : defaults.decks) {
+      deck.cues.clear();
+      deck.selectedIndex = deck.activeIndex = deck.standbyIndex = -1;
+    }
+    defaults.trackerSteps.clear();
+    defaults.presets.clear();   // a preset names cues, and there are none
+    defaults.title = Project {}.title;
+    std::error_code ec;
+    fs::create_directories(showDefaultsFile().parent_path(), ec);
+    const bool saved = saveProject(showDefaultsFile(), defaults);
+    triggerToast(saved ? "saved as my defaults: NEW starts like this show, without the cues"
+                       : "could not save the defaults",
+                 saved ? ToastKind::Help : ToastKind::Warning, kToastReadableMs);
+    return saved;
+  }
+
+  // Twice within a few seconds, like NEW: the defaults are a setup someone built.
+  // Every message says what it does NOT do as well, because the button used to
+  // read RESET and was taken for a reset of the show that is open.
+  Uint64 pendingDefaultsResetUntilMs_ = 0;
+  void resetShowDefaults(bool confirmed = false) {
+    if (!haveShowDefaults()) {
+      triggerToast("NEW already starts from factory settings");
+      return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    if (!confirmed && now > pendingDefaultsResetUntilMs_) {
+      pendingDefaultsResetUntilMs_ = now + 2500;
+      triggerToast("forget my defaults? only NEW changes, this show keeps its settings: press again",
+                   ToastKind::Help, 2500);
+      return;
+    }
+    pendingDefaultsResetUntilMs_ = 0;
+    std::error_code ec;
+    fs::remove(showDefaultsFile(), ec);
+    triggerToast(ec ? std::string("could not remove the defaults")
+                    : std::string("my defaults forgotten: NEW starts from factory settings, "
+                                  "this show is unchanged"));
+  }
+
+  bool startNewShow(bool withToast = true) {
+    clearProjectRecovery();
+    projectSaveFailed_ = false;
+    projectSaveRetryAt_ = {};
+    clearPendingNewShowConfirmation();
+    resetTransientPreviewState();
+    project_ = Project {};
+    const bool fromDefaults = haveShowDefaults();
+    if (fromDefaults) {
+      project_ = loadProject(showDefaultsFile());
+      // Saved without cues; cleared again in case the file was edited by hand.
+      for (auto& deck : project_.decks) deck.cues.clear();
+      project_.trackerSteps.clear();
+      project_.presets.clear();
+    }
+    // A fresh show resets to its starting skin rather than carrying over the
+    // colorway of whatever was loaded before.
+    project_.tabletopUnlocked = false;
+    if (project_.theme.empty()) project_.theme = "gameboy";
+    loadTheme(project_.theme);
+    normalizeProject(project_);
+    // Language before fonts (see settleIncomingShow). A factory show needs
+    // this as much as one from the defaults: without it NEW kept the previous
+    // show's language and scale while the show itself said otherwise.
+    applyProjectLanguage();
+    applyUiScale();
+    disarmAllOutputsForStartup();
+    for (auto& deck : project_.decks) {
+      deck.activeIndex = -1;
+    }
+    currentProjectFile_ = defaultProjectFile();
+    missingMediaCount_ = 0;
+    timecodeTriggeredCueIds_.clear();
+    cueRowDisplayCache_.clear();
+    resetTimecodeFollowerState();
+    selectionChangedAt_ = SDL_GetTicks();
+    if (!rebuildDeckRuntimes()) {
+      std::cerr << "Deck runtime creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    if (!rebuildOutputRuntimes()) {
+      std::cerr << "Output runtime creation failed: " << SDL_GetError() << '\n';
+      return false;
+    }
+    applyProjectNetworkSettings();
+    projectDirty_ = false;
+    if (withToast) {
+      triggerToast(fromDefaults ? "new show, from my defaults" : "new show");
+    }
+    return true;
+  }
+
+  // The autosave. During a live show it never waits on a held file: one
+  // attempt, and the deferred retry two seconds later does the rest.
+  bool persistProject() {
+    return saveProjectNow(false, !showIsLive());
+  }
+
+  // The save is synchronous, including its bounded rename retry. Call before
+  // tearing down engines so live plugin state is still available. A failed
+  // close stays on the desk: the operator can retry or use Save As.
+  bool saveProjectBeforeQuit() {
+    if (soakMode_ || !project_.loadedCleanly || !pendingProjectRecoveryFile_.empty() ||
+        !projectDirty_) return true;
+    if (saveProjectNow(false)) return true;
+    confirmQuit_ = false;
+    triggerToast("save failed - retrying; still open, use SAVE AS if needed",
+                 ToastKind::Warning, kToastReadableMs);
+    return false;
+  }
+
+  void clearProjectRecovery() {
+    if (projectRecoveryPromptShown_) depPrompt_ = DependencyPromptState{};
+    projectRecoveryPromptShown_ = false;
+    pendingProjectRecoveryFile_.clear();
+  }
+
+  void prepareProjectOpen(const fs::path& file) {
+    clearProjectRecovery();
+    projectDirty_ = false;
+    projectSaveFailed_ = false;
+    projectSaveRetryAt_ = {};
+    pendingProjectRecoveryFile_ = newerProjectRecoveryFile(file);
+  }
+
+  bool readProjectRecovery() {
+    // Recheck at acceptance: the sidecar may have changed while the prompt
+    // was up. Keep the canonical filename for relative media and future saves.
+    const fs::path candidate = newerProjectRecoveryFile(currentProjectFile_);
+    if (candidate.empty() || candidate != pendingProjectRecoveryFile_) return false;
+    Project recovered = loadProject(candidate);
+    if (!recovered.loadedCleanly || newerProjectRecoveryFile(currentProjectFile_) != candidate) return false;
+    project_ = std::move(recovered);
+    clearProjectRecovery();
+    markProjectDirty();
+    return true;
+  }
+
+  void offerProjectRecovery() {
+    if (pendingProjectRecoveryFile_.empty() || projectRecoveryPromptShown_ ||
+        depPrompt_.active || showSplashOverlay_ || showStartupDialog_) return;
+    depPrompt_ = DependencyPromptState{};
+    showDependencyPrompt("Recover newer autosave?",
+      "A newer autosave is available for " + currentProjectLabel() +
+      ".\nRECOVER opens it with outputs disarmed. KEEP SAVED keeps the saved show; "
+      "your next save replaces the recovery copy.", "", "RECOVER");
+    depPrompt_.closeLabel = "KEEP SAVED";
+    depPrompt_.onCta = [this]() {
+      projectRecoveryPromptShown_ = false;
+      if (!readProjectRecovery()) {
+        triggerToast("recovery could not be read; copy kept", ToastKind::Warning, kToastReadableMs);
+        return;
+      }
+      settleIncomingShow();
+      applyProjectNetworkSettings();
+      startMediaPresenceScanAsync(true);
+      queueAudioMetadataRepairProbes();
+      triggerToast("recovered " + currentProjectLabel());
+    };
+    depPrompt_.onDismiss = [this]() {
+      projectRecoveryPromptShown_ = false;
+      pendingProjectRecoveryFile_.clear();
+    };
+    projectRecoveryPromptShown_ = true;
+  }
+
+  // force: push even when the stack top looks the same. The comparison below
+  // looks only at cue counts and selection, so an edit that changes a field
+  // and nothing else -- clearing a trim point -- is invisible to it.
+  void pushUndoSnapshot(bool force = false) {
+    // Debounce: don't push if the stack top already matches the current state.
+    //
+    // EVERY DECK, NOT DECK 0. This compared deck 0's cue count and selection
+    // and nothing else, so with more than one playlist an edit on deck 2 --
+    // adding a cue, deleting one, changing the selection -- left deck 0
+    // identical, the snapshot was skipped, and the edit became unundoable.
+    // Harmless while a show effectively had one deck; with Super Deckboy it is
+    // silent loss of an operator's last action on any playlist but the first.
+    if (!force && !undoStack_.empty()) {
+      const Project& top = undoStack_.back().project;
+      bool identical = top.decks.size() == project_.decks.size() &&
+                       top.trackerSteps.size() == project_.trackerSteps.size() &&
+                       !top.decks.empty() && !project_.decks.empty();
+      for (std::size_t d = 0; identical && d < project_.decks.size(); ++d) {
+        identical = top.decks[d].cues.size() == project_.decks[d].cues.size() &&
+                    top.decks[d].selectedIndex == project_.decks[d].selectedIndex;
+      }
+      if (identical) {
+        return;
+      }
+    }
+    undoStack_.push_back(UndoStep {project_, currentProjectFile_, false});
+    if (static_cast<int>(undoStack_.size()) > kMaxUndoLevels) {
+      undoStack_.erase(undoStack_.begin());
+    }
+    redoStack_.clear();
+  }
+
+  // A snapshot can hold a different number of playlists than the live show
+  // (removing a deck is undoable), and every per-deck runtime is indexed by
+  // deck. Same count: nothing to do, so an ordinary undo never touches
+  // playback. Different count: grow in place, or rebuild on a shrink.
+  //
+  // AND UNDO NEVER TOUCHES WHAT IS LIVE. A snapshot is the whole Project, so
+  // restoring it also restored which outputs were armed and which cue each
+  // deck had on air AT THE TIME OF THE SNAPSHOT -- Ctrl+Z after a tweak
+  // mid-show turned the projector off and moved the LIVE marker to a stale
+  // cue. `live` is the project as it stood before the restore: outputs keep
+  // their armed state by id, and each deck keeps its on-air cue by id,
+  // wherever that cue now sits (or none, if the undo removed it).
+  //
+  // AND UNDO NEVER MOVES AN OUTPUT. Only `enabled` was kept, so every other
+  // output setting went back to how it stood at the snapshot -- and snapshots
+  // are taken for cue edits, never for a display pick. Pick a screen for an
+  // output, edit a cue, press Ctrl+Z: the output's display went back to the
+  // old one (the desk monitor, with its name blank) while the window stayed
+  // fullscreen on the screen the operator chose, because nothing re-applies
+  // routing after an undo. From then on the raster, the inspector's pixels and
+  // the display labels all described the wrong monitor: a cue had to be
+  // "3840x2160" to fill a 1280x720 output.
+  //
+  // So an output keeps everything it has NOW -- its screen, its senders, its
+  // look -- and takes back from the snapshot only what an undo is for on an
+  // output: the warp, the only output edits that take a snapshot. Which
+  // playlist feeds it comes from the snapshot only when the playlists
+  // themselves changed, since undoing a removal renumbers them. The raster
+  // settings are the screen's too, and stay as they are.
+  // A layer's pin (its mapping onto a surface) is warp, and warp is an edit
+  // Undo should put back. Which decks are layered on an output is routing,
+  // and routing is live: it stays as it is now.
+  static void restoreLayerPins(std::vector<OutputLayer>& liveLayers,
+                               const std::vector<OutputLayer>& restoredLayers) {
+    for (OutputLayer& layer : liveLayers) {
+      for (const OutputLayer& was : restoredLayers) {
+        if (was.deckIndex != layer.deckIndex) {
+          continue;
+        }
+        layer.warpEnabled = was.warpEnabled;
+        layer.warpTopLeftX = was.warpTopLeftX;
+        layer.warpTopLeftY = was.warpTopLeftY;
+        layer.warpTopRightX = was.warpTopRightX;
+        layer.warpTopRightY = was.warpTopRightY;
+        layer.warpBottomRightX = was.warpBottomRightX;
+        layer.warpBottomRightY = was.warpBottomRightY;
+        layer.warpBottomLeftX = was.warpBottomLeftX;
+        layer.warpBottomLeftY = was.warpBottomLeftY;
+        layer.warpPerspective = was.warpPerspective;
+        break;
+      }
+    }
+  }
+
+  // An output the operator is using now, with the warp the restored step had.
+  static OutputTarget liveOutputWithRestoredWarp(const OutputTarget& was,
+                                                 const OutputTarget& restored) {
+    OutputTarget kept = was;
+    kept.warpEnabled = restored.warpEnabled;
+    kept.warpMode = restored.warpMode;
+    kept.warpTopLeftX = restored.warpTopLeftX;
+    kept.warpTopLeftY = restored.warpTopLeftY;
+    kept.warpTopRightX = restored.warpTopRightX;
+    kept.warpTopRightY = restored.warpTopRightY;
+    kept.warpBottomRightX = restored.warpBottomRightX;
+    kept.warpBottomRightY = restored.warpBottomRightY;
+    kept.warpBottomLeftX = restored.warpBottomLeftX;
+    kept.warpBottomLeftY = restored.warpBottomLeftY;
+    kept.warpGridCols = restored.warpGridCols;
+    kept.warpGridRows = restored.warpGridRows;
+    kept.warpGridSmooth = restored.warpGridSmooth;
+    kept.warpGridOffsets = restored.warpGridOffsets;
+    return kept;
+  }
+
+  // UNDO RESTORES EDITS, NOT THE RIG. Which outputs exist, what they show and
+  // whether one is recording are live state, so an undo never adds, removes
+  // or re-routes an output. It used to rebuild the output list from the
+  // restored step: an output made since that step -- which is what starting
+  // a recording does -- vanished, and the recording stopped mid-take; a deck
+  // layered onto an output since then dropped off it; and Redo brought the
+  // recorder back as a new file. Only warp, which is an edit, comes back.
+  //
+  // Undoing a playlist's removal or addition is the one case where the
+  // restored outputs have to be used: outputs follow playlists by index, and
+  // the restored step is the layout those indices mean. Even then an output
+  // that exists only now is kept, its playlist references kept valid.
+  void keepLiveStateAcrossRestore(const Project& live) {
+    const bool samePlaylists = live.decks.size() == project_.decks.size();
+    const bool sameOutputs = live.outputs.size() == project_.outputs.size();
+    const auto findById = [](const std::vector<OutputTarget>& list, const std::string& id)
+        -> const OutputTarget* {
+      if (id.empty()) return nullptr;
+      for (const OutputTarget& out : list) {
+        if (out.outputId == id) return &out;
+      }
+      return nullptr;
+    };
+    if (samePlaylists) {
+      std::vector<OutputTarget> outputs;
+      outputs.reserve(live.outputs.size());
+      for (const OutputTarget& was : live.outputs) {
+        const OutputTarget* restored = findById(project_.outputs, was.outputId);
+        if (!restored) {
+          outputs.push_back(was);
+          continue;
+        }
+        OutputTarget kept = liveOutputWithRestoredWarp(was, *restored);
+        restoreLayerPins(kept.layerDecks, restored->layerDecks);
+        outputs.push_back(std::move(kept));
+      }
+      project_.outputs = std::move(outputs);
+    } else {
+      for (OutputTarget& out : project_.outputs) {
+        const OutputTarget* was = findById(live.outputs, out.outputId);
+        if (!was) {
+          continue;
+        }
+        OutputTarget kept = liveOutputWithRestoredWarp(*was, out);
+        kept.layerDecks = out.layerDecks;      // playlist indices changed
+        kept.hostDeckIndex = out.hostDeckIndex;
+        if (!sameOutputs) {
+          kept.mirrorSourceOutputIndex = out.mirrorSourceOutputIndex;
+        }
+        out = std::move(kept);
+      }
+      const int deckCount = static_cast<int>(project_.decks.size());
+      for (const OutputTarget& was : live.outputs) {
+        if (findById(project_.outputs, was.outputId) || was.outputId.empty()) {
+          continue;
+        }
+        OutputTarget kept = was;               // made since the step: keep it
+        if (kept.hostDeckIndex >= deckCount) {
+          kept.hostDeckIndex = deckCount > 0 ? 0 : -1;
+        }
+        std::vector<OutputLayer> layers;
+        for (const OutputLayer& layer : kept.layerDecks) {
+          if (layer.deckIndex >= 0 && layer.deckIndex < deckCount) layers.push_back(layer);
+        }
+        kept.layerDecks = std::move(layers);
+        kept.mirrorSourceOutputIndex = -1;
+        project_.outputs.push_back(std::move(kept));
+      }
+    }
+    project_.outputFollowDisplay = live.outputFollowDisplay;
+    project_.outputRenderWidth = live.outputRenderWidth;
+    project_.outputRenderHeight = live.outputRenderHeight;
+    project_.outputRefreshRateHz = live.outputRefreshRateHz;
+    project_.outputBitDepth = live.outputBitDepth;
+    project_.outputCanvasEnabled = live.outputCanvasEnabled;
+    project_.outputCanvasWidth = live.outputCanvasWidth;
+    project_.outputCanvasHeight = live.outputCanvasHeight;
+    project_.recordingWidth = live.recordingWidth;
+    project_.recordingHeight = live.recordingHeight;
+    project_.recordingFps = live.recordingFps;
+    // WHAT IS ON AIR, PLAYLIST BY PLAYLIST -- matched by key, because an undo
+    // that puts a removed playlist back moves every one after it, and by
+    // position the restored playlist 2 would take playlist 3's cue on air.
+    for (std::size_t d = 0; d < project_.decks.size(); ++d) {
+      Deck& deck = project_.decks[d];
+      const Deck* match = nullptr;
+      for (const Deck& candidate : live.decks) {
+        if (candidate.runtimeKey != 0 && candidate.runtimeKey == deck.runtimeKey) {
+          match = &candidate;
+          break;
+        }
+      }
+      if (!match && d < live.decks.size() && live.decks.size() == project_.decks.size()) {
+        match = &live.decks[d];   // a show from before keys: by position, as it was
+      }
+      deck.activeIndex = -1;
+      if (!match) continue;
+      const Deck& before = *match;
+      if (before.activeIndex >= 0 && before.activeIndex < static_cast<int>(before.cues.size())) {
+        const std::string& onAir = before.cues[static_cast<std::size_t>(before.activeIndex)].id;
+        for (int c = 0; c < static_cast<int>(deck.cues.size()); ++c) {
+          if (deck.cues[static_cast<std::size_t>(c)].id == onAir) {
+            deck.activeIndex = c;
+          }
+        }
+      }
+    }
+  }
+
+  void syncRuntimesAfterSnapshotRestore() {
+    cueRowDisplayCache_.clear();
+    // By key, every time: undoing a removal puts the playlist back where it
+    // was, with a fresh engine, and the ones after it move up still playing.
+    const std::size_t had = deckRuntimes_.size();
+    reconcileDeckRuntimes();
+    if (had != project_.decks.size()) {
+      refreshWindowTitle();
+    }
+  }
+
+  // Put a step back. An edit comes back into the show as it stands, which
+  // keeps what is live (keepLiveStateAcrossRestore).
+  //
+  // A SHOW SWAP COMES BACK WHOLE. NEW and OPEN put the show they replace on
+  // the stack, and undoing one is opening that show again: its file, its
+  // outputs (dark, as an open leaves them) and runtimes built for it. It used
+  // to come back as if it were an edit -- into the file of the show that
+  // replaced it, so the next autosave wrote the old show over the one just
+  // opened, and with that show's outputs still armed by id.
+  void restoreUndoStep(Project restored, const fs::path& file, bool showSwap) {
+    if (showSwap) {
+      clearProjectRecovery();
+      projectSaveFailed_ = false;
+      projectSaveRetryAt_ = {};
+      project_ = std::move(restored);
+      currentProjectFile_ = file.empty() ? defaultProjectFile() : file;
+      rememberLastOpenedProjectFile(currentProjectFile_);
+      settleIncomingShow();
+      applyProjectNetworkSettings();
+      markProjectDirty();
+      return;
+    }
+    const Project live = project_;
+    project_ = std::move(restored);
+    keepLiveStateAcrossRestore(live);
+    syncRuntimesAfterSnapshotRestore();
+    markProjectDirty();
+  }
+
+  void undo() {
+    if (undoStack_.empty()) {
+      triggerToast("nothing to undo");
+      return;
+    }
+    resetTransientPreviewState();
+    UndoStep step = std::move(undoStack_.back());
+    undoStack_.pop_back();
+    redoStack_.push_back(UndoStep {project_, currentProjectFile_, step.showSwap});
+    restoreUndoStep(std::move(step.project), step.file, step.showSwap);
+    triggerToast("undo");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void redo() {
+    if (redoStack_.empty()) {
+      triggerToast("nothing to redo");
+      return;
+    }
+    resetTransientPreviewState();
+    UndoStep step = std::move(redoStack_.back());
+    redoStack_.pop_back();
+    undoStack_.push_back(UndoStep {project_, currentProjectFile_, step.showSwap});
+    restoreUndoStep(std::move(step.project), step.file, step.showSwap);
+    triggerToast("redo");
+    playUiSound(UiSoundEffect::Navigate);
+  }
+
+  void markProjectDirty() {
+    if (!projectDirty_) {
+      projectDirty_ = true;
+      projectDirtyAt_ = std::chrono::steady_clock::now();
+    }
+    // Any project edit may have touched the active cue of some deck — refresh
+    // the engines' owned cue snapshots on the next update() tick so live-
+    // editable fields (fade in/out, still duration) stay current.
+    engineCueSyncPending_ = true;
+  }
+
+  void flushDirtyProject() {
+    if (!projectDirty_ || !pendingProjectRecoveryFile_.empty()) {
+      return;
+    }
+    // Soak mode rewires end actions to force a loop; none of that may ever
+    // be persisted into the operator's show file.
+    if (soakMode_) {
+      return;
+    }
+    // NOR MAY A SHOW WE COULD NOT FULLY READ.
+    //
+    // Opening a file is not editing it, and this save fires unattended: a
+    // metadata repair probe landing after an open marks the project dirty, so
+    // merely OPENING a show rewrote it 300ms later with no operator action at
+    // all. On a damaged file that replaced the original with our best guess at
+    // it and threw away whatever a recovery tool could still have used --
+    // measured, on a show truncated mid-cue. An explicit Save still writes,
+    // because that is the operator deciding to; this is the app deciding for
+    // them, and it has no business doing that to a file it did not understand.
+    if (!project_.loadedCleanly) {
+      return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now < projectSaveRetryAt_) return;
+    auto age = now - projectDirtyAt_;
+    if (age >= std::chrono::milliseconds(300)) {
+      persistProject();
+    }
+  }
+
+  struct VuReading {
+    float rmsLeft = 0.0f;
+    float rmsRight = 0.0f;
+    float peakLeft = 0.0f;
+    float peakRight = 0.0f;
+  };
+
+  static float linearLevelToDb(float level) {
+    if (level <= 0.00001f) {
+      return -60.0f;
+    }
+    return std::clamp(20.0f * static_cast<float>(std::log10(level)), -60.0f, 0.0f);
+  }
+
+  void clearVuMeterState(bool resetDisplay = false) {
+    std::lock_guard<std::mutex> lock(vuSamplesMutex_);
+    vuSamples_.clear();
+    vuSamplesUpdatedAtMs_ = 0;
+    if (resetDisplay) {
+      vuDisplayRmsLeft_ = 0.0f;
+      vuDisplayRmsRight_ = 0.0f;
+      vuDisplayPeakLeft_ = 0.0f;
+      vuDisplayPeakRight_ = 0.0f;
+      vuDisplayUpdatedAtMs_ = SDL_GetTicks();
+    }
+  }
+
+  VuReading computeVuReading() {
+    std::vector<std::int16_t> samples;
+    Uint64 samplesUpdatedAtMs = 0;
+    {
+      std::lock_guard<std::mutex> lock(vuSamplesMutex_);
+      samples = vuSamples_;
+      samplesUpdatedAtMs = vuSamplesUpdatedAtMs_;
+    }
+
+    VuReading target;
+    Uint64 nowMs = SDL_GetTicks();
+    bool samplesFresh = !samples.empty()
+                     && samplesUpdatedAtMs > 0
+                     && nowMs >= samplesUpdatedAtMs
+                     && (nowMs - samplesUpdatedAtMs) <= 150;
+    if (!samplesFresh) {
+      samples.clear();
+    }
+
+    double sumLeft = 0.0;
+    double sumRight = 0.0;
+    size_t countLeft = 0;
+    size_t countRight = 0;
+    for (size_t i = 0; i < samples.size(); ++i) {
+      float normalized = std::abs(samples[i]) / 32768.0f;
+      if ((i & 1u) == 0u) {
+        sumLeft += static_cast<double>(normalized) * normalized;
+        target.peakLeft = std::max(target.peakLeft, normalized);
+        ++countLeft;
+      } else {
+        sumRight += static_cast<double>(normalized) * normalized;
+        target.peakRight = std::max(target.peakRight, normalized);
+        ++countRight;
+      }
+    }
+    if (countLeft > 0) {
+      target.rmsLeft = static_cast<float>(std::sqrt(sumLeft / static_cast<double>(countLeft)));
+    }
+    if (countRight > 0) {
+      target.rmsRight = static_cast<float>(std::sqrt(sumRight / static_cast<double>(countRight)));
+    } else {
+      target.rmsRight = target.rmsLeft;
+      target.peakRight = target.peakLeft;
+    }
+
+    if (vuDisplayUpdatedAtMs_ == 0 || nowMs < vuDisplayUpdatedAtMs_) {
+      vuDisplayUpdatedAtMs_ = nowMs;
+    }
+    float deltaSeconds = static_cast<float>(std::min<Uint64>(nowMs - vuDisplayUpdatedAtMs_, 250)) / 1000.0f;
+    vuDisplayUpdatedAtMs_ = nowMs;
+    auto stepLevel = [&](float current, float desired, float fallPerSecond) {
+      if (desired >= current) {
+        return desired;
+      }
+      return std::max(desired, current - fallPerSecond * deltaSeconds);
+    };
+
+    vuDisplayRmsLeft_ = stepLevel(vuDisplayRmsLeft_, target.rmsLeft, 1.9f);
+    vuDisplayRmsRight_ = stepLevel(vuDisplayRmsRight_, target.rmsRight, 1.9f);
+    vuDisplayPeakLeft_ = stepLevel(vuDisplayPeakLeft_, target.peakLeft, 1.2f);
+    vuDisplayPeakRight_ = stepLevel(vuDisplayPeakRight_, target.peakRight, 1.2f);
+
+    VuReading reading;
+    reading.rmsLeft = vuDisplayRmsLeft_;
+    reading.rmsRight = vuDisplayRmsRight_;
+    reading.peakLeft = vuDisplayPeakLeft_;
+    reading.peakRight = vuDisplayPeakRight_;
+    return reading;
+  }
+
+  void triggerWaveformAnalysis(const std::string& path) {
+    if (path.empty()) return;
+    std::lock_guard<std::mutex> lk(waveformMutex_);
+    if (waveformCache_.count(path) || waveformFutures_.count(path)) return;
+    waveformFutures_[path] = std::async(std::launch::async,
+      [path]() { return computeWaveformPeaks(path); });
+  }
+
+  WaveformPeaks getWaveformPeaks(const std::string& path, bool& pending) {
+    std::lock_guard<std::mutex> lk(waveformMutex_);
+    auto it = waveformCache_.find(path);
+    if (it != waveformCache_.end()) { pending = false; return it->second; }
+    pending = waveformFutures_.count(path) > 0;
+    return {};
+  }
+
+  // Linear amplitude scale for waveform display from the cue's gain trim, so
+  // gain edits and R128 normalize visibly grow/shrink the drawn transients.
+  float waveformGainScale(const Cue& cue) const {
+    return std::pow(10.0f, std::clamp(cue.audioGainDb, kCueAudioGainMinDb, kCueAudioGainMaxDb) / 20.0f);
+  }
+
+  // Draw the picture an AUDIO cue puts on the screen.
+  //
+  // ONE function, called by both the program monitor and every armed output.
+  // Those two drew the audio card separately before this, and the monitor's
+  // copy carried a fade envelope the output's did not, so what an operator
+  // checked was never quite what an audience saw.
+  //
+  // The live modes read the DECK'S OWN scope ring, not the app's VU buffer:
+  // the VU buffer belongs to the focused deck, so an audio cue playing on any
+  // other deck would have drawn a picture of a different deck's audio. They
+  // fall back to the waveform until something has actually been emitted --
+  // before playback a flat scope line and a silent spectrum are
+  // indistinguishable from a visualiser that does not work.
+  void drawAudioCueVisual(SDL_Renderer* ren, SDL_Rect dest, const Cue& cue,
+                          const MediaEngine* eng) {
+    const double dur = cue.duration > 0.0 ? cue.duration : 1.0;
+    const float playFrac = eng
+      ? static_cast<float>(std::clamp(eng->position() / dur, 0.0, 1.0)) : -1.0f;
+
+    AudioVisual mode = cue.audioVisual;
+    std::vector<std::int16_t> scopeL, scopeR;
+    std::size_t scopePos = 0;
+    const bool live = eng && eng->copyScopeSamples(scopeL, scopeR, scopePos);
+    if (mode != AudioVisual::Waveform && mode != AudioVisual::Cover && !live) {
+      mode = AudioVisual::Waveform;
+    }
+
+    if (mode == AudioVisual::Waveform) {
+      bool pending = false;
+      WaveformPeaks peaks =
+        getWaveformPeaks(resolvedCueFilesystemPathString(cue, currentProjectFile_), pending);
+      const float inFrac = static_cast<float>(cue.inPointSeconds / dur);
+      const float outFrac = cue.outPointSeconds > 0.0
+                          ? static_cast<float>(cue.outPointSeconds / dur) : 1.0f;
+      drawWaveform(ren, dest, peaks, cue.audioChannels >= 2, playFrac, inFrac, outFrac,
+                   cue.pausePoints, dur, waveformGainScale(cue));
+      return;
+    }
+
+    Primitives::fillRect(ren, dest, pal.deep);
+    Primitives::strokeRect(ren, dest, pal.mid);
+    const int x0 = dest.x + 2, y0 = dest.y + 2;
+    const int w = dest.w - 4, h = dest.h - 4;
+    if (w <= 0 || h <= 0) {
+      return;
+    }
+    // The same trim the waveform gets, so changing mode does not change how
+    // loud the picture looks.
+    const float gain = waveformGainScale(cue);
+    const SDL_Color trace = pal.light;
+    const SDL_Color faint = pal.mid;
+
+    if (mode == AudioVisual::Cover) {
+      return;  // name and clock only; the caller draws those over a clean field
+    }
+
+    if (mode == AudioVisual::Scope) {
+      const std::size_t n = scopeL.size();
+      Primitives::fillRect(ren, SDL_Rect{x0, y0 + h / 2, w, 1}, faint);
+      int prevY = y0 + h / 2;
+      for (int x = 0; x < w; ++x) {
+        const std::size_t i =
+          (scopePos + (static_cast<std::size_t>(x) * n) / static_cast<std::size_t>(w)) % n;
+        const double v = std::clamp(scopeL[i] / 32768.0 * gain, -1.0, 1.0);
+        const int y = y0 + h / 2 - static_cast<int>(v * (h / 2 - 1));
+        // JOINED to the previous sample. Plotting points alone leaves a dotted
+        // line wherever the signal moves faster than one pixel per column,
+        // which on anything percussive is most of them.
+        const int top = std::min(prevY, y);
+        const int bot = std::max(prevY, y);
+        Primitives::fillRect(ren, SDL_Rect{x0 + x, top, 1, std::max(1, bot - top)}, trace);
+        prevY = y;
+      }
+      return;
+    }
+
+    if (mode == AudioVisual::Lissajous) {
+      const std::size_t n = scopeL.size();
+      const int size = std::min(w, h);
+      const int cx = x0 + w / 2;
+      const int cy = y0 + h / 2;
+      Primitives::fillRect(ren, SDL_Rect{cx - size / 2, cy, size, 1}, faint);
+      Primitives::fillRect(ren, SDL_Rect{cx, cy - size / 2, 1, size}, faint);
+      for (std::size_t i = 0; i < n; ++i) {
+        const double lx = std::clamp(scopeL[i] / 32768.0 * gain, -1.0, 1.0);
+        const double ly = std::clamp(scopeR[i] / 32768.0 * gain, -1.0, 1.0);
+        const int px = cx + static_cast<int>(lx * (size / 2 - 2));
+        const int py = cy - static_cast<int>(ly * (size / 2 - 2));
+        Primitives::fillRect(ren, SDL_Rect{px, py, 2, 2}, trace);
+      }
+      return;
+    }
+
+    if (mode == AudioVisual::Spectrum) {
+      // Goertzel per band, exactly as the tone card does it: third-octaves are
+      // how a PA is actually measured, and sixteen of them is far less work
+      // than an FFT plus a window plus a power-of-two buffer.
+      const std::size_t n = scopeL.size();
+      constexpr double kPi = 3.14159265358979323846;
+      constexpr double kRate = 48000.0;
+      constexpr int bands = 16;
+      const int barW = std::max(2, w / (bands * 2));
+      const int gap = std::max(1, barW / 2);
+      const int totalW = bands * (barW + gap) - gap;
+      int bx = x0 + (w - totalW) / 2;
+      for (int b = 0; b < bands; ++b) {
+        const double hz = 31.5 * std::pow(2.0, b / 3.0);
+        if (hz > kRate / 2.0) break;
+        const double omega = 2.0 * kPi * hz / kRate;
+        const double coeff = 2.0 * std::cos(omega);
+        double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+        for (std::size_t i = 0; i < n; ++i) {
+          s0 = (scopeL[i] / 32768.0 * gain) + coeff * s1 - s2;
+          s2 = s1;
+          s1 = s0;
+        }
+        const double power = s1 * s1 + s2 * s2 - coeff * s1 * s2;
+        const double mag = std::sqrt(std::max(0.0, power)) / static_cast<double>(n);
+        // dB, floored at -60 so a silent band is a stub rather than nothing.
+        const double db = 20.0 * std::log10(std::max(mag, 1e-6));
+        const double norm = std::clamp((db + 60.0) / 60.0, 0.0, 1.0);
+        const int barH = std::max(1, static_cast<int>(norm * h));
+        Primitives::fillRect(ren, SDL_Rect{bx, y0 + h - barH, barW, barH}, trace);
+        bx += barW + gap;
+      }
+      return;
+    }
+
+    if (mode == AudioVisual::Level) {
+      // Peak AND RMS per channel, drawn big. Peak is the thin line saying how
+      // close to clipping this is; RMS is the block saying how loud it sounds.
+      // Both are needed and they are not the same number.
+      const std::size_t n = scopeL.size();
+      double peakL = 0.0, peakR = 0.0, sumL = 0.0, sumR = 0.0;
+      for (std::size_t i = 0; i < n; ++i) {
+        const double l = std::abs(scopeL[i] / 32768.0 * gain);
+        const double r = std::abs(scopeR[i] / 32768.0 * gain);
+        peakL = std::max(peakL, l);
+        peakR = std::max(peakR, r);
+        sumL += l * l;
+        sumR += r * r;
+      }
+      const double rmsL = n ? std::sqrt(sumL / static_cast<double>(n)) : 0.0;
+      const double rmsR = n ? std::sqrt(sumR / static_cast<double>(n)) : 0.0;
+      const int laneH = h / 2 - 4;
+      const double lanes[2][2] = {{rmsL, peakL}, {rmsR, peakR}};
+      for (int lane = 0; lane < 2; ++lane) {
+        const int ly = y0 + lane * (laneH + 8);
+        Primitives::fillRect(ren, SDL_Rect{x0, ly, w, laneH}, pal.dark);
+        const int rmsW = static_cast<int>(std::clamp(lanes[lane][0], 0.0, 1.0) * w);
+        Primitives::fillRect(ren, SDL_Rect{x0, ly, rmsW, laneH}, trace);
+        const int peakX =
+          x0 + static_cast<int>(std::clamp(lanes[lane][1], 0.0, 1.0) * (w - 2));
+        // Red only within 1dB of full scale -- the one part of the scale an
+        // operator needs warning about.
+        const SDL_Color peakInk =
+          lanes[lane][1] > 0.891 ? SDL_Color{220, 60, 60, 255} : pal.fg;
+        Primitives::fillRect(ren, SDL_Rect{peakX, ly, 2, laneH}, peakInk);
+      }
+      return;
+    }
+  }
+
+  // Draw a waveform bar graph into dest. playFrac/inFrac/outFrac in [0,1].
+  // gainScale multiplies drawn amplitudes (clamped at full scale).
+  void drawWaveform(SDL_Renderer* ren, SDL_Rect dest, const WaveformPeaks& peaks,
+                    bool splitChannels,
+                    float playFrac, float inFrac, float outFrac,
+                    const std::vector<double>& pausePoints = {}, double duration = 0.0,
+                    float gainScale = 1.0f) {
+    Primitives::fillRect(ren, dest, pal.deep);
+    Primitives::strokeRect(ren, dest, pal.mid);
+    if (peaks.empty()) {
+      drawCenteredText(ren, fontSmall_, "analyzing...", pal.inkSoft, dest);
+      return;
+    }
+    int x0 = dest.x + 2, y0 = dest.y + 2;
+    int w  = dest.w - 4, h = dest.h - 4;
+    int n  = static_cast<int>(std::max(peaks.left.size(), peaks.right.size()));
+    if (w <= 0 || h <= 0 || n <= 0) {
+      return;
+    }
+    // The analysis pass measures true stereo-ness sample-by-sample
+    // (WaveformPeaks::distinct) and outranks cue metadata in both
+    // directions: old saves predate audioChannels and claim nothing, while
+    // stereo containers often carry mono content — twin identical lanes
+    // would waste half the display.
+    splitChannels = peaks.distinct;
+
+    SDL_Color trackLine = pal.dark;
+    SDL_Color activeOuter = pal.mid;
+    SDL_Color activeInner = pal.light;
+    SDL_Color dimOuter = pal.dark;
+    SDL_Color dimInner = pal.mid;
+
+    // BOTH ENDS OF THE SPAN ON THE SAME SCALE. i0 used to be computed from
+    // THIS channel's bucket count and i1 from the maximum of both channels'
+    // -- which are the same number for every file where they agree, and two
+    // different rates for one where they do not.
+    auto spanAt = [&](const std::vector<float>& channel, int pixelIndex,
+                      int& i0, int& i1) {
+      const int bucketCount = static_cast<int>(channel.size());
+      i0 = pixelIndex * bucketCount / std::max(1, w);
+      i1 = (pixelIndex + 1) * bucketCount / std::max(1, w);
+      i0 = std::clamp(i0, 0, bucketCount - 1);
+      i1 = std::clamp(i1, i0, bucketCount - 1);
+    };
+    auto sampleAt = [&](const std::vector<float>& channel, int pixelIndex) {
+      if (channel.empty()) {
+        return 0.0f;
+      }
+      int i0 = 0, i1 = 0;
+      spanAt(channel, pixelIndex, i0, i1);
+      // The MAX across the span, to preserve transients.
+      float maxVal = 0.0f;
+      for (int k = i0; k <= i1; ++k) maxVal = std::max(maxVal, channel[k]);
+      // Deliberately NOT clamped here -- drawColumn needs to know when the
+      // trimmed level exceeds full scale so it can flag it. Clamping at this
+      // point is what made gain edits invisible on already-loud material:
+      // peaks were pinned at 1.0 before and after, so nothing moved on screen.
+      return maxVal * gainScale;
+    };
+    // The RMS across the span, which is a MEAN of squares and not a maximum:
+    // taking the loudest bucket's RMS would reintroduce the very flattening
+    // the RMS lane exists to undo.
+    auto rmsAt = [&](const std::vector<float>& channel, int pixelIndex) {
+      if (channel.empty()) {
+        return 0.0f;
+      }
+      int i0 = 0, i1 = 0;
+      spanAt(channel, pixelIndex, i0, i1);
+      double sum = 0.0;
+      for (int k = i0; k <= i1; ++k) {
+        sum += static_cast<double>(channel[k]) * channel[k];
+      }
+      const int count = i1 - i0 + 1;
+      return static_cast<float>(std::sqrt(sum / std::max(1, count))) * gainScale;
+    };
+
+    constexpr float kWaveformFloorDb = -48.0f;
+    constexpr float kWaveformCeilingDb = 12.0f;
+    // THE LANE IS DRAWN TWICE: the peak as an outline and the RMS as the body.
+    //
+    // `rms` of 0 means an older analysis with no RMS data, and the column then
+    // draws exactly as it always did -- a peak-only brick, which is wrong but
+    // is not a crash, and the next analysis fills it in.
+    auto drawColumn = [&](int px, int topY, int baseY, float peak, float rms,
+                          bool upward, bool inRange) {
+      // The lane is a dB scale, not linear amplitude, and it keeps headroom
+      // ABOVE 0 dBFS.
+      //
+      // Linear was the reason gain edits looked broken. Real programme material
+      // peaks a few dB below full scale, which on a linear scale is already at
+      // the top of the lane — measured: a -3 dBFS file filled the lane by +3 dB
+      // of trim and then never moved again, so the +8..+11 dB that R128
+      // normalize actually applies was completely invisible. Everything above
+      // about -6 dBFS looks identical on a linear lane.
+      //
+      // Mapping kWaveformFloorDb..kWaveformCeilingDb across the lane fixes both
+      // ends: quiet material stops being a flat 1px line, and loud material has
+      // somewhere left to go, so a boost visibly climbs INTO the region above
+      // 0 dBFS — which is drawn hot, because that is a clip warning.
+      bool over = peak > 1.0f;  // above 0 dBFS
+      float frac = 0.0f;
+      if (peak > 0.0f) {
+        const float db = 20.0f * std::log10(peak);
+        frac = (db - kWaveformFloorDb) / (kWaveformCeilingDb - kWaveformFloorDb);
+        frac = std::clamp(frac, 0.0f, 1.0f);
+      }
+      const int lane = std::max(2, std::abs(baseY - topY));
+      int amp = std::max(1, static_cast<int>(std::round(frac * lane)));
+      // The same dB mapping for the body, so the two agree about where a
+      // level sits in the lane -- a linear body inside a dB outline would
+      // read as an effect rather than as a measurement.
+      int bodyAmp = 0;
+      if (rms > 0.0f) {
+        const float bodyDb = 20.0f * std::log10(rms);
+        float bodyFrac = (bodyDb - kWaveformFloorDb) / (kWaveformCeilingDb - kWaveformFloorDb);
+        bodyFrac = std::clamp(bodyFrac, 0.0f, 1.0f);
+        bodyAmp = std::min(amp, std::max(1, static_cast<int>(std::round(bodyFrac * lane))));
+      }
+      SDL_Color outer = inRange ? activeOuter : dimOuter;
+      SDL_Color inner = inRange ? activeInner : dimInner;
+      if (over && inRange) {
+        // Reuse the theme's existing danger colour rather than inventing a
+        // palette role — every theme already defines it, so no theme file
+        // needs touching and it stays legible in all 30 colourways.
+        outer = pal.deleteBezel;
+        inner = SDL_Color{static_cast<Uint8>(std::min(255, pal.deleteBezel.r + 60)),
+                          static_cast<Uint8>(std::min(255, pal.deleteBezel.g + 40)),
+                          static_cast<Uint8>(std::min(255, pal.deleteBezel.b + 40)),
+                          pal.deleteBezel.a};
+      }
+      // The peak reach, dim: this is the outline, and on long material it is
+      // nearly flat by nature -- the loudest sample in a second and a half of
+      // anything is the loudest sample in the file.
+      SDL_SetRenderDrawColor(ren, outer.r, outer.g, outer.b, outer.a);
+      if (upward) {
+        SDL_RenderLine(ren, px, baseY, px, std::max(topY, baseY - amp));
+      } else {
+        SDL_RenderLine(ren, px, baseY, px, std::min(topY, baseY + amp));
+      }
+      // The RMS body, bright. THIS is the part that moves, and the part an
+      // operator is reading when they look for a line of dialogue or the top
+      // of a music bed. Without RMS data fall back to the old inset so the
+      // column still has a bright core rather than going flat.
+      const int innerAmp = bodyAmp > 0 ? bodyAmp : std::max(1, amp - 2);
+      SDL_SetRenderDrawColor(ren, inner.r, inner.g, inner.b, inner.a);
+      if (upward) {
+        SDL_RenderLine(ren, px, baseY, px, std::max(topY, baseY - innerAmp));
+      } else {
+        SDL_RenderLine(ren, px, baseY, px, std::min(topY, baseY + innerAmp));
+      }
+    };
+
+    if (splitChannels) {
+      int dividerY = y0 + h / 2;
+      int topBase = dividerY - 2;
+      int bottomBase = dividerY + 2;
+      int topLimit = y0 + 2;
+      int bottomLimit = y0 + h - 2;
+      SDL_SetRenderDrawColor(ren, trackLine.r, trackLine.g, trackLine.b, trackLine.a);
+      SDL_RenderLine(ren, x0, dividerY, x0 + w, dividerY);
+      for (int i = 0; i < w; ++i) {
+        float frac = static_cast<float>(i) / std::max(1, w);
+        bool inRange = (frac >= inFrac && frac <= outFrac);
+        float leftPeak = sampleAt(peaks.left, i);
+        float rightPeak = sampleAt(peaks.right.empty() ? peaks.left : peaks.right, i);
+        float leftRms = rmsAt(peaks.leftRms, i);
+        float rightRms = rmsAt(peaks.rightRms.empty() ? peaks.leftRms : peaks.rightRms, i);
+        drawColumn(x0 + i, topLimit, topBase, leftPeak, leftRms, true, inRange);
+        drawColumn(x0 + i, bottomLimit, bottomBase, rightPeak, rightRms, false, inRange);
+      }
+      drawTextSafe(ren, fontSmall_, SDL_Rect {dest.x + 6, dest.y + 2, 16, 12}, "L", pal.light);
+      drawTextSafe(ren, fontSmall_, SDL_Rect {dest.x + 6, dest.y + dest.h - 14, 16, 12}, "R", pal.light);
+    } else {
+      // Mono view. This used to draw its columns inline instead of going
+      // through drawColumn, which meant it missed the over-scale tint and —
+      // once sampleAt stopped clamping — had no upper bound on bar height, so
+      // a large gain trim painted straight out of the lane. Both views share
+      // drawColumn now, so the clamp and the clip warning can't diverge again.
+      int cy = y0 + h / 2;
+      int topLimit = y0 + 2;
+      int bottomLimit = y0 + h - 2;
+      SDL_SetRenderDrawColor(ren, trackLine.r, trackLine.g, trackLine.b, trackLine.a);
+      SDL_RenderLine(ren, x0, cy, x0 + w, cy);
+      for (int i = 0; i < w; ++i) {
+        float frac = static_cast<float>(i) / std::max(1, w);
+        bool inRange = (frac >= inFrac && frac <= outFrac);
+        float peak = std::max(sampleAt(peaks.left, i), sampleAt(peaks.right, i));
+        float rms = std::max(rmsAt(peaks.leftRms, i), rmsAt(peaks.rightRms, i));
+        drawColumn(x0 + i, topLimit, cy, peak, rms, true, inRange);
+        drawColumn(x0 + i, bottomLimit, cy, peak, rms, false, inRange);
+      }
+    }
+
+    // Pause point ticks (orange verticals)
+    if (!pausePoints.empty() && duration > 0.0) {
+      SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+      for (double pp : pausePoints) {
+        float ppFrac = static_cast<float>(std::clamp(pp / duration, 0.0, 1.0));
+        int px = x0 + static_cast<int>(ppFrac * w);
+        SDL_SetRenderDrawColor(ren, 220, 120, 30, 200);
+        SDL_RenderLine(ren, px, y0, px, y0 + h);
+      }
+      SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    }
+    // Playhead
+    if (playFrac >= 0.0f && playFrac <= 1.0f) {
+      int px = x0 + static_cast<int>(playFrac * w);
+      SDL_SetRenderDrawColor(ren, 200, 220, 80, 255);
+      SDL_RenderLine(ren, px, y0, px, y0 + h);
+    }
+    // In/out markers
+    auto drawMarker = [&](float frac, Uint8 r, Uint8 g, Uint8 b) {
+      int mx = x0 + static_cast<int>(frac * std::max(1, w));
+      SDL_SetRenderDrawColor(ren, r, g, b, 255);
+      SDL_RenderLine(ren, mx, y0, mx, y0 + h);
+    };
+    if (inFrac > 0.0f)  drawMarker(inFrac,  80, 220, 80);
+    if (outFrac < 1.0f) drawMarker(outFrac, 220, 80, 80);
+  }
+
+  // The default toast and how long it stays.
+  //
+  // 1200ms is right for a toast that CONFIRMS something the operator just did:
+  // they know what they pressed and the message only says it landed. It is far
+  // too short for one that tells them something they did not know and must act
+  // on -- a file that cannot be converted, a tool that is missing. Those went
+  // by before they could be read, which is the same as not showing them.
+  //
+  // So there are two durations and two KINDS, and the rule is which kind of
+  // message it is, not how important it feels. The kind picks the look from
+  // the theme (paletteNotice); a call site never names a colour.
+  static constexpr Uint32 kToastReadableMs = 6500;
+
+  void triggerToast(std::string message, ToastKind kind = ToastKind::Help,
+                    Uint32 durationMs = 1200) {
+    // Shown with UI transitions off too: that switch is about MOTION. This
+    // used to return here, so turning animations off silently discarded every
+    // warning, including the ones that say a file cannot be converted.
+    ++toastsRaised_;
+    toast_.active = true;
+    toast_.startedAt = SDL_GetTicks();
+    toast_.durationMs = durationMs;
+    toast_.message = std::move(message);
+    toast_.kind = kind;
+  }
+
+  void queueUiPattern(const std::vector<std::pair<double, int>>& notes, float level = 0.13f) {
+    if (!project_.uiSoundsEnabled || !uiAudioStream_ || SDL_GetTicks() < uiJingleUntilMs_) {
+      return;
+    }
+
+    SDL_ClearAudioStream(uiAudioStream_);
+
+    std::vector<std::int16_t> pcm;
+    for (const auto& [frequency, milliseconds] : notes) {
+      int samples = std::max(1, milliseconds * kAudioRate / 1000);
+      int ramp = std::max(4, samples / 10);
+      for (int sampleIndex = 0; sampleIndex < samples; ++sampleIndex) {
+        double time = static_cast<double>(sampleIndex) / static_cast<double>(kAudioRate);
+        // A frequency of zero is a REST, not a tone. Without this the square
+        // wave takes the >= 0 branch and emits full-level DC for the whole
+        // note -- an audible thump rather than the silence a caller asked for.
+        double wave = frequency > 0.0
+          ? (std::sin(time * frequency * 6.28318530718) >= 0.0 ? 1.0 : -1.0)
+          : 0.0;
+        double envelope = 1.0;
+        if (sampleIndex < ramp) {
+          envelope = static_cast<double>(sampleIndex) / static_cast<double>(ramp);
+        } else if (sampleIndex > samples - ramp) {
+          envelope = static_cast<double>(samples - sampleIndex) / static_cast<double>(ramp);
+        }
+        std::int16_t value = static_cast<std::int16_t>(std::lround(32767.0 * level * envelope * wave));
+        pcm.push_back(value);
+        pcm.push_back(value);
+      }
+
+      int gapSamples = kAudioRate / 80;
+      for (int gap = 0; gap < gapSamples; ++gap) {
+        pcm.push_back(0);
+        pcm.push_back(0);
+      }
+    }
+
+    if (!pcm.empty()) {
+      SDL_PutAudioStreamData(uiAudioStream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)));
+      deckboySetAudioPaused(uiAudioStream_, false);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // DMG voice synth — a tiny Game Boy (DMG-01) style tracker for the richer
+  // UI sounds and the boot jingle. Honors the original chip's constraints:
+  // two pulse channels locked to the four hardware duty cycles, a 15-bit
+  // LFSR noise voice, and 4-bit (16-step) volume envelopes. Channels get the
+  // NR51-style stereo placement (PU1 leans right, PU2 leans left) so chords
+  // shimmer a little instead of sitting mono.
+  // ---------------------------------------------------------------------
+  struct DmgNote {
+    int channel;      // 0 = pulse 1, 1 = pulse 2, 2 = noise, 3 = wave
+    double freq;      // pulse/wave: pitch Hz; noise: LFSR step rate Hz
+    int startMs;
+    int durMs;
+    double duty;      // pulse only: 0.125 / 0.25 / 0.5 / 0.75
+    int vol;          // 0..15, DMG envelope start volume
+    int table = 0;    // wave only: which wavetable (kDmgWaveTables)
+    double slideSemitones = 0.0;   // wave only: glide over the note
+  };
+
+  // THE WAVE CHANNEL'S TABLES: 32 steps of 4 bits, the DMG's wave RAM. Drawn
+  // from the harmonic levels measured in the reference James chose for the
+  // robot DJs ("Dubble Bath (DIY Remix)", 2026-11-07): 1 is the high voice
+  // (smooth, fundamental and second harmonic), 2 the low voice (strongest at
+  // the 4th and 5th harmonics, a vowel colour).
+  static constexpr int kDmgWaveTables[3][32] = {
+    {8, 10, 12, 13, 14, 15, 15, 15, 14, 13, 12, 10, 8, 7, 5, 3, 2, 1, 0, 0, 0, 1, 2, 3, 5, 7, 8, 8, 8, 8, 8, 8},
+    {7, 13, 15, 15, 15, 15, 14, 12, 10, 9, 7, 6, 6, 5, 6, 7, 7, 8, 9, 10, 9, 9, 8, 6, 5, 3, 1, 0, 0, 0, 0, 2},
+    {8, 15, 14, 9, 6, 5, 6, 8, 9, 9, 8, 8, 8, 7, 7, 7, 8, 8, 8, 8, 7, 7, 7, 6, 6, 7, 9, 10, 9, 6, 1, 0},
+  };
+
+  void queueDmgPattern(const std::vector<DmgNote>& notes, float level = 0.13f) {
+    if (!project_.uiSoundsEnabled || !uiAudioStream_ || notes.empty() ||
+        SDL_GetTicks() < uiJingleUntilMs_) {
+      return;
+    }
+    SDL_ClearAudioStream(uiAudioStream_);
+
+    int totalMs = 0;
+    for (const DmgNote& n : notes) {
+      totalMs = std::max(totalMs, n.startMs + n.durMs);
+    }
+    totalMs += 30;  // release tail
+    const int totalSamples = totalMs * kAudioRate / 1000;
+    std::vector<float> mixL(totalSamples, 0.0f), mixR(totalSamples, 0.0f);
+
+    for (const DmgNote& n : notes) {
+      int start = n.startMs * kAudioRate / 1000;
+      int len = std::max(1, n.durMs * kAudioRate / 1000);
+      float gainL = 0.85f, gainR = 0.85f;
+      if (n.channel == 0) { gainL = 0.70f; gainR = 1.0f; }
+      if (n.channel == 1) { gainL = 1.0f;  gainR = 0.70f; }
+      double phase = 0.0;
+      std::uint16_t lfsr = 0x7FFF;
+      double lfsrAcc = 0.0;
+      double noiseOut = 1.0;
+      for (int i = 0; i < len && start + i < totalSamples; ++i) {
+        double t = static_cast<double>(i) / len;
+        // 4-bit envelope: quick attack, then step down through the DMG's
+        // 16 volume levels — the quantized fade IS the retro character.
+        double env = (i < 32) ? i / 32.0 : (1.0 - t);
+        int envSteps = static_cast<int>(env * n.vol);
+        double amp = static_cast<double>(envSteps) / 15.0;
+        double sample;
+        if (n.channel == 3) {
+          // The wave channel: no 4-bit fade, just a clipped gate -- the
+          // chopped syllables are the point.
+          const double f = n.freq * std::pow(2.0, n.slideSemitones * t / 12.0);
+          phase += f / kAudioRate;
+          phase -= std::floor(phase);
+          const int step = std::clamp(static_cast<int>(phase * 32.0), 0, 31);
+          sample = kDmgWaveTables[std::clamp(n.table, 0, 2)][step] / 7.5 - 1.0;
+          const double gate = std::min({1.0, i / (0.004 * kAudioRate), (len - i) / (0.008 * kAudioRate)});
+          amp = gate * n.vol / 15.0;
+        } else if (n.channel == 2) {
+          lfsrAcc += n.freq / kAudioRate;
+          while (lfsrAcc >= 1.0) {
+            lfsrAcc -= 1.0;
+            std::uint16_t bit = ((lfsr ^ (lfsr >> 1)) & 1);
+            lfsr = static_cast<std::uint16_t>((lfsr >> 1) | (bit << 14));
+            noiseOut = (lfsr & 1) ? 1.0 : -1.0;
+          }
+          sample = noiseOut;
+        } else {
+          phase += n.freq / kAudioRate;
+          phase -= std::floor(phase);
+          sample = (phase < n.duty) ? 1.0 : -1.0;
+        }
+        mixL[start + i] += static_cast<float>(sample * amp * gainL);
+        mixR[start + i] += static_cast<float>(sample * amp * gainR);
+      }
+    }
+
+    std::vector<std::int16_t> pcm(static_cast<size_t>(totalSamples) * 2u);
+    for (int i = 0; i < totalSamples; ++i) {
+      float l = std::clamp(mixL[i] * level, -1.0f, 1.0f);
+      float r = std::clamp(mixR[i] * level, -1.0f, 1.0f);
+      pcm[static_cast<size_t>(i) * 2u] = static_cast<std::int16_t>(std::lround(l * 32767.0f));
+      pcm[static_cast<size_t>(i) * 2u + 1u] = static_cast<std::int16_t>(std::lround(r * 32767.0f));
+    }
+    // For tests: DECKBOY_UI_SOUND_CAPTURE=<file> appends every pattern, as
+    // 16-bit stereo at kAudioRate, so a voice can be measured as played.
+    if (const char* capture = std::getenv("DECKBOY_UI_SOUND_CAPTURE"); capture && *capture) {
+      if (std::FILE* f = std::fopen(capture, "ab")) {
+        std::fwrite(pcm.data(), sizeof(std::int16_t), pcm.size(), f);
+        std::fclose(f);
+      }
+    }
+    SDL_PutAudioStreamData(uiAudioStream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)));
+    deckboySetAudioPaused(uiAudioStream_, false);
+  }
+
+  // Boot jingle — Coltrane changes on a DMG: key centers falling by major
+  // thirds with V7 links (B△7 → D7 → G△7 → B♭7 → E♭△7), the Giant Steps
+  // harmonic engine under an original melody (1-2-3-5 digital patterns on
+  // the majors, 9→♭7 sighs on the dominants). PU1 melody on the thin 25%
+  // duty, PU2 roots on the fat 50%, noise swings hats. ~214 BPM, swung
+  // eighth pairs of 170 + 110 ms; each chord holds two beats (560 ms).
+  void playStartupJingle() {
+    std::vector<DmgNote> song = {
+      // PU1 melody (duty 25%)
+      {0, 493.88, 0,    170, 0.25, 11},  // B4    B△7: 1-2-3-5 up
+      {0, 554.37, 170,  110, 0.25, 10},  // C#5
+      {0, 622.25, 280,  170, 0.25, 11},  // D#5
+      {0, 739.99, 450,  110, 0.25, 10},  // F#5
+      {0, 659.26, 560,  280, 0.25, 11},  // E5    D7: 9 →
+      {0, 523.25, 840,  280, 0.25, 10},  // C5        ♭7 sigh
+      {0, 783.99, 1120, 170, 0.25, 11},  // G5    G△7: 1-2-3-5, octave up
+      {0, 880.00, 1290, 110, 0.25, 10},  // A5
+      {0, 987.77, 1400, 170, 0.25, 11},  // B5
+      {0, 1174.66, 1570, 110, 0.25, 11}, // D6
+      {0, 1046.50, 1680, 280, 0.25, 11}, // C6    B♭7: 9 →
+      {0, 830.61,  1960, 280, 0.25, 10}, // A♭5       ♭7 sigh
+      // E♭△7 lands: sparkle arp up the tonic, then a held 7th
+      {0, 622.25, 2240, 90,  0.25, 10},  // E♭5
+      {0, 783.99, 2330, 90,  0.25, 10},  // G5
+      {0, 932.33, 2420, 90,  0.25, 11},  // B♭5
+      {0, 1174.66, 2510, 90, 0.25, 11},  // D6
+      {0, 1244.51, 2600, 420, 0.25, 12}, // E♭6 held
+      // PU2 roots walking the major-third cycle (duty 50%)
+      {1, 123.47, 0,    150, 0.50, 8},   // B2
+      {1, 146.83, 560,  150, 0.50, 7},   // D3
+      {1, 196.00, 1120, 150, 0.50, 8},   // G3
+      {1, 116.54, 1680, 150, 0.50, 7},   // B♭2
+      {1, 155.56, 2240, 160, 0.50, 8},   // E♭3
+      {1, 196.00, 2600, 420, 0.50, 7},   // G3 under the held E♭6
+      // Noise swung hats: accent each chord, off-tick between
+      {2, 12000, 0,    45, 0.5, 6},
+      {2, 9000,  280,  25, 0.5, 3},
+      {2, 12000, 560,  45, 0.5, 5},
+      {2, 9000,  840,  25, 0.5, 3},
+      {2, 12000, 1120, 45, 0.5, 6},
+      {2, 9000,  1400, 25, 0.5, 3},
+      {2, 12000, 1680, 45, 0.5, 5},
+      {2, 9000,  1960, 25, 0.5, 3},
+      {2, 12000, 2240, 45, 0.5, 6},
+      {2, 14000, 2600, 130, 0.5, 7},     // little crash with the final chord
+    };
+    queueDmgPattern(song, 0.11f);
+    // Hold ordinary bloops off until the last chord rings out.
+    uiJingleUntilMs_ = SDL_GetTicks() + 3060;
+  }
+
+  // Stage chimes, deliberately NOT the UI bleeps: those are tuned to be
+  // unobtrusive next to the operator, whereas a chime has to carry to a
+  // speaker on stage and be distinct from every other sound in the room.
+  // stage: 1 amber, 2 red, 3 time up -- later stages are more insistent.
+  static const char* timerChimeName(int sound) {
+    switch (((sound % 6) + 6) % 6) {
+      case 1:  return "triple beep";
+      case 2:  return "gong";
+      case 3:  return "rising";
+      case 4:  return "buzzer";
+      case 5:  return "soft";
+      default: return "bell";
+    }
+  }
+
+  void playTimerChime(int sound, int stage) {
+    const int s = ((sound % 6) + 6) % 6;
+    const float level = stage >= 3 ? 0.22f : stage == 2 ? 0.18f : 0.15f;
+    const int reps = std::clamp(stage, 1, 3);   // 1 ping amber, 3 at time up
+    std::vector<std::pair<double, int>> notes;
+    for (int r = 0; r < reps; ++r) {
+      switch (s) {
+        case 1:  // triple beep - dry and unmistakable
+          notes.insert(notes.end(), {{1046.5, 70}, {0.0, 60}});
+          break;
+        case 2:  // gong - low and long, carries over a room
+          notes.insert(notes.end(), {{164.8, 240}, {123.5, 300}, {0.0, 90}});
+          break;
+        case 3:  // rising - reads as "wrap up" rather than "stop"
+          notes.insert(notes.end(), {{523.3, 70}, {659.3, 70}, {784.0, 120}, {0.0, 80}});
+          break;
+        case 4:  // buzzer - harsh, for a hard stop
+          notes.insert(notes.end(), {{196.0, 150}, {146.8, 200}, {0.0, 80}});
+          break;
+        case 5:  // soft - a polite nudge that will not startle a speaker
+          notes.insert(notes.end(), {{659.3, 90}, {880.0, 160}, {0.0, 120}});
+          break;
+        default: // bell - the classic ding, struck then ringing down
+          notes.insert(notes.end(), {{1318.5, 60}, {1046.5, 90}, {880.0, 180}, {0.0, 90}});
+          break;
+      }
+    }
+    queueUiPattern(notes, level);
+  }
+
+  void playUiSound(UiSoundEffect effect) {
+    switch (effect) {
+      case UiSoundEffect::Navigate:
+        queueUiPattern({{880.0, 26}, {1046.5, 34}}, 0.08f);
+        break;
+      case UiSoundEffect::PowerUp:
+        // AN ORIGINAL FIGURE, not anybody's famous jingle: three major
+        // arpeggios, each a whole tone above the last, climbing into a held
+        // top note. Rising sequences read as "growing" in any game, which is
+        // the whole of what this has to say -- and a textbook sequence is
+        // nobody's melody.
+        queueUiPattern({
+          {523.3, 28}, {659.3, 28}, {784.0, 28}, {1046.5, 34},   // C  E  G  C
+          {587.3, 28}, {740.0, 28}, {880.0, 28}, {1174.7, 34},   // D  F# A  D
+          {659.3, 28}, {830.6, 28}, {987.8, 28}, {1318.5, 180},  // E  G# B  E, held
+        }, 0.12f);
+        break;
+      case UiSoundEffect::DeckAdded:
+        // A DECK ARRIVING HAS ITS OWN VOICE. Not the power-up -- that fires
+        // once, for the evolution into Super Deckboy, and a fanfare on every
+        // playlist after it would stop being a moment. This is a short rising
+        // fourth with a confirming octave on top: "one more of these".
+        queueUiPattern({{440.0, 30}, {587.3, 30}, {880.0, 56}}, 0.10f);
+        break;
+      case UiSoundEffect::DeckRemoved:
+        // The same shape backwards and lower, which is what makes a pair of
+        // sounds read as opposites rather than as two unrelated noises.
+        queueUiPattern({{880.0, 30}, {587.3, 30}, {329.6, 70}}, 0.10f);
+        break;
+      case UiSoundEffect::Import:
+        queueUiPattern({{523.3, 34}, {659.3, 34}, {784.0, 48}}, 0.10f);
+        break;
+      case UiSoundEffect::Take:
+        queueUiPattern({{659.3, 34}, {987.8, 34}, {1318.5, 62}}, 0.11f);
+        break;
+      case UiSoundEffect::Toggle:
+        queueUiPattern({{784.0, 30}, {1174.7, 42}}, 0.09f);
+        break;
+      case UiSoundEffect::Stop:
+        queueUiPattern({{659.3, 32}, {440.0, 46}}, 0.09f);
+        break;
+      case UiSoundEffect::Clear:
+        queueUiPattern({{392.0, 34}, {293.7, 50}}, 0.09f);
+        break;
+      case UiSoundEffect::Delete:
+        queueUiPattern({{523.3, 24}, {349.2, 58}}, 0.09f);
+        break;
+      case UiSoundEffect::Error:
+        // Refused-action buzzer: two low fat-duty honks with a noise edge.
+        queueDmgPattern({{1, 155.56, 0, 90, 0.50, 11},   // Eb3
+                         {2, 6000,   0, 40, 0.50, 5},
+                         {1, 146.83, 110, 150, 0.50, 11}, // D3
+                         {2, 6000,   110, 40, 0.50, 4}},
+                        0.11f);
+        break;
+      case UiSoundEffect::Panic:
+        // Everything-off: a fast chromatic dive plus a noise whoosh.
+        queueDmgPattern({{0, 880.00, 0,   70, 0.25, 12},  // A5
+                         {0, 659.26, 70,  70, 0.25, 11},  // E5
+                         {0, 493.88, 140, 70, 0.25, 10},  // B4
+                         {0, 349.23, 210, 90, 0.25, 9},   // F4
+                         {0, 233.08, 300, 160, 0.25, 9},  // Bb3
+                         {2, 10000,  0,   360, 0.50, 6}},
+                        0.12f);
+        break;
+      case UiSoundEffect::Shuffle:
+        // Dice-roll trill: quick alternating thirds with a tick underneath.
+        queueDmgPattern({{0, 783.99, 0,   45, 0.25, 9},   // G5
+                         {0, 987.77, 45,  45, 0.25, 9},   // B5
+                         {0, 783.99, 90,  45, 0.25, 10},  // G5
+                         {0, 987.77, 135, 45, 0.25, 10},  // B5
+                         {0, 1174.66, 180, 90, 0.25, 11}, // D6
+                         {2, 9000,   0,   30, 0.50, 3},
+                         {2, 9000,   90,  30, 0.50, 3}},
+                        0.10f);
+        break;
+    }
+  }
+
+  void toggleUiSounds() {
+    project_.uiSoundsEnabled = !project_.uiSoundsEnabled && uiAudioStream_ != nullptr;
+    if (!uiAudioStream_) {
+      project_.uiSoundsEnabled = false;
+    }
+    if (project_.uiSoundsEnabled) {
+      playUiSound(UiSoundEffect::Toggle);
+    }
+    triggerToast(project_.uiSoundsEnabled ? "little bloops on" : "little bloops off");
+    markProjectDirty();
+  }
+
+  void toggleUiTransitions() {
+    bool changed = !project_.uiTransitionsEnabled;
+    project_.uiTransitionsEnabled = true;
+    if (changed) {
+      markProjectDirty();
+    }
+    triggerToast("ui motion always on");
+    playUiSound(UiSoundEffect::Toggle);
+  }
+
+  void setAutoAdvance(bool enabled) {
+    (void) enabled;
+    triggerToast("auto-advance removed: cue end follows hold");
+  }
+
+  void toggleAutoAdvance() {
+    triggerToast("auto-advance removed: cue end follows hold");
+  }
+
+  void triggerParkedCueCreationToast(const std::string& cueLabel) {
+    triggerToast(cueLabel + ": parked for cleanup");
+  }
+
+  void setPlaylistLoop(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.playlistLoop == enabled) {
+      return;
+    }
+    deck.playlistLoop = enabled;
+    triggerToast(deck.playlistLoop ? "playlist loop on" : "playlist loop off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void togglePlaylistLoop() {
+    setPlaylistLoop(!focusedDeck().playlistLoop);
+  }
+
+  void ensureDeckOpacityTargetsSize() {
+    if (deckPlaylistOpacityTargets_.size() < project_.decks.size()) {
+      size_t previous = deckPlaylistOpacityTargets_.size();
+      deckPlaylistOpacityTargets_.resize(project_.decks.size(), 1.0f);
+      for (size_t i = previous; i < project_.decks.size(); ++i) {
+        deckPlaylistOpacityTargets_[i] = std::clamp(project_.decks[i].playlistOpacity, 0.0f, 1.0f);
+      }
+    } else if (deckPlaylistOpacityTargets_.size() > project_.decks.size()) {
+      deckPlaylistOpacityTargets_.resize(project_.decks.size(), 1.0f);
+    }
+  }
+
+  float deckPlaylistOpacityTarget(int deckIndex) {
+    ensureDeckOpacityTargetsSize();
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckPlaylistOpacityTargets_.size())) {
+      return 1.0f;
+    }
+    return std::clamp(deckPlaylistOpacityTargets_[deckIndex], 0.0f, 1.0f);
+  }
+
+  void setDeckPlaylistOpacityTarget(int deckIndex, float value) {
+    ensureDeckOpacityTargetsSize();
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(deckPlaylistOpacityTargets_.size())) {
+      return;
+    }
+    deckPlaylistOpacityTargets_[deckIndex] = std::clamp(value, 0.0f, 1.0f);
+  }
+
+  void setDeckPlaylistOpacity(int deckIndex, float value, bool immediate = true) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    float clamped = std::clamp(value, 0.0f, 1.0f);
+    if (std::fabs(deck.playlistOpacity - clamped) < 0.001f && std::fabs(deckPlaylistOpacityTarget(deckIndex) - clamped) < 0.001f) {
+      int pct = static_cast<int>(std::lround(clamped * 100.0f));
+      triggerToast("deck opacity: " + std::to_string(pct) + "%");
+      return;
+    }
+    if (immediate) {
+      deck.playlistOpacity = clamped;
+    }
+    setDeckPlaylistOpacityTarget(deckIndex, clamped);
+    int pct = static_cast<int>(std::lround(clamped * 100.0f));
+    triggerToast("deck opacity: " + std::to_string(pct) + "%");
+    markProjectDirty();
+  }
+
+  void setFocusedDeckPlaylistOpacity(float value, bool immediate = true) {
+    setDeckPlaylistOpacity(project_.focusedDeckIndex, value, immediate);
+  }
+
+  void setFocusedDeckPlaylistAutoFade(bool enabled) {
+    Deck& deck = focusedDeckMutable();
+    if (deck.playlistAutoFade == enabled) {
+      return;
+    }
+    deck.playlistAutoFade = enabled;
+    triggerToast(deck.playlistAutoFade ? "auto fade: on" : "auto fade: off");
+    playUiSound(UiSoundEffect::Toggle);
+    markProjectDirty();
+  }
+
+  void toggleFocusedDeckPlaylistAutoFade() {
+    setFocusedDeckPlaylistAutoFade(!focusedDeck().playlistAutoFade);
+  }
+
+  void setFocusedDeckPlaylistFadeSeconds(double seconds) {
+    Deck& deck = focusedDeckMutable();
+    double clamped = std::clamp(std::isfinite(seconds) ? seconds : deck.playlistFadeSeconds, 0.05, 10.0);
+    if (std::abs(deck.playlistFadeSeconds - clamped) < 0.001) {
+      std::ostringstream label;
+      label << std::fixed << std::setprecision(2) << deck.playlistFadeSeconds;
+      triggerToast("deck fade: " + label.str() + "s");
+      return;
+    }
+    deck.playlistFadeSeconds = clamped;
+    std::ostringstream label;
+    label << std::fixed << std::setprecision(2) << deck.playlistFadeSeconds;
+    triggerToast("deck fade: " + label.str() + "s");
+    markProjectDirty();
+  }
+
+  std::vector<int> selectedCueIndices(const Deck& deck) const {
+    std::vector<int> result;
+    result.reserve(deck.selectedIndices.size() + 1);
+    std::unordered_set<int> seen;
+    for (int index : deck.selectedIndices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      if (seen.insert(index).second) {
+        result.push_back(index);
+      }
+    }
+    if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+      if (seen.insert(deck.selectedIndex).second) {
+        result.push_back(deck.selectedIndex);
+      }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+  }
+
+  bool cueIndexSelected(const Deck& deck, int cueIndex) const {
+    if (cueIndex < 0) {
+      return false;
+    }
+    if (deck.selectedIndex == cueIndex) {
+      return true;
+    }
+    return std::find(deck.selectedIndices.begin(), deck.selectedIndices.end(), cueIndex) != deck.selectedIndices.end();
+  }
+
+  template <typename Fn>
+  bool forEachFocusedSelectedCueMutable(Fn&& fn) {
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    if (indices.empty()) {
+      return false;
+    }
+    bool changed = false;
+    for (int index : indices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      fn(deck.cues[index], index);
+      changed = true;
+    }
+    return changed;
+  }
+
+  // EVERY DECK THAT HAS A SELECTION, not just the focused one.
+  //
+  // Selection is per-deck, so cues can be selected in A and in B at the same
+  // time -- and every per-cue edit went through the focused-deck iterator
+  // above, so only one of them ever changed. In VJ mode both playlists are on
+  // screen side by side, which makes that especially odd to watch: you select
+  // in both, set a gain, and one column moves.
+  //
+  // Returns the number of DECKS touched so the caller can say so; an edit that
+  // silently reaches further than the operator is looking has to announce
+  // itself.
+  template <typename Fn>
+  int forEachSelectedCueEverywhere(Fn&& fn) {
+    int decksTouched = 0;
+    const int focused = project_.focusedDeckIndex;
+    for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {
+      Deck& deck = project_.decks[d];
+      // ONLY THE DECKS THE OPERATOR CAN SEE.
+      //
+      // `selectedIndices` is not a reliable "they meant it" signal: a plain
+      // single click clears it and pushes the clicked cue, so every deck that
+      // has ever been touched carries one. Reaching every deck through that
+      // meant a gain edit silently rewrote a cue in a deck that was not even
+      // on screen -- which is worse than the bug it was fixing.
+      //
+      // The rule that holds up is SIDE-BY-SIDE VISIBILITY. With one playlist
+      // column on screen there is only one list to have a selection in, so an
+      // edit stays on the focused deck -- visibility alone was not enough,
+      // because the single column shows deck 1 even while the inspector is
+      // editing deck 2. It takes two columns, which is the VJ split: both
+      // selections in view, and an edit that lands on both is what you see
+      // yourself asking for.
+      const bool sideBySide = visiblePlaylistDecks_.size() > 1;
+      if (d != focused
+          && (!sideBySide
+              || std::find(visiblePlaylistDecks_.begin(), visiblePlaylistDecks_.end(), d)
+                   == visiblePlaylistDecks_.end())) {
+        continue;
+      }
+      std::vector<int> indices = selectedCueIndices(deck);
+      if (indices.empty()) {
+        continue;
+      }
+      bool touched = false;
+      for (int index : indices) {
+        if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+          continue;
+        }
+        fn(deck.cues[index], index);
+        touched = true;
+      }
+      if (touched) {
+        ++decksTouched;
+      }
+    }
+    return decksTouched;
+  }
+
+  template <typename Pred>
+  Cue* firstFocusedSelectedCueMutable(Pred&& pred) {
+    Deck& deck = focusedDeckMutable();
+    auto indices = selectedCueIndices(deck);
+    for (int index : indices) {
+      if (index < 0 || index >= static_cast<int>(deck.cues.size())) {
+        continue;
+      }
+      Cue& cue = deck.cues[index];
+      if (pred(cue)) {
+        return &cue;
+      }
+    }
+    return nullptr;
+  }
+
+  // Playback and navigation move the selection to ONE cue. Setting only
+  // selectedIndex left the old cue in selectedIndices, and the edit selection
+  // is the union of the two: after an auto-next the inspector read "2 cues" and
+  // the next gain change landed on the cue that had just finished.
+  void selectOnlyCue(Deck& deck, int cueIndex) {
+    deck.selectedIndex = cueIndex;
+    deck.selectedIndices.assign(1, cueIndex);
+  }
+
+  void selectCueInDeck(int deckIndex, int cueIndex, bool extendRange, bool toggleSingle) {
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    if (extendRange) {
+      int anchor = deck.selectedIndex >= 0 ? deck.selectedIndex : cueIndex;
+      int start = std::min(anchor, cueIndex);
+      int end = std::max(anchor, cueIndex);
+      deck.selectedIndices.clear();
+      for (int i = start; i <= end; ++i) {
+        deck.selectedIndices.push_back(i);
+      }
+      deck.selectedIndex = cueIndex;
+    } else if (toggleSingle) {
+      auto it = std::find(deck.selectedIndices.begin(), deck.selectedIndices.end(), cueIndex);
+      if (it == deck.selectedIndices.end()) {
+        deck.selectedIndices.push_back(cueIndex);
+      } else if (deck.selectedIndices.size() > 1 || deck.selectedIndex != cueIndex) {
+        deck.selectedIndices.erase(it);
+      }
+      deck.selectedIndex = cueIndex;
+    } else {
+      deck.selectedIndex = cueIndex;
+      deck.selectedIndices.clear();
+      deck.selectedIndices.push_back(cueIndex);
+    }
+    onSelectionChanged();
+    markProjectDirty();
+  }
+
+  void onSelectionChanged() {
+    clearPendingLiveDeleteConfirmation();
+    Deck& deck = focusedDeckMutable();
+    if (deck.selectedIndex >= 0 && deck.selectedIndex < static_cast<int>(deck.cues.size())) {
+      if (std::find(deck.selectedIndices.begin(), deck.selectedIndices.end(), deck.selectedIndex) == deck.selectedIndices.end()) {
+        deck.selectedIndices.push_back(deck.selectedIndex);
+      }
+    }
+    deck.selectedIndices.erase(
+      std::remove_if(deck.selectedIndices.begin(), deck.selectedIndices.end(), [&](int index) {
+        return index < 0 || index >= static_cast<int>(deck.cues.size());
+      }),
+      deck.selectedIndices.end());
+    std::sort(deck.selectedIndices.begin(), deck.selectedIndices.end());
+    deck.selectedIndices.erase(std::unique(deck.selectedIndices.begin(), deck.selectedIndices.end()), deck.selectedIndices.end());
+
+    selectionChangedAt_ = SDL_GetTicks();
+    cueSettingsScroll_ = 0;
+   cueSettingsScrollMax_ = 0;
+    playUiSound(UiSoundEffect::Navigate);
+    if (const Cue* cue = selectedCuePtr()) {
+      if (cue->kind == CueKind::Pip) {
+        Cue resolvedCue;
+        if (buildResolvedPipSourceCue(deck, *cue, resolvedCue, nullptr)) {
+          requestThumbnail(resolvedCue);
+        } else {
+          clearSelectedThumbnail();
+        }
+      } else {
+        requestThumbnail(*cue);
+      }
+    } else {
+      clearSelectedThumbnail();
+    }
+  }
+
+  std::string cueVisualCacheKey(const Cue& cue) const {
+    auto quantizeMillis = [](double seconds) {
+      return static_cast<long long>(std::llround(std::max(0.0, seconds) * 1000.0));
+    };
+    std::ostringstream key;
+    key << cue.id << '|'
+        << cue.path << '|'
+        << static_cast<int>(cue.kind) << '|'
+        << quantizeMillis(cue.inPointSeconds) << '|'
+        << quantizeMillis(cue.outPointSeconds) << '|'
+        << quantizeMillis(cue.duration) << '|'
+        << quantizeMillis(cue.stillDurationSeconds);
+    if (cue.kind == CueKind::Pattern) {
+      const std::string type = stripPatternMotionSuffix(normalizePatternTypeId(cue.path));
+      if (type == "swirl") {
+        key << '|' << cue.swirl.speed << '|' << cue.swirl.twist << '|'
+            << cue.swirl.cells << '|' << cue.swirl.hue;
+      } else if (type == "moire-field") {
+        const MoireSettings& m = cue.moire;
+        key << '|' << m.shape << '|' << m.palette << '|' << m.density << '|' << m.speed << '|'
+            << m.warp << '|' << m.turn << '|' << m.centreX << '|' << m.centreY << '|' << m.grey
+            << '|' << m.hue << '|' << serializeGeometryLfos(m.lfo);
+      } else if (type == "code") {
+        key << '|' << cue.width << '|' << cue.height << '|' << cue.codeExpression;
+      } else if (type == "draw") {
+        key << '|' << cue.drawing.revision << '|' << cue.drawing.editFrame;
+      } else if (type == "portal") {
+        key << '|' << cue.portal.blobs << '|' << cue.portal.size << '|' << cue.portal.blend
+            << '|' << cue.portal.outline << '|' << cue.portal.speed << '|' << cue.portal.hue;
+      } else if (type == "fireside") {
+        key << '|' << cue.firesideIntensity << '|' << cue.firesideSparks << '|' << cue.firesideView;
+      }
+    }
+    return key.str();
+  }
+
+  std::string cuePreviewCacheKey(const Cue& cue) const {
+    auto quantizeFloat = [](float value) {
+      return static_cast<long long>(std::llround(static_cast<double>(value) * 1000.0));
+    };
+    std::ostringstream key;
+    key << cueVisualCacheKey(cue) << '|'
+        << (cue.chromaKeyEnabled ? 1 : 0) << '|'
+        << static_cast<int>(cue.chromaKeyColor.r) << ','
+        << static_cast<int>(cue.chromaKeyColor.g) << ','
+        << static_cast<int>(cue.chromaKeyColor.b) << '|'
+        << quantizeFloat(cue.chromaKeyTolerance) << '|'
+        << quantizeFloat(cue.chromaKeySoftness) << '|'
+        << quantizeFloat(cue.brightness) << '|'
+        << quantizeFloat(cue.contrast) << '|'
+        << quantizeFloat(cue.saturation) << '|'
+        << quantizeFloat(cue.hueShift) << '|'
+        // THE EFFECT STACK IS PART OF THE LOOK. Without it a PAUSED cue -- whose
+        // frame index never moves -- kept its old texture through any effect
+        // edit: clearing the stack left the effect on screen, and an amount
+        // change did nothing until the cue played again.
+        << serializeCueEffects(cue.effects);
+    return key.str();
+  }
+
+  std::string cueRuntimeCacheKey(const Cue& cue) const {
+    auto quantizeMillis = [](double seconds) {
+      return static_cast<long long>(std::llround(std::max(0.0, seconds) * 1000.0));
+    };
+    std::ostringstream key;
+    key << cuePreviewCacheKey(cue) << '|'
+        << quantizeMillis(cue.fadeInSeconds) << '|'
+        << quantizeMillis(cue.fadeOutSeconds) << '|'
+        << quantizeMillis(cue.playbackSpeed) << '|'
+        << (cue.loop ? 1 : 0) << '|'
+        << cue.loopCount << '|'
+        << (cue.pauseAtBeginning ? 1 : 0) << '|'
+        << (cue.pauseOnLastFrame ? 1 : 0) << '|'
+        << static_cast<int>(cue.endAction);
+    return key.str();
+  }
+
+  void clearSelectedThumbnail() {
+    selectedThumbnailCueKey_.clear();
+    if (thumbnailThread_.joinable()) {
+      thumbnailProcess_.killProcessOnly();
+      thumbnailThread_.join();
+      thumbnailProcess_.stop();
+    }
+    {
+      std::lock_guard<std::mutex> lk(thumbnailMutex_);
+      pendingThumbnail_.reset();
+    }
+    thumbnailPending_.store(false);
+    thumbnailLoading_.store(false);
+    if (selectedThumbnailTex_) {
+      SDL_DestroyTexture(selectedThumbnailTex_);
+      selectedThumbnailTex_ = nullptr;
+      selectedThumbnailTexW_ = 0;
+      selectedThumbnailTexH_ = 0;
+    }
+  }
+
+  void clearTimelineStrip() {
+    timelineStripJobSerial_.fetch_add(1);
+    timelineStripCueKey_.clear();
+    timelineStripCueId_.clear();
+    if (timelineStripThread_.joinable()) {
+      timelineStripProcess_.killProcessOnly();
+      timelineStripThread_.join();
+      timelineStripProcess_.stop();
+    }
+    {
+      std::lock_guard<std::mutex> lk(timelineStripMutex_);
+      pendingTimelineStrip_.reset();
+      pendingTimelineStripReadyTiles_ = 0;
+    }
+    timelineStripPending_.store(false);
+    timelineStripLoading_.store(false);
+    if (timelineStripTex_) {
+      SDL_DestroyTexture(timelineStripTex_);
+      timelineStripTex_ = nullptr;
+      timelineStripTexW_ = 0;
+      timelineStripTexH_ = 0;
+    }
+    timelineStripTexReadyTiles_ = 0;
+  }
+
+  void clearPreviewCueTexture() {
+    if (previewCueTex_) {
+      SDL_DestroyTexture(previewCueTex_);
+      previewCueTex_ = nullptr;
+    }
+    previewCueTexW_ = 0;
+    previewCueTexH_ = 0;
+    previewCueTexFormat_ = 0;
+    previewCueFrameIdx_ = static_cast<std::uint64_t>(-1);
+  }
+
+  void uploadSelectedThumbnailTexture(const DecodedFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+      if (selectedThumbnailTex_) {
+        SDL_DestroyTexture(selectedThumbnailTex_);
+        selectedThumbnailTex_ = nullptr;
+        selectedThumbnailTexW_ = 0;
+        selectedThumbnailTexH_ = 0;
+      }
+      return;
+    }
+    syncTexture(controlRenderer_, selectedThumbnailTex_,
+                selectedThumbnailTexW_, selectedThumbnailTexH_,
+                frame.width, frame.height,
+                frame.pixels.data(), frame.width * 4);
+  }
+
+  void uploadTimelineStripTexture(const DecodedFrame& frame, int readyTiles = kTimelineStripThumbCount) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+      if (timelineStripTex_) {
+        SDL_DestroyTexture(timelineStripTex_);
+        timelineStripTex_ = nullptr;
+        timelineStripTexW_ = 0;
+        timelineStripTexH_ = 0;
+      }
+      timelineStripTexReadyTiles_ = 0;
+      return;
+    }
+    syncTexture(controlRenderer_, timelineStripTex_,
+                timelineStripTexW_, timelineStripTexH_,
+                frame.width, frame.height,
+                frame.pixels.data(), frame.width * 4);
+    timelineStripTexReadyTiles_ = std::clamp(readyTiles, 0, kTimelineStripThumbCount);
+  }
+
+  void uploadPreviewCueTexture(const DecodedFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+      clearPreviewCueTexture();
+      return;
+    }
+    if (!syncFrameTexture(controlRenderer_, previewCueTex_,
+                          previewCueTexW_, previewCueTexH_,
+                          previewCueTexFormat_, frame)) {
+      clearPreviewCueTexture();
+    }
+  }
+
+  void resetTransientPreviewState() {
+    clearSelectedThumbnail();
+    clearTimelineStrip();
+    clearPipOverlayRuntimes();
+    if (previewMediaEngine_) {
+      previewMediaEngine_->stopAll();
+    }
+    clearPreviewCueTexture();
+    previewCueKey_.clear();
+    clearControlPreviewTexture();
+  }
+
+  // Drop the control window's program-monitor texture and every cache key that
+  // decides whether an incoming frame is "new". Also called when the preview
+  // source switches between the output composite tap and a decoder frame,
+  // since those differ in both size and pixel format.
+  void clearControlPreviewTexture() {
+    if (controlPreviewTex_) {
+      SDL_DestroyTexture(controlPreviewTex_);
+      controlPreviewTex_ = nullptr;
+    }
+    controlPreviewTexW_ = 0;
+    controlPreviewTexH_ = 0;
+    controlPreviewTexFormat_ = 0;
+    controlPreviewFrameIdx_ = static_cast<std::uint64_t>(-1);
+    controlPreviewTapSerial_ = 0;
+  }
+
+  std::string pipOverlayRuntimeKey(int deckIndex, int cueIndex) const {
+    return std::to_string(deckIndex) + ":" + std::to_string(cueIndex);
+  }
+
+  void clearPipOverlayRuntimes() {
+    for (auto& [key, runtime] : pipOverlayRuntimes_) {
+      (void) key;
+      if (runtime.mediaEngine) {
+        runtime.mediaEngine->stopAll();
+      }
+    }
+    pipOverlayRuntimes_.clear();
+  }
+
+  // Upload one cached still into a small texture for a playlist row, keeping
+  // the map bounded. Nearest-neighbour would fizz at this size, so these go
+  // through the linear-filtered creator like the timeline filmstrip does.
+  SDL_Texture* uploadRowThumbTexture(const std::string& key, const DecodedFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+      return nullptr;
+    }
+    SDL_Texture* tex = deckboyCreateTexture(controlRenderer_, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STATIC,
+                                            frame.width, frame.height);
+    if (!tex) {
+      return nullptr;
+    }
+    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+    SDL_UpdateTexture(tex, nullptr, frame.pixels.data(), frame.width * 4);
+    rowThumbTex_[key] = tex;
+    rowThumbOrder_.push_back(key);
+    while (rowThumbOrder_.size() > kRowThumbLimit) {
+      const std::string stale = rowThumbOrder_.front();
+      rowThumbOrder_.pop_front();
+      auto at = rowThumbTex_.find(stale);
+      if (at != rowThumbTex_.end()) {
+        if (at->second) SDL_DestroyTexture(at->second);
+        rowThumbTex_.erase(at);
+      }
+    }
+    return tex;
+  }
+
+  // Ask for the one still the playlist noticed it was missing. Called after
+  // the column has drawn, so at most one decode is ever in flight no matter
+  // how long the list is.
+  // The audio equivalent of servicePendingRowThumbnail: at most one waveform
+  // analysis started per frame, so a playlist of audio cues fills in as it is
+  // scrolled rather than launching an ffmpeg per row at once.
+  void servicePendingRowWaveform() {
+    if (rowWaveWantedPath_.empty()) {
+      return;
+    }
+    const std::string path = rowWaveWantedPath_;
+    rowWaveWantedPath_.clear();
+    triggerWaveformAnalysis(path);
+  }
+
+  void servicePendingRowThumbnail() {
+    if (rowThumbWantedKey_.empty()) {
+      return;
+    }
+    const int deckIndex = rowThumbWantedDeck_;
+    const int cueIndex = rowThumbWantedCue_;
+    rowThumbWantedKey_.clear();
+    rowThumbWantedDeck_ = -1;
+    rowThumbWantedCue_ = -1;
+    if (deckIndex < 0 || deckIndex >= static_cast<int>(project_.decks.size())) {
+      return;
+    }
+    const Deck& deck = project_.decks[deckIndex];
+    if (cueIndex < 0 || cueIndex >= static_cast<int>(deck.cues.size())) {
+      return;
+    }
+    requestRowThumbnail(deck.cues[cueIndex]);
+  }
+
+  // The yaw a mesh cue is turned to right now: its own setting plus a slow
+  // drift, so a surface that is left alone still moves.
+  double meshDriftYaw(const Cue& cue) const {
+    return cue.meshTiltY + std::sin(static_cast<double>(animationNow_) * 0.0004)
+                            * cue.meshSpin;
+  }
+
+  // Brightness of the frame, on a small grid, for the displacement mesh.
+  //
+  // Sampled here rather than read back from the texture: the pixels are
+  // already in hand at this point in the frame, and a readback would stall the
+  // renderer once per cue. Coarse on purpose -- the mesh interpolates between
+  // these, and a heightfield finer than the eye can see costs vertices for
+  // nothing.
+  void updateMeshLumaField(const DecodedFrame& frame) {
+    constexpr int kW = 64;
+    constexpr int kH = 36;
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty()) {
+      meshLumaField_.clear();
+      meshLumaW_ = meshLumaH_ = 0;
+      return;
+    }
+    meshLumaField_.assign(static_cast<std::size_t>(kW) * kH, 0.0f);
+    meshLumaW_ = kW;
+    meshLumaH_ = kH;
+    for (int y = 0; y < kH; ++y) {
+      const int sy = std::clamp(y * frame.height / kH, 0, frame.height - 1);
+      for (int x = 0; x < kW; ++x) {
+        const int sx = std::clamp(x * frame.width / kW, 0, frame.width - 1);
+        const std::size_t at = (static_cast<std::size_t>(sy) * frame.width + sx) * 4;
+        if (at + 2 >= frame.pixels.size()) continue;
+        meshLumaField_[static_cast<std::size_t>(y) * kW + x] =
+          static_cast<float>((frame.pixels[at] * 0.114 + frame.pixels[at + 1] * 0.587
+                            + frame.pixels[at + 2] * 0.299) / 255.0);
+      }
+    }
+  }
+
+  void requestThumbnail(const Cue& cue) { requestThumbnailFor(cue, true); }
+
+  // The same decode, for a cue that is NOT the selection.
+  //
+  // The playlist wants a still for every row it can see, and this already
+  // decoded one for any cue and cached it -- it simply also assumed the result
+  // was for the selected-cue preview, and would have overwritten it. So the
+  // two jobs are named apart: `forSelection` is the only difference, and it
+  // decides whether the finished frame is published to the preview or only
+  // left in the cache for the rows to find.
+  void requestRowThumbnail(const Cue& cue) { requestThumbnailFor(cue, false); }
+
+  void requestThumbnailFor(const Cue& cue, bool forSelection) {
+    if (cue.kind != CueKind::Video && cue.kind != CueKind::Image) {
+      if (forSelection) clearSelectedThumbnail();
+      return;
+    }
+    std::string mediaPath = resolvedCueFilesystemPathString(cue, currentProjectFile_);
+    if (trim(mediaPath).empty()) {
+      if (forSelection) clearSelectedThumbnail();
+      return;
+    }
+    std::string cacheKey = cueVisualCacheKey(cue);
+    bool sameCueVisual = selectedThumbnailCueKey_ == cacheKey;
+    if (forSelection && selectedThumbnailCueKey_ == cacheKey &&
+        (selectedThumbnailTex_ || thumbnailLoading_.load())) {
+      return;  // already loaded or loading
+    }
+    if (!forSelection && thumbnailLoading_.load()) {
+      return;  // one decode at a time; the row will ask again next frame
+    }
+    if (thumbnailThread_.joinable()) {
+      thumbnailProcess_.killProcessOnly();
+      thumbnailThread_.join();
+      thumbnailProcess_.stop();
+    }
+    {
+      std::lock_guard<std::mutex> lk(thumbnailMutex_);
+      pendingThumbnail_.reset();
+    }
+    thumbnailPending_.store(false);
+    thumbnailLoading_.store(false);
+    if (forSelection && !sameCueVisual && selectedThumbnailTex_) {
+      SDL_DestroyTexture(selectedThumbnailTex_);
+      selectedThumbnailTex_ = nullptr;
+      selectedThumbnailTexW_ = 0;
+      selectedThumbnailTexH_ = 0;
+    }
+    {
+      std::lock_guard<std::mutex> lk(thumbnailMutex_);
+      auto it = selectedThumbnailCache_.find(cacheKey);
+      if (it != selectedThumbnailCache_.end() && !forSelection) {
+        return;   // already cached; the row will pick it up when it draws
+      }
+      if (it != selectedThumbnailCache_.end()) {
+        selectedThumbnailCacheOrder_.erase(
+          std::remove(selectedThumbnailCacheOrder_.begin(), selectedThumbnailCacheOrder_.end(), cacheKey),
+          selectedThumbnailCacheOrder_.end());
+        selectedThumbnailCacheOrder_.push_back(cacheKey);
+        selectedThumbnailCueKey_ = cacheKey;
+        uploadSelectedThumbnailTexture(it->second);
+        return;
+      }
+    }
+
+    constexpr int kThumbW = 320;
+    constexpr int kThumbH = 180;
+    std::string scaleFilter =
+      "scale=" + std::to_string(kThumbW) + ":" + std::to_string(kThumbH) +
+      ":force_original_aspect_ratio=decrease:flags=lanczos,"
+      "pad=" + std::to_string(kThumbW) + ":" + std::to_string(kThumbH) + ":(ow-iw)/2:(oh-ih)/2";
+
+    std::vector<std::string> args = {"ffmpeg", "-hide_banner", "-loglevel", "error"};
+    if (cue.kind == CueKind::Video && cue.duration > 0.5) {
+      double clipStart = std::clamp(cue.inPointSeconds, 0.0, std::max(0.0, cue.duration - 0.1));
+      double clipEnd = cue.outPointSeconds > clipStart + 0.05
+        ? std::clamp(cue.outPointSeconds, clipStart + 0.05, cue.duration)
+        : cue.duration;
+      double clipDuration = std::max(0.1, clipEnd - clipStart);
+      double seekPos = clipStart + std::min(clipDuration * 0.1, clipDuration - 0.05);
+      args.push_back("-ss");
+      args.push_back(std::to_string(std::max(0.0, seekPos)));
+    }
+    args.insert(args.end(), {"-i", mediaPath, "-an", "-sn", "-dn", "-frames:v", "1",
+                             "-vf", scaleFilter,
+                             "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"});
+
+    if (!spawnPipeProcess(thumbnailProcess_, args)) {
+      if (forSelection) selectedThumbnailCueKey_.clear();
+      return;
+    }
+    if (forSelection) {
+      selectedThumbnailCueKey_ = cacheKey;
+    }
+    thumbnailLoading_.store(true);
+    int fd = thumbnailProcess_.readFd;
+    thumbnailThread_ = std::thread([this, fd, cacheKey, forSelection]() {
+      // Named apart from the caller's pair: this runs on the decode thread and
+      // the two are not guaranteed to stay the same number.
+      constexpr int kThreadThumbW = 320;
+      constexpr int kThreadThumbH = 180;
+      DecodedFrame frame;
+      frame.width = kThreadThumbW;
+      frame.height = kThreadThumbH;
+      frame.index = 0;
+      frame.pixels.resize(static_cast<size_t>(kThreadThumbW) * kThreadThumbH * 4u);
+      if (readExact(fd, frame.pixels.data(), frame.pixels.size())) {
+        std::lock_guard<std::mutex> lk(thumbnailMutex_);
+        selectedThumbnailCache_[cacheKey] = frame;
+        selectedThumbnailCacheOrder_.erase(
+          std::remove(selectedThumbnailCacheOrder_.begin(), selectedThumbnailCacheOrder_.end(), cacheKey),
+          selectedThumbnailCacheOrder_.end());
+        selectedThumbnailCacheOrder_.push_back(cacheKey);
+        while (selectedThumbnailCacheOrder_.size() > kThumbnailCacheLimit) {
+          const std::string staleKey = selectedThumbnailCacheOrder_.front();
+          selectedThumbnailCacheOrder_.pop_front();
+          selectedThumbnailCache_.erase(staleKey);
+        }
+        if (forSelection) {
+          // Only the selection publishes to the preview. A row thumbnail that
+          // did so would replace the picture the inspector and the timeline
+          // are showing with whatever row happened to decode last.
+          pendingThumbnail_ = std::move(frame);
+          thumbnailPending_.store(true);
+        }
+      }
+      thumbnailLoading_.store(false);
+    });
+  }
+
+  void requestTimelineStrip(const Cue& cue) {
+    if (cue.kind != CueKind::Video || cue.path.empty() || cue.duration <= 0.05) {
+      clearTimelineStrip();
+      return;
+    }
+    std::string mediaPath = resolvedCueFilesystemPathString(cue, currentProjectFile_);
+    if (trim(mediaPath).empty()) {
+      clearTimelineStrip();
+      return;
+    }
+    std::string cacheKey = cueVisualCacheKey(cue);
+    bool sameCueVisual = timelineStripCueKey_ == cacheKey;
+    Uint64 now = SDL_GetTicks();
+    {
+      std::lock_guard<std::mutex> lk(timelineStripMutex_);
+      if (timelineStripFailedCueKey_ == cacheKey &&
+          now - timelineStripFailedAtMs_ < 3000) {
+        return;
+      }
+    }
+    if (sameCueVisual && timelineStripLoading_.load()) {
+      return;
+    }
+    std::uint64_t jobSerial = timelineStripJobSerial_.fetch_add(1) + 1;
+    if (timelineStripThread_.joinable()) {
+      timelineStripProcess_.killProcessOnly();
+      timelineStripThread_.join();
+      timelineStripProcess_.stop();
+    }
+    TimelineStripCacheEntry cachedEntry;
+    bool hasCachedEntry = false;
+    {
+      std::lock_guard<std::mutex> lk(timelineStripMutex_);
+      pendingTimelineStrip_.reset();
+      pendingTimelineStripReadyTiles_ = 0;
+      auto it = timelineStripCache_.find(cacheKey);
+      if (it != timelineStripCache_.end()) {
+        cachedEntry = it->second;
+        hasCachedEntry = true;
+        timelineStripCacheOrder_.erase(
+          std::remove(timelineStripCacheOrder_.begin(), timelineStripCacheOrder_.end(), cacheKey),
+          timelineStripCacheOrder_.end());
+        timelineStripCacheOrder_.push_back(cacheKey);
+      }
+    }
+    timelineStripPending_.store(false);
+    timelineStripLoading_.store(false);
+    bool alreadyShowingCurrentStrip = sameCueVisual && timelineStripTex_ &&
+                                      timelineStripTexW_ > 0 && timelineStripTexH_ > 0;
+    if (!sameCueVisual) {
+      if (timelineStripTex_) {
+        SDL_DestroyTexture(timelineStripTex_);
+        timelineStripTex_ = nullptr;
+        timelineStripTexW_ = 0;
+        timelineStripTexH_ = 0;
+      }
+      timelineStripTexReadyTiles_ = 0;
+    }
+
+    const int stripW = kTimelineStripThumbCount * kTimelineStripThumbW +
+                       (kTimelineStripThumbCount - 1) * kTimelineStripPadding;
+    if (hasCachedEntry && cachedEntry.frame.width > 0 && cachedEntry.frame.height > 0) {
+      timelineStripCueKey_ = cacheKey;
+      timelineStripCueId_ = cue.id;
+      if (!alreadyShowingCurrentStrip ||
+          timelineStripTexReadyTiles_ < cachedEntry.readyTiles ||
+          timelineStripTexW_ != cachedEntry.frame.width ||
+          timelineStripTexH_ != cachedEntry.frame.height) {
+        uploadTimelineStripTexture(cachedEntry.frame, cachedEntry.readyTiles);
+      }
+      if (cachedEntry.readyTiles >= kTimelineStripThumbCount) {
+        return;
+      }
+    }
+
+    int startTile = hasCachedEntry ? std::clamp(cachedEntry.readyTiles, 0, kTimelineStripThumbCount) : 0;
+    if (startTile >= kTimelineStripThumbCount) {
+      return;
+    }
+
+    double stripStart = std::clamp(cue.inPointSeconds, 0.0, std::max(0.0, cue.duration - 0.05));
+    double stripEnd = cue.outPointSeconds > stripStart + 0.05
+      ? std::clamp(cue.outPointSeconds, stripStart + 0.05, cue.duration)
+      : cue.duration;
+    double stripDuration = std::max(0.05, stripEnd - stripStart);
+
+    DecodedFrame baseFrame;
+    if (hasCachedEntry && cachedEntry.frame.width == stripW && cachedEntry.frame.height == kTimelineStripThumbH) {
+      baseFrame = std::move(cachedEntry.frame);
+    } else {
+      baseFrame.width = stripW;
+      baseFrame.height = kTimelineStripThumbH;
+      baseFrame.index = 0;
+      baseFrame.pixels.resize(static_cast<size_t>(baseFrame.width) * static_cast<size_t>(baseFrame.height) * 4u, 0);
+    }
+
+    timelineStripCueKey_ = cacheKey;
+    timelineStripCueId_ = cue.id;
+    timelineStripLoading_.store(true);
+    timelineStripThread_ = std::thread([this,
+                                        cacheKey,
+                                        cueId = cue.id,
+                                        sourcePath = mediaPath,
+                                        cueDuration = cue.duration,
+                                        cueFps = cue.fps,
+                                        stripStart,
+                                        stripEnd,
+                                        stripDuration,
+                                        startTile,
+                                        jobSerial,
+                                        frame = std::move(baseFrame)]() mutable {
+      auto copyTilePixels = [&](int fromTile, int toTile) {
+        if (fromTile < 0 || toTile < 0 || fromTile == toTile) {
+          return;
+        }
+        int srcX = fromTile * (kTimelineStripThumbW + kTimelineStripPadding);
+        int dstX = toTile * (kTimelineStripThumbW + kTimelineStripPadding);
+        for (int y = 0; y < kTimelineStripThumbH; ++y) {
+          std::uint8_t* dst = frame.pixels.data() +
+            (static_cast<size_t>(y) * static_cast<size_t>(frame.width) + static_cast<size_t>(dstX)) * 4u;
+          const std::uint8_t* src = frame.pixels.data() +
+            (static_cast<size_t>(y) * static_cast<size_t>(frame.width) + static_cast<size_t>(srcX)) * 4u;
+          std::memcpy(dst, src, static_cast<size_t>(kTimelineStripThumbW) * 4u);
+        }
+      };
+
+      auto safeLastTileDecodeEnd = [&]() {
+        double maxSpanEnd = std::min(stripEnd, cueDuration);
+        if (maxSpanEnd <= stripStart + 0.001) {
+          return stripStart;
+        }
+        double segmentSpan = (maxSpanEnd - stripStart) /
+          static_cast<double>(std::max(1, kTimelineStripThumbCount));
+        double safePad = cueFps > 1.0 ? (18.0 / cueFps) : 0.60;
+        safePad = std::clamp(std::max(safePad, segmentSpan * 0.10), 0.45, 1.80);
+        double safeEnd = maxSpanEnd - safePad;
+        if (safeEnd <= stripStart + 0.001) {
+          return stripStart + (maxSpanEnd - stripStart) * 0.5;
+        }
+        return safeEnd;
+      };
+
+      auto samplePositionForTile = [&](int tileIndex) {
+        double maxSpanEnd = std::min(stripEnd, cueDuration);
+        if (maxSpanEnd <= stripStart + 0.001) {
+          return stripStart;
+        }
+        if (kTimelineStripThumbCount <= 1) {
+          return std::clamp(stripStart + (maxSpanEnd - stripStart) * 0.5,
+                            stripStart, maxSpanEnd);
+        }
+        // Sample each timeline segment away from the boundaries. The final tile
+        // intentionally stays well clear of EOF because some clips report a
+        // nominal duration slightly past the last decodable frame on disk.
+        double segmentCount = static_cast<double>(kTimelineStripThumbCount);
+        double segStart = stripStart + (maxSpanEnd - stripStart) *
+          (static_cast<double>(tileIndex) / segmentCount);
+        double segEnd = stripStart + (maxSpanEnd - stripStart) *
+          (static_cast<double>(tileIndex + 1) / segmentCount);
+        bool isLastTile = tileIndex >= kTimelineStripThumbCount - 1;
+        if (isLastTile) {
+          double framePad = cueFps > 1.0
+            ? std::clamp(8.0 / cueFps, 0.08, 0.35)
+            : 0.18;
+          double nearEnd = safeLastTileDecodeEnd();
+          double minLastPos = std::clamp(segStart + framePad, stripStart, maxSpanEnd);
+          return std::clamp(nearEnd, minLastPos, maxSpanEnd);
+        }
+        double midpoint = segStart + (segEnd - segStart) * 0.50;
+        double framePad = cueFps > 1.0
+          ? std::clamp(4.0 / cueFps, 0.05, 0.22)
+          : 0.10;
+        double minPos = std::clamp(stripStart + framePad, stripStart, maxSpanEnd);
+        double maxPos = std::clamp(maxSpanEnd - framePad, stripStart, maxSpanEnd);
+        if (maxPos <= minPos + 0.001) {
+          return std::clamp(midpoint, stripStart, std::max(stripStart, maxPos));
+        }
+        return std::clamp(midpoint, minPos, maxPos);
+      };
+
+      auto tileLooksSuspiciouslyBlack = [](const std::vector<std::uint8_t>& pixels) {
+        if (pixels.size() < 4) {
+          return true;
+        }
+        size_t sampleStride = 4u * 32u;
+        size_t samples = 0;
+        size_t darkSamples = 0;
+        long long lumaSum = 0;
+        for (size_t i = 0; i + 3 < pixels.size(); i += sampleStride) {
+          int luma = (static_cast<int>(pixels[i + 0]) * 54 +
+                      static_cast<int>(pixels[i + 1]) * 183 +
+                      static_cast<int>(pixels[i + 2]) * 19) / 256;
+          if (luma <= 24) {
+            ++darkSamples;
+          }
+          lumaSum += luma;
+          ++samples;
+        }
+        if (samples == 0) {
+          return true;
+        }
+        double avgLuma = static_cast<double>(lumaSum) / static_cast<double>(samples);
+        return darkSamples * 100 >= samples * 88 || avgLuma <= 18.0;
+      };
+
+      auto decodeTileAt = [&](double sampleSeconds, std::vector<std::uint8_t>& tilePixels) {
+        double coarseSeekSeconds = sampleSeconds > 0.35 ? (sampleSeconds - 0.35) : 0.0;
+        double fineSeekSeconds = sampleSeconds - coarseSeekSeconds;
+        std::string filter =
+          "scale=" + std::to_string(kTimelineStripThumbW) + ":" + std::to_string(kTimelineStripThumbH) +
+          ":force_original_aspect_ratio=increase:flags=fast_bilinear,"
+          "crop=" + std::to_string(kTimelineStripThumbW) + ":" + std::to_string(kTimelineStripThumbH) +
+          ",format=rgba";
+        std::vector<std::string> args {"ffmpeg", "-hide_banner", "-loglevel", "error"};
+        if (coarseSeekSeconds > 0.001) {
+          args.push_back("-ss");
+          args.push_back(std::to_string(coarseSeekSeconds));
+        }
+        args.push_back("-i");
+        args.push_back(sourcePath);
+        if (fineSeekSeconds > 0.001) {
+          args.push_back("-ss");
+          args.push_back(std::to_string(fineSeekSeconds));
+        }
+        args.insert(args.end(), {
+          "-an", "-sn", "-dn",
+          "-frames:v", "1",
+          "-vf", filter,
+          "-f", "rawvideo",
+          "-pix_fmt", "rgba",
+          "pipe:1"
+        });
+
+        if (!spawnPipeProcess(timelineStripProcess_, args)) {
+          return false;
+        }
+
+        size_t totalRead = 0;
+        while (totalRead < tilePixels.size()) {
+#ifdef _WIN32
+          unsigned int chunk = static_cast<unsigned int>(tilePixels.size() - totalRead < 65536u ? tilePixels.size() - totalRead : 65536u);
+          int bytes = _read(timelineStripProcess_.readFd, tilePixels.data() + totalRead, chunk);
+#else
+          int bytes = static_cast<int>(read(timelineStripProcess_.readFd, tilePixels.data() + totalRead, tilePixels.size() - totalRead));
+#endif
+          if (bytes <= 0) {
+            break;
+          }
+          totalRead += static_cast<size_t>(bytes);
+        }
+        bool ok = (totalRead == tilePixels.size());
+        timelineStripProcess_.stop();
+        return ok;
+      };
+
+      auto timelineStripJobCancelled = [&]() {
+        return timelineStripJobSerial_.load() != jobSerial;
+      };
+
+      bool wroteAnyTile = startTile > 0;
+      for (int tileIndex = startTile; tileIndex < kTimelineStripThumbCount; ++tileIndex) {
+        if (timelineStripJobCancelled()) {
+          timelineStripLoading_.store(false);
+          return;
+        }
+
+        std::vector<std::uint8_t> tilePixels(
+          static_cast<size_t>(kTimelineStripThumbW) * static_cast<size_t>(kTimelineStripThumbH) * 4u);
+        double sampleSeconds = std::max(0.0, samplePositionForTile(tileIndex));
+        bool decodedAny = false;
+        bool ok = false;
+        bool sawSuspiciousBlackOnly = false;
+        std::vector<double> attempts {sampleSeconds};
+        if (tileIndex >= kTimelineStripThumbCount - 1) {
+          double safeEnd = std::min(sampleSeconds, safeLastTileDecodeEnd());
+          attempts[0] = safeEnd;
+          auto pushRetryAttempt = [&](double sample) {
+            double clamped = std::clamp(sample, stripStart, safeEnd);
+            if (std::fabs(clamped - attempts.back()) > 0.01 &&
+                std::fabs(clamped - safeEnd) > 0.01) {
+              attempts.push_back(clamped);
+            }
+          };
+          double retryPadA = cueFps > 1.0 ? std::clamp(12.0 / cueFps, 0.30, 0.80) : 0.45;
+          double retryPadB = cueFps > 1.0 ? std::clamp(24.0 / cueFps, 0.60, 1.60) : 0.90;
+          double retryPadC = cueFps > 1.0 ? std::clamp(40.0 / cueFps, 1.00, 2.40) : 1.40;
+          pushRetryAttempt(safeEnd - retryPadA);
+          pushRetryAttempt(safeEnd - retryPadB);
+          pushRetryAttempt(safeEnd - retryPadC);
+        }
+
+        std::vector<std::uint8_t> lastDecodedPixels;
+        for (size_t attemptIndex = 0; attemptIndex < attempts.size(); ++attemptIndex) {
+          if (timelineStripJobCancelled()) {
+            timelineStripLoading_.store(false);
+            return;
+          }
+          std::vector<std::uint8_t> candidatePixels(tilePixels.size());
+          if (!decodeTileAt(std::max(0.0, attempts[attemptIndex]), candidatePixels)) {
+            if (timelineStripJobCancelled()) {
+              timelineStripLoading_.store(false);
+              return;
+            }
+            continue;
+          }
+          if (timelineStripJobCancelled()) {
+            timelineStripLoading_.store(false);
+            return;
+          }
+          decodedAny = true;
+          lastDecodedPixels = candidatePixels;
+          bool suspiciousLastTile =
+            tileIndex >= kTimelineStripThumbCount - 1 &&
+            tileLooksSuspiciouslyBlack(candidatePixels);
+          if (suspiciousLastTile) {
+            sawSuspiciousBlackOnly = true;
+            if (attemptIndex + 1 < attempts.size()) {
+              continue;
+            }
+            if (tileIndex > 0 || wroteAnyTile) {
+              break;
+            }
+            continue;
+          } else {
+            sawSuspiciousBlackOnly = false;
+          }
+          tilePixels = std::move(candidatePixels);
+          ok = true;
+          break;
+        }
+        if (!ok && sawSuspiciousBlackOnly && (tileIndex > 0 || wroteAnyTile)) {
+          int fallbackTile = std::max(0, tileIndex - 1);
+          copyTilePixels(fallbackTile, tileIndex);
+          wroteAnyTile = true;
+          if (timelineStripJobCancelled()) {
+            timelineStripLoading_.store(false);
+            return;
+          }
+          {
+            std::lock_guard<std::mutex> lk(timelineStripMutex_);
+            timelineStripCache_[cacheKey] = TimelineStripCacheEntry {frame, tileIndex + 1};
+            timelineStripCacheOrder_.erase(
+              std::remove(timelineStripCacheOrder_.begin(), timelineStripCacheOrder_.end(), cacheKey),
+              timelineStripCacheOrder_.end());
+            timelineStripCacheOrder_.push_back(cacheKey);
+            while (timelineStripCacheOrder_.size() > kTimelineStripCacheLimit) {
+              const std::string staleKey = timelineStripCacheOrder_.front();
+              timelineStripCacheOrder_.pop_front();
+              timelineStripCache_.erase(staleKey);
+            }
+            pendingTimelineStrip_ = frame;
+            pendingTimelineStripReadyTiles_ = tileIndex + 1;
+            timelineStripPending_.store(true);
+            timelineStripFailedCueKey_.clear();
+            timelineStripFailedAtMs_ = 0;
+          }
+          continue;
+        }
+        if (!ok && decodedAny && !lastDecodedPixels.empty()) {
+          tilePixels = std::move(lastDecodedPixels);
+          ok = true;
+        }
+
+        if (!ok) {
+          if (timelineStripJobCancelled()) {
+            timelineStripLoading_.store(false);
+            return;
+          }
+          if (tileIndex > 0 || wroteAnyTile) {
+            int fallbackTile = std::max(0, tileIndex - 1);
+            copyTilePixels(fallbackTile, tileIndex);
+          } else {
+            break;
+          }
+        } else {
+          int dstX = tileIndex * (kTimelineStripThumbW + kTimelineStripPadding);
+          for (int y = 0; y < kTimelineStripThumbH; ++y) {
+            std::uint8_t* dst = frame.pixels.data() +
+              (static_cast<size_t>(y) * static_cast<size_t>(frame.width) + static_cast<size_t>(dstX)) * 4u;
+            const std::uint8_t* src = tilePixels.data() +
+              static_cast<size_t>(y) * static_cast<size_t>(kTimelineStripThumbW) * 4u;
+            std::memcpy(dst, src, static_cast<size_t>(kTimelineStripThumbW) * 4u);
+          }
+        }
+
+        wroteAnyTile = true;
+        if (timelineStripJobCancelled()) {
+          timelineStripLoading_.store(false);
+          return;
+        }
+        {
+          std::lock_guard<std::mutex> lk(timelineStripMutex_);
+          timelineStripCache_[cacheKey] = TimelineStripCacheEntry {frame, tileIndex + 1};
+          timelineStripCacheOrder_.erase(
+            std::remove(timelineStripCacheOrder_.begin(), timelineStripCacheOrder_.end(), cacheKey),
+            timelineStripCacheOrder_.end());
+          timelineStripCacheOrder_.push_back(cacheKey);
+          while (timelineStripCacheOrder_.size() > kTimelineStripCacheLimit) {
+            const std::string staleKey = timelineStripCacheOrder_.front();
+            timelineStripCacheOrder_.pop_front();
+            timelineStripCache_.erase(staleKey);
+          }
+          pendingTimelineStrip_ = frame;
+          pendingTimelineStripReadyTiles_ = tileIndex + 1;
+          timelineStripPending_.store(true);
+          timelineStripFailedCueKey_.clear();
+          timelineStripFailedAtMs_ = 0;
+        }
+      }
+
+      if (!wroteAnyTile && !timelineStripJobCancelled()) {
+        std::lock_guard<std::mutex> lk(timelineStripMutex_);
+        timelineStripFailedCueKey_ = cacheKey;
+        timelineStripFailedAtMs_ = SDL_GetTicks();
+      }
+      timelineStripLoading_.store(false);
+    });
+  }
+
+  // A command whose verb we know but whose arguments we can't act on. The
+  // operator gets the toast they always got; a Companion or script caller now
+  // also gets ERR with the same words instead of an OK that wasn't true.
+  void failRemoteCommand(const std::string& reason) {
+    remoteCommandError_ = reason;
+    triggerToast(reason, ToastKind::Warning, kToastReadableMs);
+  }
+
+  // "TAKE: no cue 99 on deck 1 (10 cues)" -- names the deck and its size, so a
+  // caller counting from the wrong end can see why.
+  std::string noSuchCueReason(const std::string& verb, const std::string& token) const {
+    const int cueCount = static_cast<int>(focusedDeck().cues.size());
+    return verb + ": no cue " + token + " on deck " + std::to_string(project_.focusedDeckIndex + 1) +
+           " (" + std::to_string(cueCount) + (cueCount == 1 ? " cue)" : " cues)");
+  }
+
+  bool enqueueRemoteCommand(std::string command, SocketHandle replyTo = kInvalidSocket,
+                            std::uint64_t replyGeneration = 0,
+                            std::shared_ptr<WebRemoteReply> webReply = {},
+                            bool fromNetworkPeer = false) {
+    PendingRemoteCommand pending;
+    pending.text = std::move(command);
+    pending.replyTo = replyTo;
+    pending.replyGeneration = replyGeneration;
+    pending.webReply = std::move(webReply);
+    pending.fromNetworkPeer = fromNetworkPeer;
+    std::lock_guard<std::mutex> lock(remoteCommandMutex_);
+    if (remoteCommands_.size() >= 512 || pending.text.size() > 65536) return false;
+    remoteCommands_.push_back(std::move(pending));
+    return true;
+  }
+
+  // `monitorFrom` set: lines that arrived from a controller (plain-text UDP),
+  // which the MIDI and OSC monitor lists under REMOTE.
+  void enqueueRemoteCommandBatch(const std::string& payload, char separatorHint = '\n',
+                                 bool fromNetworkPeer = false,
+                                 const std::string& monitorFrom = {}) {
+    auto enqueueOne = [&](const std::string& trimmed) {
+      if (monitorFrom.empty()) {
+        enqueueRemoteCommand(trimmed, kInvalidSocket, 0, {}, fromNetworkPeer);
+      } else {
+        enqueueMonitoredCommand(trimmed, "REMOTE", monitorFrom, {}, kInvalidSocket, 0,
+                                fromNetworkPeer);
+      }
+    };
+    if (separatorHint == '\n') {
+      for (auto& line : splitLines(payload)) {
+        std::string trimmed = trim(line);
+        if (!trimmed.empty()) {
+          enqueueOne(trimmed);
+        }
+      }
+      return;
+    }
+
+    for (auto& item : splitByChar(payload, separatorHint)) {
+      std::string trimmed = trim(item);
+      if (!trimmed.empty()) {
+        enqueueOne(trimmed);
+      }
+    }
+  }

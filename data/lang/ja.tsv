@@ -1,0 +1,2353 @@
+#name 日本語
+#english Japanese
+#font YuGothR.ttc, meiryo.ttc, msgothic.ttc, Hiragino Sans GB.ttc, PingFang.ttc, NotoSansCJK-Regular.ttc, opentype/noto/NotoSansCJK-Regular.ttc
+# This script is not in the bundled faces, so the line above names the ones
+# that can draw it. They are tried in order: data/fonts first, then the
+# machine's own font directory. Every name here ships with a stock install of
+# the platform it belongs to, which is why nothing has to be downloaded.
+#
+# If none of them is present the text falls back to the bundled face and will
+# draw as empty boxes -- the settings page says so rather than leaving you to
+# work it out.
+NEW	新規
+OPEN	開く
+SAVE	保存
+SAVE AS	名前を付けて保存
+BUNDLE	まとめて保存
+IMPORT	読み込み
+SOURCE	ソース
+PATTERN	テストパターン
+SETTINGS	設定
+TAKE	TAKE
+STOP	停止
+REBOOT	再起動
+BLACKOUT	ブラック
+CLEAR	クリア
+RECORD	録画
+PLAYLIST	プレイリスト
+TIMELINE	タイムライン
+MEDIA	メディア
+TRANSPORT	トランスポート
+OUTPUT	出力
+PROGRAM	PROGRAM
+WARP	変形
+LIVE	ライブ
+DECODE	デコード
+STREAM	配信
+System	システム
+Audio	オーディオ
+Network	ネットワーク
+Video Outputs	映像出力
+About	情報
+Encoder	エンコーダー
+Screen	画面
+Geometry	ジオメトリ
+Devices	デバイス
+Streaming	配信
+APPEARANCE	外観
+REMOTE CONTROL	リモート制御
+INTEGRATION ADAPTERS	連携アダプター
+DISCOVERY / NOTES	検出 / メモ
+DISPLAY & RASTER	ディスプレイとラスター
+CONNECTED DISPLAYS	接続中のディスプレイ
+EDGE FEATHERING	エッジぼかし
+MATTE & OVERLAY	マットとオーバーレイ
+AREA OF INTEREST	対象領域
+DEFAULT TRANSITION	既定のトランジション
+NMC IN & OUT	NMC 入力と出力
+OSC QUERY / FEEDBACK	OSC クエリ / 応答
+CUE INSPECTOR	キュー インスペクター
+SELECTED CUE	選択中のキュー
+PLAYBACK	再生
+COPY	コピー
+PASTE	貼り付け
+RESET	リセット
+Theme	テーマ
+Language	言語
+Resolution	解像度
+Orientation	向き
+Toggle Fullscreen	全画面
+IDENTIFY	識別
+REGION SIZE	領域サイズ
+POSITION	位置
+CENTRE	中央
+FULL	全体
+duration	長さ
+transition	トランジション
+fade in	フェードイン
+fade out	フェードアウト
+ON	オン
+OFF	オフ
+Stopped	停止中
+Playing	再生中
+Paused	一時停止
+2-UP	2画面
+DONE	完了
+EDIT	編集
+HELD	保持中
+Mode	モード
+PICK	選択
+QUAD	4画面
+Rate	レート
+STEP	ステップ
+Apply	適用
+CLOSE	閉じる
+FIXED	固定
+Help!	ヘルプ！
+ORDER	順序
+READY	準備完了
+TILES	タイル
+VIDEO	ビデオ
+ALL ON	すべてオン
+ALWAYS	常に
+ANALOG	アナログ
+Buffer	バッファ
+Cancel	キャンセル
+Custom	カスタム
+Device	デバイス
+Folder	フォルダー
+FORMAT	形式
+HIDDEN	非表示
+Length	長さ
+Mascot	マスコット
+Mirror	ミラー
+NATIVE	ネイティブ
+PRESET	プリセット
+Sender	送信元
+SUMMED	合算
+TOGGLE	切り替え
+12 HOUR	12時間
+24 HOUR	24時間
+ALL OFF	すべてオフ
+ARRANGE	配置
+Channel	チャンネル
+CONVERT	変換
+DEFAULT	既定
+END CUE	キュー終了
+Key out	キー出力
+LTC out	LTC出力
+MISSING	見つかりません
+PRESETS	プリセット
+PROJECT	プロジェクト
+RUNNING	実行中
+Send to	送信先
+SHUFFLE	シャッフル
+UPDATES	更新
+VJ MODE	VJモード
+CLOCK ON	時計オン
+DOWNLOAD	ダウンロード
+EXAMPLES	サンプル
+Mappings	割り当て
+NMC sync	NMC同期
+PROMPTER	プロンプター
+SHOW SDP	SDPを表示
+TCP port	TCPポート
+UI scale	UIの倍率
+WATCHING	監視中
+A/V delay	A/V遅延
+ASIO outs	ASIO出力
+BOTH AXES	両軸
+CHECK NOW	今すぐ確認
+CLOCK OFF	時計オフ
+Creatures	生き物
+CUE TOOLS	キューツール
+Direction	方向
+Freewheel	フリーラン
+HTTP port	HTTPポート
+Jump mode	ジャンプモード
+Listen on	待ち受け
+OSC Query	OSCクエリ
+OUTPUT ON	出力オン
+Panic now	今すぐパニック
+RECORDING	録画中
+REMAINING	残り
+RESET ALL	すべてリセット
+RUN PANIC	パニック実行
+SHOW FLOW	ショーの流れ
+TIMERS ON	タイマーオン
+WHEN IDLE	待機中のとき
+ADD OUTPUT	出力を追加
+BUILT WITH	使用技術
+CANCEL ALL	すべてキャンセル
+colour tag	カラータグ
+copy chain	チェーンをコピー
+Hover tips	ヒント表示
+Input gain	入力ゲイン
+Input mono	入力モノラル
+live audio	ライブ音声
+Live input	ライブ入力
+MIDI input	MIDI入力
+no picture	映像なし
+no preview	プレビューなし
+OPEN SAVED	保存済みを開く
+OUTPUT OFF	出力オフ
+Panic fade	パニックフェード
+Tally port	タリーポート
+TIMERS OFF	タイマーオフ
+Accept from	受け付け元
+ASIO driver	ASIOドライバー
+BACK TO TOP	先頭へ戻る
+CANVAS MODE	キャンバスモード
+CODE SOURCE	コードソース
+Cue numbers	キュー番号
+Destination	送信先
+Mirror rate	ミラーレート
+no duration	長さなし
+NO LIVE CUE	ライブキューなし
+NO PREVIOUS	前のものなし
+OVERLAY BIN	オーバーレイ置き場
+paste chain	チェーンを貼り付け
+Sample rate	サンプルレート
+SENDING OUT	送信中
+Shift: snap	Shift: スナップ
+THIS OUTPUT	この出力
+(no matches)	(一致なし)
+(no subtext)	(サブテキストなし)
+add a button	ボタンを追加
+add a window	ウィンドウを追加
+Art-Net port	Art-Netポート
+AUDIO OUTPUT	音声出力
+Auto restore	自動復元
+DECKLINK: ON	DECKLINK: オン
+free running	フリーラン
+KEY+FILL: ON	KEY+FILL: オン
+LISTENING IN	受信中
+Miami cursor	Miamiカーソル
+MIDI CONTROL	MIDI制御
+Mirror state	状態をミラー
+NDI KEY: OFF	NDI KEY: オフ
+NDI KEY: ON	NDI KEY: オン
+NO PROGRAMME	プログラムなし
+ST 2110: OFF	ST 2110: オフ
+ST 2110: ON	ST 2110: オン
+WATCH FOLDER	監視フォルダー
+COMPOSITE CUE	合成キュー
+DECKLINK: OFF	DECKLINK: オフ
+default route	既定の経路
+Every adapter	すべてのアダプター
+KEY+FILL: OFF	KEY+FILL: オフ
+LEFT TO RIGHT	左から右へ
+MEDIA ENCODER	メディアエンコーダー
+MSC device id	MSCデバイスID
+NEW SHOW FILE	新規ショーファイル
+No cue loaded	キューが読み込まれていません
+nothing taken	何も送出していません
+OPEN PREVIOUS	前回のものを開く
+Output device	出力デバイス
+Panic profile	パニックプロファイル
+Quit Deckboy?	Deckboyを終了しますか？
+REMOVE OUTPUT	出力を削除
+Sound effects	効果音
+Tally address	タリーアドレス
+TOP TO BOTTOM	上から下へ
+127 (all-call)	127 (全体呼び出し)
+ALL INTERFACES	すべてのインターフェース
+LOCALHOST ONLY	localhostのみ
+Monitor device	モニターデバイス
+no audio track	音声トラックなし
+PRESENTER VIEW	発表者ビュー
+RECORD TO DISK	ディスクに録画
+STOP RECORDING	録画を停止
+STOP STREAMING	配信を停止
+TALLY TRIGGERS	タリートリガー
+Device channels	デバイスのチャンネル
+NDI SENDING: ON	NDI送信: オン
+NO CUE SELECTED	キューが選択されていません
+Output channels	出力チャンネル
+preview pending	プレビュー準備中
+START RECORDING	録画を開始
+START STREAMING	配信を開始
+(system default)	(システムの既定)
+Check at startup	起動時に確認
+Global crossfade	全体のクロスフェード
+Mic to recording	マイクを録音へ
+Monitor playlist	プレイリストを試聴
+NDI SENDING: OFF	NDI送信: オフ
+no still preview	静止画プレビューなし
+Pocket 3 / touch	Pocket 3 / タッチ
+SMPTE LTC OUTPUT	SMPTE LTC出力
+the whole screen	画面全体
+Check for one now	今すぐ確認
+INSTALL & RESTART	インストールして再起動
+Registry: NOT SET	レジストリ: 未設定
+SAFETY / TIMECODE	安全 / タイムコード
+Timecode jam sync	タイムコードのジャムシンク
+esc or N to cancel	EscまたはNでキャンセル
+KEYBOARD SHORTCUTS	キーボードショートカット
+loading preview...	プレビューを読み込み中...
+CONVERT ALL FLAGGED	印の付いたものをすべて変換
+dot-matrix cue deck	ドットマトリクス式キューデッキ
+HyperDeck emulation	HyperDeckエミュレーション
+locked to the tempo	テンポに同期
+VJ mode (two decks)	VJモード (デッキ2台)
+ADD ANOTHER PLAYLIST	プレイリストを追加
+Companion / OSC port	Companion / OSCポート
+Esc or click to skip	Escまたはクリックでスキップ
+PLAYLIST PREFERENCES	プレイリスト設定
+press ENTER to start	ENTERキーで開始
+ADD A SECOND PLAYLIST	2つ目のプレイリストを追加
+filmstrip unavailable	フィルムストリップは利用できません
+(empty — import media)	(空 – メディアを読み込んでください)
+Ctrl+D or Esc to close	Ctrl+DまたはEscで閉じる
+(no notes for this cue)	(このキューにメモはありません)
+Timebase / start / fade	タイムベース / 開始 / フェード
+No cues need conversion.	変換が必要なキューはありません。
+CLICK TO SAMPLE KEY COLOR	クリックしてキー色を取得
+normalize loudness (R128)	ラウドネスを正規化 (R128)
+off - all channels silent	オフ – すべてのチャンネルが無音
+no video lane for this cue	このキューに映像レーンはありません
+HyperDeck emulation is off.	HyperDeckエミュレーションはオフです。
+OWN SCRIPT  (click to edit)	自分の台本  (クリックで編集)
+Theme and operator feedback	テーマとオペレーターへの表示
+Discovery and mirrored state	発見とミラーされた状態
+FOLLOWING THE LIVE CUE NOTES	ライブキューのメモに追従中
+Listening on all interfaces.	すべてのインターフェースで待ち受けています。
+Network-facing runtime notes	ネットワーク側の動作メモ
+Hi! Press I to import a clip.	こんにちは！Iキーでクリップを読み込めます。
+Global jump and panic behavior	全体のジャンプとパニックの動作
+Roll when the show cuts to you	番組が切り替わったら再生する
+Choose a cue to inspect it here	キューを選ぶとここに表示されます
+Defaults for newly created cues	新しいキューの既定値
+Device routing for cue playback	キュー再生のデバイス経路
+Smaller buffer = lower latency.	バッファが小さいほど遅延が減ります。
+Emergency fade and sync behavior	緊急フェードと同期の動作
+mixed selection: key unavailable	複数選択: キーは使えません
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (実験的)
+Esc=continue with current session	Esc = 現在のセッションを続ける
+no per-cue settings for this type	この種類にキュー設定はありません
+On stop: remux to an ordinary MP4	停止時: 通常のMP4に再多重化する
+Where RECORD writes the programme	RECORDがプログラムを書き込む場所
+dot-matrix cue deck for live events	ライブイベント用ドットマトリクス式キューデッキ
+Listening on localhost (127.0.0.1).	localhost (127.0.0.1) で待ち受けています。
+three expressions: red, green, blue	3つの式: 赤、緑、青
+Transport sync with another machine	別のマシンとトランスポートを同期
+Add slot sources in the cue inspector	キューインスペクターでソースを追加
+Ask GitHub; never installs on its own	GitHubに問い合わせます。自動では入りません
+Import or click a cue in the playlist	読み込むか、プレイリストのキューをクリック
+mixed selection: geometry unavailable	複数選択: ジオメトリは使えません
+generate timecode for the rig to chase	機材が追従するタイムコードを生成
+Lower Third and PIP fire independently	下部テロップとPiPは別々に動きます
+Panels built for a vMix rig, unchanged	vMix機材向けのパネル、そのまま
+Incoming transport arrives as NMCEVENT.	受信したトランスポートはNMCEVENTとして届きます。
+not in this build - saved with the show	このビルドにはありません – ショーと一緒に保存されます
+Find from the playlist, not from a modal	検索はプレイリストから。別窓は使いません
+take or select a cue to open the timeline	キューを送出または選択するとタイムラインが開きます
+Optional external transport and cue control	外部トランスポートとキュー制御 (任意)
+No previous show file found at startup path.	起動時に前回のショーファイルが見つかりませんでした。
+Use Ctrl+F or type a cue id/number to search.	Ctrl+F、またはキューID/番号を入力して検索します。
+Companion / OSC ingress and HyperDeck emulation	Companion / OSC受信とHyperDeckエミュレーション
+A/V delay holds audio back for lagging displays.	A/V遅延は表示の遅いモニター向けに音声を遅らせます。
+On stop: leave the crash-resilient file as it is	停止時: 障害耐性のあるファイルをそのまま残す
+same disk as Deckboy - a separate drive is safer	Deckboyと同じディスク – 別ドライブの方が安全です
+A step fires one cue on each playlist, all at once.	1ステップで各プレイリストのキューを同時に送出します。
+one expression: the same value in red, green and blue	1つの式: 赤、緑、青に同じ値
+NDI transport is configured per output in Video Outputs.	NDIトランスポートはビデオ出力で出力ごとに設定します。
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	トランスポートの動きに合わせてPLAY / PAUSE / STOP / LOCATEを送ります。
+OSC subscribe: send /deckboy/subscribe from your controller.	OSC購読: コントローラーから /deckboy/subscribe を送信します。
+NMC mode / host / port are runtime-configurable for sync work.	NMCのモード / ホスト / ポートは動作中に変更できます。
+Going on air takes the cue. Deckboy never sends the switcher a command.	オンエアになるとキューが送出されます。Deckboyがスイッチャーに命令を送ることはありません。
+FPS: ON	FPS: オン
+FPS: OFF	FPS: オフ
+NMOS: ON	NMOS: オン
+NMOS: OFF	NMOS: オフ
+SPOUT: ON	SPOUT: オン
+SPOUT: OFF	SPOUT: オフ
+CANVAS: ON	キャンバス: オン
+CANVAS: OFF	キャンバス: オフ
+10-BIT: ON	10ビット: オン
+10-BIT: OFF	10ビット: オフ
+EDIT...	編集...
+FOLDER...	フォルダー...
+ARRANGE...	配置...
+ADD FILE...	ファイルを追加...
+RENUMBER...	番号を振り直す...
+set a port...	ポートを設定...
+no script	台本なし
++ OUTPUT	+ 出力
+Eddie's Clock	エディの時計
+Ctrl+/ to close	Ctrl+/ で閉じる
+(step lives here)	(ステップはここにあります)
+4:2:2  8-BIT	4:2:2  8ビット
+4:2:2  10-BIT	4:2:2  10ビット
+No outputs — click + OUTPUT to add one.	出力がありません – + 出力 で追加します。
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM、NDIトリガー、NMC、MTC、LTC、Art-Net、Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Deckboyがうまく再生できないキューをH.264に変換します
+a button can run any command the network protocol understands	ボタンはプロトコルが解釈できるあらゆるコマンドを実行できます
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	発表者ビューの配置  -  パネルをドラッグで移動、角で大きさを変更
+vMix API	vMix API
+capture again - what is on now	再キャプチャ - いま出ているもの
+change what it does...	動作を変更...
+decks - Stop deck...	デッキ - デッキを停止...
+decks - Take deck...	デッキ - デッキを TAKE...
+delete step	ステップを削除
+delete this button	このボタンを削除
+label, command and glyph as text...	ラベル・コマンド・記号をテキストで...
+move down	下へ移動
+move up	上へ移動
+next colour	次の色
+preset - a new preset from what is on now	プリセット - いま出ているものから新しいプリセット
+type a command myself...	コマンドを自分で入力...
+type a length in seconds...	長さを秒で入力...
+wait for GO	GO を待つ
+what it recalls...	呼び出す内容...
+when its cues end	キューが終わったとき
+AUDIONORM ALL matches the whole playlist at once	AUDIONORM ALL はプレイリスト全体を一度にそろえます
+back to the in point, not to zero	ゼロではなくインポイントに戻る
+drag to scrub. the audio follows	ドラッグでスクラブ。音声も追従します
+loops between the in and out points, not the file	ファイル全体ではなくイン点とアウト点の間をループ
+(not set)	(未設定)
+1.00x  (default 1080p)	1.00x  (標準 1080p)
+1.25x  (large desktop)	1.25x  (大きいデスクトップ)
+1.50x  (4K desktop)	1.50x  (4K デスクトップ)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / 小さい 4K)
+highest bandwidth	最大帯域
+lower bandwidth	低帯域
+film	映画
+CD, music rigs	CD、音楽機材
+video standard	映像標準
+every playlist	すべてのプレイリスト
+None  (no character art)	なし  (キャラクターなし)
+custom size...	サイズを指定...
+Browser URL	ブラウザの URL
+Camera	カメラ
+Media File / Still	メディアファイル / 静止画
+RECORD TO FILE	ファイルに録画
+browser, with sound	ブラウザ (音声あり)
+Window	ウィンドウ
+Desktop	デスクトップ
+full screen	全画面
+DeckLink Output	DeckLink 出力
+FFmpeg Stream Output	FFmpeg ストリーム出力
+NDI Output	NDI 出力
+SDL Window Output	SDL ウィンドウ出力
+Spout Output	Spout 出力
+DESK	操作卓
+drop a folder in too - it reads the whole tree	フォルダーごとドロップしてもOK。サブフォルダーまで読み込むよ
+cameras, windows, NDI, screens - all live sources	カメラ、ウィンドウ、NDI、画面。全部ライブ入力だよ
+test cards and generators - no file needed	テストパターンとジェネレーターなら、ファイルは不要
+space bar does this too, without moving your hand	スペースキーでも同じ操作ができるよ。手を動かさずにね
+stops the cue. ESC stops EVERYTHING	キューを停止。ESC はすべて停止するよ
+the safe one: audio and playback keep running	穏やかな方。音声も再生も続くよ
+the thorough one. blackout is the reversible one	しっかり止める方。元に戻せるのはブラックアウトだよ
+save as makes a new file instead	「名前を付けて保存」なら新しいファイルになるよ
+for a copy before you change something risky	思い切った変更の前に、コピーを残しておこう
+this is what you carry to the venue	これを会場に持っていけばいいんだ
+the show on disk is untouched until you save	保存するまで、ディスク上のショーはそのまま
+per cue. the deck has its own default too	キューごとの設定。デッキにも既定値があるよ
+stills hold instead - a fade would dip the frame	静止画は表示を維持。フェードすると暗くなっちゃうからね
+the frame stays up. good for slides	画像は表示されたまま。スライドに便利
+gain, pan and normalise live in the inspector	ゲイン、パン、ノーマライズはインスペクターにあるよ
+this clip has no audio track to enable	このクリップには有効にできる音声トラックがないよ
+Hi! I am Deckboy.	こんにちは！ Deckboyだよ。
+Press I to import a clip.	I キーでクリップを読み込めるよ。
+Enter takes a cue live.	Enter でキューを本番に出すよ。
+S stops the live cue.	S キーで本番中のキューを停止。
+The timeline can be resized.	タイムラインの大きさは変えられるよ。
+Try a terminal theme in Settings.	設定でターミナル風のテーマを試してみて。
+RELINK finds media that has moved.	RELINK は移動したメディアを探してくれるよ。
+Cues have their own gain and fades.	キューごとにゲインとフェードを設定できるよ。
+Trim with Ctrl+I and Ctrl+O.	Ctrl+I と Ctrl+O で再生範囲を決めよう。
+Ctrl+/ shows every shortcut.	Ctrl+/ ですべてのショートカットを表示。
+J jumps to the live cue.	J キーで本番中のキューにジャンプ。
+Normalize matches loudness across cues.	ノーマライズでキュー間の音量感をそろえよう。
+Esc clears the desk, then the output, then quits.	Esc は操作画面、出力の順にクリアして、最後に終了するよ。
+Stream SRT and RTMP at the same time.	SRT と RTMP は同時に配信できるよ。
+CHECK lists what is broken, before doors.	開場前に CHECK で問題を確認しよう。
+A cue can wait before it starts.	キューは開始前に待機できるよ。
+A cue can start the next one by itself.	キューから次のキューを自動で開始できるよ。
+Disarm a cue and GO steps over it.	キューを無効にすると、GO はそれを飛ばすよ。
+Audition plays a cue to you, not the room.	試聴は自分だけに。会場には流れないよ。
+Preload racks the next cue warm, off air.	プリロードで次のキューを本番に出さずに準備。
+A target cue starts or stops another cue.	ターゲットキューは別のキューを開始・停止するよ。
+A fade cue takes a deck down, then stops it.	フェードキューはデッキをフェードアウトしてから停止。
+A master cue fires one cue on every deck.	マスターキューは各デッキのキューを一つずつ開始。
+A MIDI cue can tell the lighting desk to go.	MIDI キューで照明卓に開始の合図を送れるよ。
+A network cue speaks OSC, UDP or TCP.	ネットワークキューは OSC、UDP、TCP に対応。
+A DMX cue fades the house lights on a cue.	DMX キューで客席照明をフェードできるよ。
+A script cue runs Deckboy's own commands.	スクリプトキューは Deckboy のコマンドを実行するよ。
+A timecode cue jams LTC to a value.	タイムコードキューで LTC を指定の値に合わせるよ。
+Each output can show a different deck.	出力ごとに別のデッキを表示できるよ。
+The matrix sends audio to any channel.	マトリクスで任意のチャンネルに音声を送れるよ。
+The panel map numbers every LED tile.	パネルマップで各 LED タイルに番号を付けるよ。
+Hey!	ちょっと！
+Quit it!	やめてってば！
+Ow. That was rude.	痛っ。それはひどくない？
+I am a professional.	これでもプロなんだけど。
+Seriously?	本気でやってる？
+This is my monitor.	ここ、僕のモニターなんだけど。
+I am telling the operator.	オペレーターさんに言いつけるよ。
+All right. Wow.	へえ。そう来るんだ。
+Right. That does it.	はい、そこまで。
+I am leaving. Good luck with the show.	もう帰る。本番、頑張ってね。
+Still here? Me too.	まだいたの？ 僕もだけど。
+Long show, huh.	長丁場にもほどがあるよ。
+I could do this all day. Apparently.	一日中できるよ。できるとは言ったけどさ。
+You have been staring at me for hours.	もう何時間もこっち見てるね。
+Has anyone seen a clock?	今、何時？ 時計まで空気読んで止まった？
+Is it still the same show?	これ、まだ同じ公演？
+I'm not tired. You're tired.	疲れてないよ。そっちこそ。
+Five more minutes. Then five more.	あと5分。その5分、何回目？
+A whole day. I need a restart.	丸一日か。再起動させて。
+Save the show. Then let me sleep.	ショーを保存して。そしたらお布団が呼んでる。
+Every pixel of me is tired.	ピクセルまでお疲れ様です状態。
+Close me. Open me. I'll be fine.	閉じて、開き直して。たぶん復活する。
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	本番、よろしくお願いします！噛まないでね。
+Oh hey. It's 4:20. Take it easy.	あ、どうも。4:20だ。のんびりいこう。
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	こんにちは
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	ドバル・デン、スカピ。私はピクセル博士。5分でショーを回せるようになる。私の話を聞けば、もっと早い。
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	そして私はビデオ教授。最初はシンセ、それからビデオ。今はほとんどビデオだ。STARTを押して、パッチを…いや、始めよう。
+TURN THE OUTPUT ON	出力をオンにする
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	スカピ、画面が空っぽだ。お客さんを待たせない。メニューを開いて、出力オフを出力オンにする。アイデ！
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	第一課：オシレーターを…その、出力につなぐまで、何も出てこない。ビデオだ。わかっている。
+BRING IN A CLIP	クリップを入れる
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	次は映像。Iを押して、パソコンからクリップを選ぶ。クリップがない？SHOW MEを押せば、私のを貸してあげる。
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	クリップはどれもプレイリストのキューになる。サンプルを読み込むようなものだ。絵の入ったサンプルだね。
+TAKE IT LIVE	本番に出す
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	クリップがプレイリストで待っている。選んでTAKE。またはEnter。自信のあるオペレーターはEnterを押す。
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	TAKEはエンベロープのトリガー。ええと、GOボタンだ。同じものだよ、絵が入っているだけで。
+LINE UP THE NEXT ONE	次を用意する
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	別のキューをクリック。合図するまで、準備したまま待っている。キューが一つだけ？もう一つ読み込むか、SHOW ME。
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	選ぶことは再生ではない。選んだものはシーケンスの次の音。次のキューだ。
+CROSSFADE TO IT	クロスフェードする
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	カットは素人のやること。インスペクターでトランジションの＋を押して、deckではなく時間が出るようにする。それからTAKE。
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	クロスフェード！ポルタメントの映像版だ。時間はいくつでもいい。あと何回か押せば1秒。それからTAKE。
+CLEAR THE SCREEN	画面を消す
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	舞台で何か起きた？BLACKかBを押す。映像は消える。ショーは裏で動き続ける。
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	何も失われない。もう一度Bで戻ってくる。ミキサーのミュートと同じだ。とても落ち着く。
+SAVE THE SHOW	ショーを保存する
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	では保存。Ctrl+Sか保存。作業を消したうえに、あなたのせいにするソフトもある。私は絶対にしない。
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	パッチを保存。いや、ショーを。ショーだ。この練習用はDeckboy自身のフォルダにある。あなたのショーは無事だよ。
+THAT'S A SHOW	これでショーだ
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	これでショーだ！出力、キュー、TAKE、クロスフェード、BLACK、保存。ナズドラヴェ、スカピ。ラキヤは私のおごり。
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	本日の授業は終わり。サンプルのショーでレイヤー、タイトル、エフェクトが学べる。メニュー > LEARN THE BASICSでもう一度。
+*shakes head* That means yes. Bravo.	＊首を横に振る＊ これは「はい」という意味。ブラボー。
+Wonderful! Lovely signal flow.	素晴らしい！見事なシグナルフロー。
+Mm. I knew you had it in you.	うむ。君ならできると思っていた。
+Yes! Have a gold star. It's a dot.	よし！金の星をあげよう。点だけど。
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	次のステップに進む？ ＊首を横に振る＊ …それは「いいえ」という意味だよ、スカピ。光ってるやつ。君のために光ってる。
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	光ってるもの以外は全部クリックしたね。私のオシレーターでも光ってるのは見つけるよ。
+stop playback first - the lesson cannot hand a running show back as it was	先に再生を止めてください - 再生中のショーは、レッスン後に元通りには戻せません
+choose RECOVER or KEEP SAVED first	先にRECOVERかKEEP SAVEDを選んでください
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	ショーを保存できなかったので、レッスンは始まっていません。保存して（名前を付けて保存）もう一度どうぞ
+the practice show would not open	練習用のショーが開きませんでした
+could not start the practice show	練習用のショーを始められませんでした
+learn the basics: Esc leaves, and it picks up here next time	learn the basics：Escで抜けると、次回はここから再開します
+that's the basics - MENU > LESSONS has part two	基本はここまで - メニュー > LESSONSに第二部があります
+tour paused - LEARN THE BASICS picks up where you left off	ツアー一時停止 - LEARN THE BASICSで続きから再開
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	画面がミラーになってるよ、スカピ。何かキーを押すかクリックすれば、ピクセル博士が元に戻す。
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	画面が違うよ、スカピ。何かキーを押すかクリックすれば、ピクセル博士が元に戻す。
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	もう一つの画面がなくなったよ、スカピ。何かキーを押すかクリックすれば、ピクセル博士が元に戻す。
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	画面が一つだけだよ、スカピ。何かキーを押すかクリックすれば、ピクセル博士が元に戻す。
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	もう一つの画面がなくなったから、映像はこっちに戻ってきたよ、スカピ。後ろの小さなウィンドウに入れておいた。つなぎ直せば、映像はそっちに戻る。
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	卓を食べちゃった、スカピ。画面が一つだから、出力が全部取った。後ろの小さなウィンドウに入れておいた。本番には二つ目の画面を。
+IT ATE THE DESK	卓を食べちゃった
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	そこ。出力オフと書いてあるボタン。オンにして、スカピ。
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	フェード元が本番に出ていないよ、スカピ。まず一つのキューをTAKE、それからもう一つを選んで時間を付けて。
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	今のはカットだよ、スカピ。速いけど、クロスフェードじゃない。もう一つのキューを選んで、トランジションの＋、それからTAKE。
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	フィードバックループだ！出力がそのまま卓に戻されている。誰にでもあることだ。主に私に。1983年。1983年の話はしない。
+No more rakia. The rat has a problem.	ラキヤはもうおしまい。ネズミに問題がある。
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	ナズドラヴェ、スカピ！ベログラトチクの、おばあちゃんのラキヤ。レッスンに一杯だけ。
+Is this... is this allowed during a tutorial?	これは…これはチュートリアル中に許されるのか？
+*shakes head* That means one more.	＊首を横に振る＊ これは「もう一杯」という意味。
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	みんな大好きだ。オシレーターが大好きだ。出力が大好きだ。ビデオだ。わかってる。わかってるって。
+...and the rat took the rakia. Every time, skapi. Every single time.	…そしてネズミがラキヤを持っていった。毎回だよ、スカピ。毎回毎回。
+Was that a rat? In a hat? With a pizza?	今のはネズミ？帽子をかぶって？ピザを持って？
+Stop that. I am a serious man.	やめなさい。私はまじめな男だ。
+Do not tell Dr. Pixel about this.	ピクセル博士には内緒だよ。
+This never happened. Back to the patch bay.	何もなかった。パッチベイに戻ろう。
+It was the eighties. Everyone had a bow tie.	80年代だったんだ。みんな蝶ネクタイをしていた。
+LESSON LIST	レッスン一覧
+OPEN EXAMPLE SHOWS	サンプルのショーを開く
+EXIT (Esc)	終了 (Esc)
+Taking it on the road	ショーを持ち出す
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	出かける前にCHECKし、見つかったものを直して、メディアと一緒にまとめて保存する。
+Effects, oscillators and colour	エフェクト、オシレーター、色
+An effect, a ~ on its knob, and the colour picker.	エフェクト一つ、そのつまみの~、そしてカラーピッカー。
+The art school crit, with Mr. Salty	美大の講評会、ミスター・ソルティと
+Patterns, synths and Draw	パターン、シンセ、Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	テストパターン、ビデオシンセ、そして映像への書き込みを静止画で保存。
+The telestrator booth, with Coach Marv	解説席のテレストレーター、コーチ・マーヴと
+Masks	マスク
+A heart from the library, the pen, invert and feather.	ライブラリのハート、ペン、反転、ぼかし。
+The Signal Files: redact the evidence	シグナル・ファイル：証拠を隠せ
+Warp, blend and slices	ワープ、ブレンド、スライス
+A corner pin, two soft edges, then three slices in the Screens window.	コーナーピン、二つのソフトエッジ、そしてScreensウィンドウで三つのスライス。
+The haunted lighthouse, with Keeper Rook	幽霊灯台、灯台守ルークと
+GO from anywhere	どこからでもGO
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	キュー番号、GOTO、ホットキー、そしてCompanion、MIDI、OSCの入り口。
+The game show, with Donna Wheel	クイズ番組、司会ドナ・ウィールと
+Words on screen	画面の文字
+A Lower Third with a name on it, then a title card with a key-green backdrop.	名前入りのテロップ、それからクロマキー緑の背景のタイトル。
+The kaiju weather report, with June O'Neil	怪獣天気予報、ジューン・オニールと
+Keeping time	時間を守る
+A stage timer counting down, held, and a presenter view for the person on stage.	カウントダウンのステージタイマー、一時停止、そして舞台の人のための発表者ビュー。
+A grand day out, with Wallis and Grommet	ウォリスとグロメット、月へ行く
+Two playlists and TAKE ALL	二つのプレイリストとTAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	レイヤーとしての二つ目のプレイリスト、そして二つを同じ拍で変えるTAKE ALL。
+The magic show, with Turnip Top	マジックショー、ターニップ・トップと
+When it goes wrong	まずいことになったら
+BLACK against PANIC, and getting a show back.	BLACKとPANICの違い、そしてショーを取り戻すこと。
+The cooking show, with Chef Bork	料理番組、ボルク・シェフと
+Presets	プリセット
+Capture a look on a DASH button, change everything, and get it back with one press.	見た目をDASHのボタンに覚えさせ、全部変えて、一押しで取り戻す。
+Transitions	トランジション
+The styles beyond the crossfade: an iris, a shatter, and their times.	クロスフェードの先のスタイル：アイリス、シャッター、そしてその時間。
+The space-opera trailer, with Optimus Primetime	スペースオペラの予告編、オプティマス・プライムタイムと
+Sound	サウンド
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	キューにオーディオエフェクト、美しく壊すベンド、そしてパッチの在りか。
+The robot DJs, with Deft Funk	ロボットDJ、デフト・ファンクと
+Reading the scopes	スコープを読む
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	波形、ベクトルスコープ、フォールスカラー：あの光は本物か、ただ明るすぎるだけか？
+The Signal Files: is the glow on the horizon a craft?	シグナル・ファイル：地平線の光は宇宙船か？
+Out of the building	建物の外へ
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	NDI、SDI、ST 2110の在りか、そしてこのパソコンにあればNDIをオンに。
+Motion: Bug Swat	Motion：Bug Swat
+The webcam as a controller, as a game. Five rounds, a high score.	ウェブカメラをコントローラーに、ゲームに。5ラウンド、ハイスコア。
+A handheld, and bugs	携帯ゲーム機と、バグ
+The multiview	マルチビュー
+Windows, the ... menu, what each one shows, layouts, and tally.	ウィンドウ、...メニュー、それぞれの表示内容、レイアウト、タリー。
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	宇宙船カソード号の謎、ハイラ大尉とジンクリー少尉と
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: プレイリストが二つ：DeckboyはSUPER DECKBOYになる。よくやった、スカピ。
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: 進化した！私のオシレーターはファンファーレをもらったことがない。
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY！どのショーにもふさわしい。ブラボー。
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: パワーアップ！もっとプレイリスト、もっとレイヤー、もっとスーパー。
+Intro video (left on the office PC)	オープニング映像（会社のPCに置き忘れ）
+ON THE ROAD	旅に出る
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	ここで作ったショーが、今夜どこか別の場所のノートPCで動く、スカピ。STARTを押して。
+Before it travels: check it, fix it, bundle it.	出かける前に：チェック、修正、まとめて保存。
+See CHECK in the top bar? It only appears when something is wrong. Press it.	上のバーにCHECKが見える？何かおかしいときだけ出てくる。押して。
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	ショーがつまずくものを全部並べる：見つからないファイル、空のキュー、届かない出力。
+FIX IT	直す
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	オープニング映像は別のパソコンにある。選んで削除するか、ファイルがあればRELINK。
+Fix it at home, where it is easy. Not at the venue, where it is not.	直すのは家で。楽だから。会場ではやらない。楽じゃないから。
+BUNDLE IT	まとめて保存する
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	まとめて保存を押して、置き場所を選ぶ：USBメモリ、共有フォルダ。ショーとメディアが全部一緒に。
+The copy finds its media beside it, wherever the folder goes.	コピーは、フォルダがどこへ行っても、隣にあるメディアを見つける。
+SAFE TRAVELS	いってらっしゃい
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	チェック、修正、まとめて保存。別のマシンで、まとめたショーを開けば、全部あるべき場所にある。
+A show file is only text, so it travels light. The media is the heavy part.	ショーファイルはただのテキストだから、身軽に旅をする。重いのはメディアの方だ。
+Student work no. 4 (untitled)	学生作品 No.4（無題）
+THE CRIT	講評会
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	美大だよ、スカピ。学生一人、絵が一枚、何もかも見てきた批評家が一人。STARTを押して。
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	エフェクトは映像を変える。オシレーターは映像を変え続ける。批評家が好きなのは後者だけ。
+A grey square on beige. I have seen this at every graduate show since 1987.	ベージュに灰色の四角。1987年から、どの卒業制作展でも見てきた。
+AN EFFECT	エフェクト
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	インスペクターのEFFECTSで＋を押すと追加できる。まずはEdgesがいい。輪郭を描いてくれる。
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	何十種類もある。どれもCPUで数ミリ秒で動く。だいたいは。
+Take a risk! Bad art is fine. Boring art is a crime.	冒険しなさい！下手な作品はいい。退屈な作品は罪だ。
+A ~ ON ITS KNOB	つまみに~
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	横に~があるコントロールは、どれもオシレーターに従わせられる。一つ押して。つまみが呼吸を始める。
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	低周波オシレーター：目で追えるくらいゆっくり。0.25ヘルツは4秒の呼吸だ。
+Now it MOVES. Okay. Okay. I'm listening.	さあ、動いた。よし。よし。聞いてやろう。
+A COLOUR OF ITS OWN	自分だけの色
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Edgesの線のように色を描くエフェクトには、色のチップがある。開くとピッカー：色相環、名前の入力、画面からの色取り。
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	どんな色にもどこかで名前がある。私のは「オシロスコープ・グリーン」。誰も使わないがね。
+That colour is doing something. I don't know what. I love it.	その色、何かしている。何かはわからん。気に入った。
+THE VERDICT	講評
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	エフェクト、~、そして色。批評家が泣いているよ、スカピ。いい涙だと思う。
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	いくつか重ねて。どのつまみにも自分の~がある。こうして見た目はパフォーマンスになる。
+It's still a square. But it's YOUR square. Post it.	まだ四角だ。だが、君の四角だ。投稿しなさい。
+THE TELESTRATOR BOOTH	解説席
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	コーチ・マーヴは、映像に丸を描いてスポーツを解説する。一度、太陽に丸をつけた。10分だけだよ、スカピ。
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	今夜は：テストパターン、ビデオシンセ、映像への書き込み。STARTを押して。
+Get me a picture and a pen. BOOM.	映像とペンをくれ。ドーン。
+A TEST PATTERN	テストパターン
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	スクリーンの調整は本番の前。本番中じゃない。プロヴディフで学んだ。
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	どの卓にもテストパターンは必要。テストパターンでPocket Testを追加：本物の測定器で確認済み。
+A VIDEO SYNTH	ビデオシンセ
+He says 'no camera needed' like it is a feature. It is a feature.	彼は「カメラ不要」を、まるで機能のように言う。機能なんだ。
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	私のお気に入り。ソース、それからVideo Synth：オシレーター、ミラー、フィードバック。カメラ不要。
+TAKE THE SYNTH	シンセをTAKE
+Select it, then TAKE. Confident operators press Enter.	選んでTAKE。自信のあるオペレーターはEnterを押す。
+That's our replay. Every replay needs a pundit.	これがリプレイ。リプレイには必ず解説者が要る。
+Now here's a replay. And here's a guy. And BOOM, he's in it.	さあリプレイだ。ここに選手がいる。で、ドーン、こいつだ。
+A SECOND PLAYLIST	二つ目のプレイリスト
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	インクは上、自分のレイヤーに乗る。プレイリストのタブの最後にある＋を押して。
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	二つ目のプレイリストは、一つ目の上に重なるレイヤー。二つ目のオシレーターを上にミックスするように。
+A DRAW CUE	Drawのキュー
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	新しいプレイリストで：ソース、それからDraw。描いていないところは全部透明。
+A Draw cue is transparent outside the ink, so the synth shows through.	Drawのキューはインク以外が透明だから、下のシンセが透けて見える。
+TAKE THE INK	インクをTAKE
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	DrawのキューをTAKE。プレイリスト二つ、レイヤー二つ、映像は一つ。
+Now both are live: the synth underneath, the ink on top.	これで両方が本番：下にシンセ、上にインク。
+CIRCLE SOMETHING	丸で囲む
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	インスペクターでDRAWを押し、プログラムモニターに描く。マウスで、ペンがあればペンで。
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	ペンは筆圧で線が太くなる。マウスはいつも同じ強さ。私のようにね。
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	こいつを囲め！いや、もっと大きく。ドーン。それは雲だ。いいだろう。雲を囲め。
+SAVE A STILL	静止画を保存
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	SAVE STILLで、描いたものを背景透明の画像にして、プレイリストに加える。
+For next week's show. Coach Marv will want the cloud again.	来週の放送用だ。コーチ・マーヴはまた雲を欲しがるだろう。
+THAT'S THE BOOTH	解説席はここまで
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	パターン、シンセ、レイヤー、インク、静止画。ナズドラヴェ、スカピ。
+Try Replay in the Draw section: it draws your lines back the way you drew them.	DrawのReplayを試して：描いた線を、描いた通りに描き直す。
+Same time next week. Bring a bigger pen. And a turducken.	来週も同じ時間に。もっと太いペンを持ってこい。あと七面鳥の丸焼きも。
+Saucer photo (CLASSIFIED)	円盤の写真（極秘）
+THE SIGNAL FILES	シグナル・ファイル
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	説明不能信号局。捜査官二人、写真一枚、そして放送してはならない。STARTを押して。
+Masks cut a picture into shapes. Tonight we cut evidence.	マスクは映像を形に切り抜く。今夜は証拠を切り抜く。
+That's a craft, Brandt. Look at the lights. I want to believe.	あれは宇宙船よ、ブラント。あの光を見て。私は信じたい。
+A MASK FROM THE LIBRARY	ライブラリのマスク
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	インスペクターのMASKで：mask、それから「new heart」。形は何でもいい。ハートの方が面白い。
+The library has circles, stars, hearts. Each one is points you can move.	ライブラリには円、星、ハートがある。どれも動かせる点でできている。
+A heart, Hollis? The Bureau redacts with black bars.	ハートだと、ホリス？局は黒塗りで隠すんだ。
+THE PEN	ペン
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	ツールをペンにして、モニター上で円盤の周りをクリック。最初の点をクリックすると閉じる。
+Click for corners, drag for curves. The way the Bezier brothers intended.	クリックで角、ドラッグで曲線。ベジェ兄弟の思し召し通りに。
+Draw round it carefully. It might be watching.	慎重に囲んで。向こうも見ているかもしれない。
+INVERT	反転
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	反転は外側を残して、内側を切り抜く。円盤は消える。空は残る。
+The same shape, the other way round. Very useful. Slightly spooky.	同じ形を、裏返しに。とても便利。ちょっと不気味。
+Hollis, there's a heart-shaped hole in the sky.	ホリス、空にハート形の穴が開いてる。
+FEATHER	ぼかし
+Feather softens the edge, so nobody sees the cut. Press + on feather.	ぼかし（feather）で縁を柔らかくすれば、誰も切り口に気づかない。featherの＋を押して。
+A hard edge says 'someone was here'. A soft one says nothing at all.	硬い縁は「誰かがここにいた」と言う。柔らかい縁は何も言わない。
+They'll never know.	絶対にバレない。
+CASE CLOSED	事件解決
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	ライブラリの形、ペン、反転、ぼかし。局は感謝する。局はここにいなかった。
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	マスクはレイヤーにも、出力にも、そのマットにもかけられる：MASK ONで選ぶ。どのコントロールにも~がつく。
+The truth is in the waveform, Hollis. Next time, the scopes.	真実は波形の中にある、ホリス。次はスコープだ。
+The ghost	幽霊
+THE HAUNTED LIGHTHOUSE	幽霊灯台
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	灯台、幽霊、そしてランプと二人きりで長く過ごしすぎた灯台守。STARTを押して。
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	プロジェクションマッピング：建物に合わせて映像を曲げる。ワープ、ブレンド、スライス。
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	幽霊を窓に映したいんだろう。ランプに気をつけろ。ランプは「わし」のだ。
+THE OUTPUT'S GEOMETRY	出力のジオメトリ
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	メニュー、映像出力、ジオメトリ。出力の形はここにある。
+Geometry: the projector-menu word for 'what shape is the picture'.	ジオメトリ：プロジェクターのメニューで「映像はどんな形か」を表す言葉。
+PIN A CORNER	角をピンで留める
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	warp editを押して、プログラムモニターで角をドラッグ。窓は四角くない。灯台守も四角四面じゃない。
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	コーナーピンは四隅を動かす。パースのおかげで線は本物の窓のようにまっすぐ。
+LEFT! Ye call that a corner? I've seen straighter gulls.	左だ！それが角か？カモメの方がまだまっすぐだ。
+TWO SOFT EDGES	二つのソフトエッジ
+Back in Geometry: edge blend, + on the left and + on the right.	ジオメトリに戻って：edge blend、左に＋、右に＋。
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	二台のプロジェクターが重なる。重なりが二倍明るくならないよう、それぞれが縁をフェードさせる。
+THE SCREENS WINDOW	Screensウィンドウ
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	ジオメトリ、SLICES、開く。Screensウィンドウはスライスを切って配置する場所。
+A slice is a piece of the picture, put anywhere on the output.	スライスは映像の一部分で、出力のどこにでも置ける。
+THREE SLICES	三つのスライス
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Screensウィンドウで＋ SLICEを三回押し、それぞれの切り抜きを映像の三分の一にドラッグ。
+Three windows, three slices: left, middle and right of one picture.	窓が三つ、スライスが三つ：一枚の映像の左、真ん中、右。
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	窓が三つ。真ん中はランプのもの。真ん中は「いつも」ランプのものだ。
+THE GHOST IS PLEASED	幽霊は満足した
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	ワープ、ブレンド、スライス。灯台守はやっと眠れる。カモメは眠らない。
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	スライスにはScreensウィンドウで専用のワープとメッシュがある。位置と回転にも~。
+Ye did alright, lad. Now get away from the lamp.	悪くなかったぞ、若いの。さあ、ランプから離れろ。
+THE GAME SHOW	クイズ番組
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	クイズ番組だよ、スカピ。解答者三人、早押しボタン一つ、どこからでも出せるキュー。STARTを押して。
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	キュー番号、ホットキー、他のマシンからのGO。どの鍵盤からでも弾けるシーケンサーのように。
+Welcome to the show! Let's spin that wheel!	番組へようこそ！ルーレット、スタート！
+A CUE NUMBER	キュー番号
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	解答者3が選ばれている。インスペクターのメタデータで、キュー番号を付ける：3。
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	劇場はキューに番号を振る。Q3、Q3.5、Q12A。Deckboyは全部読める。
+I'd like to buy a number, please.	番号を一つ、お願いします。
+GO TO IT	そこへ飛ぶ
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G、番号を入力、Enter。リストがどこにあっても本番に出る。
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO。長いリストでいちばん速い道。スクロールより速い。私よりずっと速い。
+And the number is... three!	答えは…3番！
+A BUZZER	早押しボタン
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	解答者1が選ばれている。TRIGGERSでkey、それからF5。そのキーでこのキューが出る。
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1からF10、F12、テンキー。一つ一つが早押しボタン。
+Every contestant gets a buzzer.	解答者全員に早押しボタンを。
+BUZZ IN	早押し
+Press the key. The cue fires, wherever the list is standing.	キーを押して。リストがどこにあっても、キューが出る。
+No mouse, no list, no looking. Just the key.	マウスなし、リストなし、見なくていい。キーだけ。
+Buzz! We have a winner!	ピンポーン！正解者が出ました！
+FROM ANYWHERE	どこからでも
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion、MIDIノート、OSCメッセージ：メニュー、ネットワークで、それぞれの接続先がわかる。
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	隣の部屋のStream DeckでもGOを押せる。鍵盤シンセでも。私はシンセ派だ。
+And for our viewers at home: you can play along too.	そしてお茶の間の皆さん：一緒に遊べますよ。
+THAT'S OUR SHOW	番組はここまで
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	番号、GOTO、早押しボタン、どこからでもGO。君はもうクイズ番組だ、スカピ。
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	一つのキューに、キー、MIDIノート、OSCアドレスを同時に持たせられる。石橋を叩いて、もう一回叩いて渡る。
+Goodnight, everybody! Keep spinning!	皆さん、おやすみなさい！また来週！
+Weather map	天気図
+THE KAIJU WEATHER	怪獣天気予報
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	6チャンネルの天気予報だよ、スカピ。天気図、キャスター、そしてとても大きなトカゲ。STARTを押して。
+Words on screen: Lower Thirds, text, and backdrops.	画面の文字：テロップ、テキスト、背景。
+I'm June O'Neil, and nothing about this forecast is normal.	ジューン・オニールです。今日の予報は何一つ普通じゃありません。
+A LAYER FOR WORDS	文字のレイヤー
+Words go on their own layer: press the + at the end of the playlist tabs.	文字は自分のレイヤーに：プレイリストのタブの最後にある＋を押して。
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	二つ目のプレイリストは天気図の上のレイヤー。トカゲは下にいる。だいたいは。
+Words on top. Always on top.	文字は上。いつも上。
+A LOWER THIRD	テロップ
+In the new playlist: SOURCE, then Lower Third.	新しいプレイリストで：ソース、それからLower Third。
+A name and a title, low on the screen, out of the lizard's way.	名前と肩書き、画面の下の方、トカゲの邪魔にならないところ。
+HER NAME	彼女の名前
+In the inspector, title: type the presenter's name. The second line is her job.	インスペクターのtitleに、キャスターの名前を入力。二行目は肩書き。
+Spelling counts. The audience reads it at the speed of light.	誤字は禁物。視聴者は光の速さで読む。
+Spell it right. Last week it said 'Jane O'Meal'.	正しく書いて。先週は「ジューン・オニギリ」だった。
+ON AIR	オンエア
+TAKE the Lower Third. Her name slides in over the map.	テロップをTAKE。天気図の上に名前が滑り込む。
+Two layers live: the weather, and the words on top of it.	レイヤー二つが本番：天気と、その上の文字。
+Thank you. Now, about that lizard...	ありがとうございます。さて、あのトカゲですが…
+BREAKING NEWS	ニュース速報
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	ソース、それからText：タイトル。次に背景のチップ：スイッチャーで抜けるようにクロマキー緑。
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	背景は文字の後ろを埋める。クロマキーの緑か青なら、あとはスイッチャーがやる。
+Breaking news: it's standing on the five-day forecast.	速報です：週間予報の上に立っています。
+BREAKING: KAIJU	速報：怪獣
+BACK TO YOU	スタジオにお返しします
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	テロップ、名前、タイトル、背景。トカゲはスタジオを出たよ、スカピ。
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	テロップは自分で待って、滑って、去っていける。設定は全部そのセクションに。
+That's the weather. Back to you, guys. Run.	お天気でした。スタジオにお返しします。逃げて。
+A GRAND DAY OUT	月へのお出かけ
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	地下室で作ったロケットだよ、スカピ。そしてチーズが欲しい発明家。STARTを押して。
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	ステージタイマー：カウントダウン、時計、舞台の人のための発表者ビュー。
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	チーズだよ、グロメット！月はチーズでできてる。カウントダウンが要るな。
+A COUNTDOWN	カウントダウン
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	ソース、それからStage Timer。大きくて親しみやすい数字で減っていく時計。
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	残りが少なくなると色が変わる：白、琥珀、赤。時間のVUメーターだ。
+*raises an eyebrow*	＊片眉を上げる＊
+LIFT OFF	発射
+Select the timer and TAKE it. The countdown starts.	タイマーを選んでTAKE。カウントダウンが始まる。
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	ゼロを過ぎても続いて、超過時間を数える。とても正直。ちょっと失礼。
+Ten... nine... ooh, I do love a countdown.	10…9…ああ、カウントダウンは大好きだ。
+HOLD!	待った！
+Something's loose! Space holds the countdown. The clock shows it is held.	何か外れてる！スペースでカウントダウンを止める。時計に止まっていることが出る。
+A hold is not a stop. Space again, and it carries on from where it was.	一時停止は停止じゃない。もう一度スペースで、止めたところから続く。
+*holds up a spanner*	＊スパナを掲げる＊
+THE PILOT'S VIEW	パイロットの視界
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	メニュー、映像出力：出力の種類をPRESENTERに。舞台の人には、タイマー、次のキュー、メモが見える。
+A presenter view is an output like any other. Point it at the confidence monitor.	発表者ビューも、ほかと同じ出力の一つ。返しのモニターに向ければいい。
+So the pilot can see the time. The pilot is Grommet.	パイロットが時間を見られるように。パイロットはグロメットだ。
+TO THE MOON	月へ
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	カウントダウン、一時停止、パイロット用のビュー。ナズドラヴェ、スカピ。クラッカーを忘れずに。
+Timers can also count up, or show the time of day. Their section has the lot.	タイマーはカウントアップも、時刻表示もできる。全部そのセクションに。
+A grand day out, Grommet! Pass the crackers.	最高のお出かけだ、グロメット！クラッカー取って。
+The trunk (closed)	トランク（閉）
+The trunk (open)	トランク（開）
+THE MAGIC SHOW	マジックショー
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	マジックショーだよ、スカピ。トランク、小道具、そして全部が一度に変わる一拍。STARTを押して。
+Two playlists are two layers. TAKE ALL changes both together.	プレイリスト二つはレイヤー二つ。TAKE ALLで両方一緒に変わる。
+Every trick needs two things happening at once. And a rubber chicken.	どんな手品にも、同時に起こる二つのことが要る。あとゴムのニワトリ。
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	小道具は自分のレイヤーに。プレイリストのタブの最後にある＋を押して。
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	プレイリスト2はプレイリスト1の上に乗る。OHPのフィルムのように。
+Nothing up my sleeve. Everything in my trunk.	袖には何もありません。全部トランクの中。
+THE PROP	小道具
+In the new playlist, add anything: PATTERN will do. That is the prop.	新しいプレイリストに何でも追加：テストパターンでいい。それが小道具。
+Whatever it is, it will appear the instant the trunk opens.	何であれ、トランクが開いた瞬間に現れる。
+Is it a rubber chicken? It's always a rubber chicken.	ゴムのニワトリ？いつだってゴムのニワトリだ。
+The prop (rubber chicken)	小道具（ゴムのニワトリ）
+TA-DA	ジャジャーン
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	プレイリスト1で「トランク（開）」を、プレイリスト2で小道具を選ぶ。それからTAKE ALL：両方が同じ拍で。
+One press, every playlist's selected cue. The audience never sees the seam.	一押しで、すべてのプレイリストの選んだキュー。客席に継ぎ目は見えない。
+Ta-daaa! ...Hold for applause. Hold. Hold.	ジャジャーン！…拍手をお待ちください。待って。待って。
+THE PRESTIGE	最後の大仕掛け
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	レイヤー二つ、一拍。プレイリストには不透明度があって、どの出力にも乗せられる。ナズドラヴェ、スカピ。
+A magician never reveals. A playlist never minds being revealed.	マジシャンは種明かしをしない。プレイリストは種明かしされても気にしない。
+Thank you! I'm here all week! The chicken is here forever.	ありがとう！今週ずっと出てます！ニワトリは永遠に。
+The kitchen (on fire)	キッチン（炎上中）
+A lovely souffle	すてきなスフレ
+THE COOKING SHOW	料理番組
+A cooking show, skapi. Live. Everything is on fire. Press START.	料理番組だよ、スカピ。生放送。全部燃えてる。STARTを押して。
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	BLACKは映像を隠してショーを続ける。PANICは全部止める。どっちが要るか、知っておく。
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	ボルク ボルク！フルディ・フルディ、キッチンが火事だフルディ！
+The audience must not see this. Press BLACK, or B.	お客さんに見せてはいけない。BLACKかBを押して。
+The picture goes. The cue keeps playing underneath, ready to come back.	映像が消える。キューは裏で再生を続け、戻る準備をしている。
+Bork? Bork. Oh, de picture is gun.	ボルク？ボルク。おや、映像がいなくなった。
+AND BACK	そして戻る
+The fire's out. Press B again: the picture comes back, still running.	火は消えた。もう一度B：映像が戻る、再生したまま。
+Nothing was lost. A mute on a mixer, for pictures.	何も失っていない。映像用の、ミキサーのミュートだ。
+Ta-da! Still cookin'!	ジャジャーン！まだ料理中！
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	もっとひどいとき：メニュー、システム、SAFETYカード：PANIC。パニック設定の通りに全部止まる。
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	PANICは大きな赤いボタン。BLACKで足りないときに。それから深呼吸。
+Bork bork BORK!	ボルク ボルク ボルク！
+GET IT BACK	取り戻す
+Close MENU, select the souffle, and TAKE it. The show is back on.	メニューを閉じて、スフレを選んでTAKE。ショー再開。
+After a panic, the show is still there. Pick up where you meant to be.	パニックの後も、ショーはそこにある。いるはずだった場所から続ければいい。
+Voila! De souffle, he is risen!	ヴォワラ！スフレ、膨らんだ！
+BON APPETIT	召し上がれ
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACKで隠す、PANICで止める、TAKEで戻る。どんなキッチンでも生き残れるよ、スカピ。
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	パニック設定でPANICの動きを選ぶ：フェードアウト、カット、出力だけ。
+Bork bork bork! Goodnight!	ボルク ボルク ボルク！おやすみなさい！
+Look one	ルック1
+Look two	ルック2
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	プリセットだよ、スカピ。見た目まるごと覚えて、ボタン一つで戻す。STARTを押して。
+Like the patch memory on a synth: store, then recall.	シンセのパッチメモリーと同じ：保存して、呼び出す。
+THE DASH	DASH
+Press DASH: buttons of your own, for anything at all.	DASHを押して：何にでも使える、自分だけのボタン。
+Ctrl+D also works. Very fast. Very professional.	Ctrl+Dでもいい。とても速い。とてもプロっぽい。
+A PRESET BUTTON	プリセットボタン
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	＋を押して、「preset - a new preset from what is on now」。ボタンがこの見た目を覚える。
+Store. Like saving the patch before the drummer leans on the synth.	保存。ドラマーがシンセにもたれかかる前に、パッチを保存するように。
+CHANGE EVERYTHING	全部変える
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	DASHを閉じて（Esc）、ルック2を選んでTAKE。違う見た目だ。
+Change it all. Don't worry. It remembers.	全部変えて。心配ない。覚えている。
+ONE PRESS	一押し
+Open the DASH and press your preset button. The first look comes back.	DASHを開いて、プリセットボタンを押す。最初の見た目が戻る。
+Recall. The patch memory, returning. Beautiful.	呼び出し。パッチメモリーが帰ってくる。美しい。
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	見た目を保存して、呼び出す。プリセットはキュー、位置、エフェクト、レベル、ルーティングを覚えておける。どれを覚えるかはボタンのメニューで選ぶ。
+And a DASH button can run any command at all. Any. Even the exciting ones.	それにDASHのボタンは、どんなコマンドでも実行できる。どんなのでも。わくわくするのでも。
+Opening titles	オープニングタイトル
+The planet	惑星
+The battle	決戦
+THE TRAILER	予告編
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	スペースオペラの予告編だよ、スカピ。とても低い声のナレーターは、トランジションにうるさい。STARTを押して。
+A transition is how one cue becomes the next. There are far more than the crossfade.	トランジションは、キューが次のキューになる方法。クロスフェードのほかにもたくさんある。
+In a galaxy of content... one operator... must choose a transition.	コンテンツの銀河で…一人のオペレーターが…トランジションを選ばねばならない。
+A STYLE	スタイル
+'The planet' is selected. In the inspector, its transition style: choose iris.	「惑星」が選ばれている。インスペクターのトランジションのスタイルで：irisを選ぶ。
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	プッシュ、ワイプ、アイリス、白へのディップ。ポータルまである。半分は私が書いた。火曜日に。
+The planet deserves... a dramatic entrance.	惑星には…劇的な登場がふさわしい。
+A TIME	時間
+Give it a time: + on transition until it says a second or more.	時間を付ける：1秒以上になるまで、トランジションの＋。
+No time, no transition. A style needs a duration to do anything at all.	時間なし、トランジションなし。スタイルは長さがないと何もできない。
+ROLL IT	回せ
+TAKE the planet. Watch it arrive.	惑星をTAKE。到着を見届けよう。
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	トランジションは入ってくるキューのもの。どのキューも自分の登場を選ぶ。
+Autobots... roll the transition.	オートボット…トランジション、出動。
+THE BATTLE	決戦
+Now 'The battle': choose shatter, give it a time, and TAKE it.	次は「決戦」：shatterを選んで、時間を付けて、TAKE。
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	シャッターは古い映像をガラスのように落とす。お葬式ではやらないでください。
+Transform... and shatter out!	トランスフォーム…そして砕け散れ！
+IN CINEMAS NOW	絶賛上映中
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	スタイル、時間、そして二つのとても劇的な登場。ナズドラヴェ、スカピ。
+A playlist has a default style too, for every cue that does not choose its own.	プレイリストにもデフォルトのスタイルがある。自分で選ばないキューのために。
+Coming soon... to a desk near you.	近日公開…お近くの卓で。
+The beat	ビート
+THE ROBOT DJS	ロボットDJ
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	ロボットDJが二人だよ、スカピ。彼らはしゃべらない。ヘルメットがしゃべる。STARTを押して。
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	キューにはそれぞれオーディオエフェクトのチェーンがあって、わざと音を壊すものもある。
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> コンニチハ。キミノ ミックスヲ ナオシニ キマシタ。
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	ビートが選ばれている。AUDIO EFFECTSで＋を押すと追加。delayを試して。
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	ディレイ、リバーブ、フィルター、コンプレッサー。量（amount）はいつも「これを減らす」という意味。
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> モウイチド。エコーツキデ。エコー。エコー。
+A BEND	ベンド
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	もう一つ追加：crushのようなベンド。壊れたファイルのように音を傷める。
+The bends are my favourite. Like a tape left in the sun. On purpose.	ベンドは私のお気に入り。日なたに置き忘れたテープのように。わざとね。
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> モット ハゲシク。モット ヨク。モット サクサク。モット オオキク。
+THE PATCH	パッチ
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	メニュー、オーディオ：各プレイリストの音の行き先と、名前付き出力のパッチ。
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	スピーカー、モニター、ドラマーのイヤモニ。パッチがそれぞれに届ける。
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> ミックス イッシュウ。ミックス イッシュウ。ミックス イッシュウ。
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	エフェクト、ベンド、パッチ。ロボットたちも満足だよ、スカピ。たぶん。顔がヘルメットだから。
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	オーディオエフェクトもどれも~に従う。Motionにも。ディレイに手を振ってごらん。素晴らしいよ。
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> アリガトウ。オヤスミ。ワレワレハ ロボットダ。
+The glow on the horizon (evidence #2)	地平線の光（証拠2号）
+EVIDENCE #2	証拠2号
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	また局だよ、スカピ。地平線の光と、意見の合わない捜査官二人。STARTを押して。
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	スコープは映像を測る：明るさ、色、レベル。数字であって、意見ではない。
+It's them, Brandt. It's a craft. Look how it glows.	あれよ、ブラント。宇宙船よ。あの光り方を見て。
+THE REAL SIGNAL	本物の信号
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	スコープは実際に出ていくものだけを読む。プレビューは読まない。出力をオンに：メニュー、映像出力、出力オフ。
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	縮小したプレビューを測るのは、コピーを測るようなもの。私たちは原本を測る。
+Chain of evidence, Hollis. The real signal or nothing.	証拠の管理だ、ホリス。本物の信号か、何もなしか。
+THE SCOPES	スコープ
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	メニューを閉じる。モニターの上のPROGRAMボタン：SCOPESかBOTHになるまで押す。
+Both shows the picture and its scopes side by side. Very civilised.	BOTHは映像とスコープを並べて表示する。とても文化的だ。
+Let the scopes decide, Hollis.	スコープに決めさせよう、ホリス。
+THE WAVEFORM	波形
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	波形をクリックして大きくする。明るいものは上、暗いものは下、左右は映像と同じ。
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	光は上の方のあのとがり。とても明るい。明るいことは、宇宙人とは違う。
+Look at the peak. Nothing a streetlight couldn't do.	ピークを見ろ。街灯でも出せる程度だ。
+THE VECTORSCOPE	ベクトルスコープ
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	もう一度クリックで戻り、ベクトルスコープをクリック：色が円の周りに並ぶ。鮮やかな色ほど縁へ向かう。
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	マゼンタ、ずっと縁の方。強い色だ。強いことは違法じゃない。まだね。
+It's off the chart, Brandt! Literally off the chart!	グラフからはみ出してる、ブラント！文字通り！
+FALSE COLOUR	フォールスカラー
+And false colour: red is clipped, yellow nearly. Is the glow red?	それにフォールスカラー：赤はクリップ、黄色はもう少し。光は赤い？
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	クリップとは、信号が運べる一番明るいところで、その先は失われていること。ディテールが消える。
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	赤。クリップ。宇宙人じゃない、ホリス。ただ明るすぎるだけだ。事件解決。
+THE TRUTH	真実
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	波形、ベクトルスコープ、フォールスカラー。スコープが決着をつけたよ、スカピ。捜査官たちはつけていない。
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	SCOPES SOURCEはどの出力でも読める。マトリクスは709か2020。興味がある人に。
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	街灯にしては明るすぎる、ブラント。何にしても明るすぎる。…私は信じたい。
+OUT OF THE BUILDING	建物の外へ
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	ケーブルやネットワークで出ていく映像だよ、スカピ。画面の中のウィンドウだけじゃない。STARTを押して。
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	ネットワークでNDI、DeckLinkカードからSDI、放送局向けにST 2110。
+THE DEVICES PAGE	デバイスのページ
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	メニュー、映像出力、デバイス：出力がこのパソコンから出ていく、あらゆる方法。
+Each one says whether this machine can do it, and what it needs if not.	それぞれ、このマシンでできるかどうか、できないなら何が必要かを教えてくれる。
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	このパソコンにNDIがあれば、NDI SENDINGをオンに：映像がネットワークに出る。なければSHOW MEで先へ。
+NDI finds itself on the network. No cables, only a good switch and patience.	NDIはネットワーク上で勝手に見つかる。ケーブルは要らない。いいスイッチと忍耐だけ。
+OUT THERE	外の世界
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	出力のページに残りがある：DeckLinkカードのSDI、NMOS付きのST 2110、Spout、Syphon。
+Every one is just an output. The show does not know or care how it leaves.	どれもただの出力。ショーは、自分がどうやって出ていくかを知らないし、気にしない。
+Nebula ahead	前方に星雲
+Engine room	機関室
+Deck 3: something moving	第3デッキ：何かが動いている
+THE BRIDGE	ブリッジ
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	宇宙船カソード号のブリッジだよ、スカピ。映像が四つ、メインスクリーンが一つ、謎が一つ。STARTを押して。
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	マルチビューは全プレイリストを一度に見せる。オシロスコープの壁のように。ただし宇宙で。
+Frequencies open, Captain. All of them. That's the problem.	周波数、開いています、艦長。全部。それが問題なんです。
+MULTI, above the monitor: every playlist in its own window.	モニターの上のMULTI：プレイリストごとに自分のウィンドウ。
+One window per playlist, the programme first.	プレイリスト一つにウィンドウ一つ、プログラムが最初。
+Jinkys! Four feeds. And one of them has a monster in it.	ジンキーズ！映像が四つ。そのうち一つに怪物がいる。
+WHAT'S NEXT	次に出るもの
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	ウィンドウを追加（＋）して、その...メニューで：NEXTを表示させる。TAKEを押したときに出るもの。
+Every window has a ... button. It chooses what that window shows.	どのウィンドウにも...ボタンがある。そのウィンドウに何を映すかを選ぶ。
+I need to see who's calling before they reach the main viewer.	メインスクリーンに出る前に、誰からの通信か見ておきたいの。
+A CLOCK	時計
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	もう一つウィンドウを足して、時計を表示。時計を見るオペレーターは遅れない。だいたいは。
+Time of day, big. Stardates are just very long timecode.	時刻を大きく。宇宙暦は、ものすごく長いタイムコードにすぎない。
+The monster only shows up at midnight. We're going to need a clock.	怪物が出るのは真夜中だけ。時計が要るわね。
+ONE BIG ONE	大きいのを一つ
+Any window's ... menu, then a layout: one big, the rest small.	どれかのウィンドウの...メニュー、それからレイアウト：一つを大きく、残りは小さく。
+The big window is window one. Usually the programme. Usually.	大きいウィンドウはウィンドウ1。たいていはプログラム。たいていはね。
+Main viewer big. The captain likes it big.	メインスクリーンを大きく。艦長は大きいのがお好き。
+ON SCREEN	スクリーンへ
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	プレイリスト3で第3デッキを選んでTAKE。そのウィンドウを見て。
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	赤い枠がタリー：放送中のウィンドウ。宇宙船で言う「スクリーンに出せ」だ。
+There! Feed three! Put it on screen!	そこ！映像3！スクリーンに出して！
+THAT'S A WRAP	撮影終了
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	ウィンドウ、...メニュー、NEXT、時計、レイアウト、タリー。謎は解けたよ、スカピ。
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	ウィンドウには出力を、ワープとスライスごと映すこともできる。灯台のときに便利。
+And the monster was... the ship's cook, all along. Jinkys.	そして怪物の正体は…最初からずっと船のコックでした。ジンキーズ。
+there is no such lesson	そんなレッスンはありません
+finish or leave the lesson you are in first	先に今のレッスンを終えるか、抜けてください
+leave Bug Swat first	先にBug Swatを抜けてください
+Psst. It's me, the desk. I'll be watching. Supportively.	ねえ。私だよ、卓だよ。見守ってるからね。応援しながら。
+Hi! I'm the one doing all of this, by the way.	やあ！ちなみに、これ全部やってるのは私だよ。
+Ctrl+D opens the DASH. I'm just saying.	Ctrl+DでDASHが開くよ。一応言っておくね。
+Nearly there. I can feel it in my pixels.	もう少し。ピクセルで感じる。
+You're good at this. I can tell. I'm the one doing it.	上手だね。わかるよ。やってるのは私だから。
+Every click, I heard. Every single one.	クリックは全部聞こえてた。一回残らず。
+The glowing one. I can see it from here. It's glowing for you.	光ってるやつ。ここから見えるよ。君のために光ってるんだ。
+lesson paused - MENU > LESSONS picks up where you left off	レッスン一時停止 - メニュー > LESSONSで続きから再開
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  信号：映像は何でできていて、どう曲げるのか。レッスンを選んで。
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  ショーを回すこと、スカピ。手は速く、顔は涼しく。レッスンを選んで。
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	レッスン  -  第二部  -  誰についていく？
+FOLLOW PROF. VIDEO	ビデオ教授についていく
+FOLLOW DR. PIXEL	ピクセル博士についていく
+the signal	信号
+running the show	ショーを回す
+PICK UP	続きから
+CLOSE (Esc)	閉じる (Esc)
+PART ONE: THE BASICS	第一部：基本
+finish or leave LEARN THE BASICS first	先にLEARN THE BASICSを終えるか、抜けてください
+bug swat: Esc leaves, and your show comes back as it was	bug swat：Escで抜けると、ショーは元通りに戻ります
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat：ショーが戻りました。Motionの設定は設定 > オーディオにあります
+TURN MOTION ON	MOTIONをオンに
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	バグがキューリストに這ってくる！カメラに手を振って叩き落とそう。まずMotion：MOTION CONTROLでONにして、何を読むか（READS）を選ぶ。
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	こいつはNullPointer。中身が空っぽで、何も指していない。指一本ではすり抜ける。手のひら全体を使って、スカピ。
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	タクシーを止めるみたいに手を振って！小さくて礼儀正しいタクシーをね。ボタンじゃない。タクシーだ。
+DRAW TWO ZONES	ゾーンを二つ描く
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition：双子で、どっちも自分が先だと思っている。読み取り一つでは両手を区別できないから、Motionの映像にZONESを左右一つずつドラッグして。
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	二匹同時に叩く。片方だけ叩くと入れ替わる。結婚式の私のいとこたちみたいに。
+One hand each side. Together! Together!	片手ずつ左右に。一緒に！一緒に！
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One。バグは顔じゃない。端っこの小さな余分な一節だ。小さな動きには細かい読み取りが要る。SENSITIVITYを5%まで下げて。
+Lower number, finer reading. Yes, I also think it is backwards.	数字が小さいほど、読み取りが細かい。そう、私も逆だと思う。
+Not the face. The little one on the end. Wiggle a finger.	顔じゃない。端っこの小さいやつ。指をくねくねさせて。
+FALL 1.5 S OR MORE	FALLを1.5秒以上に
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak。読み取りが高いままのときだけ離れる。FALLを1.5秒以上に長くして、振りを一つにつなげよう。
+Slow and steady, skapi. Like paying back a loan.	ゆっくり着実に、スカピ。ローンの返済みたいに。
+Sweep, and sweep again. Let the fall carry you between.	振って、また振って。あいだは下がる時間に運んでもらう。
+MOTION X ON A TONE	MOTION Xにトーンを
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	ハイゼンバグだ！動くたびに消えていく。トーンのキューのピッチをMotion Xにつないで、耳で追いかけて：近づくとチクタクが速くなる。
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	SHOW MEでトーンを作ってあげる。高いのは右。低いのは左。じっとしていれば戻ってくる。
+Follow it. Listen. Faster ticking, closer bug.	追いかけて。聞いて。チクタクが速いほど、バグは近い。
+Waving paw	手を振る肉球
+Heisenbug finder	ハイゼンバグ探知機
+FIXED! Lovely signal flow.	修正完了！見事なシグナルフロー。
+Closed as fixed. No regressions. Probably.	修正済みでクローズ。デグレなし。たぶん。
+Squashed! Ship it.	撃破！リリースだ。
+One reached the cue list. It has filed a bug report about you.	一匹キューリストに着いた。君についてのバグ報告を出したよ。
+Skapi. It is a handheld. You do not press it. You wave at it.	スカピ。これは手持ちのゲーム機。押すものじゃない。手を振るものだ。
+The buttons are for menus. The bugs are for flailing.	ボタンはメニュー用。バグには腕を振り回すの。
+The D-pad is decorative. Like my diploma.	十字キーは飾りだ。私の卒業証書と同じでね。
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	1989年には私たちもボタンを押していた。それから手を振ることを覚えた。もう戻れない。
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	強く押しても無駄。バグはボタンを感じない。腕だけを感じる。
+It's called a handheld because your hands are held... up. In the air. Waving.	「手持ち」ゲーム機と言うのは、手を持ち上げるからだよ。空中に。振りながら。
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	マウス？マウスでバグを叩いてるの？ブルガリアなら、マウスはバグの味方だよ。ネズミだから。
+Lovely clicking. Very crisp. The camera saw none of it.	いいクリックだ。とても歯切れがいい。カメラは一つも見ていない。
+DONE FOR YOU - PRESS START	代わりにやっておいた - STARTを押して
+DONE! PRESS START	完了！STARTを押して
+SELECT OPENS MOTION CONTROL	SELECTでMOTION CONTROLを開く
+ALL BUGS FIXED	バグ全部修正
+GAME OVER	ゲームオーバー
+NEW HIGH SCORE!	ハイスコア更新！
+START PLAYS AGAIN	STARTでもう一回
+Nazdrave, skapi. Now go and fix real bugs.	ナズドラヴェ、スカピ。さあ、本物のバグを直しにいこう。
+Every one of those is a real Motion control. Put them on any ~ knob you like.	あれはどれも本物のMotionのコントロール。好きな~つまみにつないでいい。
+SELECT: MOTION	SELECT：MOTION
+START: AGAIN	START：もう一回
+START: PLAY	START：プレイ
+# --- end of tutorials ---
+Splash	起動画面
+Beast mode	ビーストモード
+MIDI MAP	MIDIマップ
++ ADD	+ 追加
+LEARN	学習
+LISTENING...	待機中...
+BACK	戻る
+READY-MADE...	既製...
+Message	メッセージ
+Runs	実行
+On	対象
+Now	現在
+Map	マップ
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	MIDI入力はオフです。MIDI CONTROLでオンにしてください。OSCの行はそのまま応答します。
+LEARN: move a knob or press a key on the controller...	学習：コントローラーのつまみを回すかキーを押してください...
+1 · WHAT COMES IN	1 · 入ってくるもの
+learn it, or say how to read it	学習するか、読み方を指定
+2 · WHAT IT RUNS	2 · 実行するもの
+any command, {value} is the number	任意のコマンド、{value}が数値
+3 · WHAT IT RUNS ON	3 · 対象
+aimed here; the desk never moves	ここを狙う。デスクは動かない
+Port	ポート
+Read as	読み方
+Hold for	長押し
+Command	コマンド
+From	最小
+Centre	中央
+To	最大
+Pickup	ピックアップ
+On release	離したとき
+Runs on	対象
+Playlist	プレイリスト
+Cue	キュー
+Saved with	保存先
+Row	行
+DELETE	削除
+THE SHOW	ショー
+THIS COMPUTER	このコンピューター
+any port	すべてのポート
+the desk	デスク
+the selected cue	選択中のキュー
+what is on air	オンエア中のもの
+one named cue	名前付きキュー
+the focused one	フォーカス中
+Test: move it on the controller	テスト：コントローラーで動かしてください
+knob 0-127	つまみ 0-127
+endless encoder	エンドレスエンコーダー
+14-bit	14ビット
+press	押す
+hold	保持
+press + release	押す＋離す
+play	演奏
+on press	押したとき
+plays	演奏
+SLICES	スライス
+MULTIVIEW	マルチビュー
+LED MAP	LEDマップ
+LAYOUT	レイアウト
+FEEDS: pick a window, then one of these	ソース：ウィンドウを選び、次にこの中から一つ
++ CHOOSE A FEED	+ ソースを選ぶ
+audio meter	音声メーター
+safe areas	セーフエリア
++ ONE AFTER THIS	+ この後に追加
+- REMOVE THIS ONE	- これを削除
+ONE PER PLAYLIST	プレイリストごとに一つ
+on the desk	デスク上
+tile width	タイルの幅
+tile height	タイルの高さ
+LISTENS: OFF	聴く：オフ
+LISTENS: the figure follows the sound	聴く：図形が音を追う
+import an SVG...	SVGを読み込む...
+the selected cue in playlist {n}	プレイリスト{n}の選択中のキュー
+the selected cue in the focused playlist	フォーカス中のプレイリストの選択中のキュー
+on air in playlist {n}	プレイリスト{n}のオンエア中
+on air in the focused playlist	フォーカス中のプレイリストのオンエア中
+cue "{n}"	キュー「{n}」
+hold {n} s	{n}秒長押し
+any	すべて
+built in	組み込み
+show	ショー
+motion	モーション
+METADATA	メタデータ
+generated	生成済み
+Fit	全体表示
+inf	無限
+NO	いいえ
+YES	はい
+UP	上へ
+DOWN	下へ
+Left	左
+Right	右
+Top	上
+Bottom	下
+add	追加
+all	すべて
+none	なし
+Cut	カット
+Fade	フェード
+Load	読込
+Pause	一時停止
+Resume	再開
+Start	開始
+Skip	スキップ
+Arm	アーム
+Disarm	アーム解除
+ONE	1つ
+ONCE	1回
+Size	サイズ
+Width	幅
+amount	量
+brightness	明るさ
+contrast	コントラスト
+saturation	彩度
+hue	色相
+level	レベル
+speed	速度
+style	スタイル
+title	タイトル
+subtitle	サブタイトル
+notes	メモ
+font	フォント
+frame	フレーム
+type	種類
+state	状態
+blend	合成
+align	整列
+line	線
+box	四角
+oval	楕円
+brush	ブラシ
+eraser	消しゴム
+mask	マスク
+grow	拡張
+subtract	減算
+split	分割
+stacked	積み重ね
+soft	ソフト
+tolerance	許容値
+curve	カーブ
+Linear	リニア
+Ease in	イーズイン
+Ease out	イーズアウト
+S-curve	S字カーブ
+Position X	X位置
+Position Y	Y位置
+Deck volume	デッキ音量
+Deck opacity	デッキ不透明度
+Master dimmer	マスターディマー
+Cue brightness	キューの明るさ
+Cue contrast	キューのコントラスト
+Cue saturation	キューの彩度
+Cue hue	キューの色相
+no effects	エフェクトなし
+no audio effects	音声エフェクトなし
+nothing yet	まだありません
+no output	出力なし
+no window	ウィンドウなし
+source missing	ソースなし
+waiting for a picture	映像を待機中
+clear frame	フレームを消去
+undo stroke	線を元に戻す
+save still	静止画を保存
+save animation	アニメを保存
+export	書き出し
+repeats	繰り返し数
+hold last	最終フレーム保持
+end action	終了時の動作
+cue id	キューID
+goto target	ジャンプ先
+set	設定
+send	送信
+run	実行
+idle	待機
+standby	スタンバイ
+Loop	ループ
+loop forever	無限ループ
+PATCH	パッチ
+OUTPUTS	出力
+SECTIONS	セクション
+Video Synth	ビデオシンセ
+Browser	ブラウザー
+Browser Cue	ブラウザーキュー
+Window Source	ウィンドウソース
+Camera Source	カメラソース
+NDI Source	NDIソース
+DeckLink Input	DeckLink入力
+Syphon/Spout Source	Syphon/Spoutソース
+Live stream cue	ライブ配信キュー
+Composite	合成
+Composite scene cue	合成シーンキュー
+Lower Third	ローワーサード
+Lower Third overlay cue	ローワーサードキュー
+PIP overlay cue	PIPオーバーレイキュー
+MIDI File	MIDIファイル
+Master	マスター
+Memo	メモ
+Mic	マイク
+Timer	タイマー
+Tone	トーン
+Script	スクリプト
+Target	ターゲット
+Draw	描画
+Code	コード
+Clouds	雲
+Swirl	渦
+Moire	モアレ
+Picture	映像
+Placement	配置
+Frame lock	フレームロック
+Suspend	サスペンド
+Seam	継ぎ目
+High pass	ハイパス
+Low pass	ローパス
+Tilt EQ	ティルトEQ
+Compressor	コンプレッサー
+Gate	ゲート
+Delay	ディレイ
+Reverb	リバーブ
+Binaural	バイノーラル
+Crush	クラッシュ
+Word	ワード
+Scrub	スクラブ
+Short	ショート
+Shatter	粉砕
+Pulse	パルス
+Crawl	横スクロール
+Typewriter	タイプライター
+Oscilloscope	オシロスコープ
+Spectrum	スペクトル
+Level Meters	レベルメーター
+Waveform	波形
+EFFECTS	エフェクト
+TRIGGERS	トリガー
+SEQUENCE	シーケンス
+MOTION CONTROL	モーション制御
+THIS CUE	このキュー
+FUNCTIONS	機能
+VALUES	値
+KEYS	キー
+FREEZE	フリーズ
+FROZEN	フリーズ中
+BYPASSED	バイパス中
+BYPASS ALL	全バイパス
+DEFAULTS	既定値
+CHANGE	変更
+CHOOSE	選択
+Stop all	すべて停止
+Pause all	すべて一時停止
+Resume all	すべて再開
+Do not continue	続行しない
+Auto-continue	自動続行
+Auto-follow	終了後に続行
+END HOLD	終了 保持
+END LOOP	終了 ループ
+END NEXT	終了 次へ
+END STOP	終了 停止
+OUTPUT EFFECTS	出力エフェクト
+LIVE CAPTIONS	ライブ字幕
+captions	字幕
+Name Card	ネームカード
+TEST CARD	テストカード
+TEST CARD ON	テストカード有効
+EXPORT CARD	カードを書出し
+EXPORTING...	書き出し中...
+LOW LATENCY	低遅延
+WEB MONITOR	ウェブモニター
+PHONE & TABLET	スマホとタブレット
+SCAN TO PAIR	スキャンして接続
+WITH SOUND	音声あり
+THE NETWORK	ネットワーク
+FIXTURES	照明器具
+ADD FIXTURE	照明を追加
+Dimmer	ディマー
+Dimmer + RGB	ディマー + RGB
+Dimmer + temperature	ディマー + 色温度
+QR CODE	QRコード
+loop	ループ
+inherit	継承
+Fill	フィル
+Stretch	引き伸ばし
+Dissolve	ディゾルブ
+Pattern	パターン
+mixed	混在
+selected cue lane  |  TAKE to make it live	選択キューのレーン  |  TAKEでライブへ
+Dip to black	黒経由
+Dip to white	白経由
+Iris	アイリス
+Push left	左へプッシュ
+Push right	右へプッシュ
+Push up	上へプッシュ
+Push down	下へプッシュ
+Wipe left	左ワイプ
+Wipe right	右ワイプ
+Wipe up	上ワイプ
+Wipe down	下ワイプ
+Still	静止画
+Timecode	タイムコード
+address	アドレス
+auto next	自動で次へ
+continue	続行
+deck fader	デッキフェーダー
+fire	発火
+in	イン
+out	アウト
+pan	パン
+routing	ルーティング
+trim	トリム
+0-63, the hardware's own gain range.	0-63、機器本来のゲイン範囲。
+1-16, as the desk counts them	1-16、デスクの数え方で
+7-segment, blocky, or a real font	7セグ、ブロック、または実フォント
+[ / ] keys — fade-in duration	[ / ] キー：フェードイン時間
+a camera moves the ~ controls	カメラが ~ のコントロールを動かす
+a chain on a device, after the mix	ミックス後のデバイス上のチェーン
+a comment	コメント
+Act now, without taking the cue	キューを取らずに今実行
+Add a light	ライトを追加
+add a second output to pair	ペアにする2つ目の出力を追加
+add shape	図形を追加
+all driven by the cue's own transport	すべてキーのトランスポートで動く
+All interfaces; trusted machines only.	全インターフェース、信頼済みのマシンのみ。
+all to 0	すべて0に
+An audio effect's knob	オーディオエフェクトのノブ
+An effect's knob	エフェクトのノブ
+any channel	全チャンネル
+any window, any screen	どのウィンドウ、どの画面でも
+arcade	アーケード
+Arm this cue as the one GO will fire	次のGOで発火するようこのキューを準備
+Art-Net port address, 0-32767	Art-Netポートアドレス、0-32767
+Attached overlays fire on TAKE only	付属オーバーレイはTAKEでのみ発火
+BACK TO BUG SWAT	BUG SWATへ戻る
+backdrop	背景
+bar	バー
+bg alpha	背景アルファ
+black lift	黒レベル持ち上げ
+blend gamma	ブレンドガンマ
+blueprint	青写真
+boxes	ボックス
+bracket	ブラケット
+bulletin	速報
+by density	密度順
+BY FIXTURE	機器別
+capsule	カプセル
+caption	キャプション
+card	カード
+CARD OFF ALL	全カードオフ
+CARD ON ALL	全カードオン
+cartridge	カートリッジ
+cassette	カセット
+Ceiling	上限
+Chain	チェーン
+Changing this re-prepares the cue.	変更するとキューを再準備します。
+channel list is not readable	チャンネル一覧を読めません
+CHANNELS	チャンネル
+channels on your interfaces, by name	インターフェースのチャンネル（名前で）
+Checkerboard	市松模様
+chime amber	黄色のチャイム
+chime red	赤のチャイム
+chime zero	ゼロのチャイム
+Choose startup mode:	起動モードを選択：
+circle, heart, star...	円、ハート、星...
+circuit	回路
+CLASSIC VIEW	クラシック表示
+clear driver	ドライバーをクリア
+Clear in/out trim points	イン/アウト点をクリア
+CLEAR OVERLAY  [Backspace]	オーバーレイを消去  [Backspace]
+Clear the active Lower Third overlay now	有効なLower Thirdを今消す
+Clear the live PIP overlay now	PIPオーバーレイを今消す
+CLICK ANYWHERE...	どこかをクリック...
+click or Esc to close	クリックかEscで閉じる
+click this window	このウィンドウをクリック
+Click to edit cue notes	クリックでキューのメモを編集
+click to open the grid	クリックでグリッドを開く
+Click to seek — drag to scrub	クリックで移動、ドラッグでスクラブ
+Click to type it	クリックして入力
+comic	コミック
+Companion passphrase	Companionパスフレーズ
+confetti	紙吹雪
+Connections at once	同時接続数
+count up	カウントアップ
+Countdown, count up, or wall clock	カウントダウン、カウントアップ、時刻
+credit	クレジット
+crossfade	クロスフェード
+crosshair	十字線
+Crosshatch	クロスハッチ
+Cue has no audio	キューに音声なし
+cue number	キュー番号
+Cycle end action for selected cues	選択キューの終了動作を切替
+Cycle which slot drives scene audio	シーン音声を出すスロットを切替
+dateline	デートライン
+deck	デッキ
+decoder spin-up	デコーダー起動
+Default App Feed	既定のアプリ入力
+Default Camera	既定のカメラ
+Delay before the continue fires	続行が発火するまでの遅延
+Delay between GO and this cue starting	GOからキュー開始までの遅延
+depth 1 turns it all the way round	深さ1で一回転
+Digit colour once amber is reached	黄色になった後の数字の色
+Digit colour while there is time in hand	時間に余裕がある時の数字の色
+diskette	フロッピー
+Do it now, without taking the cue	キューを取らずに今実行
+dossier	ドシエ
+dotmatrix	ドットマトリクス
+Double-GO guard	GO二重押し防止
+draw on the monitor	モニターに描く
+driver speed	ドライバー速度
+EDGE BLEND	エッジブレンド
+EDIT is on: typing changes the show	EDITがオン：入力でショーが変わります
+edit on the monitor	モニターで編集
+Edit the main Lower Third title	Lower Thirdの主タイトルを編集
+Edit the secondary Lower Third line	Lower Thirdの2行目を編集
+eq band	EQバンド
+equalizer	イコライザー
+Esc cancels	Escでキャンセル
+Esc cancels, arrows nudge	Escでキャンセル、矢印で微調整
+Esc to close	Escで閉じる
+even grid	均等グリッド
+EXAMPLE SHOWS	サンプルショー
+EXIT  Esc	終了  Esc
+face	顔
+factory settings	工場設定
+Fade+LoadNext	フェード+次を読込
+Fade+Pause	フェード+一時停止
+Fade+Rewind	フェード+巻戻し
+Fade-in duration	フェードイン時間
+Fade-in duration for this cue	このキューのフェードイン時間
+Fade-out duration	フェードアウト時間
+Fade-out duration before next cue	次のキュー前のフェードアウト時間
+Fade-out duration for this cue	このキューのフェードアウト時間
+Fall	下降
+false colour reads SDR pictures	フォルスカラーはSDR映像を読む
+fill the frame	画面いっぱいに
+find a named colour	色名で探す
+fires cues	キューを発火
+first available	最初の空き
+Fit/Fill/Stretch/Unscaled	フィット/フィル/引き伸ばし/等倍
+Fixed repeat count — 0 = infinite	固定リピート：0 = 無限
+Fixed repeat count — 0 = loop forever	固定リピート：0 = 永久ループ
+FIXED!	修正完了！
+flag	フラッグ
+FORGET MY DEFAULTS	既定値を忘れる
+Frames a second	毎秒フレーム数
+from exactly this routing	このルーティングから正確に
+Full Black	全黒
+Full Blue	全青
+Full Green	全緑
+Full Red	全赤
+Full White	全白
+garden	庭園
+Ghastly	不気味
+glass	ガラス
+glitch down	グリッチ下
+glitch drift	グリッチの流れ
+glitch reach	グリッチの範囲
+glitch through	グリッチ貫通
+glitch up	グリッチ上
+GO steps over it	GOが飛ばす
+hairline	極細線
+Haptics	触覚
+HDR input	HDR入力
+Hex, e.g. 90 3C 7F	16進、例 90 3C 7F
+HOLDING OFF AIR	オフエアで保持中
+Home — skip to start	Home：先頭へ
+Horizontal output offset in pixels	出力の水平オフセット（ピクセル）
+How many features fit on screen.	画面に収まる数。
+how much of this effect	このエフェクトの量
+How solid the ink is	インクの濃さ
+How tall the logo is above the clock	時計の上のロゴの高さ
+In-point: cue starts playback here	イン点：ここから再生
+index	索引
+initializing webview	WebViewを起動中
+install Tailscale here and on the phone	ここと電話にTailscaleをインストール
+INSTALLING...	インストール中...
+Its amount, or one of its knobs A to D	量、またはノブAからDのいずれか
+J jump to row	J：行へ移動
+jam to	ジャム先
+Jump the driver back to its first frame	ドライバーを最初のフレームへ
+K — cycle cue color tag	K：キューの色を切替
+Keep counting past zero, or stop dead	ゼロを過ぎて数える、または止める
+key	キー
+Key edge softness	キーの縁のぼかし
+KEY L	キーL
+knob	ノブ
+L - loop this cue continuously	L：このキューをループ
+last reading	最後の読み値
+Last refused	最後に拒否
+Learn it	学習
+LEARN THE BASICS	基本を学ぶ
+ledger	台帳
+Left — skip back 10s	左：10秒戻る
+Left, centre or right	左、中央、右
+LESSONS	レッスン
+Levels	レベル
+Limiter	リミッター
+Limiting	制限中
+line  |  Enter: apply	行  |  Enter：適用
+LINEAR - a feather, not a blend	リニア：フェザー、ブレンドではない
+Linear, ease in, ease out or S-curve	リニア、イーズイン、イーズアウト、Sカーブ
+Lines	行数
+link aspect	縦横比を連動
+Listen to	聴く
+listener	リスナー
+LIVE - every assigned deck matches	LIVE：割当デッキがすべて一致
+lock to screen	画面に同期
+logo	ロゴ
+logo size	ロゴサイズ
+look at it	見る
+lower 3rd	Lower Third
+marquee	マーキー
+mask on	マスクオン
+Master oscillator rate.	マスターオシレーターの速度。
+Maximum quality	最高画質
+MIDI and OSC monitor	MIDIとOSCのモニター
+midi in	MIDI入力
+MIDI note	MIDIノート
+move points	点を動かす
+Move the height on its own oscillator	高さを専用オシレーターで動かす
+name or number...	名前か番号...
+name, from anywhere	名前、どこからでも
+NDI source cue	NDIソースキュー
+needs file-backed video	ファイルの映像が必要
+neon	ネオン
+new paths	新しいパス
+New shows start from	新規ショーの元
+next xfade	次のフェード
+no effects for this cue type	このキュー種にエフェクトはありません
+nobody	なし
+none - click to learn	なし：クリックで学習
+none - click to set some	なし：クリックで設定
+none - click to write some	なし：クリックで記入
+none yet	まだなし
+none: the one picture	なし：1枚の画像
+none: the whole picture	なし：画像全体
+notebook	ノート
+nothing	なし
+nothing assigned yet	まだ割当なし
+nothing follows	次はなし
+Nothing here with this filter.	このフィルターでは何もありません。
+nothing set - this cue sends nothing	未設定：このキューは何も送りません
+nothing targeted yet	まだ対象なし
+Nothing to see here. Probably.	ここには何もありません。たぶん。
+nothing to send - check the message	送るものなし：メッセージを確認
+offset X	オフセットX
+offset Y	オフセットY
+on any channel	全チャンネルで
+on the header to add another	ヘッダーで追加
+on the monitor	モニター上
+one big on top, the rest below	上に大1つ、残りは下
+one big, the rest beside it	大1つ、残りは横
+onion off	オニオンオフ
+onion on	オニオンオン
+only this computer	このコンピューターのみ
+Open a .deckboy show file	.deckboyファイルを開く
+open the monitor	モニターを開く
+or your own bytes	または独自のバイト
+ORDER - cues advance down the list	順番：キューはリスト順に進む
+Out-point: cue stops playback here	アウト点：ここで再生停止
+output already has	出力には既に
+Outputs Off	出力オフ
+outs	出力
+over budget - video will drop frames	予算超過：映像がコマ落ちします
+over the picture	映像の上
+PAIR	ペア
+Pair a phone	電話をペアリング
+Pair overlap	ペアの重なり
+Paired phones	ペア済みの電話
+Passphrase	パスフレーズ
+Pattern motion toggle	パターンの動きを切替
+pause begin	先頭で一時停止
+pennant	ペナント
+Per-cue transition duration override	キューごとのトランジション時間
+Perspective	パース
+PHASE	位相
+Phone access	電話アクセス
+Phone control	電話操作
+phrase hold	フレーズ保持
+PICK FROM SCREEN	画面から取得
+Pitch, in semitones.	ピッチ（半音）。
+PIXEL FOR PIXEL, TOP-LEFT	等倍、左上
+placard	プラカード
+play a note...	音を弾いて...
+PLAY BUG SWAT, a game	BUG SWATで遊ぶ（ゲーム）
+Play the out move now, then take it off	アウト動作を今再生して外す
+Playback speed: 0.25–4.0×	再生速度：0.25–4.0×
+playlists into the named outputs	プレイリストを名前付き出力へ
+plays synth	シンセを演奏
+plugin	プラグイン
+PNG matte	PNGマット
+podium	演台
+pop	ポップ
+press a key...	キーを押して...
+PRESS AGAIN TO FORGET	もう一度押すと忘れる
+Previous show file:	前のショーファイル：
+prog bar	プログレスバー
+programme	プログラム
+Programme with sound in any browser	どのブラウザでも音声付きプログラム
+PROJECTOR - gamma matched	プロジェクター：ガンマ合わせ
+Projector gamma	プロジェクターガンマ
+put it on a button	ボタンに割当
+Put the brush's opacity on an oscillator	ブラシの濃さをオシレーターへ
+Put the brush's size on an oscillator	ブラシのサイズをオシレーターへ
+Put this control on an oscillator	このコントロールをオシレーターへ
+rack it	ラックする
+RACKED, WARM	ラック済み、準備完了
+rail	レール
+rain	雨
+Reads	読取
+reads the same on any screen	どの画面でも同じに読める
+recent and in this show	最近とこのショー
+Recent shows:	最近のショー：
+red at	赤の開始
+red col	赤の列
+render height	レンダー高さ
+render width	レンダー幅
+REPORT A PROBLEM	問題を報告
+reported rather than swapped	入れ替えず報告
+restart driver now	ドライバーを今再起動
+restart on take	テイクで再起動
+restore at end	終了時に復元
+ribbon	リボン
+Right — skip forward 10s	右：10秒進む
+Right-click turns them off.	右クリックでオフ。
+Rise	上昇
+rise, slide or wipe	上昇、スライド、ワイプ
+Rotation speed, degrees per second.	回転速度（度/秒）。
+rounded rect	角丸四角
+row turns the matrix off again	行でマトリクスを再びオフ
+Run it now, without taking the cue	キューを取らずに今実行
+Run the show from a phone	電話でショーを操作
+runs off the show thread	ショースレッド外で実行
+sACN universe, 1-63999	sACNユニバース、1-63999
+SAVE AS MY DEFAULTS	既定値として保存
+says	話す
+SCALED TO FILL	埋めるように拡大縮小
+Scene dwell time — 0 = hold	シーンの滞在時間：0 = 保持
+Scene fade-in duration	シーンのフェードイン時間
+Scene fade-out duration	シーンのフェードアウト時間
+scoreboard	スコアボード
+SCREENS	スクリーン
+scroll	スクロール
+Scroll up	上スクロール
+sea	海
+Send now, without taking the cue	キューを取らずに今送信
+sends	送信
+Sensitivity	感度
+Set browser URL/path	ブラウザのURL/パスを設定
+set by	設定元
+Set capture source from the cue menu	キューメニューでソースを設定
+Set cue ID for selected cues	選択キューのIDを設定
+Set cue token to jump to when cue ends	終了時に飛ぶキューを設定
+Set goto target for selected cues	選択キューの移動先を設定
+Set Lower Third background alpha	Lower Third背景のアルファを設定
+Set per-cue transition duration	キューのトランジション時間を設定
+Set playback speed for selected cues	選択キューの再生速度を設定
+Set repeat count for selected cues	選択キューのリピート数を設定
+Set short cue id for search/goto	検索/移動用の短いIDを設定
+Set short cue label for search/goto	検索/移動用の短い名前を設定
+Set the NDI source name to receive	受信するNDIソース名を設定
+Shift+[ / ] — fade-out duration	Shift+[ / ]：フェードアウト時間
+SHOW ME	見本を見せて
+Show on	表示先
+Shows	表示
+sideline	サイドライン
+sketch	スケッチ
+slide	スライド
+slide from left	左からスライド
+slide from right	右からスライド
+SMOOTH	なめらか
+snow	雪
+SOS. Kidding. The show is fine.	SOS。冗談です。ショーは順調。
+Sound when the clock turns amber	時計が黄色になる時の音
+Sound when the clock turns red	時計が赤になる時の音
+Sound when time is up	時間切れの音
+Space — pause	スペース：一時停止
+Space — play	スペース：再生
+span	スパン
+sparkle	きらめき
+Speech models	音声モデル
+Speed, like tape	速度、テープのように
+stamp	スタンプ
+Start NEW from factory	新規を工場設定から開始
+starting browser	ブラウザーを起動中
+starting capture	キャプチャを起動中
+starting xvfb	xvfbを起動中
+sticky	付箋
+stop at 0	0で停止
+Stop puppeteering this cue	このキューの操作を止める
+STRAIGHT	直線
+survey	測量
+SVG paths	SVGパス
+tab	タブ
+tag	タグ
+TAP	タップ
+terminal	ターミナル
+text mode	テキストモード
+the file cannot be read	ファイルを読めません
+The name	名前
+The OSC path, e.g. /cue/1/start	OSCパス、例 /cue/1/start
+the playlist's PATCH	プレイリストのPATCH
+The role, or leave it empty	役職、または空欄
+the system output	システム出力
+The text this cue puts on screen	このキューが画面に出す文字
+theatre	劇場
+then stop	その後停止
+they have	持っている
+things that are oscillating	振動しているもの
+this cue lives on	このキューの場所
+This show's setup, no cues	このショーの設定（キューなし）
+ticket	チケット
+tile h	タイル高
+Tile height in pixels.	タイルの高さ（ピクセル）。
+tile w	タイル幅
+time of day	時刻
+Toggle audio enable for selected cues	選択キューの音声を切替
+Toggle chroma key	クロマキーを切替
+Toggle cue audio	キューの音声を切替
+Toggle cue audio track for this cue	このキューの音声トラックを切替
+Toggle fade in	フェードインを切替
+Toggle fade out	フェードアウトを切替
+Toggle hold on last frame	最終フレーム保持を切替
+Toggle hold-at-end for selected cues	選択キューの終了時保持を切替
+Toggle loop	ループを切替
+Toggle loop for selected cues	選択キューのループを切替
+Toggle the live input's audio	ライブ入力の音声を切替
+Total time	合計時間
+trans	遷移
+transcoding - plays clean until ready	変換中：完了までそのまま再生
+transparent: put its playlist on a layer	透明：プレイリストをレイヤーへ
+Trusted controllers	信頼済みコントローラー
+TURN OFF	オフにする
+turn phone control on	電話操作をオンに
+two big on top, the rest below	上に大2つ、残りは下
+type a cue number	キュー番号を入力
+Typing needs EDIT on	入力にはEDITをオンに
+Use GEOMETRY for exact placement	正確な配置はジオメトリーで
+value to type one	入力する値
+Vertical output offset in pixels	出力の垂直オフセット（ピクセル）
+VIDEO DIP: OFF	ビデオディップ：オフ
+VIDEO DIP: ON	ビデオディップ：オン
+walk the outputs one at a time.	出力を一つずつ確認。
+walks every output in turn	各出力を順に確認
+WHAT DECKBOY DID	Deckboyがしたこと
+what is on air in a playlist	プレイリストのオンエア中のもの
+What NEW starts from, never this show	新規の元、このショーではない
+whatever the style says	スタイルに従う
+Where the ramp ends	ランプの終点
+Which deck the cue it acts on lives on	対象キューのあるデッキ
+Which frame you draw on	描くフレーム
+Who can see it	見られる人
+whole network	ネットワーク全体
+will not open	開きません
+window and recording outputs only	ウィンドウと録画の出力のみ
+wipe	ワイプ
+Wobble	揺れ
+wobble by	揺れ幅
+words	単語
+X — cycle end action	X：終了動作を切替
+X — cycle end action: stop / next / loop	X：終了動作：停止 / 次へ / ループ
+Zones	ゾーン
+~ makes the level breathe	~ でレベルが呼吸する
+a note or an address becomes that cue's trigger	ノートやアドレスがこのキューのトリガーに
+acts on every deck; deck and cue are ignored	全デッキに作用、デッキとキューは無視
+Add an output above, then send playlists to it here.	上で出力を追加し、ここへプレイリストを送ります。
+Ancient cypher, modern video desk. Respect.	古代の暗号、現代のビデオデスク。敬意を。
+Any font on this computer, Deckboy's own, or a font file	このコンピューターのフォント、Deckboyのもの、またはファイル
+Apply fade-in to selected video/audio cues	選択した映像/音声キューにフェードインを適用
+Apply fade-out to selected video/audio cues	選択した映像/音声キューにフェードアウトを適用
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-NetかsACN (E1.31)：照明の受信方式に合わせて
+Auto-advance duration — 0 = hold until taken	自動進行の時間：0 = テイクまで保持
+Bypass: this master leaves that deck alone	バイパス：このマスターはそのデッキに触れない
+Characters across. Fewer means bigger cells.	横の文字数。少ないほどセルが大きい。
+Choose a mask from this show's library, or start a new one from a shape	ライブラリからマスクを選ぶか、図形から新規作成
+Click a value to change it. A red address overlaps another fixture.	値をクリックして変更。赤いアドレスは他の機器と重複。
+Click to show or hide this cue's captions	クリックでこのキューの字幕を表示/非表示
+Copy the show AND its media into one portable folder	ショーとメディアを1つのフォルダーへコピー
+Ctrl+S - write back over the show that is open	Ctrl+S：開いているショーに上書き
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S：新しいファイルに保存
+Device output pair this cue's audio plays on	このキューの音声を出す出力ペア
+E - freeze on last frame instead of stopping	E：停止せず最終フレームで固定
+Edit title/subtitle here or fire it live with TAKE	ここでタイトルを編集、またはTAKEでライブ発火
+Every channel on every universe this session has touched	このセッションで触れた全ユニバースの全チャンネル
+generator is off - a START cue turns it on	ジェネレーターはオフ：STARTキューでオン
+How long the note takes to reach full level.	ノートが最大レベルに達する時間。
+How much it throws off; 0 is a clean burn	飛び散る量、0はきれいに燃える
+INPUT: the programme. Drag a crop to move it, its corners to size it.	入力：プログラム。切り抜きをドラッグで移動、角でサイズ変更。
+Keep the outside and cut the inside instead	外側を残して内側を切る
+LED panel height in pixels. Click to type it	LEDパネルの高さ（ピクセル）。クリックで入力
+Legacy target mode — switch type to convert	旧ターゲットモード：種類を変えて変換
+Lissajous, spectrum, meters or a name card	リサジュー、スペクトル、メーター、名前カード
+Load the cue and hold first frame when taken	キューを読み込み、テイク時に先頭フレームで保持
+no fixtures patched - Settings > Network > FIXTURES	機器のパッチなし：設定 > ネットワーク > FIXTURES
+Nothing here changes the show that is open.	ここでは開いているショーは変わりません。
+Per-cue audio: enable, trim, pan, mono, fades, normalize	キューの音声：有効、トリム、パン、モノ、フェード、正規化
+Phone control is in PHONE & TABLET, below	電話操作は下のPHONE & TABLETにあります
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	マスクを出力サイズのグレーPNGで保存：白は残し、黒は切る
+Seconds REMAINING when the clock turns amber	時計が黄色になる残り秒数
+Seconds REMAINING when the clock turns red	時計が赤になる残り秒数
+Shown to the operator when GO reaches this cue	GOがこのキューに来たらオペレーターに表示
+SHUFFLE - the next cue is picked at random	シャッフル：次のキューをランダムに選ぶ
+Slots are self-contained sources in this first pass	スロットはこの版では独立したソースです
+that output's whole picture, or its matte	その出力の画像全体、またはマット
+The cue number on the other desk, e.g. 12.5	他のデスクのキュー番号、例 12.5
+Toggle pause-at-beginning for selected cues	選択キューの先頭一時停止を切替
+Toggle transition-to-next for selected cues	選択キューの次への遷移を切替
+transparent outside the blobs: put it on a layer	しみの外は透明：レイヤーへ
+transparent outside the ink: put it on a layer	インクの外は透明：レイヤーへ
+what is said, on screen, made on this computer	話された内容を画面へ、このコンピューターで作成
+What this cue does when it ends - click to change	このキューの終了時の動作：クリックで変更
+Whether the next shape or pen path adds or cuts	次の図形やペンが足すか切るか
+shape	形状
+palette	パレット
+scale	拡大率
+feedback	フィードバック
+RED	赤
+do it	実行
+(empty)	(空)
+(unset)	(未設定)
+English	英語
+amber at	黄になる時点
++ section	+ セクション
++pause pt	+ 一時停止点
+a-fade in	音声フェードイン
+amber col	黄色
+(no notes)	(メモなし)
+a-fade out	音声フェードアウト
+gain (each)	ゲイン（各）
+% of the height	高さの%
++  a first step	+  最初のステップ
++ ADD AN EFFECT	+ エフェクトを追加
+(none playing now)	(現在再生なし)
+Keep a transcript (.srt)	文字起こしを保存 (.srt)
+Key tolerance (RGB distance)	キー許容差（RGB距離）
+Contrast multiplier (0.0-2.0x)	コントラスト倍率（0.0–2.0x）
+Brightness multiplier (0.0-2.0x)	明るさ倍率（0.0–2.0x）
+Saturation multiplier (0.0-2.0x)	彩度倍率（0.0–2.0x）
+Output rotation angle (-180..180)	出力の回転角（-180..180）
+Hue rotation (-180 to +180 degrees)	色相回転（-180～+180度）
+Lower Third background opacity (0-255)	ローワーサードの背景不透明度（0–255）
+0-127; 127 addresses every device on the line	0–127。127は回線上の全機器を指定
+GO shows the note; picture and sound carry on	GOでメモ表示。映像と音声は続行
+How fast it moves; no effect when it is still	動きの速さ。静止時は無効
+Fires when incoming timecode passes this point	入力タイムコードがこの位置を通過すると実行
+Source pixels, independent of output placement	出力の配置に依存しないソースのピクセル
+Stereo balance, applied live (snaps to center)	ステレオバランスを即時反映（中央にスナップ）
+bypassed: nothing here is processed or limited	バイパス中：処理もリミットも適用しない
+Per-cue audio trim: -40 to +40 dB, applied live	キューの音量補正：-40～+40 dB、即時反映
+Show the message in red - the wrap up NOW state	メッセージを赤く表示：今すぐ終了の合図
+The brush's width, as % of the picture's height	画像の高さに対するブラシ幅の割合（%）
+What the stream carries: SDR, PQ (HDR10) or HLG	配信形式：SDR、PQ (HDR10)、HLG
+Digit colour once red is reached, and in overtime	赤のしきい値以降と時間超過時の数字の色
+Downmix this cue to mono (mono sources / mono PA)	キューをモノラルにミックス（モノ音源／モノPA）
+Drag to scrub (shift = fine), click to type exact	ドラッグでスクラブ（Shift：微調整）、クリックで数値入力
+Hand this to an oscillator so it moves on its own	オシレーターに割り当てて自動で動かす
+Changing width also scales height (and vice versa)	幅の変更で高さも拡縮。逆も同様
+How long the levels take to arrive; zero is a snap	目標レベルまでの時間。0で即時変更
+Set the self-contained PIP source for this overlay	このオーバーレイ専用の独立したPIPソースを設定
+Take the newest shape or pen path out of this mask	マスクから最新の図形やペンパスを削除
+An address sent to Deckboy's OSC port fires this cue	DeckboyのOSCポートでこのアドレスを受信するとキューを実行
+Hold on the last composite frame when the scene ends	シーン終了時に最後の合成フレームを保持
+How long it takes; zero is a snap rather than a fade	所要時間。0ならフェードせず即時変更
+Set still/pattern/browser duration for selected cues	選択キューの静止画／パターン／ブラウザーの長さを設定
+Start the LTC carrier, stop it, or jam it to a value	LTC搬送波を開始・停止、または指定値に同期
+Which cue on that deck; step off the end to clear it	このデッキのキュー。末尾を越えると選択解除
+Bob up and down. Depth 1 is half the frame either way	上下に揺らす。深さ1で各方向に半画面
+Output width in pixels | click value to type exact px	出力幅（ピクセル）。クリックで正確な値を入力
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	配信URLを設定（srt://, rtmp://, rtsp://, udp://）
+Fires at this time on this computer's clock, every day	毎日、このコンピューターの時計の指定時刻に実行
+Output height in pixels | click value to type exact px	出力高（ピクセル）。クリックで正確な値を入力
+Bar across the foot - readable further back than digits	下端のバー：数字より遠くから読める
+OUTPUT: drag a slice to move it, its corners to size it.	出力：スライスをドラッグして移動、角をドラッグして拡縮
+Choose a Lower Third from the overlay bin to fire on TAKE	TAKEで起動するローワーサードをオーバーレイ一覧から選択
+Choose a PIP overlay from the overlay bin to fire on TAKE	TAKEで起動するPIPをオーバーレイ一覧から選択
+OUTPUT: drag a slice to move it, its corners to pin them.	出力：スライスをドラッグして移動、角をドラッグして固定
+F1-F10, F12 or the number pad fires this cue from anywhere	F1–F10、F12、テンキーでどこからでもこのキューを実行
+Use transition when auto-advancing or goto-taking next cue	自動送りやGOTOで次のキューへ移るときにトランジションを使用
+Nothing has arrived yet. Press something on the controller.	まだ受信していません。コントローラーを操作してください。
+Audio fade-in: follow visual fade, none, or explicit seconds	音声フェードイン：映像に連動、なし、または秒数を指定
+Audio fade-out: follow visual fade, none, or explicit seconds	音声フェードアウト：映像に連動、なし、または秒数を指定
+Add a library shape to this mask; its points are yours to move	ライブラリーの図形をマスクに追加。各点を移動できます
+No slices: this output shows its one picture. + SLICE to start.	スライスなし：この出力は自身の画像を表示。+ SLICEで開始
+Open and close this edge on an oscillator -- a wipe that breathes	オシレーターでこの端を開閉：呼吸するようなワイプ
+(none)	(なし)
+(nothing yet)	(まだありません)
++ ADD AN OUTPUT	+ 出力を追加
+>LIVE	>ライブ
+(no media source)	(メディアソースなし)
+snap	即時
+this deck	このデッキ
+protocol	プロトコル
+does	動作
+signal	信号
+sine	正弦波
+freq	周波数
+visuals	映像表示
+black	黒
+green	緑
+blue	青
+Pause at start	開始時に一時停止
+Pause at end	終了時に一時停止
+Transition to next	次へトランジション
+Hardware display	表示装置
+Raster mode	ラスター方式
+Refresh rate	リフレッシュレート
+Bit depth	ビット深度
+SDR material at	SDRレベル
+HDR signal	HDR信号
+Fullscreen	全画面
+Matte aspect	マット比率
+Bar opacity	帯の不透明度
+Output mask	出力マスク
+Overlay still	静止画オーバーレイ
+Overlay opacity	重ね画像の不透明度
+Overlay image	重ね画像
+Place it	配置
+Corner pin	コーナーピン
+choose...	選択...
+not configured	未設定
+(default system device)	(システムの既定機器)
+(no monitor)	(モニターなし)
+System audio (SDL)	システム音声 (SDL)
+Not watching a folder	フォルダー監視なし
+anyone	誰でも
+When taken off air	オンエア終了時
+browser cue added	ブラウザーキュー追加
+source cue added	ソースキュー追加
+text added	テキスト追加
+tone cue added	トーンキュー追加
+gain	ゲイン
+follow	連動
+moves	動き
+overtime	時間超過
+chime	チャイム
+bell	ベル
+load a sprite sheet from a file...	ファイルからスプライトシートを読み込む...
+Run the clock	時計を開始
+What fires this cue besides GO	GO以外のキュー実行条件
+center	中央
+visual	映像表示
+JAM	同期
+MIX	ミックス
+CLIP	クリップ
+TEXT	テキスト
+MULTI	マルチ
+WACKY	ぶっ飛び
+COLOUR	カラー
+DARKEN	暗く
+STEREO	ステレオ
+COMPARE	比較
+LIGHTEN	明るく
+DASHBOARD	ダッシュボード
+Pocket Test (day)	Pocketテスト (昼)
+Dark Detail (0-12%)	暗部ディテール (0-12%)
+Frame Count (emoji)	フレームカウンター (絵文字)
+PLUGE (black level)	PLUGE (黒レベル)
+Pocket Test (night)	Pocketテスト (夜)
+Pocket Test (storm)	Pocketテスト (嵐)
+Marks stacked BELOW.	記号を下に重ねる。
+Panel Map (animated)	パネルマップ (アニメーション)
+Pocket Test (sunset)	Pocketテスト (夕焼け)
+Boresight (alignment)	照準 (位置合わせ)
+SMPTE 75% Colour Bars	SMPTE 75% カラーバー
+(projector curve only)	(プロジェクターカーブのみ)
+Multiburst (bandwidth)	マルチバースト (帯域)
+Convergence (fine grid)	コンバージェンス (細かいグリッド)
+Greyscale Steps (gamma)	グレースケール段階 (ガンマ)
+Uniformity (flat fields)	均一性 (フラットフィールド)
+MULTIVIEW carries this too.	MULTIVIEW にもこれが載ります。
+Test Clock (sync + latency)	テストクロック (同期 + 遅延)
+auto (reads the common two)	自動 (よく使う2つを読む)
+Panel Map (LED tile numbers)	パネルマップ (LEDパネル番号)
+Portal (blobs of deep space)	ポータル (深宇宙の泡)
+Terrarium (living ecosystem)	テラリウム (生きた生態系)
+Window 10% (peak brightness)	ウィンドウ 10% (ピーク輝度)
+Window 50% (peak at mid APL)	ウィンドウ 50% (中間APLでのピーク)
+Frame Count (drops + latency)	フレームカウンター (落ち + 遅延)
+Terrarium Pico (1px per cell)	テラリウム Pico (1セル1px)
+Banding Ramps (real bit depth)	バンディング ランプ (本当のビット深度)
+Fireside (a hearth that burns)	暖炉 (燃える炉辺)
+HLG - live broadcast (BT.2100)	HLG - 生放送 (BT.2100)
+Test Bars (motion diagnostics)	テストバー (動きの診断)
+Moire 1:1 (is anything scaling?)	モアレ 1:1 (何かがスケーリングしている?)
+Pocket Test (test card + scene cycle)	Pocketテスト (テストカード + シーン巡回)
+Critters (pixel-exact scaling, animated)	Critters (ピクセル単位の拡大、アニメーション)
+headphones, desk sounds and LTC stay out of it	ヘッドホン、卓の音、LTCは含まれません
+Above 1 tunnels inward, below 1 blooms outward.	1より上でトンネルは内へ吸い込まれ、1より下で外へ開きます。
+Read everything right to left. Yes, everything.	すべて右から左へ読みます。そう、すべて。
+Amber is closest to the 1976 single-phosphor look.	アンバーが1976年の単色蛍光体の見た目に最も近いです。
+Greetings, primitive. Your "slideshow" amuses us.	ごきげんよう、原始人。君の「スライドショー」はなかなか愉快だ。
+Sway sideways. Depth 1 is half the frame either way	横に揺らす。深さ1で左右それぞれ半画面
+Draw the diagnostic over the card, or just the text.	診断をカードの上に描く、またはテキストだけ。
+All interfaces, but only this computer is trusted yet.	すべてのインターフェース。ただし今はこのコンピューターだけを信頼しています。
+Choose the legacy cue token to show inside the PIP window	PIPウィンドウに表示する旧キュートークンを選ぶ
+ASIO carries the show's sound, and these are not on it yet	ASIOがショーの音を運んでいますが、これらはまだ乗っていません
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=新規  Enter/P=前回  O=保存を開く  E=サンプル  L=学ぶ
+Hand this parameter to an oscillator so it moves on its own	このパラメーターをオシレーターに任せて勝手に動かす
+How long the finished drawing stays before it is drawn again	描き終えた絵が描き直されるまで残る時間
+How it comes on and goes off: none, fade, rise, slide or wipe	出入りの仕方: なし、フェード、上昇、スライド、ワイプ
+The 64-step wavetable, quantised to 6 bits like the hardware.	64ステップのウェーブテーブル。実機と同じ6ビットに量子化。
+Vary tile size per cell, so the grid stops looking like a grid.	セルごとにタイルの大きさを変え、グリッドがグリッドに見えないようにする。
+Which output channel carries the signal. 'all' feeds every one.	信号を運ぶ出力チャンネル。'all' はすべてに送ります。
+What is sent. Backslash-n, -r, -t and -0 become those characters	送る内容。バックスラッシュ n、r、t、0 はその文字になります
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Deckboy独自のリモートプロトコルの命令。1行に1つ。# はコメント
+Modulator speed as a ratio of the note, so the bend tracks pitch.	音程に対する比率でのモジュレーター速度。曲がりが音程に追従します。
+Play this cue to the preview only; the outputs keep what they have	このキューをプレビューだけで再生。出力は今のまま
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	音程をオシレーターに: Motion X でテルミンのように掃引
+A disarmed cue stays in the list and does nothing; GO steps over it	無効化したキューはリストに残り、何もしません。GOは飛ばします
+Where the clock reads from this cue on; click the value to type one	このキューから時計が読む場所。値をクリックして入力
+Add a dashboard button that fires this master by name, from anywhere	このマスターを名前でどこからでも起動するボタンをダッシュボードに追加
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	はじめてですか? 基本を学ぶは5分です。ご案内します。
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	IPv4アドレス、またはネットワーク全体に送る 255.255.255.255
+How much playing audio widens and brightens the pattern. 0 free-runs.	再生中の音が模様をどれだけ広げ明るくするか。0は自走。
+LED panel width in pixels - what one tile really is. Click to type it	LEDパネルの幅 (ピクセル)。1枚のタイルの実寸。クリックして入力
+Which deck it acts on; step off the end for the one this cue lives on	どのデッキに作用するか。末尾を越えるとこのキューのデッキ
+only one playlist - use the routing chip on the header to add another	プレイリストは1つだけ。見出しのルーティングチップで追加できます
+Which cue this master fires on that deck; step off the end to clear it	このマスターがそのデッキで起動するキュー。末尾を越えると解除
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	プログラムモニターにマウスかペンで描く (DRAW)。Escで終了
+How long the move takes, each way. 0 is instant whatever the style says	動きにかかる時間 (片道)。スタイルにかかわらず0は即時
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	ランプが着いたらそのデッキを止める: よくある下げて止める
+Which of the file's sound tracks plays: a second language, a commentary	ファイルのどの音声トラックを鳴らすか: 別の言語、解説
+An oscillator on the colour: depth is how far round the wheel it travels	色にオシレーター: 深さは色相環をどこまで回るか
+Rack this cue paused and off air so GO starts it with no decoder spin-up	このキューを一時停止・オフエアで準備し、GOでデコーダーの立ち上がり待ちなしに始める
+Note, control change, program change, MIDI Show Control, or your own bytes	ノート、コントロールチェンジ、プログラムチェンジ、MIDIショーコントロール、または独自のバイト
+Black behind the words. Zero leaves it over whatever the output already has	文字の後ろの黒。0なら出力に既にあるものの上に重ねます
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	モジュレーターが音程を曲げる量。0-63、実機のゲイン範囲。
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	このキューが画面に出す言葉  |  Shift+Enter: 改行  |  Enter: 適用
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	OSCとUDPは送りっぱなし。TCPは接続するので、ショーのスレッドの外で動きます
+Put the level on an oscillator: Motion makes it a gate that opens as you move	レベルをオシレーターに: Motion で動くと開くゲートになります
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	文字の上に重ねる記号。行からはみ出す結合アクセントのように。
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	どのチャイムか。切り替えると鳴るので、名前ではなく耳で選べます。
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	行がありません。+ 追加 か 学習 で作成。MIDIMAP RESET で組み込みの行が戻ります。
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	マスクのパスをSVGで保存。Illustratorなど読めるものなら何でも
+Which MIDI output; a named port that is missing is reported rather than swapped	どのMIDI出力か。名前付きのポートが無ければ別のものに替えず報告します
+An oscillator on the level, running after GO until a later cue sets this fixture	レベルにオシレーター。GOの後、後のキューがこの灯体を設定するまで動き続けます
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	3分の1オクターブ刻み。耳は比で聞くから。1 kHz が慣例です。
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	セルを横切る線。文字を飾るのではなく傷つけます。
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	入ってくるMIDIノートでこのシンセを鳴らすか、いつも通りキューを起動するか。
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	ノート番号、または LEARN と入力して弾く。どのキューも取らないノートは引き続きキュー N+1 へ
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	ふつうのステレオペア。クリックでこのルーティングからマトリクスを開く
+Folding is what turns an arbitrary pattern into something that reads as designed.	折り畳みが、任意の模様をデザインされたものに変えます。
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	チャンネル=レベルをカンマ区切りで。範囲も可: 1=255, 10-14=64。チャンネルは1から数えます
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	選択した全キューのトリムを同じdBだけ動かします。値を入力するとすべてその値に
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	キャリアの音程を、混ぜるのではなく曲げます。これがFDSのうなりです。
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	基本を学ぶの途中です。Lを押せば続きから、skapi。
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	ピクセルではなく、16色インデックスパレットの文字グリッドとして描く。
+Which MIDI output this file plays to; step past the end for the first one available	このファイルを鳴らすMIDI出力。末尾を越えると最初に空いているもの
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	IPv4アドレス、またはユニバースのマルチキャストグループ用の 255.255.255.255 (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	セルをクリックで切り替え: オフ、最大、-3、-6、-12。この行でマトリクスをまたオフに
+How long each phrase stays before it moves. Zero hides them without losing the list.	各フレーズが動くまで留まる時間。0ならリストを失わずに隠します。
+How long it takes to fall away after the attack. Only audible when retrigger is set.	アタック後に減衰する時間。リトリガーがオンのときだけ聞こえます。
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	オフ、開始から (このキューが始まると次が起動) または終了から (終わったとき)
+Height of one line as a percent of the raster, so a card reads the same on any screen	1行の高さをラスターの割合で。どの画面でもカードが同じに見えます
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	スロットのソースを media:/パス、browser:url、window:名前、camera:名前、syphon:名前 で指定
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	短いLFSRモード。周期が短く、シャーではなく調律された金属のように聞こえます。
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	白、暖色、赤、アンバー、緑、シアン、青、マゼンタ。~ で色相環を回します
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	エンベロープを打ち直す間隔。Hold は1音を保ち、ドローン向きです。
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	Diamond は Atari Video Music の鋭いエッジの格子。リングはフィードバックズームでよいトンネルになります。
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	揺らすか回すか。深さ1で左右それぞれ半回転。深さ1ののこぎり波で一回転
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	デッキの再生レベル (ライブ、キューに保存されません) - キューごとのトリムは AUDIO セクションのゲイン
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	静止、フェードイン、タイプライター、上スクロール、クロール、パルス。すべてキュー自身のトランスポートで動きます
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	描画1フレームあたりのフィールド数。1で1対1、0.5で各フィールドを2フレーム保持、0で停止。
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	再生中にこのキューが表示するもの: 波形、スコープ、リサージュ、スペクトラム、メーター、ネームカード
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	0は明るさでタイルを選び、絵が読めます。1はランダムに選び、グリッドが質感になります。
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	移動する量 (半音)。上は到着、下は出発のように、0は打たれた音です。
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	IPv4アドレス。名前は解決しません: DNS照会は処理を止めるため、GOでは行えません
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	タイル幅 (ピクセル)。シートのグリッドと合わないと、切り出しが隣のスプライトにかかります。
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	セル位置で交互に鏡像化。ランダムな反転はノイズに見え、こちらは模様に見えます。
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	0でセルに固定し、彫ったように。それ以上は引き直され、煮えたぎるように見えます。
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	MONO L は左入力を両スピーカーで鳴らします: 多くの機器でマイク1。STEREO はライン入力用です。
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	身ぶり全体。これがキューの長さそのものです: ここで唯一終わる生成信号がスティングです。
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	値をクリックして、この灯体を送るか、前のキューが置いた所に残すか。~ でレベルが呼吸します
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	FDS はモジュレーターで曲げるウェーブテーブル。2A03 はほとんどのチップチューンの元になったパルス/三角/ノイズの組です。
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	どの字形がどの明るさを表すかを混ぜる。同じ組で別の筆跡。シード付きなので固定です。
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	ピクセルソート: 行の中のピクセル列を明るさで並べ替え、データモッシュの溶けた見た目を作ります。
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	記号が上れるセル数。上るほど薄くなるので、高い到達は重なるのではなく尾を引きます。
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	キュー 動作 値  -  G テイク  S 停止  F フェードアウト (値 = 0.1秒単位)  V 音量  O 不透明度  J 行へジャンプ
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	倍音の重み: 0で澄んだチャイム、最大で金管。これがピンとファンファーレの違いです。
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	このコンピューターの入力を順に切り替えます。'Settings input' は 設定 > オーディオ で選んだ入力に従います。
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	熾火から燃え盛る炎まで。どの設定でも盛り上がって落ち着きます: 動かない火は写真に見えます
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	基準音。440が現代の標準、432がよくある代案、古い楽器はさらに低めでした。
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	スティングの始まり。声の下では邪魔にならず、会場の上では突き抜けるように。
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	入力のデジタルゲイン、-40〜+40 dB。まず機器のプリアンプを合わせ、これは最後の数dB用です。
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	大きさを脈打たせる。単独では幅と高さが一緒に動きます。潰したり伸ばしたりするには高さに別の ~ を
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	カードは画面全体。ロワーサードは名前と肩書きを透明な画面の下に、イン・アウト付きで
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Held は最後の変位を消さずに保ちます: ドライバーが残したとおり曲がったままです。
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	12.5と25は細く鼻にかかり、50はうつろ。75は25と同じ音: トラッカーにあるので置いています。
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	実機のように出力を量子化。段差こそが音で、滑らかにするとチップを真似るシンセになります。
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	選択した全キューのトリムを差を保ったまま同じdBだけ動かします。値を入力するとすべてその値に
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	プレイリストのクロスポイントの送り先 (設定 > オーディオ)。クリックでそのルーティングから名前でマトリクスを開く
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	値に名前を  d = ...;  で付け、式1つ、または赤 緑 青の3つで終える  |  Shift+Enter: 改行  |  Enter: 適用
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	ランプが着いたら (停止の後) 元の状態に戻す: 次のキューに備えたデッキ、手を離すスウェル
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	字幕を作る音声モデル: 英語、全言語、またはより遅く正確な組。どれも1回のダウンロード
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	マスクが切るもの: どこで再生してもこのキュー、選択中の出力上のこのプレイリスト、その出力の画面全体、またはそのマット
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	画面のレートとの差が0.2%以内 (60に対し59.94) ならそのレートで再生: 各フレームを1回、音は最大3.5セント高めか低め
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	90度単位は正確で鮮明なまま。回転は斜めにサンプリングし、ピクセルアートを裂きます: それが欲しいときもあります。
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	テイクごとに同じように動かし始めるので、リハーサルした見た目が、アプリの起動時間に左右されず再現されます。
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	各傾きの向きを決めるもの: 自分の位置、画像の輝度勾配 (文字が絵と同じに傾く)、またはセルの色相。
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	チャンネルやペアに一度だけ名前を付ける。プレイリストは名前へ送るので、機器を替えてもここの名前を変えるだけで、キューごとの変更は不要です。
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	クロスポイントをクリックで切り替え: オフ、0、-3、-6、-12 dB。横にドラッグで任意のレベル。ポイントの無いプレイリストは自分のデバイスで鳴ります。
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	data/sprites に入れたスプライトセット。フォルダ1つが1セット。切り替えで選び、最後はなしに戻ります。右クリックでオフ。
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	内部解像度、1が最も粗く5が最も細かい。速度と同じくらい見た目の設定です: 8ビットらしさは大きなピクセルから来ます。
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Picture は画像から色を取ります。緑、アンバー、シアンは端末の蛍光体。Palette は選んだハードウェアパレットに文字を固定します。
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	SUBTLE は自然に回復 (H.264)。CLASSIC は本物のにじみ (MPEG-4)。EXTREME はより粗く常ににじみます。変更するとキューを準備し直します。
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	サインは調整、ピンクはPAの鳴らし、ホワイトはびびり探し、スイープは会場の響く所を聞く、identify は出力を1つずつ確かめるため。
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	どのエフェクトか。起動時にそのデッキが再生しているキューのスタック内の位置で選びます。何も無ければ、フェードはそう告げて何もしません
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	各フレームを次のフレームに混ぜます。これがHypnoの持ち味: 0では模様の生成器、それ以上では画像が自分自身を食べ始めます。
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	炉辺の壁の窓から見えるもの: 庭、雨、雪、海。外に天気のある部屋は、壁ではなく場所に見えます
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	灯体ごと: パッチの照明 (設定 > ネットワーク > 灯体) を名前で。チャンネル: チャンネル=レベルを手で。キューは両方持てます。チャンネルが最後
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	各文字が傾くカードのように揺れます。セルごとに位相が違うので、グリッドは1枚で滑るのではなく呼吸します。
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	ペン: クリックで角、ドラッグで曲線、最初の点をクリックで閉じる (P)。点: ドラッグ、輪郭をクリックで追加、Alt+クリックか Delete で削除
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	チップの3チャンネル。性質が違います: 三角波は実機に音量が無く、ノイズはオシレーターではなくシフトレジスターです。
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	厳選した記号と絵文字のセット: 星、音符、花、矢印、天気、ルーン、顔。選ぶと下のカスタム字形が埋まり、編集もできます。
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	コンピューターのキーボードで演奏、Ableton配列: A W S E D F T G Y H U J、Z と X でオクターブ。オンの間、そのキーはキューを起動せず音を鳴らします。
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	デッキの不透明度、デッキの音量、マスターディマー、アクティブなキューの明るさ / コントラスト / 彩度 / 色相、またはそのエフェクトかオーディオエフェクトのつまみ
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	走査線、蛍光体のにじみ、RGBのふち。大事なのはにじみ: 蛍光体が横に広がるので、CRTは光を発しているように見えます。
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	裂けた走査線の帯とRGBのずれ。テキストモードではセルも壊します: 行全体が同じ文字の繰り返しに固まり、同期を失った本物のテキスト画面のようです。
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Still は今のフレームで止めます。Flipbook はフレームを順に再生。Replay は最初のフレームを描いたとおり一筆ずつ描き、止まってまた始めます
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start、Stop、Pause、Resume、Load (起動せず準備)、Arm、Disarm、Devamp (ループが一周を終えて終わる)。または Stop all、Pause all、Resume all: すべてのデッキ
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Scope は形とクリップを表示。Lissajous は最初の2チャンネル間の位相と極性: 対角線が逆向きならどちらかが反転しています。Spectrum は3分の1オクターブのバーです。
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	0は明るさが求める字形を、1はセット内の任意の字形を選びます。上げるとアルファベット全体が見えます: インク量で厳密に並べると、平らな部分は1つの記号だけを選び、残りは出てきません。
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	ブロックとディザは密度に、ASCIIランプは文字に、記号は残骸に見えます。切り替えるとカスタム字形の文字列を消します (上書きするため)。プリセットの行で1つ戻せます。
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	平均律はどの音程も少しずつずれる代わりに自由な転調を得ます。純正律とピタゴラス音律は1つの調で完全に合います。Bohlen-Pierce は12度を分割するのでオクターブがありません。
+OSC	OSC
+RTMPS	RTMPS
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+Syphon / Spout	Syphon / Spout
+NDI® NETWORK	NDI® NETWORK
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+TRACKER	トラッカー
+Passphrase (shared)	パスフレーズ (共有)
+, — skip to previous cue	, — 前のキューへ
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  そのプレイリストでは何もしない  -  (M) ステップ自身のプレイリスト
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	-18 dBFS は EBU のアライメント、-20 は SMPTE。0 未満に制限: ライブの PA に送るため。
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  そのプレイリストでは何もしない  -  (M) ステップ自身のプレイリスト  -  EDIT がオン: 入力でショーが変わります
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+29.97 fps (NTSC)	29.97 fps (NTSC)
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+SELECT DECK 2	DECK 2 を選ぶ
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	次はそのタブ、Deck 2 をクリック。新しいプレイリストはクリックするまで選択されない。
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	光っているタブが、ソースの追加先。ここを飛ばすとインクがシンセの下に入る。
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	あのタブ、見える？クリック。これで Deck 2 だ。ドーン。基本だ。
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	そのタブ、Deck 2 をクリック。光っているタブが、ソースの追加先のプレイリスト。
+Skip this and the words go under the map. With the lizard.	ここを飛ばすと文字が地図の下に行く。トカゲと一緒に。
+Nine years of live weather. Always click the tab.	生の天気予報を九年。タブは必ずクリック。
+Click its tab, Deck 2. A new playlist waits until you choose it.	そのタブ、Deck 2 をクリック。新しいプレイリストは、選ばれるまで待っている。
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	光っているタブが次のキューを受け取る。プロジェクターに入れるスライドを選ぶのと同じ。
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	デッキを一つお選びください。どれでも。…Deck 2。Deck 2 をお選びください。
+MENU	メニュー
+VOLUME	音量
++ step	+ ステップ
+< BACK	< 戻る
+ATEM switcher	ATEMスイッチャー
+ATEM tally	ATEMタリー
+AUDIO: DEFAULT	オーディオ: 既定
+Animated GIF	アニメーションGIF
+Arrows	矢印キー
+CLICKER	プレゼンター
+Copyright	著作権
+DEST...	保存先...
+Datamosh - classic	Datamosh – クラシック
+Datamosh - extreme	Datamosh – エクストリーム
+Datamosh - subtle	Datamosh – 控えめ
+Deckboy is input	Deckboyの入力
+Device: None	デバイス: なし
+Drag	ドラッグ
+Drop media here	ここにメディアをドロップ
+Enter Take  Space Play/Pause	Enter Take  Space 再生/一時停止
+FFmpeg / libav  (in-process)	FFmpeg / libav  (プロセス内)
+FPS: SOURCE	FPS: ソース
+Fonts	フォント
+Free software. You may use, study, share	自由ソフトウェア。使用・研究・
+GO / BACK	GO / 戻る
+GO / BACK (clicker)	GO / 戻る (プレゼンター)
+Key out: None - fill only	キー出力: なし – フィルのみ
+LTC in	LTC入力
+Licence	ライセンス
+MATCH SOURCE	ソースに合わせる
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> トランスポート
+MOSH: SUBTLE	MOSH: 控えめ
+MSC Trigger -> cue by id	MSC Trigger -> IDでcue
+MTC in	MTC入力
+Mode: CALLER	モード: CALLER
+NDI receiver	NDIレシーバー
+NDI trigger	NDIトリガー
+NO STEPS YET	ステップはまだありません
+No PTP lock, wide-model pacing - will not genlock to plant sources	PTPロックなし、粗いペーシング – 局内ソースにはゲンロックしません
+ONCE  |  ORDER	1回  |  順序
+Optional	オプション
+PNG sequence	PNG連番
+Platform	プラットフォーム
+Press A to take cue	Aでcueをテイク
+RATE: AUTO	レート: 自動
+S Stop   C Clear   Esc Panic	S 停止   C クリア   Esc パニック
+SIZE: SOURCE	サイズ: ソース
+SPOUT TEXTURE SHARE	SPOUTテクスチャ共有
+Session	セッション
+TSL tally out	TSLタリー出力
+Thanks	謝辞
+Timecode chase	タイムコード追従
+Timecode run	タイムコード走行
+Toolkit	ツールキット
+Trigger	トリガー
+WAV (audio only)	WAV (音声のみ)
+Warranty	保証
+address...	アドレス...
+and modify it; derivatives stay GPL.	共有・改変できます。派生物もGPLです。
+auto	自動
+clear the cell	セルを消去
+companion ping	Companionからのping
+fire this row	この行を実行
+insert a row	行を挿入
+live lane  |  I/O set trim  |  click or drag to seek	ライブレーン  |  I/O でトリム設定  |  クリックかドラッグでシーク
+media in	メディア投入
+move the cursor	カーソル移動
+mute / solo a column	列をミュート / ソロ
+off -- edit on monitor	オフ -- モニター上で編集
+off: no camera is open. Drag on the picture to draw a zone.	オフ: カメラが開いていません。画面上をドラッグしてゾーンを描きます。
+open the code editor	コードエディターを開く
+play / stop	再生 / 停止
+stop, fade, vol, opacity	停止、フェード、音量、不透明度
+the FFmpeg, SDL and FreeType projects,	FFmpeg、SDL、FreeType の各プロジェクト、
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion、x42/libltc に感謝します。
+Keys	キー
+None. See LICENSE sections 15-16.	なし。LICENSE の第15-16節を参照。
+none compiled in	組み込みなし
+Alpha	アルファ
+Group	グループ
+Normal	通常
+Remote	リモート
+lesson	レッスン
+Bitrate	ビットレート
+Latency	レイテンシ
+OUT {n}	アウト {n}
+Out {n}	アウト {n}
+{n} row	{n} 行
+Deck {n}	デッキ {n}
+Key name	キー名
+Keyframe	キーフレーム
+Registry	レジストリ
+fade {n}	フェード {n}
+{n} rows	{n} 行
+Node port	ノードポート
+Stream ID	ストリームID
+added {1}	{1} を追加
+start {n}	開始 {n}
+still {n}	静止画 {n}
+FADE {n} s	フェード {n}秒
+LAYER {n}%	レイヤー {n}%
+Output {n}	出力 {n}
+PROXY {n}p	プロキシ {n}p
+PTP domain	PTPドメイン
+Proxy {n}p	プロキシ {n}p
+Stream key	ストリームキー
+[ASSIGNED]	[割り当て済み]
+audio only	オーディオのみ
+to Out {n}	アウト {n} へ
+{n} of {n}	{n} / {n}
+Display {n}	ディスプレイ {n}
+active jobs	実行中のジョブ
+local clock	ローカル時計
+not running	停止中
+click to set	クリックして設定
+full {n}x{n}	全体 {n}x{n}
+running v{n}	v{n} 実行中
+the other one	もう一方
+DELIVERY H.{n}	納品用 H.{n}
+Output {n} mix	出力 {n} ミックス
+made by Deckboy	Deckboyで作成
+{1} plays to {2}	{1} は {2} へ演奏
+the picture {1} plays	{1} が演奏する映像
+New media joins {1} by itself	新規メディアは自動で {1} に加わる
+Press Win+P and choose Extend	Win+P を押して「拡張」を選択
+{n} patched - DMX cues set them by name	{n} 件パッチ済み - DMXキューが名前で設定
+Set them to extend in your display settings	ディスプレイ設定で拡張に設定
+lesson: {1}. Esc leaves, and it picks up here next time	レッスン：{1}。Escで抜けると、次回はここから再開します
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	{1} の TCP 9993 でデッキとして ATEM Software Control に応答
+In System Settings > Displays, use it as an extended display	システム設定 > ディスプレイ で拡張ディスプレイとして使用
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	卓を食べちゃった、skapi。画面が{1}つあるよ。メニューで出力のディスプレイを使えば別の画面に移せるよ。
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	卓を食べちゃった、skapi。画面が2つあるよ。メニューで出力のディスプレイを使えばもう一方に移せるよ。
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	画面が{1}つだね、skapi。デスクはこっちに残って、映像は{2}に出るよ。メニューを開いて出力オフを出力オンにしてね。
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	画面が2つだね、skapi。デスクはこっちに残って、映像はもう一方に出るよ：{1}。メニューを開いて出力オフを出力オンにしてね。
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	卓を食べちゃった、skapi。ミラーリングした画面だと両方に映像が出るから、後ろの小さなウィンドウに入れておいたよ。{1}と、映像専用の画面ができるよ。
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	画面がミラーリングされてるよ、skapi。{1}はこの画面と同じものを映すから、両方で映像がデスクを覆っちゃう。{2}と、映像を専用の画面に出すよ。それかメニューを開いて出力オフを出力オンにしてね。

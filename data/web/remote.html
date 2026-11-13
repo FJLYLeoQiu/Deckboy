@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0f380f">
+  <title>Deckboy</title>
+  <link rel="icon" href="/remote/logo.png">
+  <link rel="apple-touch-icon" href="/remote/logo.png">
+  <link rel="stylesheet" href="/remote.css">
+  <script src="/remote.js" defer></script>
+</head>
+<body>
+  <main>
+    <section id="login" class="login">
+      <img src="/remote/logo.png" alt="Deckboy" class="logo" width="160" height="160">
+      <p class="sub">PHONE CONTROL</p>
+      <form id="pin-form" class="panel">
+        <label for="pin">PASSPHRASE</label>
+        <input id="pin" type="password" autocomplete="current-password" minlength="8" required>
+        <button class="big">CONNECT</button>
+      </form>
+      <p class="hint">Or scan <b>SCAN TO PAIR</b> on the desk (Settings &gt; Network &gt; PHONE &amp; TABLET) and this connects by itself.</p>
+      <p id="login-status" class="hint" role="status"></p>
+    </section>
+
+    <section id="controls" hidden>
+      <header class="top">
+        <span class="plate">DECKBOY</span>
+        <span id="link" class="link" role="status">LINK</span>
+        <button id="lock" class="small" aria-label="Lock this phone">LOCK</button>
+      </header>
+      <!-- A live source with a remote of its own (a build's private extra). -->
+      <div id="extras" class="chips" hidden></div>
+      <!-- ONE SCREEN, top to bottom in the order an operator reaches for it:
+           which deck, what is live, TAKE, the transport, the cues, DASH, the
+           tracker, then the show. No tabs and no levels (James, 2026-10-16). -->
+      <div id="deck-chips" class="chips" aria-label="Decks"></div>
+      <div class="now" aria-live="polite">
+        <div class="now-top"><span id="now-status">-</span><span id="now-time"></span></div>
+        <div id="now-name" class="now-name">-</div>
+        <div class="bar"><div id="now-bar"></div></div>
+        <div class="now-next">STANDBY: <span id="now-next">-</span></div>
+      </div>
+      <button id="go" class="go">TAKE</button>
+      <div class="row5">
+        <button data-verb="RERACK" aria-label="Rerack">|&lt;</button>
+        <button data-verb="SKIPBACK" aria-label="Previous cue">&lt;&lt;</button>
+        <button id="playpause" aria-label="Play or pause">II</button>
+        <button data-verb="STOP">STOP</button>
+        <button data-verb="SKIP" aria-label="Next cue">&gt;&gt;</button>
+      </div>
+      <div class="row4">
+        <button data-seek="-10">-10S</button>
+        <button data-seek="10">+10S</button>
+        <button data-verb="PREV">BACK</button>
+        <button data-verb="NEXT">NEXT</button>
+      </div>
+      <div class="fader">
+        <label for="fader">FADER</label>
+        <input id="fader" type="range" min="0" max="100" step="1" value="100">
+        <span id="fader-value">100%</span>
+      </div>
+
+      <p class="label">CUES <span class="dim">TAP: STANDBY &middot; HOLD: TAKE NOW</span></p>
+      <div id="cues" class="list compact"></div>
+
+      <p class="label">DASH <span class="dim">HOLD A BUTTON TO CHANGE IT</span></p>
+      <div id="dash" class="grid3"></div>
+      <form id="dash-edit" class="panel" hidden>
+        <p id="dash-edit-title" class="label">DASH</p>
+        <label for="dash-label">NAME</label>
+        <input id="dash-label" maxlength="24" autocomplete="off">
+        <label for="dash-action">DOES</label>
+        <select id="dash-action"></select>
+        <div class="row3">
+          <button type="submit" class="on">SAVE</button>
+          <button type="button" id="dash-clear">REMOVE</button>
+          <button type="button" id="dash-cancel">CANCEL</button>
+        </div>
+      </form>
+
+      <div id="tracker-block" hidden>
+        <p class="label">TRACKER <span id="trk-count" class="dim"></span></p>
+        <div class="now small-now"><div id="trk-name" class="now-name">-</div>
+          <div class="now-next">NEXT: <span id="trk-next">-</span></div></div>
+        <div class="row3">
+          <button data-tracker="BACK">BACK</button>
+          <button id="trk-go" class="on">GO</button>
+          <button id="trk-play">PLAY</button>
+        </div>
+      </div>
+
+      <p class="label">SHOW <span class="dim">HOLD BLACKOUT AND REC</span></p>
+      <div class="row3">
+        <button id="blackout" class="hold">BLACKOUT</button>
+        <button id="testcard">TEST CARD</button>
+        <button id="record" class="hold">REC</button>
+      </div>
+      <div id="outputs" class="chips outs" aria-label="Outputs"></div>
+      <p id="anywhere" class="hint" hidden></p>
+      <p id="result" class="result" role="status"></p>
+    </section>
+    <noscript>This remote needs JavaScript enabled.</noscript>
+  </main>
+  <label id="tick" class="tick" aria-hidden="true"><input type="checkbox" switch tabindex="-1"></label>
+</body>
+</html>

@@ -1,0 +1,386 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Deckboy Contributors
+#
+# package_linux.sh — build a portable Deckboy tree, the Linux counterpart to
+# tools/package_windows.ps1 and tools/package_macos.sh.
+#
+# Output: dist/Deckboy-<VERSION>-linux-<arch>.tar.gz
+#
+# LAYOUT
+# ------
+#   Deckboy-<VERSION>-linux-x86_64/
+#     deckboy            launcher (thin; the RPATH does the real work)
+#     bin/Deckboy        RPATH=$ORIGIN/../lib
+#     bin/ffmpeg         bundled, and REACHABLE: the app prepends its own
+#     bin/ffprobe        directory to PATH at startup
+#     lib/*.so*          bundled non-system libraries
+#     data/              resources
+#     LICENSE, README-linux.txt
+#
+# `bin` is in Paths::resolveProjectRoot()'s skip list, so the walk-up steps out
+# of bin/ and finds the sibling data/ on the first try. No code change needed.
+#
+# WHAT TO BUNDLE, AND WHY THE LINE IS WHERE IT IS
+# -----------------------------------------------
+# The instinct is "bundle everything so it runs anywhere". On Linux that is
+# actively wrong, and it is the single thing that makes portable builds fragile.
+#
+# Anything that talks to the kernel, the GPU driver, the display server or the
+# sound server MUST come from the host:
+#   * libGL / libEGL / libGLdispatch — these load the machine's actual DRI
+#     driver. A bundled libGL against a host Mesa is a crash, not a fallback.
+#   * libX11 / libxcb / libwayland — must match the running display server.
+#   * libasound / libpulse / libjack — must match the running sound server.
+#   * libdrm / libgbm — kernel-coupled.
+#   * glibc (libc/libm/libpthread/libdl/librt) and the dynamic loader — bundling
+#     glibc is how you get "symbol lookup error" on every second machine.
+#   * libstdc++ / libgcc_s — deliberately NOT bundled. The host's Mesa driver is
+#     loaded into our process and links against the host libstdc++; forcing ours
+#     in front of it is a classic way to break GL on newer distros. The cost is
+#     that this build needs a reasonably current distro, which is the right
+#     trade for a tool that must not fall over mid-show.
+#
+# Everything else — SDL3, the FFmpeg libraries, codecs — travels with us.
+set -euo pipefail
+
+# FFMPEG'S NOTICE TRAVELS WITH FFMPEG (audit 2026-10-19, F4: no package carried
+# it). Looked for beside the ffmpeg being bundled -- <prefix>/share/doc/ffmpeg,
+# where CI and tools/build_mini_ffmpeg.sh put it -- then where a distro keeps
+# it. Every file found there goes into one LICENSE-ffmpeg.txt.
+stage_ffmpeg_notice() {  # $1 = the bundled ffmpeg (may be empty), $2 = destination
+  local bin="$1" dest="$2" dir f found=""
+  local dirs=()
+  if [ -n "$bin" ] && [ -e "$bin" ]; then
+    dirs+=("$(dirname "$(readlink -f "$bin")")/../share/doc/ffmpeg")
+  fi
+  dirs+=(/usr/local/share/doc/ffmpeg /usr/share/doc/ffmpeg)
+  for dir in /usr/share/doc/libavcodec*; do [ -d "$dir" ] && dirs+=("$dir"); done
+  rm -f "$dest.tmp"
+  for dir in "${dirs[@]}"; do
+    for f in "$dir"/LICENSE* "$dir"/COPYING* "$dir"/copyright; do
+      [ -f "$f" ] || continue
+      { echo "==== $(basename "$f") ===="; cat "$f"; echo; } >> "$dest.tmp"
+      found="$dir"
+    done
+    [ -n "$found" ] && break
+  done
+  if [ -n "$found" ]; then
+    mv "$dest.tmp" "$dest"
+    echo "  + $(basename "$dest") from $found"
+    return 0
+  fi
+  rm -f "$dest.tmp"
+  return 1
+}
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="$REPO_ROOT/build"
+OUTPUT_DIR="$REPO_ROOT/dist"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --build-dir) BUILD_DIR="$2"; shift 2 ;;
+    --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
+    -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "error: this packager only runs on Linux (uname is $(uname -s))" >&2
+  exit 1
+fi
+command -v patchelf >/dev/null || {
+  echo "error: patchelf is required (apt install patchelf)" >&2; exit 1; }
+
+VERSION="$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")"
+[ -n "$VERSION" ] || { echo "error: VERSION file is empty" >&2; exit 1; }
+
+ARCH="$(uname -m)"
+STAGE_NAME="Deckboy-${VERSION}-linux-${ARCH}"
+STAGE_DIR="$OUTPUT_DIR/staging/$STAGE_NAME"
+
+BINARY="$BUILD_DIR/Deckboy"
+[ -f "$BINARY" ] || { echo "error: $BINARY not found - build first" >&2; exit 1; }
+
+echo "Staging Deckboy $VERSION ($ARCH) -> $STAGE_DIR"
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR/bin" "$STAGE_DIR/lib" "$OUTPUT_DIR"
+
+cp "$BINARY" "$STAGE_DIR/bin/Deckboy"
+chmod +x "$STAGE_DIR/bin/Deckboy"
+
+# Deckboy Mini, the single-deck command-line player. REQUIRED: a tarball that
+# quietly lacked it would look exactly like one where it was left out on purpose.
+if [ ! -f "$BUILD_DIR/deckboy-mini" ]; then
+  echo "error: $BUILD_DIR/deckboy-mini not found - it builds with Deckboy unless DECKBOY_BUILD_MINI is OFF" >&2
+  exit 1
+fi
+cp "$BUILD_DIR/deckboy-mini" "$STAGE_DIR/bin/deckboy-mini"
+chmod +x "$STAGE_DIR/bin/deckboy-mini"
+echo "  + bin/deckboy-mini"
+
+for tool in ffmpeg ffprobe; do
+  if src="$(command -v "$tool" 2>/dev/null)"; then
+    cp "$src" "$STAGE_DIR/bin/$tool"
+    chmod +x "$STAGE_DIR/bin/$tool"
+    echo "  + bin/$tool"
+  else
+    echo "  ! $tool not found on PATH - the bundle will not decode media" >&2
+  fi
+done
+
+# whisper-cli: captions made on this computer. A static whisper.cpp build; the
+# library walk below still sees it, for the OpenMP runtime it may link. The
+# speech model is fetched on first use, never bundled. CI sets
+# DECKBOY_REQUIRE_WHISPER=1 so a package without it fails.
+WHISPER_SRC="${DECKBOY_WHISPER_CLI:-$BUILD_DIR/whisper-cli}"
+if [ -f "$WHISPER_SRC" ]; then
+  cp "$WHISPER_SRC" "$STAGE_DIR/bin/whisper-cli"
+  chmod +x "$STAGE_DIR/bin/whisper-cli"
+  echo "  + bin/whisper-cli"
+elif [ "${DECKBOY_REQUIRE_WHISPER:-0}" = "1" ]; then
+  echo "  ! whisper-cli not found at $WHISPER_SRC and DECKBOY_REQUIRE_WHISPER=1" >&2
+  exit 1
+else
+  echo "  ! whisper-cli not found - captions made on this computer will be unavailable" >&2
+fi
+
+# deckboy-listen: LIVE CAPTIONS' speech engine, built from the same whisper.cpp
+# (tools/listen). Required whenever whisper-cli is, for the same reason.
+LISTEN_SRC="${DECKBOY_LISTEN_BIN:-$BUILD_DIR/deckboy-listen}"
+if [ -f "$LISTEN_SRC" ]; then
+  cp "$LISTEN_SRC" "$STAGE_DIR/bin/deckboy-listen"
+  chmod +x "$STAGE_DIR/bin/deckboy-listen"
+  echo "  + bin/deckboy-listen"
+elif [ "${DECKBOY_REQUIRE_WHISPER:-0}" = "1" ]; then
+  echo "  ! deckboy-listen not found at $LISTEN_SRC and DECKBOY_REQUIRE_WHISPER=1" >&2
+  exit 1
+else
+  echo "  ! deckboy-listen not found - live captions will be unavailable" >&2
+fi
+
+# libltc (LTC timecode) is dlopen()d at runtime, never linked, so the ldd walk
+# below cannot see it. Copy it into lib/ explicitly; ltc_api.hpp looks in
+# ../lib relative to the executable. Without this the bundle claimed LTC but it
+# only worked where libltc happened to be installed.
+for ltccand in /usr/lib/x86_64-linux-gnu/libltc.so.11 /usr/lib/libltc.so.11 \
+               /usr/local/lib/libltc.so.11; do
+  if [ -f "$ltccand" ]; then
+    cp -L "$ltccand" "$STAGE_DIR/lib/libltc.so.11"
+    chmod u+w "$STAGE_DIR/lib/libltc.so.11"
+    echo "  + lib/libltc.so.11"
+    break
+  fi
+done
+[ -f "$STAGE_DIR/lib/libltc.so.11" ] || echo "  ! libltc not found - LTC unavailable in this bundle" >&2
+
+if [ -d "$REPO_ROOT/data" ]; then
+  cp -R "$REPO_ROOT/data" "$STAGE_DIR/data"
+  # Per-machine state, exactly as the Windows and macOS packagers strip it:
+  # last_project.txt holds the packager's own absolute paths, and
+  # default.deckboy is gitignored scratch state (a release once shipped the
+  # packager's webcam cue).
+  # recent_projects.txt (v0.99.331) is the splash's recent-shows list: one
+  # absolute path per show opened on this machine. Same class as the rest.
+  for stale in last_project.txt recent_projects.txt default.deckboy defaults.deckboy \
+               deckboy-first-run found-sources tabletop deckboy-crash.log deckboy-soak.log \
+               deckboy-render.log deckboy-show.log deckboy-live-frame.bmp paired-phones.txt \
+               tutorial-practice.deckboy tutorial-progress.txt lessons.txt midi_map.tsv \
+               lesson-road lesson-road-bundle bugswat-highscore.txt bugswat-practice.deckboy; do
+    if [ -e "$STAGE_DIR/data/$stale" ]; then
+      rm -rf "$STAGE_DIR/data/$stale"   # some are folders (tabletop, lesson-road)
+      echo "  - stripped data/$stale (build-machine state)"
+    fi
+  done
+  # Captions made on THIS machine: the downloaded speech model (~140 MB), the
+  # captions written for media it had no folder for, the scratch audio, and a
+  # whisper-cli someone placed by hand. None of it is the package's. And the
+  # colour tables an operator added for the effect colour picker: theirs,
+  # possibly licensed (a Pantone table), never the package's.
+  for stale_dir in models captions captions-work whisper colours; do
+    if [ -d "$STAGE_DIR/data/$stale_dir" ]; then
+      rm -rf "$STAGE_DIR/data/$stale_dir"
+      echo "  - stripped data/$stale_dir/ (build-machine state)"
+    fi
+  done
+
+  # Two directories of the OPERATOR'S OWN media, both gitignored -- which does
+  # not help, because .gitignore does not apply to a file copy. _converted holds
+  # transcodes, proxies and datamosh preps; recordings holds captured programme
+  # output. Only the Windows packager had learned _converted, and none of the
+  # three had ever heard of recordings, so this is the same drift the list above
+  # documents being fixed twice. Keep all three in step.
+  for stale_dir in _converted recordings updates test-cards; do
+    if [ -d "$STAGE_DIR/data/$stale_dir" ]; then
+      stale_mb=$(du -sm "$STAGE_DIR/data/$stale_dir" 2>/dev/null | cut -f1)
+      rm -rf "$STAGE_DIR/data/$stale_dir"
+      echo "  - stripped data/$stale_dir (operator media, ${stale_mb:-?} MB)"
+    fi
+  done
+fi
+
+# The English speech model for live captions, bundled: there is no installer
+# here to offer it as a tick, as the Windows one does (tools/fetch_caption_model.sh).
+bash "$REPO_ROOT/tools/fetch_caption_model.sh" "$STAGE_DIR/data"
+
+[ -f "$REPO_ROOT/LICENSE" ] && cp "$REPO_ROOT/LICENSE" "$STAGE_DIR/LICENSE"
+
+# --- Which libraries stay on the host -------------------------------------
+# Matched against the SONAME. See the rationale at the top of this file.
+# Patterns are PREFIX-based, not ".so.N"-based. The first version of this list
+# required a numeric suffix and so happily bundled libpulsecommon-16.1.so —
+# PulseAudio's own internals — because that name ends in a bare ".so". Shipping
+# a sound server's guts alongside a different host build of it is precisely the
+# class of breakage this list exists to prevent.
+is_excluded() {
+  case "$1" in
+    # loader + glibc
+    ld-linux*|libc.so.*|libm.so.*|libdl.so.*|librt.so.*|libpthread.so.*) return 0 ;;
+    libresolv.so.*|libnsl.so.*|libutil.so.*|libcrypt.so.*|libanl.so.*)   return 0 ;;
+    # C++ runtime — must not sit in front of the host's Mesa
+    libstdc++*|libgcc_s*)                                                return 0 ;;
+    # GPU / graphics: these load the machine's own driver
+    libGL*|libEGL*|libOpenGL*|libGLdispatch*|libglapi*|libgbm*|libdrm*)  return 0 ;;
+    # display server
+    libX*|libxcb*|libwayland*|libxkbcommon*|libxshmfence*)               return 0 ;;
+    # sound servers — prefix form catches libpulsecommon-16.1.so
+    libasound*|libpulse*|libjack*|libpipewire*|libsndio*|libasyncns*)    return 0 ;;
+    # system policy / init / device management
+    libdbus*|libudev*|libsystemd*|libselinux*|libapparmor*|libcap.so.*)  return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+echo "Bundling libraries"
+WORKLIST=()
+for f in "$STAGE_DIR/bin/Deckboy" "$STAGE_DIR/bin/deckboy-mini" "$STAGE_DIR/bin/ffmpeg" "$STAGE_DIR/bin/ffprobe" "$STAGE_DIR/bin/whisper-cli" "$STAGE_DIR/bin/deckboy-listen"; do
+  [ -f "$f" ] && WORKLIST+=("$f")
+done
+
+# Index-walk rather than shifting: expanding an empty array under `set -u` is an
+# error on older bash, which bites exactly when the list drains.
+idx=0
+while [ "$idx" -lt "${#WORKLIST[@]}" ]; do
+  current="${WORKLIST[$idx]}"
+  idx=$((idx + 1))
+  # ldd output: "libfoo.so.1 => /path/to/libfoo.so.1 (0x...)". Entries without
+  # a "=>" are the loader or linux-vdso and are never copied.
+  while read -r soname arrow target _rest; do
+    [ "$arrow" = "=>" ] || continue
+    [ -n "$target" ] && [ -f "$target" ] || continue
+    is_excluded "$soname" && continue
+    if [ ! -f "$STAGE_DIR/lib/$soname" ]; then
+      cp -L "$target" "$STAGE_DIR/lib/$soname"
+      chmod u+w "$STAGE_DIR/lib/$soname"
+      WORKLIST+=("$STAGE_DIR/lib/$soname")
+      echo "  + lib/$soname"
+    fi
+  done < <(ldd "$current" 2>/dev/null | sed 's/^[[:space:]]*//' || true)
+done
+
+# --- RPATHs ---------------------------------------------------------------
+# $ORIGIN is resolved by the loader relative to the object being loaded, which
+# is what makes the tree relocatable. Quoted so the shell does not expand it.
+for exe in "$STAGE_DIR/bin"/*; do
+  [ -f "$exe" ] || continue
+  patchelf --set-rpath '$ORIGIN/../lib' "$exe" 2>/dev/null || true
+done
+for lib in "$STAGE_DIR/lib"/*; do
+  [ -f "$lib" ] || continue
+  patchelf --set-rpath '$ORIGIN' "$lib" 2>/dev/null || true
+done
+
+bash "$REPO_ROOT/tools/package_linux_desktop.sh" "$STAGE_DIR/share"
+cp "$REPO_ROOT/tools/install_linux_desktop.py" "$STAGE_DIR/install-desktop.py"
+
+# --- Launcher -------------------------------------------------------------
+# Thin on purpose. The RPATH already resolves libraries and the app prepends its
+# own directory to PATH for ffmpeg, so this exists only so users have something
+# obvious to double-click or type.
+cat > "$STAGE_DIR/deckboy" <<'LAUNCH'
+#!/bin/sh
+# POSIX sh with an absolute interpreter path, NOT `#!/usr/bin/env bash`.
+# `env bash` has to find bash on PATH, so the launcher failed outright in a
+# stripped environment while the binary beside it ran fine — a launcher that is
+# more fragile than the thing it launches. /bin/sh is always present.
+SELF="$0"
+# Resolve symlinks so this works via a PATH entry or a desktop shortcut.
+while [ -L "$SELF" ]; do
+  DIR=$(cd -P "$(dirname "$SELF")" && pwd)
+  SELF=$(readlink "$SELF")
+  case "$SELF" in
+    /*) ;;
+    *) SELF="$DIR/$SELF" ;;
+  esac
+done
+HERE=$(cd -P "$(dirname "$SELF")" && pwd)
+exec "$HERE/bin/Deckboy" "$@"
+LAUNCH
+chmod +x "$STAGE_DIR/deckboy"
+
+# The same launcher for Mini: the deckboy one with the last line changed.
+sed 's#/bin/Deckboy" "\$@"#/bin/deckboy-mini" "$@"#' "$STAGE_DIR/deckboy" > "$STAGE_DIR/deckboy-mini"
+grep -q 'bin/deckboy-mini' "$STAGE_DIR/deckboy-mini" || { echo "error: the deckboy-mini launcher did not come out right" >&2; exit 1; }
+chmod +x "$STAGE_DIR/deckboy-mini"
+
+cat > "$STAGE_DIR/README-linux.txt" <<NOTE
+Deckboy ${VERSION} (Linux ${ARCH})
+
+Run it
+------
+    ./deckboy
+
+Deckboy Mini, the one-deck player for a screen that only needs to play:
+
+    ./deckboy-mini <clips or a folder> [--loop] [--display N]
+
+Optional application-menu and show-file integration for this user:
+
+    python3 ./install-desktop.py
+
+Run that command again after moving the portable folder. Remove integration with
+python3 ./install-desktop.py --uninstall before deleting the folder.
+
+Nothing to install. SDL3, the FFmpeg libraries and ffmpeg/ffprobe travel with
+the app.
+
+What comes from your system, on purpose
+---------------------------------------
+Graphics (libGL/Mesa), the display server (X11/Wayland), audio
+(ALSA/PulseAudio/PipeWire) and the C/C++ runtime are NOT bundled. Those must
+match the machine actually running: a bundled libGL cannot load your GPU driver,
+and a bundled libstdc++ in front of your Mesa is a well-known way to break GL.
+
+That means this build wants a reasonably current distribution. It is built on
+Ubuntu 24.04 / Mint 22 and should run on anything of that vintage or newer.
+
+Not in this build
+-----------------
+  * Spout / DeckLink   - Windows features.
+  * GPU zero-copy decode - Windows-only (D3D11VA). Decoding falls back to the
+                         CPU.
+Browser cues, camera capture (V4L2) and window capture (x11grab) DO work here.
+
+If it crashes
+-------------
+A stack trace is written to data/deckboy-crash.log. Sending that is the single
+most useful thing you can do.
+NOTE
+
+if [ -f "$STAGE_DIR/bin/ffmpeg" ] || ls "$STAGE_DIR/lib"/libav* >/dev/null 2>&1; then
+  stage_ffmpeg_notice "$(command -v ffmpeg || true)" "$STAGE_DIR/LICENSE-ffmpeg.txt" || {
+    echo "error: FFmpeg is bundled but its licence notice was not found (see stage_ffmpeg_notice)" >&2
+    exit 1
+  }
+fi
+
+TARBALL="$OUTPUT_DIR/$STAGE_NAME.tar.gz"
+rm -f "$TARBALL"
+# --owner/--group 0 so the archive does not carry the packager's uid.
+tar -czf "$TARBALL" --owner=0 --group=0 -C "$OUTPUT_DIR/staging" "$STAGE_NAME"
+
+echo
+echo "Wrote $TARBALL"
+du -h "$TARBALL" | awk '{print "  size: " $1}'

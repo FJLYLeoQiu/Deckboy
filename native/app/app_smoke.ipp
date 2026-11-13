@@ -1,0 +1,7648 @@
+// Part of class App — included inside the class body in main.cpp.
+// Do NOT compile this file separately.
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+// app_smoke.ipp — Startup Self-Test & Smoke Test Suite
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Provides two static entry points invoked from main() before the GUI starts:
+//
+//   runSelfCheck()   — diagnostic inventory printed to stdout. Enumerates the
+//                      runtime environment: version tag, font availability,
+//                      ffmpeg/ffprobe reachability, NDI SDK compile-time flag,
+//                      LTC dynamic library load, NMC sync runtime, and the
+//                      full set of capture / output / integration backend
+//                      catalogs with their support status. Route planning is
+//                      exercised for default request profiles so operators can
+//                      verify that the correct backends resolve on their OS.
+//                      Triggered by the --check CLI flag.
+//
+//   runSmoke()       — automated regression suite that returns 0 on success or
+//                      1 on any failure. Each test is a self-contained lambda
+//                      guarded by an expect() helper that prints [ok] or [fail].
+//                      Coverage includes:
+//                        • transition source gain policy (paused / stopped /
+//                          playing fade-envelope correctness)
+//                        • browser cue status summary label variants
+//                        • OSC string message build → parse → command map
+//                          round-trip, including bundle unwrapping
+//                        • NMC sync packet parsing
+//                        • capture backend route planning per-platform
+//                        • output backend route planning (stream + NDI combo)
+//                        • integration backend route planning with runtime
+//                          support flag assertions per-platform
+//                        • full project save → load round-trip covering every
+//                          serializable field: canvas, OSC query, integrations,
+//                          jump mode, panic profile, outputs (NDI, stream,
+//                          alpha, delay, colorspace, layout, orientation, test
+//                          card, AOI), deck settings (transition, opacity,
+//                          playlist defaults, timecode, warp, edge blend, NDI),
+//                          and cue fields (trim, chroma key, crop, color
+//                          controls, lower third, image still)
+//                        • legacy deck-level NDI → output-level migration
+//                      Triggered by the --smoke CLI flag.
+//
+// These tests run without SDL initialization or GPU resources, exercising only
+// the data model, serialization, protocol helpers, and backend catalogs.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+  // Include a readback fence: timing queued draw calls alone measures the CPU
+  // submitting work, and can hide a sign that overruns the GPU's frame budget.
+  static int runLowerThirdBench(int width, int height, int frames, bool arabic) {
+    if (!SDL_Init(SDL_INIT_VIDEO) || !TTF_Init()) return 1;
+    SDL_Window* window = SDL_CreateWindow("Lower third bench", 64, 64, SDL_WINDOW_HIDDEN);
+    SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
+    SDL_Texture* target = renderer ? deckboyCreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+      SDL_TEXTUREACCESS_TARGET, width, height) : nullptr;
+    App app;
+    // Use the live font ladders and script fallbacks. Unregistered faces would
+    // time missing-glyph boxes instead of the operator's Arabic words.
+    const bool fontsReady = app.loadFonts(1.5);
+    int result = 0;
+    if (!target || !fontsReady) {
+      std::cerr << "lower-third-bench: " << SDL_GetError() << '\n';
+      result = 1;
+    } else {
+      SDL_SetRenderTarget(renderer, target);
+      std::cout << "lower-third-bench " << width << 'x' << height << " renderer="
+                << SDL_GetRendererName(renderer) << " frames=" << frames
+                << " (clear, draw, GPU fence; warm cache)\n";
+      Cue cue;
+      cue.kind = CueKind::Text;
+      cue.textBody = "Name Surname\nTitle or role";
+      if (arabic) cue.textBody = reinterpret_cast<const char*>(
+        u8"\u0645\u0631\u064a\u0645 \u0623\u062d\u0645\u062f\n"
+        u8"\u0645\u062f\u064a\u0631\u0629 \u0627\u0644\u0625\u0646\u062a\u0627\u062c");
+      cue.lowerThird.on = true;
+      cue.lowerThird.inSeconds = 3;
+      cue.lowerThird.moveIn = LowerThirdMove::Fade;
+      const SDL_Rect bounds {0, 0, width, height}, pixel {width / 2, height * 4 / 5, 1, 1};
+      for (int look = 0; look < static_cast<int>(LowerThirdLook::Count); ++look) {
+        cue.lowerThird.look = static_cast<LowerThirdLook>(look);
+        std::vector<double> samples;
+        for (int frame = -20; frame < frames; ++frame) {
+          const double seconds = (frame + 20) * 6.0 / (frames + 20);
+          const auto start = std::chrono::steady_clock::now();
+          SDL_SetRenderDrawColor(renderer, 55, 58, 63, 255);
+          SDL_RenderClear(renderer);
+          app.renderLowerThirdIntoOutput(renderer, cue, bounds, seconds, -1);
+          SDL_Surface* fence = SDL_RenderReadPixels(renderer, &pixel);
+          if (!fence) { result = 1; break; }
+          SDL_DestroySurface(fence);
+          const double elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+          if (frame >= 0) samples.push_back(elapsed);
+        }
+        if (samples.empty()) { result = 1; break; }
+        std::sort(samples.begin(), samples.end());
+        double total = 0;
+        for (double sample : samples) total += sample;
+        std::printf("%-12s mean=%.3f p95=%.3f max=%.3f ms\n", lowerThirdLookLabel(cue.lowerThird.look),
+                    total / samples.size(), samples[static_cast<std::size_t>((samples.size() - 1) * 0.95)], samples.back());
+      }
+      SDL_SetRenderTarget(renderer, nullptr);
+    }
+    app.purgeTextTextureCache(renderer);
+    app.releaseFonts();
+    if (target) SDL_DestroyTexture(target);
+    if (renderer) SDL_DestroyRenderer(renderer);
+    if (window) SDL_DestroyWindow(window);
+    TTF_Quit();
+    SDL_Quit();
+    return result;
+  }
+
+  static int runSelfCheck() {
+    std::cout << "Deckboy self-check\n";
+    // WHAT THE INTERFACE CAN BE READ IN, and what it cannot.
+    //
+    // A language missing from the picker looks like an oversight. Saying here
+    // that it is present but needs a text-shaping build turns "where is
+    // Arabic" into an answer somebody can act on.
+    {
+      // PROBE FIRST. This runs before any font has been opened, so without
+      // asking here the answer would always be "no shaping" and the report
+      // would blame the build for something it can do.
+      if (TTF_Init()) {
+        const auto face = Paths::fontPath(Paths::FontName::Sans).string();
+        if (TTF_Font* probe = TTF_OpenFont(face.c_str(), 16.0f)) {
+          deckboy::core::i18n::noteShapingAvailable(
+            TTF_SetFontDirection(probe, TTF_DIRECTION_RTL));
+          TTF_CloseFont(probe);
+        }
+      }
+      const auto langs = deckboy::core::i18n::availableLanguages(Paths::dataDir());
+      std::cout << "languages: " << langs.size() << " available";
+      // WHICH ONES NOBODY HAS CHECKED, counted here because this is the report
+      // somebody reads before a release, and "unreviewed" is exactly the sort
+      // of state that quietly becomes permanent if nothing ever says it.
+      int unreviewed = 0;
+      for (const auto& lang : langs) {
+        if (lang.unverified) ++unreviewed;
+      }
+      if (unreviewed > 0) {
+        std::cout << "; " << unreviewed << " unreviewed by a speaker (";
+        bool first = true;
+        for (const auto& lang : langs) {
+          if (!lang.unverified) continue;
+          if (!first) std::cout << " ";
+          std::cout << lang.code;
+          first = false;
+        }
+        std::cout << ")";
+      }
+      const auto waiting =
+        deckboy::core::i18n::languagesAwaitingShaping(Paths::dataDir());
+      if (!waiting.empty()) {
+        std::cout << "; " << waiting.size()
+                  << " right-to-left hidden (needs SDL_ttf built with HarfBuzz):";
+        for (const auto& w : waiting) std::cout << " " << w;
+      }
+      std::cout << "\n";
+    }
+    std::cout << "version: " << deckboy::core::version::kVersionTag << '\n';
+    std::cout << "project-root: " << Paths::projectRoot() << '\n';
+    std::cout << "font-sans: " << (fs::exists(Paths::fontPath(Paths::FontName::Sans)) ? "ok" : "missing") << '\n';
+    std::cout << "font-mono: " << (fs::exists(Paths::fontPath(Paths::FontName::Mono)) ? "ok" : "missing") << '\n';
+    std::cout << "font-pixel: " << (fs::exists(Paths::fontPath(Paths::FontName::Pixel)) ? "ok" : "missing") << '\n';
+    std::cout << "ffmpeg: " << (readAllText({"ffmpeg", "-version"}).has_value() ? "ok" : "missing") << '\n';
+    // Whether this BINARY decodes in-process (libav): GPU zero-copy video, and
+    // an SRT feed's sound over its one connection. A build without the FFmpeg
+    // dev libraries falls back to the CLI quietly -- every Windows release up
+    // to 0.99.398 did -- so the packager asks this line rather than assume.
+#if DECKBOY_INPROC_DECODE
+    std::cout << "inproc-decode: yes\n";
+#else
+    std::cout << "inproc-decode: no (ffmpeg CLI only)\n";
+#endif
+    std::cout << "ffprobe: " << (readAllText({"ffprobe", "-version"}).has_value() ? "ok" : "missing") << '\n';
+#ifdef _WIN32
+    // A window cue captured through Windows.Graphics.Capture comes through at
+    // the window's real size whatever the display scaling is; through the older
+    // screen grab it does not, and nothing fails -- the picture just arrives in
+    // the corner of a black frame. That depends entirely on the ffmpeg beside
+    // the exe having the source, so it is reported rather than assumed.
+    std::cout << "window-capture: "
+              << (deckboy::platform::windowCaptureIsExact()
+                    ? "exact (ffmpeg has the graphics-capture source)"
+                    : "screen-grab fallback (ffmpeg 8+ needed for exact window capture)")
+              << '\n';
+#endif
+#if defined(DECKBOY_HAS_NDI_SDK)
+    std::cout << "ndi-sdk: headers detected (runtime loads when NDI is enabled)\n";
+#else
+    std::cout << "ndi-sdk: not built (set DECKBOY_NDI_SDK or install SDK headers)\n";
+#endif
+    // MIDI: report the RtMidi wrapper's view separately from whether the app
+    // can actually consume MIDI. They are not the same thing — see
+    // startMidiInput(), which is ALSA-only, so a Windows/macOS build happily
+    // enumerates ports it has no code path to open.
+    {
+#if defined(DECKBOY_HAS_MIDI)
+      auto midiDevices = deckboy::platform::midi::MidiInput::listDevices();
+      std::cout << "midi-runtime: rtmidi ok (" << midiDevices.size() << " input port"
+                << (midiDevices.size() == 1 ? "" : "s") << ")";
+#if !defined(DECKBOY_HAS_ALSA)
+      std::cout << " via rtmidi (MTC/MMC sysex remain ALSA-only)";
+#endif
+      std::cout << '\n';
+#else
+      std::cout << "midi-runtime: not built (rtmidi not found)\n";
+#endif
+    }
+    // LtcApi resolves libltc dynamically on every platform — ltc.dll on
+    // Windows, libltc.dylib on macOS, libltc.so on Linux — so probe it for
+    // real everywhere. This used to be skipped under _WIN32 and print
+    // "not supported on this build", which was simply untrue: the Windows
+    // build ships ltc.dll, the loader looks for it, and the integration
+    // catalog already reported ltc[ok]. An operator checking whether timecode
+    // ingest would work was told the wrong thing.
+    {
+      LtcApi ltcApi;
+      if (ltcApi.ensureLoaded()) {
+        std::cout << "ltc-runtime: ok\n";
+      } else {
+        std::cout << "ltc-runtime: missing (" << ltcApi.loadError << ")\n";
+      }
+      ltcApi.shutdown();
+    }
+    std::cout << "ui-sfx: enabled by separate SDL audio device when available\n";
+    std::cout << "companion-control: tcp/udp port 5510 by default (override with DECKBOY_COMPANION_PORT)\n";
+
+    {
+      auto captureCatalog = deckboy::platform::createCaptureBackendCatalog();
+      std::ostringstream line;
+      line << "capture-backends:";
+      for (const auto& info : captureCatalog->list()) {
+        line << ' ' << info.id << '[' << (info.supported ? "ok" : "stub") << ']';
+      }
+      std::cout << line.str() << '\n';
+
+      auto describeSourcePlan = [](const deckboy::platform::SourceCapturePlan& plan) {
+        return plan.backendId + "[" + (plan.supported ? "ok" : "stub") + "]";
+      };
+      deckboy::platform::SourceCaptureRequest windowReq;
+      windowReq.kind = deckboy::platform::SourceCaptureKind::Window;
+      windowReq.sourceRef = "active-window";
+      windowReq.width = 1280;
+      windowReq.height = 720;
+      windowReq.frameRate = 30;
+      windowReq.drawMouse = true;
+      windowReq.display = ":0.0";
+      deckboy::platform::SourceCaptureRequest cameraReq = windowReq;
+      cameraReq.kind = deckboy::platform::SourceCaptureKind::Camera;
+      cameraReq.sourceRef = "default-camera";
+      deckboy::platform::SourceCaptureRequest appReq = windowReq;
+      appReq.kind = deckboy::platform::SourceCaptureKind::AppTexture;
+      appReq.sourceRef = "default-bus";
+      std::cout << "capture-plan-defaults:"
+                << " window=" << describeSourcePlan(deckboy::platform::planSourceCapture(windowReq))
+                << " camera=" << describeSourcePlan(deckboy::platform::planSourceCapture(cameraReq))
+                << " app=" << describeSourcePlan(deckboy::platform::planSourceCapture(appReq))
+                << '\n';
+    }
+
+    {
+      auto outputCatalog = deckboy::platform::createOutputBackendCatalog();
+      std::ostringstream line;
+      line << "output-backends:";
+      for (const auto& info : outputCatalog->list()) {
+        line << ' ' << info.id << '[' << (info.supported ? "ok" : "stub") << ']';
+      }
+      std::cout << line.str() << '\n';
+
+      auto describeRoute = [](const deckboy::platform::OutputBackendRoutePlan& route) {
+        std::ostringstream value;
+        for (size_t i = 0; i < route.steps.size(); ++i) {
+          if (i) {
+            value << '+';
+          }
+          value << route.steps[i].backendId << '[' << (route.steps[i].supported ? "ok" : "stub") << ']';
+        }
+        return value.str();
+      };
+      deckboy::platform::OutputBackendRouteRequest standardReq;
+      standardReq.outputType = "window";
+      standardReq.streamEnabled = false;
+      standardReq.ndiEnabled = false;
+      standardReq.deckLinkEnabled = false;
+      deckboy::platform::OutputBackendRouteRequest streamReq;
+      streamReq.outputType = "stream";
+      streamReq.streamEnabled = true;
+      streamReq.ndiEnabled = false;
+      streamReq.deckLinkEnabled = false;
+      deckboy::platform::OutputBackendRouteRequest ndiReq;
+      ndiReq.outputType = "window";
+      ndiReq.streamEnabled = false;
+      ndiReq.ndiEnabled = true;
+      ndiReq.deckLinkEnabled = false;
+      std::cout << "output-route-defaults:"
+                << " standard=" << describeRoute(deckboy::platform::planOutputBackendRoute(standardReq, *outputCatalog))
+                << " stream=" << describeRoute(deckboy::platform::planOutputBackendRoute(streamReq, *outputCatalog))
+                << " ndi=" << describeRoute(deckboy::platform::planOutputBackendRoute(ndiReq, *outputCatalog))
+                << '\n';
+    }
+
+    {
+      NdiTriggerApi ndiTriggerApi;
+      if (ndiTriggerApi.ensureLoaded()) {
+        std::cout << "ndi-trigger-runtime: ok\n";
+      } else {
+        std::cout << "ndi-trigger-runtime: missing (" << ndiTriggerApi.loadError << ")\n";
+      }
+      ndiTriggerApi.shutdown();
+    }
+    {
+      // Reported for real on every platform. This used to print
+      // "stub (windows pending)" under _WIN32, which was untrue: the NMC
+      // bridge is cross-platform UDP built on the same helpers as Companion,
+      // and enabling it on Windows does bind its port and report nmc[on,ok].
+      App app;
+      std::cout << "nmc-sync-runtime: " << app.describeNmcSyncRuntime() << '\n';
+    }
+    {
+      auto integrationCatalog = deckboy::platform::createIntegrationBackendCatalog();
+      std::ostringstream line;
+      line << "integration-backends:";
+      for (const auto& info : integrationCatalog->list()) {
+        line << ' ' << info.id << '[' << (info.supported ? "ok" : "stub") << ']';
+      }
+      std::cout << line.str() << '\n';
+
+      auto describeRoute = [](const deckboy::platform::IntegrationBackendRoutePlan& route) {
+        std::ostringstream value;
+        for (size_t i = 0; i < route.steps.size(); ++i) {
+          if (i) {
+            value << '+';
+          }
+          value << route.steps[i].backendId
+                << '[' << (route.steps[i].enabled ? "on" : "off") << ','
+                << (route.steps[i].supported ? "ok" : "stub") << ']';
+        }
+        return value.str();
+      };
+      deckboy::platform::IntegrationBackendRouteRequest defaultsReq;
+      deckboy::platform::IntegrationBackendRouteRequest triggerReq;
+      triggerReq.atemTriggerEnabled = true;
+      triggerReq.ndiTriggerEnabled = true;
+      triggerReq.mtcIngestEnabled = true;
+      deckboy::platform::IntegrationBackendRouteRequest lightingReq;
+      lightingReq.dmxArtNetEnabled = true;
+      std::cout << "integration-route-defaults:"
+                << " base=" << describeRoute(deckboy::platform::planIntegrationBackendRoute(defaultsReq, *integrationCatalog))
+                << " trigger=" << describeRoute(deckboy::platform::planIntegrationBackendRoute(triggerReq, *integrationCatalog))
+                << " lighting=" << describeRoute(deckboy::platform::planIntegrationBackendRoute(lightingReq, *integrationCatalog))
+                << '\n';
+    }
+
+    // WHAT THIS MACHINE CAN DRAW, script by script, and from which fonts.
+    //
+    // The scripts Deckboy SHIPS faces for -- Latin (Kabyle's letters too),
+    // Greek and Cyrillic in Liberation; Arabic, Persian, Kurdish and
+    // Tifinagh in Noto -- must draw on every machine, so a miss there fails this check: a package that lost one of its
+    // fonts would otherwise show boxes and go out green. The rest come from the
+    // computer's own fonts and are reported, not required; a build machine has
+    // no Japanese, a desk usually does.
+    int scriptFailures = 0;
+    {
+      namespace shaping = deckboy::render::shaping;
+      const std::string sans = Paths::fontPath(Paths::FontName::Sans).string();
+      TTF_Font* face = (TTF_WasInit() > 0 || TTF_Init()) ? TTF_OpenFont(sans.c_str(), 16.0f) : nullptr;
+      if (!face) {
+        std::cout << "scripts: no face opened (" << sans << ")\n";
+        ++scriptFailures;
+      } else {
+        shaping::setFallbackChain(deckboy::render::scriptFallbacks(deckboy::core::i18n::activeCode()));
+        shaping::registerFace(face, sans, 16.0f);
+        std::cout << "font-discovery: " << deckboy::render::fontDiscoveryRoute() << '\n';
+        std::cout << "fallback-fonts:";
+        for (const auto& f : shaping::fallbackChain()) {
+          std::cout << " " << fs::path(f.path).filename().string();
+          if (f.faceIndex) std::cout << "#" << f.faceIndex;
+        }
+        std::cout << '\n';
+        struct Sample {
+          const char* name;
+          const char8_t* text;
+          bool shipped;
+        };
+        // Escapes, not the characters themselves: the compiler is not told the
+        // source is UTF-8, and a literal it misreads would test nothing.
+        const Sample samples[] = {
+          {"latin", u8"Deckboy \u00e0\u00e9\u00ee\u00f5\u00fc \u00df", true},
+          {"greek", u8"\u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac", true},
+          {"cyrillic", u8"\u0420\u0443\u0441\u0441\u043a\u0438\u0439", true},
+          {"arabic", u8"\u0627\u0644\u0639\u0631\u0628\u064a\u0629", true},
+          {"persian", u8"\u0641\u0627\u0631\u0633\u06cc \u067e\u0698\u0648\u0647\u0634 \u06f1\u06f4\u06f0\u06f5", true},
+          {"kurdish", u8"\u06a9\u0648\u0631\u062f\u06cc \u0695\u06b5\u06c6\u06ce\u06d5", true},
+          {"tifinagh", u8"\u2d5c\u2d30\u2d4e\u2d30\u2d63\u2d49\u2d56\u2d5c", true},
+          {"kabyle", u8"Taqbaylit \u025b\u0263\u010d\u01e7\u1e0d\u1e25\u1e5b\u1e63\u1e6d\u1e93", true},
+          {"devanagari", u8"\u0939\u093f\u0928\u094d\u0926\u0940", false},
+          {"thai", u8"\u0e44\u0e17\u0e22", false},
+          {"japanese", u8"\u65e5\u672c\u8a9e \u3072\u3089\u304c\u306a", false},
+          {"chinese", u8"\u7b80\u4f53\u4e2d\u6587 \u7e41\u9ad4", false},
+          {"korean", u8"\ud55c\uad6d\uc5b4", false},
+          {"ethiopic", u8"\u12a0\u121b\u122d\u129b", false},
+        };
+        std::cout << "scripts:";
+        for (const Sample& s : samples) {
+          const std::string_view text(reinterpret_cast<const char*>(s.text));
+          const bool ok = shaping::covers(face, text);
+          std::cout << " " << s.name << "=" << (ok ? "ok" : (s.shipped ? "MISSING" : "no-font"));
+          if (!ok && s.shipped) ++scriptFailures;
+        }
+        std::cout << '\n';
+        // The cyphers' own faces ship with Deckboy too, so a package without
+        // one fails here like one without a script's face.
+        std::cout << "cypher-fonts:";
+        for (const std::string& name : deckboy::core::i18n::cypherFonts()) {
+          const std::string file = (Paths::dataDir() / "fonts" / name).string();
+          TTF_Font* cf = TTF_OpenFont(file.c_str(), 16.0f);
+          bool ok = cf != nullptr;
+          // Alienese II's is the only one, and it must have all 26 symbols.
+          for (char32_t cp = deckboy::core::i18n::kAlieneseFirst;
+               ok && cp < deckboy::core::i18n::kAlieneseFirst + 26; ++cp) {
+            ok = TTF_FontHasGlyph(cf, static_cast<Uint32>(cp));
+          }
+          if (cf) TTF_CloseFont(cf);
+          std::cout << " " << name << "=" << (ok ? "ok" : "MISSING");
+          if (!ok) ++scriptFailures;
+        }
+        std::cout << '\n';
+        shaping::forgetFace(face);
+        TTF_CloseFont(face);
+      }
+    }
+
+    return scriptFailures ? 1 : 0;
+  }
+
+  // Exercises the real save/quit/prompt paths with isolated files. SDL's dummy
+  // driver prevents even a recovered show with armed outputs reaching a screen.
+  static int runAutosaveCheck(const fs::path& directory) {
+    const fs::path root = fs::absolute(directory).lexically_normal();
+    std::error_code ec;
+    if (fs::exists(root, ec) || ec ||
+        fs::absolute(Paths::stateDir()).lexically_normal() != root / "state") {
+      std::cerr << "autosave-check: use a new directory and set DECKBOY_STATE_DIR="
+                << (root / "state").string() << '\n';
+      return 2;
+    }
+    fs::create_directories(root, ec);
+    if (ec) return 2;
+    int failures = 0;
+    auto expect = [&](bool condition, const std::string& label) {
+      std::cout << (condition ? "[ok] " : "[fail] ") << label << std::endl;
+      if (!condition) ++failures;
+      return condition;
+    };
+    auto bytes = [](const fs::path& file) {
+      std::ifstream in(file, std::ios::binary);
+      return std::string(std::istreambuf_iterator<char>(in), {});
+    };
+    // POSIX readers do not prevent rename. Use a directory obstruction there;
+    // on Windows this is the real scanner-style handle, denying delete share.
+    struct HeldTarget {
+      fs::path target;
+#ifdef _WIN32
+      HANDLE handle = INVALID_HANDLE_VALUE;
+      explicit HeldTarget(const fs::path& file) : target(file) {
+        handle = CreateFileW(file.c_str(), GENERIC_READ,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+      }
+      bool ready() const { return handle != INVALID_HANDLE_VALUE; }
+      void release() {
+        if (ready()) { CloseHandle(handle); handle = INVALID_HANDLE_VALUE; }
+      }
+#else
+      fs::path parked;
+      bool held = false;
+      explicit HeldTarget(const fs::path& file) : target(file), parked(file.string() + ".held") {
+        std::error_code holdError;
+        fs::rename(target, parked, holdError);
+        if (!holdError) held = fs::create_directory(target, holdError);
+      }
+      bool ready() const { return held; }
+      void release() {
+        if (!held) return;
+        std::error_code holdError;
+        fs::remove(target, holdError);  // only the empty directory we created
+        if (!holdError) fs::rename(parked, target, holdError);
+        held = false;
+      }
+#endif
+      ~HeldTarget() { release(); }
+    };
+
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER, "dummy", SDL_HINT_OVERRIDE);
+    if (!expect(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) && TTF_Init(), "headless SDL and fonts")) return 1;
+    auto app = std::make_unique<App>();
+    app->controlWindowRevealed_ = true;
+    app->showSplashOverlay_ = false;
+    app->showStartupDialog_ = false;
+    app->project_.title = "Saved show";
+    app->project_.hyperDeckEnabled = false;
+    app->project_.updateCheckEnabled = false;
+    app->project_.uiSoundsEnabled = false;
+    app->project_.uiScale = 1.5;
+    app->project_.outputFollowDisplay = false;
+    app->project_.outputRenderWidth = 320;
+    app->project_.outputRenderHeight = 180;
+    normalizeProject(app->project_);
+    const Project original = app->project_;
+    app->currentProjectFile_ = root / "show.deckboy";
+    const fs::path file = app->currentProjectFile_;
+    const fs::path saving = projectSavingFile(file);
+    // Seed via a different path so the first save of file sees an existing
+    // show, as it does on reopen (a brand-new show has no session backup).
+    const fs::path seed = root / "seed.deckboy";
+    expect(saveProject(seed, original) && fs::copy_file(seed, file), "create initial show");
+    const std::string originalBytes = bytes(file);
+    {
+      HeldTarget held(file);
+      if (expect(held.ready(), "hold target against replacement")) {
+        std::thread releaseSoon([&]() {
+          const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+          std::error_code pollError;
+          while (!fs::exists(saving, pollError) && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          std::this_thread::sleep_for(std::chrono::milliseconds(35));
+          held.release();
+        });
+        app->project_.title = "Brief hold edit";
+        app->markProjectDirty();
+        const auto began = std::chrono::steady_clock::now();
+        const bool saved = app->persistProject();
+        releaseSoon.join();
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - began).count();
+        std::cout << "brief hold elapsed: " << elapsed << " ms\n";
+        expect(saved && !app->projectDirty_ && !fs::exists(saving) &&
+               loadProject(file).title == "Brief hold edit", "short backoff lands a briefly held save");
+      }
+    }
+    const std::string beforeFailure = bytes(file);
+    app->project_.title = "Pending edit";
+    app->markProjectDirty();
+    {
+      HeldTarget held(file);
+      if (expect(held.ready(), "hold target through all retries")) {
+        app->projectDirtyAt_ -= std::chrono::seconds(1);
+        app->flushDirtyProject();
+        expect(app->projectDirty_ && app->projectSaveFailed_ &&
+               app->toast_.kind == ToastKind::Warning && app->toast_.message == "save failed - retrying",
+               "failed autosave stays dirty and raises a warning");
+        expect(loadProject(saving).title == "Pending edit", "complete recovery copy survives failure");
+        const auto retryAt = app->projectSaveRetryAt_;
+        const auto sidecarTime = fs::last_write_time(saving);
+        const auto toasts = app->toastsRaised_;
+        app->flushDirtyProject();
+        expect(app->projectSaveRetryAt_ == retryAt && fs::last_write_time(saving) == sidecarTime &&
+               app->toastsRaised_ == toasts, "retry delay avoids writes and repeated warnings every frame");
+        app->confirmQuit_ = true;
+        expect(!app->saveProjectBeforeQuit() && app->projectDirty_ && !app->confirmQuit_ &&
+               app->toast_.message.find("still open") != std::string::npos,
+               "persistent failure refuses quit and offers SAVE AS");
+      }
+    }
+    expect(bytes(file) == beforeFailure, "failed replacement preserves saved show byte for byte");
+    app->projectSaveRetryAt_ = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    app->flushDirtyProject();
+    expect(!app->projectDirty_ && !app->projectSaveFailed_ &&
+           loadProject(file).title == "Pending edit", "autosave retries successfully after release");
+
+    app->project_.title = "Quit edit";
+    app->markProjectDirty();
+    app->flushDirtyProject();
+    expect(app->projectDirty_ && loadProject(file).title == "Pending edit", "autosave delay is still pending");
+    gShouldQuit.store(true);
+    app->run();  // enters the actual quit gate before any rendering/update
+    gShouldQuit.store(false);
+    expect(!app->projectDirty_ && loadProject(file).title == "Quit edit", "quit saves before the delay expires");
+    expect(bytes(fs::path(file.string() + ".bak")) == originalBytes, "session backup retains initial show");
+
+    // An unwritable staging path must preserve BOTH previous complete copies.
+    Project recovery = original;
+    recovery.title = "Recovered show";
+    recovery.outputs.front().enabled = true;
+    auto putRecovery = [&]() {
+      expect(saveProject(saving, recovery), "write recovery fixture");
+      fs::last_write_time(saving, fs::last_write_time(file) + std::chrono::seconds(2));
+    };
+    putRecovery();
+    const std::string recoveryBytes = bytes(saving);
+    fs::path staging = saving;
+    staging += ".tmp";
+    fs::create_directory(staging);
+    expect(!app->saveProjectNow(false) && app->projectDirty_ && bytes(saving) == recoveryBytes &&
+           loadProject(file).title == "Quit edit", "staging failure preserves the existing recovery and show");
+    fs::remove(staging);
+    const fs::path badParent = root / "not-a-directory";
+    { std::ofstream out(badParent); out << "occupied"; }
+    expect(!saveProject(badParent / "show.deckboy", original), "parent-directory failure returns false");
+
+    app->controlWindow_ = SDL_CreateWindow("Autosave check", app->uiScaled(1760), app->uiScaled(1020), SDL_WINDOW_HIDDEN);
+    app->controlRenderer_ = SDL_CreateRenderer(app->controlWindow_, "software");
+    if (!expect(app->controlWindow_ && app->controlRenderer_, "hidden recovery prompt renderer")) {
+      app->shutdown();
+      return 1;
+    }
+    app->applyUiScale();
+    auto openSaved = [&]() {
+      app->openProjectFromPath(file);
+      app->offerProjectRecovery();
+      expect(app->pendingProjectRecoveryFile_ == saving && app->depPrompt_.active &&
+             app->depPrompt_.ctaLabel == "RECOVER" && app->depPrompt_.closeLabel == "KEEP SAVED",
+             "open offers the newer recovery copy");
+    };
+    openSaved();
+    app->markProjectDirty();
+    app->projectDirtyAt_ -= std::chrono::seconds(1);
+    app->flushDirtyProject();
+    expect(!app->saveProjectNow(false) && bytes(saving) == recoveryBytes &&
+           loadProject(file).title == "Quit edit", "pending recovery blocks automatic and explicit saves");
+    app->showDependencyPrompt("Unrelated", "Suggestion", "", "CONTINUE");
+    expect(app->depPrompt_.ctaLabel == "RECOVER", "another prompt cannot replace recovery callbacks");
+    for (const char* theme : {"dark", "virtual-boy", "ganon"}) {
+      app->loadTheme(theme);
+      SDL_SetRenderDrawColor(app->controlRenderer_, pal.tile.r, pal.tile.g, pal.tile.b, 255);
+      SDL_RenderClear(app->controlRenderer_);
+      app->renderDependencyPrompt();
+      SDL_Surface* shot = SDL_RenderReadPixels(app->controlRenderer_, nullptr);
+      expect(shot && SDL_SaveBMP(shot, (root / (std::string(theme) + "-recovery.bmp")).string().c_str()),
+             std::string("recovery screenshot at 1.5x: ") + theme);
+      if (shot) SDL_DestroySurface(shot);
+    }
+    expect(std::abs(app->effectiveUiScale() - 1.5) < 0.001, "recovery prompt actually uses 1.5x");
+    app->handleMouseDown(0, 0, SDL_BUTTON_LEFT);
+    expect(app->projectRecoveryPromptShown_, "backdrop click does not choose a recovery option");
+    app->handleKeyDown(SDLK_S, SDL_KMOD_CTRL);
+    expect(app->projectRecoveryPromptShown_ && bytes(saving) == recoveryBytes, "save shortcut cannot bypass recovery");
+    app->handleKeyDown(SDLK_ESCAPE, 0);
+    expect(app->pendingProjectRecoveryFile_.empty() && !app->depPrompt_.active &&
+           app->project_.title == "Quit edit" && bytes(saving) == recoveryBytes,
+           "KEEP SAVED via Escape leaves recovery intact until next save");
+    expect(app->saveProjectNow(false) && !fs::exists(saving), "next save replaces the declined copy");
+
+    putRecovery();
+    openSaved();
+    app->handleKeyDown(SDLK_RETURN, 0);
+    expect(app->project_.title == "Recovered show" && app->currentProjectFile_ == file &&
+           app->projectDirty_ && app->pendingProjectRecoveryFile_.empty(),
+           "RECOVER via Enter loads edits and retains canonical filename");
+    expect(std::all_of(app->project_.outputs.begin(), app->project_.outputs.end(),
+                      [](const OutputTarget& target) { return !target.enabled; }),
+           "recovered outputs are disarmed");
+    expect(loadProject(file).title == "Quit edit" && fs::exists(saving), "recovery waits for a successful save");
+    expect(app->saveProjectBeforeQuit() && loadProject(file).title == "Recovered show" && !fs::exists(saving),
+           "quit lands the recovered show at its original filename");
+
+    putRecovery();
+    openSaved();
+    app->renderDependencyPrompt();
+    const SDL_Rect keep = app->depPrompt_.closeRect;
+    app->handleMouseDown(keep.x + keep.w / 2, keep.y + keep.h / 2, SDL_BUTTON_LEFT);
+    expect(!app->depPrompt_.active && app->pendingProjectRecoveryFile_.empty(), "KEEP SAVED button is wired");
+    openSaved();
+    app->renderDependencyPrompt();
+    const SDL_Rect accept = app->depPrompt_.ctaRect;
+    app->handleMouseDown(accept.x + accept.w / 2, accept.y + accept.h / 2, SDL_BUTTON_LEFT);
+    expect(!app->depPrompt_.active && app->pendingProjectRecoveryFile_.empty() && app->projectDirty_,
+           "RECOVER button is wired");
+
+    openSaved();
+    { std::ofstream out(saving, std::ios::binary | std::ios::trunc); out << "title\tIncomplete"; }
+    fs::last_write_time(saving, fs::last_write_time(file) + std::chrono::seconds(2));
+    app->handleKeyDown(SDLK_RETURN, 0);
+    expect(!app->pendingProjectRecoveryFile_.empty() && app->toast_.kind == ToastKind::Warning &&
+           app->project_.title == "Recovered show", "damaged recovery is refused without replacing the loaded show");
+    app->offerProjectRecovery();
+    app->handleKeyDown(SDLK_ESCAPE, 0);
+    putRecovery();
+    fs::last_write_time(saving, fs::last_write_time(file));
+    expect(newerProjectRecoveryFile(file).empty(), "equal-time recovery is not offered");
+    fs::last_write_time(saving, fs::last_write_time(file) - std::chrono::seconds(2));
+    expect(newerProjectRecoveryFile(file).empty(), "older recovery is not offered");
+    const fs::path absent = root / "missing.deckboy";
+    expect(saveProject(projectSavingFile(absent), original) &&
+           newerProjectRecoveryFile(absent) == projectSavingFile(absent), "recovery is offered when original is absent");
+    app->openProjectFromPath(absent);
+    app->showStartupDialog_ = true;
+    app->handleKeyDown(SDLK_P, 0);
+    expect(!app->showStartupDialog_ && !app->sdlDialogOpen_.load(),
+           "OPEN PREVIOUS reaches a recoverable missing show");
+    app->openProjectFromCommandLine(absent);
+    app->offerProjectRecovery();
+    expect(app->currentProjectFile_ == absent && app->projectRecoveryPromptShown_,
+           "command-line open reaches recovery when original is absent");
+    expect(app->startupProjectFile() == absent, "startup remembers a recoverable missing show");
+    expect(app->saveProjectBeforeQuit() && fs::exists(projectSavingFile(absent)),
+           "quitting an unanswered recovery prompt leaves the copy intact");
+    app->handleKeyDown(SDLK_RETURN, 0);
+    expect(app->saveProjectBeforeQuit() && loadProject(absent).title == original.title,
+           "recovered missing show saves under its original filename");
+    app->openProjectFromPath(file);
+
+    app->clearProjectRecovery();
+    app->project_.title = "Do not persist";
+    app->markProjectDirty();
+    app->projectDirtyAt_ -= std::chrono::seconds(1);
+    app->project_.loadedCleanly = false;
+    app->flushDirtyProject();
+    expect(app->saveProjectBeforeQuit() && loadProject(file).title == "Recovered show",
+           "automatic save and quit preserve an incompletely loaded show");
+    app->project_.loadedCleanly = true;
+    app->soakMode_ = true;
+    app->flushDirtyProject();
+    expect(app->saveProjectBeforeQuit() && loadProject(file).title == "Recovered show", "soak mode still suppresses writes");
+    app->shutdown();
+    std::cout << "autosave-check: " << (failures ? "FAILED" : "passed") << " (" << failures << " failures)\n";
+    return failures ? 1 : 0;
+  }
+
+  static int runSmoke() {
+    // Preserve the last completed check if a later assertion or dependency throws.
+    std::cout << std::unitbuf;
+    static_assert(static_cast<int>(LowerThirdLook::Bar) == 0 &&
+                  static_cast<int>(LowerThirdLook::Scroll) == 12 &&
+                  static_cast<int>(LowerThirdLook::Bulletin) == 13 &&
+                  static_cast<int>(LowerThirdLook::Count) == 52,
+                  "lower-third look numbers are part of the saved show");
+    int failures = 0;
+    auto expect = [&](bool condition, const std::string& label) {
+      if (condition) {
+        std::cout << "[ok] " << label << '\n';
+      } else {
+        std::cout << "[fail] " << label << '\n';
+        failures += 1;
+      }
+    };
+    // A CONVERTER THAT HANGS IS STOPPED. A slide import on Gigantor sat on its
+    // card for ever (2026-10-30); runCaptured's time limit is what ends any
+    // such wait now, so it is proved here on a child that would sleep 30 s.
+    {
+      const auto began = std::chrono::steady_clock::now();
+#ifdef _WIN32
+      const ProcessCapture slept = runCaptured({"powershell", "-NoProfile", "-NonInteractive", "-Command",
+                                                "Start-Sleep -Seconds 30"}, 1500);
+#else
+      const ProcessCapture slept = runCaptured({"sleep", "30"}, 1500);
+#endif
+      const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+      expect(slept.ran && slept.timedOut && !slept.ok() && took < 15.0,
+             "a child past its time limit is stopped, and says so (" + std::to_string(took) + " s)");
+#ifdef _WIN32
+      const ProcessCapture quick = runCaptured({"cmd", "/c", "exit 0"}, 30000);
+#else
+      const ProcessCapture quick = runCaptured({"true"}, 30000);
+#endif
+      expect(!quick.timedOut, "a child inside its time limit is left alone");
+    }
+    // THE FONT LIST READS FAMILY NAMES OUT OF THE FILES. Run on the bundled
+    // fonts, which are the same on every runner: each family once, by the
+    // name inside the file, not the file's own name.
+    {
+      const auto fonts = deckboy::fonts::listSystemFonts({Paths::dataDir() / "fonts"});
+      auto has = [&](const std::string& family, const std::string& file) {
+        for (const auto& font : fonts) {
+          if (font.family == family) return fs::path(font.path).filename().string() == file;
+        }
+        return false;
+      };
+      expect(has("Liberation Sans", "LiberationSans-Regular.ttf") &&
+               has("Liberation Mono", "LiberationMono-Regular.ttf") && has("Noto Sans Arabic", "NotoSansArabic-Regular.ttf"),
+             "the font list names bundled faces by the family inside the file (" + std::to_string(fonts.size()) +
+               " families)");
+      const auto everything = deckboy::fonts::listSystemFonts(deckboy::fonts::systemFontFolders());
+      std::cout << "  this computer's fonts: " << everything.size() << " families\n";
+    }
+    auto framesMatch = [](const std::optional<DecodedFrame>& lhs,
+                          const std::optional<DecodedFrame>& rhs) {
+      return lhs && rhs &&
+             lhs->width == rhs->width &&
+             lhs->height == rhs->height &&
+             lhs->pixels == rhs->pixels;
+    };
+
+    {
+      App app;
+      app.showSplashOverlay_ = false;
+      app.showStartupDialog_ = false;
+      app.project_.decks = {Deck {}};
+      app.settingsOpen_ = true;
+      app.settingsTab_ = 4;
+      const auto* source = deckboy::extras::findGenerator("tabletop");
+      expect(source != nullptr, "built-in board source is registered");
+      app.hiddenSourcesFound_ = true;
+      expect(source && !app.generatorAvailable(*source), "other source discovery does not reveal the board");
+      expect(!app.isKnownPatternType("tabletop"), "locked source cannot be added by a pattern command");
+      app.handleRemoteCommand("PATTERN ADD tabletop");
+      expect(app.project_.decks[0].cues.empty() && !app.remoteCommandError_.empty(),
+             "remote add cannot bypass the source unlock");
+      app.handleRemoteCommand("TABLE STATUS");
+      expect(!app.remoteCommandRecognized_, "locked board command is not exposed");
+      const auto type = [&](const std::string& keys, Uint16 modifiers = 0) {
+        for (const char key : keys) app.handleKeyDown(static_cast<SDL_Keycode>(key), modifiers);
+      };
+      type("abacabb", SDL_KMOD_CTRL);
+      expect(!app.project_.tabletopUnlocked, "modified shortcut chords do not enter the source code");
+      app.settingsTab_ = 0;
+      type("abacabb");
+      expect(!app.project_.tabletopUnlocked, "source code only belongs to About");
+      app.settingsTab_ = 4;
+      type("abaca");
+      app.handleKeyDown(SDLK_B, 0, 0, true);
+      type("b");
+      expect(!app.project_.tabletopUnlocked, "key repeat cannot complete the source code");
+      type("x");
+      type("abacabx");
+      expect(!app.project_.tabletopUnlocked && app.project_.decks[0].cues.empty(),
+             "a wrong final key cannot unlock or add a source");
+      type("abacabb");
+      expect(app.project_.tabletopUnlocked && !app.settingsOpen_, "complete code unlocks the source and returns to the desk");
+      expect(app.project_.decks[0].cues.size() == 1 &&
+             app.project_.decks[0].cues[0].path == "pattern://tabletop", "unlock adds the usable source cue");
+      expect(app.masterDimmerTarget_ == 1.0 && app.project_.decks[0].activeIndex == -1 &&
+             !app.project_.outputs[0].enabled, "code does not black out, take a cue, or enable an output");
+      expect(source && app.generatorAvailable(*source) && app.isKnownPatternType("tabletop"),
+             "unlocked source is available to the source menu and commands");
+      app.settingsOpen_ = true;
+      type("abacabb");
+      expect(app.project_.decks[0].cues.size() == 1, "re-entering the code does not duplicate the cue");
+      const fs::path saved = fs::temp_directory_path() / "deckboy-board-unlock-check.deckboy";
+      expect(saveProject(saved, app.project_), "source unlock show saves");
+      const Project restored = loadProject(saved);
+      expect(restored.tabletopUnlocked && !restored.decks.empty() && !restored.decks[0].cues.empty() &&
+             restored.decks[0].cues[0].path == "pattern://tabletop",
+             "source unlock and cue survive a save/load round trip");
+      std::error_code ignored;
+      fs::remove(saved, ignored);
+      app.project_ = Project {};
+      expect(!app.project_.tabletopUnlocked && source && !app.generatorAvailable(*source),
+             "another show starts with the source hidden");
+    }
+    // MASKS survive a save: the library (paths, flags, controls, an
+    // oscillator) and every place one can be put -- a cue, a layer, the base
+    // playlist, the whole output and the matte slot.
+    {
+      using namespace deckboy::masks;
+      Project show;
+      Mask m;
+      m.id = "m1";
+      m.name = "heart, then a hole";
+      m.paths.push_back(makeMaskShape(MaskShape::Heart, 16.0 / 9.0));
+      MaskPath hole = makeMaskShape(MaskShape::Star, 16.0 / 9.0);
+      hole.subtract = true;
+      m.paths.push_back(hole);
+      m.invert = true;
+      m.feather = 0.02f;
+      m.rotation = 12.5f;
+      m.lfo[kMaskLfoRotation].on = true;
+      m.lfo[kMaskLfoRotation].rateHz = 0.5f;
+      show.masks.push_back(m);
+      show.decks.resize(2);
+      Cue cue;
+      cue.name = "masked";
+      cue.kind = CueKind::Pattern;
+      cue.path = "pattern://full-white";
+      cue.maskId = "m1";
+      show.decks[0].cues.push_back(cue);
+      show.decks[1].cues.push_back(cue);
+      OutputLayer layer;
+      layer.deckIndex = 1;
+      layer.maskId = "m1";
+      show.outputs[0].layerDecks.push_back(layer);
+      show.outputs[0].maskId = "m1";
+      show.outputs[0].baseLayerMaskId = "m1";
+      show.outputs[0].matteAspect = "mask:m1";
+      const fs::path saved = fs::temp_directory_path() / "deckboy-masks-check.deckboy";
+      expect(saveProject(saved, show), "a show with masks saves");
+      const Project back = loadProject(saved);
+      const bool library = back.masks.size() == 1 && back.masks[0].id == "m1" &&
+                           back.masks[0].name == m.name && back.masks[0].paths.size() == 2 &&
+                           back.masks[0].paths[1].subtract && back.masks[0].invert &&
+                           std::fabs(back.masks[0].rotation - 12.5f) < 1e-6f &&
+                           back.masks[0].lfo[kMaskLfoRotation].on &&
+                           std::fabs(back.masks[0].lfo[kMaskLfoRotation].rateHz - 0.5f) < 1e-6f;
+      expect(library, "the mask library survives a save/load round trip");
+      expect(library && rasterizeMask(back.masks[0], 160, 90) == rasterizeMask(m, 160, 90),
+             "...and draws the same mask after it");
+      const bool places = !back.decks.empty() && !back.decks[0].cues.empty() &&
+                          back.decks[0].cues[0].maskId == "m1" && !back.outputs.empty() &&
+                          back.outputs[0].maskId == "m1" && back.outputs[0].baseLayerMaskId == "m1" &&
+                          back.outputs[0].matteAspect == "mask:m1" && back.outputs[0].layerDecks.size() == 1 &&
+                          back.outputs[0].layerDecks[0].maskId == "m1" && !back.outputs[0].layerDecks[0].warpEnabled;
+      expect(places, "a mask on a cue, a layer, the base, the output and the matte all survive it");
+      std::error_code ignored;
+      fs::remove(saved, ignored);
+    }
+
+    {
+      // Headless integration of the same core exercised by scopes_check.cpp.
+      namespace scopes = deckboy::core::scopes;
+      const std::array<std::uint8_t, 16> rgba{
+        0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255, 0, 0, 255, 255};
+      scopes::Options options;
+      options.columns = 4;
+      options.levelBins = options.vectorBins = options.histogramBins = 16;
+      const auto result = scopes::analyze(scopes::Rgba8View{rgba, 4, 1, 0}, options);
+      expect(result.validPixels == 4 && result.invalidPixels == 0 &&
+             result.lumaHistogram.bins.front() == 1 && result.lumaHistogram.bins.back() == 1 &&
+             result.lumaWaveform().bins.front() == 1 &&
+             result.rawGamut.preferred.pixels == 0 && result.filteredGamut.preferred.pixels == 0,
+             "scopes core analyzes full-range RGBA without display resources");
+      scopes::Density density;
+      density.width = 1024; density.height = 8;
+      density.bins.resize(density.width * density.height);
+      for (std::size_t i = 0; i < density.bins.size(); ++i) density.bins[i] = i;
+      density.bins.back() = 1000000;
+      bool sameTrace = true;
+      for (const bool flip : {false, true}) {
+        for (const SDL_Color tint : {SDL_Color{150,255,150,255}, SDL_Color{255,110,110,255},
+                                    SDL_Color{120,255,120,255}, SDL_Color{120,160,255,255}}) {
+          const int w = static_cast<int>(density.width) + 6, h = static_cast<int>(density.height);
+          std::vector<std::uint8_t> actual(static_cast<std::size_t>(w) * h * 4, 37), expected = actual;
+          uploadScopeDensity(0, density, static_cast<int>(density.width), 3, w, h, flip, tint, actual);
+          // Original per-cell formula: exact bytes, including the uncached
+          // populations, empty cells, flip and untouched parade margins.
+          const double scale = 1.0 / std::log1p(1000000.0);
+          for (int row = 0; row < h; ++row) {
+            for (std::size_t x = 0; x < density.width; ++x) {
+              const auto count = density.bins[static_cast<std::size_t>(row) * density.width + x];
+              const double level = count ? std::pow(std::log1p(static_cast<double>(count)) * scale, 0.55) : 0.0;
+              const double lift = count ? 0.18 + 0.82 * level : 0.0;
+              auto* pixel = &expected[(static_cast<std::size_t>(flip ? h - 1 - row : row) * w + x + 3) * 4];
+              pixel[0] = static_cast<std::uint8_t>(std::min(255.0, tint.r * lift));
+              pixel[1] = static_cast<std::uint8_t>(std::min(255.0, tint.g * lift));
+              pixel[2] = static_cast<std::uint8_t>(std::min(255.0, tint.b * lift));
+              pixel[3] = 255;
+            }
+          }
+          sameTrace = sameTrace && actual == expected;
+        }
+      }
+      expect(sameTrace, "scope trace lookup preserves every display byte");
+      expect(scopeTextureMask(MonitorView::Program, -1) == 0 &&
+             scopeTextureMask(MonitorView::Scopes, -1) == 15 &&
+             scopeTextureMask(MonitorView::Both, -1) == 5 &&
+             scopeTextureMask(MonitorView::Both, kScopeParade) == 2 &&
+             scopeTextureMask(MonitorView::Scopes, kScopeSound) == 0,
+             "scope uploads follow the panels visible in each view");
+    }
+
+    {
+      const std::string marked = reinterpret_cast<const char*>(u8"\u0645\u064e\u0631\u064a\u0645 \u0623\u062d\u0645\u062f");
+      const auto ends = characterEnds(marked);
+      expect(ends.size() == 9 && ends.front() == 4 && ends.back() == marked.size(),
+             "lower-third reveals count letters and keep Arabic marks attached");
+      expect(characterEnds("Name Surname").size() == 12 && characterEnds("").empty(),
+             "lower-third reveals handle Latin and empty titles");
+    }
+
+    {
+      // Exercise the derived toggle colours from every bundled theme.
+      rebuildPalette();
+      const Palette original = pal;
+      int themesChecked = 0;
+      for (const auto& entry : fs::directory_iterator(Paths::dataDir() / "themes")) {
+        std::ifstream file(entry.path() / "theme.txt");
+        if (!file) continue;
+        std::map<std::string, SDL_Color> colors;
+        std::string line;
+        while (std::getline(file, line)) {
+          const auto tab = line.find('\t');
+          if (tab == std::string::npos) continue;
+          try {
+            colors[line.substr(0, tab)] = paletteColorFromRgba(
+              static_cast<std::uint32_t>(std::stoul(line.substr(tab + 1), nullptr, 16)));
+          } catch (...) {}
+        }
+        pal = original;
+        for (auto role : {std::make_pair("screen_light", &pal.light),
+                          std::make_pair("screen_deep", &pal.deep),
+                          std::make_pair("screen_dark", &pal.dark),
+                          std::make_pair("shell_outer", &pal.shellOuter),
+                          std::make_pair("screen_ink_soft", &pal.inkSoft)}) {
+          if (colors.count(role.first)) *role.second = colors.at(role.first);
+        }
+        pal.tile = colors.count("screen_tile") ? colors.at("screen_tile") : pal.light;
+        pal.fg = colors.count("screen_fg") ? colors.at("screen_fg") : pal.deep;
+        pal.fgSoft = colors.count("screen_fg_soft") ? colors.at("screen_fg_soft") : pal.dark;
+        const bool readable = paletteContrastRatio(paletteToggleInk(true), paletteToggleFill(true)) >= 4.5 &&
+                              paletteContrastRatio(paletteToggleInk(false), paletteToggleFill(false)) >= 4.5;
+        const bool distinct = detail::paletteLuma(paletteToggleFill(true)) >
+                              detail::paletteLuma(paletteToggleFill(false)) &&
+                              paletteColorDistance(paletteToggleFill(true), paletteToggleFill(false)) >= 90;
+        expect(readable && distinct, "readable, distinct toggles: " + entry.path().filename().string());
+        ++themesChecked;
+      }
+      pal = original;
+      expect(themesChecked > 0, "bundled themes checked");
+    }
+
+    {
+      Cue cue;
+      float pausedGain = transitionSourceGainForLoadCue(&cue, TransportState::Paused, 0.0);
+      float stoppedGain = transitionSourceGainForLoadCue(&cue, TransportState::Stopped, 0.0);
+      float playingGain = transitionSourceGainForLoadCue(&cue, TransportState::Playing, 0.25);
+      expect(std::abs(pausedGain - 1.0f) < 0.001f &&
+               std::abs(stoppedGain - 1.0f) < 0.001f &&
+               std::abs(playingGain - 0.25f) < 0.001f,
+             "transition source gain policy");
+    }
+
+    {
+      // Diagonal drift (v0.78.7): crosshatch loops one cell per 8 s,
+      // checkerboard one period per 10 s — X and Y in lockstep (45°).
+      Cue cue;
+      cue.kind = CueKind::Pattern;
+      cue.path = "pattern://crosshatch-motion";
+      cue.width = 320;
+      cue.height = 180;
+      auto first = MediaEngine::buildPatternFrame(cue, 0.0, cue.width, cue.height);
+      auto looped = MediaEngine::buildPatternFrame(cue, 8.0, cue.width, cue.height);
+      auto mid = MediaEngine::buildPatternFrame(cue, 4.0, cue.width, cue.height);
+      expect(framesMatch(first, looped) && !framesMatch(first, mid),
+             "crosshatch motion drifts diagonally and loops at 8s");
+    }
+
+    {
+      Cue cue;
+      cue.kind = CueKind::Pattern;
+      cue.path = "pattern://checkerboard-motion";
+      cue.width = 320;
+      cue.height = 180;
+      auto first = MediaEngine::buildPatternFrame(cue, 0.0, cue.width, cue.height);
+      auto looped = MediaEngine::buildPatternFrame(cue, 10.0, cue.width, cue.height);
+      // Probe at quarter period: a half-period diagonal shift maps a
+      // checkerboard onto itself, so t=5 would falsely match t=0.
+      auto quarter = MediaEngine::buildPatternFrame(cue, 2.5, cue.width, cue.height);
+      expect(framesMatch(first, looped) && !framesMatch(first, quarter),
+             "checkerboard motion drifts diagonally and loops at 10s");
+    }
+
+    {
+      Cue cue;
+      cue.kind = CueKind::Pattern;
+      cue.path = "pattern://checkerboard";
+      cue.width = 128;
+      cue.height = 128;
+      auto frame = MediaEngine::buildPatternFrame(cue, 0.0, cue.width, cue.height);
+      bool hasWhite = false;
+      bool hasBlack = false;
+      bool hasTransparent = false;
+      if (frame) {
+        for (size_t i = 0; i + 3 < frame->pixels.size(); i += 4) {
+          const std::uint8_t r = frame->pixels[i + 0];
+          const std::uint8_t g = frame->pixels[i + 1];
+          const std::uint8_t b = frame->pixels[i + 2];
+          const std::uint8_t a = frame->pixels[i + 3];
+          hasWhite = hasWhite || (r == 255 && g == 255 && b == 255);
+          hasBlack = hasBlack || (r == 0 && g == 0 && b == 0);
+          hasTransparent = hasTransparent || (a != 255);
+          if (hasWhite && hasBlack && hasTransparent) {
+            break;
+          }
+        }
+      }
+      expect(frame && hasWhite && hasBlack && !hasTransparent, "checkerboard frame opaque");
+    }
+
+    {
+      std::string startupLabel = browserCueStatusSummary(BrowserStartPhase::WaitXvfb, false, "");
+      bool startupLabelOk = startupLabel.find("xvfb") != std::string::npos
+                         || startupLabel.find("webview") != std::string::npos
+                         || startupLabel.find("initializing") != std::string::npos;
+      bool liveLabelOk = browserCueStatusSummary(BrowserStartPhase::Live, true, "") == "live";
+      bool failedLabelOk = browserCueStatusSummary(BrowserStartPhase::WaitChrome, false, "capture start failed").rfind("failed:", 0) == 0;
+      expect(startupLabelOk && liveLabelOk && failedLabelOk, "browser status summary");
+    }
+
+    // ── The cyphers ────────────────────────────────────────────────────────
+    //
+    // A cypher covers every string in the program without a catalogue, which
+    // is its whole appeal and also means nothing else will ever catch it being
+    // wrong. These are exact transforms, so they can be checked exactly.
+    {
+      std::string err;
+      const dbfs::path noData;
+      auto say = [&](const char* code, const std::string& in) {
+        deckboy::core::i18n::setLanguage(code, noData, err);
+        return deckboy::core::i18n::translate(in);
+      };
+      expect(say("cy-rot13", "NEW") == "ARJ", "cypher: rot13");
+      expect(say("cy-rot13", say("cy-rot13", "TAKE")) == "TAKE", "cypher: rot13 is its own inverse");
+      expect(say("cy-atbash", "ABC") == "ZYX", "cypher: atbash");
+      expect(say("cy-leet", "SAVE AS") == "54V3 45", "cypher: leet");
+      expect(say("cy-morse", "NEW") == "-. . .--", "cypher: morse letters");
+      expect(say("cy-morse", "SAVE AS") == "... .- ...- . / .- ...", "cypher: morse word break");
+      // Alienese II carries a running total, so the same letter encodes
+      // differently depending on what it follows -- N,E,W is 13, then 13+4=17,
+      // then 17+22=13 again, so "NEW" is "NRN" and the two Ns are not the same
+      // N. A letter-for-letter table would get this wrong and look right.
+      expect(say("cy-alienese2", "NEW") == "NRN", "cypher: alienese II runs a total");
+      expect(say("cy-alienese2", "AAA") == "AAA", "cypher: alienese II holds at zero");
+      expect(say("cy-alienese2", "BBB") == "BCD", "cypher: alienese II accumulates");
+
+      // APPLIED EXACTLY ONCE, which the transforms above cannot tell you.
+      //
+      // The text helpers translate, then hand the finished string to the
+      // rasteriser -- which also translated, so every label went through twice.
+      // A catalogue survives that (the German is not itself a key) and 1337
+      // survives it, so German and 1337 both looked perfect while ROT13 drew
+      // the interface in ENGLISH and Morse drew it as a row of slashes.
+      //
+      // An involution is the only honest test for this: apply it twice and you
+      // are back where you started, which is indistinguishable from it never
+      // having run. That is the bug, so that is the check.
+      deckboy::core::i18n::setLanguage("cy-rot13", noData, err);
+      expect(deckboy::core::i18n::translate(deckboy::core::i18n::translate("NEW")) == "NEW",
+             "cypher: rot13 twice is the identity -- so the draw path must apply it once");
+      deckboy::core::i18n::setLanguage("cy-morse", noData, err);
+      expect(deckboy::core::i18n::translate(deckboy::core::i18n::translate("NEW")) != "-. . .--",
+             "cypher: morse twice is not morse once");
+
+      // A NAME AND ITS QUALIFIER. Menus write "Full White (motion)"; with no
+      // line for the whole, each half is translated on its own. Against the
+      // German catalogue, whose OUTPUT is AUSGANG and which has no line for
+      // "spare": the half it knows changes and the half it does not stays.
+      if (deckboy::core::i18n::setLanguage("de", Paths::dataDir(), err)) {
+        expect(deckboy::core::i18n::translate("OUTPUT (spare)") == "AUSGANG (spare)",
+               "i18n: a bracketed qualifier does not hide the name from the catalogue");
+        expect(deckboy::core::i18n::translate("spare (also spare)") == "spare (also spare)",
+               "i18n: a name and qualifier nobody translated stay as written");
+      }
+
+      deckboy::core::i18n::setLanguage("en", noData, err);
+      expect(deckboy::core::i18n::passthrough(), "cypher: english is a pass-through");
+      expect(deckboy::core::i18n::translate("TAKE") == "TAKE", "cypher: english changes nothing");
+    }
+
+    // ── The matte, as geometry ─────────────────────────────────────────────
+    //
+    // Four fill rects are hard to get wrong; deciding WHERE they go is not.
+    // An unrecognised aspect in particular has to mean "no mask" -- guessing a
+    // ratio over a typo would black out part of somebody's show.
+    {
+      auto rect = [](const char* aspect, int w, int h) {
+        return matteContentRect(aspect, w, h);
+      };
+      const SDL_Rect off = rect("off", 1920, 1080);
+      expect(off.x == 0 && off.y == 0 && off.w == 1920 && off.h == 1080,
+             "matte: off covers the whole raster");
+      const SDL_Rect same = rect("16:9", 1920, 1080);
+      expect(same.w == 1920 && same.h == 1080,
+             "matte: an aspect the raster already is draws no bars");
+      const SDL_Rect wide = rect("2.39:1", 1920, 1080);
+      expect(wide.w == 1920 && wide.h == 803 && wide.x == 0 && wide.y == 138,
+             "matte: 2.39 letterboxes a 16:9 raster");
+      const SDL_Rect tall = rect("4:3", 1920, 1080);
+      expect(tall.h == 1080 && tall.w == 1440 && tall.y == 0 && tall.x == 240,
+             "matte: 4:3 pillarboxes a 16:9 raster");
+      const SDL_Rect junk = rect("not-an-aspect", 1920, 1080);
+      expect(junk.w == 1920 && junk.h == 1080,
+             "matte: an unparseable aspect masks nothing");
+      const SDL_Rect zero = rect("16:0", 1920, 1080);
+      expect(zero.w == 1920 && zero.h == 1080,
+             "matte: a zero denominator masks nothing");
+      const SDL_Rect portrait = rect("9:16", 1920, 1080);
+      expect(portrait.h == 1080 && portrait.w == 608,
+             "matte: 9:16 pillarboxes hard");
+    }
+
+    // ── Loop, Hold and the end action cannot disagree ──────────────────────
+    //
+    // The switches show what the cue WILL do, and moving one moves the
+    // others: the walkthrough found Loop off on a cue that looped, and Hold
+    // on under Auto next (first-time walkthrough, 2026-10-26).
+    {
+      Cue c;
+      c.kind = CueKind::Video;
+      c.endAction = CueEndAction::Loop;   // an explicit loop with the flag off
+      c.loop = false;
+      c.duration = 10.0;                  // long enough to have an end, were it not looping
+      expect(cueLoopsAtEnd(c) && trackerCueHasEnd(c) == false,
+             "end: an explicit Loop shows Loop on, and has no end to wait for");
+      setCueLoopsAtEnd(c, false);
+      expect(!cueLoopsAtEnd(c) && resolvedCueEndAction(c) == CueEndAction::AutoNext,
+             "end: Loop off takes the explicit Loop with it");
+
+      c = Cue {};
+      c.kind = CueKind::Video;
+      c.endAction = CueEndAction::AutoNext;
+      c.pauseOnLastFrame = true;          // Hold on under Auto next
+      expect(!cueHoldsAtEnd(c), "end: Hold under an explicit Auto next shows off");
+      setCueHoldsAtEnd(c, true);
+      expect(cueHoldsAtEnd(c) && resolvedCueEndAction(c) == CueEndAction::PauseOnLast,
+             "end: Hold on makes the cue hold");
+      setCueHoldsAtEnd(c, false);
+      expect(!cueHoldsAtEnd(c) && resolvedCueEndAction(c) == CueEndAction::AutoNext,
+             "end: Hold off goes back to the next cue");
+
+      c = Cue {};
+      c.loop = true;
+      c.pauseOnLastFrame = true;          // a loop whose devamp tail holds
+      expect(cueLoopsAtEnd(c) && cueHoldsAtEnd(c), "end: a loop that holds once devamped shows both");
+      setCueHoldsAtEnd(c, false);
+      expect(cueLoopsAtEnd(c) && !c.pauseOnLastFrame, "end: Hold off under a loop leaves the loop");
+
+      c = Cue {};
+      c.pauseOnLastFrame = true;
+      setCueEndActionKeepingSwitches(c, CueEndAction::Loop);
+      expect(c.loop && cueLoopsAtEnd(c), "end: choosing Loop turns the Loop switch on");
+      setCueEndActionKeepingSwitches(c, CueEndAction::Stop);
+      expect(!c.loop && !cueLoopsAtEnd(c) && !cueHoldsAtEnd(c) && c.pauseOnLastFrame,
+             "end: choosing Stop turns Loop off; Hold shows off and keeps an overlay's frame");
+    }
+
+    // ── The Colour effect: neutral is nothing, and each knob does its job ──
+    {
+      namespace fx = deckboy::effects;
+      auto run = [](std::vector<std::uint8_t> pixels, float a, float b, float c, float d) {
+        fx::CueEffect effect;
+        effect.kind = fx::CueEffectKind::Colour;
+        effect.amount = 1.0f;
+        effect.paramA = a;
+        effect.paramB = b;
+        effect.paramC = c;
+        effect.paramD = d;
+        fx::CueEffectContext ctx;
+        ctx.width = static_cast<int>(pixels.size() / 4);
+        ctx.height = 1;
+        fx::applyCueEffectStack(pixels, {effect}, ctx);
+        return pixels;
+      };
+      std::vector<std::uint8_t> sample;
+      for (int i = 0; i < 256; ++i) {
+        sample.insert(sample.end(), {static_cast<std::uint8_t>(i), static_cast<std::uint8_t>(255 - i),
+                                     static_cast<std::uint8_t>((i * 7) & 255), 255});
+      }
+      expect(run(sample, 0.5f, 0.0f, 0.0f, 0.0f) == sample,
+             "colour effect: arrives neutral (A=0.5, B=C=D=0 changes no byte)");
+      const auto washed = run({200, 40, 90, 255}, 0.5f, 0.0f, 0.0f, 1.0f);
+      expect(washed[0] == washed[1] && washed[1] == washed[2], "colour effect: wash out all the way is grey");
+      const auto tinted = run({128, 128, 128, 255}, 0.5f, 1.0f, 0.0f, 0.0f);
+      expect(tinted[0] > tinted[1] + 40 && tinted[0] > tinted[2] + 40, "colour effect: a red tint turns grey red");
+      const auto turned = run({255, 0, 0, 255}, 1.0f, 0.0f, 0.0f, 0.0f);
+      expect(turned[0] < turned[1] && turned[0] < turned[2], "colour effect: half a turn takes red to cyan");
+    }
+
+    // ── The basics added 2026-10-29: answers that can be worked out by hand ──
+    {
+      namespace fx = deckboy::effects;
+      auto run = [](fx::CueEffectKind kind, std::vector<std::uint8_t> pixels, int width,
+                    float a, float b, float c, float d, double seconds = -1.0) {
+        fx::CueEffect effect;
+        effect.kind = kind;
+        effect.amount = 1.0f;
+        effect.paramA = a;
+        effect.paramB = b;
+        effect.paramC = c;
+        effect.paramD = d;
+        fx::CueEffectContext ctx;
+        ctx.width = width;
+        ctx.height = static_cast<int>(pixels.size() / 4) / width;
+        ctx.seconds = seconds;
+        fx::applyCueEffectStack(pixels, {effect}, ctx);
+        return pixels;
+      };
+      // Colour replace, as it arrives: cyan becomes red, at the same
+      // brightness, and a grey has no hue to change.
+      const auto cyan = run(fx::CueEffectKind::ColourReplace, {0, 255, 255, 255, 128, 128, 128, 255},
+                            2, 0.5f, 0.0f, 0.0f, 0.0f);
+      expect(cyan[0] == 255 && cyan[1] == 0 && cyan[2] == 0 && cyan[4] == 128 && cyan[5] == 128 &&
+             cyan[6] == 128, "colour replace: arrives taking cyan to red, and leaves grey alone");
+      // Mirror: flip across reverses a row exactly; left onto right reflects.
+      std::vector<std::uint8_t> row;
+      for (int i = 0; i < 4; ++i) row.insert(row.end(), {static_cast<std::uint8_t>(i * 60), 0, 0, 255});
+      const auto flipped = run(fx::CueEffectKind::Mirror, row, 4, 0.0f, 0.0f, 0.0f, 0.0f);
+      const auto folded = run(fx::CueEffectKind::Mirror, row, 4, 0.5f, 0.0f, 0.0f, 0.0f);
+      expect(flipped[0] == 180 && flipped[4] == 120 && flipped[8] == 60 && flipped[12] == 0,
+             "mirror: flip across reverses the row");
+      expect(folded[0] == 0 && folded[4] == 60 && folded[8] == 60 && folded[12] == 0,
+             "mirror: as it arrives, the left half shows reflected on the right");
+      // Luma key, as it arrives: black goes, white stays; cut bright takes white too.
+      const std::vector<std::uint8_t> blackWhite {0, 0, 0, 255, 255, 255, 255, 255};
+      const auto keyed = run(fx::CueEffectKind::LumaKey, blackWhite, 2, 0.5f, 0.0f, 0.0f, 0.0f);
+      const auto keyedBright = run(fx::CueEffectKind::LumaKey, blackWhite, 2, 0.5f, 0.0f, 1.0f, 0.0f);
+      expect(keyed[3] == 0 && keyed[7] == 255 && keyed[0] == 0 && keyed[4] == 255,
+             "luma key: takes black out and keeps white, colour untouched");
+      expect(keyedBright[7] == 0, "luma key: cut bright takes white out as well");
+      // Strobe on the show's clock: a flash at the start of each beat, none
+      // between, white by default and black at the far end of "flash to".
+      const std::vector<std::uint8_t> mid {100, 100, 100, 255};
+      const auto onBeat = run(fx::CueEffectKind::Strobe, mid, 1, 0.5f, 0.0f, 0.0f, 0.0f, 0.0);
+      const auto between = run(fx::CueEffectKind::Strobe, mid, 1, 0.5f, 0.0f, 0.0f, 0.0f, 0.4);
+      const auto blackFlash = run(fx::CueEffectKind::Strobe, mid, 1, 0.5f, 1.0f, 0.0f, 0.0f, 0.0);
+      expect(onBeat[0] == 255 && between[0] == 100 && blackFlash[0] == 0,
+             "strobe: white on the beat, nothing between, black when asked");
+      // Ten a second at the top of the rate: a tenth of a second in is the next
+      // flash, and halfway between two is dark.
+      const auto tenth = run(fx::CueEffectKind::Strobe, mid, 1, 1.0f, 0.0f, 0.0f, 0.0f, 0.105);
+      const auto half = run(fx::CueEffectKind::Strobe, mid, 1, 1.0f, 0.0f, 0.0f, 0.0f, 0.15);
+      expect(tenth[0] == 255 && half[0] == 100, "strobe: the fastest rate is ten a second");
+      // Mosaic: a tile is its own average.
+      std::vector<std::uint8_t> checker;
+      for (int y = 0; y < 64; ++y) {
+        for (int x = 0; x < 64; ++x) {
+          const std::uint8_t v = ((x + y) & 1) ? 200 : 0;
+          checker.insert(checker.end(), {v, v, v, 255});
+        }
+      }
+      const auto tiled = run(fx::CueEffectKind::Mosaic, checker, 64, 0.5f, 0.0f, 0.0f, 0.0f);
+      expect(tiled[0] == 100 && tiled[4] == 100, "mosaic: a tile is filled with its own average");
+      // Blur keeps a flat picture flat; sharpen and edges leave it alone.
+      const std::vector<std::uint8_t> flat(64 * 64 * 4, 90);
+      expect(run(fx::CueEffectKind::Blur, flat, 64, 0.5f, 0.0f, 0.0f, 0.0f) == flat &&
+             run(fx::CueEffectKind::Sharpen, flat, 64, 0.5f, 0.0f, 0.0f, 0.0f) == flat,
+             "blur and sharpen: a flat picture stays exactly as it was");
+      const auto noEdges = run(fx::CueEffectKind::Edges, flat, 64, 0.5f, 0.0f, 0.0f, 0.0f);
+      expect(noEdges[0] == 0 && noEdges[1] == 0, "edges: a flat picture has no lines, so it goes black");
+    }
+
+    // ── Busy animals: each moves like itself, and stays in its strip ───────
+    {
+      struct Watched {
+        double travelled = 0.0;
+        double highest = 0.0;
+        int stillSteps = 0;
+        unsigned poses = 0;
+        bool inside = true;
+      };
+      const auto watch = [](const char* species) {
+        Watched w;
+        BusyCritter b;
+        b.species = species;
+        b.dice = 12345u;
+        b.runLeft = busyGaitFor(species).runFor;
+        double last = b.x;
+        for (int i = 0; i < 600; ++i) {   // ten seconds at sixty steps a second
+          stepBusyCritter(b, 1.0 / 60.0);
+          w.travelled += std::fabs(b.x - last);
+          last = b.x;
+          w.highest = std::max(w.highest, b.lift);
+          if (b.pose == 0) ++w.stillSteps;
+          if (b.pose >= 0) w.poses |= 1u << b.pose;
+          w.inside = w.inside && b.x >= 0.06 && b.x <= 0.94 && b.lift >= 0.0 && b.lift <= 1.0;
+        }
+        return w;
+      };
+      bool allInside = true;
+      for (const char* species : {"cat", "clownfish", "crab", "dolphin", "eel", "frog", "hedgehog",
+                                  "lizard", "moth", "mouse", "rat", "snail"}) {
+        allInside = allInside && watch(species).inside;
+      }
+      expect(allInside, "busy animals: all twelve stay inside their strip");
+      const Watched frog = watch("frog");
+      expect(frog.poses == 0xFu && frog.highest > 0.9 && frog.stillSteps > 0,
+             "busy animals: the frog sits, then hops through all four frames");
+      const Watched mouse = watch("mouse");
+      const Watched snail = watch("snail");
+      const Watched fish = watch("clownfish");
+      expect(mouse.stillSteps > 60 && fish.stillSteps == 0 && fish.highest > 0.8,
+             "busy animals: the mouse freezes between runs; the fish never stops, and swims up and down");
+      expect(snail.travelled < 0.6 && mouse.travelled > snail.travelled * 2.0,
+             "busy animals: the snail is the slowest");
+      expect(!busyGaitFor("crab").turnsBody && busyGaitFor("cat").turnsBody,
+             "busy animals: the crab sidles without turning; the cat turns round");
+    }
+
+    // ── Sound scopes: answers known in advance ─────────────────────────────
+    //
+    // Correlation from signals whose answer is a definition, the spectrum
+    // from a sine of a stated level, and the loudness meter they share with
+    // the egress from EBU Tech 3341's first test: a stereo 1 kHz sine at
+    // -23 dBFS reads -23.0 LUFS momentary, short-term and integrated.
+    {
+      namespace afx = deckboy::audiofx;
+      constexpr double kPi = 3.14159265358979323846;
+      auto stereo = [](std::size_t frames, auto left, auto right) {
+        std::vector<std::int16_t> out(frames * 2);
+        for (std::size_t i = 0; i < frames; ++i) {
+          out[2 * i] = static_cast<std::int16_t>(std::lround(left(i) * 32767.0));
+          out[2 * i + 1] = static_cast<std::int16_t>(std::lround(right(i) * 32767.0));
+        }
+        return out;
+      };
+      auto sine = [&](double hz, double dbfs, double phase = 0.0) {
+        const double amplitude = std::pow(10.0, dbfs / 20.0);
+        return [=](std::size_t i) { return amplitude * std::sin(2.0 * kPi * hz * i / kAudioRate + phase); };
+      };
+      auto silent = [](std::size_t) { return 0.0; };
+      const auto inPhase = stereo(4096, sine(440, -12), sine(440, -12));
+      const auto inverted = stereo(4096, sine(440, -12), sine(440, -12, kPi));
+      const auto oneSide = stereo(4096, sine(440, -12), silent);
+      expect(afx::stereoCorrelation(inPhase.data(), 4096) > 0.999 &&
+             afx::stereoCorrelation(inverted.data(), 4096) < -0.999,
+             "sound scopes: correlation is +1 in phase and -1 with one leg inverted");
+      expect(afx::stereoCorrelation(oneSide.data(), 4096) == 0.0,
+             "sound scopes: correlation is 0 with one side silent");
+
+      const auto tone = stereo(afx::kSpectrumFrames, sine(1000, -20), sine(1000, -20));
+      const auto bands = afx::thirdOctaveLevels(tone.data(), afx::kSpectrumFrames, kAudioRate);
+      const int oneK = 16;   // kThirdOctaveLabels[16] is "1k"
+      bool loudest = true;
+      for (int b = 0; b < afx::kThirdOctaveBands; ++b) {
+        if (b != oneK && bands[b] >= bands[oneK]) loudest = false;
+      }
+      std::printf("      1 kHz at -20 dBFS: 1k band %.2f dB, 100 Hz band %.1f dB\n", bands[oneK], bands[6]);
+      expect(std::string(afx::kThirdOctaveLabels[oneK]) == "1k" && std::fabs(bands[oneK] + 20.0) < 0.2 &&
+             loudest && bands[6] < -60.0,
+             "sound scopes: a -20 dBFS 1 kHz sine reads -20 in the 1k band and nowhere else");
+
+      afx::ProgramLoudnessMeter meter;
+      meter.push(stereo(static_cast<std::size_t>(kAudioRate) * 20, sine(1000, -23), sine(1000, -23)));
+      std::printf("      Tech 3341 test 1: M %.2f  S %.2f  I %.2f LUFS\n",
+                  meter.momentary, meter.shortTerm, meter.integrated);
+      expect(std::fabs(meter.momentary + 23.0) <= 0.1 && std::fabs(meter.shortTerm + 23.0) <= 0.1 &&
+             std::fabs(meter.integrated + 23.0) <= 0.1,
+             "sound scopes: EBU Tech 3341 test 1 reads -23.0 LUFS (M, S and I)");
+
+      // A sine at a quarter of the sample rate, sampled 45 degrees off its
+      // crests: every sample sits 3 dB under the true peak, which only the
+      // 4x interpolation sees.
+      afx::ProgramLoudnessMeter peaks;
+      peaks.push(stereo(48000, sine(12000, -6, kPi / 4), sine(12000, -6, kPi / 4)));
+      std::printf("      12 kHz at -6 dBFS, samples 3 dB down: true peak %.2f dBTP\n", peaks.peakDb());
+      expect(std::fabs(peaks.peakDb() + 6.0) < 0.6,
+             "sound scopes: true peak finds the crest between samples");
+    }
+
+    // ── The output limiter: a ceiling, and nothing else ─────────────────────
+    {
+      namespace afx = deckboy::audiofx;
+      constexpr double kPi = 3.14159265358979323846;
+      const int rate = 48000;
+      auto stereoSine = [&](std::size_t frames, auto amplitudeAt) {
+        std::vector<float> out(frames * 2);
+        for (std::size_t i = 0; i < frames; ++i) {
+          const float v = static_cast<float>(amplitudeAt(i) * std::sin(2.0 * kPi * 1000.0 * i / rate));
+          out[2 * i] = out[2 * i + 1] = v;
+        }
+        return out;
+      };
+      auto peakOf = [](const std::vector<float>& s, std::size_t from, std::size_t to) {
+        float p = 0.0f;
+        for (std::size_t i = from * 2; i < to * 2 && i < s.size(); ++i) p = std::max(p, std::fabs(s[i]));
+        return p;
+      };
+      const float sixDown = static_cast<float>(std::pow(10.0, -6.0 / 20.0));
+
+      // Full scale into a -6 dBFS ceiling, and a step from quiet straight to
+      // full scale: the lookahead has the gain down before the step arrives.
+      afx::BusLimiter loud;
+      loud.setCeilingDb(-6.0);
+      auto step = stereoSine(48000, [](std::size_t i) { return i < 24000 ? 0.1 : 1.0; });
+      loud.process(step.data(), 48000, 2, rate);
+      std::printf("      0 dBFS into -6: peak out %.5f (ceiling %.5f), reduction %.1f dB, clamped %llu\n",
+                  peakOf(step, 0, 48000), sixDown, loud.gainReductionDb(),
+                  static_cast<unsigned long long>(loud.clampedSamples()));
+      expect(peakOf(step, 0, 48000) <= sixDown + 1e-6f && loud.gainReductionDb() < -5.5 &&
+             loud.clampedSamples() == 0,
+             "output limiter: nothing passes the ceiling, a sudden step included, with no clipping");
+
+      // Under the ceiling: the same samples, a lookahead later.
+      afx::BusLimiter quiet;
+      quiet.setCeilingDb(-1.0);
+      const auto input = stereoSine(9600, [](std::size_t) { return 0.1; });
+      auto passed = input;
+      quiet.process(passed.data(), 9600, 2, rate);
+      const std::size_t lag = static_cast<std::size_t>(quiet.latencyFrames());
+      float worst = 0.0f;
+      for (std::size_t i = lag; i < 9600; ++i) worst = std::max(worst, std::fabs(passed[2 * i] - input[2 * (i - lag)]));
+      expect(worst < 1e-7f && quiet.gainReductionDb() == 0.0,
+             "output limiter: under the ceiling it changes nothing but the time");
+
+      // After a loud stretch the gain comes back up (120 ms release).
+      auto recover = stereoSine(48000, [](std::size_t i) { return i < 12000 ? 1.0 : 0.1; });
+      loud.process(recover.data(), 48000, 2, rate);
+      const float tail = peakOf(recover, 40000, 48000);
+      std::printf("      back to -20 dBFS: tail peak %.4f (input 0.1000)\n", tail);
+      expect(tail > 0.098f && tail <= 0.1001f, "output limiter: the gain recovers once the loud part has gone");
+
+      // One gain for both channels: a loud left does not leave the right alone.
+      afx::BusLimiter linked;
+      linked.setCeilingDb(-6.0);
+      std::vector<float> lr(48000 * 2);
+      for (std::size_t i = 0; i < 48000; ++i) {
+        const double s = std::sin(2.0 * kPi * 1000.0 * i / rate);
+        lr[2 * i] = static_cast<float>(s);
+        lr[2 * i + 1] = static_cast<float>(0.2 * s);
+      }
+      linked.process(lr.data(), 48000, 2, rate);
+      float left = 0.0f, right = 0.0f;
+      for (std::size_t i = 24000; i < 48000; ++i) {
+        left = std::max(left, std::fabs(lr[2 * i]));
+        right = std::max(right, std::fabs(lr[2 * i + 1]));
+      }
+      expect(std::fabs(right / left - 0.2f) < 0.01f, "output limiter: both channels share one gain, so the image holds");
+    }
+
+    // ── False colour: ARRI's bands, and a frame through them ───────────────
+    {
+      auto rgb = [](double percent) {
+        const SDL_Color c = falseColourFor(percent);
+        return std::array<int, 3> {c.r, c.g, c.b};
+      };
+      expect(rgb(1.0) == std::array<int, 3> {128, 0, 160} && rgb(3.0) == std::array<int, 3> {40, 80, 255},
+             "false colour: crushed is purple, just above black is blue");
+      expect(rgb(40.0) == std::array<int, 3> {0, 200, 60} && rgb(54.0) == std::array<int, 3> {255, 120, 190},
+             "false colour: 18% grey is green, a stop over is pink");
+      expect(rgb(98.0) == std::array<int, 3> {255, 225, 0} && rgb(99.5) == std::array<int, 3> {235, 20, 20},
+             "false colour: nearly clipped is yellow, clipped is red");
+      const auto grey = rgb(70.0);
+      expect(grey[0] == grey[1] && grey[1] == grey[2] && grey[0] > 100 && grey[0] < 179,
+             "false colour: between the bands, the picture's own grey");
+      std::vector<std::uint8_t> frame {0, 0, 0, 255, 255, 255, 255, 255};   // BGRA: black, white
+      int fw = 0, fh = 0;
+      const auto picture = buildFalseColour(frame, 2, 1, fw, fh);
+      expect(fw == 2 && fh == 1 && (*picture)[0] == 128 && (*picture)[4] == 235,
+             "false colour: a frame's black comes out purple and its white red");
+    }
+
+    // ── Tally: state versus event ──────────────────────────────────────────
+    //
+    // A switcher reports its program bus about once a second whether or not
+    // anything moved, so the rule that separates "still on air" from "just went
+    // on air" is the entire feature. Sixty-one held readings were confirmed
+    // against a real ATEM to fire nothing; these cover the branches a bench
+    // test cannot reach without an operator standing at the panel.
+    {
+      // The rule moved to platform/atem.hpp with the client, and it is still
+      // testable here because it is a PURE function of three ints -- which is
+      // exactly why it was kept separate from the socket in the first place.
+      using Atem = deckboy::platform::AtemSwitcherClient;
+      using TallyEdge = Atem::TallyEdge;
+      const int us = 3;
+      expect(Atem::tallyEdge(1, 3, us) == TallyEdge::OnAir, "tally: cut to us is ON AIR");
+      expect(Atem::tallyEdge(3, 1, us) == TallyEdge::OffAir, "tally: cut away is OFF AIR");
+      expect(Atem::tallyEdge(3, 3, us) == TallyEdge::None, "tally: held on air is not an event");
+      expect(Atem::tallyEdge(1, 2, us) == TallyEdge::None, "tally: a cut between others is not ours");
+      expect(Atem::tallyEdge(-1, 3, us) == TallyEdge::None, "tally: first reading is state, not a cut");
+      expect(Atem::tallyEdge(1, 3, 0) == TallyEdge::None, "tally: no input chosen fires nothing");
+    }
+
+    // The ATEM packet parsers, against a packet built to the documented shape.
+    // Both run on a network thread against a datagram anyone on the LAN could
+    // have sent, so the bounds behaviour matters as much as the happy path.
+    {
+      auto block = [](std::vector<unsigned char>& into, const char* name,
+                      const std::vector<unsigned char>& payload) {
+        const unsigned len = 8 + static_cast<unsigned>(payload.size());
+        into.push_back(static_cast<unsigned char>(len >> 8));
+        into.push_back(static_cast<unsigned char>(len & 0xFF));
+        into.push_back(0);
+        into.push_back(0);
+        for (int i = 0; i < 4; ++i) into.push_back(static_cast<unsigned char>(name[i]));
+        into.insert(into.end(), payload.begin(), payload.end());
+      };
+      std::vector<unsigned char> packet(12, 0);          // header, contents unused here
+      std::vector<unsigned char> prgi {0, 0, 0, 4};      // ME 0, program = source 4
+      block(packet, "PrgI", prgi);
+      std::vector<unsigned char> inpr(22, 0);
+      inpr[0] = 0; inpr[1] = 4;
+      const char* label = "Camera 4";
+      for (int i = 0; label[i]; ++i) inpr[2 + i] = static_cast<unsigned char>(label[i]);
+      block(packet, "InPr", inpr);
+
+      const auto program =
+        deckboy::platform::AtemSwitcherClient::atemProgramInputFromPacket(packet.data(), static_cast<unsigned>(packet.size()));
+      expect(program && *program == 4, "atem parse: program input");
+
+      std::map<int, std::string> names;
+      deckboy::platform::AtemSwitcherClient::atemInputNamesFromPacket(packet.data(), static_cast<unsigned>(packet.size()), names);
+      expect(names.size() == 1 && names[4] == "Camera 4", "atem parse: input name");
+
+      // A truncated datagram must stop, not read past the end.
+      std::map<int, std::string> shortNames;
+      const unsigned half = static_cast<unsigned>(packet.size()) / 2;
+      deckboy::platform::AtemSwitcherClient::atemInputNamesFromPacket(packet.data(), half, shortNames);
+      expect(shortNames.empty() || shortNames.count(4) == 0,
+             "atem parse: truncated packet reads nothing past the end");
+
+      // A zero-length block would otherwise spin forever.
+      std::vector<unsigned char> evil(12, 0);
+      evil.insert(evil.end(), {0, 0, 0, 0, 'P', 'r', 'g', 'I'});
+      const auto none =
+        deckboy::platform::AtemSwitcherClient::atemProgramInputFromPacket(evil.data(), static_cast<unsigned>(evil.size()));
+      expect(!none, "atem parse: zero-length block terminates");
+    }
+
+    {
+      auto osc = buildOscStringMessage("/take", "3");
+      std::string packet(reinterpret_cast<const char*>(osc.data()), osc.size());
+      auto parsed = parseOscPacket(packet);
+      expect(parsed.size() == 1 && toUpper(parsed[0].address) == "/TAKE", "osc message parse");
+      auto mapped = parsed.empty() ? std::optional<std::string> {} : mapOscToRemoteCommand(parsed[0]);
+      expect(mapped && *mapped == "TAKE 3", "osc command mapping");
+    }
+
+    {
+      auto osc = buildOscStringMessage("/cue/audio", "on");
+      std::string packet(reinterpret_cast<const char*>(osc.data()), osc.size());
+      auto parsed = parseOscPacket(packet);
+      auto mapped = parsed.empty() ? std::optional<std::string> {} : mapOscToRemoteCommand(parsed[0]);
+      expect(mapped && (*mapped == "CUEAUDIO ON" || *mapped == "CUEAUDIO"), "osc cue audio mapping");
+    }
+
+    {
+      auto osc = buildOscStringMessage("/deck/opacity", "75");
+      std::string packet(reinterpret_cast<const char*>(osc.data()), osc.size());
+      auto parsed = parseOscPacket(packet);
+      auto mapped = parsed.empty() ? std::optional<std::string> {} : mapOscToRemoteCommand(parsed[0]);
+      expect(mapped && *mapped == "DECKOPACITY 75", "osc deck opacity mapping");
+    }
+
+    {
+      auto osc = buildOscStringMessage("/atem", "1");
+      std::string packet(reinterpret_cast<const char*>(osc.data()), osc.size());
+      auto parsed = parseOscPacket(packet);
+      auto mapped = parsed.empty() ? std::optional<std::string> {} : mapOscToRemoteCommand(parsed[0]);
+      expect(mapped && *mapped == "ATEM ON", "osc integration mapping");
+    }
+
+    {
+      auto parsed = parseNmcSyncPacket("DECKBOY_NMC1 PLAY 12.5");
+      expect(parsed && parsed->command == "PLAY" && parsed->seconds &&
+               std::fabs(*parsed->seconds - 12.5) < 0.001,
+             "nmc packet parse");
+    }
+
+    {
+      auto one = buildOscStringMessage("/go", "1");
+      auto two = buildOscStringMessage("/overlay", "1");
+      std::vector<std::uint8_t> bundle;
+      bundle.insert(bundle.end(), {'#', 'b', 'u', 'n', 'd', 'l', 'e', '\0'});
+      bundle.insert(bundle.end(), 8, 0);
+      appendOscU32(bundle, static_cast<std::uint32_t>(one.size()));
+      bundle.insert(bundle.end(), one.begin(), one.end());
+      appendOscU32(bundle, static_cast<std::uint32_t>(two.size()));
+      bundle.insert(bundle.end(), two.begin(), two.end());
+      std::string packet(reinterpret_cast<const char*>(bundle.data()), bundle.size());
+      auto parsed = parseOscPacket(packet);
+      expect(parsed.size() == 2, "osc bundle parse");
+    }
+
+    {
+      // A window cue whose window is not open must SAY SO. It used to plan a
+      // capture that ffmpeg then failed to start, which reached the operator as
+      // a cue that racked and stayed dark.
+      deckboy::platform::SourceCaptureRequest request;
+      request.kind = deckboy::platform::SourceCaptureKind::Window;
+      request.sourceRef = "title:Deckboy Smoke Test No Such Window";
+      request.width = 1280;
+      request.height = 720;
+      request.frameRate = 30;
+      auto plan = deckboy::platform::planSourceCapture(request);
+      expect(!plan.supported && !plan.reasonUnavailable.empty(),
+             "missing window cue reports a reason");
+    }
+
+    {
+      // The Web Monitor must advertise an address on an actual RFC1918
+      // Ethernet/Wi-Fi interface and must be able to bind that exact address.
+      // No eligible LAN is a supported state; it must never fall back to the
+      // VPN's default route or to an address that the listener cannot bind.
+      const std::string address = privateLanIPv4Address();
+      bool validPrivate = address.empty();
+      bool bindable = address.empty();
+      bool eligibleLanFound = false;
+#ifdef _WIN32
+      WSADATA wsaData {};
+      const bool socketRuntimeReady = WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+#else
+      const bool socketRuntimeReady = true;
+#endif
+      if (!address.empty()) {
+        sockaddr_in parsed {};
+        parsed.sin_family = AF_INET;
+        const bool parsedOk = inet_pton(AF_INET, address.c_str(), &parsed.sin_addr) == 1;
+        const std::uint32_t host = parsedOk ? ntohl(parsed.sin_addr.s_addr) : 0;
+        validPrivate = parsedOk && ((host >> 24) == 10 || (host >> 20) == 0xAC1 ||
+                                    (host >> 16) == 0xC0A8);
+        if (validPrivate && socketRuntimeReady) {
+          const SocketHandle test = createBoundSocket(SOCK_STREAM, 0, true, false, address);
+          bindable = test != kInvalidSocket;
+          closeSocket(test);
+        }
+      }
+#ifdef _WIN32
+      ULONG bytes = 16 * 1024;
+      std::vector<unsigned char> adaptersStorage(bytes);
+      auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(adaptersStorage.data());
+      constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+                              GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_GATEWAYS;
+      ULONG result = GetAdaptersAddresses(AF_INET, flags, nullptr, adapters, &bytes);
+      if (result == ERROR_BUFFER_OVERFLOW) {
+        adaptersStorage.resize(bytes);
+        adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(adaptersStorage.data());
+        result = GetAdaptersAddresses(AF_INET, flags, nullptr, adapters, &bytes);
+      }
+      if (result == NO_ERROR) {
+        for (auto* adapter = adapters; adapter && !eligibleLanFound; adapter = adapter->Next) {
+          if (adapter->OperStatus != IfOperStatusUp ||
+              (adapter->IfType != IF_TYPE_ETHERNET_CSMACD &&
+               adapter->IfType != IF_TYPE_IEEE80211)) continue;
+          bool gateway = false;
+          for (auto* item = adapter->FirstGatewayAddress; item; item = item->Next) {
+            if (item->Address.lpSockaddr && item->Address.lpSockaddr->sa_family == AF_INET &&
+                reinterpret_cast<const sockaddr_in*>(item->Address.lpSockaddr)->sin_addr.s_addr != htonl(INADDR_ANY)) {
+              gateway = true;
+              break;
+            }
+          }
+          if (!gateway) continue;
+          for (auto* item = adapter->FirstUnicastAddress; item; item = item->Next) {
+            if (!item->Address.lpSockaddr || item->Address.lpSockaddr->sa_family != AF_INET) continue;
+            const std::uint32_t host = ntohl(reinterpret_cast<const sockaddr_in*>(item->Address.lpSockaddr)->sin_addr.s_addr);
+            if ((host >> 24) == 10 || (host >> 20) == 0xAC1 || (host >> 16) == 0xC0A8) {
+              eligibleLanFound = true;
+              break;
+            }
+          }
+        }
+      }
+#else
+      ifaddrs* interfaces = nullptr;
+      if (getifaddrs(&interfaces) == 0 && interfaces) {
+        for (const ifaddrs* item = interfaces; item; item = item->ifa_next) {
+          if (!item->ifa_name || !item->ifa_addr || item->ifa_addr->sa_family != AF_INET ||
+              (item->ifa_flags & IFF_UP) == 0 ||
+              (item->ifa_flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) != 0) continue;
+          const std::string name(item->ifa_name);
+          if (!(name.rfind("en", 0) == 0 || name.rfind("eth", 0) == 0 ||
+                name.rfind("em", 0) == 0 || name.rfind("igb", 0) == 0 ||
+                name.rfind("ix", 0) == 0 || name.rfind("re", 0) == 0 ||
+                name.rfind("wl", 0) == 0 || name.rfind("wlan", 0) == 0 ||
+                name.rfind("wifi", 0) == 0)) continue;
+          const std::uint32_t host = ntohl(reinterpret_cast<const sockaddr_in*>(item->ifa_addr)->sin_addr.s_addr);
+          if ((host >> 24) == 10 || (host >> 20) == 0xAC1 || (host >> 16) == 0xC0A8) {
+            eligibleLanFound = true;
+            break;
+          }
+        }
+        freeifaddrs(interfaces);
+      }
+#endif
+      expect(!eligibleLanFound || (validPrivate && bindable),
+             "web monitor selects a bindable private LAN address when one exists");
+#ifdef _WIN32
+      if (socketRuntimeReady) WSACleanup();
+#endif
+    }
+
+    {
+      deckboy::platform::SourceCaptureRequest request;
+      request.kind = deckboy::platform::SourceCaptureKind::Window;
+      request.sourceRef = "active-window";
+      request.width = 1280;
+      request.height = 720;
+      request.frameRate = 30;
+      request.drawMouse = true;
+      request.display = ":0.0";
+      auto plan = deckboy::platform::planSourceCapture(request);
+#if defined(__linux__)
+      expect(plan.supported && !plan.ffmpegArgs.empty() && plan.backendId == "x11grab", "capture backend plan");
+#elif defined(_WIN32)
+      expect(plan.supported && !plan.ffmpegArgs.empty() && plan.backendId == "gdigrab", "capture backend plan");
+#else
+      // macOS: window/screen capture is the ScreenCaptureKit helper. It reports
+      // supported once deckboy-sckcapture is beside the exe (as it is in the
+      // build tree and the bundle), and emits the helper's argv as ffmpegArgs;
+      // if the helper is missing it stays honest with a reason.
+      expect(plan.backendId == "screencapturekit" &&
+                 (plan.supported ? !plan.ffmpegArgs.empty()
+                                 : !plan.reasonUnavailable.empty()),
+             "capture backend plan");
+#endif
+    }
+
+    {
+      auto outputCatalog = deckboy::platform::createOutputBackendCatalog();
+      deckboy::platform::OutputBackendRouteRequest request;
+      request.outputType = "stream";
+      request.streamEnabled = true;
+      request.ndiEnabled = true;
+      request.deckLinkEnabled = false;
+      auto route = deckboy::platform::planOutputBackendRoute(request, *outputCatalog);
+      bool hasStream = false;
+      bool hasNdi = false;
+      for (const auto& step : route.steps) {
+        if (step.backendId == "stream") {
+          hasStream = true;
+        } else if (step.backendId == "ndi") {
+          hasNdi = true;
+        }
+      }
+      expect(hasStream && hasNdi, "output backend route plan");
+    }
+
+    {
+      auto integrationCatalog = deckboy::platform::createIntegrationBackendCatalog();
+      deckboy::platform::IntegrationBackendRouteRequest request;
+      request.atemTriggerEnabled = true;
+      request.dmxArtNetEnabled = true;
+      auto route = deckboy::platform::planIntegrationBackendRoute(request, *integrationCatalog);
+      bool hasAtem = false;
+      bool hasArtNet = false;
+      bool atemSupported = false;
+      bool artNetSupported = false;
+      for (const auto& step : route.steps) {
+        if (step.backendId == "atem") {
+          hasAtem = true;
+          atemSupported = step.supported;
+        } else if (step.backendId == "dmx-artnet") {
+          hasArtNet = true;
+          artNetSupported = step.supported;
+        }
+      }
+      expect(hasAtem && hasArtNet, "integration backend route plan");
+      // ATEM and Art-Net bridges are plain UDP listeners — supported on all
+      // platforms since the v0.76.12 cross-platform networking pass. (The
+      // old #ifdef _WIN32 expectation predated Windows socket support.)
+      expect(atemSupported && artNetSupported, "integration runtime support flags");
+    }
+
+    {
+      Project project;
+      project.outputCanvasEnabled = true;
+      project.outputCanvasWidth = 5760;
+      project.outputCanvasHeight = 2160;
+      project.focusedOutputIndex = 1;
+      project.oscQueryEnabled = true;
+      project.oscQueryPort = 6410;
+      project.oscFeedbackMirrorEnabled = true;
+      project.oscFeedbackRateMs = 90;
+      project.atemTriggerEnabled = true;
+      project.ndiTriggerEnabled = true;
+      project.nmcSyncEnabled = false;
+      project.mtcIngestEnabled = true;
+      project.ltcIngestEnabled = false;
+      project.dmxArtNetEnabled = true;
+      project.artNetPort = 16454;
+      project.jumpMode = "load";
+      project.jumpTransitionEnabled = false;
+      project.panicProfile = "fade_rewind";
+      project.panicFadeSeconds = 1.4;
+      project.panicAutoRestore = true;
+      Deck deck;
+      deck.name = "Deck Smoke";
+      deck.outputRouteDeckIndex = 0;
+      deck.transitionSeconds = 1.5;
+      deck.transitionStyle = "dip";
+      deck.playlistOpacity = 0.62f;
+      deck.playlistAutoFade = true;
+      deck.playlistFadeSeconds = 1.7;
+      deck.playlistTimebaseFps = 29.97;
+      deck.playlistStartOffsetSeconds = 3600.0;
+      deck.playlistDefaultCueFadeSeconds = 0.75;
+      deck.playlistDefaultStillDurationSeconds = 6.5;
+      deck.playlistDefaultLoop = true;
+      deck.playlistDefaultFadeInEnabled = true;
+      deck.playlistDefaultFadeOutEnabled = false;
+      deck.playlistDefaultAudioEnabled = false;
+      deck.playlistDefaultPauseAtBeginning = true;
+      deck.playlistDefaultPauseAtEnd = true;
+      deck.playlistDefaultTransitionToNext = false;
+      deck.ndiEnabled = true;
+      deck.ndiSourceName = "Smoke Fill";
+      deck.ndiKeyEnabled = true;
+      deck.ndiKeySourceName = "Smoke Key";
+      deck.canvasViewX = 320;
+      deck.canvasViewY = 40;
+      deck.warpEnabled = true;
+      deck.warpMode = "perspective";
+      deck.warpTopLeftX = -12.0f;
+      deck.warpTopLeftY = 8.0f;
+      deck.warpTopRightX = 10.0f;
+      deck.warpTopRightY = 5.0f;
+      deck.warpBottomRightX = 14.0f;
+      deck.warpBottomRightY = -6.0f;
+      deck.warpBottomLeftX = -9.0f;
+      deck.warpBottomLeftY = -7.0f;
+      deck.edgeBlendLeft = 0.08f;
+      deck.edgeBlendRight = 0.12f;
+      deck.edgeBlendTop = 0.03f;
+      deck.edgeBlendBottom = 0.05f;
+      deck.timecodeChaseEnabled = true;
+      deck.timecodeRunEnabled = false;
+      deck.timecodeTriggerEnabled = true;
+      deck.timecodeJamSyncEnabled = false;
+      deck.timecodeFreewheelSeconds = 2.5;
+      deck.timecodeFps = 25.0;
+      deck.timecodeCurrentSeconds = 12.0;
+      Cue cue;
+      cue.path = (fs::temp_directory_path() / "test.mp4").string();
+      cue.name = "Smoke Cue";
+      cue.id = "smoke-cue-1";
+      cue.cueId = "A1";
+      cue.kind = CueKind::Video;
+      cue.duration = 20.0;
+      cue.width = 1920;
+      cue.height = 1080;
+      cue.hasAudio = true;
+      cue.audioEnabled = false;
+      cue.inPointSeconds = 2.0;
+      cue.outPointSeconds = 8.0;
+      cue.pauseAtBeginning = true;
+      cue.pauseOnLastFrame = true;
+      cue.transitionToNext = false;
+      cue.gotoTarget = "Q12";
+      cue.triggerTimecodeSeconds = 13.0;
+      cue.cueTransitionSeconds = 1.25;
+      cue.cueTransitionStyle = "crossfade";
+      cue.outputRotationDegrees = 17.5f;
+      cue.cropLeft = 0.10f;
+      cue.cropRight = 0.05f;
+      cue.cropTop = 0.02f;
+      cue.cropBottom = 0.03f;
+      cue.chromaKeyEnabled = true;
+      cue.chromaKeyColor = SDL_Color {20, 220, 45, 255};
+      cue.chromaKeyTolerance = 88.5f;
+      cue.chromaKeySoftness = 14.0f;
+      cue.brightness = 1.25f;
+      cue.contrast = 0.85f;
+      cue.saturation = 1.40f;
+      cue.hueShift = -22.0f;
+      cue.audioGainDb = -6.5f;
+      cue.audioPan = 0.35f;
+      cue.audioMono = true;
+      cue.audioFadeInSeconds = 0.5f;
+      cue.audioFadeOutSeconds = 0.0f;
+      cue.audioOutputPair = 2;  // outs 5-6
+      deck.audioOutputChannels = kMaxAudioOutputs;   // the widest: a save used to clamp it to 8
+      Cue imgCue;
+      imgCue.path = (fs::temp_directory_path() / "test.jpg").string();
+      imgCue.name = "Smoke Still";
+      imgCue.id = "smoke-cue-2";
+      imgCue.kind = CueKind::Image;
+      imgCue.stillDurationSeconds = 5.0;
+      Cue ltCue;
+      ltCue.path = "graphic://lower-third";
+      ltCue.name = "Smoke Lower Third";
+      ltCue.kind = CueKind::LowerThird;
+      ltCue.lowerThirdText = "Hello World";
+      ltCue.lowerThirdSubtext = "subtitle here";
+      ltCue.lowerThirdBgAlpha = 200;
+      // An effect stack with ALL FOUR parameters set, a non-default bypass, and
+      // a motion driver. paramC and paramD serialise AFTER the bypass flag so
+      // older shows still load -- exactly the kind of ordering that survives a
+      // code review and dies on a save/load round trip.
+      {
+        deckboy::effects::CueEffect fx;
+        fx.kind = deckboy::effects::CueEffectKind::ReactionBloom;
+        fx.amount = 0.85f;
+        fx.paramA = 0.25f;
+        fx.paramB = 0.5f;
+        fx.paramC = 0.4f;
+        fx.paramD = 0.3f;
+        cue.effects.push_back(fx);
+        deckboy::effects::CueEffect puppet;
+        puppet.kind = deckboy::effects::CueEffectKind::MotionPuppet;
+        puppet.amount = 0.6f;
+        puppet.bypassed = true;
+        cue.effects.push_back(puppet);
+        cue.motionDriverPath = "smoke-driver.mp4";
+        cue.motionDriverSpeed = 1.75f;
+        cue.motionDriverPaused = true;
+      }
+      // Every video-synth field, each set to something that cannot be
+      // confused with a neighbour or with its own default. The record is
+      // POSITIONAL: a field added to the writer without a matching read
+      // shifts every column after it, and the loader had exactly that -- the
+      // synth tuning pair was written mid-record and read from the end, so
+      // twenty-three video-synth fields were read two columns early and
+      // nothing noticed, because each wrong value still clamped into range.
+      // Distinctive values are the whole point: 20 read from a column holding
+      // 1 still clamps to 20 and looks correct.
+      cue.tone.synth.tuning = static_cast<SynthTuning>(3);
+      cue.tone.synth.referenceHz = 432.0;
+      cue.videoSynth.shape = static_cast<VideoSynthShape>(3);
+      cue.videoSynth.mirror = static_cast<VideoSynthMirror>(1);
+      cue.videoSynth.palette = static_cast<VideoSynthPalette>(2);
+      cue.videoSynth.speed = 2.75;
+      cue.videoSynth.scale = 3.25;
+      cue.videoSynth.warp = 1.5;
+      cue.videoSynth.feedbackAmount = 0.77;
+      cue.videoSynth.feedbackZoom = 1.11;
+      cue.videoSynth.feedbackRotate = -4.5;
+      cue.videoSynth.audioReactivity = 0.66;
+      cue.videoSynth.resolution = 4;
+      cue.videoSynth.pixelSort = 0.44;
+      cue.videoSynth.glitch = 0.33;
+      // NOT videoSynth.ascii. That flag is retired: setting it here would mean
+      // "this cue came from an old show", and the loader would rightly add a
+      // TEXT MODE effect to it -- giving this fixture an effect stack it did
+      // not ask for. The migration has its own test below.
+      cue.videoSynth.asciiCols = 137;
+      cue.videoSynth.crt = 0.22;
+      cue.videoSynth.asciiCharSet = 4;
+      cue.videoSynth.asciiShuffle = 7;
+      cue.videoSynth.asciiInk = 3;
+      cue.videoSynth.spriteSheetPath = "smoke-sheet.png";
+      cue.videoSynth.spriteTileW = 24;
+      cue.videoSynth.spriteTileH = 40;
+      cue.videoSynth.spriteRotate = 2;
+      cue.videoSynth.spriteFreeAngle = 90.0;
+      cue.videoSynth.spriteFlip = 3;
+      cue.videoSynth.spriteJitter = 0.55;
+      cue.videoSynth.spriteChaos = 0.88;
+      cue.videoSynth.asciiGlyphs = ".oO@";
+      cue.videoSynth.asciiPhrases = "DECKBOY|GO LIVE";
+      cue.videoSynth.asciiPhraseHold = 4.5;
+      deck.cues.push_back(cue);      // [0]: video — trim/tc/transition tests
+      deck.cues.push_back(imgCue);   // [1]: image still — stillDuration test
+      deck.cues.push_back(ltCue);    // [2]: lower_third — lowerThird tests
+      project.decks = {deck};
+      project.outputs = {
+        OutputTarget {"Program Out", 0, 1, "", true, "window", -1, {}, true, "srt", "srt://127.0.0.1:9100?mode=caller", "", 7200},
+        OutputTarget {"Stage Left Stream", 0, 2, "", true, "stream", 0, {}, true, "rtmp", "rtmp://127.0.0.1/live", "stage-left", 4200}
+      };
+      project.outputs[0].ndiEnabled = true;
+      project.outputs[0].ndiSourceName = "Program Fill";
+      project.outputs[0].ndiKeyEnabled = true;
+      project.outputs[0].ndiKeySourceName = "Program Key";
+      project.outputs[0].outputId = "out-smoke-program";
+      project.outputs[0].outputAlpha = 0.82f;
+      project.outputs[0].outputDelayMs = 240;
+      project.outputs[0].outputTimeOverlayEnabled = true;
+      project.outputs[0].outputColorSpace = "bt709";
+      project.outputs[0].outputLayoutMode = "span";
+      project.outputs[0].outputOrientationDegrees = 90;
+      project.outputs[0].outputTestCardEnabled = true;
+      project.outputs[1].outputId = "out-smoke-stream";
+      project.outputs[1].outputAlpha = 0.67f;
+      project.outputs[1].outputDelayMs = 120;
+      project.outputs[1].outputTimeOverlayEnabled = false;
+      project.outputs[1].outputColorSpace = "srgb";
+      project.outputs[1].outputLayoutMode = "duplicate";
+      project.outputs[1].outputOrientationDegrees = 270;
+      project.outputs[1].outputTestCardEnabled = false;
+      project.outputBitDepth = 10;
+      // The chosen MIDI port. It used to live only in memory, so every restart
+      // fell back to whichever port enumerated first.
+      project.midiDeviceName = "APC40 mkII Control";
+      normalizeProject(project);
+
+      // ── Caption formats ──────────────────────────────────────────────────
+      {
+        using namespace deckboy::captions;
+        expect(formatForPath("a.vtt") == Format::WebVtt &&
+               formatForPath("a.SCC") == Format::Scc &&
+               formatForPath("a.dfxp") == Format::Ttml &&
+               formatForPath("a.srt") == Format::Srt,
+               "caption files are recognised by extension");
+
+        const std::string vtt =
+          "WEBVTT\n\n"
+          "00:00:01.000 --> 00:00:03.500 align:middle\n"
+          "First line\n"
+          "second line\n\n"
+          "00:01:00.000 --> 00:01:02.000\n"
+          "Later\n";
+        const SubtitleTrack fromVtt = parseWebVtt(vtt);
+        expect(fromVtt.entries.size() == 2, "WebVTT yields both cues");
+        expect(std::abs(fromVtt.entries[0].startSeconds - 1.0) < 0.001 &&
+               std::abs(fromVtt.entries[0].endSeconds - 3.5) < 0.001,
+               "WebVTT times are read, and cue settings after them ignored");
+        expect(fromVtt.entries[0].text.find("second line") != std::string::npos,
+               "WebVTT keeps a cue's second line");
+        expect(std::abs(fromVtt.entries[1].startSeconds - 60.0) < 0.001,
+               "WebVTT reads minutes past the first");
+
+        // A round trip has to survive, or the converter is a shredder.
+        const SubtitleTrack again = parseWebVtt(writeWebVtt(fromVtt));
+        expect(again.entries.size() == fromVtt.entries.size() &&
+               std::abs(again.entries[0].startSeconds -
+                        fromVtt.entries[0].startSeconds) < 0.002,
+               "WebVTT survives being written and read again");
+
+        const SubtitleTrack fromSrtText =
+          deckboy::core::parseSrtText(writeSrt(fromVtt));
+        expect(fromSrtText.entries.size() == 2 &&
+               std::abs(fromSrtText.entries[1].startSeconds - 60.0) < 0.002,
+               "a track written as SubRip reads back the same");
+
+        // SCC: real byte pairs. 9420 is Resume Caption Loading, 942F is
+        // End of Caption, and the pairs between them are two characters each.
+        // "C8C5" is "HE", "CCCC" is "LL", "CF" with a null is "O".
+        const std::string scc =
+          "Scenarist_SCC V1.0\n\n"
+          "00:00:02:00\t9420 9420 C8C5 CCCC CF80 942f 942f\n\n"
+          "00:00:06:00\t9420 9420 5745 5254 C580 942f 942f\n";
+        const SubtitleTrack fromScc = parseScc(scc);
+        expect(fromScc.entries.size() == 2, "SCC yields a caption per timecode");
+        expect(fromScc.entries[0].text.find("HELLO") != std::string::npos,
+               "SCC decodes 608 character pairs into text");
+        expect(std::abs(fromScc.entries[0].startSeconds - 2.0) < 0.05,
+               "SCC non-drop timecode resolves to seconds");
+        expect(fromScc.entries[0].endSeconds <= fromScc.entries[1].startSeconds + 0.001,
+               "an SCC caption ends when the next one displaces it");
+
+        // Drop-frame counts by skipping numbers, not by running slow. At one
+        // hour the two differ by about 3.6 seconds, which on air is a caption
+        // on the wrong shot.
+        bool dropped = false;
+        const double ndf = deckboy::captions::detail::parseSccTime("01:00:00:00", dropped);
+        expect(!dropped, "a colon before the frames means non-drop");
+        const double df = deckboy::captions::detail::parseSccTime("01;00;00;00", dropped);
+        expect(dropped, "a semicolon before the frames means drop-frame");
+        expect(std::abs((ndf - df) - 3.6) < 0.2,
+               "drop-frame and non-drop differ by ~3.6s at one hour");
+
+        const std::string ttml =
+          "<tt><body><div>"
+          "<p begin=\"00:00:04.000\" end=\"00:00:06.000\">Line<br/>Break</p>"
+          "</div></body></tt>";
+        const SubtitleTrack fromTtml = parseTtml(ttml);
+        expect(fromTtml.entries.size() == 1 &&
+               std::abs(fromTtml.entries[0].startSeconds - 4.0) < 0.001,
+               "TTML paragraphs carry their times");
+        expect(fromTtml.entries[0].text.find("\n") != std::string::npos,
+               "TTML line breaks become line breaks");
+
+        expect(parseWebVtt("").entries.empty() && parseScc("").entries.empty() &&
+               parseTtml("").entries.empty(),
+               "an empty caption file yields no captions rather than one bad one");
+      }
+
+      // ── MIDI Show Control ────────────────────────────────────────────────
+      {
+        using namespace deckboy::showcontrol;
+        auto msc = [](std::initializer_list<int> bytes) {
+          std::vector<std::uint8_t> out;
+          for (int b : bytes) out.push_back(static_cast<std::uint8_t>(b));
+          return out;
+        };
+        // F0 7F <id> 02 <format> <command> [cue] F7
+        // GO on cue "5", addressed to device 3, video format.
+        auto go = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x01, '5', 0xF7}), 3);
+        expect(go.action == Action::Go && go.cue == "5",
+               "MSC GO carries its cue number");
+
+        // A multi-part cue number, which is what a real desk sends.
+        auto dotted = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x01,
+                                 '1', '2', '.', '4', 0xF7}), 3);
+        expect(dotted.cue == "12.4", "MSC cue numbers keep their dots");
+
+        // Cue, list and path are separated by 00.
+        auto listed = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x01,
+                                 '7', 0x00, '2', 0xF7}), 3);
+        expect(listed.cue == "7" && listed.cueList == "2",
+               "MSC cue list is read after the separator");
+
+        // 127 is everybody, and must be honoured whatever we are set to.
+        auto all = parse(msc({0xF0, 0x7F, 0x7F, 0x02, 0x30, 0x01, '1', 0xF7}), 9);
+        expect(all.action == Action::Go, "MSC device 127 addresses everything");
+
+        // A message for another device is not ours.
+        auto other = parse(msc({0xF0, 0x7F, 0x05, 0x02, 0x30, 0x01, '1', 0xF7}), 3);
+        expect(other.action == Action::None, "MSC ignores another device's cue");
+
+        // A GO to the LIGHTING rig arriving on our wire is not ours either.
+        // This is the one that matters: acting on it would fire video when the
+        // desk asked for a lamp.
+        auto lighting = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x01, 0x01, '1', 0xF7}), 3);
+        expect(lighting.action == Action::None,
+               "MSC ignores commands addressed to another kind of device");
+
+        // All-types reaches us.
+        auto every = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x7F, 0x01, '1', 0xF7}), 3);
+        expect(every.action == Action::Go, "MSC all-types format reaches video");
+
+        auto stop = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x02, 0xF7}), 3);
+        expect(stop.action == Action::Stop, "MSC STOP");
+        auto resume = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x03, 0xF7}), 3);
+        expect(resume.action == Action::Resume, "MSC RESUME");
+        auto load = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x05, '9', 0xF7}), 3);
+        expect(load.action == Action::Load && load.cue == "9",
+               "MSC LOAD preselects a cue");
+        auto off = parse(msc({0xF0, 0x7F, 0x03, 0x02, 0x30, 0x08, 0xF7}), 3);
+        expect(off.action == Action::AllOff, "MSC ALL OFF");
+
+        // ── MIDI Machine Control ───────────────────────────────────────────
+        auto play = parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x02, 0xF7}), 3);
+        expect(play.action == Action::MmcPlay, "MMC PLAY");
+        auto mstop = parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x01, 0xF7}), 3);
+        expect(mstop.action == Action::MmcStop, "MMC STOP");
+        auto pause = parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x09, 0xF7}), 3);
+        expect(pause.action == Action::MmcPause, "MMC PAUSE");
+
+        // LOCATE to 00:01:30:00 at 25fps. The hours byte carries the rate in
+        // its top bits, which is why it is masked before it is read as hours.
+        auto locate = parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x44, 0x06, 0x01,
+                                 0x20, 0x01, 0x1E, 0x00, 0xF7}), 3);
+        expect(locate.action == Action::MmcLocate &&
+               std::abs(locate.locateSeconds - 90.0) < 0.001,
+               "MMC LOCATE resolves to a position in seconds");
+
+        // A LOCATE that is one byte short must be REFUSED, not guessed at.
+        // The last byte of an 11-byte message is the F7 terminator, and it
+        // used to be read as the frame count -- 0xF7 & 0x7F is 119 frames,
+        // so this exact message resolved to 00:01:34.76 and moved the
+        // video five seconds.
+        expect(!parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x44, 0x06, 0x01,
+                           0x20, 0x01, 0x1E, 0xF7}), 3).ok(),
+               "a truncated MMC LOCATE is refused, not guessed at");
+        // 44 01 is LOCATE to an information field, not to a timecode. Its
+        // bytes are not hours and minutes and must not be read as them.
+        expect(!parse(msc({0xF0, 0x7F, 0x03, 0x06, 0x44, 0x01, 0x00,
+                           0x20, 0x01, 0x1E, 0x00, 0xF7}), 3).ok(),
+               "MMC LOCATE to an information field is not a seek");
+
+        // Rubbish must not be mistaken for a command.
+        expect(!parse(msc({0xF0, 0x7F, 0x03, 0xF7}), 3).ok(),
+               "a truncated message is not a command");
+        expect(!parse(msc({0xF0, 0x7E, 0x03, 0x02, 0x30, 0x01, 0xF7}), 3).ok(),
+               "a non-realtime universal message is not show control");
+      }
+
+      // THE TEXT MODE ROWS MUST EDIT WHAT THE RENDERER READS.
+      //
+      // On a cue carrying the effect the picture comes from paramA..D, and the
+      // inspector was editing cue.videoSynth instead -- which the renderer
+      // overwrote on the way past. Every control in the section moved a number
+      // and changed nothing, and the ink row read "green" over a full-colour
+      // picture because paramD was still at its default of 0, which is
+      // "picture".
+      //
+      // A control is only live if writing the parameter reads the value back,
+      // so that is what this checks: the mapping and its inverse must agree for
+      // every value the rows can produce.
+      {
+        deckboy::effects::CueEffect fx;
+        VideoSynthSettings probe;
+        for (int set : {0, 1, 2, 3, 4, 6}) {
+          fx.paramC = textModeParamForCharSet(set);
+          applyTextModeParams(fx, probe);
+          expect(probe.asciiCharSet == set,
+                 std::string("glyph set ") + std::to_string(set) + " survives the round trip");
+        }
+        for (int ink = 0; ink <= 5; ++ink) {
+          fx.paramD = textModeParamForInk(ink);
+          applyTextModeParams(fx, probe);
+          expect(probe.asciiInk == ink,
+                 std::string("ink ") + std::to_string(ink) + " survives the round trip");
+        }
+        bool colsOk = true;
+        for (int cols = 20; cols <= 200; cols += 10) {
+          fx.paramA = textModeParamForCols(cols);
+          applyTextModeParams(fx, probe);
+          if (probe.asciiCols != cols) colsOk = false;
+        }
+        expect(colsOk, "column counts survive the round trip");
+      }
+
+      // TEXT MODE MUST COVER THE WHOLE RASTER.
+      //
+      // The cell grid was sized by integer division -- dstW/cols -- and the
+      // remainder was simply never drawn, leaving a bare strip down the right
+      // edge and along the bottom. It showed as a black band in the synth and
+      // as untouched video when text mode ran as an effect over a clip.
+      //
+      // Rendered over a flat MAGENTA source: any pixel still magenta is a pixel
+      // the grid never reached. The sizes are chosen to divide badly on purpose
+      // -- 1280/74 leaves 22 columns, 1920/113 leaves 17 -- because the sizes
+      // that divide evenly were never the problem.
+      {
+        MediaEngine textEngine(nullptr, nullptr, {}, {}, {}, {});
+        VideoSynthSettings tvs;
+        tvs.ascii = true;
+        tvs.asciiCharSet = 6;                 // music & sparkle
+        int uncoveredCases = 0;
+        for (auto wh : {std::pair<int,int>{1280, 720},
+                        std::pair<int,int>{1920, 1080},
+                        std::pair<int,int>{640, 360}}) {
+          for (int cols : {74, 113, 37, 200, 20}) {
+            const int W = wh.first, H = wh.second;
+            std::vector<std::uint8_t> srcPix(static_cast<std::size_t>(W) * H * 4);
+            for (std::size_t i = 0; i < srcPix.size(); i += 4) {
+              srcPix[i + 0] = 40; srcPix[i + 1] = 90; srcPix[i + 2] = 200; srcPix[i + 3] = 255;
+            }
+            std::vector<std::uint8_t> dstPix(static_cast<std::size_t>(W) * H * 4);
+            for (std::size_t i = 0; i < dstPix.size(); i += 4) {
+              dstPix[i + 0] = 255; dstPix[i + 1] = 0; dstPix[i + 2] = 255; dstPix[i + 3] = 255;
+            }
+            tvs.asciiCols = cols;
+            // Alternate between the bitmap sets and a glyph string that can
+            // only be drawn through a FONT. On a machine with no usable font
+            // the cache comes back empty and the bitmap path has to take over
+            // -- if it did not, this would leave the raster half drawn, and
+            // that fallback is the part most likely to differ between a dev
+            // box and a CI runner.
+            // A music note and a star, ESCAPED rather than pasted: these had
+            // been through UTF-8 twice, so this case had been feeding the
+            // renderer four mojibake characters instead of the two symbols it
+            // meant to test.
+            tvs.asciiGlyphs = (cols % 20 == 0) ? std::string("\xe2\x99\xaa\xe2\x98\x85")
+                                               : std::string();
+            textEngine.renderTextMode(srcPix.data(), W, H, dstPix.data(), W, H, tvs, 0, 0.0);
+            std::size_t stillMagenta = 0;
+            for (std::size_t i = 0; i < dstPix.size(); i += 4) {
+              if (dstPix[i] == 255 && dstPix[i + 1] == 0 && dstPix[i + 2] == 255) {
+                ++stillMagenta;
+              }
+            }
+            if (stillMagenta > 0) {
+              ++uncoveredCases;
+              std::cout << "      " << W << "x" << H << " at " << cols
+                        << " cols left " << stillMagenta << " pixels undrawn" << '\n';
+            }
+          }
+        }
+        expect(uncoveredCases == 0, "text mode covers the whole raster");
+      }
+
+      // The clock has to carry. %04.1f rounds after the minute is split off,
+      // so a value in the last twentieth of a second used to print :60.0 --
+      // an out-point of 899.983s read "14:60.0" in the inspector.
+      expect(formatSeconds(899.983) == "15:00.0",
+             "formatSeconds carries into the minute");
+      expect(formatSeconds(59.97) == "01:00.0",
+             "formatSeconds carries at the first minute");
+      expect(formatSeconds(0.0) == "00:00.0", "formatSeconds at zero");
+      expect(formatSeconds(61.25) == "01:01.3", "formatSeconds mid-minute");
+      expect(formatSeconds(3599.999) == "60:00.0",
+             "formatSeconds carries at the hour");
+
+      // A PLUGIN SLOT THROUGH THE SHOW FILE. Both fields are hostile to a
+      // colon-delimited record: the id is a Windows path with a drive letter
+      // in it, and the state is arbitrary binary that will contain a newline,
+      // a tab and a zero byte sooner rather than later. Checked at the
+      // serializer rather than through a save, so it fails on the encoding
+      // rather than on whatever else a full round trip touches.
+      {
+        namespace afx = deckboy::audiofx;
+        afx::AudioEffect slot = afx::audioEffectDefaults(afx::AudioEffectKind::Plugin);
+        slot.pluginId = "vst3:C:/Program Files/Common Files/VST3/A|B:reverb.vst3";
+        slot.pluginState = std::string("chunk\0\t\n|:%\xff\x01 end", 18);
+        slot.amount = 0.75f;
+        const std::vector<afx::AudioEffect> before {slot};
+        const std::vector<afx::AudioEffect> after =
+          afx::parseAudioEffects(afx::serializeAudioEffects(before));
+        expect(after.size() == 1 &&
+               after[0].kind == afx::AudioEffectKind::Plugin,
+               "plugin slot survives the show file");
+        expect(!after.empty() && after[0].pluginId == slot.pluginId,
+               "plugin id keeps its colons and bars");
+        expect(!after.empty() && after[0].pluginState == slot.pluginState,
+               "plugin state survives byte for byte");
+        // And a chain written before plugins existed still reads the same --
+        // the two fields are appended, so an old record has neither.
+        const std::vector<afx::AudioEffect> old =
+          afx::parseAudioEffects("comp:80:30:50:20:0:0|delay:40:25:35:0:0:1");
+        expect(old.size() == 2 && old[0].kind == afx::AudioEffectKind::Compressor &&
+               old[1].kind == afx::AudioEffectKind::Delay && old[1].bypassed,
+               "a chain saved before plugins still loads");
+      }
+
+      // THE SEQUENCING SPINE THROUGH THE SHOW FILE. Three appended fields, so
+      // the thing that matters is that a show written WITHOUT them still loads
+      // as the show it was: no waits, nothing following anything. A cue list
+      // that quietly grew a continue would run a show by itself.
+      {
+        Cue& seq = project.decks[0].cues[0];
+        project.webMonitorMaxHeight = 2160;
+        expect(!project.webRemoteEnabled, "phone control is opt-in for older shows");
+        project.webRemoteEnabled = true;
+        project.normalizeTargetLufs = -23.0;
+        project.outputs[0].st2110AudioAddress = "239.20.10.9";
+        project.outputs[0].st2110AudioPort = 22002;
+        project.outputs[0].st2110VideoSourcePort = 21000;
+        project.outputs[0].st2110AudioSourcePort = 21002;
+        project.outputs[0].st2110AudioRtpEnabled = false;
+        project.outputs[0].st2110VideoMasterEnabled = false;
+        seq.preWaitSeconds = 2.5;
+        seq.postWaitSeconds = 1.25;
+        seq.continueMode = CueContinueMode::AutoFollow;
+        // And the things this cue record grew after it: a lower third's
+        // layout and a portal's controls, each round-tripped below.
+        seq.lowerThird.on = true;
+        seq.lowerThird.look = LowerThirdLook::Tag;
+        seq.lowerThird.moveIn = LowerThirdMove::Pop;
+        seq.lowerThird.moveOut = LowerThirdMove::Wipe;
+        seq.lowerThird.holdSeconds = 12.0;
+        seq.lowerThird.accent = 4;
+        seq.lowerThird.wiggle = true;
+        seq.backdrop = 0x00b140;
+        seq.portal.blobs = 31;
+        seq.portal.hue = 0.25;
+        seq.swirl.speed = 0.4;
+        seq.swirl.twist = 2.2;
+        seq.swirl.cells = 192;
+        seq.swirl.hue = 0.6;
+        seq.moire.shape = 4;
+        seq.moire.palette = 2;
+        seq.moire.density = 0.8;
+        seq.moire.turn = 0.25;
+        seq.moire.themeInks = {0x102030u, 0x405060u, 0x708090u, 0xA0B0C0u};
+        seq.moire.lfo[kMoireLfoHue].on = true;
+        seq.moire.lfo[kMoireLfoHue].rateHz = 2.0f;
+        // A preset, with a playlist and an output in it.
+        ShowPreset preset;
+        preset.id = "preset-smoke";
+        preset.name = "Smoke preset";
+        preset.scope = kPresetPosition | kPresetLevels;
+        preset.masterVolume = 0.8;
+        PresetDeckState pd;
+        pd.deckIndex = 0;
+        pd.live = true;
+        pd.cueId = seq.id;
+        pd.opacity = 0.4f;
+        pd.scaleX = 0.5f;
+        pd.rotation = 12.5f;
+        pd.effects = "invert:0.5:0.5:0:0:0:0";
+        preset.decks.push_back(pd);
+        PresetOutputState po;
+        po.outputIndex = 0;
+        po.crossfadeEnabled = true;
+        po.crossfadeMix = 0.25;
+        preset.outputs.push_back(po);
+        project.presets = {preset};
+      }
+
+      const fs::path smokeDir = fs::temp_directory_path();
+      fs::path smokePath = smokeDir / "deckboy-smoke.deckboy";
+      // A MASTER CUE IN A PLAYLIST MOVES TO THE TRACKER, and the playlist's
+      // indices move with it: the cue on air after it is still the one on air.
+      {
+        Project legacy;
+        legacy.decks.resize(1);
+        Cue a;
+        a.kind = CueKind::Pattern;
+        a.path = "pattern://smpte-bars";
+        a.name = "bars";
+        Cue m;
+        m.kind = CueKind::Master;
+        m.name = "old master";
+        Cue b = a;
+        b.name = "after";
+        legacy.decks[0].cues = {a, m, b};
+        legacy.decks[0].activeIndex = 2;
+        legacy.decks[0].selectedIndex = 1;
+        normalizeProject(legacy);
+        const Deck& d0 = legacy.decks[0];
+        expect(d0.cues.size() == 2 && legacy.trackerSteps.size() == 1 &&
+               legacy.trackerSteps[0].name == "old master",
+               "a master cue in a playlist moves into the tracker");
+        expect(d0.activeIndex == 1 && d0.cues[1].name == "after",
+               "...and the cue on air keeps its identity");
+      }
+      // A TRACKER STEP LIVES IN THE TRACKER. It goes out as a cue record with
+      // deck -1 and must come back into trackerSteps, not into a playlist.
+      const std::size_t deckZeroCuesBeforeStep = project.decks[0].cues.size();
+      {
+        Cue step;
+        step.kind = CueKind::Master;
+        step.name = "smoke step";
+        MasterAssignment fires;
+        fires.deckIndex = 0;
+        fires.cueId = project.decks[0].cues.empty() ? std::string() : project.decks[0].cues[0].id;
+        step.masterAssignments.push_back(fires);
+        project.trackerSteps.push_back(step);
+        normalizeProject(project);
+      }
+      expect(saveProject(smokePath, project), "project save");
+      {
+        // SAVE asks where to put a show that only lives in the scratch file;
+        // writing the scratch file and saying "saved" let the next NEW eat it.
+        expect(isScratchProjectFile(Paths::defaultProjectFile()),
+               "a new show in the scratch file counts as never saved");
+        expect(isScratchProjectFile(fs::path()), "a show with no file counts as never saved");
+        expect(!isScratchProjectFile(smokePath), "a show saved under its own name is not scratch");
+      }
+      Project loaded = loadProject(smokePath);
+      expect(loaded.normalizeTargetLufs == -23.0, "loudness target persists");
+      expect(loaded.webMonitorMaxHeight == 2160, "web monitor quality persists");
+      expect(loaded.webRemoteEnabled, "phone control opt-in persists");
+      expect(!loaded.outputs.empty() && loaded.outputs[0].st2110AudioAddress == "239.20.10.9" &&
+        loaded.outputs[0].st2110AudioPort == 22002 && loaded.outputs[0].st2110VideoSourcePort == 21000 &&
+        loaded.outputs[0].st2110AudioSourcePort == 21002 && !loaded.outputs[0].st2110AudioRtpEnabled &&
+        !loaded.outputs[0].st2110VideoMasterEnabled, "independent NMOS transport states persist");
+      expect(!loaded.decks.empty(), "project load");
+      expect(loaded.trackerSteps.size() == 1 && loaded.trackerSteps[0].name == "smoke step" &&
+             loaded.trackerSteps[0].kind == CueKind::Master &&
+             !loaded.trackerSteps[0].id.empty() &&
+             loaded.trackerSteps[0].masterAssignments.size() == 1 &&
+             loaded.trackerSteps[0].masterAssignments[0].deckIndex == 0,
+             "a tracker step round-trips in the tracker, with what it fires");
+      expect(!loaded.decks.empty() && loaded.decks[0].cues.size() == deckZeroCuesBeforeStep,
+             "a tracker step adds no cue to any playlist");
+      if (!loaded.decks.empty() && !loaded.decks[0].cues.empty()) {
+        const Deck& loadedDeck = loaded.decks[0];
+        const Cue& loadedCue = loadedDeck.cues[0];
+        expect(std::fabs(loadedCue.preWaitSeconds - 2.5) < 1e-6 &&
+               std::fabs(loadedCue.postWaitSeconds - 1.25) < 1e-6 &&
+               loadedCue.continueMode == CueContinueMode::AutoFollow,
+               "pre-wait, post-wait and continue mode persist");
+        const LowerThirdDesign& l3 = loadedCue.lowerThird;
+        expect(l3.on && l3.look == LowerThirdLook::Tag && l3.moveIn == LowerThirdMove::Pop &&
+                 l3.moveOut == LowerThirdMove::Wipe && l3.holdSeconds == 12.0 &&
+                 l3.accent == 4 && l3.wiggle,
+               "a lower third's layout persists");
+        expect(loadedCue.backdrop == 0x00b140, "a cue's backdrop colour persists");
+        {
+          // EVERY FIELD APPENDED AFTER THE TRACKER'S JUMP AND SECTION: the
+          // twelve Moire fields, then the fade cue's effect, knob and
+          // restore at end, then the backdrop, then lock to screen, then the
+          // cue's mask, then a tone's oscillators, then a drawing, then
+          // whether its pixels carry alpha. The
+          // older-show checks below trim this many and then their own, so a
+          // field appended to the record is counted here once. When the
+          // Moire fields went in, only two of five checks were bumped, and the
+          // other three trimmed nothing but Moire -- passing without testing
+          // the show they were named for.
+          constexpr int kAfterTrackerFields = 21;
+          // A show from immediately before the fixture patch (one tail field
+          // fewer) keeps its mic channel and has no fixture levels.
+          {
+            std::ifstream preIn(smokePath);
+            std::ostringstream preOlder;
+            std::string preLine;
+            while (std::getline(preIn, preLine)) {
+              // The newer fields, the tracker's jump and section, the stream
+              // HDR field, then the fixture levels.
+              if (preLine.rfind("cue\t", 0) == 0) {
+                for (int t = 0; t < kAfterTrackerFields + 4; ++t) preLine.erase(preLine.find_last_of('\t'));
+              }
+              preOlder << preLine << '\n';
+            }
+            preIn.close();
+            const fs::path prePath = smokeDir / "deckboy-smoke-pre-fixtures.deckboy";
+            { std::ofstream out(prePath); out << preOlder.str(); }
+            const Project pre = loadProject(prePath);
+            const Cue& preBack = pre.decks.at(0).cues.at(0);
+            expect(preBack.micChannel == loadedCue.micChannel && preBack.dmxFixtures.empty(),
+                   "a pre-fixture show keeps its mic channel and has no fixture levels");
+            fs::remove(prePath);
+          }
+          // A show from immediately before the Mic cue (two tail fields fewer)
+          // keeps its DMX protocol, and its cues' mic channel is MONO L.
+          {
+            std::ifstream preIn(smokePath);
+            std::ostringstream preOlder;
+            std::string preLine;
+            while (std::getline(preIn, preLine)) {
+              // The newer fields, the tracker's section and jump, stream HDR,
+              // the fixture levels, then the mic channel.
+              if (preLine.rfind("cue\t", 0) == 0) {
+                for (int t = 0; t < kAfterTrackerFields + 5; ++t) preLine.erase(preLine.find_last_of('\t'));
+              }
+              preOlder << preLine << '\n';
+            }
+            preIn.close();
+            const fs::path preMicPath = smokeDir / "deckboy-smoke-pre-mic.deckboy";
+            { std::ofstream out(preMicPath); out << preOlder.str(); }
+            const Project preMic = loadProject(preMicPath);
+            const Cue& preBack = preMic.decks.at(0).cues.at(0);
+            expect(preBack.dmxProtocol == loadedCue.dmxProtocol && preBack.micChannel == MicChannel::MonoLeft,
+                   "a pre-mic show keeps its DMX protocol and defaults the mic channel to MONO L");
+            fs::remove(preMicPath);
+          }
+          // A show from immediately before sACN (three tail fields fewer) keeps
+          // Wiggle and sends Art-Net, as every show before it did.
+          {
+            std::ifstream preIn(smokePath);
+            std::ostringstream preOlder;
+            std::string preLine;
+            while (std::getline(preIn, preLine)) {
+              // The newer fields, the tracker's section and jump, stream HDR,
+              // the fixture levels, the mic channel, then the DMX protocol.
+              if (preLine.rfind("cue\t", 0) == 0) {
+                for (int t = 0; t < kAfterTrackerFields + 6; ++t) preLine.erase(preLine.find_last_of('\t'));
+              }
+              preOlder << preLine << '\n';
+            }
+            preIn.close();
+            const fs::path preSacnPath = smokeDir / "deckboy-smoke-pre-sacn.deckboy";
+            { std::ofstream out(preSacnPath); out << preOlder.str(); }
+            const Project preSacn = loadProject(preSacnPath);
+            const Cue& preBack = preSacn.decks.at(0).cues.at(0);
+            expect(preBack.lowerThird.wiggle && preBack.dmxProtocol == "artnet",
+                   "a pre-sACN show keeps wiggle and its DMX cues send Art-Net");
+            fs::remove(preSacnPath);
+          }
+          // Trim the newer fields, then the tracker's section and jump, stream
+          // HDR, fixture levels, the mic channel, the DMX protocol, then
+          // Wiggle: a show from immediately before
+          // Wiggle must keep its look, timings, triggers and audio selection.
+          std::ifstream in(smokePath);
+          std::ostringstream older;
+          std::string line;
+          while (std::getline(in, line)) {
+            if (line.rfind("cue\t", 0) == 0) {
+              for (int t = 0; t < kAfterTrackerFields + 7; ++t) line.erase(line.find_last_of('\t'));
+            }
+            older << line << '\n';
+          }
+          in.close();
+          const fs::path olderPath = smokeDir / "deckboy-smoke-pre-wiggle.deckboy";
+          { std::ofstream out(olderPath); out << older.str(); }
+          const Project revived = loadProject(olderPath);
+          const Cue& back = revived.decks.at(0).cues.at(0);
+          expect(!back.lowerThird.wiggle && back.lowerThird.look == l3.look &&
+                 back.lowerThird.moveIn == l3.moveIn && back.lowerThird.moveOut == l3.moveOut &&
+                 back.lowerThird.holdSeconds == l3.holdSeconds &&
+                 back.triggerOscAddress == loadedCue.triggerOscAddress &&
+                 back.audioTrack == loadedCue.audioTrack && back.audioTrackCount == loadedCue.audioTrackCount,
+                 "a pre-wiggle show keeps the preceding fields and defaults wiggle off");
+          fs::remove(olderPath);
+        }
+        expect(loadedCue.portal.blobs == 31 && std::fabs(loadedCue.portal.hue - 0.25) < 1e-6,
+               "a portal's controls persist");
+        expect(std::fabs(loadedCue.swirl.speed - 0.4) < 1e-6 &&
+               std::fabs(loadedCue.swirl.twist - 2.2) < 1e-6 && loadedCue.swirl.cells == 192 &&
+               std::fabs(loadedCue.swirl.hue - 0.6) < 1e-6, "a swirl's controls persist");
+        expect(loadedCue.moire.shape == 4 && loadedCue.moire.palette == 2 &&
+               std::fabs(loadedCue.moire.density - 0.8) < 1e-6 &&
+               std::fabs(loadedCue.moire.turn - 0.25) < 1e-6 &&
+               loadedCue.moire.themeInks[3] == 0xA0B0C0u &&
+               loadedCue.moire.lfo[kMoireLfoHue].on &&
+               std::fabs(loadedCue.moire.lfo[kMoireLfoHue].rateHz - 2.0f) < 1e-4f &&
+               !loadedCue.moire.lfo[kMoireLfoDensity].on,
+               "a moire's controls, inks and oscillators persist");
+        expect(loaded.presets.size() == 1 && loaded.presets[0].name == "Smoke preset" &&
+                 loaded.presets[0].scope == (kPresetPosition | kPresetLevels) &&
+                 std::fabs(loaded.presets[0].masterVolume - 0.8) < 1e-6,
+               "a preset persists, with what it recalls");
+        if (loaded.presets.size() == 1 && loaded.presets[0].decks.size() == 1 &&
+            loaded.presets[0].outputs.size() == 1) {
+          const PresetDeckState& back = loaded.presets[0].decks[0];
+          expect(back.live && back.opacity == 0.4f && back.scaleX == 0.5f &&
+                   back.rotation == 12.5f && back.effects == "invert:0.5:0.5:0:0:0:0",
+                 "and the playlist it captured");
+          expect(loaded.presets[0].outputs[0].crossfadeEnabled &&
+                   loaded.presets[0].outputs[0].crossfadeMix == 0.25,
+                 "and the output");
+        } else {
+          expect(false, "a preset keeps its playlist and its output");
+        }
+        // A CUE LIST MUST NOT GROW A CONTINUE BY ITSELF. Simulated by taking
+        // the file just written and cutting every field from preWaitSeconds
+        // onward off each cue line, which is precisely what an older Deckboy
+        // wrote. Opening that has to give back a show with no waits and
+        // nothing following -- a show that started running itself on open
+        // would be unforgivable.
+        //
+        // kSpineTailFields IS THE NUMBER OF FIELDS AT OR AFTER preWaitSeconds,
+        // and it MUST be raised by one every time a field is appended to the
+        // cue record. It was 3, then master assignments were appended after
+        // the spine and trimming 3 stopped reaching preWaitSeconds -- the test
+        // failed loudly, which is the only reason this comment exists rather
+        // than a silent hole in the backward-compatibility check.
+        constexpr int kSpineTailFields = 114;  // preWait, postWait, continue, masters,
+                                              // target id/deck/verb, armed, panel w/h,
+                                              // fade secs/to/what/curve/stop,
+                                              // fireside view, overlay lower-third
+                                              // style and time, geometry LFOs, the
+                                              // six portal controls, the twelve
+                                              // text lower-third fields, ten swirl controls,
+                                              // three triggers (hotkey, MIDI note, OSC),
+                                              // audio track and track count, wiggle,
+                                              // the DMX protocol, the mic channel,
+                                              // the fixture levels, stream HDR, tracker jump and section, the twelve Moire fields,
+                                              // a fade cue's effect, knob and restore at end,
+                                              // the backdrop, lock to screen, the mask,
+                                              // a tone's oscillators, a drawing, alpha
+        {
+          std::ifstream in(smokePath);
+          std::ostringstream older;
+          std::string line;
+          int trimmed = 0;
+          while (std::getline(in, line)) {
+            if (line.rfind("cue\t", 0) == 0) {
+              for (int i = 0; i < kSpineTailFields; ++i) {
+                const std::size_t tab = line.find_last_of('\t');
+                if (tab != std::string::npos) {
+                  line.erase(tab);
+                }
+              }
+              ++trimmed;
+            }
+            older << line << '\n';
+          }
+          in.close();
+          const fs::path olderPath = smokeDir / "deckboy-smoke-older.deckboy";
+          { std::ofstream out(olderPath); out << older.str(); }
+          expect(trimmed > 0, "the older-show simulation found cue records to trim");
+          const Project revived = loadProject(olderPath);
+          bool inert = true;
+          for (const Deck& d : revived.decks) {
+            for (const Cue& c : d.cues) {
+              inert = inert && c.preWaitSeconds == 0.0 && c.postWaitSeconds == 0.0 &&
+                      c.continueMode == CueContinueMode::DoNotContinue &&
+                      // And armed, which is the one whose missing-field default
+                      // is NOT the zero value: a show trimmed of this field must
+                      // come back with every cue live, not every cue inert.
+                      c.armed && c.swirl.speed == 1.0 && c.swirl.twist == 1.35 &&
+                      c.swirl.cells == 480 && c.swirl.hue == 0.0 && !c.lowerThird.wiggle;
+            }
+          }
+          expect(inert, "a show saved before the spine opens with no waits and no continue");
+        }
+    // ── A LAYER'S PIN, SAVED AND READ BACK ─────────────────────────────────
+    //
+    // The mode is appended to the pin's token, so the two things to hold are:
+    // it comes back as it was saved, and a pin written before it existed opens
+    // LINEAR -- what that show drew -- not the new perspective default.
+    {
+      OutputLayer pinned;
+      pinned.deckIndex = 1;
+      pinned.warpEnabled = true;
+      pinned.warpTopLeftX = 0.08f;
+      pinned.warpBottomLeftY = -0.3f;
+      pinned.warpPerspective = true;
+      const std::vector<OutputLayer> back = parseLayerList(joinLayerList({pinned}));
+      expect(back.size() == 1 && back[0].warpEnabled && back[0].warpPerspective &&
+             std::abs(back[0].warpTopLeftX - 0.08f) < 1e-4f &&
+             std::abs(back[0].warpBottomLeftY + 0.3f) < 1e-4f,
+             "a perspective layer pin survives save and reload");
+      pinned.warpPerspective = false;
+      expect(!parseLayerList(joinLayerList({pinned}))[0].warpPerspective,
+             "a linear layer pin survives save and reload");
+      const std::vector<OutputLayer> older =
+        parseLayerList("1:0:0:1:1:dissolve:1:0.08:0.3:-0.04:0.04:-0.04:-0.04:0.08:-0.3");
+      expect(older.size() == 1 && older[0].warpEnabled && !older[0].warpPerspective,
+             "a layer pin saved before the mode existed opens linear");
+    }
+    // ── THE WIDEST ROUTE: the matrix reaches the last of the 128 outputs ──
+    {
+      std::vector<AudioCrosspoint> wide;
+      wide.push_back(AudioCrosspoint {1, kMaxAudioOutputs - 1, 0.5f});
+      const auto back = parseAudioMatrix(serializeAudioMatrix(wide));
+      expect(back.size() == 1 && back[0].source == 1 && back[0].dest == kMaxAudioOutputs - 1,
+             "a crosspoint to output 128 survives save and reload");
+      expect(parseAudioMatrix("0:" + std::to_string(kMaxAudioOutputs) + ":1.0").empty(),
+             "a crosspoint past the last output is refused on load");
+    }
+    // ── MIDI OUT: THE BYTES ────────────────────────────────────────────────
+    //
+    // The encoder is a pure function precisely so it can be checked here, with
+    // no desk in the room. Whether a port carried the bytes to a console is a
+    // question only a console can answer; whether the bytes were RIGHT is a
+    // question for a test, and it is the half that goes wrong silently.
+    {
+      using deckboy::platform::midi::OutMessage;
+      using deckboy::platform::midi::OutMessageKind;
+      using deckboy::platform::midi::encodeOutMessage;
+      auto bytesOf = [](const OutMessage& m) { return encodeOutMessage(m); };
+      auto eq = [](const std::vector<std::uint8_t>& got,
+                   const std::vector<std::uint8_t>& want) { return got == want; };
+
+      OutMessage note;
+      note.kind = OutMessageKind::NoteOn;
+      note.channel = 1;
+      note.data1 = 60;
+      note.data2 = 127;
+      expect(eq(bytesOf(note), {0x90, 0x3C, 0x7F}), "note on, channel 1");
+
+      // CHANNEL 16 IS 0x0F ON THE WIRE, NOT 0x10. Operators count from one and
+      // the wire counts from zero, and getting that backwards puts every
+      // message on the wrong channel in a way that looks like a cabling fault.
+      note.channel = 16;
+      expect(eq(bytesOf(note), {0x9F, 0x3C, 0x7F}), "note on, channel 16 is 0x9F");
+
+      OutMessage off = note;
+      off.kind = OutMessageKind::NoteOff;
+      off.channel = 1;
+      expect(eq(bytesOf(off), {0x80, 0x3C, 0x7F}), "note off");
+
+      OutMessage cc;
+      cc.kind = OutMessageKind::ControlChange;
+      cc.channel = 2;
+      cc.data1 = 7;
+      cc.data2 = 100;
+      expect(eq(bytesOf(cc), {0xB1, 0x07, 0x64}), "control change");
+
+      OutMessage prog;
+      prog.kind = OutMessageKind::ProgramChange;
+      prog.channel = 3;
+      prog.data1 = 5;
+      expect(eq(bytesOf(prog), {0xC2, 0x05}), "program change is two bytes");
+
+      // Out-of-range data is clamped rather than wrapped: 200 wrapping to 72
+      // would send a plausible wrong note instead of an obvious loud one.
+      OutMessage wild = note;
+      wild.channel = 1;
+      wild.data1 = 200;
+      wild.data2 = -5;
+      expect(eq(bytesOf(wild), {0x90, 0x7F, 0x00}), "data bytes clamp, not wrap");
+
+      OutMessage go;
+      go.kind = OutMessageKind::MscGo;
+      go.mscDevice = 1;
+      go.mscCue = "12.5";
+      expect(eq(bytesOf(go),
+                {0xF0, 0x7F, 0x01, 0x02, 0x7F, 0x01, '1', '2', '.', '5', 0xF7}),
+             "MSC GO carries its cue number with the dot intact");
+
+      go.mscList = "2";
+      expect(eq(bytesOf(go),
+                {0xF0, 0x7F, 0x01, 0x02, 0x7F, 0x01,
+                 '1', '2', '.', '5', 0x00, '2', 0xF7}),
+             "MSC cue list follows a null separator");
+
+      OutMessage stop = go;
+      stop.kind = OutMessageKind::MscStop;
+      stop.mscList.clear();
+      expect(bytesOf(stop).size() > 6 && bytesOf(stop)[5] == 0x02, "MSC STOP");
+      OutMessage resume = stop;
+      resume.kind = OutMessageKind::MscResume;
+      expect(bytesOf(resume)[5] == 0x03, "MSC RESUME");
+
+      // Device 127 addresses everything, which is what the receive side
+      // already honours -- so one Deckboy can drive a rack of them.
+      go.mscDevice = 127;
+      expect(bytesOf(go)[2] == 0x7F, "MSC device 127 addresses everything");
+
+      // A cue number with rubbish in it must not put a byte above 0x7F inside
+      // a SysEx: that terminates the message early and desks answer by
+      // ignoring the whole thing.
+      OutMessage dirty = go;
+      dirty.mscCue = "12/5x";
+      dirty.mscList.clear();
+      const auto dirtyBytes = bytesOf(dirty);
+      expect(std::none_of(dirtyBytes.begin() + 1, dirtyBytes.end() - 1,
+                          [](std::uint8_t b) { return b >= 0x80; }),
+             "a bad cue number cannot terminate the SysEx early");
+
+      OutMessage raw;
+      raw.kind = OutMessageKind::Raw;
+      raw.rawHex = "90 3C 7F";
+      expect(eq(bytesOf(raw), {0x90, 0x3C, 0x7F}), "raw hex with spaces");
+      raw.rawHex = "903C7F";
+      expect(eq(bytesOf(raw), {0x90, 0x3C, 0x7F}), "raw hex without spaces");
+      // HALF A MESSAGE IS WORSE THAN SILENCE, so a malformed raw string sends
+      // nothing at all rather than as much as it could parse.
+      raw.rawHex = "90 3C 7";
+      expect(bytesOf(raw).empty(), "an odd number of hex digits sends nothing");
+      raw.rawHex = "90 ZZ 7F";
+      expect(bytesOf(raw).empty(), "a non-hex byte sends nothing");
+      raw.rawHex = "";
+      expect(bytesOf(raw).empty(), "an empty raw string sends nothing");
+    }
+    // ── ART-NET OUT: THE PACKET ────────────────────────────────────────────
+    //
+    // Pure function, checked here, for the same reason the MIDI encoder is: a
+    // header one byte wrong is dropped by every node on the network while
+    // looking exactly like a cabling fault.
+    {
+      using deckboy::platform::buildArtDmxPacket;
+      using deckboy::platform::parseDmxChannelSpec;
+
+      auto packet = buildArtDmxPacket(0, {255, 128}, 1);
+      expect(packet.size() == 18 + 2, "ArtDMX is an 18-byte header plus data");
+      expect(std::string(packet.begin(), packet.begin() + 8) ==
+               std::string("Art-Net\0", 8),
+             "ArtDMX starts with a null-terminated Art-Net");
+      // OpCode 0x5000 is LITTLE endian on the wire and ProtVer is BIG endian.
+      // Getting either the wrong way round is the classic Art-Net bug and it
+      // produces a packet every node ignores in silence.
+      expect(packet[8] == 0x00 && packet[9] == 0x50, "OpCode 0x5000, little endian");
+      expect(packet[10] == 0x00 && packet[11] == 0x0E, "ProtVer 14, big endian");
+      expect(packet[12] == 1, "the sequence byte is carried");
+      expect(packet[16] == 0x00 && packet[17] == 0x02, "length is big endian");
+      expect(packet[18] == 255 && packet[19] == 128, "the channel data follows");
+
+      // A 15-bit port address splits across SubUni and Net.
+      auto uni = buildArtDmxPacket(0x0102, {1, 2}, 0);
+      expect(uni[14] == 0x02 && uni[15] == 0x01, "universe splits into SubUni and Net");
+
+      // LENGTH IS ALWAYS EVEN. An odd length is legal to write and illegal to
+      // read: nodes reject the packet, so a rig goes dark with nothing in any
+      // log to say why.
+      auto odd = buildArtDmxPacket(0, {1, 2, 3}, 0);
+      expect(odd.size() == 18 + 4, "an odd channel count is padded to even");
+      // Data starts at 18, so the third channel is 20 and the pad is 21.
+      expect(odd[20] == 3 && odd[21] == 0, "the pad byte is zero");
+
+      auto tiny = buildArtDmxPacket(0, {7}, 0);
+      expect(tiny.size() == 18 + 2, "a single channel still sends the legal minimum");
+      auto big = buildArtDmxPacket(0, std::vector<std::uint8_t>(600, 9), 0);
+      expect(big.size() == 18 + 512, "more than a universe is truncated to 512");
+
+      // ── sACN (E1.31) ────────────────────────────────────────────────────
+      {
+        using deckboy::platform::buildSacnPacket;
+        const std::uint8_t cid[16] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+        auto s = buildSacnPacket(0x0102, {255, 128, 7}, 9, cid, "Deckboy");
+        expect(s.size() == 126 + 3, "sACN is a 126-byte envelope plus the slots");
+        expect(s[0] == 0x00 && s[1] == 0x10 && s[2] == 0 && s[3] == 0, "preamble 0x0010, postamble 0");
+        expect(std::string(s.begin() + 4, s.begin() + 13) == "ASC-E1.17" && s[13] == 0 && s[15] == 0,
+               "ACN packet identifier");
+        expect(((s[16] << 8) | s[17]) == (0x7000 | (129 - 16)), "root flags and length");
+        expect(s[18] == 0 && s[19] == 0 && s[20] == 0 && s[21] == 4, "root vector: E1.31 data");
+        expect(s[22] == 1 && s[37] == 16, "the CID is carried");
+        expect(((s[38] << 8) | s[39]) == (0x7000 | (129 - 38)), "framing flags and length");
+        expect(s[43] == 2, "framing vector: DMP");
+        expect(std::string(s.begin() + 44, s.begin() + 51) == "Deckboy" && s[51] == 0, "source name, NUL padded");
+        expect(s[108] == 100 && s[111] == 9, "priority 100, sequence carried");
+        expect(s[113] == 0x01 && s[114] == 0x02, "universe is big endian");
+        expect(((s[115] << 8) | s[116]) == (0x7000 | (129 - 115)), "DMP flags and length");
+        expect(s[117] == 0x02 && s[118] == 0xA1 && s[122] == 1, "DMP vector, address type, increment");
+        expect(((s[123] << 8) | s[124]) == 4 && s[125] == 0, "count includes the start code, which is 0");
+        expect(s[126] == 255 && s[128] == 7, "the slots follow the start code");
+        expect(deckboy::platform::sacnMulticastAddress(0x0102) == "239.255.1.2",
+               "sACN multicast is 239.255.<hi>.<lo>");
+        expect(buildSacnPacket(0, {1}, 1, cid, "x")[114] == 1, "there is no universe 0; it is clamped to 1");
+      }
+
+      // ── THE CHANNEL SPEC ────────────────────────────────────────────────
+      auto one = parseDmxChannelSpec("1=255");
+      expect(one && one->size() == 1 && (*one)[0].first == 1 && (*one)[0].second == 255,
+             "a single channel parses, 1-based");
+      auto range = parseDmxChannelSpec("10-14=64");
+      expect(range && range->size() == 5 && (*range)[0].first == 10 &&
+               (*range)[4].first == 14,
+             "a range expands inclusively");
+      auto several = parseDmxChannelSpec(" 1=255 , 5=128 ,10-11=64 ");
+      expect(several && several->size() == 4, "spaces and several items parse");
+
+      // ANY MALFORMED PART YIELDS NOTHING AT ALL. A DMX line that half-applies
+      // is a lighting state nobody asked for, which on a show is worse than
+      // one that plainly did not fire.
+      expect(!parseDmxChannelSpec("1"), "a channel with no value is refused");
+      expect(!parseDmxChannelSpec("1=300"), "a value above 255 is refused");
+      expect(!parseDmxChannelSpec("0=255"), "channel 0 is refused -- DMX counts from 1");
+      expect(!parseDmxChannelSpec("513=255"), "channel 513 is refused");
+      expect(!parseDmxChannelSpec("5-2=255"), "a backwards range is refused");
+      expect(!parseDmxChannelSpec("1=255,fish"), "one bad item refuses the whole line");
+      expect(parseDmxChannelSpec("") && parseDmxChannelSpec("")->empty(),
+             "an empty spec is empty rather than an error");
+    }
+    // ── THE AUDIO CROSSPOINT MIX ───────────────────────────────────────────
+    {
+      auto mix = &MediaEngine::mixCrosspointSample;
+      expect(mix(1000.0f, 0.0f, 1.0f, 0.0f) == 1000, "left at unity passes through");
+      expect(mix(1000.0f, 0.0f, 0.0f, 1.0f) == 0, "left does not reach a right-only cell");
+      expect(mix(1000.0f, 500.0f, 0.5f, 0.5f) == 750, "a crosspoint scales by its gain");
+      // THE POINT OF A MATRIX: two sources onto one output must ADD. A mono
+      // fold-down is exactly this, and if it did not sum it would silently
+      // drop one side.
+      expect(mix(1000.0f, 1000.0f, 1.0f, 1.0f) == 2000, "two sources onto one out sum");
+      // CLAMPED, NOT WRAPPED. A wrap here is a bang out of the PA.
+      expect(mix(30000.0f, 30000.0f, 1.0f, 1.0f) == 32767, "a hot sum clips rather than wraps");
+      expect(mix(-30000.0f, -30000.0f, 1.0f, 1.0f) == -32768, "and clips at the bottom too");
+      expect(mix(1000.0f, 1000.0f, 0.0f, 0.0f) == 0, "a cell with no gain is silence");
+    }
+        expect(loaded.outputBitDepth == 10, "output bit depth persisted");
+        expect(loaded.midiDeviceName == "APC40 mkII Control",
+               "midi port persisted");
+        expect(loaded.outputCanvasEnabled && loaded.outputCanvasWidth == 5760 && loaded.outputCanvasHeight == 2160,
+               "output canvas persisted");
+        expect(loaded.oscQueryEnabled &&
+               loaded.oscQueryPort == 6410 &&
+               loaded.oscFeedbackMirrorEnabled &&
+               loaded.oscFeedbackRateMs == 90,
+               "osc query settings persisted");
+        expect(loaded.atemTriggerEnabled &&
+               loaded.ndiTriggerEnabled &&
+               !loaded.nmcSyncEnabled &&
+               loaded.mtcIngestEnabled &&
+               !loaded.ltcIngestEnabled &&
+               loaded.dmxArtNetEnabled &&
+               loaded.artNetPort == 16454,
+               "integration settings persisted");
+        expect(loadedCue.effects.size() == 2 &&
+               loadedCue.effects[0].kind == deckboy::effects::CueEffectKind::ReactionBloom &&
+               std::abs(loadedCue.effects[0].paramA - 0.25f) < 0.01f &&
+               std::abs(loadedCue.effects[0].paramB - 0.5f) < 0.01f &&
+               std::abs(loadedCue.effects[0].paramC - 0.4f) < 0.01f &&
+               std::abs(loadedCue.effects[0].paramD - 0.3f) < 0.01f &&
+               !loadedCue.effects[0].bypassed &&
+               loadedCue.effects[1].kind == deckboy::effects::CueEffectKind::MotionPuppet &&
+               loadedCue.effects[1].bypassed,
+               "effect stack persisted with all four parameters and bypass");
+        // The positional record, checked field by field. One assertion per
+        // field rather than one for the block: a skew shifts a RUN of them,
+        // and naming the first one that moved says immediately where the
+        // writer and the reader parted company.
+        const VideoSynthSettings& lv = loadedCue.videoSynth;
+        expect(static_cast<int>(loadedCue.tone.synth.tuning) == 3 &&
+               std::abs(loadedCue.tone.synth.referenceHz - 432.0) < 0.001,
+               "synth tuning and reference pitch persisted");
+        expect(static_cast<int>(lv.shape) == 3, "video synth shape persisted");
+        expect(static_cast<int>(lv.mirror) == 1, "video synth mirror persisted");
+        expect(static_cast<int>(lv.palette) == 2, "video synth palette persisted");
+        expect(std::abs(lv.speed - 2.75) < 0.001 &&
+               std::abs(lv.scale - 3.25) < 0.001 &&
+               std::abs(lv.warp - 1.5) < 0.001,
+               "video synth speed/scale/warp persisted");
+        expect(std::abs(lv.feedbackAmount - 0.77) < 0.001 &&
+               std::abs(lv.feedbackZoom - 1.11) < 0.001 &&
+               std::abs(lv.feedbackRotate + 4.5) < 0.001,
+               "video synth feedback persisted");
+        expect(std::abs(lv.audioReactivity - 0.66) < 0.001 &&
+               lv.resolution == 4,
+               "video synth reactivity and detail persisted");
+        expect(std::abs(lv.pixelSort - 0.44) < 0.001 &&
+               std::abs(lv.glitch - 0.33) < 0.001 &&
+               std::abs(lv.crt - 0.22) < 0.001,
+               "video synth smear/glitch/crt persisted");
+        // The flag is no longer round-tripped as a switch -- the writer emits
+        // it as "has the effect" for older builds, so a cue with the flag and
+        // no effect cannot survive a save by design. The migration itself is
+        // tested directly below, against the shape an old FILE has.
+        expect(lv.asciiCols == 137,
+               "text mode column count persisted");
+
+        // ── The migration, on the shape an OLD FILE has ──────────────────
+        //
+        // A cue carrying the retired videoSynth.ascii flag and no TEXT MODE
+        // effect is what every show written before this change looks like.
+        // It must come back with the effect, carrying the settings it had, so
+        // the show opens looking exactly as it did.
+        {
+          Project old;
+          old.decks.resize(1);
+          Cue oldCue;
+          oldCue.kind = CueKind::VideoSynth;
+          oldCue.videoSynth.ascii = true;
+          oldCue.videoSynth.asciiCols = 137;
+          oldCue.videoSynth.asciiCharSet = 4;
+          oldCue.videoSynth.asciiInk = 3;
+          oldCue.videoSynth.glitch = 0.25;
+          old.decks[0].cues.push_back(oldCue);
+          migrateVideoSynthTextMode(old);
+          const Cue& m = old.decks[0].cues[0];
+          const deckboy::effects::CueEffect* fx = nullptr;
+          for (const auto& e : m.effects) {
+            if (e.kind == deckboy::effects::CueEffectKind::TextMode) { fx = &e; break; }
+          }
+          expect(fx != nullptr && !m.videoSynth.ascii,
+                 "an old text-mode flag becomes a TEXT MODE effect");
+          expect(fx && ::textModeColsForParam(fx->paramA) == 137 &&
+                 ::textModeCharSetForParam(fx->paramC) == 4 &&
+                 ::textModeInkForParam(fx->paramD) == 3,
+                 "and the settings it had arrive unchanged in the effect");
+          // A cue that already has one must not collect a second.
+          migrateVideoSynthTextMode(old);
+          int count = 0;
+          for (const auto& e : old.decks[0].cues[0].effects) {
+            if (e.kind == deckboy::effects::CueEffectKind::TextMode) ++count;
+          }
+          expect(count == 1, "and migrating twice does not stack two of them");
+        }
+        expect(lv.asciiCharSet == 4 && lv.asciiShuffle == 7 && lv.asciiInk == 3,
+               "text mode glyph set, shuffle and ink persisted");
+        expect(lv.asciiGlyphs == ".oO@" &&
+               lv.asciiPhrases == "DECKBOY|GO LIVE" &&
+               std::abs(lv.asciiPhraseHold - 4.5) < 0.001,
+               "custom glyphs and phrases persisted");
+        expect(lv.spriteSheetPath == "smoke-sheet.png" &&
+               lv.spriteTileW == 24 && lv.spriteTileH == 40,
+               "sprite sheet and tile size persisted");
+        expect(lv.spriteRotate == 2 &&
+               std::abs(lv.spriteFreeAngle - 90.0) < 0.001 &&
+               lv.spriteFlip == 3 &&
+               std::abs(lv.spriteJitter - 0.55) < 0.001 &&
+               std::abs(lv.spriteChaos - 0.88) < 0.001,
+               "sprite rotate/flip/jitter/chaos persisted");
+        expect(loadedCue.motionDriverPath == "smoke-driver.mp4" &&
+               std::abs(loadedCue.motionDriverSpeed - 1.75f) < 0.01f &&
+               loadedCue.motionDriverPaused,
+               "motion driver persisted");
+        expect(loaded.jumpMode == "load" && !loaded.jumpTransitionEnabled, "jump mode persisted");
+        expect(loaded.panicProfile == "fade_rewind", "panic profile persisted");
+        expect(std::abs(loaded.panicFadeSeconds - 1.4) < 0.01 && loaded.panicAutoRestore, "panic options persisted");
+        expect(loaded.focusedOutputIndex == 1, "focused output persisted");
+        expect(loaded.outputs.size() == 2 &&
+               loaded.outputs[0].name == "Program Out" &&
+               loaded.outputs[1].name == "Stage Left Stream" &&
+               loaded.outputs[0].hostDeckIndex == 0 &&
+               loaded.outputs[1].displayIndex == 2 &&
+               loaded.outputs[0].streamEnabled &&
+               loaded.outputs[0].streamProtocol == "srt" &&
+               loaded.outputs[0].streamUrl == "srt://127.0.0.1:9100?mode=caller" &&
+               loaded.outputs[0].streamBitrateKbps == 7200 &&
+               loaded.outputs[0].outputType == "window" &&
+               loaded.outputs[0].mirrorSourceOutputIndex == -1 &&
+               loaded.outputs[1].streamEnabled &&
+               loaded.outputs[1].streamProtocol == "rtmp" &&
+               loaded.outputs[1].streamBitrateKbps == 4200 &&
+               loaded.outputs[1].outputType == "stream" &&
+               loaded.outputs[1].mirrorSourceOutputIndex == 0 &&
+               loaded.outputs[0].outputId == "out-smoke-program" &&
+               loaded.outputs[1].outputId == "out-smoke-stream" &&
+               std::abs(loaded.outputs[0].outputAlpha - 0.82f) < 0.01f &&
+               loaded.outputs[0].outputDelayMs == 240 &&
+               loaded.outputs[0].outputTimeOverlayEnabled &&
+               loaded.outputs[0].outputColorSpace == "bt709" &&
+               loaded.outputs[0].outputLayoutMode == "span" &&
+               loaded.outputs[0].outputOrientationDegrees == 90 &&
+               // Saved with the card UP, and it must come back down: the
+               // test card is never part of a show.
+               !loaded.outputs[0].outputTestCardEnabled &&
+               std::abs(loaded.outputs[1].outputAlpha - 0.67f) < 0.01f &&
+               loaded.outputs[1].outputDelayMs == 120 &&
+               !loaded.outputs[1].outputTimeOverlayEnabled &&
+               loaded.outputs[1].outputColorSpace == "srgb" &&
+               loaded.outputs[1].outputLayoutMode == "duplicate" &&
+               loaded.outputs[1].outputOrientationDegrees == 270 &&
+               !loaded.outputs[1].outputTestCardEnabled,
+               "output targets persisted");
+        expect(loaded.outputs[0].ndiEnabled &&
+               loaded.outputs[0].ndiSourceName == "Program Fill" &&
+               loaded.outputs[0].ndiKeyEnabled &&
+               loaded.outputs[0].ndiKeySourceName == "Program Key",
+               "output ndi persisted");
+        expect(loadedDeck.ndiEnabled && loadedDeck.ndiSourceName == "Smoke Fill", "ndi fill persisted");
+        expect(loadedDeck.ndiKeyEnabled && loadedDeck.ndiKeySourceName == "Smoke Key", "ndi key persisted");
+        expect(loadedDeck.canvasViewX == 320 && loadedDeck.canvasViewY == 40, "canvas view persisted");
+        expect(loadedDeck.outputRouteDeckIndex == 0, "deck route persisted");
+        // ── WARP AND EDGE BLEND MIGRATE OFF THE DECK ────────────────────
+        //
+        // The show above sets them on the DECK, which is where every show
+        // saved before this release has them. Loading it must lift them onto
+        // that deck's OUTPUT and clear the deck -- so the projector stays
+        // aligned exactly as it was, and the value has exactly one home
+        // afterwards.
+        //
+        // This test used to assert they came back on the deck, which is the
+        // old model; asserting the migration is worth more than asserting the
+        // field survived a round trip.
+        expect(loaded.outputs[0].warpEnabled &&
+               loaded.outputs[0].warpMode == "perspective" &&
+               std::abs(loaded.outputs[0].warpTopLeftX + 12.0f) < 0.01f &&
+               std::abs(loaded.outputs[0].warpBottomRightY + 6.0f) < 0.01f,
+               "warp migrated from the deck to its output");
+        expect(!loadedDeck.warpEnabled &&
+               std::abs(loadedDeck.warpTopLeftX) < 0.001f,
+               "and the deck no longer carries it");
+        expect(std::abs(loaded.outputs[0].edgeBlendLeft - 0.08f) < 0.001f &&
+               std::abs(loaded.outputs[0].edgeBlendRight - 0.12f) < 0.001f &&
+               std::abs(loaded.outputs[0].edgeBlendTop - 0.03f) < 0.001f &&
+               std::abs(loaded.outputs[0].edgeBlendBottom - 0.05f) < 0.001f,
+               "edge blend migrated too");
+        expect(std::abs(loadedDeck.edgeBlendLeft) < 0.001f,
+               "and the deck no longer carries that either");
+        expect(std::abs(loadedDeck.transitionSeconds - 1.5) < 0.01, "transition persisted");
+        expect(parseTransitionStyleToken(loadedDeck.transitionStyle) == TransitionStyle::DipBlack, "transition style persisted");
+        expect(std::abs(loadedDeck.playlistOpacity - 0.62f) < 0.01f &&
+               loadedDeck.playlistAutoFade &&
+               std::abs(loadedDeck.playlistFadeSeconds - 1.7) < 0.01,
+               "playlist opacity settings persisted");
+        expect(std::abs(loadedDeck.playlistTimebaseFps - 29.97) < 0.01 &&
+               std::abs(loadedDeck.playlistStartOffsetSeconds - 3600.0) < 0.01 &&
+               std::abs(loadedDeck.playlistDefaultCueFadeSeconds - 0.75) < 0.01 &&
+               std::abs(loadedDeck.playlistDefaultStillDurationSeconds - 6.5) < 0.01 &&
+               loadedDeck.playlistDefaultLoop &&
+               loadedDeck.playlistDefaultFadeInEnabled &&
+               !loadedDeck.playlistDefaultFadeOutEnabled &&
+               !loadedDeck.playlistDefaultAudioEnabled &&
+               loadedDeck.playlistDefaultPauseAtBeginning &&
+               loadedDeck.playlistDefaultPauseAtEnd &&
+               !loadedDeck.playlistDefaultTransitionToNext,
+               "playlist preference defaults persisted");
+        expect(loadedDeck.timecodeChaseEnabled, "timecode chase persisted");
+        expect(!loadedDeck.timecodeJamSyncEnabled && std::abs(loadedDeck.timecodeFreewheelSeconds - 2.5) < 0.01,
+               "timecode follower options persisted");
+        expect(std::abs(loadedCue.inPointSeconds - 2.0) < 0.01 && std::abs(loadedCue.outPointSeconds - 8.0) < 0.01, "trim persisted");
+        expect(std::abs(loadedCue.triggerTimecodeSeconds - 13.0) < 0.01, "cue tc mark persisted");
+        expect(std::abs(loadedCue.cueTransitionSeconds - 1.25) < 0.01, "cue transition persisted");
+        expect(loadedCue.cueTransitionStyle == "crossfade", "cue transition style persisted");
+        expect(loadedCue.cueId == "A1" &&
+               loadedCue.hasAudio &&
+               !loadedCue.audioEnabled &&
+               loadedCue.pauseAtBeginning &&
+               loadedCue.pauseOnLastFrame &&
+               !loadedCue.transitionToNext &&
+               loadedCue.gotoTarget == "Q12",
+               "cue parity fields persisted");
+        expect(std::abs(loadedCue.outputRotationDegrees - 17.5f) < 0.01f, "cue rotation persisted");
+        expect(std::abs(loadedCue.cropLeft - 0.10f) < 0.001f &&
+               std::abs(loadedCue.cropRight - 0.05f) < 0.001f &&
+               std::abs(loadedCue.cropTop - 0.02f) < 0.001f &&
+               std::abs(loadedCue.cropBottom - 0.03f) < 0.001f, "cue crop persisted");
+        expect(loadedCue.chromaKeyEnabled &&
+               loadedCue.chromaKeyColor.r == 20 &&
+               loadedCue.chromaKeyColor.g == 220 &&
+               loadedCue.chromaKeyColor.b == 45 &&
+               std::abs(loadedCue.chromaKeyTolerance - 88.5f) < 0.01f &&
+               std::abs(loadedCue.chromaKeySoftness - 14.0f) < 0.01f, "cue chroma key persisted");
+        expect(std::abs(loadedCue.brightness - 1.25f) < 0.01f &&
+               std::abs(loadedCue.contrast - 0.85f) < 0.01f &&
+               std::abs(loadedCue.saturation - 1.40f) < 0.01f &&
+               std::abs(loadedCue.hueShift + 22.0f) < 0.01f, "cue color controls persisted");
+        expect(std::abs(loadedCue.audioGainDb + 6.5f) < 0.01f &&
+               std::abs(loadedCue.audioPan - 0.35f) < 0.01f &&
+               loadedCue.audioMono, "cue audio trim/pan/mono persisted");
+        expect(std::abs(loadedCue.audioFadeInSeconds - 0.5f) < 0.01f &&
+               std::abs(loadedCue.audioFadeOutSeconds) < 0.01f, "cue audio fades persisted");
+        expect(loadedCue.audioOutputPair == 2 && loadedDeck.audioOutputChannels == kMaxAudioOutputs,
+               "audio output routing persisted");
+        if (loadedDeck.cues.size() > 1) {
+          const Cue& img = loadedDeck.cues[1];
+          expect(img.kind == CueKind::Image, "still image kind persisted");
+          expect(std::abs(img.stillDurationSeconds - 5.0) < 0.01, "still duration persisted");
+        }
+        if (loadedDeck.cues.size() > 2) {
+          const Cue& lt = loadedDeck.cues[2];
+          expect(lt.kind == CueKind::LowerThird, "lower third kind persisted");
+          expect(lt.lowerThirdText == "Hello World", "lower third text persisted");
+          expect(lt.lowerThirdSubtext == "subtitle here", "lower third subtext persisted");
+          expect(lt.lowerThirdBgAlpha == 200, "lower third alpha persisted");
+        }
+      }
+      std::error_code ignored;
+      fs::remove(smokePath, ignored);
+    }
+
+    // (workspace smoke test removed — single-deck simplification)
+
+    {
+      Project legacy;
+      Deck legacyDeck;
+      legacyDeck.name = "Legacy Deck";
+      legacyDeck.ndiEnabled = true;
+      legacyDeck.ndiSourceName = "Legacy Fill";
+      legacyDeck.ndiKeyEnabled = true;
+      legacyDeck.ndiKeySourceName = "Legacy Key";
+      legacy.decks = {legacyDeck};
+      legacy.outputs = {OutputTarget {"Legacy Output", 0, 0, "", false, "window", -1, {}, false, "srt", "", "", 6000}};
+      normalizeProject(legacy);
+      expect(!legacy.outputs.empty()
+               && legacy.outputs[0].ndiEnabled
+               && legacy.outputs[0].ndiSourceName == "Legacy Fill"
+               && legacy.outputs[0].ndiKeyEnabled
+               && legacy.outputs[0].ndiKeySourceName == "Legacy Key",
+             "legacy deck ndi migrated to output");
+    }
+
+    {
+      // Numeric-entry shorthand: 'x' multiplies, "px" units are ignored.
+      auto v1 = parseNumericExpression("1920x2");
+      auto v2 = parseNumericExpression("960px * 2");
+      auto v3 = parseNumericExpression("3840/2");
+      auto v4 = parseNumericExpression("1920X2 + 10px");
+      expect(v1 && std::abs(*v1 - 3840.0) < 0.001, "expression: 1920x2");
+      expect(v2 && std::abs(*v2 - 1920.0) < 0.001, "expression: 960px * 2");
+      expect(v3 && std::abs(*v3 - 1920.0) < 0.001, "expression: 3840/2");
+      expect(v4 && std::abs(*v4 - 3850.0) < 0.001, "expression: 1920X2 + 10px");
+    }
+
+    {
+      // The usual lower third holds until OUT. Its zero duration must still
+      // allow pause, seek and resume to drive the material's animation clock.
+      MediaEngine engine(nullptr, nullptr);
+      Cue textCue;
+      textCue.kind = CueKind::Text;
+      textCue.textBody = "Name Surname\nTitle or role";
+      textCue.stillDurationSeconds = 0.0;
+      engine.loadCue(&textCue, true);
+      engine.pause();
+      engine.seek(4.1);
+      engine.update();
+      expect(engine.state() == TransportState::Paused && std::abs(engine.position() - 4.1) < 1e-6,
+             "an indefinite text cue pauses and seeks to its cue clock");
+      engine.toggle();
+      expect(engine.state() == TransportState::Playing && engine.position() >= 4.1,
+             "an indefinite text cue resumes from its paused position");
+      engine.toggle();
+      engine.seek(1.3);
+      engine.update();
+      expect(engine.state() == TransportState::Paused && std::abs(engine.position() - 1.3) < 1e-6,
+             "an indefinite text cue can seek backwards while held");
+      engine.seek(-1);
+      expect(engine.position() == 0, "a text cue cannot seek before its start");
+      textCue.stillDurationSeconds = 3.0;
+      engine.loadCue(&textCue, false);
+      engine.seek(4.1);
+      expect(engine.position() == 3.0, "a timed text cue still stops a seek at its end");
+    }
+
+    {
+      // Fade in/out end-to-end through the live engine path. A Pattern cue
+      // decodes on the CPU (no ffmpeg subprocess) and the engine tolerates a
+      // null renderer, so this exercises the real loadCue → position() →
+      // currentVisualFadeGain() chain the output compositor multiplies into
+      // the bridge-texture alpha.
+      MediaEngine engine(nullptr, nullptr);
+      Cue fadeCue;
+      fadeCue.kind = CueKind::Pattern;
+      fadeCue.name = "fade-check";
+      fadeCue.path = "pattern://smpte-bars";
+      fadeCue.stillDurationSeconds = 4.0;
+      fadeCue.fadeInSeconds = 1.0;
+      fadeCue.fadeOutSeconds = 1.0;
+      const Uint64 loadedAt = SDL_GetTicksNS();
+      engine.loadCue(&fadeCue, true);
+      double gainStart = engine.currentVisualFadeGain();
+      SDL_Delay(500);
+      engine.update();
+      double gainMid = engine.currentVisualFadeGain();
+      // The fade rides real time, and a loaded CI runner can oversleep the
+      // 500 ms: judge the 1 s linear ramp against the time that really passed.
+      const double fadeElapsed = std::min(1.0, double(SDL_GetTicksNS() - loadedAt) / 1e9);
+      engine.seek(3.5);  // pattern seek pauses at the target position
+      engine.update();
+      double gainTail = engine.currentVisualFadeGain();
+      engine.stopAll();
+      expect(gainStart < 0.15, "fade-in gain starts near zero");
+      expect(gainMid > gainStart && std::abs(gainMid - fadeElapsed) < 0.2, "fade-in gain ramps mid-fade");
+      expect(gainTail > 0.30 && gainTail < 0.70, "fade-out gain ramps near cue end");
+    }
+
+    {
+      // Pocket test card instrumentation (v0.78.x): the auto-cycling
+      // pocket-test carries the test-card overlay — verify the pixel-mapping
+      // border checkerboard and the instrument-strip separator landed where
+      // drawPocketTestCardOverlay puts them. The clean scene variants must
+      // NOT have the border (they stay usable as backgrounds).
+      Cue cardCue;
+      cardCue.kind = CueKind::Pattern;
+      cardCue.path = "pattern://pocket-test";
+      cardCue.width = 320;
+      cardCue.height = 180;
+      auto card = MediaEngine::buildPatternFrame(cardCue, 5.0, 320, 180);
+      bool cardOk = card.has_value() && !card->pixels.empty();
+      if (cardOk) {
+        auto red = [&](int x, int y) {
+          return card->pixels[(static_cast<std::size_t>(y) * card->width + x) * 4u];
+        };
+        // Diegetic instruments: scan for the exact measurement values the
+        // props must carry — 75% red (billboard bar), 2% near-black (cave
+        // eyes), 96% near-white (cloud lump) — plus the checker border.
+        bool saw75Red = false;
+        bool sawCaveEye = false;
+        bool sawCloudLump = false;
+        for (std::size_t i = 0; i + 3 < card->pixels.size(); i += 4) {
+          const std::uint8_t r = card->pixels[i];
+          const std::uint8_t g = card->pixels[i + 1];
+          const std::uint8_t b = card->pixels[i + 2];
+          saw75Red = saw75Red || (r == 191 && g == 0 && b == 0);
+          sawCaveEye = sawCaveEye || (r == 5 && g == 5 && b == 5);
+          sawCloudLump = sawCloudLump || (r == 245 && g == 245 && b == 245);
+        }
+        cardOk = red(0, 0) == 0 && red(1, 0) == 255 &&
+                 saw75Red && sawCaveEye && sawCloudLump;
+      }
+      cardCue.path = "pattern://pocket-day";
+      auto clean = MediaEngine::buildPatternFrame(cardCue, 5.0, 320, 180);
+      bool cleanOk = clean.has_value() && !clean->pixels.empty();
+      if (cleanOk) {
+        auto redC = [&](int x, int y) {
+          return clean->pixels[(static_cast<std::size_t>(y) * clean->width + x) * 4u];
+        };
+        cleanOk = !(redC(0, 0) == 0 && redC(1, 0) == 255);       // no border on scenes
+      }
+      expect(cardOk, "pocket test card instrumentation present");
+      expect(cleanOk, "pocket scene variants stay clean");
+    }
+
+    {
+      // Native Terrarium pattern. This used to assert a FIXED 1600x896 raster
+      // regardless of the size asked for — which was the bug, not the contract:
+      // terrarium was the only pattern that ignored --pattern-dump's size.
+      // The world is a 200x112 CELL grid, so the raster is now the requested
+      // size quantised DOWN to whole pixels-per-cell. The world must also
+      // actually contain life (non-black pixels).
+      // The terrarium world grid (TERRA_W/TERRA_H in the vendored core). Spelled
+      // out because the vendored header is only included by media_engine.cpp.
+      constexpr int kTerraW = 200;
+      constexpr int kTerraH = 112;
+      auto buildTerr = [](int w, int h) {
+        Cue c;
+        c.kind = CueKind::Pattern;
+        c.path = "pattern://terrarium";
+        c.width = w;
+        c.height = h;
+        return MediaEngine::buildPatternFrame(c, 1.0, w, h);
+      };
+      auto countLit = [](const DecodedFrame& f) {
+        std::size_t lit = 0;
+        for (std::size_t i = 0; i + 3 < f.pixels.size(); i += 4) {
+          if (f.pixels[i] || f.pixels[i + 1] || f.pixels[i + 2]) {
+            ++lit;
+          }
+        }
+        return lit;
+      };
+      // Small ask -> 1 px per cell.
+      auto terrSmall = buildTerr(320, 180);
+      bool terrOk = terrSmall.has_value() && terrSmall->width == kTerraW &&
+                    terrSmall->height == kTerraH && countLit(*terrSmall) > 1000;
+      // Large ask -> more pixels per cell, still a whole multiple of the grid.
+      auto terrBig = buildTerr(1600, 900);
+      terrOk = terrOk && terrBig.has_value() &&
+               terrBig->width == kTerraW * 8 && terrBig->height == kTerraH * 8 &&
+               countLit(*terrBig) > 1000;
+      expect(terrOk, "native terrarium pattern renders a living world at the asked-for size");
+
+      // Pico is the Pi panel's picture: ALWAYS 1 px per cell, whatever it is
+      // asked for. If this ever tracks the request, the pico look is gone.
+      Cue picoCue;
+      picoCue.kind = CueKind::Pattern;
+      picoCue.path = "pattern://terrarium-pico";
+      auto pico = MediaEngine::buildPatternFrame(picoCue, 1.0, 1920, 1080);
+      expect(pico.has_value() && pico->width == kTerraW && pico->height == kTerraH,
+             "terrarium-pico stays 1px per cell");
+    }
+
+    {
+      // Crash resilience (GPU_DECODE_PLAN §9): a corrupt media file must
+      // degrade to EOF/rerack — never crash or wedge the engine. The
+      // in-process decoder validates by priming the first frame in open();
+      // garbage that fails there falls back to the CLI pipe, which EOFs on
+      // the same garbage. Either way the engine survives and stays loaded.
+      fs::path corruptPath;
+      try {
+        corruptPath = fs::temp_directory_path() / "deckboy-smoke-corrupt.mp4";
+        std::ofstream out(corruptPath, std::ios::binary | std::ios::trunc);
+        for (int i = 0; i < 4096; ++i) {
+          out.put(static_cast<char>((i * 37 + 11) & 0xFF));
+        }
+      } catch (...) {
+        corruptPath.clear();
+      }
+      if (!corruptPath.empty()) {
+        MediaEngine engine(nullptr, nullptr);
+        Cue badCue;
+        badCue.kind = CueKind::Video;
+        badCue.name = "corrupt-check";
+        badCue.path = corruptPath.string();
+        badCue.width = 320;
+        badCue.height = 180;
+        badCue.duration = 2.0;
+        badCue.hasAudio = false;
+        engine.loadCue(&badCue, true);
+        for (int i = 0; i < 30; ++i) {
+          engine.update();
+          SDL_Delay(10);
+        }
+        bool alive = engine.activeCue() != nullptr;
+        engine.stopAll();
+        std::error_code removeEc;
+        fs::remove(corruptPath, removeEc);
+        expect(alive, "corrupt media file degrades without crash");
+      } else {
+        expect(true, "corrupt media file check skipped (no temp dir)");
+      }
+    }
+
+    {
+      // Missing-media scan + relink: a file cue whose media moved must flag
+      // MISSING, and relinkMissingMediaFromFolder must find the file by name
+      // under the picked folder and repoint the cue at it.
+      bool relinkOk = false;
+      std::error_code ec;
+      fs::path relinkRoot = fs::temp_directory_path(ec) / "deckboy-smoke-relink";
+      if (!ec) {
+        fs::remove_all(relinkRoot, ec);
+        fs::create_directories(relinkRoot / "moved", ec);
+        {
+          std::ofstream out(relinkRoot / "moved" / "smoke-relink.bin",
+                            std::ios::binary | std::ios::trunc);
+          out << "deckboy";
+        }
+
+        App app;
+        Cue lost;
+        lost.kind = CueKind::Video;
+        lost.name = "smoke-relink";
+        lost.path = (relinkRoot / "gone" / "smoke-relink.bin").generic_string();
+        Deck deck;
+        deck.cues.push_back(lost);
+        app.project_.decks = {deck};
+
+        int missingBefore = app.scanProjectMediaPresence();
+        const Cue& probe = app.project_.decks[0].cues[0];
+        bool flagged = missingBefore >= 1 && probe.mediaMissing;
+        int relinked = app.relinkMissingMediaFromFolder(relinkRoot);
+        std::error_code existsEc;
+        bool repointed = relinked >= 1 && !probe.mediaMissing &&
+                         fs::exists(fs::path(probe.path), existsEc);
+        relinkOk = flagged && repointed;
+        fs::remove_all(relinkRoot, ec);
+      }
+      expect(relinkOk, "missing media flags and relinks from folder");
+    }
+
+    {
+      // Vanished-media take guard: a file cue whose media is gone must be
+      // flagged and refused before the engine ever sees it (the same check
+      // auto-advance uses to skip dead cues mid-show).
+      App app;
+      Cue ghost;
+      ghost.kind = CueKind::Video;
+      ghost.name = "smoke-ghost";
+      std::error_code ghostEc;
+      ghost.path = (fs::temp_directory_path(ghostEc) / "deckboy-smoke-void" / "ghost.mp4").generic_string();
+      expect(!app.cueMediaAvailableForTake(ghost) && ghost.mediaMissing,
+             "vanished media is flagged and refused at take");
+    }
+
+    {
+      // UNDO NEVER MOVES AN OUTPUT. The snapshot is taken before a cue edit;
+      // the display is picked afterwards, which takes no snapshot; Ctrl+Z
+      // must take the cue edit back and leave the screen where it was put.
+      App app;
+      Deck deck;
+      deck.cues.resize(1);
+      app.project_.decks = {deck};
+      OutputTarget& out = app.project_.outputs[0];
+      out.outputId = "smoke-out";
+      out.displayIndex = 0;
+      out.displayName.clear();
+      out.warpTopLeftX = 0.0f;
+      app.project_.outputFollowDisplay = true;
+      const Project snapshot = app.project_;
+      app.project_.decks[0].cues.resize(2);          // the edit
+      app.project_.outputs[0].warpTopLeftX = 0.1f;    // a warp edit, undoable too
+      app.project_.outputs[0].displayIndex = 1;       // the display pick
+      app.project_.outputs[0].displayName = "SMOKE-720P";
+      app.project_.outputFollowDisplay = false;       // and a raster change
+      app.project_.outputRenderWidth = 1280;
+      app.project_.outputRenderHeight = 720;
+      const Project live = app.project_;
+      app.project_ = snapshot;
+      app.keepLiveStateAcrossRestore(live);
+      const OutputTarget& after = app.project_.outputs[0];
+      expect(app.project_.decks[0].cues.size() == 1, "undo still takes back a cue edit");
+      expect(after.warpTopLeftX == 0.0f, "undo still takes back a warp edit");
+      expect(after.displayIndex == 1 && after.displayName == "SMOKE-720P",
+             "undo keeps the display an output was put on");
+      expect(!app.project_.outputFollowDisplay && app.project_.outputRenderWidth == 1280 &&
+             app.project_.outputRenderHeight == 720,
+             "undo keeps the output raster");
+
+      // A show swap remembers whose file it was, so undoing OPEN cannot write
+      // the old show into the new one's file.
+      app.currentProjectFile_ = fs::path("smoke-show-a.deckboy");
+      app.pushUndoSnapshotForShowReplace();
+      expect(!app.undoStack_.empty() && app.undoStack_.back().showSwap &&
+             app.undoStack_.back().file == fs::path("smoke-show-a.deckboy"),
+             "a replaced show goes on the undo stack with its own file");
+      app.pushUndoSnapshot(true);
+      expect(!app.undoStack_.back().showSwap, "an edit is not a show swap");
+    }
+
+    {
+      // THE DESK'S MONITOR PLACES A CUE THE WAY THE OUTPUT DOES. A 480-wide
+      // preview of a 1920 output, fed a 960-wide copy of a 1920 source: 1:1
+      // fills the output, so it fills the preview; 192 output pixels of offset
+      // is a tenth of the frame in both.
+      App app;
+      Cue cue;
+      cue.kind = CueKind::Video;
+      cue.width = 1920;
+      cue.height = 1080;
+      cue.scaleMode = ScaleMode::Unscaled;
+      cue.outputOffsetX = 192.0f;
+      const auto onOutput = app.cuePlacementFor(&cue, 1920, 1080, SDL_Rect {0, 0, 1920, 1080});
+      const auto onPreview = app.cuePlacementFor(&cue, 960, 540, SDL_Rect {0, 0, 480, 270}, 1920);
+      expect(onOutput.destination.w == 1920 && onOutput.destination.x == 192,
+             "1:1 and offset on the output are in output pixels");
+      expect(onPreview.destination.w == 480 && onPreview.destination.h == 270 &&
+             onPreview.destination.x == 48,
+             "the preview scales 1:1 and offset to its own size");
+      cue.scaleMode = ScaleMode::Fit;
+      cue.outputOffsetX = 0.0f;
+      const auto fitOutput = app.cuePlacementFor(&cue, 1920, 1080, SDL_Rect {0, 0, 1920, 1080});
+      const auto fitPreview = app.cuePlacementFor(&cue, 960, 540, SDL_Rect {0, 0, 480, 270}, 1920);
+      expect(fitOutput.destination.w == 1920 && fitPreview.destination.w == 480,
+             "fit fills both the output and its preview");
+    }
+
+    // ---- HAP ---------------------------------------------------------------
+    // The Snappy vectors are real streams from the reference implementation
+    // (python-snappy), not something this repo produced, so passing them means
+    // the vendored decompressor agrees with Google format rather than with
+    // itself. See docs/HAP_PLAYBACK_PLAN.md.
+    {
+      #include "engine/hap_test_vectors.inc"
+      bool allOk = true;
+      for (const SnappyVector& v : kSnappyVectors) {
+        std::vector<std::uint8_t> got;
+        std::string err;
+        const bool ok = deckboy::hap::snappyUncompress(v.comp, v.compSize, got, err);
+        const bool match = ok && got.size() == v.rawSize &&
+                           std::memcmp(got.data(), v.raw, v.rawSize) == 0;
+        if (!match) {
+          allOk = false;
+          std::cout << "  snappy vector failed: " << v.name
+                    << (err.empty() ? "" : (" (" + err + ")")) << "\n";
+        }
+      }
+      expect(allOk, "snappy decompresses the reference implementation output");
+
+      // A HAP frame the decoder builds itself: uncompressed section, DXT1.
+      std::vector<std::uint8_t> frame;
+      const std::vector<std::uint8_t> blocks(64, 0x5A);
+      frame.push_back(static_cast<std::uint8_t>(blocks.size() & 0xFF));
+      frame.push_back(static_cast<std::uint8_t>((blocks.size() >> 8) & 0xFF));
+      frame.push_back(static_cast<std::uint8_t>((blocks.size() >> 16) & 0xFF));
+      frame.push_back(0xAB);            // compressor none | RGB_DXT1
+      frame.insert(frame.end(), blocks.begin(), blocks.end());
+      deckboy::hap::Frame decoded;
+      std::string hapErr;
+      const bool hapOk = deckboy::hap::decodeFrame(frame.data(), frame.size(),
+                                                   decoded, hapErr);
+      expect(hapOk && decoded.format == deckboy::hap::TextureFormat::RgbDxt1 &&
+             decoded.data == blocks,
+             "hap decodes an uncompressed DXT1 frame");
+
+      // Truncated frames must fail cleanly rather than read past the buffer.
+      deckboy::hap::Frame bad;
+      std::string badErr;
+      const bool rejected =
+        !deckboy::hap::decodeFrame(frame.data(), 3, bad, badErr) &&
+        !deckboy::hap::decodeFrame(frame.data(), frame.size() / 2, bad, badErr);
+      expect(rejected, "hap rejects truncated frames instead of overrunning");
+
+      // Block expansion. A single DXT1 block with known endpoints: white and
+      // black, indices all 0, so every texel must come out pure white. This
+      // pins endpoint decoding, index order and row layout without depending
+      // on any reference decoder.
+      {
+        std::vector<std::uint8_t> one;
+        const std::uint16_t white = 0xFFFF;   // 565 all-ones
+        const std::uint16_t black = 0x0000;
+        one.push_back(white & 0xFF); one.push_back(white >> 8);
+        one.push_back(black & 0xFF); one.push_back(black >> 8);
+        for (int i = 0; i < 4; ++i) one.push_back(0x00);   // all indices 0
+        deckboy::hap::Frame f;
+        f.format = deckboy::hap::TextureFormat::RgbDxt1;
+        f.data = one;
+        std::vector<std::uint8_t> rgba;
+        std::string e2;
+        const bool ok2 = deckboy::hap::decompressToRgba(f, 4, 4, rgba, e2);
+        bool allWhite = ok2 && rgba.size() == 4 * 4 * 4;
+        for (std::size_t i = 0; allWhite && i < rgba.size(); i += 4) {
+          allWhite = rgba[i] == 255 && rgba[i+1] == 255 && rgba[i+2] == 255 &&
+                     rgba[i+3] == 255;
+        }
+        expect(allWhite, "hap expands DXT1 blocks to the expected texels");
+
+        // Too little data for the stated raster must be refused, not read past.
+        std::vector<std::uint8_t> ignored;
+        std::string e3;
+        expect(!deckboy::hap::decompressToRgba(f, 64, 64, ignored, e3),
+               "hap refuses to expand undersized block data");
+      }
+    }
+
+    {
+      Cue codeCue;
+      codeCue.kind = CueKind::Pattern;
+      codeCue.path = "code";
+      codeCue.width = 320;
+      codeCue.height = 180;
+      codeCue.codeExpression = "0.25,0.5,0.75";
+      DecodedFrame codeFrame;
+      MediaEngine::buildPatternFrameInto(codeFrame, codeCue, 0.0, 640, 360);
+      expect(codeFrame.width == 320 && codeFrame.height == 180 &&
+             codeFrame.pixels.size() == 320u * 180u * 4u,
+             "code source honours its render raster on a larger output");
+      const auto goodPixels = codeFrame.pixels;
+      codeCue.codeExpression = "sin(";
+      MediaEngine::buildPatternFrameInto(codeFrame, codeCue, 1.0, 640, 360);
+      expect(codeFrame.width == 320 && codeFrame.height == 180 &&
+             codeFrame.pixels == goodPixels,
+              "an incomplete live code edit preserves the previous picture");
+      codeCue.codeExpression = "0.25,0.5,0.75";
+      codeCue.width = codeCue.height = 64;
+      codeFrame.colorspace = SDL_COLORSPACE_BT709_LIMITED;
+      MediaEngine::buildPatternFrameInto(codeFrame, codeCue, 2.0, 3840, 2160);
+      expect(codeFrame.width == 64 && codeFrame.height == 64 &&
+             codeFrame.colorspace == SDL_COLORSPACE_SRGB,
+             "small code raster remains exact and clears reused video colour metadata");
+    }
+
+    {
+      Cue swirl;
+      swirl.kind = CueKind::Pattern;
+      swirl.path = "swirl";
+      DecodedFrame frame;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      const auto original = frame.pixels;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 1.0, 320, 180);
+      expect(frame.pixels != original, "swirl animates at its default speed");
+      swirl.swirl.speed = 0.0;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      const auto frozen = frame.pixels;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 5.0, 320, 180);
+      expect(frame.pixels == frozen, "zero swirl speed holds the field");
+      swirl.swirl.hue = 0.5;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      bool colourOnly = frame.pixels != frozen && frame.pixels.size() == frozen.size();
+      for (std::size_t i = 0; colourOnly && i + 3 < frozen.size(); i += 4) {
+        colourOnly = frame.pixels[i+3] == 255 &&
+          std::max({frame.pixels[i], frame.pixels[i+1], frame.pixels[i+2]}) ==
+          std::max({frozen[i], frozen[i+1], frozen[i+2]});
+      }
+      expect(colourOnly, "swirl colour changes hue while preserving palette brightness and opacity");
+      swirl.swirl.hue = 1.0;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      expect(frame.pixels == frozen, "one full swirl colour turn restores the original palette");
+      swirl.swirl.hue = 0.0;
+      swirl.swirl.twist = 0.0;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      expect(frame.pixels != frozen, "swirl twist changes the spiral field");
+      swirl.swirl.twist = 1.35;
+      swirl.swirl.cells = 96;
+      MediaEngine::buildPatternFrameInto(frame, swirl, 0.0, 320, 180);
+      expect(frame.pixels != frozen, "swirl pixel density changes its cell size");
+    }
+
+    // ---- Timer ------------------------------------------------------------
+    // The formatting asymmetry is the part worth pinning: counting down rounds
+    // UP so the last second reads 0:01, overtime rounds DOWN so it starts at
+    // +0:00. Both are checked by rendering and counting lit pixels, since the
+    // digits are geometry rather than a string we could compare.
+    {
+      auto litPixels = [](const DecodedFrame& f) {
+        int n = 0;
+        for (std::size_t i = 0; i + 3 < f.pixels.size(); i += 4) {
+          if (f.pixels[i] || f.pixels[i + 1] || f.pixels[i + 2]) ++n;
+        }
+        return n;
+      };
+      TimerSettings cfg;
+      cfg.durationSeconds = 300;
+      cfg.amberSeconds = 60;
+      cfg.redSeconds = 15;
+      cfg.blinkAtZero = false;   // deterministic for the test
+
+      DecodedFrame f;
+      f.width = 640; f.height = 360;
+      f.pixels.assign(static_cast<std::size_t>(f.width) * f.height * 4, 0);
+
+      MediaEngine::buildTimerFrame(f, cfg, 0.0, true);
+      const int atStart = litPixels(f);
+      expect(atStart > 0, "timer renders digits at the start of a countdown");
+
+      // Colour must move white -> amber -> red as the thresholds pass.
+      auto inkAt = [&](double elapsed) {
+        MediaEngine::buildTimerFrame(f, cfg, elapsed, true);
+        for (std::size_t i = 0; i + 3 < f.pixels.size(); i += 4) {
+          if (f.pixels[i] || f.pixels[i + 1] || f.pixels[i + 2]) {
+            return std::make_tuple(f.pixels[i], f.pixels[i + 1], f.pixels[i + 2]);
+          }
+        }
+        return std::make_tuple<std::uint8_t, std::uint8_t, std::uint8_t>(0, 0, 0);
+      };
+      const auto early = inkAt(10.0);      // 4:50 left  -> white
+      const auto amber = inkAt(250.0);     // 0:50 left  -> amber
+      const auto red   = inkAt(290.0);     // 0:10 left  -> red
+      const bool coloursOk =
+        std::get<1>(early) > 200 && std::get<2>(early) > 200 &&      // white
+        std::get<2>(amber) < 120 && std::get<1>(amber) > 120 &&      // amber
+        std::get<1>(red) < 120 && std::get<2>(red) < 120;            // red
+      expect(coloursOk, "timer moves white -> amber -> red across its thresholds");
+
+      // Overtime still renders (and differs from the zero frame).
+      MediaEngine::buildTimerFrame(f, cfg, 305.0, true);
+      expect(litPixels(f) > 0, "timer renders overtime past zero");
+
+      // A paused clock is visibly different from a running one.
+      MediaEngine::buildTimerFrame(f, cfg, 100.0, true);
+      const int runningPx = litPixels(f);
+      MediaEngine::buildTimerFrame(f, cfg, 100.0, false);
+      expect(litPixels(f) > runningPx, "paused timer draws the hold marker");
+    }
+
+    // ── Parameter LFOs ──────────────────────────────────────────────────────
+    //
+    // The whole feature is invisible in any single frame — what it does happens
+    // BETWEEN frames — so this samples the oscillator across time. Four things
+    // would each ruin a show on their own: an LFO that does not move, one that
+    // moves while switched off, one that pushes a parameter outside 0–1, and
+    // one that drifts off the beat it is supposed to be locked to.
+    {
+      using namespace deckboy::effects;
+      ParamLfo lfo;
+      lfo.on = true;
+      lfo.rateHz = 1.0f;
+      lfo.depth = 1.0f;
+      double lo = 2.0, hi = -1.0, sum = 0.0;
+      const int n = 400;
+      for (int i = 0; i < n; ++i) {
+        const double v = lfoApply(lfo, 0.5f, i / 200.0, 0.0);
+        lo = std::min(lo, v);
+        hi = std::max(hi, v);
+        sum += v;
+      }
+      expect(hi - lo > 0.9, "an LFO at full depth swings the whole range");
+      expect(lo >= 0.0 && hi <= 1.0, "and never leaves 0-1");
+      expect(std::fabs(sum / n - 0.5) < 0.02,
+             "and averages to the value the operator set");
+
+      // The rails matter most at the ENDS of the range, where the swing has to
+      // go lopsided rather than out of bounds.
+      bool inside = true;
+      for (float base : {0.0f, 0.05f, 0.95f, 1.0f}) {
+        for (int i = 0; i < 100; ++i) {
+          const float v = lfoApply(lfo, base, i / 50.0, 0.0);
+          if (v < 0.0f || v > 1.0f) inside = false;
+        }
+      }
+      expect(inside, "an LFO stays in range from any base value");
+
+      ParamLfo off;
+      bool untouched = true;
+      for (int i = 0; i < 50; ++i) {
+        if (lfoApply(off, 0.37f, i * 0.1, i * 0.25) != 0.37f) untouched = false;
+      }
+      expect(untouched, "an LFO that is off changes nothing at all");
+
+      // Sample-and-hold has to be REPEATABLE: a random that differs between the
+      // rehearsal and the show is not usable.
+      ParamLfo hold;
+      hold.on = true;
+      hold.shape = LfoShape::Sample;
+      hold.rateHz = 1.0f;
+      hold.depth = 1.0f;
+      expect(std::fabs(lfoApply(hold, 0.5f, 3.10, 0.0) -
+                       lfoApply(hold, 0.5f, 3.90, 0.0)) < 1e-9,
+             "sample-and-hold holds its value across a cycle");
+      expect(std::fabs(lfoApply(hold, 0.5f, 3.10, 0.0) -
+                       lfoApply(hold, 0.5f, 4.10, 0.0)) > 1e-9,
+             "and steps at the cycle boundary");
+
+      ParamLfo synced;
+      synced.on = true;
+      synced.beatSync = true;
+      synced.beats = 4.0f;
+      synced.depth = 1.0f;
+      synced.shape = LfoShape::Saw;
+      expect(std::fabs(lfoApply(synced, 0.5f, 999.0, 0.0) -
+                       lfoApply(synced, 0.5f, 12.5, 4.0)) < 1e-6,
+             "a 4-beat LFO repeats every 4 beats");
+      expect(std::fabs(lfoApply(synced, 0.5f, 0.0, 1.0) -
+                       lfoApply(synced, 0.5f, 500.0, 1.0)) < 1e-6,
+             "and ignores the wall clock entirely");
+
+      std::vector<CueEffect> stack(2);
+      stack[0].kind = CueEffectKind::Invert;
+      stack[1].kind = CueEffectKind::Ripple;
+      stack[1].paramA = 0.5f;
+      std::vector<CueEffect> out;
+      expect(!modulateCueEffectStack(stack, 1.0, 0.0, out),
+             "a stack with no LFO does not pay for a copy");
+      stack[1].lfo[0] = lfo;
+      // Across a whole cycle, not at one moment: a sine passes through its own
+      // centre twice per cycle, so a single sample can legitimately equal the
+      // base value and prove nothing. The first version of this failed for
+      // exactly that reason.
+      bool moved = false, neighbourMoved = false;
+      for (int i = 0; i < 40; ++i) {
+        modulateCueEffectStack(stack, i / 40.0, 0.0, out);
+        if (out[1].paramA != stack[1].paramA) moved = true;
+        if (out[0].paramA != stack[0].paramA) neighbourMoved = true;
+      }
+      expect(moved, "an armed LFO moves the parameter it is on");
+      expect(!neighbourMoved, "and leaves every other effect alone");
+      expect(stack[1].paramA == 0.5f,
+             "and never writes back over what the operator set");
+      stack[1].bypassed = true;
+      expect(!cueEffectStackHasLfo(stack), "a bypassed effect's LFO does not run");
+
+      // THE AUDIO SHAPE: the picture half of the Ouroboros loop.
+      ParamLfo heard;
+      heard.on = true;
+      heard.shape = LfoShape::Audio;
+      heard.depth = 0.4f;
+      expect(lfoApply(heard, 0.3f, 12.0, 3.0, 0.0) == 0.3f,
+             "an Audio LFO in silence leaves the value where it was set");
+      expect(std::fabs(lfoApply(heard, 0.3f, 12.0, 3.0, 1.0) - 0.7f) < 1e-5,
+             "and full level pushes it up by exactly the depth");
+      expect(lfoApply(heard, 0.9f, 0.0, 0.0, 1.0) == 1.0f,
+             "and never past the top of the range");
+      expect(std::fabs(lfoApply(heard, 0.3f, 1.0, 0.0, 0.5) -
+                       lfoApply(heard, 0.3f, 99.0, 7.0, 0.5)) < 1e-6,
+             "and ignores the clock and the tempo");
+      expect(std::string(lfoShapeToken(LfoShape::Audio)) == "audio",
+             "the Audio shape has its own token");
+
+      // THE MOTION SHAPES: a camera's movement, zone by zone.
+      {
+        publishMotionReading(0, 0.0f, 0.5f, 0.5f);
+        publishMotionReading(2, 1.0f, 1.0f, 0.0f);
+        ParamLfo motionLfo;
+        motionLfo.on = true;
+        motionLfo.shape = LfoShape::Motion;
+        motionLfo.depth = 0.4f;
+        expect(lfoApply(motionLfo, 0.3f, 5.0, 1.0, 0.0) == 0.3f,
+               "a Motion LFO on a still picture leaves the value where it was set");
+        motionLfo.motionZone = 2;
+        expect(std::fabs(lfoApply(motionLfo, 0.3f, 5.0, 1.0, 0.0) - 0.7f) < 1e-5,
+               "and a zone moving at full pushes it up by the depth");
+        motionLfo.shape = LfoShape::MotionX;
+        expect(std::fabs(lfoApply(motionLfo, 0.5f, 5.0, 1.0, 0.0) - 0.7f) < 1e-5,
+               "Motion X at the right edge swings it up by half the depth, like an oscillator");
+        motionLfo.shape = LfoShape::MotionY;
+        expect(std::fabs(lfoApply(motionLfo, 0.5f, 5.0, 1.0, 0.0) - 0.3f) < 1e-5,
+               "Motion Y at the top swings it down by half the depth");
+        std::ostringstream one;
+        writeParamLfo(one, motionLfo);
+        ParamLfo back;
+        readParamLfo(one.str(), back);
+        expect(back.shape == LfoShape::MotionY && back.motionZone == 2,
+               "a Motion LFO's shape and zone survive the show file");
+        ParamLfo drawnAfter;
+        drawnAfter.shape = LfoShape::Drawn;
+        drawnAfter.curve[7] = 0.25f;
+        std::ostringstream two;
+        writeParamLfo(two, drawnAfter);
+        ParamLfo drawnBack;
+        readParamLfo(two.str(), drawnBack);
+        expect(drawnBack.motionZone == 0 && std::fabs(drawnBack.curve[7] - 0.25f) < 1e-5,
+               "and a drawn curve is still read as a curve, not a zone");
+        publishMotionReading(2, 0.0f, 0.5f, 0.5f);
+      }
+      // THE MIDI SHAPES: a key's pitch and weight, a CC, aftertouch.
+      {
+        ParamLfo midi;
+        midi.on = true;
+        midi.depth = 1.0f;
+        midi.shape = LfoShape::MidiNote;
+        midi.midiChannel = 2;
+        publishMidiToLfo(0x90, 2, 84, 100);
+        expect(std::fabs(lfoApply(midi, 0.5f, 5.0, 1.0, 0.0) - 1.0f) < 1e-5,
+               "MIDI note: C6 on channel 2 takes the control to the top");
+        publishMidiToLfo(0x80, 2, 84, 0);
+        expect(std::fabs(lfoApply(midi, 0.5f, 5.0, 1.0, 0.0) - 1.0f) < 1e-5,
+               "and it stays there when the key is let go");
+        midi.shape = LfoShape::MidiVelocity;
+        expect(lfoApply(midi, 0.2f, 5.0, 1.0, 0.0) == 0.2f,
+               "velocity is nothing once the key is up");
+        publishMidiToLfo(0x90, 2, 60, 127);
+        publishMidiToLfo(0x90, 2, 64, 127);
+        publishMidiToLfo(0x80, 2, 60, 0);
+        expect(std::fabs(lfoApply(midi, 0.2f, 5.0, 1.0, 0.0) - 1.0f) < 1e-5,
+               "a chord's other key letting go does not drop it");
+        publishMidiToLfo(0x80, 2, 64, 0);
+        midi.shape = LfoShape::MidiCc;
+        midi.midiChannel = 0;
+        midi.midiNumber = 74;
+        publishMidiToLfo(0xB0, 5, 74, 0);
+        expect(std::fabs(lfoApply(midi, 0.5f, 5.0, 1.0, 0.0) - 0.0f) < 1e-5,
+               "MIDI CC on any channel follows CC 74 from channel 5");
+        std::ostringstream one;
+        writeParamLfo(one, midi);
+        ParamLfo back;
+        readParamLfo(one.str(), back);
+        expect(back.shape == LfoShape::MidiCc && back.midiNumber == 74 && back.midiChannel == 0,
+               "a MIDI shape's CC and channel survive the show file");
+        expect(std::string(lfoShapeToken(LfoShape::MidiPressure)) == "aftertouch",
+               "aftertouch is a shape");
+        // The sound's pitch: a 220 Hz tone (A3) at the 6 kHz the detector reads.
+        {
+          std::vector<float> tone(2048);
+          for (std::size_t k = 0; k < tone.size(); ++k) {
+            tone[k] = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * 220.0 * k / 6000.0) +
+                                         0.2 * std::sin(2.0 * 3.14159265358979 * 440.0 * k / 6000.0));
+          }
+          const double hz = detectPitchHz(tone.data(), tone.size(), 6000.0);
+          expect(std::fabs(hz - 220.0) < 3.0,
+                 "audio-pitch hears A3 as 220 Hz, not its octave (" + std::to_string(hz) + ")");
+          std::vector<float> quiet(2048, 0.0f);
+          expect(detectPitchHz(quiet.data(), quiet.size(), 6000.0) == 0.0, "and silence as no pitch");
+          expect(std::fabs(pitchToLfoUnit(220.0) - (57.0 - 36.0) / 48.0) < 0.01,
+                 "A3 sits where the MIDI note shape puts it");
+        }
+
+        std::array<ParamLfo, 2> tone {};
+        tone[kToneLfoLevel].on = true;
+        tone[kToneLfoLevel].shape = LfoShape::Motion;
+        tone[kToneLfoLevel].motionZone = 1;
+        const auto toneBack = parseToneLfos(serializeToneLfos(tone));
+        expect(toneBack[kToneLfoLevel].on && toneBack[kToneLfoLevel].shape == LfoShape::Motion &&
+                 toneBack[kToneLfoLevel].motionZone == 1 && !toneBack[kToneLfoFreq].on,
+               "a tone's oscillators survive the show file");
+        expect(serializeToneLfos(std::array<ParamLfo, 2> {}).empty(),
+               "and a tone that never had one writes nothing");
+      }
+      std::vector<CueEffect> heardStack(1);
+      heardStack[0].kind = CueEffectKind::Invert;
+      heardStack[0].amount = 0.5f;   // not 1.0: a clamped top would prove nothing
+      heardStack[0].lfo[4] = heard;
+      expect(cueEffectStackHasLfo(heardStack),
+             "a stack whose only LFO follows the sound still counts as moving");
+      std::vector<CueEffect> heardOut;
+      modulateCueEffectStack(heardStack, 0.0, 0.0, heardOut, 1.0);
+      expect(heardOut.size() == 1 && std::fabs(heardOut[0].amount - 0.9f) < 1e-5,
+             "and modulateCueEffectStack carries the level through");
+      modulateCueEffectStack(heardStack, 0.0, 0.0, heardOut, 0.0);
+      expect(heardOut.size() == 1 && heardOut[0].amount == 0.5f,
+             "and in silence hands back what the operator set");
+    }
+
+    // ── GEOMETRY LFOS ROUND-TRIP ────────────────────────────────────────
+    //
+    // Nine oscillators in one field, written only when one is armed. The
+    // empty case matters as much as the full one: every cue that never had a
+    // geometry LFO must write nothing and read back all-off.
+    {
+      using deckboy::effects::LfoShape;
+      std::array<deckboy::effects::ParamLfo, 9> none {};
+      expect(serializeGeometryLfos(none).empty(),
+             "a cue with no geometry LFO writes an empty field");
+      for (const auto& lfo : parseGeometryLfos(std::string())) {
+        expect(!lfo.on, "and an empty field reads back with every oscillator off");
+        break;
+      }
+      // Shaped, then switched off: the shape survives a save (Codex audit #3).
+      std::array<deckboy::effects::ParamLfo, 9> parked {};
+      parked[kMoireLfoHue].shape = LfoShape::Square;
+      parked[kMoireLfoHue].rateHz = 2.0f;
+      parked[kMoireLfoHue].depth = 0.8f;
+      const auto parkedBack = parseGeometryLfos(serializeGeometryLfos(parked));
+      expect(!parkedBack[kMoireLfoHue].on && parkedBack[kMoireLfoHue].shape == LfoShape::Square &&
+               std::fabs(parkedBack[kMoireLfoHue].rateHz - 2.0f) < 1e-6f &&
+               std::fabs(parkedBack[kMoireLfoHue].depth - 0.8f) < 1e-6f,
+             "an oscillator shaped and switched off keeps its settings through a save");
+      std::array<deckboy::effects::ParamLfo, 9> some {};
+      some[kGeoLfoRotation].on = true;
+      some[kGeoLfoRotation].shape = LfoShape::Saw;
+      some[kGeoLfoRotation].rateHz = 0.1f;
+      some[kGeoLfoRotation].depth = 1.0f;
+      some[kGeoLfoCropBottom].on = true;
+      some[kGeoLfoCropBottom].beatSync = true;
+      some[kGeoLfoCropBottom].beats = 8.0f;
+      const auto back = parseGeometryLfos(serializeGeometryLfos(some));
+      expect(back[kGeoLfoRotation].on && back[kGeoLfoRotation].shape == LfoShape::Saw &&
+               std::fabs(back[kGeoLfoRotation].rateHz - 0.1f) < 1e-6f &&
+               back[kGeoLfoRotation].depth == 1.0f,
+             "a rotation saw survives a save");
+      expect(back[kGeoLfoCropBottom].on && back[kGeoLfoCropBottom].beatSync &&
+               back[kGeoLfoCropBottom].beats == 8.0f,
+             "and a tempo-locked crop keeps its lock and its length");
+      expect(!back[kGeoLfoOffsetX].on && !back[kGeoLfoScaleY].on,
+             "and the ones left off stay off");
+    }
+
+
+    // ── STANDARD MIDI FILE PARSING ──────────────────────────────────────
+    //
+    // Tested on BYTES, in --smoke, because that is the only way to test a
+    // MIDI feature on a machine with no MIDI on it -- which is every CI
+    // runner and most development machines. The files here are written by
+    // hand so each one isolates one rule of the format.
+    {
+      using namespace deckboy::platform::midi;
+      auto be32 = [](std::uint32_t v) {
+        return std::vector<std::uint8_t> {
+          static_cast<std::uint8_t>(v >> 24), static_cast<std::uint8_t>(v >> 16),
+          static_cast<std::uint8_t>(v >> 8),  static_cast<std::uint8_t>(v)};
+      };
+      auto build = [&](int format, int tracks, int division,
+                       const std::vector<std::vector<std::uint8_t>>& trackData) {
+        std::vector<std::uint8_t> out {'M', 'T', 'h', 'd'};
+        auto len = be32(6);
+        out.insert(out.end(), len.begin(), len.end());
+        out.push_back(static_cast<std::uint8_t>(format >> 8));
+        out.push_back(static_cast<std::uint8_t>(format));
+        out.push_back(static_cast<std::uint8_t>(tracks >> 8));
+        out.push_back(static_cast<std::uint8_t>(tracks));
+        out.push_back(static_cast<std::uint8_t>(division >> 8));
+        out.push_back(static_cast<std::uint8_t>(division));
+        for (const auto& body : trackData) {
+          out.insert(out.end(), {'M', 'T', 'r', 'k'});
+          auto blen = be32(static_cast<std::uint32_t>(body.size()));
+          out.insert(out.end(), blen.begin(), blen.end());
+          out.insert(out.end(), body.begin(), body.end());
+        }
+        return out;
+      };
+      const std::vector<std::uint8_t> endOfTrack {0x00, 0xFF, 0x2F, 0x00};
+
+      expect(!looksLikeMidiFile({'R', 'I', 'F', 'F', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
+             "a file that is not a MIDI file is not mistaken for one");
+
+      // One note on at tick 0, off a quarter note later, at 96 ticks per
+      // quarter and the default 120bpm -- so the off lands at exactly 0.5s.
+      {
+        std::vector<std::uint8_t> track {
+          0x00, 0x90, 0x3C, 0x40,          // note on,  middle C
+          0x60, 0x80, 0x3C, 0x40,          // note off, 96 ticks later
+        };
+        track.insert(track.end(), endOfTrack.begin(), endOfTrack.end());
+        File file = parseMidiFile(build(0, 1, 96, {track}));
+        expect(file.ok && file.events.size() == 2, "a one-note MIDI file parses");
+        expect(file.events.size() == 2 && file.events[0].seconds == 0.0 &&
+               std::abs(file.events[1].seconds - 0.5) < 0.001,
+               "and 96 ticks at 120bpm is half a second");
+        expect(file.events.size() == 2 && file.events[1].bytes.size() == 3 &&
+               file.events[1].bytes[0] == 0x80,
+               "and the note off survives with its status byte");
+      }
+
+      // RUNNING STATUS: the second note omits its status byte entirely. A
+      // parser without it reads the first note and then garbage, which is
+      // the single most common way a MIDI reader is wrong.
+      {
+        std::vector<std::uint8_t> track {
+          0x00, 0x90, 0x3C, 0x40,
+          0x30, 0x3E, 0x40,                // no status byte: still note on
+        };
+        track.insert(track.end(), endOfTrack.begin(), endOfTrack.end());
+        File file = parseMidiFile(build(0, 1, 96, {track}));
+        expect(file.events.size() == 2, "running status is understood");
+        expect(file.events.size() == 2 && file.events[1].bytes.size() == 3 &&
+               file.events[1].bytes[0] == 0x90 && file.events[1].bytes[1] == 0x3E,
+               "and the omitted status byte is put back");
+      }
+
+      // A TEMPO CHANGE moves everything after it. At 240bpm a quarter note is
+      // a quarter of a second, so the same 96 ticks now land at 0.25s -- a
+      // parser that ignores tempo drifts further out the longer it plays.
+      {
+        std::vector<std::uint8_t> track {
+          0x00, 0xFF, 0x51, 0x03, 0x03, 0xD0, 0x90,   // 250000us = 240bpm
+          0x00, 0x90, 0x3C, 0x40,
+          0x60, 0x80, 0x3C, 0x40,
+        };
+        track.insert(track.end(), endOfTrack.begin(), endOfTrack.end());
+        File file = parseMidiFile(build(0, 1, 96, {track}));
+        expect(file.events.size() == 2 &&
+               std::abs(file.events[1].seconds - 0.25) < 0.001,
+               "a tempo change moves every event after it");
+      }
+
+      // FORMAT 1: tempo on track 1, notes on track 2, and the tempo still
+      // applies. This is what every DAW exports, so getting it wrong means
+      // getting nearly every real file wrong.
+      {
+        std::vector<std::uint8_t> tempoTrack {
+          0x00, 0xFF, 0x51, 0x03, 0x03, 0xD0, 0x90,
+        };
+        tempoTrack.insert(tempoTrack.end(), endOfTrack.begin(), endOfTrack.end());
+        std::vector<std::uint8_t> noteTrack {
+          0x00, 0x90, 0x3C, 0x40,
+          0x60, 0x80, 0x3C, 0x40,
+        };
+        noteTrack.insert(noteTrack.end(), endOfTrack.begin(), endOfTrack.end());
+        File file = parseMidiFile(build(1, 2, 96, {tempoTrack, noteTrack}));
+        expect(file.ok && file.events.size() == 2,
+               "a format 1 file merges its tracks onto one timeline");
+        expect(file.events.size() == 2 &&
+               std::abs(file.events[1].seconds - 0.25) < 0.001,
+               "and a tempo on one track governs the notes on another");
+      }
+
+      // SYSEX passes through whole -- a show that drives a desk is mostly
+      // this, and dropping it would make the feature useless for the job it
+      // is most often wanted for.
+      {
+        std::vector<std::uint8_t> track {
+          0x00, 0xF0, 0x05, 0x7F, 0x00, 0x02, 0x01, 0xF7,
+        };
+        track.insert(track.end(), endOfTrack.begin(), endOfTrack.end());
+        File file = parseMidiFile(build(0, 1, 96, {track}));
+        expect(file.events.size() == 1 && file.events[0].bytes.size() == 6 &&
+               file.events[0].bytes.front() == 0xF0 &&
+               file.events[0].bytes.back() == 0xF7,
+               "sysex survives the parse whole");
+      }
+
+      // A TRUNCATED FILE must not read past its end. The bytes here promise a
+      // track longer than the data -- the shape a half-copied file has.
+      {
+        std::vector<std::uint8_t> bad = build(0, 1, 96, {{0x00, 0x90, 0x3C}});
+        bad.resize(bad.size() - 2);
+        File file = parseMidiFile(bad);
+        expect(true, "a truncated file is parsed without reading past its end");
+        (void)file;
+      }
+
+      // FORMAT 2 is refused rather than guessed at: its tracks are
+      // independent patterns with no shared timeline, so flattening them
+      // would invent an arrangement nobody wrote.
+      {
+        File file = parseMidiFile(build(2, 1, 96, {endOfTrack}));
+        expect(!file.ok && !file.error.empty(),
+               "a format 2 file is refused, with a reason");
+      }
+
+      // SMPTE division, which is how anything stamped against video arrives:
+      // 25fps, 40 ticks per frame, so 1000 ticks is exactly one second.
+      {
+        std::vector<std::uint8_t> track {
+          0x00, 0x90, 0x3C, 0x40,
+          0x87, 0x68, 0x80, 0x3C, 0x40,    // 1000 ticks as a varlen
+        };
+        track.insert(track.end(), endOfTrack.begin(), endOfTrack.end());
+        const int division = static_cast<int>(
+          (static_cast<std::uint16_t>(static_cast<std::uint8_t>(-25)) << 8) | 40);
+        File file = parseMidiFile(build(0, 1, division, {track}));
+        expect(file.events.size() == 2 &&
+               std::abs(file.events[1].seconds - 1.0) < 0.001,
+               "an SMPTE-stamped file counts in frames, not beats");
+      }
+    }
+
+
+    // ── KEY + FILL ────────────────────────────────────────────────────────
+    //
+    // The one half of key+fill that can be checked without a DeckLink card in
+    // the machine, which is why the arithmetic was moved out from behind the
+    // SDK ifdef to reach it. Each case below is a fault that would only show
+    // up on air:
+    //
+    //   Unmultiplied fill is the classic halo round a soft-edged graphic.
+    //   A truncating multiply is a dirty fringe on a large one.
+    //   Alpha 255 not being exact means a solid graphic is not quite solid.
+    //   A key that carries its own transparency is invisible to a keyer.
+    {
+      // Four pixels: opaque white, transparent white, half white, opaque red.
+      const std::uint8_t rgba[16] = {
+        255, 255, 255, 255,
+        255, 255, 255,   0,
+        255, 255, 255, 128,
+        255,   0,   0, 255,
+      };
+      std::uint8_t fill[16] = {};
+      std::uint8_t key[16] = {};
+      splitKeyAndFill(rgba, 4, fill, key);
+
+      expect(fill[0] == 255 && fill[1] == 255 && fill[2] == 255,
+             "key+fill: a fully opaque pixel keeps its colour exactly");
+      expect(fill[3] == 255, "key+fill: the fill is sent opaque");
+      expect(fill[4] == 0 && fill[5] == 0 && fill[6] == 0,
+             "key+fill: a fully transparent pixel becomes black in the fill");
+      // 255 * 128 / 255 = 128 exactly with rounding; truncation gives 127.
+      expect(fill[8] == 128 && fill[9] == 128 && fill[10] == 128,
+             "key+fill: a half-transparent pixel is premultiplied, and rounded");
+      expect(fill[12] == 255 && fill[13] == 0 && fill[14] == 0,
+             "key+fill: colour is premultiplied per channel, not as luma");
+
+      expect(key[0] == 255 && key[1] == 255 && key[2] == 255,
+             "key+fill: the key is white where the fill is solid");
+      expect(key[4] == 0 && key[5] == 0 && key[6] == 0,
+             "key+fill: the key is black where there is nothing");
+      expect(key[8] == 128 && key[9] == 128 && key[10] == 128,
+             "key+fill: the key carries the alpha, on all three channels");
+      expect(key[3] == 255 && key[7] == 255,
+             "key+fill: the key is itself opaque, or a keyer cannot see it");
+
+      // Every alpha, checked against the exact rational. A rounding rule that
+      // is right at 0, 128 and 255 and wrong in between is the version of
+      // this bug that a three-value test would miss.
+      bool everyAlphaExact = true;
+      for (int a = 0; a <= 255; ++a) {
+        const std::uint8_t one[4] = {200, 100, 50, static_cast<std::uint8_t>(a)};
+        std::uint8_t f[4] = {};
+        std::uint8_t k[4] = {};
+        splitKeyAndFill(one, 1, f, k);
+        const auto exact = [a](int v) {
+          return static_cast<std::uint8_t>(
+            static_cast<int>(static_cast<double>(v) * a / 255.0 + 0.5));
+        };
+        if (f[0] != exact(200) || f[1] != exact(100) || f[2] != exact(50) ||
+            k[0] != static_cast<std::uint8_t>(a)) {
+          everyAlphaExact = false;
+          break;
+        }
+      }
+      expect(everyAlphaExact,
+             "key+fill: the premultiply matches the exact rounding at every alpha");
+
+      // A null buffer must be a no-op rather than a crash: the send path can
+      // reach here with a capture that failed.
+      splitKeyAndFill(nullptr, 4, fill, key);
+      expect(fill[0] == 255, "key+fill: a null source leaves the buffers alone");
+    }
+
+    // ── GRID WARP ─────────────────────────────────────────────────────────
+    //
+    // The renderer cannot be checked here (it needs an output window), so the
+    // parts that go wrong silently are: does the bend go where it was put, does
+    // changing the density keep the shape, and does a show bring it back.
+    {
+      OutputTarget g;
+      resizeWarpGrid(g, 3, 3);
+      expect(warpGridActive(g) && g.warpGridOffsets.size() == 18,
+             "grid warp: a 3x3 grid has nine points");
+      g.warpGridOffsets[(1 * 3 + 1) * 2] = 40.0f;      // centre point, 40px right
+      g.warpGridOffsets[(1 * 3 + 1) * 2 + 1] = -20.0f;
+      for (bool smooth : {true, false}) {
+        g.warpGridSmooth = smooth;
+        const SDL_FPoint at = warpGridOffsetAt(g, 0.5f, 0.5f);
+        const SDL_FPoint corner = warpGridOffsetAt(g, 0.0f, 0.0f);
+        expect(std::abs(at.x - 40.0f) < 0.01f && std::abs(at.y + 20.0f) < 0.01f,
+               std::string("grid warp: the bend passes THROUGH the dragged point (") +
+                 (smooth ? "smooth" : "straight") + ")");
+        expect(std::abs(corner.x) < 0.01f && std::abs(corner.y) < 0.01f,
+               std::string("grid warp: the corners stay the corner pin's (") +
+                 (smooth ? "smooth" : "straight") + ")");
+      }
+      g.warpGridSmooth = true;
+      const SDL_FPoint before = warpGridOffsetAt(g, 0.5f, 0.5f);
+      resizeWarpGrid(g, 5, 5);
+      const SDL_FPoint after = warpGridOffsetAt(g, 0.5f, 0.5f);
+      expect(g.warpGridOffsets.size() == 50 && std::abs(before.x - after.x) < 0.5f &&
+               std::abs(before.y - after.y) < 0.5f,
+             "grid warp: 3x3 -> 5x5 keeps the shape");
+      OutputTarget back;
+      parseWarpGrid(back, serializeWarpGrid(g));
+      expect(back.warpGridCols == 5 && back.warpGridRows == 5 && back.warpGridSmooth &&
+               back.warpGridOffsets == g.warpGridOffsets,
+             "grid warp: a saved grid comes back exactly");
+      OutputTarget junk;
+      parseWarpGrid(junk, "5,5,1,3.0,4.0");
+      expect(!warpGridActive(junk) && junk.warpGridOffsets.empty(),
+             "grid warp: a grid with the wrong point count loads as no grid");
+      OutputTarget none;
+      parseWarpGrid(none, "");
+      expect(!warpGridActive(none), "grid warp: an old show (empty field) has no grid");
+
+      // AND THE RENDERER BENDS THE PICTURE. Off-screen, on SDL's software
+      // renderer: white left half, black right half, a 3x3 grid with only the
+      // centre point nudged 16px right. The boundary must move 16px at
+      // mid-height and not at all along the top edge.
+      constexpr int kN = 64;
+      SDL_Surface* target = SDL_CreateSurface(kN, kN, SDL_PIXELFORMAT_RGBA32);
+      SDL_Renderer* soft = target ? SDL_CreateSoftwareRenderer(target) : nullptr;
+      SDL_Texture* split = soft ? SDL_CreateTexture(soft, SDL_PIXELFORMAT_RGBA32,
+                                                    SDL_TEXTUREACCESS_STATIC, kN, kN) : nullptr;
+      bool rendered = false;
+      int boundaryMid = -1, boundaryTop = -1;
+      if (split) {
+        std::vector<std::uint8_t> px(static_cast<std::size_t>(kN * kN * 4), 255);
+        for (int y = 0; y < kN; ++y)
+          for (int x = kN / 2; x < kN; ++x)
+            for (int c = 0; c < 3; ++c) px[static_cast<std::size_t>((y * kN + x) * 4 + c)] = 0;
+        SDL_UpdateTexture(split, nullptr, px.data(), kN * 4);
+        SDL_SetTextureScaleMode(split, SDL_SCALEMODE_NEAREST);
+        OutputTarget w;
+        resizeWarpGrid(w, 3, 3);
+        w.warpGridOffsets[(1 * 3 + 1) * 2] = 16.0f;
+        Deck noBlend;
+        const float n = static_cast<float>(kN);
+        rendered = renderGridWarp(soft, split, noBlend, w, false,
+                                  {0, 0}, {1, 0}, {1, 1}, {0, 1},
+                                  {0, 0}, {n, 0}, {n, n}, {0, n}, false);
+        SDL_RenderPresent(soft);
+        auto boundary = [&](int y) {
+          const auto* row = static_cast<const std::uint8_t*>(target->pixels) + y * target->pitch;
+          for (int x = 0; x < kN; ++x) if (row[x * 4] < 128) return x;
+          return -1;
+        };
+        boundaryMid = boundary(kN / 2);
+        boundaryTop = boundary(0);
+      }
+      expect(rendered, "grid warp: the mesh renders");
+      expect(std::abs(boundaryMid - (kN / 2 + 16)) <= 2,
+             "grid warp: the centre point moves the picture 16px (boundary at " +
+               std::to_string(boundaryMid) + ")");
+      expect(std::abs(boundaryTop - kN / 2) <= 2,
+             "grid warp: the top edge stays put (boundary at " + std::to_string(boundaryTop) + ")");
+      if (split) SDL_DestroyTexture(split);
+      if (soft) SDL_DestroyRenderer(soft);
+      if (target) SDL_DestroySurface(target);
+    }
+
+
+    // ── EVERY LANGUAGE IS READABLE IN THE PICKER ──────────────────────────
+    //
+    // Each entry is drawn in its OWN script while the interface is still in
+    // the previous language's font, so the CJK, Arabic and Devanagari names
+    // are boxes on an English desk -- you cannot read the thing you are
+    // choosing. Every catalogue therefore carries a Latin name as well.
+    //
+    // Checked here because the failure is silent: a language added without
+    // one still shows up in the picker, just unreadably.
+    {
+      const auto langs = deckboy::core::i18n::availableLanguages(Paths::dataDir());
+      expect(langs.size() > 8, "languages: the catalogues were found at all");
+      int missingEnglish = 0;
+      int nonLatinEnglish = 0;
+      std::string firstBad;
+      for (const auto& lang : langs) {
+        if (lang.cypher) continue;   // a cypher's name is already Latin
+        if (lang.english.empty()) {
+          ++missingEnglish;
+          if (firstBad.empty()) firstBad = lang.code;
+          continue;
+        }
+        // An "English name" written in the language's own script is the same
+        // bug wearing a hat, so it has to be plain ASCII.
+        for (unsigned char c : lang.english) {
+          if (c > 0x7F) {
+            ++nonLatinEnglish;
+            if (firstBad.empty()) firstBad = lang.code;
+            break;
+          }
+        }
+      }
+      expect(missingEnglish == 0,
+             "languages: every catalogue names itself in English too" +
+               (missingEnglish ? (" (" + std::to_string(missingEnglish) +
+                                  " without, first " + firstBad + ")")
+                               : std::string()));
+      expect(nonLatinEnglish == 0,
+             "languages: those English names are readable in a Latin font" +
+               (nonLatinEnglish ? (" (" + std::to_string(nonLatinEnglish) +
+                                   " not, first " + firstBad + ")")
+                                : std::string()));
+    }
+
+    // ── RIGHT TO LEFT, IN THE RIGHT ORDER ─────────────────────────────────
+    //
+    // The whole algorithm is proven against Unicode's own conformance files by
+    // tools/bidi_check.cpp, in CI. These are the cases the DESK lives on, so a
+    // break shows here without fetching 15 MB of test data: a number inside an
+    // Arabic label (the "%59" that started this), an Arabic name inside English,
+    // Persian digits and brackets, and a half-space that must stay in its word.
+    // Escapes, not the characters: the compiler is not told the source is UTF-8.
+    {
+      namespace bidi = deckboy::core::bidi;
+      auto u8s = [](const char8_t* t) { return std::string(reinterpret_cast<const char*>(t)); };
+      auto runText = [](const std::string& t, const bidi::Run& r) {
+        return t.substr(r.begin, r.end - r.begin);
+      };
+      expect(std::string(bidi::unicodeVersion()).size() >= 5, "bidi: the Unicode tables are in");
+      {
+        const std::string t = u8s(u8"\u0627\u0644\u0635\u0648\u062a 95%");  // volume 95%
+        bool rtl = false;
+        const auto runs = bidi::visualRuns(t, bidi::Direction::Auto, &rtl);
+        // After Arabic letters the digits are an Arabic-context number (W2) and
+        // the sign a neutral, so it shows as "%95" -- the sign at the left,
+        // which is how Arabic writes a percentage. What must never happen is
+        // the digits themselves reversed, "59": that was the old bug.
+        expect(rtl && runs.size() == 3 && runText(t, runs[0]) == "%" &&
+                 runText(t, runs[1]) == "95" && !runs[1].rightToLeft() && runs[2].rightToLeft(),
+               "bidi: the number in an Arabic label reads 95, with its sign as Arabic writes it");
+      }
+      {
+        const std::string t = u8s(u8"Hello \u0645\u0631\u064a\u0645 world");
+        bool rtl = true;
+        const auto runs = bidi::visualRuns(t, bidi::Direction::Auto, &rtl);
+        expect(!rtl && runs.size() == 3 && runs[1].rightToLeft() &&
+                 runText(t, runs[0]) == "Hello " && runText(t, runs[2]) == " world",
+               "bidi: an Arabic name inside English stays where it was written");
+      }
+      {
+        // Tehran 1405 (final): Persian digits are European numbers, so they
+        // run left to right at a level of their own between the words.
+        const std::string t = u8s(u8"\u062a\u0647\u0631\u0627\u0646 "
+                                  u8"\u06f1\u06f4\u06f0\u06f5 (\u0646\u0647\u0627\u06cc\u06cc)");
+        const auto runs = bidi::visualRuns(t);
+        expect(runs.size() == 3 && runs[0].rightToLeft() && runs[1].level == 2 &&
+                 runs[2].rightToLeft(),
+               "bidi: Persian digits and brackets order around the words");
+      }
+      {
+        // "mi-shavad": the half-space is a joiner control and must stay
+        // inside the one run, or the shaper never sees it.
+        const std::string t = u8s(u8"\u0645\u06cc\u200c\u0634\u0648\u062f");
+        const auto runs = bidi::visualRuns(t);
+        expect(runs.size() == 1 && runs[0].rightToLeft() && runs[0].begin == 0 &&
+                 runs[0].end == t.size(),
+               "bidi: a Persian half-space stays inside its word");
+      }
+      {
+        // "DECKLINK: on" in Arabic starts with a Latin word, so on its own it
+        // is a left-to-right paragraph and an Arabic reader meets the value
+        // first. The desk puts a right-to-left mark in front of such a label
+        // in a right-to-left interface: then the value is at the LEFT.
+        const std::string t = u8s(u8"\u200fDECKLINK: \u062a\u0634\u063a\u064a\u0644");
+        bool rtl = false;
+        const auto runs = bidi::visualRuns(t, bidi::Direction::Auto, &rtl);
+        std::size_t latinAt = runs.size();
+        std::size_t arabicAt = runs.size();
+        for (std::size_t i = 0; i < runs.size(); ++i) {
+          const std::string s = runText(t, runs[i]);
+          if (s.find("DECKLINK") != std::string::npos) latinAt = i;
+          if (s.find("\xd8\xaa") != std::string::npos) arabicAt = i;  // its first letter
+        }
+        expect(rtl && arabicAt < latinAt && latinAt < runs.size(),
+               "bidi: a right-to-left mark puts a label's Arabic value before its Latin name");
+      }
+      expect(!bidi::needsBidi("PLAYLIST 3 / cue 12 (hold)"),
+             "bidi: plain English takes the fast path");
+    }
+
+    // ── ALIENESE II IN ITS OWN SYMBOLS ─────────────────────────────────────
+    //
+    // With its face found, the cypher writes the symbols themselves, which no
+    // face but its own has; without it, the Latin letters checked above. The
+    // symbols must then reach the desk's faces through the fallback chain --
+    // the pixel face has no idea what U+EE0D is -- and digits stay as they
+    // are, so a timecode in a cypher label still reads.
+    {
+      namespace i18n = deckboy::core::i18n;
+      namespace shaping = deckboy::render::shaping;
+      std::string err;
+      const dbfs::path noData;
+      i18n::setLanguage("cy-alienese2", noData, err);
+      i18n::noteFontResolved(true);
+      const std::string symbols = i18n::translate("NEW 1");
+      expect(symbols == reinterpret_cast<const char*>(u8"\uEE0D\uEE11\uEE0D 1"),
+             "cypher: alienese II writes its own symbols when its face is there");
+      i18n::noteFontResolved(false);
+      expect(i18n::translate("NEW 1") == "NRN 1", "cypher: ...and the letters standing for them when not");
+      const auto chainBefore = shaping::fallbackChain();
+      shaping::setFallbackChain(deckboy::render::scriptFallbacks("cy-alienese2"));
+      const std::string pixel = Paths::fontPath(Paths::FontName::Pixel).string();
+      TTF_Font* face = (TTF_WasInit() > 0 || TTF_Init()) ? TTF_OpenFont(pixel.c_str(), 24.0f) : nullptr;
+      expect(face && [&] {
+        shaping::registerFace(face, pixel, 24.0f);
+        const bool drawn = shaping::covers(face, symbols);
+        shaping::forgetFace(face);
+        return drawn;
+      }(), "cypher: the desk's pixel face draws the symbols from the bundled face");
+      if (face) TTF_CloseFont(face);
+      shaping::setFallbackChain(chainBefore);
+      i18n::setLanguage("en", noData, err);
+    }
+
+    std::cout << "smoke failures: " << failures << '\n';
+    return failures == 0 ? 0 : 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runSyncPopTest — `--sync-pop-test`
+  //
+  // Drives the real MediaEngine pocket-test sync-pop path against the real
+  // default audio device for ~2.5 s and reports whether samples flowed
+  // (audible as the once-per-second pop). Diagnoses "no audio from the test
+  // card" reports: PASS here means the engine path works and the problem is
+  // the cue's audio toggle / device routing; FAIL means the synth path is
+  // broken in code.
+  // ---------------------------------------------------------------------------
+  // What hardware does this machine actually offer?
+  //
+  // Written because a show file names its audio interface as a STRING, and a
+  // name that does not match what the driver reports is indistinguishable, from
+  // inside the app, from a device that is not plugged in. This prints the names
+  // exactly as SDL spells them, which is what the show file has to contain.
+  //
+  // It is also the first thing to ask of a venue machine that "has no sound" or
+  // "will not go full screen", because it separates a Deckboy fault from a
+  // machine that genuinely cannot see the hardware.
+  // Ask GitHub what the newest release is and say so, without starting the
+  // application. The check the app does at startup is the same call; this is
+  // how it gets tested, and how an operator on a locked-down machine can find
+  // out whether the network path works at all.
+  static int runUpdateCheckReport() {
+    App probe;
+    std::string error;
+    UpdateInfo info = probe.fetchLatestRelease(error);
+    std::cout << "running: " << deckboy::core::version::kVersionTag << '\n';
+    if (!error.empty()) {
+      std::cout << "result:  " << error << '\n';
+      return 1;
+    }
+    if (info.version.empty()) {
+      std::cout << "result:  up to date" << '\n';
+      return 0;
+    }
+    std::cout << "result:  " << info.version << " is available" << '\n';
+    std::cout << "asset:   " << info.assetName
+              << "  (" << (info.assetSize / (1024 * 1024)) << " MB)" << '\n';
+    std::cout << "url:     " << info.assetUrl << '\n';
+    return 0;
+  }
+
+  // ── runPluginReport — `--plugins` ─────────────────────────────────────────
+  //
+  // The same job --devices does for hardware: say what this machine offers and
+  // where it was found, so "Deckboy cannot see my reverb" is answerable without
+  // guessing. Prints the folders FIRST, because the usual cause is a plugin
+  // installed somewhere the format does not name.
+  // `--plugins load` asks for the slow, thorough version.
+  static bool deckboyPluginLoadProbeRequested() {
+    const char* env = std::getenv("DECKBOY_PLUGIN_LOAD");
+    return env && *env == '1';
+  }
+
+  static int runPluginReport() {
+    namespace ap = deckboy::platform::audioplugin;
+    std::cout << "plugin support: "
+              << (ap::audioPluginsSupported()
+                    ? "vst3 (this build can load them)"
+                    : "SCAN ONLY (this build has no VST3 host)")
+              << '\n';
+    // A build with VST2 turned on says so, every time it is asked. An
+    // operator handed a binary should be able to find out what it is.
+#if defined(DECKBOY_HAS_VST2)
+    std::cout << "vst2: ON in this build. Somebody flipped the switch with\n"
+                 "their own SDK licence -- this is their binary, not a\n"
+                 "Deckboy release, and should not be passed off as one.\n";
+#endif
+    std::cout << "searched:\n";
+    for (const auto& path : ap::audioPluginSearchPaths()) {
+      std::cout << "  " << path << '\n';
+    }
+    const auto found = ap::scanAudioPlugins();
+    std::cout << "found: " << found.size() << '\n';
+    // A sentinel rather than an empty string: the first group's vendor IS empty
+    // (the plugins sitting at the top of the folder), so starting empty skipped
+    // its heading and those plugins looked like they belonged to nobody.
+    std::string vendor = "\x01";
+    for (const auto& p : found) {
+      if (p.vendor != vendor) {
+        vendor = p.vendor;
+        std::cout << "  " << (vendor.empty() ? std::string("(no vendor folder)") : vendor)
+                  << ":\n";
+      }
+      std::cout << "    " << p.name << '\n';
+    }
+    if (found.empty()) {
+      std::cout << "  nothing in those folders -- a plugin installed elsewhere is\n"
+                   "  invisible to every host, not just this one\n";
+    }
+    // `--plugins load` OPENS every one of them. Slow, and the only honest way
+    // to know what this machine can actually host: a plugin that scans and
+    // will not load is the failure an operator meets at the worst moment.
+    if (ap::audioPluginsSupported() && deckboyPluginLoadProbeRequested()) {
+      std::cout << "\nloading each (this takes a moment):\n";
+      // NAME IT BEFORE OPENING IT, and flush. Loading somebody else's code can
+      // crash or simply never return -- both happened on the machine this was
+      // written on, opening a library of 124 -- and buffered output means the
+      // last thing printed is the plugin BEFORE the one that did it. Naming it
+      // first costs a flush per plugin and turns "it died somewhere" into "it
+      // died on this one".
+      std::cout << "  (each is named before it is opened, so if this stops, "
+                   "the last name is the plugin that stopped it)\n";
+      int ok = 0, failed = 0, params = 0;
+      for (const auto& p : found) {
+        std::cout << "  ... " << p.name << std::flush;
+        auto instance = ap::openAudioPlugin(p.id, 48000.0, 1024);
+        std::cout << "\r" << std::string(p.name.size() + 6, ' ') << "\r";
+        if (instance) {
+          ++ok;
+          params += static_cast<int>(instance->parameters().size());
+          std::cout << "  ok    " << p.name << "  ("
+                    << instance->parameters().size() << " parameters)\n";
+        } else {
+          ++failed;
+          std::cout << "  FAIL  " << p.name << '\n';
+        }
+      }
+      std::cout << "loaded " << ok << ", refused " << failed
+                << ", " << params << " parameters in total\n";
+    }
+    return 0;
+  }
+
+  // ── runPluginChainCheck — `--plugin-chain-check [id-or-name]` ─────────────
+  //
+  // --audio-fx-check asks "does this effect do anything" of Deckboy's own
+  // twenty-two. This asks it of a PLUGIN SLOT, which is a different question
+  // in three ways worth a separate harness:
+  //
+  //   Does the chain reach it at all? A Plugin slot is the only kind whose
+  //   work happens outside audio_effects.hpp, through a host callback. A slot
+  //   that silently passes audio through is indistinguishable, from the
+  //   operator's chair, from a plugin that is doing nothing.
+  //
+  //   Do the four mapped controls move the sound? VST3 parameters reach the
+  //   PROCESSOR only through the block's parameter changes -- setting them on
+  //   the controller moves the plugin's own UI and nothing else. That bug
+  //   sounds exactly like a plugin working normally, which is why it gets its
+  //   own measurement rather than a code comment.
+  //
+  //   Does its state survive a save? A show that reopens with the plugin at
+  //   its defaults has lost work the operator did.
+  //
+  // With no argument it takes the first plugin that loads on this machine.
+  // ---------------------------------------------------------------------------
+  static int runPluginChainCheck(const std::string& wanted) {
+    namespace afx = deckboy::audiofx;
+    namespace ap = deckboy::platform::audioplugin;
+    if (!ap::audioPluginsSupported()) {
+      std::cout << "plugin-chain-check: this build has no plugin host\n";
+      return 1;
+    }
+    // Pick one: an exact id, a name containing the argument, or the first that
+    // opens. Matching on the NAME is what makes this runnable by hand.
+    const std::vector<ap::PluginDescriptor> found = ap::scanAudioPlugins();
+    std::unique_ptr<ap::AudioPluginInstance> instance;
+    std::string chosen;
+    for (const auto& d : found) {
+      const bool matches =
+        wanted.empty() || d.id == wanted ||
+        d.name.find(wanted) != std::string::npos;
+      if (!matches) {
+        continue;
+      }
+      auto candidate = ap::openAudioPlugin(d.id, 48000.0, 2048);
+      if (!candidate) {
+        if (!wanted.empty()) {
+          std::cout << "plugin-chain-check: " << d.name << " refused to load\n";
+          return 1;
+        }
+        continue;
+      }
+      // A NAMED plugin is the one asked about, whatever it is. An unnamed run
+      // is looking for a subject that can answer the questions: an instrument
+      // with no notes correctly outputs silence, and a plugin with no
+      // parameters has no knobs to sweep, so neither can tell us whether the
+      // chain and the parameter route work.
+      const bool usable = !candidate->descriptor().isInstrument &&
+                          !candidate->parameters().empty();
+      if (!wanted.empty() || usable) {
+        instance = std::move(candidate);
+        chosen = d.name;
+        break;
+      }
+      if (!instance) {
+        instance = std::move(candidate);   // keep the first as a fallback
+        chosen = d.name;
+      }
+    }
+    if (!instance) {
+      std::cout << "plugin-chain-check: no plugin "
+                << (wanted.empty() ? "loaded" : ("matched \"" + wanted + "\""))
+                << '\n';
+      return 1;
+    }
+    const bool isInstrument = instance->descriptor().isInstrument;
+    std::cout << "plugin-chain-check: " << chosen << ", "
+              << instance->parameters().size() << " parameters"
+              << (isInstrument ? ", INSTRUMENT (silent without notes)" : "")
+              << '\n';
+
+    // The host, standing in for MediaEngine's. Same contract: whole slot,
+    // dry/wet included, audio left alone when the plugin declines the block.
+    struct Host : afx::AudioEffectHost {
+      ap::AudioPluginInstance* plugin = nullptr;
+      std::vector<float> scratch;
+      int processed = 0;
+      // THE ENGINE'S OWN IMPLEMENTATION, called rather than copied.
+      //
+      // This used to be a second copy of the unit conversion and the mix, with
+      // a comment proudly calling it "deliberately duplicated" -- and that is
+      // precisely why this check reported zero failures across a release in
+      // which the engine drove every plugin 32768x too hot. The check was
+      // exercising its own correct copy. A gate that does not run the shipped
+      // code path is not testing the shipped code path.
+      double inputPeak = 0.0;   // the loudest thing the plugin was handed
+      bool processPluginSlot(std::size_t, const afx::AudioEffect& fx,
+                             double* samples, std::size_t frames) override {
+        double peak = 0.0;
+        if (!ap::applyPluginSlot(*plugin, static_cast<double>(fx.amount),
+                                 samples, frames, scratch, 2048, &peak)) {
+          return false;
+        }
+        if (peak > inputPeak) {
+          inputPeak = peak;
+        }
+        ++processed;
+        return true;
+      }
+    };
+    Host host;
+    host.plugin = instance.get();
+
+    constexpr int kRate = 48000;
+    constexpr int kFrames = kRate / 2;
+    constexpr double kPi = 3.141592653589793;
+    auto makeSignal = [&]() {
+      std::vector<double> s(static_cast<std::size_t>(kFrames) * 2, 0.0);
+      std::uint32_t rng = 9931u;
+      for (int f = 0; f < kFrames; ++f) {
+        const double t = static_cast<double>(f) / kRate;
+        rng = rng * 1664525u + 1013904223u;
+        const double noise = static_cast<double>(rng >> 8) / 8388608.0 - 1.0;
+        // AT THE ENGINE'S SCALE (int16-valued doubles), so the conversion in
+        // the host above is exercised rather than bypassed. A ±1.0 signal here
+        // is what let a unit mismatch pass this check for an afternoon.
+        const double v = 32768.0 * (0.4 * std::sin(2.0 * kPi * 220.0 * t) +
+                                    0.2 * std::sin(2.0 * kPi * 3500.0 * t) +
+                                    0.05 * noise);
+        s[static_cast<std::size_t>(f) * 2] = v;
+        s[static_cast<std::size_t>(f) * 2 + 1] = v;
+      }
+      return s;
+    };
+    auto rms = [](const std::vector<double>& s) {
+      double sum = 0.0;
+      for (const double v : s) {
+        sum += v * v;
+      }
+      return s.empty() ? 0.0 : std::sqrt(sum / static_cast<double>(s.size()));
+    };
+    // How far apart two renders are, as a fraction of the signal. This is the
+    // number that answers "did the knob do anything", and it has to be a
+    // DIFFERENCE rather than a level: a filter and a pan both change the sound
+    // without necessarily changing its RMS.
+    auto difference = [](const std::vector<double>& a,
+                         const std::vector<double>& b) {
+      double sum = 0.0, ref = 0.0;
+      for (std::size_t i = 0; i < a.size() && i < b.size(); ++i) {
+        sum += (a[i] - b[i]) * (a[i] - b[i]);
+        ref += a[i] * a[i];
+      }
+      return ref > 0.0 ? std::sqrt(sum / ref) : 0.0;
+    };
+
+    // Run the chain in 512-frame blocks, as the engine does -- a plugin with
+    // any memory at all behaves differently given one long buffer.
+    auto render = [&](const afx::AudioEffect& fx) {
+      std::vector<double> signal = makeSignal();
+      afx::AudioEffectState state;
+      afx::AudioEffectContext ctx;
+      ctx.host = &host;
+      const std::vector<afx::AudioEffect> stack {fx};
+      const std::size_t block = 512;
+      std::vector<double> chunk;
+      for (std::size_t at = 0; at < signal.size(); at += block * 2) {
+        const std::size_t take = std::min(block * 2, signal.size() - at);
+        chunk.assign(signal.begin() + static_cast<std::ptrdiff_t>(at),
+                     signal.begin() + static_cast<std::ptrdiff_t>(at + take));
+        afx::applyAudioEffectStack(chunk, stack, state, ctx);
+        std::copy(chunk.begin(), chunk.end(),
+                  signal.begin() + static_cast<std::ptrdiff_t>(at));
+      }
+      return signal;
+    };
+
+    const std::vector<double> dry = makeSignal();
+    afx::AudioEffect fx = afx::audioEffectDefaults(afx::AudioEffectKind::Plugin);
+    const std::vector<double> wet = render(fx);
+
+    int failures = 0;
+    std::cout << "  blocks processed: " << host.processed << '\n';
+    if (host.processed == 0) {
+      std::cout << "  FAIL the chain never reached the plugin\n";
+      ++failures;
+    }
+    bool finite = true;
+    for (const double v : wet) {
+      finite = finite && std::isfinite(v);
+    }
+    if (!finite) {
+      std::cout << "  FAIL non-finite samples out of the plugin\n";
+      ++failures;
+    }
+    // ── ABSOLUTE FACTS, BECAUSE A RATIO CANNOT SEE A SCALE ERROR ────────────
+    //
+    // `difference` is normalised, so it divides out exactly the fault it looks
+    // like it is testing. Run on the defective v0.99.370 and the fixed
+    // v0.99.371 it prints the SAME 0.550813, and the same four control sweeps
+    // to six figures, and "0 failures" on both -- while the plugin in one of
+    // them is being driven 32768x past full scale into a square wave. Only the
+    // rms scale moved, by exactly that factor.
+    //
+    // So the check now states three things a ratio cannot: how much of the
+    // output is pinned to the rail, and what the wet level is against the dry
+    // one IN THE SAME UNITS. Either would have failed that release loudly.
+    auto railedFraction = [](const std::vector<double>& s) {
+      if (s.empty()) {
+        return 0.0;
+      }
+      std::size_t railed = 0;
+      for (const double v : s) {
+        if (std::fabs(v) >= 32767.0 * 0.999) {
+          ++railed;
+        }
+      }
+      return static_cast<double>(railed) / static_cast<double>(s.size());
+    };
+    const double dryRms = rms(dry);
+    const double wetRms = rms(wet);
+    const double railed = railedFraction(wet);
+    const double levelRatio = dryRms > 0.0 ? wetRms / dryRms : 0.0;
+    std::cout << "  dry rms " << dryRms << "  wet rms " << wetRms
+              << "  difference " << difference(dry, wet) << '\n';
+    std::cout << "  wet/dry level " << levelRatio
+              << "   railed " << (railed * 100.0) << "%\n";
+    // WHAT THE PLUGIN WAS HANDED. The single number that names the v0.99.370
+    // fault outright, and the only one that works for every plugin: a plugin
+    // that clips its output betrays an overdriven input, and one that does not
+    // hides it completely. Programme material converts to something near 1.0.
+    std::cout << "  level handed to the plugin: peak " << host.inputPeak << '\n';
+    if (host.inputPeak > 4.0) {
+      std::cout << "  FAIL the plugin is being handed peaks of "
+                << host.inputPeak
+                << " -- the host is in different units from the plugin\n";
+      ++failures;
+    }
+    // A plugin pinned to the rail is not processing, it is clipping. One
+    // sample in a hundred is generous for programme material that peaks well
+    // below full scale.
+    if (railed > 0.01) {
+      std::cout << "  FAIL " << (railed * 100.0)
+                << "% of the output is at full scale -- the plugin is being "
+                   "driven past its range\n";
+      ++failures;
+    }
+    // And a wet signal orders of magnitude from the dry one means the two
+    // sides disagree about what full scale IS. An instrument is exempt: it
+    // ignores the input, so its level has no relationship to the dry one.
+    if (!isInstrument && dryRms > 0.0 && (levelRatio > 8.0 || levelRatio < 0.02)) {
+      std::cout << "  FAIL wet is " << levelRatio
+                << "x the dry level -- host and plugin disagree about full "
+                   "scale\n";
+      ++failures;
+    }
+    // A plugin that emits nothing at all in half a second is not necessarily
+    // broken -- a long time-stretcher fills several seconds of buffer before
+    // anything comes out, and an instrument has had no note. It does mean the
+    // knob sweep below cannot answer anything, so it is reported and not
+    // counted: a check that fails a plugin for being slow to speak is a check
+    // nobody will trust.
+    const bool silent = wetRms < 1e-9;
+    if (silent) {
+      std::cout << "  note  no output in this window -- nothing to hear a "
+                   "control change in\n";
+    }
+
+    // CAN IT BE PLAYED? An instrument that loads and processes but makes no
+    // sound when a note arrives is exactly what Deckboy shipped in v0.99.370:
+    // hosting was real, note delivery was a stub, and nothing said so. Silence
+    // in, a note, and silence out is the whole test.
+    if (isInstrument) {
+      instance->noteOn(0, 60, 0.8);          // middle C, firmly
+      std::vector<double> played = render(fx);
+      const double playedRms = rms(played);
+      // A soft synth may take a block or two to start, and an attack envelope
+      // can be slower than half a second of test signal, so give it a second
+      // pass before believing the silence.
+      if (playedRms < 1e-6) {
+        played = render(fx);
+      }
+      instance->noteOff(0, 60);
+      const double afterRms = rms(render(fx));
+      std::cout << "  played a note: rms " << rms(played)
+                << "   after note-off: rms " << afterRms << '\n';
+      // IN THE ENGINE'S UNITS. This threshold was 1e-6, written when the
+      // harness worked at ±1.0, and never moved when it moved to int16 scale.
+      // With the unit bug in place an instrument returns rms 0.4 -- which is
+      // not zero, so the check passed, and which is -98 dBFS, which is
+      // silence. A threshold has to be in the same units as the thing it
+      // judges. About -80 dBFS: far below anything audible, far above nothing.
+      constexpr double kAudibleRms = 32768.0 * 0.0001;
+      if (rms(played) < kAudibleRms) {
+        std::cout << "  FAIL an instrument was sent a note and made no sound "
+                     "(rms " << rms(played) << ", silence at this scale)\n";
+        ++failures;
+      }
+    }
+
+    // THE KNOBS. Sweep each mapped parameter end to end and see whether the
+    // rendered audio moves. A plugin whose first four automatable parameters
+    // are genuinely inaudible (some are labels or meters) is reported rather
+    // than failed -- but all four silent means the parameter route is broken,
+    // which is the bug this check was written for.
+    int moved = 0;
+    for (int slot = 0; slot < 4; ++slot) {
+      afx::AudioEffect low = fx;
+      afx::AudioEffect high = fx;
+      float* lowP = slot == 0 ? &low.paramA : slot == 1 ? &low.paramB
+                  : slot == 2 ? &low.paramC : &low.paramD;
+      float* highP = slot == 0 ? &high.paramA : slot == 1 ? &high.paramB
+                   : slot == 2 ? &high.paramC : &high.paramD;
+      *lowP = 0.0f;
+      *highP = 1.0f;
+      // Through the same route the app uses: the mapped parameters are pushed
+      // onto the instance, not passed in the effect.
+      auto push = [&](float value) {
+        int taken = 0;
+        for (const auto& p : instance->parameters()) {
+          if (!p.automatable) {
+            continue;
+          }
+          if (taken == slot) {
+            instance->setParameter(p.id, static_cast<double>(value));
+            return;
+          }
+          if (++taken > 3) {
+            return;
+          }
+        }
+      };
+      push(0.0f);
+      const std::vector<double> atLow = render(low);
+      push(1.0f);
+      const std::vector<double> atHigh = render(high);
+      const double delta = difference(atLow, atHigh);
+      std::cout << "  control " << (slot + 1) << " sweep difference " << delta
+                << (delta > 1e-4 ? "" : "   (inaudible)") << '\n';
+      if (delta > 1e-4) {
+        ++moved;
+      }
+      push(0.5f);
+    }
+    if (moved == 0 && !isInstrument && !silent && !instance->parameters().empty()) {
+      std::cout << "  FAIL none of the four mapped controls changed the audio\n";
+      ++failures;
+    }
+
+    // STATE. Save, move everything, load it back, and the sound has to return.
+    const std::string saved = instance->saveState();
+    std::cout << "  state: " << saved.size() << " bytes\n";
+    if (saved.empty()) {
+      std::cout << "  note  this plugin gave no state to save\n";
+    } else {
+      const std::vector<double> before = render(fx);
+      for (const auto& p : instance->parameters()) {
+        if (p.automatable) {
+          instance->setParameter(p.id, 1.0);
+        }
+      }
+      // A RENDER IN BETWEEN, deliberately. Parameter changes reach the
+      // processor on the next block, so loading the state first and rendering
+      // once would deliver the queued changes ON TOP of the restored state and
+      // measure the harness rather than the plugin. That is exactly what the
+      // first version of this check did, and it reported a drift of 1.0.
+      (void)render(fx);
+      const bool restored = instance->loadState(saved);
+      const std::vector<double> after = render(fx);
+      const double drift = difference(before, after);
+      std::cout << "  state round-trip: " << (restored ? "loaded" : "REFUSED")
+                << ", drift " << drift << '\n';
+      if (!restored) {
+        std::cout << "  FAIL the plugin refused the state it had just given us\n";
+        ++failures;
+      }
+      // The base64 the show file carries has to come back byte for byte, or
+      // the plugin is handed something its author never wrote.
+      const std::string roundTrip =
+        afx::detail::base64Decode(afx::detail::base64Encode(saved));
+      if (roundTrip != saved) {
+        std::cout << "  FAIL base64 round-trip changed the state\n";
+        ++failures;
+      }
+    }
+
+    std::cout << "plugin-chain-check: " << failures << " failures\n";
+    return failures == 0 ? 0 : 1;
+  }
+
+  static int runDeviceReport() {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+      std::cout << "devices: SDL init failed: " << SDL_GetError() << '\n';
+      return 1;
+    }
+    std::cout << "audio driver: "
+              << (SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "(none)")
+              << '\n';
+    for (int recording = 0; recording < 2; ++recording) {
+      int count = 0;
+      SDL_AudioDeviceID* ids = recording ? SDL_GetAudioRecordingDevices(&count)
+                                         : SDL_GetAudioPlaybackDevices(&count);
+      std::cout << (recording ? "audio in:  " : "audio out: ") << count << '\n';
+      if (ids) {
+        for (int i = 0; i < count; ++i) {
+          const char* name = SDL_GetAudioDeviceName(ids[i]);
+          std::cout << "  " << (name ? name : "(unnamed)");
+          SDL_AudioSpec spec {};
+          int frames = 0;
+          if (SDL_GetAudioDeviceFormat(ids[i], &spec, &frames)) {
+            std::cout << "  [" << spec.freq << " Hz, " << static_cast<int>(spec.channels)
+                      << " ch, " << frames << " frame buffer]";
+          }
+          std::cout << '\n';
+        }
+        SDL_free(ids);
+      }
+      if (!recording) {
+        // SDL's default and, where it can be asked, the OS's. They disagree
+        // when SDL has missed a change of output, which is the fault the
+        // reconcile in app_output_mgmt.ipp exists for.
+        const std::string sdlDefault = sdlDefaultPlaybackName();
+        const std::string osDefault = osDefaultPlaybackName();
+        std::cout << "audio out default: " << (sdlDefault.empty() ? "(none)" : sdlDefault);
+        if (!osDefault.empty() && osDefault != sdlDefault) {
+          std::cout << "  (the OS says " << osDefault << ")";
+        }
+        std::cout << '\n';
+      }
+    }
+
+    std::cout << "video driver: "
+              << (SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(none)")
+              << '\n';
+    int displayCount = 0;
+    int displayCount2 = 0;
+    std::vector<SDL_DisplayID> probeDisplays;
+    if (SDL_DisplayID* displays = SDL_GetDisplays(&displayCount)) {
+      probeDisplays.assign(displays, displays + displayCount);
+      displayCount2 = displayCount;
+      std::cout << "displays: " << displayCount << '\n';
+      for (int i = 0; i < displayCount; ++i) {
+        const char* name = SDL_GetDisplayName(displays[i]);
+        std::cout << "  " << (name ? name : "(unnamed)");
+        if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(displays[i])) {
+          // The refresh rate is the number that matters: a 50 Hz projector and
+          // a 144 Hz monitor are both ordinary and neither is 60.
+          std::cout << "  " << dm->w << "x" << dm->h << " @ " << dm->refresh_rate << " Hz";
+        }
+        std::cout << "  scale " << SDL_GetDisplayContentScale(displays[i]);
+        // Whether the OS has the screen in HDR -- the first question for any
+        // HDR report, and one nothing else here could answer.
+        std::cout << (SDL_GetBooleanProperty(SDL_GetDisplayProperties(displays[i]),
+                                             SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, false)
+                        ? "  HDR on" : "  HDR off");
+        // Mirrored screens are ONE display to SDL; only the OS can say so.
+        SDL_Rect bounds {};
+        if (SDL_GetDisplayBounds(displays[i], &bounds)) {
+          auto mirror = deckboy::platform::queryDisplayMirrorInfo(bounds.x, bounds.y, bounds.w,
+                                                                  bounds.h, name);
+          std::cout << "  at " << bounds.x << "," << bounds.y << "  ";
+          if (!mirror.known) {
+            std::cout << "arrangement unknown";
+          } else if (mirror.panelCount <= 1) {
+            std::cout << "extended";
+          } else {
+            std::cout << "MIRRORED with";
+            for (const auto& panel : mirror.otherPanels) std::cout << " [" << panel << "]";
+          }
+        }
+        std::cout << '\n';
+      }
+      SDL_free(displays);
+    }
+
+    // What a window on this display ACTUALLY gets.
+    //
+    // A display's mode is in pixels and its content scale is separate, so a
+    // 4K panel at 150% reports 3840x2160 and 1.5. What matters for output
+    // quality is whether a window there is backed by as many pixels as it
+    // covers: if the size in points and the size in pixels differ, the
+    // programme is being rendered at the smaller one and scaled up by the
+    // compositor, and the operator sees a soft picture with no setting to
+    // explain it. Measured with a HIDDEN window so nothing appears on a screen
+    // that may be showing a programme.
+    for (int i = 0; i < displayCount2; ++i) {
+      SDL_Window* probe = SDL_CreateWindow("Deckboy device probe", 1280, 720,
+                                           SDL_WINDOW_HIDDEN);
+      if (!probe) {
+        continue;
+      }
+      SDL_SetWindowPosition(probe, SDL_WINDOWPOS_CENTERED_DISPLAY(probeDisplays[i]),
+                            SDL_WINDOWPOS_CENTERED_DISPLAY(probeDisplays[i]));
+      int pointsW = 0, pointsH = 0, pixelsW = 0, pixelsH = 0;
+      SDL_GetWindowSize(probe, &pointsW, &pointsH);
+      SDL_GetWindowSizeInPixels(probe, &pixelsW, &pixelsH);
+      const char* dispName = SDL_GetDisplayName(probeDisplays[i]);
+      // The size that comes back is not always the size asked for -- a window
+      // centred on a display the same size as itself can be adjusted by the
+      // window manager -- so both are printed. What matters here is the ratio
+      // between the two, not either number.
+      std::cout << "  window on " << (dispName ? dispName : "?") << ": asked 1280x720, got "
+                << pointsW << "x" << pointsH << " points, "
+                << pixelsW << "x" << pixelsH << " pixels"
+                << ((pointsW == pixelsW && pointsH == pixelsH) ? "  (1:1)"
+                                                              : "  (SCALED -- output renders at the point size)");
+      {
+        // Where SDR white sits in this window and how far above it HDR can go
+        // (SDL reports both per window; headroom 1 means no HDR at all).
+        const SDL_PropertiesID wp = SDL_GetWindowProperties(probe);
+        std::cout << "  SDR white " << SDL_GetFloatProperty(wp, SDL_PROP_WINDOW_SDR_WHITE_LEVEL_FLOAT, 1.0f)
+                  << "  headroom " << SDL_GetFloatProperty(wp, SDL_PROP_WINDOW_HDR_HEADROOM_FLOAT, 1.0f);
+      }
+      std::cout << '\n';
+      SDL_DestroyWindow(probe);
+    }
+
+    // MIDI, because a control surface is hardware too and the show names its
+    // port as a string exactly like the audio device does. The ORDER matters
+    // here: with no name configured the app opens the first port in this list.
+#if defined(DECKBOY_HAS_MIDI)
+    {
+      auto midiDevices = deckboy::platform::midi::MidiInput::listDevices();
+      std::cout << "midi in:   " << midiDevices.size() << '\n';
+      for (const auto& dev : midiDevices) {
+        std::cout << "  [" << dev.id << "] " << dev.name << '\n';
+      }
+      // AND THE OUTPUTS, now that cues can send. These are a DIFFERENT list
+      // from the inputs -- an interface often offers one and not the other --
+      // and a MIDI cue names one of these, so printing only the inputs would
+      // hand somebody the wrong name to type.
+      auto midiOuts = deckboy::platform::midi::MidiOutput::listDevices();
+      std::cout << "midi out:  " << midiOuts.size() << '\n';
+      for (const auto& dev : midiOuts) {
+        std::cout << "  [" << dev.id << "] " << dev.name << '\n';
+      }
+    }
+#else
+    // midi.cpp is only compiled when ENABLE_MIDI is on, so this has to be
+    // guarded rather than merely returning an empty list -- calling it in a
+    // build without it is a LINK error, which the Windows dev build (MIDI on)
+    // never sees. Saying so is more useful than printing "0 ports" and letting
+    // someone conclude their controller is broken.
+    std::cout << "midi in:   (this build has no MIDI support)" << '\n';
+    std::cout << "midi out:  (this build has no MIDI support)" << '\n';
+#endif
+
+    int renderCount = SDL_GetNumRenderDrivers();
+    std::cout << "render drivers: ";
+    for (int i = 0; i < renderCount; ++i) {
+      const char* name = SDL_GetRenderDriver(i);
+      std::cout << (i ? ", " : "") << (name ? name : "?");
+    }
+    std::cout << '\n';
+
+    // ---- WHICH TYPEFACES THIS MACHINE ACTUALLY RESOLVED --------------------
+    //
+    // The app looked different on every platform for a long time and nobody
+    // could see why, because the font search silently falls back: it names a
+    // bundled face first, then the machine's own. If the bundled one is not
+    // there the app still runs, just wearing a different face -- and the only
+    // way to tell was to look at it.
+    //
+    // So it says. "bundled" means the face travelled with the app and every
+    // platform will look the same; "system" means this machine substituted its
+    // own and will not.
+    {
+      const auto dataDir = deckboy::core::Paths::dataDir();
+      auto report = [&](const char* label, deckboy::core::Paths::FontName which) {
+        const auto path = deckboy::core::Paths::fontPath(which);
+        std::error_code ec;
+        const bool exists = dbfs::exists(path, ec);
+        // Bundled == inside the app's own data directory.
+        const auto pathStr = path.string();
+        const auto dataStr = dataDir.string();
+        const bool bundled = !dataStr.empty() && pathStr.rfind(dataStr, 0) == 0;
+        std::cout << "  " << label << ": " << pathStr
+                  << (exists ? (bundled ? "  [bundled]" : "  [SYSTEM - this machine will not match the others]")
+                             : "  [MISSING - falling back further]")
+                  << '\n';
+      };
+      std::cout << "fonts:\n";
+      report("sans ", deckboy::core::Paths::FontName::Sans);
+      report("mono ", deckboy::core::Paths::FontName::Mono);
+      report("pixel", deckboy::core::Paths::FontName::Pixel);
+    }
+    SDL_Quit();
+    return 0;
+  }
+
+  static int runSyncPopTest() {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+      std::cout << "sync-pop-test: SDL init failed: " << SDL_GetError() << '\n';
+      return 1;
+    }
+    SDL_AudioSpec spec {};
+    spec.format = SDL_AUDIO_S16;
+    spec.channels = 2;
+    spec.freq = 48000;
+    SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(
+      SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+    if (!stream) {
+      std::cout << "sync-pop-test: no audio device: " << SDL_GetError() << '\n';
+      SDL_Quit();
+      return 1;
+    }
+    std::size_t tapSamples = 0;
+    MediaEngine engine(nullptr, stream,
+                       [&tapSamples](const std::vector<std::int16_t>& samples) {
+                         tapSamples += samples.size();
+                       });
+    Cue cue;
+    cue.kind = CueKind::Pattern;
+    cue.name = "sync-pop-test";
+    cue.path = "pattern://pocket-test";
+    cue.width = 320;
+    cue.height = 180;
+    cue.audioEnabled = true;
+    engine.loadCue(&cue, true);
+    int maxQueued = 0;
+    Uint64 start = SDL_GetTicks();
+    while (SDL_GetTicks() - start < 2500) {
+      engine.update();
+      maxQueued = std::max(maxQueued, SDL_GetAudioStreamQueued(stream));
+      SDL_Delay(4);
+    }
+    engine.stopAll();
+    SDL_DestroyAudioStream(stream);
+    SDL_Quit();
+    std::cout << "sync-pop-test: tap-samples=" << tapSamples
+              << " max-queued-bytes=" << maxQueued
+              << " => " << ((tapSamples > 0 && maxQueued > 0) ? "PASS (pop path works)"
+                                                              : "FAIL (synth path broken)")
+              << '\n';
+    return (tapSamples > 0 && maxQueued > 0) ? 0 : 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runPatternDump — `--pattern-dump <pattern-id> <out.ppm> [WxH] [t]`
+  //
+  // Renders one frame of a procedural pattern to a binary PPM for visual
+  // inspection outside the app (test-card development, docs screenshots).
+  // ---------------------------------------------------------------------------
+  // runCodeCheck -- `--code-check`
+  //
+  // The expression language, asserted against expected values. It is
+  // arithmetic: no window, no GPU, no media, so it runs in CI and over ssh.
+  //
+  // The first case is a regression. compileExpression used to clear the
+  // program it was given, so compile() -- which builds the prelude by calling
+  // it once per statement -- erased every statement but the last, and every
+  // named value except the final one read zero. Six shipped examples drew the
+  // wrong picture and nothing said so, because a wrong picture is still a
+  // picture. A test that reads a NUMBER back is the only kind that catches it.
+  static int runCodeCheck() {
+    std::cout << "Deckboy code-source check\n";
+    int failures = 0;
+    // x, y, cx, cy, r, a, t -- the same order the renderer fills.
+    const double vars[7] = {0.25, 0.75, -0.5, 0.5, 0.7071, 2.3562, 2.0};
+
+    struct Case {
+      const char* what;
+      const char* source;
+      int channel;          // 0..2, or 3 for alpha
+      double expect;
+    };
+    // Tolerance is loose on purpose: these assert that a value ARRIVED, not
+    // that the libm on this machine rounds a sine the same way as the last.
+    const double kTol = 1e-6;
+    const Case kCases[] = {
+      // ── the regression ───────────────────────────────────────────────────
+      {"a named value reads the one above it", "a1 = 0.7;\nb1 = a1;\nb1, 0, 0", 0, 0.7},
+      {"three deep", "p = 0.2;\nq = p + 0.3;\ns = q * 2;\ns, 0, 0", 0, 1.0},
+      {"the last name still works", "k = 0.4;\nk, 0, 0", 0, 0.4},
+      {"a name reads a variable", "h = cx;\nh, 0, 0", 0, -0.5},
+      {"a name is reused, not redeclared", "n = 1;\nn = n + 2;\nn, 0, 0", 0, 3.0},
+      // ── the fourth channel ───────────────────────────────────────────────
+      {"alpha is the fourth expression", "0, 0, 0, 0.25", 3, 0.25},
+      {"alpha sees the named values", "m = 0.6;\n0, 0, 0, m", 3, 0.6},
+      // ── the old shapes of source, unchanged ──────────────────────────────
+      {"one expression is grey (red)",   "0.3", 0, 0.3},
+      {"one expression is grey (blue)",  "0.3", 2, 0.3},
+      {"three expressions still work",   "0.1, 0.2, 0.3", 2, 0.3},
+      // ── arithmetic that the presets lean on ──────────────────────────────
+      {"mix blends a to b",        "mix(0, 10, 0.25), 0, 0", 0, 2.5},
+      {"clamp holds the range",    "clamp(5, 0, 1), 0, 0", 0, 1.0},
+      {"smoothstep at the middle", "smoothstep(0, 1, 0.5), 0, 0", 0, 0.5},
+      {"smoothstep below the low edge", "smoothstep(0, 1, -3), 0, 0", 0, 0.0},
+      {"a reversed smoothstep inverts", "smoothstep(1, 0, 0), 0, 0", 0, 1.0},
+      {"length is a distance",     "length(3, 4), 0, 0", 0, 5.0},
+      {"if picks the branch",      "if(1, 7, 9), 0, 0", 0, 7.0},
+      {"if picks the other one",   "if(0, 7, 9), 0, 0", 0, 9.0},
+      {"unary minus",              "0 - -2, 0, 0", 0, 2.0},
+      {"precedence",               "1 + 2 * 3, 0, 0", 0, 7.0},
+      {"power is right associative", "2 ^ 3 ^ 2, 0, 0", 0, 512.0},
+    };
+
+    std::vector<double> stack;
+    for (const Case& c : kCases) {
+      const deckboy::code::CompiledSource compiled = deckboy::code::compile(c.source);
+      if (!compiled.ok()) {
+        std::cout << "  FAIL " << c.what << ": " << compiled.error << '\n';
+        ++failures;
+        continue;
+      }
+      std::vector<double> named(compiled.names.size(), 0.0);
+      if (!compiled.prelude.empty()) {
+        deckboy::code::evaluate(compiled.prelude, vars, stack, &named);
+      }
+      const deckboy::code::Program& program =
+        c.channel == 3 ? compiled.alpha : compiled.channel[c.channel];
+      if (c.channel == 3 && !compiled.hasAlpha) {
+        std::cout << "  FAIL " << c.what << ": no alpha program was compiled\n";
+        ++failures;
+        continue;
+      }
+      const double got = deckboy::code::evaluate(program, vars, stack, &named);
+      if (std::fabs(got - c.expect) > kTol) {
+        std::cout << "  FAIL " << c.what << ": expected " << c.expect
+                  << " got " << got << '\n';
+        ++failures;
+      }
+    }
+
+    // NOISE. Not a fixed value -- the hash is an implementation detail and
+    // pinning it would make every future improvement a test failure. What it
+    // must do is stay in range, return the same answer for the same input,
+    // and actually vary, because a noise that returns a constant makes a cloud
+    // that is a rectangle and nothing else would notice.
+    {
+      const deckboy::code::CompiledSource n =
+        deckboy::code::compile("noise(x*7, y*7), 0, 0");
+      if (!n.ok()) {
+        std::cout << "  FAIL noise compiles: " << n.error << '\n';
+        ++failures;
+      } else {
+        double lo = 2.0, hi = -1.0, first = 0.0;
+        bool varied = false;
+        std::vector<double> named;
+        for (int i = 0; i < 64; ++i) {
+          const double u = i / 64.0;
+          const double probe[7] = {u, 1.0 - u, 0, 0, 0, 0, 0};
+          const double v = deckboy::code::evaluate(n.channel[0], probe, stack, &named);
+          if (i == 0) first = v;
+          if (std::fabs(v - first) > 1e-9) varied = true;
+          lo = v < lo ? v : lo;
+          hi = v > hi ? v : hi;
+        }
+        if (lo < 0.0 || hi > 1.0) {
+          std::cout << "  FAIL noise stays in 0..1: got " << lo << ".." << hi << '\n';
+          ++failures;
+        }
+        if (!varied) {
+          std::cout << "  FAIL noise varies: every sample was " << first << '\n';
+          ++failures;
+        }
+        const double probe[7] = {0.3, 0.4, 0, 0, 0, 0, 0};
+        const double a = deckboy::code::evaluate(n.channel[0], probe, stack, &named);
+        const double b = deckboy::code::evaluate(n.channel[0], probe, stack, &named);
+        if (a != b) {
+          std::cout << "  FAIL noise repeats: " << a << " then " << b << '\n';
+          ++failures;
+        }
+      }
+    }
+
+    // A BAD SOURCE MUST SAY SO. Reporting an error is half the language: the
+    // editor shows it, and a source that compiled to something wrong instead
+    // would be the fault above all over again.
+    const char* kBad[] = {
+      "nosuchname",              // unknown name
+      "sin()",                   // no argument
+      "sin(1, 2)",               // too many
+      "1, 2",                    // two expressions is not a thing
+      "1, 2, 3, 4, 5",           // nor five
+      "(1 + 2",                  // unbalanced
+      "1e999",                   // out of range
+      "x = ;",                   // nothing to assign
+      "t = 1;\n0, 0, 0",         // t is already part of the language
+      "sin = 1;\n0, 0, 0",       // so is sin
+      "later;\nlater = 1;\n0,0,0",   // forward reference
+    };
+    for (const char* bad : kBad) {
+      if (deckboy::code::compile(bad).ok()) {
+        std::cout << "  FAIL should not compile: " << bad << '\n';
+        ++failures;
+      }
+    }
+
+    // THE SHIPPED PRESETS, every one of them. They are the language's
+    // documentation and its most-used surface; a preset that stops compiling
+    // is a broken button on the editor.
+    for (const auto& example : codeExamples()) {
+      const deckboy::code::CompiledSource compiled =
+        deckboy::code::compile(example.expression);
+      if (!compiled.ok()) {
+        std::cout << "  FAIL preset \"" << example.name << "\": "
+                  << compiled.error << '\n';
+        ++failures;
+      }
+    }
+
+    std::cout << (failures ? "code-check: FAILED " : "code-check: ok, ")
+              << (failures ? std::to_string(failures) + " failures"
+                           : std::string("all cases passed"))
+              << '\n';
+    return failures ? 1 : 0;
+  }
+
+  // runCodeDump -- `--code-dump <expression|@file> <out.ppm> [WxH] [t]`
+  //
+  // The expression source, rendered once with no window and no GPU. The app
+  // keeps the last good picture when an expression will not compile, which is
+  // right for someone typing live and wrong for a check: here a compile error
+  // is an exit code and the message is printed, so a preset that has rotted
+  // fails the sweep instead of quietly writing the frame before it.
+  //
+  // `@path` reads the expression from a file. Presets carry semicolons,
+  // commas and newlines, and no quoting convention survives being passed
+  // through a shell on three platforms.
+  static int runCodeDump(const std::string& expressionOrFile,
+                         const std::string& outPath, int w, int h, double t) {
+    std::string expression = expressionOrFile;
+    if (!expression.empty() && expression[0] == '@') {
+      std::ifstream in(expression.substr(1), std::ios::binary);
+      if (!in) {
+        std::cout << "code-dump: cannot read " << expression.substr(1) << '\n';
+        return 1;
+      }
+      std::ostringstream buffer;
+      buffer << in.rdbuf();
+      expression = buffer.str();
+    }
+    // Compiled here as well as in the renderer, only so the error can be
+    // reported. The renderer's own cache does the compile that counts.
+    const deckboy::code::CompiledSource compiled = deckboy::code::compile(expression);
+    if (!compiled.ok()) {
+      std::cout << "code-dump: " << compiled.error << '\n';
+      return 1;
+    }
+    Cue cue;
+    cue.kind = CueKind::Pattern;
+    cue.name = "code-dump";
+    cue.path = "code";
+    cue.codeExpression = expression;
+    cue.width = w;
+    cue.height = h;
+    auto frame = MediaEngine::buildPatternFrame(cue, t, w, h);
+    if (!frame || frame->pixels.empty()) {
+      std::cout << "code-dump: build failed\n";
+      return 1;
+    }
+    std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+      std::cout << "code-dump: cannot write " << outPath << '\n';
+      return 1;
+    }
+    // Over black, for the same reason --pattern-dump does it: PPM has no
+    // alpha, and a shape written straight would draw its glow at full
+    // strength where the output fades it away.
+    out << "P6\n" << frame->width << ' ' << frame->height << "\n255\n";
+    std::size_t opaque = 0, clear = 0;
+    for (std::size_t i = 0; i + 3 < frame->pixels.size(); i += 4) {
+      const unsigned alpha = frame->pixels[i + 3];
+      if (alpha == 255) ++opaque; else if (alpha == 0) ++clear;
+      for (int c = 0; c < 3; ++c) {
+        out.put(static_cast<char>(frame->pixels[i + c] * alpha / 255u));
+      }
+    }
+    // The coverage numbers are the point of the tool for a SHAPE. A preset
+    // that is meant to sit over a picture and comes back 100% opaque has
+    // silently become a background, and the picture alone does not say so --
+    // it looks fine over the black the dump writes.
+    const std::size_t total = static_cast<std::size_t>(frame->width) * frame->height;
+    std::cout << "code-dump: wrote " << outPath << " ("
+              << frame->width << "x" << frame->height << ") opaque "
+              << (total ? opaque * 100 / total : 0) << "% clear "
+              << (total ? clear * 100 / total : 0) << "%\n";
+    return 0;
+  }
+
+  static int runPatternDump(const std::string& patternId, const std::string& outPath,
+                            int w, int h, double t) {
+    Cue cue;
+    cue.kind = CueKind::Pattern;
+    cue.name = "pattern-dump";
+    // `fireside:snow` -- a pattern id may carry one variant, the way
+    // --effect-dump carries its amount. Without it the hearth's window could
+    // only be seen by clicking it in a running app, and a headless dump is the
+    // only kind of check that runs in CI or over ssh.
+    std::string id = patternId;
+    const std::size_t variantAt = id.find(':');
+    if (variantAt != std::string::npos) {
+      const std::string variant = id.substr(variantAt + 1);
+      id = id.substr(0, variantAt);
+      if (id == "moire-field") {
+        // `moire-field:ripple,density=0.8,palette=2` -- a shape by name, and
+        // any control as its stored 0-1 value, so every control can be
+        // proven to move the picture without a running app.
+        std::stringstream parts(variant);
+        std::string part;
+        while (std::getline(parts, part, ',')) {
+          const std::size_t eq = part.find('=');
+          if (eq == std::string::npos) {
+            for (int s = 0; s < kMoireShapeCount; ++s)
+              if (part == moireShapeName(s)) cue.moire.shape = s;
+            continue;
+          }
+          const std::string key = part.substr(0, eq);
+          const double v = std::atof(part.substr(eq + 1).c_str());
+          MoireSettings& m = cue.moire;
+          if (key == "shape") m.shape = std::clamp(static_cast<int>(v), 0, kMoireShapeCount - 1);
+          else if (key == "palette") m.palette = std::clamp(static_cast<int>(v), 0, kMoirePaletteCount - 1);
+          else if (key == "density") m.density = v;
+          else if (key == "speed") m.speed = v;
+          else if (key == "warp") m.warp = v;
+          else if (key == "turn") m.turn = v;
+          else if (key == "cx") m.centreX = v;
+          else if (key == "cy") m.centreY = v;
+          else if (key == "grey") m.grey = v;
+          else if (key == "hue") m.hue = v;
+        }
+      } else {
+        cue.firesideView = firesideViewFromToken(variant);
+      }
+    }
+    cue.path = id;
+    cue.width = w;
+    cue.height = h;
+    auto frame = MediaEngine::buildPatternFrame(cue, t, w, h);
+    if (!frame || frame->pixels.empty()) {
+      std::cout << "pattern-dump: build failed for " << patternId << '\n';
+      return 1;
+    }
+    std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+      std::cout << "pattern-dump: cannot write " << outPath << '\n';
+      return 1;
+    }
+    // OVER BLACK, the way an output with nothing beneath it shows it. PPM
+    // has no alpha, and writing the colour channels straight drew a
+    // transparent source's glow at full strength where the output fades it
+    // out -- the dump looked nothing like the picture. Every opaque pattern
+    // (alpha 255 throughout) writes exactly the bytes it always did.
+    out << "P6\n" << frame->width << ' ' << frame->height << "\n255\n";
+    for (std::size_t i = 0; i + 3 < frame->pixels.size(); i += 4) {
+      const unsigned alpha = frame->pixels[i + 3];
+      for (int c = 0; c < 3; ++c) {
+        out.put(static_cast<char>(frame->pixels[i + c] * alpha / 255u));
+      }
+    }
+    std::cout << "pattern-dump: wrote " << outPath << " ("
+              << frame->width << "x" << frame->height << ")\n";
+    return 0;
+  }
+
+  // runColourCheck -- `--colour-check`. What the effect colour picker relies
+  // on and nothing can see from outside: a typed colour meaning what it says,
+  // a hue surviving the trip to a colour and back, and the effect's colour
+  // surviving a save -- with a show saved before it opening exactly as it was.
+  static int runColourCheck() {
+    int failed = 0;
+    auto check = [&](const std::string& what, bool ok, const std::string& detail = {}) {
+      std::printf("  %-58s %s\n", what.c_str(), ok ? "ok" : ("FAIL " + detail).c_str());
+      if (!ok) ++failed;
+    };
+    auto hex = [](std::uint32_t c) {
+      char t[8];
+      std::snprintf(t, sizeof(t), "%06x", static_cast<unsigned>(c));
+      return std::string(t);
+    };
+    std::vector<deckboy::colours::LibraryColour> none;
+    const struct { const char* typed; std::uint32_t want; } typed[] = {
+      {"#ff2040", 0xff2040}, {"ff2040", 0xff2040}, {"#F24", 0xff2244}, {"0xff2040", 0xff2040},
+      {"255 32 64", 0xff2040}, {"rgb(255, 32, 64)", 0xff2040}, {"255,32,64", 0xff2040},
+      {"crimson", 0xdc143c}, {"Rebecca Purple", 0x663399}, {"grey", 0x808080},
+      {"RAL 3020", 0xc1121c}, {"ral3020", 0xc1121c}, {"3020", 0xc1121c}, {"traffic red", 0xc1121c},
+    };
+    for (const auto& t : typed) {
+      const auto m = deckboy::colours::findColour(t.typed, none);
+      check(std::string("\"") + t.typed + "\" is #" + hex(t.want), m && m->rgb == t.want,
+            m ? "#" + hex(m->rgb) : "no match");
+    }
+    for (const char* nothing : {"186", "", "   ", "not a colour at all", "256 0 0", "#ff20"}) {
+      const auto m = deckboy::colours::findColour(nothing, none);
+      check(std::string("\"") + nothing + "\" is not a colour", !m || !m->exact,
+            m ? "#" + hex(m->rgb) + " " + m->name : "");
+    }
+    // An operator's own table, the way a Pantone export reads.
+    const dbfs::path folder = dbfs::temp_directory_path() / ("deckboy-colour-check-" + std::to_string(SDL_GetTicks()));
+    std::error_code ec;
+    dbfs::create_directories(folder, ec);
+    {
+      std::ofstream csv((folder / "pantone.csv").string());
+      csv << "Name,Hex\r\nPANTONE 186 C,#C8102E\r\n\"PANTONE 2945 C\";004C97\r\nnot a colour line\r\n";
+    }
+    const auto libraries = deckboy::colours::loadColourLibraries(folder);
+    dbfs::remove_all(folder, ec);
+    check("an operator's table loads (2 colours)", libraries.size() == 2, std::to_string(libraries.size()));
+    for (const auto& [typedName, want] : std::vector<std::pair<std::string, std::uint32_t>> {
+           {"186 C", 0xc8102e}, {"pantone 186c", 0xc8102e}, {"2945 C", 0x004c97}}) {
+      const auto m = deckboy::colours::findColour(typedName, libraries);
+      check("\"" + typedName + "\" from that table", m && m->exact && m->rgb == want,
+            m ? "#" + hex(m->rgb) : "no match");
+    }
+    // The hue round trip, and a grey having none.
+    for (const std::uint32_t c : {0xff0000u, 0x00ff00u, 0x0000ffu, 0xffff00u, 0x00ffffu, 0xff00ffu}) {
+      const double h = deckboy::effects::colourHue01(c);
+      check("#" + hex(c) + " goes to a hue and back", h >= 0.0 && deckboy::effects::hueColour(h) == c,
+            "#" + hex(deckboy::effects::hueColour(h)));
+    }
+    check("a grey has no hue", deckboy::effects::colourHue01(0x808080) < 0.0);
+    check("navy and sky blue are one hue",
+          std::abs(deckboy::effects::colourHue01(0x000080) - deckboy::effects::colourHue01(0x8080ff)) < 1e-9);
+    // Saved and loaded.
+    deckboy::effects::CueEffect strobe;
+    strobe.kind = deckboy::effects::CueEffectKind::Strobe;
+    strobe.colour = 0xff2040;
+    deckboy::effects::CueEffect edges;
+    edges.kind = deckboy::effects::CueEffectKind::Edges;   // white: written as it always was
+    deckboy::effects::CueEffect tinted = strobe;
+    tinted.lfo[1].on = true;
+    tinted.colour = 0x204080;
+    const std::string saved = serializeCueEffects({strobe, edges, tinted});
+    const auto loaded = parseCueEffects(saved);
+    check("three effects come back", loaded.size() == 3, saved);
+    if (loaded.size() == 3) {
+      check("a strobe's colour comes back", loaded[0].colour == 0xff2040, hex(loaded[0].colour));
+      check("a white edge line comes back white", loaded[1].colour == 0xffffff, hex(loaded[1].colour));
+      check("a colour after an LFO comes back", loaded[2].colour == 0x204080 && loaded[2].lfo[1].on,
+            hex(loaded[2].colour));
+    }
+    check("white is not written at all", serializeCueEffects({edges}).find("ffffff") == std::string::npos,
+          serializeCueEffects({edges}));
+    const auto old = parseCueEffects("strobe:1:0.5:0:0:0.1:0|edges:1:0.5:0:0:0:0");
+    check("a show saved before the colour opens white", old.size() == 2 && old[0].colour == 0xffffff &&
+          old[1].colour == 0xffffff);
+    std::printf("\ncolour check: %s\n", failed ? (std::to_string(failed) + " FAILED").c_str() : "all pass");
+    return failed ? 1 : 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runEffectDump — `--effect-dump <token[:amount[:a[:b]]]> <in.ppm> <out.ppm>`
+  //
+  // Apply one effect to one picture and write the result, with no window, no
+  // decoder and no timing.
+  //
+  // Judging an effect from a screenshot of the running app does not work: the
+  // capture lands on whatever frame the seek happened to reach, so a baseline
+  // and a treated shot differ everywhere before the effect has done anything,
+  // and the comparison says "changed" no matter what. This renders the effect
+  // itself, deterministically, which is the only way to tell whether it looks
+  // the way it is supposed to.
+  //
+  // `frame` sets the frame index for the effects that advance with time, and
+  // `passes` runs the effect that many times, feeding the SAME picture round a
+  // persistent feedback buffer. One pass is the default and is what every
+  // effect but feedback wants; feedback needs at least two before there is
+  // anything to see, because the first only fills the buffer.
+  // ---------------------------------------------------------------------------
+  static int runEffectDump(const std::string& spec, const std::string& inPath,
+                           const std::string& outPath, int frameIndex,
+                           int passes = 1) {
+    // token:amount:paramA:paramB — everything after the token is optional.
+    std::vector<std::string> parts;
+    std::size_t start = 0;
+    for (;;) {
+      const std::size_t colon = spec.find(':', start);
+      parts.push_back(spec.substr(start, colon == std::string::npos
+                                           ? std::string::npos : colon - start));
+      if (colon == std::string::npos) break;
+      start = colon + 1;
+    }
+    deckboy::effects::CueEffect fx;
+    fx.kind = deckboy::effects::cueEffectFromToken(parts[0]);
+    if (fx.kind == deckboy::effects::CueEffectKind::None) {
+      std::cerr << "effect-dump: unknown effect '" << parts[0] << "'. Known: ";
+      for (int i = 1; i < static_cast<int>(deckboy::effects::CueEffectKind::Count); ++i) {
+        if (i > 1) std::cerr << ", ";
+        std::cerr << deckboy::effects::cueEffectToken(
+          static_cast<deckboy::effects::CueEffectKind>(i));
+      }
+      std::cerr << '\n';
+      return 2;
+    }
+    if (parts.size() > 1) fx.amount = static_cast<float>(std::atof(parts[1].c_str()));
+    if (parts.size() > 2) fx.paramA = static_cast<float>(std::atof(parts[2].c_str()));
+    if (parts.size() > 3) fx.paramB = static_cast<float>(std::atof(parts[3].c_str()));
+    // Note the CLI spec is amount:a:b:c:d -- it is NOT the save format, which
+    // carries bypassed between b and c. This is a dev flag, and a straight run
+    // of the four parameters is what someone typing it expects.
+    if (parts.size() > 4) fx.paramC = static_cast<float>(std::atof(parts[4].c_str()));
+    if (parts.size() > 5) fx.paramD = static_cast<float>(std::atof(parts[5].c_str()));
+    // A seventh field is the effect's colour, as hex: strobe:1:0:0:0.4:0:ff2040.
+    if (parts.size() > 6 && !parts[6].empty()) {
+      fx.colour = static_cast<std::uint32_t>(std::strtoul(parts[6].c_str(), nullptr, 16)) & 0xFFFFFF;
+    }
+
+    std::ifstream in(inPath, std::ios::binary);
+    if (!in) {
+      std::cerr << "effect-dump: cannot read " << inPath << '\n';
+      return 1;
+    }
+    std::string magic;
+    int w = 0, h = 0, maxval = 0;
+    in >> magic >> w >> h >> maxval;
+    if (magic != "P6" || w <= 0 || h <= 0 || maxval != 255) {
+      std::cerr << "effect-dump: " << inPath << " is not a binary 8-bit PPM\n";
+      return 1;
+    }
+    in.get();   // the single whitespace byte before the raster
+    const std::size_t count = static_cast<std::size_t>(w) * h;
+    std::vector<std::uint8_t> rgb(count * 3);
+    in.read(reinterpret_cast<char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
+    if (in.gcount() != static_cast<std::streamsize>(rgb.size())) {
+      std::cerr << "effect-dump: " << inPath << " is short\n";
+      return 1;
+    }
+    // The effects work on the decoder's own layout, which is RGBA: byte 0 is
+    // red. Feeding them anything else would render a picture that is correct
+    // in shape and wrong in colour, which is worse than failing.
+    std::vector<std::uint8_t> pixels(count * 4, 255);
+    for (std::size_t i = 0; i < count; ++i) {
+      pixels[i * 4 + 0] = rgb[i * 3 + 0];
+      pixels[i * 4 + 1] = rgb[i * 3 + 1];
+      pixels[i * 4 + 2] = rgb[i * 3 + 2];
+    }
+
+    // Lives across the passes, exactly as the app's per-deck buffer lives
+    // across frames.
+    // One scratch slot per effect in the chain, exactly as the app gives it.
+    std::vector<std::vector<std::uint8_t>> effectState(1);
+    double ms = 0.0;
+    const int passCount = std::max(1, passes);
+    for (int pass = 0; pass < passCount; ++pass) {
+      deckboy::effects::CueEffectContext ctx;
+      ctx.width = w;
+      ctx.height = h;
+      ctx.frameIndex = static_cast<std::uint64_t>(std::max(0, frameIndex) + pass);
+      ctx.effectState = &effectState;
+      const auto began = std::chrono::steady_clock::now();
+      deckboy::effects::applyCueEffectStack(pixels, {fx}, ctx);
+      ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - began).count();
+    }
+
+    std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+      std::cerr << "effect-dump: cannot write " << outPath << '\n';
+      return 1;
+    }
+    out << "P6\n" << w << ' ' << h << "\n255\n";
+    // Transparency over a checkerboard, as an editor shows it: PPM has no
+    // alpha, and without this a key (luma key) dumped as the picture it was
+    // given. Everything that leaves alpha at 255 is written exactly as before.
+    for (std::size_t i = 0; i < count; ++i) {
+      const int alpha = pixels[i * 4 + 3];
+      const int px = static_cast<int>(i % static_cast<std::size_t>(w));
+      const int py = static_cast<int>(i / static_cast<std::size_t>(w));
+      const int check = (((px / 16) + (py / 16)) & 1) ? 160 : 96;
+      for (int c = 0; c < 3; ++c) {
+        out.put(static_cast<char>((pixels[i * 4 + c] * alpha + check * (255 - alpha) + 127) / 255));
+      }
+    }
+    std::cout << "effect-dump: " << deckboy::effects::cueEffectToken(fx.kind)
+              << " amount=" << fx.amount << " a=" << fx.paramA << " b=" << fx.paramB
+              << " on " << w << "x" << h << " took " << ms << "ms -> " << outPath << '\n';
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runTransitionDump — `--transition-dump <style> <out.ppm> <in.ppm> <dst.ppm>
+  //                      [progress] [seconds]`
+  //
+  // One frame of one transition, composited, with no window and no decoder.
+  //
+  // The CPU-built transitions (portal, shatter, clouds, ghastly) produce the
+  // OUTGOING layer as RGBA with alpha in it, and the incoming cue is already on
+  // the output underneath. So a dump of the layer on its own is not what
+  // anybody needs to look at: the interesting picture is the composite, and the
+  // one property that matters most is only checkable on the composite --
+  //
+  //   AT progress=1 THE RESULT MUST BE THE INCOMING PICTURE, EXACTLY.
+  //
+  // A transition that ends holding a shard, a wisp or one stubborn pixel of the
+  // old cue is a transition that has to be cut out of a show, and it is
+  // invisible in a screenshot of the running app because the capture lands on
+  // whatever frame the seek reached. Here it is arithmetic: composite at
+  // progress=1 and compare to the incoming file.
+  //
+  // So this writes the composite, and prints the numbers a script needs to
+  // judge it: how much of the outgoing layer is still opaque, and how far the
+  // composite is from each of the two inputs.
+  // ---------------------------------------------------------------------------
+  static int runTransitionDump(const std::string& styleToken,
+                              const std::string& outgoingPath,
+                              const std::string& incomingPath,
+                              const std::string& dstPath,
+                              double progress, double seconds) {
+    bool recognised = false;
+    const TransitionStyle style =
+      deckboy::core::utils::parseTransitionStyleToken(styleToken, &recognised);
+    if (!recognised) {
+      std::cerr << "transition-dump: unknown style '" << styleToken << "'. Known: ";
+      for (int i = 0; i < static_cast<int>(TransitionStyle::Count); ++i) {
+        if (i) std::cerr << ", ";
+        std::cerr << deckboy::core::utils::transitionStyleToken(
+          static_cast<TransitionStyle>(i));
+      }
+      std::cerr << '\n';
+      return 2;
+    }
+
+    auto readPpm = [](const std::string& path, int& w, int& h,
+                      std::vector<std::uint8_t>& rgb) -> bool {
+      std::ifstream in(path, std::ios::binary);
+      if (!in) {
+        std::cerr << "transition-dump: cannot read " << path << '\n';
+        return false;
+      }
+      std::string magic;
+      int maxval = 0;
+      in >> magic >> w >> h >> maxval;
+      if (magic != "P6" || w <= 0 || h <= 0 || maxval != 255) {
+        std::cerr << "transition-dump: " << path
+                  << " is not a binary 8-bit PPM\n";
+        return false;
+      }
+      in.get();
+      rgb.resize(static_cast<std::size_t>(w) * h * 3u);
+      in.read(reinterpret_cast<char*>(rgb.data()),
+              static_cast<std::streamsize>(rgb.size()));
+      if (in.gcount() != static_cast<std::streamsize>(rgb.size())) {
+        std::cerr << "transition-dump: " << path << " is short\n";
+        return false;
+      }
+      return true;
+    };
+
+    int ow = 0, oh = 0, iw = 0, ih = 0;
+    std::vector<std::uint8_t> outRgb, inRgb;
+    if (!readPpm(outgoingPath, ow, oh, outRgb)) return 1;
+    if (!readPpm(incomingPath, iw, ih, inRgb)) return 1;
+    if (ow != iw || oh != ih) {
+      std::cerr << "transition-dump: the two pictures are different sizes ("
+                << ow << "x" << oh << " and " << iw << "x" << ih << ")\n";
+      return 1;
+    }
+
+    const std::size_t count = static_cast<std::size_t>(ow) * oh;
+    DecodedFrame outgoing;
+    outgoing.width = ow;
+    outgoing.height = oh;
+    outgoing.format = FramePixelFormat::RGBA32;
+    outgoing.index = 0;
+    outgoing.pixels.assign(count * 4u, 255);
+    for (std::size_t i = 0; i < count; ++i) {
+      outgoing.pixels[i * 4 + 0] = outRgb[i * 3 + 0];
+      outgoing.pixels[i * 4 + 1] = outRgb[i * 3 + 1];
+      outgoing.pixels[i * 4 + 2] = outRgb[i * 3 + 2];
+    }
+
+    std::vector<std::uint8_t> layer;
+    const std::uint64_t seed = 0;         // fixed: a dump has to repeat exactly
+    const double elapsed = progress * seconds;
+    const auto build = [&]() -> bool {
+      switch (style) {
+        case TransitionStyle::Portal:
+          MediaEngine::buildPortalTransition(outgoing, layer, progress, elapsed, seed);
+          return true;
+        case TransitionStyle::Shatter:
+          MediaEngine::buildShatterTransition(outgoing, layer, progress, elapsed, seed);
+          return true;
+        case TransitionStyle::Clouds:
+          MediaEngine::buildCloudsTransition(outgoing, layer, progress, elapsed, seed);
+          return true;
+        case TransitionStyle::Ghastly:
+          MediaEngine::buildGhastlyTransition(outgoing, layer, progress, elapsed, seed);
+          return true;
+        default:
+          return false;
+      }
+    };
+    if (!build()) {
+      std::cerr << "transition-dump: "
+                << deckboy::core::utils::transitionStyleToken(style)
+                << " is drawn by the renderer rather than built on the CPU, so"
+                   " there is nothing to dump. Dumpable: portal, shatter,"
+                   " clouds, ghastly\n";
+      return 2;
+    }
+    // DECKBOY_TRANSITION_BENCH=<n>: build the frame n more times and print the
+    // median. A builder runs once per output frame while a transition is on
+    // air, so it has to fit inside one frame with the rest of the composite;
+    // this times the builder alone, on the picture given.
+    if (const char* benchEnv = std::getenv("DECKBOY_TRANSITION_BENCH")) {
+      const int runs = std::clamp(std::atoi(benchEnv), 1, 500);
+      std::vector<double> ms;
+      for (int i = 0; i < runs; ++i) {
+        const auto t0 = std::chrono::steady_clock::now();
+        build();
+        ms.push_back(std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - t0).count());
+      }
+      std::sort(ms.begin(), ms.end());
+      std::printf("transition-bench: %s %dx%d p=%.2f median %.2f ms, min %.2f, max %.2f (%d runs)\n",
+                  deckboy::core::utils::transitionStyleToken(style).c_str(), ow, oh,
+                  progress, ms[ms.size() / 2], ms.front(), ms.back(), runs);
+    }
+    if (layer.size() < count * 4u) {
+      std::cerr << "transition-dump: the builder produced nothing (the frame"
+                   " would have dissolved instead)\n";
+      return 1;
+    }
+
+    // SOURCE-OVER, the same blend SDL_BLENDMODE_BLEND does on the output.
+    std::vector<std::uint8_t> composite(count * 3u);
+    double alphaSum = 0.0;
+    std::size_t opaque = 0;
+    std::size_t clear = 0;
+    // THE WORST PIXEL, not just the average. A handful of stubborn pixels at
+    // full alpha is an island of the old cue and averages away to nothing; the
+    // maximum is what says whether anything is actually left.
+    int maxAlpha = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+      const double a = layer[i * 4 + 3] / 255.0;
+      alphaSum += a;
+      if (layer[i * 4 + 3] == 255) ++opaque;
+      if (layer[i * 4 + 3] == 0) ++clear;
+      if (layer[i * 4 + 3] > maxAlpha) maxAlpha = layer[i * 4 + 3];
+      for (int c = 0; c < 3; ++c) {
+        const double over = layer[i * 4 + c];
+        const double under = inRgb[i * 3 + c];
+        composite[i * 3 + c] = static_cast<std::uint8_t>(
+          std::clamp(over * a + under * (1.0 - a) + 0.5, 0.0, 255.0));
+      }
+    }
+
+    std::ofstream dst(dstPath, std::ios::binary | std::ios::trunc);
+    if (!dst) {
+      std::cerr << "transition-dump: cannot write " << dstPath << '\n';
+      return 1;
+    }
+    dst << "P6\n" << ow << ' ' << oh << "\n255\n";
+    dst.write(reinterpret_cast<const char*>(composite.data()),
+              static_cast<std::streamsize>(composite.size()));
+
+    // How far the composite is from each input, as a mean absolute difference
+    // per channel. At progress=0 it should be on the outgoing picture; at
+    // progress=1, on the incoming one.
+    auto meanDiff = [&](const std::vector<std::uint8_t>& other) {
+      double sum = 0.0;
+      for (std::size_t i = 0; i < composite.size(); ++i) {
+        sum += std::abs(static_cast<int>(composite[i]) - static_cast<int>(other[i]));
+      }
+      return sum / static_cast<double>(composite.size());
+    };
+
+    std::cout << "transition-dump: " << deckboy::core::utils::transitionStyleToken(style)
+              << " p=" << progress
+              << " on " << ow << "x" << oh
+              << "  meanAlpha=" << (alphaSum / static_cast<double>(count))
+              << " maxAlpha=" << maxAlpha
+              << " opaque=" << opaque << " clear=" << clear
+              << " fromOutgoing=" << meanDiff(outRgb)
+              << " fromIncoming=" << meanDiff(inRgb)
+              << " -> " << dstPath << '\n';
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runAudioFxCheck — `--audio-fx-check [token]`
+  //
+  // The audio equivalent of --effect-dump, and it exists for the same reason:
+  // an effect that renders is not an effect that WORKS, and the only way to
+  // tell them apart on a picture is to look at one. You cannot look at audio,
+  // so this measures it instead.
+  //
+  // Per effect, over a deterministic test signal:
+  //
+  //   in/out RMS      -- did it do anything at all? An effect that leaves the
+  //                      level and the spectrum untouched is a control that
+  //                      does nothing, which is this codebase's signature bug.
+  //   peak            -- did it blow up? A resonant filter or a delay with too
+  //                      much feedback can add 20dB, and the limiter after it
+  //                      should never be the only thing standing between an
+  //                      effect and a damaged PA.
+  //   low/high split  -- the point of a filter is WHICH end it removed. RMS
+  //                      alone cannot tell a high pass from a low pass, and
+  //                      the two were one keystroke apart when they were
+  //                      written.
+  //   tail            -- silence pushed through afterwards. A delay and a
+  //                      reverb must ring; everything else must go quiet, and
+  //                      an effect that keeps making noise after the signal
+  //                      has stopped is feeding back.
+  //   finite          -- no NaN and no infinity ever reaches the device. One
+  //                      denormal spiral in a feedback path is a burst of full
+  //                      scale into somebody's room.
+  //
+  // Deliberately not a pass/fail on the numbers themselves except for the two
+  // that ARE faults on any setting (non-finite output, and a peak over the
+  // ceiling). The rest is a table to read, like the contact sheet.
+  // ---------------------------------------------------------------------------
+  static int runAudioFxCheck(const std::string& only, int rate = 48000) {
+    namespace afx = deckboy::audiofx;
+    constexpr double kPi = 3.141592653589793;
+    // THE RATE IS AN ARGUMENT. An effect chain that has been made rate-aware
+    // is unproven until it has actually been run at another rate, and the
+    // assertion is not that any measurement takes a particular value -- it is
+    // that the SAME measurements come out when the rate changes, because an
+    // effect that is correctly rate-aware sounds the same at any rate.
+    const int kRate = rate > 0 ? rate : 48000;
+    const int kFrames = kRate;                // one second
+    const int kTailFrames = kRate / 2;        // and half a second of silence
+
+    // A signal with both ends of the spectrum in it, so a filter has something
+    // to remove either way: a 120Hz tone, a 6kHz tone, and a burst of noise in
+    // the middle so the dynamics have a transient to catch.
+    auto makeSignal = [&]() {
+      std::vector<double> s(static_cast<std::size_t>(kFrames) * 2, 0.0);
+      std::uint32_t rng = 22222u;
+      for (int f = 0; f < kFrames; ++f) {
+        const double t = static_cast<double>(f) / kRate;
+        rng = rng * 1664525u + 1013904223u;
+        const double noise = (static_cast<double>(rng >> 8) / 8388608.0 - 1.0);
+        // SPEECH-SHAPED, not a continuous tone. Three bursts with real gaps
+        // between them: a gate has nothing to close on if the signal never
+        // stops, and the first version of this signal ran a 120Hz tone from
+        // end to end -- so the gate correctly never moved and the check called
+        // it broken. Any test whose signal cannot exercise the thing it is
+        // measuring will report the measurement, not the truth.
+        // 330ms of speech, 150ms of pause, three times over. The pause has to
+        // be the length of a REAL one: a gate's release is a couple of hundred
+        // milliseconds by design -- long enough not to chop the ends off words
+        // -- so measuring it against 70ms gaps reports a gate that barely
+        // closes, and the fault is in the gaps.
+        const double phase = std::fmod(t, 0.48) / 0.48;
+        // RAMPED, not switched. A hard step is an impulse, every filter here
+        // rings on one, and the ring lands in the gap -- which made the noise
+        // floor of a high pass read 29dB ABOVE the source it was filtering.
+        // That was the test signal clicking, not the filter misbehaving. Real
+        // speech does not start and stop in one sample either.
+        const double ramp = 0.04;      // ~19ms in and out
+        double envelope = 0.002;
+        if (phase < 0.69) {
+          const double edge = std::min(phase, 0.69 - phase);
+          const double open = edge >= ramp ? 1.0
+            : 0.5 - 0.5 * std::cos(kPi * (edge / ramp));
+          envelope = 0.002 + 0.998 * open;
+        }
+        const double v = envelope * (8000.0 * std::sin(2.0 * kPi * 120.0 * t)
+                                   + 5000.0 * std::sin(2.0 * kPi * 6000.0 * t)
+                                   + 9000.0 * noise * (phase < 0.05 ? 1.0 : 0.15));
+        s[static_cast<std::size_t>(f) * 2] = v;
+        // The right channel is deliberately NOT the left: width, ping-pong
+        // delay and binaural all do nothing measurable on a mono-in-stereo
+        // signal, and reporting "no change" for them would be a lie about the
+        // effect rather than about the test.
+        s[static_cast<std::size_t>(f) * 2 + 1] =
+          v * 0.6 + envelope * 3000.0 * std::sin(2.0 * kPi * 300.0 * t);
+      }
+      return s;
+    };
+
+    // Energy above and below 1kHz, by the crudest one-pole split that can tell
+    // them apart. This is a measuring tool, not a signal path, so a proper
+    // filter bank would be precision nobody reads.
+    auto bandRms = [kRate](const std::vector<double>& s, bool high) {
+      const double coeff = std::exp(-2.0 * kPi * 1000.0 / kRate);
+      double low = 0.0, sum = 0.0;
+      const std::size_t frames = s.size() / 2;
+      for (std::size_t f = 0; f < frames; ++f) {
+        const double x = s[f * 2];
+        low = x * (1.0 - coeff) + low * coeff;
+        const double v = high ? (x - low) : low;
+        sum += v * v;
+      }
+      return frames ? std::sqrt(sum / static_cast<double>(frames)) : 0.0;
+    };
+    auto rmsOf = [](const std::vector<double>& s) {
+      double sum = 0.0;
+      for (double v : s) sum += v * v;
+      return s.empty() ? 0.0 : std::sqrt(sum / static_cast<double>(s.size()));
+    };
+    auto peakOf = [](const std::vector<double>& s) {
+      double peak = 0.0;
+      for (double v : s) peak = std::max(peak, std::fabs(v));
+      return peak;
+    };
+    auto dbOf = [](double a, double b) {
+      if (a <= 1e-9 || b <= 1e-9) return 0.0;
+      return 20.0 * std::log10(a / b);
+    };
+
+    // WHICH FRAMES ARE THE QUIET ONES, decided from the dry signal and reused
+    // for the wet, so both are measured over the same stretch of time.
+    //
+    // A GATE CANNOT BE SEEN IN THE RMS. Its entire job is to change what
+    // happens in the GAPS, and the gaps are some 50dB down: shutting them
+    // completely moves the overall RMS by a few millionths, which rounds to
+    // "this effect does nothing". The first version of this check reported
+    // exactly that, and it was a statement about the measurement rather than
+    // about the gate.
+    auto quietFrames = [](const std::vector<double>& s) {
+      const std::size_t frames = s.size() / 2;
+      std::vector<double> mags(frames, 0.0);
+      for (std::size_t f = 0; f < frames; ++f) {
+        mags[f] = std::max(std::fabs(s[f * 2]), std::fabs(s[f * 2 + 1]));
+      }
+      std::vector<double> sorted = mags;
+      std::sort(sorted.begin(), sorted.end());
+      const double median = sorted.empty() ? 0.0 : sorted[sorted.size() / 2];
+      std::vector<std::size_t> quiet;
+      for (std::size_t f = 0; f < frames; ++f) {
+        if (mags[f] < median * 0.1) {
+          quiet.push_back(f);
+        }
+      }
+      return quiet;
+    };
+    auto floorRms = [](const std::vector<double>& s,
+                       const std::vector<std::size_t>& quiet) {
+      if (quiet.empty()) return 0.0;
+      double sum = 0.0;
+      for (std::size_t f : quiet) {
+        sum += s[f * 2] * s[f * 2] + s[f * 2 + 1] * s[f * 2 + 1];
+      }
+      return std::sqrt(sum / static_cast<double>(quiet.size() * 2));
+    };
+
+    const std::vector<double> dry = makeSignal();
+    const std::vector<std::size_t> quiet = quietFrames(dry);
+    const double dryFloor = floorRms(dry, quiet);
+    const double dryRms = rmsOf(dry);
+    const double dryLow = bandRms(dry, false);
+    const double dryHigh = bandRms(dry, true);
+
+    std::cout << "audio-fx-check: " << kFrames << " frames @ " << kRate
+              << "Hz, dry rms=" << std::fixed << std::setprecision(0) << dryRms
+              << " peak=" << peakOf(dry) << "\n";
+    std::cout << "  effect      rms        peak      low      high    floor"
+                 "     tail   verdict\n";
+
+    int failures = 0;
+    for (int k = 1; k < static_cast<int>(afx::AudioEffectKind::Count); ++k) {
+      const auto kind = static_cast<afx::AudioEffectKind>(k);
+      const std::string token = afx::audioEffectToken(kind);
+      if (!only.empty() && token != only) {
+        continue;
+      }
+      if (kind == afx::AudioEffectKind::Plugin) {
+        // A PLUGIN SLOT IS A HOLE, and this harness has nothing to put in it:
+        // the chain here runs with no host, which is exactly the condition
+        // under which a plugin slot is SUPPOSED to pass the audio through
+        // untouched. Measuring it would report "no audible change" as a fault
+        // when it is the specified behaviour. Its own check is
+        // --plugin-chain-check, which runs a real plugin.
+        std::cout << "  plugin      -- see --plugin-chain-check (needs a real "
+                     "plugin and a host)\n";
+        continue;
+      }
+      // WHAT THE EFFECT ARRIVES SET TO, which is what an operator who adds one
+      // during a show actually gets. Testing the struct's neutral defaults
+      // instead would report a flat tilt and a 1:1 compressor as broken, which
+      // is true of those numbers and false of the feature.
+      afx::AudioEffect fx = afx::audioEffectDefaults(kind);
+
+      // AN EQ BAND ARRIVES FLAT, and that is correct: every desk hands you a
+      // new band doing nothing, and one that arrived boosting would damage
+      // the first cue it was dropped onto. Measuring it where it arrives
+      // would therefore report a working band as dead.
+      //
+      // So it is probed with the gain dialled up instead of being exempted.
+      // The check still demands an audible change -- it just asks the
+      // question at a setting where the answer is supposed to be yes. The
+      // flat arrival is asserted separately, immediately below, so both
+      // halves are actually tested rather than one being assumed.
+      if (kind == afx::AudioEffectKind::Eq) {
+        {
+          // Flat on arrival, proven rather than trusted.
+          afx::AudioEffect flat = afx::audioEffectDefaults(kind);
+          afx::AudioEffectState flatState;
+          std::vector<double> probe(2048 * 2, 0.0);
+          for (std::size_t i = 0; i < probe.size() / 2; ++i) {
+            const double v = std::sin(static_cast<double>(i) * 0.05) * 8000.0;
+            probe[i * 2] = v;
+            probe[i * 2 + 1] = v;
+          }
+          const std::vector<double> before = probe;
+          afx::applyAudioEffectStack(probe, {flat}, flatState, {});
+          double worst = 0.0;
+          for (std::size_t i = 0; i < probe.size(); ++i) {
+            worst = std::max(worst, std::fabs(probe[i] - before[i]));
+          }
+          // A biquad at unity is not bit-exact -- it is a ratio of computed
+          // coefficients -- so the tolerance is "inaudible", not "identical".
+          if (worst > 1.0) {
+            std::cout << "  eq          FAIL not flat on arrival: moved a "
+                      << "sample by " << worst << "\n";
+            ++failures;
+          }
+        }
+        fx.paramB = 0.92f;   // a firm lift, so the measurement has something to see
+      }
+
+      afx::AudioEffectState state;
+
+      // A CUE FOR THE FIVE THAT NEED ONE.
+      //
+      // Picture, Placement, Seam, Frame lock and Suspend read a context the
+      // deck supplies, and with a default one they correctly do nothing: no
+      // picture to follow, centred and full-size geometry, no known duration,
+      // no video clock, not held. Measuring them against that would report
+      // five working effects as dead. So the check invents a cue -- a picture
+      // that changes, a PIP moving across the output, a known length, a real
+      // frame rate -- and drives them through it.
+      auto contextAt = [&](double t, double total) {
+        afx::AudioEffectContext c;
+        c.sampleRate = static_cast<double>(kRate);
+        c.hasPicture = true;
+        // A picture that goes dark and comes back, with a cut in the middle of
+        // it so there is something for `motion` to be.
+        c.luma = static_cast<float>(0.5 + 0.45 * std::sin(2.0 * kPi * 0.7 * t));
+        c.motion = static_cast<float>(std::fabs(std::sin(2.0 * kPi * 0.7 * t)) > 0.98
+                                        ? 1.0 : 0.05);
+        // A PIP crossing the output left to right and shrinking as it goes.
+        c.centerX = static_cast<float>(std::clamp(t / std::max(total, 1e-6), 0.0, 1.0));
+        c.centerY = 0.5f;
+        c.coverage = static_cast<float>(std::clamp(
+          1.0 - 0.75 * (t / std::max(total, 1e-6)), 0.05, 1.0));
+        c.position = t;
+        c.duration = total;
+        c.framePeriod = 1.0 / 23.976;   // deliberately not a musical value
+        c.held = false;
+        // The finished picture: as if a picture effect inverted it, so Ouroboros
+        // has something different from the decoded frame to follow.
+        c.hasPostPicture = true;
+        c.postLuma = 1.0f - c.luma;
+        c.postMotion = c.motion;
+        return c;
+      };
+
+      // IN CHUNKS, the way the engine calls it. A single call with one context
+      // would hold the picture still for the whole second and hide every bug
+      // that only appears when the context MOVES -- which for four of these
+      // five is the entire point of them.
+      std::vector<double> wet = dry;
+      const std::size_t chunk = 512;
+      const double totalSeconds =
+        static_cast<double>(kFrames + kTailFrames) / kRate;
+      for (std::size_t at = 0; at < wet.size() / 2; at += chunk) {
+        const std::size_t take = std::min(chunk, wet.size() / 2 - at);
+        std::vector<double> slice(wet.begin() + static_cast<std::ptrdiff_t>(at * 2),
+                                  wet.begin() + static_cast<std::ptrdiff_t>((at + take) * 2));
+        afx::applyAudioEffectStack(
+          slice, {fx}, state,
+          contextAt(static_cast<double>(at) / kRate, totalSeconds));
+        std::copy(slice.begin(), slice.end(),
+                  wet.begin() + static_cast<std::ptrdiff_t>(at * 2));
+      }
+
+      // The tail: silence through the SAME state, so a delay line that is
+      // still holding something has somewhere to put it. Suspend is HELD here,
+      // because a tail is exactly the moment it exists for -- and it is the
+      // one effect for which "still sounding after the input stopped" is the
+      // feature rather than the fault.
+      std::vector<double> tail(static_cast<std::size_t>(kTailFrames) * 2, 0.0);
+      for (std::size_t at = 0; at < tail.size() / 2; at += chunk) {
+        const std::size_t take = std::min(chunk, tail.size() / 2 - at);
+        std::vector<double> slice(tail.begin() + static_cast<std::ptrdiff_t>(at * 2),
+                                  tail.begin() + static_cast<std::ptrdiff_t>((at + take) * 2));
+        afx::AudioEffectContext c =
+          contextAt(static_cast<double>(kFrames + at) / kRate, totalSeconds);
+        c.held = (kind == afx::AudioEffectKind::Suspend);
+        afx::applyAudioEffectStack(slice, {fx}, state, c);
+        std::copy(slice.begin(), slice.end(),
+                  tail.begin() + static_cast<std::ptrdiff_t>(at * 2));
+      }
+
+      bool finite = true;
+      for (double v : wet) if (!std::isfinite(v)) { finite = false; break; }
+      if (finite) {
+        for (double v : tail) if (!std::isfinite(v)) { finite = false; break; }
+      }
+
+      const double wetRms = rmsOf(wet);
+      const double wetPeak = peakOf(wet);
+      // THE SECOND HALF OF THE TAIL. Every filter here is still holding the
+      // last sample the moment the input stops, and its natural decay is a
+      // few milliseconds of perfectly correct output -- measuring the peak
+      // over the whole tail called each of them a runaway. What "still
+      // sounding" means is still sounding a quarter of a second later.
+      const std::vector<double> lateTail(
+        tail.begin() + static_cast<std::ptrdiff_t>(tail.size() / 2), tail.end());
+      const double tailPeak = peakOf(lateTail);
+      const double lowDb = dbOf(bandRms(wet, false), dryLow);
+      const double highDb = dbOf(bandRms(wet, true), dryHigh);
+      const double floorDb = dbOf(floorRms(wet, quiet), dryFloor);
+
+      std::string verdict;
+      // 32767 is full scale for the int16 the engine quantises to. An effect
+      // that exceeds it is relying on the limiter to save it, which is not
+      // what the limiter is there for.
+      if (!finite) {
+        verdict = "FAIL non-finite output";
+        ++failures;
+      } else if (wetPeak > 32767.0 * 4.0) {
+        verdict = "FAIL runaway (>12dB over full scale)";
+        ++failures;
+      } else {
+        // Which effects are SUPPOSED to still be making sound after the input
+        // stops. For the first three it is a stored signal coming back; for
+        // Suspend it is the entire feature, which is why the order of these
+        // tests matters -- see below.
+        //
+        // Frame lock is deliberately NOT here. It holds a grain and replays
+        // it, so once the input goes quiet it is replaying silence: no tail is
+        // the correct answer, and listing it as a ringing effect made the
+        // check demand a fault.
+        // Scrub is here because its playhead sits up to two seconds behind
+        // now: after the input stops it is still playing what came before.
+        // The other bends are NOT -- their loudness meter follows the dry
+        // signal down, so silence in is silence out, and that is tested.
+        const bool rings = kind == afx::AudioEffectKind::Delay ||
+                           kind == afx::AudioEffectKind::Reverb ||
+                           kind == afx::AudioEffectKind::Seam ||
+                           kind == afx::AudioEffectKind::Suspend ||
+                           kind == afx::AudioEffectKind::Scrub;
+        const bool tailed = tailPeak >= 1.0;
+        const bool movedInline = std::fabs(dbOf(wetRms, dryRms)) >= 0.05 ||
+                                 std::fabs(lowDb) >= 0.05 ||
+                                 std::fabs(highDb) >= 0.05 ||
+                                 std::fabs(floorDb) >= 0.05;
+        if (rings && !tailed) {
+          verdict = "FAIL no tail -- nothing was stored";
+          ++failures;
+        } else if (!rings && tailPeak > 32767.0 * 0.02) {
+          verdict = "FAIL still sounding after the input stopped";
+          ++failures;
+        } else if (!movedInline && !tailed) {
+          // NOTHING MOVED ANYWHERE, tail included. On an effect at the setting
+          // it arrives at, that is one which is not connected to its own
+          // parameters.
+          //
+          // The tail has to count, and Suspend is why. While the cue is
+          // RUNNING it is inaudible by design -- it is only filling its ring
+          // buffer -- so every inline measurement is correctly zero and the
+          // first version of this check called the feature dead. What it does
+          // is in the tail, which is the one place the old test never looked.
+          verdict = "FAIL no audible change at the setting it arrives at";
+          ++failures;
+        } else if (kind == afx::AudioEffectKind::Suspend) {
+          verdict = "ok (holds through the hold)";
+        } else {
+          verdict = rings ? "ok (rings)" : "ok";
+        }
+      }
+
+      std::ostringstream row;
+      row << "  " << std::left << std::setw(11) << token << std::right
+          << std::fixed << std::setprecision(1)
+          << std::setw(8) << dbOf(wetRms, dryRms) << "dB"
+          << std::setw(10) << std::setprecision(0) << wetPeak
+          << std::setprecision(1)
+          << std::setw(8) << lowDb << std::setw(9) << highDb
+          << std::setw(9) << floorDb
+          << std::setw(9) << std::setprecision(0) << tailPeak
+          << "   " << verdict;
+      std::cout << row.str() << '\n';
+    }
+
+    // ── THE THREE THINGS A ROW CANNOT SEE ─────────────────────────────────
+    if (only.empty() || only == "ouroboros" || only == "word") {
+      auto loudSine = [&](std::size_t frames, double amp) {
+        std::vector<double> v(frames * 2);
+        for (std::size_t f = 0; f < frames; ++f) {
+          const double s = amp * 32767.0 * std::sin(2.0 * kPi * 220.0 * f / kRate);
+          v[f * 2] = s;
+          v[f * 2 + 1] = s;
+        }
+        return v;
+      };
+      const std::size_t chunk = 2048;   // the engine's largest chunk
+
+      // 1. THE LOOP, CLOSED. Ouroboros's output drives a model of a picture
+      //    effect on an Audio LFO: the louder the bent sound, the brighter the
+      //    picture. Twelve seconds at the strongest coupling. It must stay
+      //    finite and inside the bend ceiling the whole way.
+      {
+        afx::AudioEffect fx = afx::audioEffectDefaults(afx::AudioEffectKind::Ouroboros);
+        fx.paramA = 1.0f;
+        afx::AudioEffectState state;
+        double prevLuma = 0.5;
+        double level = 0.0;
+        bool finite = true;
+        double peak = 0.0;
+        for (int n = 0; n < static_cast<int>(12.0 * kRate / chunk); ++n) {
+          std::vector<double> buf = loudSine(chunk, 0.6);
+          afx::AudioEffectContext c;
+        c.sampleRate = static_cast<double>(kRate);
+          c.hasPicture = true;
+          c.hasPostPicture = true;
+          const double luma = std::clamp(0.5 + 0.5 * level, 0.0, 1.0);
+          c.postLuma = static_cast<float>(luma);
+          c.postMotion = static_cast<float>(std::clamp(std::fabs(luma - prevLuma) * 8.0, 0.0, 1.0));
+          prevLuma = luma;
+          c.position = static_cast<double>(n * chunk) / kRate;
+          afx::applyAudioEffectStack(buf, {fx}, state, c);
+          double e = 0.0;
+          for (double v : buf) {
+            if (!std::isfinite(v)) finite = false;
+            peak = std::max(peak, std::fabs(v));
+            e += (v / 32768.0) * (v / 32768.0);
+          }
+          level = std::min(1.0, 2.0 * std::sqrt(e / static_cast<double>(buf.size())));
+        }
+        const bool ok = finite && peak <= 32768.0 * 1.5;
+        std::cout << "  loop: 12s closed at full coupling, peak "
+                  << std::setprecision(0) << peak << (ok ? "   ok" : "   FAIL unstable")
+                  << "\n";
+        if (!ok) ++failures;
+      }
+
+      // 2. THE WATCHDOG. Drive the loop as hard as it goes -- a white, moving
+      //    picture under a loud input -- and it has to open itself within a
+      //    few seconds. A safety that never fires is a comment.
+      {
+        afx::AudioEffect fx = afx::audioEffectDefaults(afx::AudioEffectKind::Ouroboros);
+        fx.paramA = 1.0f;
+        fx.paramB = 1.0f;   // slowest leak: the hardest case to trip out of
+        afx::AudioEffectState state;
+        double trippedAt = -1.0;
+        for (int n = 0; n < static_cast<int>(6.0 * kRate / chunk); ++n) {
+          std::vector<double> buf = loudSine(chunk, 0.9);
+          afx::AudioEffectContext c;
+        c.sampleRate = static_cast<double>(kRate);
+          c.hasPicture = true;
+          c.hasPostPicture = true;
+          c.postLuma = 1.0f;
+          c.postMotion = 1.0f;
+          c.position = static_cast<double>(n * chunk) / kRate;
+          afx::applyAudioEffectStack(buf, {fx}, state, c);
+          if (trippedAt < 0.0 && !state.slots.empty() &&
+              state.slots[0].tripSeconds > 0.0) {
+            trippedAt = c.position;
+          }
+        }
+        const bool ok = trippedAt >= 0.0 && trippedAt <= 4.0;
+        std::cout << "  watchdog: " << (trippedAt < 0.0 ? std::string("never tripped")
+                                        : "tripped at " + std::to_string(trippedAt).substr(0, 4) + "s")
+                  << (ok ? "   ok" : "   FAIL") << "\n";
+        if (!ok) ++failures;
+      }
+
+      // 3. REHEARSAL EQUALS SHOW. Two fresh runs of a bend over the same
+      //    moment must make the same noise, sample for sample.
+      {
+        const afx::AudioEffect fx = afx::audioEffectDefaults(afx::AudioEffectKind::Word);
+        std::vector<double> first;
+        for (int run = 0; run < 2; ++run) {
+          afx::AudioEffectState state;
+          std::vector<double> all;
+          for (int n = 0; n < 24; ++n) {
+            std::vector<double> buf = loudSine(chunk, 0.5);
+            afx::AudioEffectContext c;
+        c.sampleRate = static_cast<double>(kRate);
+            c.position = 30.0 + static_cast<double>(n * chunk) / kRate;
+            afx::applyAudioEffectStack(buf, {fx}, state, c);
+            all.insert(all.end(), buf.begin(), buf.end());
+          }
+          if (run == 0) first = all;
+          else {
+            const bool same = all == first;
+            std::cout << "  determinism: word, same moment twice"
+                      << (same ? "   ok" : "   FAIL differs") << "\n";
+            if (!same) ++failures;
+          }
+        }
+      }
+    }
+
+    std::cout << "audio-fx-check: " << failures << " failures\n";
+    return failures == 0 ? 0 : 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runEffectBench — `--effect-bench <token[:amount[:a[:b]]]> [WxH] [frames]`
+  //
+  // What one effect costs per frame at a given raster, and what fraction of a
+  // 60fps budget that is.
+  //
+  // --effect-dump reports the time for a single application, which is enough to
+  // notice something pathological and useless for judging an optimisation: one
+  // run on a cold cache with the frame index fixed is mostly noise. This runs
+  // the effect repeatedly on the same buffer with an advancing frame index, so
+  // the time-varying effects do their real work, and reports the median rather
+  // than the mean so one scheduling hiccup cannot flatter or damn a change.
+  // ---------------------------------------------------------------------------
+  static int runEffectBench(const std::string& spec, int w, int h, int frames) {
+    std::vector<std::string> parts;
+    std::size_t start = 0;
+    for (;;) {
+      const std::size_t colon = spec.find(':', start);
+      parts.push_back(spec.substr(start, colon == std::string::npos
+                                           ? std::string::npos : colon - start));
+      if (colon == std::string::npos) break;
+      start = colon + 1;
+    }
+    deckboy::effects::CueEffect fx;
+    fx.kind = deckboy::effects::cueEffectFromToken(parts[0]);
+    if (fx.kind == deckboy::effects::CueEffectKind::None) {
+      std::cerr << "effect-bench: unknown effect '" << parts[0] << "'\n";
+      return 2;
+    }
+    if (parts.size() > 1) fx.amount = static_cast<float>(std::atof(parts[1].c_str()));
+    if (parts.size() > 2) fx.paramA = static_cast<float>(std::atof(parts[2].c_str()));
+    if (parts.size() > 3) fx.paramB = static_cast<float>(std::atof(parts[3].c_str()));
+    if (parts.size() > 4) fx.paramC = static_cast<float>(std::atof(parts[4].c_str()));
+    if (parts.size() > 5) fx.paramD = static_cast<float>(std::atof(parts[5].c_str()));
+
+    const std::size_t count = static_cast<std::size_t>(w) * h;
+    // A deterministic picture with real structure in it. A flat fill would let
+    // anything with a branch on content look faster than it is, and pixel sort
+    // in particular is only honest on something with detail to sort.
+    std::vector<std::uint8_t> pristine(count * 4, 255);
+    for (int y = 0; y < h; ++y) {
+      for (int x = 0; x < w; ++x) {
+        std::uint32_t n = static_cast<std::uint32_t>(x * 374761393 + y * 668265263);
+        n = (n ^ (n >> 13)) * 1274126177u;
+        std::uint8_t* p = pristine.data() + (static_cast<std::size_t>(y) * w + x) * 4;
+        p[0] = static_cast<std::uint8_t>((x * 255 / std::max(1, w - 1)) ^ (n >> 24));
+        p[1] = static_cast<std::uint8_t>(y * 255 / std::max(1, h - 1));
+        p[2] = static_cast<std::uint8_t>((n >> 16) & 0xFF);
+      }
+    }
+
+    std::vector<std::uint8_t> pixels;
+    // Persists across frames, the way the app's per-deck buffer does, so a
+    // feedback bench measures the real loop and not a first frame forever.
+    // One scratch slot per effect in the chain, exactly as the app gives it.
+    std::vector<std::vector<std::uint8_t>> effectState(1);
+    std::vector<double> samples;
+    samples.reserve(static_cast<std::size_t>(frames));
+    for (int i = 0; i < frames; ++i) {
+      // Restored every pass. Effects are destructive, and letting one chew on
+      // its own output measures something that never happens in a show.
+      pixels = pristine;
+      deckboy::effects::CueEffectContext ctx;
+      ctx.width = w;
+      ctx.height = h;
+      ctx.frameIndex = static_cast<std::uint64_t>(i);
+      ctx.effectState = &effectState;
+      const auto began = std::chrono::steady_clock::now();
+      deckboy::effects::applyCueEffectStack(pixels, {fx}, ctx);
+      samples.push_back(std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - began).count());
+    }
+    if (samples.empty()) {
+      std::cerr << "effect-bench: no frames\n";
+      return 1;
+    }
+    std::sort(samples.begin(), samples.end());
+    const double median = samples[samples.size() / 2];
+    const double best = samples.front();
+    std::cout << "effect-bench: " << deckboy::effects::cueEffectToken(fx.kind)
+              << ' ' << w << 'x' << h
+              << "  median " << median << "ms"
+              << "  best " << best << "ms"
+              << "  " << (median > 0.0 ? 1000.0 / median : 0.0) << "fps-if-alone"
+              << "  " << (median / 16.667 * 100.0) << "% of a 60fps frame\n";
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runPdfProbe — `--pdf-probe <file.pdf> [outdir] [scale]`
+  //
+  // Rasterise a document and report what came out, with no window.
+  //
+  // The import path itself needs a GUI and a drop, which makes the one thing
+  // worth checking on a headless box -- does THIS platform's PDF engine work at
+  // all -- the one thing that cannot be checked there. Each platform uses a
+  // different engine (Windows.Data.Pdf, CoreGraphics, pdftoppm), so "it worked
+  // on Windows" says nothing about the other two.
+  // ---------------------------------------------------------------------------
+
+  // ── --atem-probe: watch a real switcher's program bus ────────────────────
+  //
+  // The tally trigger cannot be tested by reading it. Either the handshake is
+  // right and the switcher starts talking, or it is not and nothing happens --
+  // and from inside the app those two look exactly alike. This makes the
+  // difference visible, with no show open, no cue racked and no output armed.
+  //
+  // It runs the SAME header writer and the SAME packet parser the live client
+  // runs, so a pass here is evidence about the client rather than about a
+  // second implementation that happens to sit next to it.
+  static int runAtemProbe(const std::string& host, int seconds) {
+    // The probes run before the app has started, and on Windows a socket call
+    // before WSAStartup fails with no explanation at all -- which presented as
+    // "could not open a socket" and looked exactly like a switcher fault.
+#ifdef _WIN32
+    WSADATA wsaData {};
+    const bool winsockStarted = WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+    if (!winsockStarted) {
+      std::cerr << "atem-probe: WSAStartup failed\n";
+      return 1;
+    }
+    struct WinsockGuard {
+      ~WinsockGuard() { WSACleanup(); }
+    } winsockGuard;
+#endif
+    SocketHandle sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == kInvalidSocket) {
+      std::cerr << "atem-probe: could not open a socket\n";
+      return 1;
+    }
+    sockaddr_in dest {};
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(9910);
+    if (inet_pton(AF_INET, host.c_str(), &dest.sin_addr) != 1) {
+      std::cerr << "atem-probe: " << host << " is not an IPv4 address\n";
+      closeSocket(sock);
+      return 2;
+    }
+
+    unsigned session = deckboy::platform::AtemSwitcherClient::atemFreshSessionId();
+    unsigned char hello[20] {};
+    deckboy::platform::AtemSwitcherClient::atemWriteHeader(hello, 0x02, 20, session, 0, 0);
+    hello[12] = 0x01;
+    sendto(sock, reinterpret_cast<const char*>(hello), 20, 0,
+           reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+    std::cout << "atem-probe " << host << ":9910 -- hello sent\n";
+
+    bool greeted = false;
+    int packets = 0, acked = 0, programReports = 0, lastProgram = -1;
+    // The switcher's own names for its sources -- the same parse the input
+    // picker uses, so what prints here is what the picker will offer.
+    std::map<int, std::string> names;
+    const auto started = std::chrono::steady_clock::now();
+    std::array<unsigned char, 2048> buffer {};
+
+    while (std::chrono::steady_clock::now() - started < std::chrono::seconds(seconds)) {
+      fd_set readFds;
+      FD_ZERO(&readFds);
+      watchFd(sock, &readFds);
+      timeval timeout {};
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 200000;
+      if (select(selectNfds(sock), &readFds, nullptr, nullptr, &timeout) <= 0) continue;
+      if (!readyFd(sock, &readFds)) continue;
+
+      sockaddr_in from {};
+      socklen_t fromLen = sizeof(from);
+      const int bytes = recvfrom(sock, reinterpret_cast<char*>(buffer.data()),
+                                 static_cast<int>(buffer.size()), 0,
+                                 reinterpret_cast<sockaddr*>(&from), &fromLen);
+      if (bytes < 12) continue;
+      ++packets;
+
+      const unsigned first = (static_cast<unsigned>(buffer[0]) << 8) | buffer[1];
+      const unsigned flags = first >> 11;
+      const unsigned length = first & 0x07FFu;
+      const unsigned pktSession = (static_cast<unsigned>(buffer[2]) << 8) | buffer[3];
+      const unsigned pktId = (static_cast<unsigned>(buffer[10]) << 8) | buffer[11];
+
+      if ((flags & 0x02) != 0 && !greeted) {
+        // Echoes what we proposed; the switcher's own id arrives next packet.
+        session = pktSession;
+        greeted = true;
+        std::cout << "  connected -- session 0x" << std::hex << session << std::dec << "\n";
+        unsigned char ack[12] {};
+        deckboy::platform::AtemSwitcherClient::atemWriteHeader(ack, 0x10, 12, session, 0, 0);
+        sendto(sock, reinterpret_cast<const char*>(ack), 12, 0,
+               reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+        ++acked;
+        continue;
+      }
+      if (greeted && pktSession != session) {
+        session = pktSession;
+        std::cout << "  switcher moved to session 0x" << std::hex << session
+                  << std::dec << "\n";
+      }
+      if ((flags & 0x01) != 0) {
+        unsigned char ack[12] {};
+        deckboy::platform::AtemSwitcherClient::atemWriteHeader(ack, 0x10, 12, session, pktId, 0);
+        sendto(sock, reinterpret_cast<const char*>(ack), 12, 0,
+               reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+        ++acked;
+      }
+
+      const unsigned usable = std::min<unsigned>(length, static_cast<unsigned>(bytes));
+      deckboy::platform::AtemSwitcherClient::atemInputNamesFromPacket(buffer.data(), usable, names);
+      if (const auto source = deckboy::platform::AtemSwitcherClient::atemProgramInputFromPacket(buffer.data(), usable)) {
+        ++programReports;
+        if (*source != lastProgram) {
+          std::cout << "  program input -> " << *source
+                    << (lastProgram < 0 ? "   (initial state)" : "   (CUT)") << "\n";
+          lastProgram = *source;
+        }
+      }
+    }
+    closeSocket(sock);
+
+    std::cout << "  packets " << packets << "  acks sent " << acked
+              << "  program reports " << programReports << "\n";
+    if (!greeted) {
+      std::cout << "  NOT CONNECTED -- no hello answer from " << host << "\n";
+      return 1;
+    }
+    std::cout << "  connected, program bus is input " << lastProgram << "\n";
+    if (names.empty()) {
+      std::cout << "  no input names reported\n";
+    } else {
+      std::cout << "  inputs the picker will offer:\n";
+      for (const auto& [id, label] : names) {
+        std::cout << "    " << id << "  " << label
+                  << (id == lastProgram ? "   <- on program" : "") << "\n";
+      }
+    }
+    return 0;
+  }
+
+  static int runPdfProbe(const std::string& file, const std::string& outDir,
+                         int targetWidth) {
+    std::string whyNot;
+    if (!deckboy::platform::pdfRasterAvailable(whyNot)) {
+      std::cout << "pdf-probe: unavailable -- " << whyNot << std::endl;
+      return 1;
+    }
+    const fs::path out = fs::absolute(outDir.empty()
+      ? (fs::temp_directory_path() / "deckboy-pdf-probe") : fs::path(outDir));
+
+    // A PRESENTATION GOES THROUGH ITS CONVERTER FIRST, and the probe reports
+    // which one -- because "it did not import" has three different causes
+    // (no converter, the converter refused the file, the render failed) that
+    // look identical from the outside, and a toast cannot be read by a script.
+    fs::path source = file;
+    if (deckboy::platform::isPresentationDocumentPath(source)) {
+      std::string why;
+      if (!deckboy::platform::presentationConvertAvailable(why)) {
+        std::cout << "pdf-probe: no converter -- " << why << std::endl;
+        return 1;
+      }
+      std::cout << "pdf-probe: converting the presentation..." << std::endl;
+      const auto convBegan = std::chrono::steady_clock::now();
+      auto converted = deckboy::platform::convertPresentationToPdf(source, out);
+      const double convMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - convBegan).count();
+      if (!converted.ok()) {
+        std::cout << "pdf-probe: CONVERSION FAILED -- " << converted.error
+                  << std::endl;
+        return 1;
+      }
+      std::error_code sizeEc;
+      const auto bytes = fs::file_size(converted.pdfPath, sizeEc);
+      std::cout << "pdf-probe: converted by " << converted.converter << " in "
+                << convMs << "ms -> " << converted.pdfPath.string() << " ("
+                << (sizeEc ? 0 : bytes) << " bytes)" << std::endl;
+      source = converted.pdfPath;
+    }
+    const auto began = std::chrono::steady_clock::now();
+    auto result = deckboy::platform::rasterisePdf(source, out, targetWidth, nullptr);
+    const double ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - began).count();
+    if (!result.ok()) {
+      std::cout << "pdf-probe: FAILED -- "
+                << (result.error.empty() ? "no pages" : result.error) << std::endl;
+      return 1;
+    }
+    std::cout << "pdf-probe: " << result.pagePaths.size() << " page(s) in "
+              << ms << "ms at " << targetWidth << "px wide -> " << out.string() << std::endl;
+    for (std::size_t i = 0; i < result.pagePaths.size() && i < 4; ++i) {
+      std::error_code ec;
+      const auto bytes = fs::file_size(result.pagePaths[i], ec);
+      std::cout << "  " << fs::path(result.pagePaths[i]).filename().string()
+                << "  " << (ec ? 0 : bytes) << " bytes" << std::endl;
+    }
+    if (result.pagePaths.size() > 4) {
+      std::cout << "  ... and " << (result.pagePaths.size() - 4) << " more"
+                << std::endl;
+    }
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runPatternBench — `--pattern-bench <pattern-id> [WxH] [frames]`
+  //
+  // Times buildPatternFrame in isolation: no window, no texture upload, no file
+  // I/O. Added while chasing "pocket-test is laggy at 4K" — the live OUTPUT fps
+  // readout was too noisy to tell whether the cost was the CPU build or the
+  // 33 MB-per-frame texture upload, and guessing between them is how you
+  // optimise the wrong half.
+  // ---------------------------------------------------------------------------
+  static int runPatternBench(const std::string& patternId, int w, int h, int frames) {
+    Cue cue;
+    cue.kind = CueKind::Pattern;
+    cue.name = "pattern-bench";
+    cue.path = patternId;
+    cue.width = w;
+    cue.height = h;
+
+    // One warm-up build so first-touch page faults and any lazy init don't land
+    // in the measurement.
+    auto warm = MediaEngine::buildPatternFrame(cue, 0.0, w, h);
+    if (!warm || warm->pixels.empty()) {
+      std::cout << "pattern-bench: build failed for " << patternId << '\n';
+      return 1;
+    }
+    const int outW = warm->width;
+    const int outH = warm->height;
+
+    double worstMs = 0.0;
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < frames; ++i) {
+      const auto t0 = std::chrono::steady_clock::now();
+      // Advance wall time so animated patterns do real per-frame work.
+      auto f = MediaEngine::buildPatternFrame(cue, 1.0 + i * (1.0 / 60.0), w, h);
+      const auto t1 = std::chrono::steady_clock::now();
+      const double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+      worstMs = std::max(worstMs, ms);
+      if (!f) {
+        std::cout << "pattern-bench: build returned nothing at frame " << i << '\n';
+        return 1;
+      }
+    }
+    const double totalMs =
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    const double avgMs = totalMs / std::max(1, frames);
+    std::cout << "pattern-bench: " << patternId << "  " << outW << "x" << outH
+              << "  avg " << avgMs << " ms/frame"
+              << "  worst " << worstMs << " ms"
+              << "  => " << (avgMs > 0.0 ? 1000.0 / avgMs : 0.0) << " fps ceiling"
+              << "  (build only, no upload)\n";
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runLtcGenerate — `--ltc-generate <out.wav> [HH:MM:SS:FF] [fps] [seconds]`
+  //
+  // Generates SMPTE LTC as a mono 48 kHz WAV, then DECODES ITS OWN OUTPUT with
+  // the same libltc decoder Deckboy chases with, and reports whether the
+  // timecode came back. Round-tripping is the point: an encoder that produces
+  // plausible-looking audio nobody can read is worse than none, and this proves
+  // the two halves agree.
+  //
+  // Deckboy could previously chase timecode but never generate it, so it could
+  // not be master of a rig. libltc always shipped the encoder; it was unbound.
+  // ---------------------------------------------------------------------------
+  static int runLtcGenerate(const std::string& outPath, const std::string& startTc,
+                            double fps, double seconds) {
+    LtcApi api;
+    if (!api.ensureLoaded()) {
+      std::cout << "ltc-generate: libltc unavailable: " << api.loadError << '\n';
+      return 1;
+    }
+    if (!api.encoderAvailable) {
+      std::cout << "ltc-generate: libltc has no encoder symbols\n";
+      return 1;
+    }
+
+    int hh = 10, mm = 0, ss = 0, ff = 0;
+    std::sscanf(startTc.c_str(), "%d:%d:%d:%d", &hh, &mm, &ss, &ff);
+
+    constexpr double kRate = 48000.0;
+    // standard 1 = LTC_TV_625_50 etc.; 0 (LTC_TV_525_60) is right for 30/29.97
+    // and is what a generic generator should emit.
+    void* enc = api.encoderCreateFn(kRate, fps, 0, 0);
+    if (!enc) {
+      std::cout << "ltc-generate: encoder_create failed\n";
+      return 1;
+    }
+    if (api.encoderSetVolumeFn) {
+      api.encoderSetVolumeFn(enc, -3.0);  // -3 dBFS: hot enough to read, not clipping
+    }
+
+    LtcSmpteTimecode tc {};
+    std::snprintf(tc.timezone, sizeof(tc.timezone), "+0000");
+    tc.hours = static_cast<unsigned char>(hh);
+    tc.mins  = static_cast<unsigned char>(mm);
+    tc.secs  = static_cast<unsigned char>(ss);
+    tc.frame = static_cast<unsigned char>(ff);
+    api.encoderSetTimecodeFn(enc, &tc);
+
+    const int frameCount = std::max(1, static_cast<int>(std::lround(seconds * fps)));
+    std::vector<std::int16_t> pcm;
+    // libltc emits unsigned 8-bit centred on 128 (ltcsnd_sample_t).
+    std::vector<std::uint8_t> frameBuf(static_cast<std::size_t>(kRate / fps) + 64);
+    for (int i = 0; i < frameCount; ++i) {
+      api.encoderEncodeFrameFn(enc);
+      const int got = api.encoderGetBufferFn(enc, frameBuf.data());
+      for (int s = 0; s < got; ++s) {
+        const int centred = static_cast<int>(frameBuf[static_cast<std::size_t>(s)]) - 128;
+        pcm.push_back(static_cast<std::int16_t>(std::clamp(centred * 256, -32768, 32767)));
+      }
+      if (api.encoderBufferFlushFn) {
+        api.encoderBufferFlushFn(enc);
+      }
+      api.encoderIncTimecodeFn(enc);
+    }
+    api.encoderFreeFn(enc);
+
+    if (pcm.empty()) {
+      std::cout << "ltc-generate: encoder produced no samples\n";
+      return 1;
+    }
+
+    // --- WAV (mono, 16-bit, 48 kHz) ---
+    {
+      std::ofstream wav(outPath, std::ios::binary | std::ios::trunc);
+      if (!wav) {
+        std::cout << "ltc-generate: cannot write " << outPath << '\n';
+        return 1;
+      }
+      const std::uint32_t dataBytes = static_cast<std::uint32_t>(pcm.size() * 2);
+      auto put32 = [&](std::uint32_t v) { wav.write(reinterpret_cast<const char*>(&v), 4); };
+      auto put16 = [&](std::uint16_t v) { wav.write(reinterpret_cast<const char*>(&v), 2); };
+      wav.write("RIFF", 4); put32(36 + dataBytes); wav.write("WAVE", 4);
+      wav.write("fmt ", 4); put32(16); put16(1); put16(1);
+      put32(48000); put32(48000 * 2); put16(2); put16(16);
+      wav.write("data", 4); put32(dataBytes);
+      wav.write(reinterpret_cast<const char*>(pcm.data()), dataBytes);
+    }
+
+    // --- Round-trip: decode what we just made ---
+    void* dec = api.decoderCreateFn(static_cast<int>(kRate / fps), 8);
+    int decoded = 0;
+    std::string firstTc, lastTc;
+    if (dec) {
+      std::vector<std::uint8_t> frameExt(LtcApi::kFrameExtBytes);
+      // Write in chunks and DRAIN AFTER EACH. libltc's decode queue holds only
+      // the size given to decoder_create (8 here); pushing the whole file in
+      // one call overflows it and everything but the last few frames is thrown
+      // away — which looked exactly like a broken encoder.
+      const std::size_t chunk = static_cast<std::size_t>(kRate / fps);
+      for (std::size_t off = 0; off < pcm.size(); off += chunk) {
+        const std::size_t n = std::min(chunk, pcm.size() - off);
+        api.decoderWriteS16Fn(dec, pcm.data() + off, n, static_cast<std::int64_t>(off));
+        while (api.decoderQueueLengthFn(dec) > 0) {
+          if (api.decoderReadFn(dec, frameExt.data()) <= 0) {
+            break;
+          }
+          if (auto got = decodeLtcFrameBytes(frameExt.data())) {
+            char buf[24];
+            std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d:%02d",
+                          got->hours, got->minutes, got->seconds, got->frames);
+            if (decoded == 0) firstTc = buf;
+            lastTc = buf;
+            ++decoded;
+          }
+        }
+      }
+      api.decoderFreeFn(dec);
+    }
+
+    std::cout << "ltc-generate: wrote " << outPath << " ("
+              << pcm.size() << " samples, " << frameCount << " frames @ " << fps << "fps)\n";
+    std::cout << "ltc-generate: round-trip decoded " << decoded << " frames";
+    if (decoded > 0) {
+      std::cout << "  first=" << firstTc << "  last=" << lastTc;
+    }
+    std::cout << '\n';
+    return decoded > 0 ? 0 : 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runDecodeBench — `--decode-bench <file> [seconds] [cli]`
+  //
+  // Measures sustained decode throughput through the real MediaEngine path so
+  // Pocket before/after numbers are comparable (GPU_DECODE_PLAN §6). The cue
+  // fps is pinned high so the consumer drains the queue every tick — the
+  // number reported is decoder throughput, not playback pacing. `cli` forces
+  // the ffmpeg subprocess pipe path for A/B against the in-process decoder.
+  //
+  // `download` keeps the hardware decoder but asks for a packed CPU format, so
+  // the frames come back through av_hwframe_transfer_data and swscale. That is
+  // the A/B that isolates what ZERO-COPY buys: `cli` and DECKBOY_NO_HW_DECODE
+  // both change the decoder as well, so neither can separate "hardware decode
+  // is cheaper" from "not downloading the frame is cheaper".
+  // Zero-copy mode also exercises the GPU slice→texture copy the output
+  // compositor performs per frame advance.
+  // ---------------------------------------------------------------------------
+  static int runDecodeBench(const std::string& mediaPath, double benchSeconds, bool forceCli,
+                            bool forceDownload = false) {
+#if DECKBOY_INPROC_DECODE
+    // Same as App::init — the shared decode device needs a thread-safe D3D11 device.
+    SDL_SetHint(SDL_HINT_RENDER_DIRECT3D_THREADSAFE, "1");
+#endif
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+      std::cout << "decode-bench: SDL init failed: " << SDL_GetError() << '\n';
+      return 1;
+    }
+    SDL_Window* window = SDL_CreateWindow("Deckboy decode bench", 1280, 720, SDL_WINDOW_HIDDEN);
+    SDL_Renderer* renderer = window ? deckboyCreateRenderer(window) : nullptr;
+    if (!renderer) {
+      std::cout << "decode-bench: renderer create failed: " << SDL_GetError() << '\n';
+      SDL_Quit();
+      return 1;
+    }
+    MediaEngine::setInprocDecodeDisabled(forceCli);
+    MediaEngine engine(renderer, nullptr, {}, {}
+#if DECKBOY_INPROC_DECODE
+      , [renderer]() { return deckboy::libav::rendererD3D11Device(renderer); }
+#endif
+    );
+    Cue cue;
+    cue.kind = CueKind::Video;
+    cue.name = "decode-bench";
+    cue.path = mediaPath;
+    cue.duration = benchSeconds + 3600.0;  // never trip end-of-cue
+    cue.fps = 240.0;                       // drain the queue: measure decode, not pacing
+    cue.hasAudio = false;
+    // Asking for a packed CPU format is what a cue with a chroma key or a
+    // colour grade does, and it is the one thing that turns zero-copy off
+    // while leaving the hardware decoder in place. The key is armed with a
+    // colour nothing in the picture matches, so the format is the only thing
+    // that changes -- arming a grade would add its own per-pixel cost to the
+    // measurement and confuse the very comparison being made.
+    if (forceDownload) {
+      cue.chromaKeyEnabled = true;
+      cue.chromaKeyColor = SDL_Color {255, 0, 255, 255};
+      cue.chromaKeyTolerance = 0.0f;
+    }
+    engine.loadCue(&cue, true);
+
+#if DECKBOY_INPROC_DECODE
+    SDL_Texture* gpuBridge = nullptr;
+    void* gpuBridgeTex2D = nullptr;
+    int gpuBridgeW = 0;
+    int gpuBridgeH = 0;
+#endif
+    const Uint64 startMs = SDL_GetTicks();
+    std::uint64_t lastIndex = static_cast<std::uint64_t>(-1);
+    std::uint64_t framesSeen = 0;
+    std::uint64_t gpuFrames = 0;
+    std::uint64_t cpuFrames = 0;
+    while (SDL_GetTicks() - startMs < static_cast<Uint64>(benchSeconds * 1000.0)) {
+      engine.update();
+      const DecodedFrame* frame = engine.currentFrame();
+      if (frame && frame->index != lastIndex) {
+        lastIndex = frame->index;
+        ++framesSeen;
+#if DECKBOY_INPROC_DECODE
+        if (frame->isGpu()) ++gpuFrames; else ++cpuFrames;
+        if (frame->isGpu()) {
+          // Mirror the output compositor's per-advance GPU copy.
+          if (!gpuBridge || gpuBridgeW != frame->width || gpuBridgeH != frame->height) {
+            if (gpuBridge) SDL_DestroyTexture(gpuBridge);
+            deckboy::libav::releaseD3D11Texture(gpuBridgeTex2D);
+            gpuBridgeTex2D = nullptr;
+            gpuBridge = deckboy::libav::createWrappedVideoTexture(
+              renderer, frame->width, frame->height, frame->format, &gpuBridgeTex2D,
+              frameColorspace(*frame));
+            gpuBridgeW = frame->width;
+            gpuBridgeH = frame->height;
+          }
+          if (gpuBridgeTex2D) {
+            deckboy::libav::copyGpuFrameToTexture(*frame, gpuBridgeTex2D);
+          }
+        }
+#endif
+      }
+      SDL_Delay(1);
+    }
+    const double elapsed = static_cast<double>(SDL_GetTicks() - startMs) / 1000.0;
+    const char* mode = "cli-pipe";
+    if (engine.inprocDecodeActive()) {
+      // Asked, not inferred from a device pointer -- macOS zero-copy has no
+      // device to hand back and would have been reported as a CPU decode.
+      mode = engine.activeDecodeZeroCopy() ? "inproc-zerocopy" : "inproc-cpu";
+    }
+    std::cout << "decode-bench: file=" << mediaPath
+              << " mode=" << mode
+              // Which decoder, not just whether a copy happened. On macOS and
+              // Linux "inproc-cpu" now covers both hardware decode with a
+              // download AND genuine software decode, and the difference is
+              // the entire point of running this.
+              << " decoder=" << engine.activeDecodeName()
+              << " frames=" << framesSeen
+              << " gpu-frames=" << gpuFrames
+              << " cpu-frames=" << cpuFrames
+              << " elapsed=" << elapsed
+              << " throughput-fps=" << (elapsed > 0.0 ? framesSeen / elapsed : 0.0)
+              << '\n';
+    engine.stopAll();
+#if DECKBOY_INPROC_DECODE
+    if (gpuBridge) SDL_DestroyTexture(gpuBridge);
+    deckboy::libav::releaseD3D11Texture(gpuBridgeTex2D);
+#endif
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // runMtcCheck — `--mtc-check`
+  //
+  // MIDI timecode arrives as eight nibbles spread over two frames, from a
+  // machine that is not this one, over a cable. Which means the decoder was
+  // only ever exercised by plugging in a timecode sender and watching -- and
+  // until this release, only on Linux, because the decoder lived inside the
+  // ALSA block and the cross-platform MIDI input dropped 0xF1 on the floor.
+  //
+  // core::MtcQuarterFrameDecoder is pure arithmetic on bytes, so it can be
+  // checked on any platform with no interface and no cable, which is what this
+  // does. The encoder half (mtcQuarterFrameBytes) exists for exactly this: send
+  // what a sender would send, and require the same timecode back.
+  // ---------------------------------------------------------------------------
+  static int runMtcCheck() {
+    using deckboy::core::MtcQuarterFrameDecoder;
+    int failures = 0;
+    auto check = [&](const char* what, bool ok, const std::string& detail) {
+      std::cout << (ok ? "  ok   " : "  FAIL ") << what;
+      if (!detail.empty()) std::cout << "  " << detail;
+      std::cout << '\n';
+      if (!ok) ++failures;
+    };
+
+    struct Case { int h, m, s, f, rate; double fps; const char* name; };
+    const Case cases[] = {
+      {0,  0,  0,  0, 0, 24.0,  "24fps    00:00:00:00"},
+      {1,  2,  3,  4, 1, 25.0,  "25fps    01:02:03:04"},
+      {9, 59, 59, 29, 2, 29.97, "29.97fps 09:59:59:29"},
+      {23, 59, 59, 29, 3, 30.0, "30fps    23:59:59:29"},
+      {17, 5, 42, 11, 3, 30.0,  "30fps    17:05:42:11"},
+    };
+    for (const Case& c : cases) {
+      MtcQuarterFrameDecoder decoder;
+      const auto bytes = deckboy::core::mtcQuarterFrameBytes(c.h, c.m, c.s, c.f, c.rate);
+      std::optional<MtcQuarterFrameDecoder::Timecode> got;
+      int reportedEarly = 0;
+      for (std::size_t i = 0; i < bytes.size(); ++i) {
+        got = decoder.feed(bytes[i]);
+        // NOTHING may be reported before the eighth piece. A decoder that
+        // answers early answers with nibbles it has not received -- which on a
+        // sender that starts mid-sequence is a timecode nobody sent.
+        if (got && i + 1 < bytes.size()) ++reportedEarly;
+      }
+      const double want = c.h * 3600.0 + c.m * 60.0 + c.s + (c.f / c.fps);
+      const bool haveIt = got.has_value();
+      const double seconds = haveIt ? got->seconds : -1.0;
+      const double fps = haveIt ? got->fps : -1.0;
+      std::ostringstream detail;
+      detail << std::fixed << std::setprecision(6)
+             << "want " << want << "s @" << std::setprecision(2) << c.fps
+             << "  got " << std::setprecision(6) << seconds
+             << "s @" << std::setprecision(2) << fps;
+      check(c.name,
+            haveIt && reportedEarly == 0 &&
+              std::fabs(seconds - want) < 1e-6 && std::fabs(fps - c.fps) < 0.01,
+            detail.str());
+      if (reportedEarly) {
+        check("  (reported before all eight nibbles arrived)", false, "");
+      }
+    }
+
+    // A sender that is already running: the receiver joins mid-sequence and
+    // must stay silent until it has a whole timecode, then be right.
+    {
+      MtcQuarterFrameDecoder decoder;
+      const auto bytes = deckboy::core::mtcQuarterFrameBytes(2, 3, 4, 5, 1);
+      bool spokeEarly = false;
+      for (std::size_t i = 5; i < bytes.size(); ++i) {   // join at piece five
+        if (decoder.feed(bytes[i])) spokeEarly = true;
+      }
+      std::optional<MtcQuarterFrameDecoder::Timecode> got;
+      for (const int byte : bytes) got = decoder.feed(byte);
+      const double want = 2 * 3600.0 + 3 * 60.0 + 4 + (5 / 25.0);
+      check("joined mid-sequence, silent then correct",
+            !spokeEarly && got && std::fabs(got->seconds - want) < 1e-6,
+            got ? "" : "no timecode after a full set");
+    }
+
+    // A corrupt frame nibble must not become a whole second. The old clamp
+    // allowed frames == ceil(fps), which at 25fps put the time exactly one
+    // second out -- a clamp that admits the one value it exists to stop.
+    {
+      MtcQuarterFrameDecoder decoder;
+      auto bytes = deckboy::core::mtcQuarterFrameBytes(0, 0, 10, 0, 1);
+      bytes[0] = (0 << 4) | 0x0F;        // frames low nibble = 15
+      bytes[1] = (1 << 4) | 0x0F;        // frames high nibble = 15 -> 255
+      std::optional<MtcQuarterFrameDecoder::Timecode> got;
+      for (const int byte : bytes) got = decoder.feed(byte);
+      const bool ok = got && got->seconds >= 10.0 && got->seconds < 11.0;
+      std::ostringstream detail;
+      detail << std::fixed << std::setprecision(6)
+             << "want inside 10.0-11.0s  got " << (got ? got->seconds : -1.0);
+      check("corrupt frame count stays inside its second", ok, detail.str());
+    }
+
+    // Every rate code must map to a rate, and to a DIFFERENT one -- a switch
+    // that falls through to a default looks like it works until the one rate
+    // the show is running on turns out to be the default.
+    {
+      const double rates[4] = {
+        deckboy::core::mtcFpsForRateCode(0), deckboy::core::mtcFpsForRateCode(1),
+        deckboy::core::mtcFpsForRateCode(2), deckboy::core::mtcFpsForRateCode(3),
+      };
+      bool distinct = true;
+      for (int a = 0; a < 4; ++a) {
+        for (int b = a + 1; b < 4; ++b) {
+          if (std::fabs(rates[a] - rates[b]) < 0.001) distinct = false;
+        }
+      }
+      std::ostringstream detail;
+      detail << rates[0] << " " << rates[1] << " " << rates[2] << " " << rates[3];
+      check("four rate codes, four rates", distinct, detail.str());
+    }
+
+    std::cout << "mtc-check: " << failures << " failures\n";
+    return failures == 0 ? 0 : 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // runImageCheck -- `--image-check`
+  //
+  // Does this machine draw the interface's PICTURES, and if not, which step
+  // fails? The same question --font-check asks about text.
+  //
+  // Written for a report no existing check could answer: on macOS Ventura the
+  // whole interface rendered -- text, panels, theme colours -- with every icon
+  // button blank and no splash art. `--self-check` said "ffmpeg: ok" and meant
+  // only that ffmpeg could be RUN; it never asked whether a picture came back.
+  // Meanwhile every image load gives up silently, the way every text draw used
+  // to:
+  //
+  //     auto size = probeStillImageSize(asset.path);
+  //     if (!size) return false;               <- no log, no toast, nothing
+  //
+  // DECKBOY DECODES ITS OWN CHROME BY SPAWNING ffprobe AND THEN ffmpeg, once
+  // per image. That is the one thing the missing pieces have in common and the
+  // thing nothing else in the interface needs, so it is the first thing to
+  // ask about -- on a machine where spawning those helpers fails, every
+  // picture in the interface disappears together and nothing reports it.
+  //
+  // Needs no window and no GPU: it stops at the decoded pixels, which is the
+  // step that was failing, and that makes it runnable over ssh on the machine
+  // that has the fault.
+  // ---------------------------------------------------------------------------
+  static int runImageCheck() {
+    std::cout << "Deckboy image check\n";
+    App app;
+    const fs::path dataDir = Paths::dataDir();
+    std::cout << "  data dir:      " << dataDir.string() << "\n";
+
+    fs::path root = dataDir / kUiPackRelativePathV3;
+    std::string which = "v3";
+    if (!fs::exists(root)) {
+      root = dataDir / kUiPackRelativePathV2;
+      which = "v2 (the v3 pack is not here)";
+    }
+    std::cout << "  ui pack:       " << (fs::exists(root) ? which : "NONE")
+              << "  " << root.string() << "\n";
+    if (!fs::exists(root)) {
+      std::cout << "\n  The pack is missing, so there is nothing to decode.\n";
+      return 1;
+    }
+
+    // Count what is there before decoding anything, so 'present but not
+    // decodable' and 'not present' cannot be confused for each other.
+    int files = 0;
+    std::vector<fs::path> samples;
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(root, ec);
+         it != fs::recursive_directory_iterator(); it.increment(ec)) {
+      if (ec) break;
+      if (!it->is_regular_file(ec)) continue;
+      if (it->path().extension() != ".png") continue;
+      ++files;
+      // One from each of the directories the operator actually sees.
+      const std::string parent = it->path().parent_path().filename().string();
+      if ((parent == "mode_icons" || parent == "toolbar" ||
+           parent == "controls" || parent == "splash") && samples.size() < 4) {
+        bool haveThisDir = false;
+        for (const fs::path& s : samples) {
+          if (s.parent_path().filename().string() == parent) haveThisDir = true;
+        }
+        if (!haveThisDir) samples.push_back(it->path());
+      }
+    }
+    std::cout << "  png files:     " << files << "\n";
+
+    // THE TWO HELPERS, separately. ffprobe gives the size and ffmpeg gives the
+    // pixels; either can be the one that is unreachable, and saying which
+    // turns 'no icons' into something somebody can act on.
+    const bool haveProbe = readAllText({"ffprobe", "-version"}).has_value();
+    const bool haveFfmpeg = readAllText({"ffmpeg", "-version"}).has_value();
+    std::cout << "  ffprobe:       " << (haveProbe ? "ok" : "CANNOT RUN") << "\n";
+    std::cout << "  ffmpeg:        " << (haveFfmpeg ? "ok" : "CANNOT RUN") << "\n";
+
+    int decoded = 0;
+    for (const fs::path& sample : samples) {
+      const std::string label = sample.parent_path().filename().string() +
+                                "/" + sample.filename().string();
+      auto size = app.probeStillImageSize(sample);
+      if (!size) {
+        std::cout << "  FAIL  " << label << "  -- ffprobe read no size\n";
+        continue;
+      }
+      std::vector<std::uint8_t> rgba;
+      if (!app.decodeStillImageRgba(sample, size->first, size->second, rgba)) {
+        std::cout << "  FAIL  " << label << "  -- " << size->first << "x"
+                  << size->second << ", but no pixels came back\n";
+        continue;
+      }
+      ++decoded;
+      std::cout << "  ok    " << label << "  " << size->first << "x"
+                << size->second << ", " << rgba.size() << " bytes\n";
+    }
+
+    std::cout << "\n";
+    if (samples.empty()) {
+      std::cout << "  no sample images found in the pack\n";
+      return 1;
+    }
+    if (decoded == static_cast<int>(samples.size())) {
+      std::cout << "  every sample decoded: the interface's pictures will draw.\n";
+      return 0;
+    }
+    std::cout << "  " << (static_cast<int>(samples.size()) - decoded) << " of "
+              << samples.size() << " did not decode.\n";
+    if (!haveProbe || !haveFfmpeg) {
+      std::cout << "  Deckboy decodes every icon and the splash art by spawning\n"
+                << "  ffprobe and ffmpeg. Neither is reachable here, so every\n"
+                << "  picture in the interface will be missing while the text\n"
+                << "  and panels draw normally.\n";
+    }
+    return 1;
+  }
+
+  // runFontCheck — `--font-check`
+  //
+  // Does this machine actually draw text, and if not, which step fails?
+  //
+  // Written for a bug report that no existing check could answer: on macOS 26
+  // the whole interface rendered -- panels, icons, theme colours, splash art --
+  // with NO TEXT ANYWHERE. `--self-check` said "font-sans: ok" and meant only
+  // that the FILE EXISTS; it never opened it. Meanwhile every text draw in the
+  // app gives up silently:
+  //
+  //     SDL_Surface* surface = TTF_RenderText_Blended(...);
+  //     if (!surface) return;                     <- no log, no toast, nothing
+  //     SDL_Texture* texture = ...FromSurface(...);
+  //     if (!texture) { ...; return; }            <- same
+  //
+  // So an operator sees a blank interface and the app has nothing to say about
+  // it. This walks the whole path in order and names the step that fails, on
+  // any platform, with no window and no GPU -- rendering to a surface needs
+  // neither, which is what makes it runnable over ssh on the machine that has
+  // the fault.
+  // ---------------------------------------------------------------------------
+  static int runFontCheck(const std::string& languageCode = std::string()) {
+    std::cout << "Deckboy font check\n";
+    // Ask for the language BEFORE anything reads the active one, so every
+    // answer below is about the interface the operator actually has rather
+    // than about English.
+    if (!languageCode.empty()) {
+      std::string langError;
+      if (deckboy::core::i18n::setLanguage(languageCode, Paths::dataDir(), langError)) {
+        std::cout << "language requested: " << languageCode << "\n";
+      } else {
+        std::cout << "language requested: " << languageCode
+                  << " -- NOT AVAILABLE (" << langError << ")\n";
+      }
+    }
+    if (!TTF_Init()) {
+      std::cout << "TTF_Init: FAILED -- " << SDL_GetError() << "\n";
+      std::cout << "font-check: 1 failure\n";
+      return 1;
+    }
+    std::cout << "TTF_Init: ok\n";
+
+    // WHAT THE INTERFACE WILL ACTUALLY OPEN, which is not always the default
+    // face. A language that Liberation cannot draw -- CJK, Devanagari, Arabic
+    // -- makes loadFonts replace BOTH the sans and the pixel face with a
+    // system font it found by name. A check that tests only the default would
+    // pass on a machine where the substituted face is the thing that fails,
+    // and the substitution is silent.
+    std::string substituted;
+    {
+      const auto candidates = deckboy::core::i18n::activeFontCandidates();
+      std::cout << "language: " << deckboy::core::i18n::activeCode();
+      if (!candidates.empty()) {
+        std::cout << "  needs one of:";
+        for (const std::string& name : candidates) std::cout << " " << name;
+      }
+      std::cout << "\n";
+      for (const std::string& name : candidates) {
+        std::error_code fec;
+        const fs::path bundled = Paths::dataDir() / "fonts" / name;
+        if (fs::exists(bundled, fec)) { substituted = bundled.string(); break; }
+        const fs::path system = Paths::systemFontDir() / name;
+        if (fs::exists(system, fec)) { substituted = system.string(); break; }
+      }
+      if (!substituted.empty()) {
+        std::cout << "substituted face (sans AND pixel): " << substituted
+                  << "\n";
+      } else if (!candidates.empty()) {
+        std::cout << "substituted face: none found -- the interface keeps the"
+                     " default and this language will draw as boxes" "\n";
+      }
+    }
+
+    int failures = 0;
+
+    // Do these two strings rasterise to the same pixels? That is the question
+    // behind every "can this face draw that script" test here: a face with no
+    // glyphs maps every character to one .notdef box, so two different pieces
+    // of text come out identical. Ink alone cannot tell them apart, because a
+    // box is ink.
+    auto sameRaster = [](TTF_Font* f, const std::string& a,
+                         const std::string& b) -> bool {
+      SDL_Color white {255, 255, 255, 255};
+      SDL_Surface* sa = deckboy::render::shaping::renderText(f, a.c_str(), 0, white);
+      SDL_Surface* sb = deckboy::render::shaping::renderText(f, b.c_str(), 0, white);
+      bool same = false;
+      if (sa && sb && sa->w == sb->w && sa->h == sb->h && sa->w > 0) {
+        same = true;
+        if (SDL_LockSurface(sa)) {
+          if (SDL_LockSurface(sb)) {
+            const auto* details = SDL_GetPixelFormatDetails(sa->format);
+            const std::size_t rowBytes =
+              static_cast<std::size_t>(sa->w) * details->bytes_per_pixel;
+            for (int y = 0; y < sa->h && same; ++y) {
+              const auto* pa = static_cast<const std::uint8_t*>(sa->pixels) +
+                               static_cast<std::size_t>(y) * sa->pitch;
+              const auto* pb = static_cast<const std::uint8_t*>(sb->pixels) +
+                               static_cast<std::size_t>(y) * sb->pitch;
+              if (std::memcmp(pa, pb, rowBytes) != 0) {
+                same = false;
+              }
+            }
+            SDL_UnlockSurface(sb);
+          }
+          SDL_UnlockSurface(sa);
+        }
+      }
+      if (sa) SDL_DestroySurface(sa);
+      if (sb) SDL_DestroySurface(sb);
+      return same;
+    };
+
+    // The distinct characters of a UTF-8 string, each as its own string, so
+    // two of them can be rendered on their own and compared. Single characters
+    // rather than words: two words of the same script can differ in length and
+    // then differ as images whether or not a single glyph exists, which is a
+    // test that always passes.
+    auto distinctCharacters = [](const std::string& s) {
+      std::vector<std::string> out;
+      for (std::size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        std::size_t len = 1;
+        if ((c & 0xF8) == 0xF0)      len = 4;
+        else if ((c & 0xF0) == 0xE0) len = 3;
+        else if ((c & 0xE0) == 0xC0) len = 2;
+        if (i + len > s.size()) break;
+        std::string ch = s.substr(i, len);
+        if (ch != " " &&
+            std::find(out.begin(), out.end(), ch) == out.end()) {
+          out.push_back(ch);
+        }
+        i += len;
+      }
+      return out;
+    };
+
+    // The language names ITSELF in its own script -- `#name 日本語` -- so every
+    // catalogue ships the sample needed to test whether the face that will be
+    // opened for it can actually draw it.
+    const std::vector<std::string> scriptChars =
+      distinctCharacters(deckboy::core::i18n::activeName());
+
+    struct Face { const char* label; Paths::FontName name; int size; };
+    // The sizes the interface actually opens, not a token 16: a face can open
+    // at one size and fail at another, and the one that matters is the one the
+    // app asks for.
+    const Face faces[] = {
+      {"sans  large", Paths::FontName::Sans,  32},
+      {"sans  base",  Paths::FontName::Sans,  21},
+      {"sans  small", Paths::FontName::Sans,  17},
+      {"mono",        Paths::FontName::Mono,  18},
+      {"pixel",       Paths::FontName::Pixel, 24},
+      {"pixel small", Paths::FontName::Pixel, 12},
+    };
+    for (const Face& face : faces) {
+      // The substitution replaces the sans and the pixel faces, never the mono.
+      std::string path = Paths::fontPath(face.name).string();
+      if (!substituted.empty() && face.name != Paths::FontName::Mono) {
+        path = substituted;
+      }
+      std::error_code ec;
+      const bool exists = fs::exists(path, ec);
+      std::cout << "  " << face.label << " @" << face.size << "  " << path << "\n";
+      if (!exists) {
+        std::cout << "      file: MISSING\n";
+        ++failures;
+        continue;
+      }
+      TTF_Font* font = TTF_OpenFont(path.c_str(), static_cast<float>(face.size));
+      if (!font) {
+        std::cout << "      open: FAILED -- " << SDL_GetError() << "\n";
+        ++failures;
+        continue;
+      }
+      // A string with an ascender, a descender and a digit, so a face that
+      // loads but rasterises nothing is caught by the size being wrong rather
+      // than by the call returning null.
+      const char* sample = "Deckboy 1080p";
+      SDL_Color white {255, 255, 255, 255};
+      SDL_Surface* surface = deckboy::render::shaping::renderText(font, sample, 0, white);
+      if (!surface) {
+        std::cout << "      render: FAILED -- " << SDL_GetError() << "\n";
+        ++failures;
+        TTF_CloseFont(font);
+        continue;
+      }
+      const int w = surface->w;
+      const int h = surface->h;
+      // Is there any INK in it? A surface of the right size full of nothing is
+      // the shape this bug would take if the rasteriser stopped working while
+      // the metrics kept coming.
+      long long lit = 0;
+      if (SDL_LockSurface(surface)) {
+        const auto* details = SDL_GetPixelFormatDetails(surface->format);
+        for (int y = 0; y < surface->h && lit == 0; ++y) {
+          const auto* row = static_cast<const std::uint8_t*>(surface->pixels) +
+                            static_cast<std::size_t>(y) * surface->pitch;
+          for (int x = 0; x < surface->w; ++x) {
+            std::uint32_t pixel = 0;
+            std::memcpy(&pixel, row + static_cast<std::size_t>(x) * details->bytes_per_pixel,
+                        details->bytes_per_pixel);
+            std::uint8_t r = 0, g = 0, b = 0, a = 0;
+            SDL_GetRGBA(pixel, details, nullptr, &r, &g, &b, &a);
+            if (a > 8) { ++lit; break; }
+          }
+        }
+        SDL_UnlockSurface(surface);
+      }
+      // AND ARE THEY REAL GLYPHS, or is every character the same empty box?
+      //
+      // Ink is not enough and this check used to stop at ink. A .notdef box --
+      // tofu -- is ink, so a face with no glyphs for the script it is being
+      // asked to draw passed this test cleanly. That is precisely the failure
+      // an operator reports as "no text": boxes are not text.
+      //
+      // So render a SECOND string of the SAME LENGTH and compare the rasters.
+      // Every character of a face that cannot draw this script maps to the same
+      // box with the same advance, so the two come out byte-identical; a face
+      // with real glyphs cannot. The equal length is load-bearing -- comparing
+      // strings of different lengths makes the images differ whether or not a
+      // single glyph exists, which is a test that always passes.
+      const char* sampleAlt = "Zxwvuts 3947k";   // 13 characters, as above
+      const bool tofu = sameRaster(font, sample, sampleAlt);
+
+      // AND THE ACTIVE LANGUAGE'S OWN SCRIPT, which the Latin sample above
+      // cannot speak for. A Japanese interface opens a system face named by
+      // the catalogue; that face draws Latin perfectly well and may still have
+      // nothing for Japanese, and the check would pass while every label on
+      // screen was a box. Two single characters of the language's own name,
+      // rendered alone so their differing widths cannot mask the answer.
+      //
+      // NOT THE MONO FACE. The substitution deliberately leaves it alone, so it
+      // is never asked to draw the interface language -- it carries timecode,
+      // counters and technical readouts, which are ASCII whatever the language.
+      // Testing it here reported a failure on every non-Latin language for a
+      // face that was working exactly as intended, and a diagnostic that cries
+      // wolf is worse than one that says nothing.
+      bool scriptTofu = false;
+      const bool scriptTested =
+        scriptChars.size() >= 2 && face.name != Paths::FontName::Mono;
+      if (scriptTested) {
+        scriptTofu = sameRaster(font, scriptChars[0], scriptChars[1]);
+      }
+
+      // AND WHAT THE INTERFACE MEASURES, which is a different call from the one
+      // that draws. Every label in Deckboy is measured with TTF_GetStringSize
+      // first and then ellipsized or clipped to fit its box. If measuring
+      // disagrees with rasterising -- says a short label is enormous, or fails
+      // outright -- the layout concludes nothing fits and draws nothing, on a
+      // machine whose font is perfectly fine. That failure looks exactly like a
+      // missing font and is not one.
+      int measuredW = -1, measuredH = -1;
+      const bool measured =
+        deckboy::render::shaping::textSize(font, sample, 0, &measuredW, &measuredH);
+      std::cout << "      open ok, rendered " << w << "x" << h
+                << ", ink " << (lit > 0 ? "present" : "NONE")
+                << (tofu ? ", GLYPHS NONE (every character drew the same box)" : "")
+                << (scriptTofu ? ", CANNOT DRAW THIS LANGUAGE (its own name came"
+                                 " out as identical boxes)" : "")
+                << ", measured ";
+      if (!measured) {
+        std::cout << "FAILED -- " << SDL_GetError();
+      } else {
+        std::cout << measuredW << "x" << measuredH;
+        if (measuredW != w || measuredH != h) {
+          std::cout << "  <-- DISAGREES WITH THE RENDER";
+        }
+      }
+      std::cout << "\n";
+      if (w <= 0 || h <= 0 || lit == 0 || tofu || scriptTofu || !measured ||
+          measuredW != w || measuredH != h) {
+        ++failures;
+      }
+      SDL_DestroySurface(surface);
+      TTF_CloseFont(font);
+    }
+    std::cout << "font-check: " << failures << (failures == 1 ? " failure\n" : " failures\n");
+    return failures == 0 ? 0 : 1;
+  }

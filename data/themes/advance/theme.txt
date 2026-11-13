@@ -1,0 +1,20 @@
+# Deckboy Theme: Game Boy Advance
+# Washed-out frontlit LCD with indigo shell Ã¢â‚¬â€ the 32-bit era.
+# All color values are RRGGBBAA hex.
+
+shell_outer	4040B0FF
+shell_inner	C1C1E2FF
+shell_shadow	181870FF
+screen_light	E8E8E0FF
+screen_mid	A8B0A0FF
+screen_dark	506858FF
+screen_deep	182820FF
+screen_ink_soft	607868FF
+button_bezel	5858C0FF
+delete_bezel	B04040FF
+scanline_alpha	10
+
+# Creatures. They live in the empty part of the playlist, never over a
+# control, and they hide the moment an output goes live.
+creature	moth	2
+creature	spider	1

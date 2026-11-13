@@ -1,0 +1,2346 @@
+#name Gàidhlig
+#english Scottish Gaelic
+# Deckboy interface catalogue.
+#
+# english<TAB>translation. A line left out, or left empty, falls through to the
+# English -- so an unfinished catalogue is a partly translated app rather than
+# one with holes in it.
+#
+# Broadcast vocabulary is deliberately left in English where the trade leaves
+# it there: TAKE, PROGRAM, NDI, SRT, OSC.
+NEW	ÙR
+OPEN	FOSGAIL
+SAVE	SÀBHAIL
+SAVE AS	SÀBHAIL MAR
+BUNDLE	PASGAN COMHLA
+IMPORT	IOMPAIR
+SOURCE	TÙS
+PATTERN	PÀTRAN
+SETTINGS	ROGHAINNEAN
+TAKE	TAKE
+STOP	STAD
+REBOOT	ATH-THÒISICH
+BLACKOUT	DUBH
+CLEAR	GLAN
+RECORD	CLÀRAICH
+PLAYLIST	LIOSTA
+TIMELINE	LÌNE-ÙINE
+MEDIA	MEADHANAN
+TRANSPORT	GIÙLAN
+OUTPUT	ÀS-CHUR
+PROGRAM	PROGRAM
+WARP	FIAR
+LIVE	BEÒ
+DECODE	DÌ-CHÒDAICH
+STREAM	SRUTH A-MACH
+System	Siostam
+Audio	Fuaim
+Network	Lìonra
+Video Outputs	Às-chuir bhidio
+About	Mu dheidhinn
+Encoder	Còdaiche
+Screen	Sgrìn
+Geometry	Geoimeatraidh
+Devices	Innealan
+Streaming	Sruthadh
+APPEARANCE	COLTAS
+REMOTE CONTROL	SMACHD ASTAIR
+INTEGRATION ADAPTERS	ADAPTAIREAN FILLIDH
+DISCOVERY / NOTES	LORG / NÒTAICHEAN
+DISPLAY & RASTER	SGRÌN IS RASTAR
+CONNECTED DISPLAYS	SGRÌNICHEAN CEANGAILTE
+EDGE FEATHERING	MAOTHACHADH OIR
+MATTE & OVERLAY	MATA IS TAR-CHÒMHDACH
+AREA OF INTEREST	RAON ÙIDHE
+DEFAULT TRANSITION	TAR-MHÙTHADH BUNAITEACH
+NMC IN & OUT	NMC A-STEACH IS A-MACH
+OSC QUERY / FEEDBACK	CEIST OSC / FREAGAIRT
+CUE INSPECTOR	SGRÙDAIR CUE
+SELECTED CUE	CUE AIR A THAGHADH
+PLAYBACK	CLUICH
+COPY	LETHBHREAC
+PASTE	CUIR ANN
+RESET	ATH-SHUIDHICH
+Theme	Ùrlar
+Language	Cànan
+Resolution	Dùmhlachd
+Orientation	Comhair
+Toggle Fullscreen	Làn-sgrìn
+IDENTIFY	COMHARRAICH
+REGION SIZE	MEUD AN RAOIN
+POSITION	SUIDHEACHADH
+CENTRE	MEADHAN
+FULL	LÀN
+duration	fad
+transition	gluasad
+fade in	crìon a-steach
+fade out	crìon a-mach
+ON	AIR
+OFF	DHETH
+Stopped	Stad
+Playing	A' cluich
+Paused	Na thàmh
+2-UP	2 RI TAOBH
+DONE	DEISEIL
+EDIT	DEASAICH
+HELD	AIR CHUMAIL
+Mode	Modh
+PICK	TAGH
+QUAD	CEITHIR
+Rate	Reat
+STEP	CEUM
+Apply	Cuir an sàs
+CLOSE	DÙIN
+FIXED	SOCRAICHTE
+Help!	Cuidich!
+ORDER	ÒRDUGH
+READY	DEISEIL
+TILES	LEACAN
+VIDEO	BHIDEO
+ALL ON	A H-UILE AIR
+ALWAYS	A-RIAMH
+ANALOG	ANALOGACH
+Buffer	Bufair
+Cancel	Sguir dheth
+Custom	Gnàthaichte
+Device	Uidheam
+Folder	Pasgan
+FORMAT	FÒRMAT
+HIDDEN	FALAICHTE
+Length	Faid
+Mascot	Suaicheantas
+Mirror	Sgàthan
+NATIVE	DÙTHCHASACH
+PRESET	RO-SHUIDHEACHADH
+Sender	Cuiriche
+SUMMED	SUIMICHTE
+TOGGLE	TOGAIL
+12 HOUR	12 UAIR
+24 HOUR	24 UAIR
+ALL OFF	A H-UILE DHETH
+ARRANGE	SUIDHICH
+Channel	Seanail
+CONVERT	IOMPAICH
+DEFAULT	BUN-ROGHAINN
+END CUE	DEIREADH A' CHUE
+Key out	Key a-mach
+LTC out	LTC a-mach
+MISSING	A DHÌTH
+PRESETS	RO-SHUIDHICHIDHEAN
+PROJECT	PRÒISEACT
+RUNNING	A' RUITH
+Send to	Cuir gu
+SHUFFLE	MEASGAICH
+UPDATES	ÙRACHAIDHEAN
+VJ MODE	MODH VJ
+CLOCK ON	GLEOC AIR
+DOWNLOAD	LUCHDAICH A-NUAS
+EXAMPLES	EISIMPLEIREAN
+Mappings	Mapaidhean
+NMC sync	Sioncrones NMC
+PROMPTER	BROSNAICHEAR
+SHOW SDP	SEALL SDP
+TCP port	Port TCP
+UI scale	Sgèile na h-eadar-aghaidh
+vMix API	API vMix
+WATCHING	A' CUMAIL SÙIL
+A/V delay	Dàil A/V
+ASIO outs	Às-chuir ASIO
+BOTH AXES	AN DÀ AISEAL
+CHECK NOW	THOIR SÙIL A-NIS
+CLOCK OFF	GLEOC DHETH
+Creatures	Creutairean
+CUE TOOLS	INNEALAN CUE
+Direction	Comhair
+Freewheel	Cuibhle shaor
+HTTP port	Port HTTP
+Jump mode	Modh leum
+Listen on	Èist air
+OSC Query	Ceist OSC
+OUTPUT ON	ÀS-CHUR AIR
+Panic now	Clisgeadh an-dràsta
+RECORDING	A' CLÀRADH
+REMAINING	AIR FHÀGAIL
+RESET ALL	ATH-SHUIDHICH NA H-UILE
+RUN PANIC	RUITH CLISGEADH
+SHOW FLOW	SRUTH AN TAISBEANAIDH
+TIMERS ON	TÌMEARAN AIR
+WHEN IDLE	NUAIR A BHIOS NA TÀMH
+ADD OUTPUT	CUIR ÀS-CHUR RIS
+BUILT WITH	TOGTE LE
+CANCEL ALL	SGUIR DE NA H-UILE
+colour tag	taga dhath
+copy chain	dèan lethbhreac dhen t-sreath
+Hover tips	Gliocasan
+Input gain	Buannachd a-steach
+Input mono	Ion-chur mono
+live audio	fuaim beò
+Live input	Ion-chur beò
+MIDI input	Ion-chur MIDI
+no picture	gun dealbh
+no preview	gun ro-shealladh
+OPEN SAVED	FOSGAIL FEAR SÀBHAILTE
+OUTPUT OFF	ÀS-CHUR DHETH
+Panic fade	Crìonadh clisgidh
+Tally port	Port tally
+TIMERS OFF	TÌMEARAN DHETH
+Accept from	Gabh bho
+ASIO driver	Draibhear ASIO
+BACK TO TOP	AIR AIS GUN MHULLACH
+CANVAS MODE	MODH CANABHAIS
+CODE SOURCE	TÙS CÒID
+Cue numbers	Àireamhan cue
+Destination	Ceann-uidhe
+Mirror rate	Reat an sgàthain
+no duration	gun fhaid
+NO LIVE CUE	GUN CUE BEÒ
+NO PREVIOUS	GUN FHEAR ROIMHE
+OVERLAY BIN	BIONA TAR-CHÒMHDACH
+paste chain	cuir an t-sreath ann
+Sample rate	Reat samplachaidh
+SENDING OUT	A' CUR A-MACH
+Shift: snap	Shift: greimich
+THIS OUTPUT	AN ÀS-CHUR SEO
+(no matches)	(gun maidse)
+(no subtext)	(gun fho-theacsa)
+add a button	cuir putan ris
+add a window	cuir uinneag ris
+Art-Net port	Port Art-Net
+AUDIO OUTPUT	ÀS-CHUR FUAIME
+Auto restore	Aisig gu fèin-obrachail
+DECKLINK: ON	DECKLINK: AIR
+free running	a' ruith saor
+KEY+FILL: ON	KEY+FILL: AIR
+LISTENING IN	AG ÈISTEACHD
+Miami cursor	Cùrsair Miami
+MIDI CONTROL	SMACHD MIDI
+Mirror state	Sgàthanaich an staid
+NDI KEY: OFF	NDI KEY: DHETH
+NDI KEY: ON	NDI KEY: AIR
+NO PROGRAMME	GUN PHRÒGRAM
+ST 2110: OFF	ST 2110: DHETH
+ST 2110: ON	ST 2110: AIR
+WATCH FOLDER	PASGAN FAIRE
+COMPOSITE CUE	CUE CO-DHÈANTA
+DECKLINK: OFF	DECKLINK: DHETH
+default route	slighe bhunaiteach
+Every adapter	Gach adaptair
+KEY+FILL: OFF	KEY+FILL: DHETH
+LEFT TO RIGHT	BHON CHLÌ GUN DEIS
+MEDIA ENCODER	CÒDAICHEAR MEADHANAN
+MSC device id	ID uidheim MSC
+NEW SHOW FILE	FAIDHLE TAISBEANAIDH ÙR
+No cue loaded	Gun cue air a luchdadh
+nothing taken	cha deach dad a ghabhail
+OPEN PREVIOUS	FOSGAIL AM FEAR ROIMHE
+Output device	Uidheam às-chuir
+Panic profile	Pròifil clisgidh
+Quit Deckboy?	Fàg Deckboy?
+REMOVE OUTPUT	THOIR ÀS-CHUR AIR FALBH
+Sound effects	Èifeachdan fuaime
+Tally address	Seòladh tally
+TOP TO BOTTOM	BHON MHULLACH GUN BHONN
+127 (all-call)	127 (gairm-uile)
+ALL INTERFACES	NA H-UILE EADAR-AGHAIDH
+LOCALHOST ONLY	LOCALHOST A-MHÀIN
+Monitor device	Uidheam sgrùdaidh
+no audio track	gun trac fuaime
+PRESENTER VIEW	SEALLADH AN TAISBEANAICHE
+RECORD TO DISK	CLÀRAICH GUN DIOSG
+STOP RECORDING	SGUIR DEN CHLÀRADH
+STOP STREAMING	SGUIR DEN SRUTHADH
+TALLY TRIGGERS	BRIOSGAIDEAN TALLY
+Device channels	Seanailean an uidheim
+NDI SENDING: ON	CUR NDI: AIR
+NO CUE SELECTED	GUN CUE AIR A THAGHADH
+Output channels	Seanailean às-chuir
+preview pending	ro-shealladh ri thighinn
+START RECORDING	TÒISICH A' CLÀRADH
+START STREAMING	TÒISICH A' SRUTHADH
+(system default)	(bun-roghainn an t-siostaim)
+Check at startup	Thoir sùil aig an toiseach
+Global crossfade	Tar-chrìonadh coitcheann
+Mic to recording	Micreofon gun chlàradh
+Monitor playlist	Sgrùdaich an liosta-chluich
+NDI SENDING: OFF	CUR NDI: DHETH
+no still preview	gun ro-shealladh dealbh
+Pocket 3 / touch	Pocket 3 / suathadh
+SMPTE LTC OUTPUT	ÀS-CHUR SMPTE LTC
+the whole screen	an sgrìn gu lèir
+Check for one now	Thoir sùil a-nis
+INSTALL & RESTART	STÀLAICH IS ATH-THÒISICH
+Registry: NOT SET	Clàr: GUN SUIDHEACHADH
+SAFETY / TIMECODE	SÀBHAILTEACHD / TIMECODE
+Timecode jam sync	Jam sync timecode
+esc or N to cancel	Esc no N airson sgur dheth
+KEYBOARD SHORTCUTS	ATH-GHOIRIDEAN MEUR-CHLÀIR
+loading preview...	a' luchdadh an ro-sheallaidh...
+CONVERT ALL FLAGGED	IOMPAICH NA H-UILE COMHARRAICHTE
+dot-matrix cue deck	deic cue dot-matrix
+HyperDeck emulation	Aithris HyperDeck
+locked to the tempo	glaiste ris an luaths
+VJ mode (two decks)	Modh VJ (dà dheic)
+ADD ANOTHER PLAYLIST	CUIR LIOSTA-CHLUICH EILE RIS
+Companion / OSC port	Port Companion / OSC
+Esc or click to skip	Esc no briog airson leum thairis
+PLAYLIST PREFERENCES	ROGHAINNEAN NA LIOSTA-CHLUICH
+press ENTER to start	brùth ENTER airson tòiseachadh
+ADD A SECOND PLAYLIST	CUIR DARA LIOSTA-CHLUICH RIS
+filmstrip unavailable	stiall film ri fhaotainn
+(empty — import media)	(falamh – ion-phortaich meadhanan)
+Ctrl+D or Esc to close	Ctrl+D no Esc airson dùnadh
+(no notes for this cue)	(gun nòtaichean dhan chue seo)
+Timebase / start / fade	Bunait-ùine / toiseach / crìonadh
+No cues need conversion.	Chan eil cue sam bith ag iarraidh iompachadh.
+CLICK TO SAMPLE KEY COLOR	BRIOG AIRSON DATH KEY A THOGAIL
+normalize loudness (R128)	cunbhalaich an àirde (R128)
+off - all channels silent	dheth – gach seanail sàmhach
+no video lane for this cue	gun lòd bhidio dhan chue seo
+HyperDeck emulation is off.	Tha aithris HyperDeck dheth.
+OWN SCRIPT  (click to edit)	SGRIOBT AGAD FHÈIN  (briog airson deasachadh)
+Theme and operator feedback	Ùrlar is fios-air-ais dhan obraiche
+Discovery and mirrored state	Lorg is staid sgàthanaichte
+FOLLOWING THE LIVE CUE NOTES	A' LEANTAINN NÒTAICHEAN A' CHUE BHEÒ
+Listening on all interfaces.	Ag èisteachd air a h-uile eadar-aghaidh.
+Network-facing runtime notes	Nòtaichean ruith a chì an lìonra
+Hi! Press I to import a clip.	Halò! Brùth I airson clip a thoirt a-steach.
+Global jump and panic behavior	Giùlan leum is clisgidh coitcheann
+Roll when the show cuts to you	Ruith nuair a thig an taisbeanadh thugad
+Choose a cue to inspect it here	Tagh cue airson sùil a thoirt air an seo
+Defaults for newly created cues	Bun-roghainnean do chue ùra
+Device routing for cue playback	Rùtadh uidheam airson cluich cue
+Smaller buffer = lower latency.	Bufair nas lugha = dàil nas lugha.
+Emergency fade and sync behavior	Crìonadh èiginn is giùlan sioncronaidh
+mixed selection: key unavailable	taghadh measgaichte: key ri fhaotainn
+SMPTE ST 2110-20  (EXPERIMENTAL)	SMPTE ST 2110-20  (DEUCHAINNEIL)
+Esc=continue with current session	Esc = lean air an t-seisean seo
+no per-cue settings for this type	gun roghainnean cue dhan t-seòrsa seo
+On stop: remux to an ordinary MP4	Nuair a sguireas: ath-mheasgaich gu MP4 àbhaisteach
+Where RECORD writes the programme	Càite a sgrìobhas RECORD am prògram
+dot-matrix cue deck for live events	deic cue dot-matrix do thachartasan beò
+Listening on localhost (127.0.0.1).	Ag èisteachd air localhost (127.0.0.1).
+three expressions: red, green, blue	trì abairtean: dearg, uaine, gorm
+Transport sync with another machine	Sioncronachadh giùlain le inneal eile
+Add slot sources in the cue inspector	Cuir tùsan ris ann an sgrùdair a' chue
+Ask GitHub; never installs on its own	Faighnich do GitHub; cha stàlaich e leis fhèin
+Import or click a cue in the playlist	Thoir a-steach no briog air cue san liosta
+mixed selection: geometry unavailable	taghadh measgaichte: geomatras ri fhaotainn
+generate timecode for the rig to chase	gin timecode a leanas an t-uidheam
+Lower Third and PIP fire independently	Bidh an Treas Ìochdarach is PiP a' losgadh leotha fhèin
+Panels built for a vMix rig, unchanged	Panailean airson uidheam vMix, gun atharrachadh
+Incoming transport arrives as NMCEVENT.	Thig an giùlan a-steach mar NMCEVENT.
+not in this build - saved with the show	chan eil san togail seo – air a shàbhaladh leis an taisbeanadh
+Find from the playlist, not from a modal	Lorg on liosta-chluich, chan ann bho uinneag
+take or select a cue to open the timeline	gabh no tagh cue airson an loidhne-ama a fhosgladh
+Optional external transport and cue control	Giùlan is smachd cue bhon taobh a-muigh, ma thogras tu
+No previous show file found at startup path.	Cha deach faidhle taisbeanaidh roimhe a lorg.
+Use Ctrl+F or type a cue id/number to search.	Cleachd Ctrl+F no sgrìobh id/àireamh cue airson sireadh.
+Companion / OSC ingress and HyperDeck emulation	Ion-chur Companion / OSC is aithris HyperDeck
+A/V delay holds audio back for lagging displays.	Cumaidh dàil A/V am fuaim air ais do sgrìnean slaodach.
+On stop: leave the crash-resilient file as it is	Nuair a sguireas: fàg am faidhle tuisleach-dhìonach mar a tha e
+same disk as Deckboy - a separate drive is safer	an aon diosg ri Deckboy – tha draibh eile nas sàbhailte
+A step fires one cue on each playlist, all at once.	Losgaidh ceum aon cue air gach liosta-chluich aig an aon àm.
+one expression: the same value in red, green and blue	aon abairt: an aon luach ann an dearg, uaine is gorm
+NDI transport is configured per output in Video Outputs.	Tha giùlan NDI air a shuidheachadh mu gach às-chur ann an Às-chuir Bhidio.
+Sends PLAY / PAUSE / STOP / LOCATE as the transport moves.	Cuiridh e PLAY / PAUSE / STOP / LOCATE mar a ghluaiseas an giùlan.
+OSC subscribe: send /deckboy/subscribe from your controller.	Fo-sgrìobh OSC: cuir /deckboy/subscribe bhon smachdair agad.
+NMC mode / host / port are runtime-configurable for sync work.	Gabhas modh / òstair / port NMC atharrachadh fhad 's a tha e a' ruith.
+Going on air takes the cue. Deckboy never sends the switcher a command.	Bheir dol air an èadhar an cue. Cha chuir Deckboy àithne dhan t-suidsear idir.
+FPS: ON	FPS: AIR
+FPS: OFF	FPS: DHETH
+NMOS: ON	NMOS: AIR
+NMOS: OFF	NMOS: DHETH
+SPOUT: ON	SPOUT: AIR
+SPOUT: OFF	SPOUT: DHETH
+CANVAS: ON	CANABHAS: AIR
+CANVAS: OFF	CANABHAS: DHETH
+10-BIT: ON	10-BIT: AIR
+10-BIT: OFF	10-BIT: DHETH
+EDIT...	DEASAICH...
+FOLDER...	PASGAN...
+ARRANGE...	SUIDHICH...
+ADD FILE...	CUIR FAIDHLE RIS...
+RENUMBER...	ATH-ÀIREAMHAICH...
+set a port...	suidhich port...
+no script	gun sgriobt
++ OUTPUT	+ ÀS-CHUR
+Eddie's Clock	Gleoc Eddie
+Ctrl+/ to close	Ctrl+/ airson dùnadh
+(step lives here)	(tha an ceum an seo)
+No outputs — click + OUTPUT to add one.	Gun às-chur – briog + ÀS-CHUR airson fear a chur ris.
+ATEM, NDI trigger, NMC, MTC, LTC, Art-Net, and Tally/TSL	ATEM, briosgaid NDI, NMC, MTC, LTC, Art-Net is Tally/TSL
+Convert cues Deckboy can't play (or plays poorly) to H.264	Iompaich gu H.264 na cue nach cluich Deckboy gu math
+a button can run any command the network protocol understands	faodaidh putan àithne sam bith a tha am protacal a' tuigsinn a ruith
+ARRANGE PRESENTER  -  drag a panel to move it, a corner to size it	SUIDHICH AN TAISBEANAICHE  -  slaod panail airson a ghluasad, oisean airson a mheudachadh
+4:2:2  8-BIT	4:2:2  8-BIT
+4:2:2  10-BIT	4:2:2  10-BIT
+film	film
+capture again - what is on now	glac a-rithist - na tha a' dol a-nis
+change what it does...	atharraich na nì e...
+decks - Stop deck...	decks - stad an deck...
+decks - Take deck...	decks - TAKE an deck...
+delete step	sguab às an ceum
+delete this button	sguab às am putan seo
+label, command and glyph as text...	leubail, àithne is samhla mar theacsa...
+move down	gluais sìos
+move up	gluais suas
+next colour	an ath dhath
+preset - a new preset from what is on now	preset - preset ùr bho na tha a' dol a-nis
+type a command myself...	sgrìobhaidh mi àithne mi-fhìn...
+type a length in seconds...	sgrìobh fad ann an diogan...
+wait for GO	fuirich ri GO
+what it recalls...	na bheir e air ais...
+when its cues end	nuair a thig na cue aige gu crìch
+AUDIONORM ALL matches the whole playlist at once	Nì AUDIONORM ALL an liosta-cluiche air fad co-ionann aig an aon àm
+back to the in point, not to zero	air ais chun a' phuing a-steach, chan ann gu neoni
+drag to scrub. the audio follows	slaod gus sgrùbadh. leanaidh an fhuaim
+loops between the in and out points, not the file	lùbaidh e eadar na puingean a-steach is a-mach, chan e am faidhle
+(not set)	(gun suidheachadh)
+1.00x  (default 1080p)	1.00x  (bunaiteach 1080p)
+1.25x  (large desktop)	1.25x  (deasg mòr)
+1.50x  (4K desktop)	1.50x  (deasg 4K)
+2.00x  (Pocket 3 / 4K small)	2.00x  (Pocket 3 / 4K beag)
+highest bandwidth	an leud-banda as motha
+lower bandwidth	leud-banda nas lugha
+CD, music rigs	CD, uidheam ciùil
+video standard	inbhe bhidio
+every playlist	gach liosta-cluiche
+None  (no character art)	Chan eil gin  (gun charactar)
+custom size...	meud gnàthaichte...
+Browser URL	URL a' bhrabhsair
+Camera	Camara
+Media File / Still	Faidhle meadhain / dealbh
+RECORD TO FILE	CLÀR GU FAIDHLE
+browser, with sound	brabhsair, le fuaim
+Window	Uinneag
+Desktop	Deasg
+full screen	làn-sgrìn
+DeckLink Output	Às-chur DeckLink
+FFmpeg Stream Output	Às-chur sruth FFmpeg
+NDI Output	Às-chur NDI
+SDL Window Output	Às-chur uinneig SDL
+Spout Output	Às-chur Spout
+DESK	DEASG
+drop a folder in too - it reads the whole tree	slaod pasgan a-steach cuideachd — leughar na fo-phasganan uile
+cameras, windows, NDI, screens - all live sources	camaraichean, uinneagan, NDI, sgrìonaichean — uile nan tùsan beò
+test cards and generators - no file needed	cairtean deuchainn is gineadairean — chan eil feum air faidhle
+space bar does this too, without moving your hand	nì am bàr-spàs seo cuideachd, gun do làmh a ghluasad
+stops the cue. ESC stops EVERYTHING	stadaidh e an cue. Stadaidh ESC A H-UILE RUD
+the safe one: audio and playback keep running	an roghainn shocair: cumaidh am fuaim is an cluich a’ dol
+the thorough one. blackout is the reversible one	an roghainn iomlan. Gabhaidh an dubhadh a thionndadh air ais
+save as makes a new file instead	nì Sàbhail mar fhaidhle ùr
+for a copy before you change something risky	airson lethbhreac mus dèan thu atharrachadh cunnartach
+this is what you carry to the venue	seo na bheir thu leat don ionad
+the show on disk is untouched until you save	fanaidh an taisbeanadh air an diosg mar a tha e gus an sàbhail thu
+per cue. the deck has its own default too	airson gach cue. Tha roghainn bhunaiteach aig an deck cuideachd
+stills hold instead - a fade would dip the frame	fanaidh dealbhan sàmhach suas — dhorchachadh seargadh an dealbh
+the frame stays up. good for slides	fanaidh an dealbh suas. Math airson shleamhnagan
+gain, pan and normalise live in the inspector	tha neart, pan agus gnàthachadh san sgrùdaire
+this clip has no audio track to enable	chan eil traca fuaime sa chriomag seo ri chur air
+Hi! I am Deckboy.	Halò! Is mise Deckboy.
+Press I to import a clip.	Brùth I gus criomag a thoirt a-steach.
+Enter takes a cue live.	Cuiridh Enter cue air an èadhar.
+S stops the live cue.	Stadaidh S an cue a tha air an èadhar.
+The timeline can be resized.	Gabhaidh meud na loidhne-tìm atharrachadh.
+Try a terminal theme in Settings.	Feuch coltas tèirmineil sna Roghainnean.
+RELINK finds media that has moved.	Lorgaidh RELINK meadhanan a chaidh a ghluasad.
+Cues have their own gain and fades.	Tha neart agus seargadh fa leth aig gach cue.
+Trim with Ctrl+I and Ctrl+O.	Suidhich na crìochan le Ctrl+I agus Ctrl+O.
+Ctrl+/ shows every shortcut.	Seallaidh Ctrl+/ gach ath-ghoirid.
+J jumps to the live cue.	Leumaidh J chun a’ chue a tha air an èadhar.
+Normalize matches loudness across cues.	Cuiridh gnàthachadh neart-fuaime nan cue air an aon ìre.
+Esc clears the desk, then the output, then quits.	Glanaidh Esc an deasg, an uair sin an t-às-chur, is dùinidh e mu dheireadh.
+Stream SRT and RTMP at the same time.	Sruthaich SRT agus RTMP aig an aon àm.
+CHECK lists what is broken, before doors.	Seallaidh CHECK na duilgheadasan mus fosgail na dorsan.
+A cue can wait before it starts.	Faodaidh cue feitheamh mus tòisich e.
+A cue can start the next one by itself.	Faodaidh cue an ath fhear a thòiseachadh leis fhèin.
+Disarm a cue and GO steps over it.	Cuir cue à comas agus leumaidh GO thairis air.
+Audition plays a cue to you, not the room.	Cluichidh ro-èisteachd dhut fhèin, chan ann don t-seòmar.
+Preload racks the next cue warm, off air.	Ullaichidh ro-luchdadh an ath chue far an èadhair.
+A target cue starts or stops another cue.	Tòisichidh no stadaidh cue targaid cue eile.
+A fade cue takes a deck down, then stops it.	Lùghdaichidh cue seargaidh deck, is stadaidh e an uair sin.
+A master cue fires one cue on every deck.	Tòisichidh prìomh chue aon chue air gach deck.
+A MIDI cue can tell the lighting desk to go.	Faodaidh cue MIDI òrdugh tòiseachaidh a thoirt don deasg-sholais.
+A network cue speaks OSC, UDP or TCP.	Bruidhinnidh cue lìonra OSC, UDP no TCP.
+A DMX cue fades the house lights on a cue.	Atharraichidh cue DMX solais an talla gu rèidh.
+A script cue runs Deckboy's own commands.	Ruithidh cue sgriobt òrdughan Deckboy fhèin.
+A timecode cue jams LTC to a value.	Suidhichidh cue còd-tìm LTC gu luach.
+Each output can show a different deck.	Faodaidh gach às-chur deck eile a shealltainn.
+The matrix sends audio to any channel.	Cuiridh am maitris fuaim gu seanail sam bith.
+The panel map numbers every LED tile.	Àireamhaichidh mapa nam pannalan gach leac LED.
+Hey!	Ò!
+Quit it!	Sguir dheth!
+Ow. That was rude.	Och. Nach mì-mhodhail thu.
+I am a professional.	’S e proifeiseantach a th’ annam, fhios agad.
+Seriously?	An da-rìribh?
+This is my monitor.	’S e seo an sgrìn agamsa.
+I am telling the operator.	Innsidh mi don ghnìomhaiche.
+All right. Wow.	Uill, uill.
+Right. That does it.	Ceart. Tha sin gu leòr.
+I am leaving. Good luck with the show.	Tha mi a’ falbh. Gur math a thèid leis an taisbeanadh.
+Still here? Me too.	Fhathast an seo? Mise cuideachd.
+Long show, huh.	Cha tig crìoch air a’ chèilidh seo idir.
+I could do this all day. Apparently.	Dhèanainn seo fad an latha. Tha e coltach gum feum mi.
+You have been staring at me for hours.	Tha thu air a bhith a’ coimhead orm fad uairean.
+Has anyone seen a clock?	Am faca duine gleoc, no a bheil e na chadal cuideachd?
+Is it still the same show?	An e an aon taisbeanadh a th’ ann fhathast?
+I'm not tired. You're tired.	Chan eil mise sgìth. Tha thusa sgìth.
+Five more minutes. Then five more.	Còig mionaidean eile. Seadh, seadh.
+A whole day. I need a restart.	Latha slàn. Feumaidh mi ath-thòiseachadh.
+Save the show. Then let me sleep.	Sàbhail an taisbeanadh. Leig leam cadal an uair sin.
+Every pixel of me is tired.	Tha mo phiogsail uile marbh le sgìths.
+Close me. Open me. I'll be fine.	Dùin mi. Fosgail mi. Bidh mi ceart gu leòr.
+
+# What the desk face says when you switch to this language: a local saying, not a translation.
+@hello	Slàinte mhath! Tha mi deiseil.
+Oh hey. It's 4:20. Take it easy.	O, haló. Tha e 4:20. Gabh air do shocair.
+
+# --- tutorials: tools/lesson_strings.py (a whole line each) ---
+HELLO	HALÒ
+Dobar den, skapi. I am Dr. Pixel. Five minutes, and you will run a show. Less, if you listen to me.	Dobar den, skapi. Is mise an Dotair Pixel. Còig mionaidean, agus bidh tu a' ruith taisbeanadh. Nas lugha, ma dh'èisteas tu rium.
+And I'm Professor Video. Synths first, then video. Mostly video now. Press START and we'll patch... we'll begin.	Agus is mise an t-Ollamh Video. Synths an toiseach, an uairsin bhidio. Bhidio sa mhòr-chuid a-nis. Brùth START agus ceanglaidh sinn... tòisichidh sinn.
+TURN THE OUTPUT ON	CUIR AN T-ÀS-CHUR AIR
+Skapi, the screen is empty. Don't keep them waiting. Open MENU and make OUTPUT OFF say OUTPUT ON. Aide!	Skapi, tha an sgrìn falamh. Na cùm iad a' feitheamh. Fosgail CLÀR agus dèan ÀS-CHUR DHETH na ÀS-CHUR AIR. Hajde!
+Lesson one: nothing comes out until you patch the oscillator to the... the OUTPUT. It's video. I know.	Leasan a h-aon: chan eil dad a' tighinn a-mach gus an ceangail thu an t-oscillator ris an... ris an ÀS-CHUR. 'S e bhidio a th' ann. Tha fios agam.
+BRING IN A CLIP	THOIR A-STEACH CLIOP
+Now a picture. Press I and pick a clip from your computer. No clip? SHOW ME, and I lend you one of mine.	A-nis dealbh. Brùth I agus tagh cliop bhon choimpiutair agad. Gun chliop? SHOW ME, agus bheir mi iasad dhut de dh'fhear dhe mo chuid.
+Every clip becomes a cue in the playlist. Like loading a sample. A sample with pictures in it.	Bidh gach cliop na cue anns an liosta-chluich. Mar a bhith a' luchdadh sample. Sample le dealbhan ann.
+TAKE IT LIVE	CUIR AIR AN ADHAR E
+Your clip waits in the playlist. Select it, then TAKE. Or Enter. Confident operators press Enter.	Tha an cliop agad a' feitheamh san liosta-chluich. Tagh e, an uairsin TAKE. No Enter. Brùthaidh luchd-obrachaidh misneachail Enter.
+TAKE is the envelope trigger. The, ah, the GO button. Same thing, it just has pictures in it.	'S e TAKE an t-inneal-tòiseachaidh. Am putan, àh, GO. An aon rud, ach le dealbhan.
+LINE UP THE NEXT ONE	DÈAN AN ATH FHEAR DEISEIL
+Click another cue. It waits, ready, until you say. Only one cue? Import another, or SHOW ME.	Briog air cue eile. Fuirichidh e deiseil gus an can thu. Dìreach aon cue? Iompair fear eile, no SHOW ME.
+Selecting is not playing. The selected one is the next note in the sequence. The next CUE.	Chan e cluich a th' ann an taghadh. 'S e an fhear a thagh thu an ath nòta san t-sreath. An ath CUE.
+CROSSFADE TO IT	CROSSFADE DHA
+Cuts are for amateurs. In the inspector, press + on transition, so it shows a time, not deck. Then TAKE.	Tha gearraidhean cruaidh do neo-dhreuchdaich. Anns an inspector, brùth + air gluasad, gus am bi ùine air seach deck. An uairsin TAKE.
+A crossfade! Portamento, but for pictures. Any time will do. A few more presses and it's a second. Then TAKE.	Crossfade! Portamento, ach airson dealbhan. Nì ùine sam bith a' chùis. Beagan bhrùthaidhean eile agus 's e diog a th' ann. An uairsin TAKE.
+CLEAR THE SCREEN	GLAN AN SGRÌN
+Something goes wrong on stage? Press BLACK, or B. The picture goes. The show keeps running underneath.	Rud a' dol ceàrr air an àrd-ùrlar? Brùth BLACK, no B. Falbhaidh an dealbh. Cumaidh an taisbeanadh a' dol fodha.
+Nothing is lost. Press B again and it comes back. Like the mute on a mixer. Very calming.	Chan eil dad air chall. Brùth B a-rithist agus thig e air ais. Mar am mute air measgaire. Socrach dha-rìribh.
+SAVE THE SHOW	SÀBHAIL AN TAISBEANADH
+Now save. Ctrl+S, or SAVE. Some programs lose your work and then blame you. I would never.	A-nis sàbhail. Ctrl+S, no SÀBHAIL. Bidh cuid de phrògraman a' call d' obrach agus an uairsin gad choireachadh. Cha dèanainn-sa sin gu bràth.
+Save your patch. Your SHOW. Show. This practice one lives in Deckboy's own folder; yours is safe.	Sàbhail am patch agad. An TAISBEANADH agad. Taisbeanadh. Tha am fear-cleachdaidh seo a' fuireach ann am pasgan Deckboy fhèin; tha am fear agad sàbhailte.
+THAT'S A SHOW	SIN TAISBEANADH
+That's a show! Output, cue, TAKE, crossfade, BLACK, save. Nazdrave, skapi. Rakia is on me.	Sin taisbeanadh! Às-chur, cue, TAKE, crossfade, BLACK, sàbhail. Nazdrave, skapi. Tha an rakia orm-sa. Slàinte mhath!
+Class dismissed. The example shows teach layers, titles and effects. MENU > LEARN THE BASICS runs this again.	Tha an clas seachad. Bidh na taisbeanaidhean eisimpleir a' teagasg sreathan, tiotalan agus buadhan. Ruithidh CLÀR > LEARN THE BASICS seo a-rithist.
+*shakes head* That means yes. Bravo.	*crathaidh e a cheann* Tha sin a' ciallachadh tha. Math fhèin.
+Wonderful! Lovely signal flow.	Iongantach! Sruth comharra àlainn.
+Mm. I knew you had it in you.	Mm. Bha fios agam gun robh e annad.
+Yes! Have a gold star. It's a dot.	Seadh! Seo rionnag òir. 'S e dotag a th' ann.
+Ready for the next step? *nods* ...That means no, skapi. The glowing one. It is glowing for you.	Deiseil airson an ath cheum? *crathaidh e a cheann sìos is suas* ...Tha sin a' ciallachadh chan eil, skapi. Am fear a tha a' deàrrsadh. Tha e a' deàrrsadh dhutsa.
+You've clicked everything but the glowing one. Even my oscillators find the glowing one.	Bhriog thu air a h-uile càil ach am fear a tha a' deàrrsadh. Lorgaidh fiù 's na h-oscillators agam am fear a tha a' deàrrsadh.
+stop playback first - the lesson cannot hand a running show back as it was	stad a' chluich an toiseach - chan urrainn don leasan taisbeanadh a tha a' ruith a thoirt air ais mar a bha e
+choose RECOVER or KEEP SAVED first	tagh RECOVER no KEEP SAVED an toiseach
+your show could not be saved, so the lesson has not started. Save it (SAVE AS) and try again	cha b' urrainn an taisbeanadh agad a shàbhaladh, mar sin cha do thòisich an leasan. Sàbhail e (SÀBHAIL MAR) agus feuch a-rithist
+the practice show would not open	cha do dh'fhosgail an taisbeanadh-cleachdaidh
+could not start the practice show	cha b' urrainn an taisbeanadh-cleachdaidh a thòiseachadh
+learn the basics: Esc leaves, and it picks up here next time	learn the basics: fàgaidh Esc, agus leanaidh e bhon seo an ath thuras
+that's the basics - MENU > LESSONS has part two	sin na bunaitean - tha pàirt a dhà aig CLÀR > LESSONS
+tour paused - LEARN THE BASICS picks up where you left off	turas air a chumail - leanaidh LEARN THE BASICS bhon àite far an do sguir thu
+Mirrored screens, skapi. Press any key or click, and Dr. Pixel gives it back.	Sgrìnichean sgàthanaichte, skapi. Brùth iuchair sam bith no briog, agus bheir an Dotair Pixel air ais e.
+Wrong screen, skapi. Press any key or click, and Dr. Pixel gives it back.	An sgrìn cheàrr, skapi. Brùth iuchair sam bith no briog, agus bheir an Dotair Pixel air ais e.
+The other screen went away, skapi. Press any key or click, and Dr. Pixel gives it back.	Dh'fhalbh an sgrìn eile, skapi. Brùth iuchair sam bith no briog, agus bheir an Dotair Pixel air ais e.
+One screen, skapi. Press any key or click, and Dr. Pixel gives it back.	Aon sgrìn, skapi. Brùth iuchair sam bith no briog, agus bheir an Dotair Pixel air ais e.
+The other screen went away, skapi, so the picture came back to this one. I put it in a little window, behind. Plug it back in and the picture goes back on it.	Dh'fhalbh an sgrìn eile, skapi, mar sin thàinig an dealbh air ais chun an tè seo. Chuir mi ann an uinneag bheag e, air a chùlaibh. Ceangail a-rithist i agus thèid an dealbh air ais oirre.
+It ate the desk, skapi. One screen, so the output took all of it. I put it in a little window, behind. A real show gets a second screen.	Dh'ith e an deasg, skapi. Aon sgrìn, mar sin ghabh an t-às-chur e gu lèir. Chuir mi ann an uinneag bheag e, air a chùlaibh. Gheibh fìor thaisbeanadh dàrna sgrìn.
+IT ATE THE DESK	DH'ITH E AN DEASG
+There. The button that says OUTPUT OFF. Make it say ON, skapi.	An siud. Am putan a tha ag ràdh ÀS-CHUR DHETH. Thoir air AIR a ràdh, skapi.
+Nothing is live to fade from, skapi. TAKE one cue first, then pick the other and give it a time.	Chan eil dad air an adhar airson crìonadh bhuaithe, skapi. Dèan TAKE air aon cue an toiseach, an uairsin tagh am fear eile agus thoir ùine dha.
+That was a cut, skapi. Fast, but not a crossfade. Pick the other cue, press + on transition, then TAKE.	B' e gearradh a bha sin, skapi. Luath, ach chan e crossfade. Tagh an cue eile, brùth + air gluasad, an uairsin TAKE.
+A feedback loop! Output patched straight back into the desk. Happens to the best of us. Mostly to me. 1983. We don't talk about 1983.	Lùb ais-bhiadhaidh! Às-chur ceangailte dìreach air ais dhan deasg. Tachraidh e don fheadhainn as fheàrr. Dhòmhsa sa mhòr-chuid. 1983. Cha bhruidhinn sinn mu 1983.
+No more rakia. The rat has a problem.	Gun tuilleadh rakia. Tha duilgheadas aig an radan.
+Nazdrave, skapi! Baba's rakia, from Belogradchik. One glass, for the lesson.	Nazdrave, skapi! Rakia mo sheanmhar, à Belogradchik. Aon ghlainne, airson an leasain. Nas làidire na uisge-beatha, tha eagal orm.
+Is this... is this allowed during a tutorial?	A bheil seo... a bheil seo ceadaichte rè oideachadh?
+*shakes head* That means one more.	*crathaidh e a cheann* Tha sin a' ciallachadh tè eile.
+I love you all. I love the oscillator. I love the OUTPUT. It's video. I know. I KNOW.	Tha gaol agam oirbh uile. Tha gaol agam air an oscillator. Tha gaol agam air an ÀS-CHUR. 'S e bhidio a th' ann. Tha fios agam. THA FIOS AGAM.
+...and the rat took the rakia. Every time, skapi. Every single time.	...agus ghabh an radan an rakia. Gach turas, skapi. Gach aon turas.
+Was that a rat? In a hat? With a pizza?	An e radan a bha siud? Ann an ad? Le piotsa?
+Stop that. I am a serious man.	Sguir dheth sin. 'S e duine dàirire a th' annam.
+Do not tell Dr. Pixel about this.	Na innis seo don Dotair Pixel.
+This never happened. Back to the patch bay.	Cha do thachair seo a-riamh. Air ais chun a' bhùird-cheangail.
+It was the eighties. Everyone had a bow tie.	B' e na h-ochdadan a bh' ann. Bha bogha-amhaich aig a h-uile duine.
+LESSON LIST	LIOSTA LEASANAN
+OPEN EXAMPLE SHOWS	FOSGAIL TAISBEANAIDHEAN EISIMPLEIR
+EXIT (Esc)	FÀG (Esc)
+Taking it on the road	An taisbeanadh air an rathad
+CHECK a show before it travels, fix what it finds, and bundle it with its media.	CHECK taisbeanadh mus fhalbh e, càraich na lorgas e, agus cuir ann am pasgan e còmhla ris na meadhanan aige.
+Effects, oscillators and colour	Buadhan, oscillators agus dath
+An effect, a ~ on its knob, and the colour picker.	Buaidh, ~ air a' phutan aice, agus an taghadair dhathan.
+The art school crit, with Mr. Salty	Breithneachadh na sgoile-ealain, le Mr. Salty
+Patterns, synths and Draw	Pàtranan, synths agus Draw
+A test pattern, the video synth, and drawing on the picture, saved as a still.	Dealbh deuchainn, an synth bhidio, agus tarraing air an dealbh, air a shàbhaladh mar dhealbh-stad.
+The telestrator booth, with Coach Marv	Bothan an telestrator, le Coach Marv
+Masks	Masgaichean
+A heart from the library, the pen, invert and feather.	Cridhe bhon leabharlann, am peann, tionndaidh agus maothaich.
+The Signal Files: redact the evidence	Faidhlichean nan Comharran: falaich an fhianais
+Warp, blend and slices	Lùbadh, measgachadh agus sliseagan
+A corner pin, two soft edges, then three slices in the Screens window.	Prìne oisein, dà oir bhog, an uairsin trì sliseagan ann an uinneag Screens.
+The haunted lighthouse, with Keeper Rook	An taigh-solais tathaichte, le Fear-gleidhidh Rook
+GO from anywhere	GO bho àite sam bith
+Cue numbers, GOTO, a hotkey, and where Companion, MIDI and OSC come in.	Àireamhan cue, GOTO, iuchair-ghoirid, agus far an tig Companion, MIDI agus OSC a-steach.
+The game show, with Donna Wheel	An taisbeanadh-geama, le Donna Wheel
+Words on screen	Faclan air an sgrìn
+A Lower Third with a name on it, then a title card with a key-green backdrop.	Bann-ainm le ainm air, an uairsin cairt-tiotail le cùl-raon uaine iuchrach.
+The kaiju weather report, with June O'Neil	Aimsir nan kaiju, le June O'Neil
+Keeping time	A' cumail na h-ùine
+A stage timer counting down, held, and a presenter view for the person on stage.	Uaireadair àrd-ùrlair a' cunntadh sìos, air a chumail, agus sealladh preasantair don neach air an àrd-ùrlar.
+A grand day out, with Wallis and Grommet	Latha mòr a-muigh, le Wallis agus Grommet
+Two playlists and TAKE ALL	Dà liosta-chluich agus TAKE ALL
+A second playlist as a layer, and TAKE ALL so two things change on one beat.	Dara liosta mar shreath, agus TAKE ALL gus an atharraich dà rud air aon bhuille.
+The magic show, with Turnip Top	An taisbeanadh draoidheachd, le Turnip Top
+When it goes wrong	Nuair a thèid e ceàrr
+BLACK against PANIC, and getting a show back.	BLACK an aghaidh PANIC, agus taisbeanadh fhaighinn air ais.
+The cooking show, with Chef Bork	An taisbeanadh còcaireachd, le Chef Bork
+Presets	Ro-shuidheachaidhean
+Capture a look on a DASH button, change everything, and get it back with one press.	Glac coltas air putan DASH, atharraich a h-uile càil, agus faigh air ais e le aon bhrùthadh.
+Transitions	Gluasadan
+The styles beyond the crossfade: an iris, a shatter, and their times.	Na stoidhlichean seachad air a' chrossfade: iris, bristeadh, agus na h-amannan aca.
+The space-opera trailer, with Optimus Primetime	Tràilear opara-fànais, le Optimus Primetime
+Sound	Fuaim
+An audio effect on a cue, a bend that damages it beautifully, and where the patch lives.	Buaidh fuaim air cue, lùb a mhillis gu brèagha e, agus far a bheil am patch a' fuireach.
+The robot DJs, with Deft Funk	Na DJs inneil, le Deft Funk
+Reading the scopes	A' leughadh nan scopes
+The waveform, the vectorscope, and false colour: is the glow real, or just too bright?	An cruth-tonn, an vectorscope, agus dath meallta: a bheil an deàrrsadh fìor, no dìreach ro shoilleir?
+The Signal Files: is the glow on the horizon a craft?	Faidhlichean nan Comharran: an e soitheach a th' anns an deàrrsadh air fàire?
+Out of the building	A-mach às an togalach
+Where NDI, SDI and ST 2110 live, and NDI switched on where this computer has it.	Far a bheil NDI, SDI agus ST 2110 a' fuireach, agus NDI air far a bheil e aig a' choimpiutair seo.
+The webcam as a controller, as a game. Five rounds, a high score.	An camara-lìn mar smachd, mar gheama. Còig cuairtean, sgòr as àirde.
+A handheld, and bugs	Inneal-làimhe, agus biastagan
+The multiview	An ioma-shealladh
+Windows, the ... menu, what each one shows, layouts, and tally.	Uinneagan, an clàr ..., na tha gach tè a' sealltainn, cruthan, agus tally.
+Mystery on the starship Cathode, with Lt. Haila and Ensign Jinkley	Dìomhaireachd air an long-fànais Cathode, le Lt. Haila agus Ensign Jinkley
+DR. PIXEL: Two playlists: Deckboy becomes SUPER DECKBOY. It earned it, skapi.	DR. PIXEL: Dà liosta-chluich: bidh Deckboy na SUPER DECKBOY. Choisinn e e, skapi.
+PROF. VIDEO: It evolved! My oscillators never got a fanfare.	PROF. VIDEO: Dh'atharraich e! Cha d' fhuair na h-oscillators agam fanfare a-riamh.
+DR. PIXEL: SUPER DECKBOY! Every show deserves one. Bravo.	DR. PIXEL: SUPER DECKBOY! Tha fear airidh air gach taisbeanadh. Math fhèin.
+PROF. VIDEO: The power-up! More playlists, more layers, more super.	PROF. VIDEO: An cumhachd! Barrachd liostaichean, barrachd sreathan, barrachd super.
+Intro video (left on the office PC)	Bhidio fosglaidh (air fhàgail air coimpiutair na h-oifis)
+ON THE ROAD	AIR AN RATHAD
+A show you built here, skapi, running on a laptop somewhere else tonight. Press START.	Taisbeanadh a thog thu an seo, skapi, a' ruith a-nochd air laptop ann an àite eile. Brùth START.
+Before it travels: check it, fix it, bundle it.	Mus fhalbh e: dearbh e, càraich e, pasgain e.
+See CHECK in the top bar? It only appears when something is wrong. Press it.	Am faic thu CHECK sa bhàr gu h-àrd? Cha nochd e ach nuair a tha rudeigin ceàrr. Brùth e.
+It lists everything a show would trip over: missing files, empty cues, unreachable outputs.	Bidh e a' liostadh a h-uile càil a thuislicheadh taisbeanadh: faidhlichean a dhìth, cues falamh, às-chuir nach ruigear.
+FIX IT	CÀRAICH E
+The intro video is on another computer. Select it and delete it, or RELINK it if you have the file.	Tha a' bhidio fosglaidh air coimpiutair eile. Tagh i agus sguab às i, no dèan RELINK oirre ma tha am faidhle agad.
+Fix it at home, where it is easy. Not at the venue, where it is not.	Càraich aig an taigh e, far a bheil e furasta. Chan ann aig an ionad, far nach eil.
+BUNDLE IT	PASGAIN E
+Press BUNDLE and choose where: a USB stick, a shared folder. The show and all its media, together.	Brùth PASGAN COMHLA agus tagh càite: maide USB, pasgan co-roinnte. An taisbeanadh agus a h-uile meadhan aige, còmhla.
+The copy finds its media beside it, wherever the folder goes.	Lorgaidh an lethbhreac na meadhanan aige ri thaobh, ge be càite an tèid am pasgan.
+SAFE TRAVELS	TURAS MATH
+Checked, fixed, bundled. On the other machine, open the bundle's show: everything is where it should be.	Air a dhearbhadh, air a chàradh, air a phasgadh. Air an inneal eile, fosgail taisbeanadh a' phasgain: tha a h-uile càil far am bu chòir.
+A show file is only text, so it travels light. The media is the heavy part.	Chan eil ann am faidhle taisbeanaidh ach teacsa, mar sin siubhlaidh e aotrom. 'S iad na meadhanan am pàirt trom.
+Student work no. 4 (untitled)	Obair oileanaich àir. 4 (gun tiotal)
+THE CRIT	AM BREITHNEACHADH
+An art school, skapi. One student, one picture, one critic who has seen it all. Press START.	Sgoil-ealain, skapi. Aon oileanach, aon dealbh, aon bhreitheamh a chunnaic a h-uile càil. Brùth START.
+Effects change a picture; an oscillator keeps changing it. The critic only likes the second kind.	Atharraichidh buadhan dealbh; cumaidh oscillator ga atharrachadh. Cha toil leis a' bhreitheamh ach an dàrna seòrsa.
+A grey square on beige. I have seen this at every graduate show since 1987.	Ceàrnag ghlas air beige. Chunna mi seo aig a h-uile taisbeanadh ceumnachaidh bho 1987.
+AN EFFECT	BUAIDH
+In the inspector's EFFECTS section, + adds one. Edges is a good start: it draws the outlines.	Ann an earrann EFFECTS an inspector, cuiridh + tè ris. 'S e deagh thoiseach a th' ann an Edges: tarraingidh e na h-oirean.
+There are dozens. Every one runs on the CPU in a few milliseconds. Mostly.	Tha dusanan ann. Ruithidh gach tè air a' CPU ann am beagan mhilidiogan. Mar as trice.
+Take a risk! Bad art is fine. Boring art is a crime.	Gabh cothrom! Tha droch ealain ceart gu leòr. 'S e eucoir a th' ann an ealain leamh.
+A ~ ON ITS KNOB	~ AIR A' PHUTAN
+Every control with a ~ beside it can follow an oscillator. Press one. The knob starts to breathe.	Faodaidh smachd sam bith le ~ ri thaobh oscillator a leantainn. Brùth fear. Tòisichidh am putan ag anail.
+A low-frequency oscillator: slow, so the eye can follow it. A quarter of a hertz is a four-second breath.	Oscillator tricead ìosal: slaodach, gus an lean an t-sùil e. 'S e anail ceithir diogan a th' ann an cairteal de hertz.
+Now it MOVES. Okay. Okay. I'm listening.	A-nis tha e a' GLUASAD. Ceart. Ceart. Tha mi ag èisteachd.
+A COLOUR OF ITS OWN	DATH DHA FHÈIN
+Effects that draw a colour, like Edges' line, have a colour chip. It opens the picker: a wheel, typed names, or a colour off the screen.	Tha clach-dhatha aig buadhan a tharraingeas dath, mar loidhne Edges. Fosglaidh i an taghadair: cuibhle, ainmean sgrìobhte, no dath bhon sgrìn.
+Every colour has a name somewhere. Mine is 'oscilloscope green'. Nobody else uses it.	Tha ainm aig gach dath am badeigin. 'S e 'uaine osgailoscop' a th' air mo fhear-sa. Chan eil duine eile ga chleachdadh.
+That colour is doing something. I don't know what. I love it.	Tha an dath sin a' dèanamh rudeigin. Chan eil fhios agam dè. Is toil leam e.
+THE VERDICT	AM BREITH
+An effect, a ~ and a colour. The critic is crying, skapi. Good crying, I think.	Buaidh, ~ agus dath. Tha am breitheamh a' caoineadh, skapi. Deagh chaoineadh, tha mi a' smaoineachadh.
+Stack a few. Each has its own ~ on every knob. That is how a look becomes a performance.	Cuir grunn air muin a chèile. Tha a ~ fhèin aig gach fear air gach putan. Sin mar a bhios coltas na chluich.
+It's still a square. But it's YOUR square. Post it.	'S e ceàrnag a th' ann fhathast. Ach 's e DO cheàrnag-sa a th' ann. Cuir suas e.
+THE TELESTRATOR BOOTH	BOTHAN AN TELESTRATOR
+Coach Marv explains sport by drawing circles on it. Once he circled the sun. Ten minutes, skapi.	Mìnichidh Coach Marv spòrs le bhith a' tarraing chearcall air. Aon turas chuir e cearcall timcheall na grèine. Deich mionaidean, skapi.
+Tonight: test patterns, the video synth, and drawing on the picture. Press START.	A-nochd: dealbhan deuchainn, an synth bhidio, agus tarraing air an dealbh. Brùth START.
+Get me a picture and a pen. BOOM.	Thoir dhomh dealbh agus peann. BÙM.
+A TEST PATTERN	DEALBH DEUCHAINN
+Line up the screens BEFORE the show. Not during. I learned this in Plovdiv.	Cuir na sgrìnichean ann an loidhne MUS tòisich an taisbeanadh. Chan ann rè. Dh'ionnsaich mi sin ann am Plovdiv.
+Every desk needs a test pattern. PATTERN adds Pocket Test: checked against real meters.	Feumaidh gach deasg dealbh deuchainn. Cuiridh DEALBH DEUCHAINN Pocket Test ris: air a dhearbhadh le fìor mheidheachan.
+A VIDEO SYNTH	SYNTH BHIDIO
+He says 'no camera needed' like it is a feature. It is a feature.	Tha e ag ràdh 'chan fheum thu camara' mar gur e feart a th' ann. 'S e feart a th' ann.
+My favourite. SOURCE, then Video Synth: oscillators, mirrors and feedback. No camera needed.	Am fear as fheàrr leam. TÙS, an uairsin Video Synth: oscillators, sgàthanan agus ais-bhiadhadh. Chan fheum thu camara.
+TAKE THE SYNTH	TAKE AN SYNTH
+Select it, then TAKE. Confident operators press Enter.	Tagh e, an uairsin TAKE. Brùthaidh luchd-obrachaidh misneachail Enter.
+That's our replay. Every replay needs a pundit.	Sin an ath-chluich againn. Feumaidh gach ath-chluich eòlaiche.
+Now here's a replay. And here's a guy. And BOOM, he's in it.	Seo an ath-chluich. Seo an cluicheadair. Agus BÙM, tha e innte.
+A SECOND PLAYLIST	DARA LIOSTA-CHLUICH
+Ink goes on top, on its own layer. Press the + at the end of the playlist tabs.	Thèid inc air a' mhullach, air an t-sreath aice fhèin. Brùth an + aig deireadh tabaichean nan liostaichean-cluich.
+A second playlist is a layer over the first. Like a second oscillator, mixed on top.	'S e sreath os cionn a' chiad tè a th' ann an dara liosta. Mar dhara oscillator, measgaichte air a' mhullach.
+A DRAW CUE	CUE DRAW
+In the new playlist: SOURCE, then Draw. Clear everywhere you have not drawn.	Anns an liosta ùr: TÙS, an uairsin Draw. Trìd-shoilleir anns gach àite far nach do tharraing thu.
+A Draw cue is transparent outside the ink, so the synth shows through.	Tha cue Draw trìd-shoilleir taobh a-muigh na h-inc, mar sin chithear an synth troimhe.
+TAKE THE INK	TAKE AN INC
+Select the Draw cue and TAKE it. Two playlists, two layers, one picture.	Tagh an cue Draw agus dèan TAKE. Dà liosta, dà shreath, aon dealbh.
+Now both are live: the synth underneath, the ink on top.	A-nis tha an dithis air an adhar: an synth fodha, an inc air a' mhullach.
+CIRCLE SOMETHING	CUIR CEARCALL TIMCHEALL AIR RUDEIGIN
+Press DRAW in the inspector, then draw on the programme monitor. Mouse, or a pen if you have one.	Brùth DRAW san inspector, an uairsin tarraing air monitor a' phrògraim. Le luchag, no peann ma tha fear agad.
+A pen's pressure makes the line thicker. A mouse presses at one strength. Like me.	Nì cuideam a' phinn an loidhne nas tiugha. Brùthaidh luchag an-còmhnaidh aig an aon neart. Coltach rium-sa.
+Circle him! No, bigger. BOOM. That's a cloud. Fine. Circle the cloud.	Cuir cearcall timcheall air! Chan e, nas motha. BÙM. Sin sgòth. Ceart. Cuir cearcall timcheall air an sgòth.
+SAVE A STILL	SÀBHAIL DEALBH-STAD
+SAVE STILL keeps the drawing as a picture with a clear background, and adds it to the playlist.	Cumaidh SAVE STILL an dealbh mar ìomhaigh le cùl-raon trìd-shoilleir, agus cuiridh e ris an liosta i.
+For next week's show. Coach Marv will want the cloud again.	Airson prògram na h-ath sheachdain. Bidh Coach Marv ag iarraidh an sgòth a-rithist.
+THAT'S THE BOOTH	SIN AM BOTHAN
+Patterns, the synth, a layer, ink, a still. Nazdrave, skapi.	Pàtranan, an synth, sreath, inc, dealbh-stad. Nazdrave, skapi.
+Try Replay in the Draw section: it draws your lines back the way you drew them.	Feuch Replay ann an earrann Draw: tarraingidh e na loidhnichean agad a-rithist mar a tharraing thu iad.
+Same time next week. Bring a bigger pen. And a turducken.	An aon àm an ath sheachdain. Thoir peann nas motha leat. Agus mias cranachan.
+Saucer photo (CLASSIFIED)	Dealbh an t-sàsair (DÌOMHAIR)
+THE SIGNAL FILES	FAIDHLICHEAN NAN COMHARRAN
+The Bureau of Unexplained Signals. Two agents, one photo, and it must not air. Press START.	Biùro nan Comharran gun Mhìneachadh. Dà àidseant, aon dealbh, agus chan fhaod e a dhol air an adhar. Brùth START.
+Masks cut a picture into shapes. Tonight we cut evidence.	Gearraidh masgaichean dealbh na chumaidhean. A-nochd gearraidh sinn fianais.
+That's a craft, Brandt. Look at the lights. I want to believe.	'S e soitheach a th' ann, Brandt. Coimhead air na solais. Tha mi airson creidsinn.
+A MASK FROM THE LIBRARY	MASG BHON LEABHARLANN
+In the inspector's MASK section: mask, then 'new heart'. Any shape will do. The heart is funnier.	Ann an earrann MASK an inspector: mask, an uairsin 'new heart'. Nì cumadh sam bith a' chùis. Tha an cridhe nas èibhinne.
+The library has circles, stars, hearts. Each one is points you can move.	Tha cearcaill, rionnagan, cridheachan san leabharlann. 'S e puingean a ghabhas gluasad a th' anns gach fear.
+A heart, Hollis? The Bureau redacts with black bars.	Cridhe, Hollis? Bidh am Biùro a' falach le bàraichean dubha.
+THE PEN	AM PEANN
+Set the tool to pen, then click round the saucer on the monitor. Click the first point to close it.	Cuir an t-inneal gu peann, an uairsin briog timcheall an t-sàsair air a' mhonitor. Briog air a' chiad phuing airson a dhùnadh.
+Click for corners, drag for curves. The way the Bezier brothers intended.	Briog airson oiseanan, slaod airson lùban. Mar a bha bràithrean Bézier an dùil.
+Draw round it carefully. It might be watching.	Tarraing timcheall air gu faiceallach. Dh'fhaodadh e a bhith a' coimhead.
+INVERT	TIONNDAIDH
+Invert keeps the outside and cuts the inside. The saucer goes. The sky stays.	Cumaidh tionndadh an taobh a-muigh agus gearraidh e an taobh a-staigh. Falbhaidh an sàsar. Fanaidh an speur.
+The same shape, the other way round. Very useful. Slightly spooky.	An aon chumadh, an taobh eile. Glè fheumail. Beagan uamhasach.
+Hollis, there's a heart-shaped hole in the sky.	Hollis, tha toll ann an cumadh cridhe san speur.
+FEATHER	MAOTHAICH
+Feather softens the edge, so nobody sees the cut. Press + on feather.	Maothaichidh e an oir, gus nach fhaic duine an gearradh. Brùth + air feather.
+A hard edge says 'someone was here'. A soft one says nothing at all.	Tha oir chruaidh ag ràdh 'bha cuideigin an seo'. Chan eil oir bhog ag ràdh dad.
+They'll never know.	Chan fhaigh iad a-mach gu bràth.
+CASE CLOSED	CÙIS DÙINTE
+A library shape, the pen, invert and feather. The Bureau thanks you. The Bureau was never here.	Cumadh leabharlainn, am peann, tionndadh agus maothachadh. Tha am Biùro taingeil. Cha robh am Biùro an seo a-riamh.
+Masks also go on a layer, an output, or its matte: MASK ON chooses. And every control takes a ~.	Thèid masgaichean cuideachd air sreath, às-chur, no am matte aige: taghaidh MASK ON. Agus gabhaidh gach smachd ~.
+The truth is in the waveform, Hollis. Next time, the scopes.	Tha an fhìrinn anns a' chruth-tonn, Hollis. An ath thuras, na scopes.
+The ghost	An taibhse
+THE HAUNTED LIGHTHOUSE	AN TAIGH-SOLAIS TATHAICHTE
+A lighthouse, a ghost, and a keeper who has been alone with the lamp far too long. Press START.	Taigh-solais, taibhse, agus fear-gleidhidh a bha leis fhèin leis an lampa fada ro fhada. Brùth START.
+Projection mapping: bending the picture to fit the building. Warp, blend, slices.	Mapadh teilgidh: a' lùbadh an deilbh gus am freagair e an togalach. Lùbadh, measgachadh, sliseagan.
+Ye'll be wanting the ghost on the windows. Mind the lamp. The lamp is MINE.	Bidh sibh ag iarraidh an taibhse air na h-uinneagan, a bheil? Thoiribh an aire don lampa. Is ann LEAMSA a tha an lampa.
+THE OUTPUT'S GEOMETRY	GEOIMEATRAIDH AN ÀS-CHUIR
+MENU, then Video Outputs, then Geometry. Where an output's shape lives.	CLÀR, an uairsin Às-chuir bhidio, an uairsin Geoimeatraidh. Sin far a bheil cumadh às-chuir a' fuireach.
+Geometry: the projector-menu word for 'what shape is the picture'.	Geoimeatraidh: facal clàr-taice an teilgeadair airson 'dè an cumadh a th' air an dealbh'.
+PIN A CORNER	PRÌNICH OISEAN
+Press warp edit, then drag a corner on the programme monitor. The window is not square. Neither is the keeper.	Brùth warp edit, an uairsin slaod oisean air monitor a' phrògraim. Chan eil an uinneag ceàrnagach. No am fear-gleidhidh.
+A corner pin moves the four corners. Perspective keeps the lines straight, like a real window.	Gluaisidh prìne oisein na ceithir oiseanan. Cumaidh sealladh-farsaing na loidhnichean dìreach, mar fhìor uinneag.
+LEFT! Ye call that a corner? I've seen straighter gulls.	CLÌ! An e sin oisean dhutsa? Chunna mi faoileagan nas dìriche.
+TWO SOFT EDGES	DÀ OIR BHOG
+Back in Geometry: edge blend, + on the left and + on the right.	Air ais ann an Geoimeatraidh: edge blend, + air an taobh chlì agus + air an taobh dheas.
+Two projectors overlap; each fades its edge so the overlap is not twice as bright.	Tha dà theilgeadair a' dol thairis air a chèile; crìonaidh gach fear an oir aige gus nach bi an tar-laighe dà uair cho soilleir.
+THE SCREENS WINDOW	UINNEAG SCREENS
+Geometry, SLICES, open. The Screens window is where slices are cut and placed.	Geoimeatraidh, SLICES, fosgail. 'S e uinneag Screens far an tèid sliseagan a ghearradh agus a chur.
+A slice is a piece of the picture, put anywhere on the output.	'S e pìos den dealbh a th' ann an sliseag, air a chur àite sam bith air an às-chur.
+THREE SLICES	TRÌ SLISEAGAN
+In the Screens window, + SLICE three times, and drag each crop to a third of the picture.	Ann an uinneag Screens, + SLICE trì tursan, agus slaod gach bàrr gu trian den dealbh.
+Three windows, three slices: left, middle and right of one picture.	Trì uinneagan, trì sliseagan: clì, meadhan agus deas aon deilbh.
+Three windows. The lamp gets the middle one. The lamp ALWAYS gets the middle one.	Trì uinneagan. Gheibh an lampa am fear meadhanach. Gheibh an lampa an-còmhnaidh am fear meadhanach.
+THE GHOST IS PLEASED	THA AN TAIBHSE TOILICHTE
+Warp, blend, slices. The keeper will finally sleep. The gulls will not.	Lùbadh, measgachadh, sliseagan. Caidlidh am fear-gleidhidh mu dheireadh. Cha chaidil na faoileagan.
+Slices have their own warp and mesh in the Screens window. And a ~ on the place and the turn.	Tha an lùbadh agus an lìon aca fhèin aig sliseagan ann an uinneag Screens. Agus ~ air an àite agus an tionndadh.
+Ye did alright, lad. Now get away from the lamp.	Rinn thu ceart gu leòr, a bhalaich. A-nis, falbh bhon lampa.
+THE GAME SHOW	AN TAISBEANADH-GEAMA
+A game show, skapi. Three contestants, one buzzer, and cues that fire from anywhere. Press START.	Taisbeanadh-geama, skapi. Triùir farpaiseach, aon bhuzzer, agus cues a loisgeas bho àite sam bith. Brùth START.
+Cue numbers, hotkeys, and GO from other machines. Like a sequencer you can play from any key.	Àireamhan cue, iuchraichean-goirid, agus GO bho innealan eile. Mar sequencer a chluicheas tu bho iuchair sam bith.
+Welcome to the show! Let's spin that wheel!	Fàilte chun an taisbeanaidh! Cuiribh car air a' chuibhle sin!
+A CUE NUMBER	ÀIREAMH CUE
+Contestant 3 is selected. In the inspector's metadata, give it a cue number: 3.	Tha Farpaiseach 3 air a thaghadh. Ann am metadata an inspector, thoir àireamh cue dha: 3.
+Theatre numbers its cues. Q3, Q3.5, Q12A. Deckboy reads them all.	Bidh an taigh-cluiche a' cur àireamhan air na cues aige. Q3, Q3.5, Q12A. Leughaidh Deckboy iad uile.
+I'd like to buy a number, please.	Bu toil leam àireamh a cheannach, ma 's e do thoil e.
+GO TO IT	THEIRIG ANN
+Ctrl+G, type the number, Enter. It goes live wherever the list happens to be standing.	Ctrl+G, sgrìobh an àireamh, Enter. Thèid e air an adhar, ge be càite a bheil an liosta na seasamh.
+GOTO. The fastest way across a long list. Faster than scrolling. Much faster than me.	GOTO. An t-slighe as luaithe ann an liosta fhada. Nas luaithe na sgroladh. Fada nas luaithe na mise.
+And the number is... three!	Agus 's e an àireamh... trì!
+A BUZZER	BUZZER
+Contestant 1 is selected. In TRIGGERS, press key, then F5. That key now fires this cue.	Tha Farpaiseach 1 air a thaghadh. Ann an TRIGGERS, brùth key, an uairsin F5. Loisgidh an iuchair sin an cue seo a-nis.
+F1 to F10, F12, or the number pad. Each one, a buzzer.	F1 gu F10, F12, no am pada àireamhan. Gach tè, buzzer.
+Every contestant gets a buzzer.	Gheibh gach farpaiseach buzzer.
+BUZZ IN	BRÙTH AM BUZZER!
+Press the key. The cue fires, wherever the list is standing.	Brùth an iuchair. Loisgidh an cue, ge be càite a bheil an liosta na seasamh.
+No mouse, no list, no looking. Just the key.	Gun luchag, gun liosta, gun choimhead. Dìreach an iuchair.
+Buzz! We have a winner!	Bzzz! Tha buannaiche againn!
+FROM ANYWHERE	BHO ÀITE SAM BITH
+Companion, a MIDI note, an OSC message: MENU, then Network, says where each one connects.	Companion, nòta MIDI, teachdaireachd OSC: CLÀR, an uairsin Lìonra, ag innse càite an ceangail gach fear.
+A Stream Deck in the next room can press GO. So can a keyboard synth. I prefer the synth.	Faodaidh Stream Deck san ath rùm GO a bhrùthadh. Agus synth meur-chlàir cuideachd. B' fheàrr leam an synth.
+And for our viewers at home: you can play along too.	Agus don luchd-coimhead aig an taigh: faodaidh sibhse cluich cuideachd.
+THAT'S OUR SHOW	SIN AN TAISBEANADH AGAINN
+Numbers, GOTO, a buzzer, and GO from anywhere. You are a game show now, skapi.	Àireamhan, GOTO, buzzer, agus GO bho àite sam bith. Is e taisbeanadh-geama a th' annad a-nis, skapi.
+A cue can have a key, a MIDI note and an OSC address at once. Belt, braces and a second belt.	Faodaidh iuchair, nòta MIDI agus seòladh OSC a bhith aig cue aig an aon àm. Crios, galasaichean agus dara crios.
+Goodnight, everybody! Keep spinning!	Oidhche mhath, a h-uile duine! Cumaibh a' cur car!
+Weather map	Mapa na h-aimsir
+THE KAIJU WEATHER	AIMSIR NAN KAIJU
+Channel 6 weather, skapi. A map, a presenter, and a very large lizard. Press START.	Aimsir Seanal 6, skapi. Mapa, preasantair, agus dearc-luachrach glè mhòr. Uisge, a rèir coltais, mar as àbhaist. Brùth START.
+Words on screen: Lower Thirds, text, and backdrops.	Faclan air an sgrìn: bannan-ainm, teacsa, agus cùl-raointean.
+I'm June O'Neil, and nothing about this forecast is normal.	Is mise June O'Neil, agus chan eil dad mun ro-aithris seo àbhaisteach.
+A LAYER FOR WORDS	SREATH AIRSON FHACLAN
+Words go on their own layer: press the + at the end of the playlist tabs.	Thèid faclan air an t-sreath aca fhèin: brùth an + aig deireadh tabaichean nan liostaichean-cluich.
+A second playlist is a layer over the map. The lizard stays underneath. Mostly.	'S e sreath os cionn a' mhapa a th' anns an dara liosta. Fanaidh an dearc-luachrach fodha. Mar as trice.
+Words on top. Always on top.	Faclan air a' mhullach. An-còmhnaidh air a' mhullach.
+A LOWER THIRD	BANN-AINM
+In the new playlist: SOURCE, then Lower Third.	Anns an liosta ùr: TÙS, an uairsin Lower Third.
+A name and a title, low on the screen, out of the lizard's way.	Ainm agus tiotal, ìosal air an sgrìn, a-mach à rathad an dearc-luachrach.
+HER NAME	AN T-AINM AICE
+In the inspector, title: type the presenter's name. The second line is her job.	Anns an inspector, title: sgrìobh ainm a' phreasantair. 'S e an dàrna loidhne an obair aice.
+Spelling counts. The audience reads it at the speed of light.	Tha litreachadh cudromach. Leughaidh an luchd-èisteachd aig astar an t-solais.
+Spell it right. Last week it said 'Jane O'Meal'.	Litrich e ceart. An t-seachdain sa chaidh bha 'June Nic Néill' air.
+ON AIR	AIR AN ADHAR
+TAKE the Lower Third. Her name slides in over the map.	TAKE am bann-ainm. Sleamhnaichidh an t-ainm aice a-steach thairis air a' mhapa.
+Two layers live: the weather, and the words on top of it.	Dà shreath air an adhar: an aimsir, agus na faclan os a cionn.
+Thank you. Now, about that lizard...	Tapadh leat. A-nis, mun dearc-luachrach sin...
+BREAKING NEWS	NAIDHEACHDAN ÙRA
+SOURCE, then Text: a title card. Then its backdrop chip: key green, for the vision mixer to key out.	TÙS, an uairsin Text: cairt-tiotail. An uairsin a clach cùl-raoin: uaine iuchrach, gus an iuchraich am measgaire e a-mach.
+A backdrop fills behind the words. Key green or key blue, and the mixer does the rest.	Lìonaidh cùl-raon air cùl nam facal. Uaine no gorm iuchrach, agus nì am measgaire an còrr.
+Breaking news: it's standing on the five-day forecast.	Naidheachd ùr: tha e na sheasamh air an ro-aithris còig latha.
+BREAKING: KAIJU	NAIDHEACHD: KAIJU
+BACK TO YOU	AIR AIS GUN STIÙIDIO
+A Lower Third, a name, a title card, a backdrop. The lizard has left the studio, skapi.	Bann-ainm, ainm, cairt-tiotail, cùl-raon. Dh'fhàg an dearc-luachrach an stiùidio, skapi.
+Lower Thirds can wait, slide and leave on their own. Their section has every setting.	Faodaidh bannan-ainm feitheamh, sleamhnachadh agus falbh leotha fhèin. Tha a h-uile roghainn san earrann aca.
+That's the weather. Back to you, guys. Run.	Sin an aimsir. Air ais gun stiùidio. Ruithibh. Agus thoiribh cleòc-uisge.
+A GRAND DAY OUT	LATHA MÒR A-MUIGH
+A rocket built in a basement, skapi, and an inventor who wants cheese. Press START.	Rocaid air a togail ann an seilear, skapi, agus innleadair a tha ag iarraidh càise. Brùth START.
+Stage timers: countdowns, clocks, and a presenter view for the person on stage.	Uaireadairean àrd-ùrlair: cunntaidhean sìos, gleocan, agus sealladh preasantair don neach air an àrd-ùrlar.
+Cheese, Grommet! The moon's made of it. We'll need a countdown.	Càise, Grommet! Tha a' ghealach air a dèanamh dheth. Feumaidh sinn cunntadh sìos.
+A COUNTDOWN	CUNNTADH SÌOS
+SOURCE, then Stage Timer. A clock that counts down, in big friendly numbers.	TÙS, an uairsin Stage Timer. Gleoc a chunntas air ais, ann an àireamhan mòra càirdeil.
+Its colours change as it runs out: white, amber, red. Like a VU meter for time.	Atharraichidh na dathan aige mar a ruitheas an ùine a-mach: geal, òmar, dearg. Mar VU meter airson ùine.
+*raises an eyebrow*	*togaidh e mala*
+LIFT OFF	ÈIRIDH
+Select the timer and TAKE it. The countdown starts.	Tagh an t-uaireadair agus dèan TAKE. Tòisichidh an cunntadh.
+Past zero it keeps going, counting the overtime. Very honest. Slightly rude.	Às dèidh neoni cumaidh e a' dol, a' cunntadh an ùine a bharrachd. Glè onarach. Beagan mì-mhodhail.
+Ten... nine... ooh, I do love a countdown.	Deich... naoi... ò, is toil leam cunntadh sìos.
+HOLD!	CUM!
+Something's loose! Space holds the countdown. The clock shows it is held.	Tha rudeigin fuasgailte! Cumaidh am bàr-fànais an cunntadh. Seallaidh an gleoc gu bheil e air a chumail.
+A hold is not a stop. Space again, and it carries on from where it was.	Chan e stad a th' ann an cumail. Am bàr-fànais a-rithist, agus leanaidh e bhon àite far an robh e.
+*holds up a spanner*	*togaidh e spanair*
+THE PILOT'S VIEW	SEALLADH A' PHÌOLOTA
+MENU, Video Outputs: make an output's type PRESENTER. The person on stage gets the timer, the next cue and their notes.	CLÀR, Às-chuir bhidio: dèan seòrsa às-chuir PRESENTER. Gheibh an neach air an àrd-ùrlar an t-uaireadair, an ath cue agus na notaichean aca.
+A presenter view is an output like any other. Point it at the confidence monitor.	'S e às-chur coltach ri gin eile a th' ann an sealladh preasantair. Stiùir e chun a' mhonitor misneachd.
+So the pilot can see the time. The pilot is Grommet.	Gus am faic am pìolota an uair. 'S e Grommet am pìolota.
+TO THE MOON	CHUN NA GEALAICH
+A countdown, a hold, and a view for the pilot. Nazdrave, skapi. Bring crackers.	Cunntadh sìos, cumail, agus sealladh don phìolota. Nazdrave, skapi. Thoir briosgaidean.
+Timers can also count up, or show the time of day. Their section has the lot.	Faodaidh uaireadairean cunntadh suas cuideachd, no uair an latha a shealltainn. Tha a h-uile càil san earrann aca.
+A grand day out, Grommet! Pass the crackers.	Latha mòr a-muigh, Grommet! Sìn thugam na briosgaidean.
+The trunk (closed)	A' chiste (dùinte)
+The trunk (open)	A' chiste (fosgailte)
+THE MAGIC SHOW	AN TAISBEANADH DRAOIDHEACHD
+A magic show, skapi. A trunk, a prop, and one beat where everything changes at once. Press START.	Taisbeanadh draoidheachd, skapi. Ciste, prop, agus aon bhuille far an atharraich a h-uile càil aig an aon àm. Brùth START.
+Two playlists are two layers. TAKE ALL changes both together.	'S e dà shreath a th' ann an dà liosta. Atharraichidh TAKE ALL an dà chuid còmhla.
+Every trick needs two things happening at once. And a rubber chicken.	Feumaidh gach cleas dà rud a' tachairt aig an aon àm. Agus cearc rubair.
+The prop goes on its own layer. Press the + at the end of the playlist tabs.	Thèid am prop air an t-sreath aige fhèin. Brùth an + aig deireadh tabaichean nan liostaichean-cluich.
+Playlist 2 sits on top of playlist 1. Like a transparency on an overhead projector.	Suidhidh liosta 2 air muin liosta 1. Mar thrìd-shoilleireachd air teilgeadair os-cionn.
+Nothing up my sleeve. Everything in my trunk.	Chan eil dad nam mhuinchill. A h-uile càil nam chiste.
+THE PROP	AM PROP
+In the new playlist, add anything: PATTERN will do. That is the prop.	Anns an liosta ùr, cuir rud sam bith ris: nì DEALBH DEUCHAINN a' chùis. Sin am prop.
+Whatever it is, it will appear the instant the trunk opens.	Ge be dè a th' ann, nochdaidh e an dearbh mhionaid a dh'fhosglas a' chiste.
+Is it a rubber chicken? It's always a rubber chicken.	An e cearc rubair a th' ann? 'S e cearc rubair a th' ann an-còmhnaidh.
+The prop (rubber chicken)	Am prop (cearc rubair)
+Select 'The trunk (open)' in playlist 1 and the prop in playlist 2. Then TAKE ALL: both on one beat.	Tagh 'A' chiste (fosgailte)' ann an liosta 1 agus am prop ann an liosta 2. An uairsin TAKE ALL: an dà chuid air aon bhuille.
+One press, every playlist's selected cue. The audience never sees the seam.	Aon bhrùthadh, cue taghte gach liosta. Chan fhaic an luchd-èisteachd an t-uaim gu bràth.
+Ta-daaa! ...Hold for applause. Hold. Hold.	Ta-daaa! ...Fuirich airson bualadh-bhasan. Fuirich. Fuirich.
+THE PRESTIGE	AN CLEAS MÒR
+Two layers, one beat. Every playlist has its own opacity and can sit on any output. Nazdrave, skapi.	Dà shreath, aon bhuille. Tha a neo-thrìd-shoilleireachd fhèin aig gach liosta agus faodaidh i suidhe air às-chur sam bith. Nazdrave, skapi.
+A magician never reveals. A playlist never minds being revealed.	Cha nochd draoidh a dhìomhaireachd gu bràth. Chan eil diofar aig liosta ma tha i air a nochdadh.
+Thank you! I'm here all week! The chicken is here forever.	Tapadh leibh! Tha mi an seo fad na seachdain! Tha a' chearc an seo gu bràth.
+The kitchen (on fire)	An cidsin (na theine)
+A lovely souffle	Soufflé brèagha
+THE COOKING SHOW	AN TAISBEANADH CÒCAIREACHD
+A cooking show, skapi. Live. Everything is on fire. Press START.	Taisbeanadh còcaireachd, skapi. Beò. Tha a h-uile càil na theine. Brùth START.
+BLACK hides the picture and keeps the show running. PANIC stops everything. Know which you need.	Falaichidh BLACK an dealbh agus cumaidh e an taisbeanadh a' ruith. Stadaidh PANIC a h-uile càil. Biodh fios agad dè am fear a dh'fheumas tu.
+Bork bork! Hurdy-flurdy, de kitchen is fire-a-flurdy!	Bork bork! Hurdy-flurdy, tha an cidsin na theine-flurdy!
+The audience must not see this. Press BLACK, or B.	Chan fhaod an luchd-èisteachd seo fhaicinn. Brùth BLACK, no B.
+The picture goes. The cue keeps playing underneath, ready to come back.	Falbhaidh an dealbh. Cumaidh an cue a' cluich fodha, deiseil airson tilleadh.
+Bork? Bork. Oh, de picture is gun.	Bork? Bork. O, tha an dealbh air falbh.
+AND BACK	AGUS AIR AIS
+The fire's out. Press B again: the picture comes back, still running.	Tha an teine às. Brùth B a-rithist: thig an dealbh air ais, fhathast a' ruith.
+Nothing was lost. A mute on a mixer, for pictures.	Cha deach dad air chall. Mute air measgaire, airson dealbhan.
+Ta-da! Still cookin'!	Ta-da! Fhathast a' còcaireachd!
+Worse: MENU, System, the SAFETY card: PANIC. Everything stops, the way the panic setting says.	Nas miosa: CLÀR, Siostam, a' chairt SAFETY: PANIC. Stadaidh a h-uile càil, mar a tha roghainn a' chlisgidh ag ràdh.
+PANIC is the big red button. Use it when BLACK is not enough. Then breathe.	'S e PANIC am putan mòr dearg. Cleachd e nuair nach leòr BLACK. An uairsin tarraing anail.
+GET IT BACK	FAIGH AIR AIS E
+Close MENU, select the souffle, and TAKE it. The show is back on.	Dùin CLÀR, tagh an soufflé, agus dèan TAKE. Tha an taisbeanadh a' dol a-rithist.
+After a panic, the show is still there. Pick up where you meant to be.	Às dèidh clisgeadh, tha an taisbeanadh ann fhathast. Lean ort bhon àite far an robh thu airson a bhith.
+Voila! De souffle, he is risen!	Voilà! An soufflé, dh'èirich e!
+BON APPETIT	BIADH MATH DHUIBH
+BLACK to hide, PANIC to stop, TAKE to come back. You will survive any kitchen, skapi.	BLACK airson falach, PANIC airson stad, TAKE airson tilleadh. Mairidh tu beò ann an cidsin sam bith, skapi.
+The panic setting chooses what PANIC does: fade out, cut, or just the outputs.	Taghaidh roghainn a' chlisgidh na nì PANIC: crìonadh a-mach, gearradh, no dìreach na h-às-chuir.
+Bork bork bork! Goodnight!	Bork bork bork! Oidhche mhath!
+Look one	Coltas a h-aon
+Look two	Coltas a dhà
+Presets, skapi. A whole look, remembered, and back with one button. Press START.	Ro-shuidheachaidhean, skapi. Coltas slàn, air a chuimhneachadh, agus air ais le aon phutan. Brùth START.
+Like the patch memory on a synth: store, then recall.	Mar chuimhne patch air synth: stòir, an uairsin gairm air ais.
+THE DASH	AN DASH
+Press DASH: buttons of your own, for anything at all.	Brùth DASH: putanan agad fhèin, airson rud sam bith.
+Ctrl+D also works. Very fast. Very professional.	Obraichidh Ctrl+D cuideachd. Glè luath. Glè phroifeiseanta.
+A PRESET BUTTON	PUTAN RO-SHUIDHEACHAIDH
+Press +, then 'preset - a new preset from what is on now'. The button remembers this look.	Brùth +, an uairsin 'preset - a new preset from what is on now'. Cuimhnichidh am putan an coltas seo.
+Store. Like saving the patch before the drummer leans on the synth.	Stòir. Mar a bhith a' sàbhaladh a' phatch mus lùb an drumair air an synth.
+CHANGE EVERYTHING	ATHARRAICH A H-UILE CÀIL
+Close the DASH (Esc), then select Look two and TAKE it. A different look.	Dùin an DASH (Esc), an uairsin tagh Coltas a dhà agus dèan TAKE. Coltas eile.
+Change it all. Don't worry. It remembers.	Atharraich a h-uile càil. Na gabh dragh. Cuimhnichidh e.
+ONE PRESS	AON BHRÙTHADH
+Open the DASH and press your preset button. The first look comes back.	Fosgail an DASH agus brùth am putan ro-shuidheachaidh agad. Thig a' chiad choltas air ais.
+Recall. The patch memory, returning. Beautiful.	Gairm air ais. Cuimhne a' phatch, a' tilleadh. Brèagha.
+A look, stored and recalled. A preset can keep cues, positions, effects, levels and routing; its button's menu chooses which.	Coltas, air a stòradh is air a ghairm air ais. Cumaidh ro-shuidheachadh cues, àiteachan, buadhan, ìrean agus slighean; taghaidh clàr a' phutain aige cò iad.
+And a DASH button can run any command at all. Any. Even the exciting ones.	Agus faodaidh putan DASH àithne sam bith a ruith. Gin sam bith. Fiù 's an fheadhainn inntinneach.
+Opening titles	Tiotalan fosglaidh
+The planet	Am planaid
+The battle	Am blàr
+THE TRAILER	AN TRÀILEAR
+A space-opera trailer, skapi. A narrator with a very deep voice and opinions about transitions. Press START.	Tràilear opara-fànais, skapi. Aithrisiche le guth glè dhomhainn agus beachdan air gluasadan. Brùth START.
+A transition is how one cue becomes the next. There are far more than the crossfade.	'S e gluasad mar a thèid aon cue gu bhith na ath fhear. Tha fada a bharrachd ann na crossfade.
+In a galaxy of content... one operator... must choose a transition.	Ann an reul-chrios de shusbaint... feumaidh aon neach-obrachaidh... gluasad a thaghadh.
+A STYLE	STOIDHLE
+'The planet' is selected. In the inspector, its transition style: choose iris.	Tha 'Am planaid' air a thaghadh. Anns an inspector, stoidhle a ghluasaid: tagh iris.
+Pushes, wipes, iris, dip to white. Even a portal. I wrote half of them. On a Tuesday.	Putaidhean, sguabaidhean, iris, dup gu geal. Fiù 's portal. Sgrìobh mi an leth dhiubh. Air Dimàirt.
+The planet deserves... a dramatic entrance.	Tha am planaid airidh air... teachd a-steach drùidhteach.
+A TIME	ÙINE
+Give it a time: + on transition until it says a second or more.	Thoir ùine dha: + air gluasad gus an can e diog no barrachd.
+No time, no transition. A style needs a duration to do anything at all.	Gun ùine, gun ghluasad. Feumaidh stoidhle fad-ùine gus dad a dhèanamh.
+ROLL IT	RUITH E
+TAKE the planet. Watch it arrive.	TAKE am planaid. Coimhead air a' tighinn.
+The transition belongs to the cue arriving. Each cue chooses its own entrance.	Buinidh an gluasad don cue a tha a' tighinn. Taghaidh gach cue a theachd a-steach fhèin.
+Autobots... roll the transition.	Autobots... ruith an gluasad.
+THE BATTLE	AM BLÀR
+Now 'The battle': choose shatter, give it a time, and TAKE it.	A-nis 'Am blàr': tagh shatter, thoir ùine dha, agus dèan TAKE.
+Shatter drops the old picture like a pane of glass. Please do not do this at a funeral.	Leigidh bristeadh an seann dealbh sìos mar phana glainne. Feuch nach dèan sibh seo aig tòrradh.
+Transform... and shatter out!	Cruth-atharraich... agus bris a-mach!
+IN CINEMAS NOW	ANNS NA TAIGHEAN-DEALBH A-NIS
+A style, a time, and two very dramatic entrances. Nazdrave, skapi.	Stoidhle, ùine, agus dà theachd a-steach glè dhrùidhteach. Nazdrave, skapi.
+A playlist has a default style too, for every cue that does not choose its own.	Tha stoidhle bhunaiteach aig liosta cuideachd, airson gach cue nach tagh a fhèin.
+Coming soon... to a desk near you.	A' tighinn a dh'aithghearr... gu deasg faisg ort.
+The beat	A' bhuille
+THE ROBOT DJS	NA DJS INNEIL
+Two robot DJs, skapi. They do not talk. Their helmets do. Press START.	Dà DJ inneil, skapi. Cha bhruidhinn iad. Bruidhnidh na clogaidean aca. Brùth START.
+Every cue has its own chain of audio effects, and some of them break the sound on purpose.	Tha a sreath fhèin de bhuadhan fuaim aig gach cue, agus brisidh cuid dhiubh am fuaim a dh'aona ghnothach.
+> HELLO. WE ARE HERE TO FIX YOUR MIX.	> HALÒ. THA SINN AN SEO GUS DO MHEASGACHADH A CHÀRADH.
+The beat is selected. In its AUDIO EFFECTS section, + adds one. Try the delay.	Tha a' bhuille air a taghadh. Anns an earrann AUDIO EFFECTS aice, cuiridh + tè ris. Feuch an delay.
+Delay, reverb, filters, a compressor. Amount always means 'less of this'.	Dàil, ath-fhuaim, sìoltachain, compressor. Tha meud an-còmhnaidh a' ciallachadh 'nas lugha de seo'.
+> ONE MORE TIME. WITH ECHO. ECHO. ECHO.	> AON TURAS EILE. LE MAC-TALLA. MAC-TALLA. MAC-TALLA.
+A BEND	LÙB
+Add a second: a bend, like crush. It damages the sound the way a broken file would.	Cuir dàrna tè ris: lùb, mar crush. Millidh e am fuaim mar a dhèanadh faidhle briste.
+The bends are my favourite. Like a tape left in the sun. On purpose.	'S iad na lùban an fheadhainn as fheàrr leam. Mar theip air fhàgail sa ghrèin. A dh'aona ghnothach.
+> HARDER. BETTER. CRUNCHIER. LOUDER.	> NAS CRUAIDHE. NAS FHEÀRR. NAS CRIOSLAICHE. NAS ÀIRDE.
+THE PATCH	AM PATCH
+MENU, then Audio: where each playlist's sound goes, and the patch for named outputs.	CLÀR, an uairsin Fuaim: far an tèid fuaim gach liosta, agus am patch airson às-chuir ainmichte.
+Speakers, monitors, an in-ear for the drummer. The patch sends each its own.	Labhradairean, monitors, in-ear don drumair. Cuiridh am patch a chuid fhèin gu gach fear.
+> AROUND THE MIX. AROUND THE MIX. AROUND THE MIX.	> TIMCHEALL A' MHEASGACHAIDH. TIMCHEALL A' MHEASGACHAIDH. TIMCHEALL A' MHEASGACHAIDH.
+An effect, a bend and the patch. The robots approve, skapi. I think. Their faces are helmets.	Buaidh, lùb agus am patch. Tha na h-innealan riaraichte, skapi. Tha mi a' smaoineachadh. 'S e clogaidean a th' anns na h-aodainn aca.
+Every audio effect can follow a ~ too, even Motion. Wave at the delay. It's wonderful.	Faodaidh gach buaidh fuaim ~ a leantainn cuideachd, fiù 's Motion. Smèid ris an dàil. Tha e iongantach.
+> THANK YOU. GOOD NIGHT. WE ARE ROBOTS.	> TAPADH LEIBH. OIDHCHE MHATH. 'S E ROBOTAN A TH' ANNAINN.
+The glow on the horizon (evidence #2)	An deàrrsadh air fàire (fianais àir. 2)
+EVIDENCE #2	FIANAIS ÀIR. 2
+The Bureau again, skapi. A glow on the horizon, and two agents who disagree about it. Press START.	Am Biùro a-rithist, skapi. Deàrrsadh air fàire, agus dà àidseant nach eil ag aontachadh mu dheidhinn. Brùth START.
+The scopes measure a picture: brightness, colour, levels. Numbers, not opinions.	Tomhaisidh na scopes dealbh: soilleireachd, dath, ìrean. Àireamhan, chan e beachdan.
+It's them, Brandt. It's a craft. Look how it glows.	'S iad-san a th' ann, Brandt. 'S e soitheach a th' ann. Coimhead mar a tha e a' deàrrsadh.
+THE REAL SIGNAL	AN FHÌOR CHOMHARRA
+The scopes read only what really goes out, never a preview. Turn the output on: MENU, Video Outputs, OUTPUT OFF.	Cha leugh na scopes ach na thèid a-mach dha-rìribh, ro-shealladh gu bràth. Cuir an t-às-chur air: CLÀR, Às-chuir bhidio, ÀS-CHUR DHETH.
+Measuring a scaled-down preview would be measuring a photocopy. We measure the original.	Bhiodh tomhas ro-shealladh air a lùghdachadh mar tomhas lethbhreac. Tomhaisidh sinne an tùsail.
+Chain of evidence, Hollis. The real signal or nothing.	Sreath na fianais, Hollis. An fhìor chomharra no dad.
+THE SCOPES	NA SCOPES
+Close MENU. Above the monitor, the PROGRAM button: press it until it says SCOPES or BOTH.	Dùin CLÀR. Os cionn a' mhonitor, am putan PROGRAM: brùth e gus an can e SCOPES no BOTH.
+Both shows the picture and its scopes side by side. Very civilised.	Seallaidh BOTH an dealbh agus na scopes aige taobh ri taobh. Glè shìobhalta.
+Let the scopes decide, Hollis.	Leig leis na scopes co-dhùnadh, Hollis.
+THE WAVEFORM	AN CRUTH-TONN
+Click the waveform to make it big. Bright things sit high, dark things low, left to right as in the picture.	Briog air a' chruth-tonn gus a dhèanamh mòr. Suidhidh rudan soilleir àrd, rudan dorcha ìosal, clì gu deas mar san dealbh.
+The glow is that spike near the top. Very bright. Bright is not the same as alien.	'S e an deàrrsadh am binnean sin faisg air a' mhullach. Glè shoilleir. Chan ionann soilleir agus coigreach.
+Look at the peak. Nothing a streetlight couldn't do.	Coimhead air a' bhinnean. Dad nach b' urrainn do lampa-sràide a dhèanamh.
+THE VECTORSCOPE	AN VECTORSCOPE
+Click it again to go back, then click the vectorscope: colour round a circle. Saturated runs to the edge.	Briog air a-rithist gus tilleadh, an uairsin briog air an vectorscope: dath timcheall air cearcall. Ruithidh làn-dath chun na h-oire.
+Magenta, far out by the rim. A strong colour. Strong is not illegal. Yet.	Magenta, fada a-muigh ris an oir. Dath làidir. Chan eil làidir mì-laghail. Fhathast.
+It's off the chart, Brandt! Literally off the chart!	Tha e far a' chairt, Brandt! Gu litireil far a' chairt!
+FALSE COLOUR	DATH MEALLTA
+And false colour: red is clipped, yellow nearly. Is the glow red?	Agus dath meallta: tha dearg air a ghearradh, buidhe cha mhòr. A bheil an deàrrsadh dearg?
+Clipped means the brightest the signal can carry, and then some lost. Detail gone.	Tha air a ghearradh a' ciallachadh an rud as soilleire as urrainn don chomharra a ghiùlan, agus beagan os a chionn air chall. Am mion-fhiosrachadh air falbh.
+Red. Clipped. Not alien, Hollis. Just too bright. Case closed.	Dearg. Air a ghearradh. Chan e coigreach, Hollis. Dìreach ro shoilleir. Cùis dùinte.
+THE TRUTH	AN FHÌRINN
+Waveform, vectorscope, false colour. The scopes settled it, skapi. The agents did not.	Cruth-tonn, vectorscope, dath meallta. Shocraich na scopes e, skapi. Cha do shocraich na h-àidseantan.
+SCOPES SOURCE reads any output, and the matrix can be 709 or 2020. For the curious.	Leughaidh SCOPES SOURCE às-chur sam bith, agus faodaidh am matrix a bhith 709 no 2020. Dhaibhsan a tha fiosrach.
+Too bright for a streetlight, Brandt. Too bright for anything. ...I want to believe.	Ro shoilleir airson lampa-sràide, Brandt. Ro shoilleir airson rud sam bith. ...Tha mi airson creidsinn.
+OUT OF THE BUILDING	A-MACH ÀS AN TOGALACH
+Pictures that leave by cable or network, skapi, not only a window on a screen. Press START.	Dealbhan a dh'fhàgas le càball no lìonra, skapi, chan e dìreach uinneag air sgrìn. Brùth START.
+NDI over the network, SDI from a DeckLink card, ST 2110 for broadcast plants.	NDI thar an lìonra, SDI bho chairt DeckLink, ST 2110 airson ionadan craolaidh.
+THE DEVICES PAGE	DUILLEAG NAN INNEALAN
+MENU, Video Outputs, then Devices: every way an output can leave this computer.	CLÀR, Às-chuir bhidio, an uairsin Innealan: gach dòigh anns an urrainn do às-chur an coimpiutair seo fhàgail.
+Each one says whether this machine can do it, and what it needs if not.	Tha gach fear ag ràdh an urrainn don inneal seo a dhèanamh, agus dè a dh'fheumas e mura h-urrainn.
+If this computer has NDI, switch NDI SENDING on: the picture is on the network. If not, SHOW ME moves on.	Ma tha NDI aig a' choimpiutair seo, cuir NDI SENDING air: tha an dealbh air an lìonra. Mura h-eil, gluaisidh SHOW ME air adhart.
+NDI finds itself on the network. No cables, only a good switch and patience.	Lorgaidh NDI e fhèin air an lìonra. Gun chàballan, dìreach deagh shuidse agus foighidinn.
+OUT THERE	A-MUIGH AN SIN
+The output's own page has the rest: a DeckLink card's SDI, ST 2110 with NMOS, Spout and Syphon.	Tha an còrr air duilleag an às-chuir fhèin: SDI cairt DeckLink, ST 2110 le NMOS, Spout agus Syphon.
+Every one is just an output. The show does not know or care how it leaves.	Chan eil ann an gin dhiubh ach às-chur. Chan eil fios no diù aig an taisbeanadh ciamar a dh'fhàgas e.
+Nebula ahead	Neul-fànais air thoiseach
+Engine room	Seòmar nan einnseanan
+Deck 3: something moving	Deic 3: rudeigin a' gluasad
+THE BRIDGE	AN DROCHAID
+The bridge of the starship Cathode, skapi. Four feeds, one main viewer, one mystery. Press START.	Drochaid an long-fànais Cathode, skapi. Ceithir biadhan, aon phrìomh sgrìn, aon dìomhaireachd. Brùth START.
+The multiview shows every playlist at once. Like a wall of oscilloscopes, but in space.	Seallaidh an ioma-shealladh gach liosta aig an aon àm. Mar bhalla de osgailoscopan, ach san fhànais.
+Frequencies open, Captain. All of them. That's the problem.	Triceadan fosgailte, a Chaiptein. Iad uile. 'S e sin an duilgheadas.
+MULTI, above the monitor: every playlist in its own window.	MULTI, os cionn a' mhonitor: gach liosta na h-uinneag fhèin.
+One window per playlist, the programme first.	Aon uinneag gach liosta, am prògram an toiseach.
+Jinkys! Four feeds. And one of them has a monster in it.	Jinkys! Ceithir biadhan. Agus tha uilebheist ann an tè dhiubh.
+WHAT'S NEXT	DÈ THA RI THIGHINN
+Add a window (+), then its ... menu: make it show NEXT. What goes live when you press TAKE.	Cuir uinneag ris (+), an uairsin an clàr ... aice: thoir oirre NEXT a shealltainn. Na thèid air an adhar nuair a bhrùthas tu TAKE.
+Every window has a ... button. It chooses what that window shows.	Tha putan ... aig gach uinneag. Taghaidh e na sheallas an uinneag sin.
+I need to see who's calling before they reach the main viewer.	Feumaidh mi faicinn cò tha a' gairm mus ruig iad am prìomh sgrìn.
+A CLOCK	GLEOC
+And one more window, showing the clock. Operators who watch a clock are never late. Mostly.	Agus aon uinneag eile, a' sealltainn a' ghleoc. Cha bhi luchd-obrachaidh a choimheadas air gleoc fadalach gu bràth. Mar as trice.
+Time of day, big. Stardates are just very long timecode.	Uair an latha, mòr. Chan eil ann an cinn-latha reultach ach timecode glè fhada.
+The monster only shows up at midnight. We're going to need a clock.	Cha nochd an uilebheist ach aig meadhan-oidhche. Feumaidh sinn gleoc.
+ONE BIG ONE	AON TÈ MHÒR
+Any window's ... menu, then a layout: one big, the rest small.	Clàr ... uinneag sam bith, an uairsin cruth: aon tè mhòr, an còrr beag.
+The big window is window one. Usually the programme. Usually.	'S e an uinneag mhòr uinneag a h-aon. Am prògram mar as trice. Mar as trice.
+Main viewer big. The captain likes it big.	Prìomh sgrìn mòr. Is toil leis a' chaiptean e mòr.
+ON SCREEN	AIR AN SGRÌN
+Select Deck 3 in playlist 3 and TAKE. Watch its window.	Tagh Deic 3 ann an liosta 3 agus dèan TAKE. Coimhead air an uinneag aige.
+The red border is TALLY: the window that is on air. On screen, as they say on starships.	'S e an oir dhearg TALLY: an uinneag a tha air an adhar. Air an sgrìn, mar a chanas iad air longan-fànais.
+There! Feed three! Put it on screen!	An siud! Biadh trì! Cuir air an sgrìn e!
+THAT'S A WRAP	SIN E DÈANTA
+Windows, the ... menu, NEXT, the clock, a layout, tally. Mystery solved, skapi.	Uinneagan, an clàr ..., NEXT, an gleoc, cruth, tally. Dìomhaireachd fuasgailte, skapi.
+A window can also show an output, with its warp and slices. Handy when it's a lighthouse.	Faodaidh uinneag às-chur a shealltainn cuideachd, leis an lùbadh agus na sliseagan aige. Feumail nuair a tha taigh-solais ann.
+And the monster was... the ship's cook, all along. Jinkys.	Agus 's e an uilebheist... còcaire na luinge, fad na h-ùine. Jinkys.
+there is no such lesson	chan eil leasan mar sin ann
+finish or leave the lesson you are in first	crìochnaich no fàg an leasan anns a bheil thu an toiseach
+leave Bug Swat first	fàg Bug Swat an toiseach
+Psst. It's me, the desk. I'll be watching. Supportively.	Pst. Mise a th' ann, an deasg. Bidh mi a' coimhead. Gu taiceil.
+Hi! I'm the one doing all of this, by the way.	Halò! 'S e mise a tha a' dèanamh seo uile, co-dhiù.
+Ctrl+D opens the DASH. I'm just saying.	Fosglaidh Ctrl+D an DASH. Dìreach ag ràdh.
+Nearly there. I can feel it in my pixels.	Cha mhòr. Tha mi ga fhaireachdainn nam piogsailean.
+You're good at this. I can tell. I'm the one doing it.	Tha thu math air seo. Chì mi sin. 'S e mise a tha ga dhèanamh.
+Every click, I heard. Every single one.	Gach briogadh, chuala mi e. Gach fear dhiubh.
+The glowing one. I can see it from here. It's glowing for you.	Am fear a tha a' deàrrsadh. Chì mi e às an seo. Tha e a' deàrrsadh dhutsa.
+lesson paused - MENU > LESSONS picks up where you left off	leasan air a chumail - leanaidh CLÀR > LESSONS bhon àite far an do sguir thu
+PROF. VIDEO:  The signal: what the picture is made of, and how to bend it. Pick a lesson.	PROF. VIDEO:  An comharra: dè às a bheil an dealbh air a dhèanamh, agus ciamar a lùbas tu e. Tagh leasan.
+DR. PIXEL:  Running the show, skapi. Fast hands, calm face. Pick a lesson.	DR. PIXEL:  A' ruith an taisbeanaidh, skapi. Làmhan luath, aodann socair. Tagh leasan.
+LESSONS  -  PART TWO  -  WHO DO YOU FOLLOW?	LEASANAN  -  PÀIRT A DHÀ  -  CÒ LEANAS TU?
+FOLLOW PROF. VIDEO	LEAN AN T-OLLAMH VIDEO
+FOLLOW DR. PIXEL	LEAN AN DOTAIR PIXEL
+the signal	an comharra
+running the show	a' ruith an taisbeanaidh
+PICK UP	LEAN AIR ADHART
+CLOSE (Esc)	DÙIN (Esc)
+PART ONE: THE BASICS	PÀIRT A H-AON: NA BUNAITEAN
+finish or leave LEARN THE BASICS first	crìochnaich no fàg LEARN THE BASICS an toiseach
+bug swat: Esc leaves, and your show comes back as it was	bug swat: fàgaidh Esc, agus thig an taisbeanadh agad air ais mar a bha e
+bug swat: your show is back. Motion's controls are in Settings > Audio	bug swat: tha an taisbeanadh agad air ais. Tha smachdan Motion ann an Roghainnean > Fuaim
+TURN MOTION ON	CUIR MOTION AIR
+Bugs are crawling to the cue list! Swat them by waving at your camera. First, Motion: in MOTION CONTROL turn it ON and choose what it READS.	Tha biastagan a' snàgail gu liosta nan cue! Pronn iad le bhith a' smèideadh ris a' chamara agad. An toiseach, Motion: ann am MOTION CONTROL cuir air ON e agus tagh na leughas e (READS).
+This one is NullPointer. Hollow, points at nothing. A finger goes straight through. Use the whole hand, skapi.	'S e seo NullPointer. Falamh, a' comharrachadh gun dad. Thèid meur tron mheadhan. Cleachd an làmh gu lèir, skapi.
+Wave like you are hailing a cab! A small, polite cab. Not the buttons. The cab.	Smèid mar gum biodh tu a' stad tagsaidh! Tagsaidh beag modhail. Chan e na putanan. An tagsaidh.
+DRAW TWO ZONES	TARRAING DÀ RAON
+Race Condition: twins, each sure it got there first. One reading cannot tell your hands apart, so drag two ZONES on the Motion picture, one each side.	Race Condition: càraid, gach fear cinnteach gun do ràinig e an toiseach. Chan urrainn do aon leughadh do làmhan aithneachadh bho chèile, mar sin slaod dà ZONES air dealbh Motion, aon air gach taobh.
+Hit both together. Hit one, and they swap. Like my cousins at a wedding.	Buail an dithis còmhla. Buail fear, agus atharraichidh iad àite. Mar mo cho-oghaichean aig banais.
+One hand each side. Together! Together!	Aon làmh gach taobh. Còmhla! Còmhla!
+Off By One. The bug is not the face, it is the tiny extra segment, and a little wiggle needs a finer reading. Turn SENSITIVITY down to 5%.	Off By One. Chan e an t-aodann a' bhiastag, 's e am pìos beag a bharrachd, agus feumaidh gluasad beag leughadh nas mìne. Cuir SENSITIVITY sìos gu 5%.
+Lower number, finer reading. Yes, I also think it is backwards.	Àireamh nas ìsle, leughadh nas mìne. Tha, tha mi a' smaoineachadh gu bheil e air ais-air-adhart cuideachd.
+Not the face. The little one on the end. Wiggle a finger.	Chan e an t-aodann. Am fear beag aig an deireadh. Gluais meur.
+FALL 1.5 S OR MORE	FALL 1.5 S NO BARRACHD
+Memory Leak. It only lets go while the reading stays up. Make FALL longer, 1.5 seconds or more, so your sweeps join up into one.	Memory Leak. Cha leig e às ach fhad 's a dh'fhanas an leughadh suas. Dèan FALL nas fhaide, 1.5 diogan no barrachd, gus an tig na sguabaidhean agad còmhla nan aon.
+Slow and steady, skapi. Like paying back a loan.	Slaodach is seasmhach, skapi. Mar a bhith a' pàigheadh air ais morgaids.
+Sweep, and sweep again. Let the fall carry you between.	Sguab, agus sguab a-rithist. Leig leis an tuiteam do ghiùlan eatarra.
+MOTION X ON A TONE	MOTION X AIR TÒNA
+The Heisenbug! It fades whenever you move. Put a tone cue's pitch on Motion X and follow it by ear: the ticking speeds up as you close in.	Am Heisenbug! Crìonaidh e gach uair a ghluaiseas tu. Cuir àirde cue tòna air Motion X agus lean e leis a' chluais: luathaichidh an tic nuair a thig thu nas fhaisge.
+SHOW ME makes the tone for you. High is right. Low is left. Stand still and it comes back.	Nì SHOW ME an tòna dhut. Tha àrd deas. Tha ìosal clì. Seas gu socair agus tillidh e.
+Follow it. Listen. Faster ticking, closer bug.	Lean e. Èist. Tic nas luaithe, biastag nas fhaisge.
+Waving paw	Spòg a' smèideadh
+Heisenbug finder	Lorgaire Heisenbug
+FIXED! Lovely signal flow.	CÀRAICHTE! Sruth comharra àlainn.
+Closed as fixed. No regressions. Probably.	Dùinte mar chàraichte. Gun ais-cheum. Is dòcha.
+Squashed! Ship it.	Pronnte! Cuir a-mach e.
+One reached the cue list. It has filed a bug report about you.	Ràinig tè liosta nan cue. Chuir i aithisg-biastaig a-steach mu do dheidhinn.
+Skapi. It is a handheld. You do not press it. You wave at it.	Skapi. 'S e inneal-làimhe a th' ann. Cha bhrùth thu e. Smèididh tu ris.
+The buttons are for menus. The bugs are for flailing.	Tha na putanan airson chlàran. Tha na biastagan airson a bhith a' crathadh do ghàirdeanan.
+The D-pad is decorative. Like my diploma.	Tha a' chrois-stiùiridh airson sgeadachadh. Mar mo dhioploma.
+In 1989 we also pressed the buttons. Then we discovered waving. Never looked back.	Ann an 1989 bhrùth sinne putanan cuideachd. An uairsin lorg sinn smèideadh. Cha do choimhead sinn air ais a-riamh.
+Pressing harder does not help. The bugs cannot feel buttons. Only arms.	Cha chuidich brùthadh nas cruaidhe. Chan fhairich biastagan putanan. Dìreach gàirdeanan.
+It's called a handheld because your hands are held... up. In the air. Waving.	'S e inneal-làimhe a th' air a chionn 's gu bheil do làmhan... suas. San adhar. A' smèideadh.
+The mouse? You are swatting bugs with a MOUSE? In Bulgaria the mouse would be on the bugs' side.	An luchag? A bheil thu a' pronnadh biastagan le LUCHAG? Ann am Bulgàiria bhiodh an luchag air taobh nam biastag.
+Lovely clicking. Very crisp. The camera saw none of it.	Briogadh brèagha. Glè chrioslach. Chan fhaca an camara gin dheth.
+DONE FOR YOU - PRESS START	DÈANTA DHUT - BRÙTH START
+DONE! PRESS START	DÈANTA! BRÙTH START
+SELECT OPENS MOTION CONTROL	FOSGLAIDH SELECT MOTION CONTROL
+ALL BUGS FIXED	A H-UILE BIASTAG CÀRAICHTE
+GAME OVER	CRÌOCH A' GHEAMA
+NEW HIGH SCORE!	SGÒR ÙR AS ÀIRDE!
+START PLAYS AGAIN	CLUICHIDH START A-RITHIST
+Nazdrave, skapi. Now go and fix real bugs.	Nazdrave, skapi. A-nis falbh agus càraich fìor bhiastagan.
+Every one of those is a real Motion control. Put them on any ~ knob you like.	'S e fìor smachd Motion a th' anns gach fear dhiubh sin. Cuir iad air putan ~ sam bith a thogras tu.
+START: AGAIN	START: A-RITHIST
+START: PLAY	START: CLUICH
+# --- end of tutorials ---
+Splash	Sgrìn-fàilte
+Beast mode	Modh bèist
++ ADD AN OUTPUT	+ CUIR ÀS-CHUR RIS
+>LIVE	>BEÒ
+center	MEADHAN
+NO	CHAN EIL
+YES	THA
+To	Gu
+UP	SUAS
+add	cuir ris
+all	uile
+any	sam bith
+box	bogsa
+Cut	Gearradh
+Fit	Freagair
+hue	dath
+inf	neo-chrìoch
+key	iuchair
+Map	Mapa
+Now	A-nis
+ONE	AON
+RED	DEARG
+Row	Ràgh
+run	ruith
+sea	muir
+set	suidhich
+tab	taba
+tag	taga
+Top	Mullach
+BACK	AIR AIS
+bell	clag
+blue	gorm
+Code	Còd
+DOWN	SÌOS
+DRAW	TARRAING
+face	aodann
+Fill	Lìon
+flag	bratach
+font	cruth-clò
+From	Bho
+grow	fàs
+hold	cùm
+idle	na thàmh
+KEYS	IUCHRAICHEAN
+Left	Clì
+line	loidhne
+Load	Luchdaich
+Loop	Lùb
+MASK	MASG
+Memo	Meòrachan
+NONE	CHAN EIL GIN
+ONCE	AON TURAS
+oval	ugh-chruthach
+PAIR	PAIDHIR
+play	cluich
+rain	uisge
+send	cuir
+show	taisbeanadh
+Size	Meud
+SKIP	LEUM THAIRIS
+snow	sneachd
+soft	bog
+TEXT	TEACSA
+type	seòrsa
+Word	Facal
++ ADD	+ CUIR RIS
+align	co-thaobhaich
+black	dubh
+blend	measgachadh
+boxes	bogsaichean
+brush	bruis
+Chain	Sreath
+Curve	Lùb
+Delay	Dàil
+do it	dèan e
+frame	frèam
+glass	glainne
+green	uaine
+LEARN	IONNSAICH
+level	ìre
+Lines	Loidhnichean
+mixed	measgaichte
+notes	nòtaichean
+Pause	Cuir na stad
+Right	Deas
+scale	sgèile
+shape	cumadh
+Short	Goirid
+speed	luaths
+split	sgolt
+stamp	stampa
+START	TÒISICH
+state	staid
+Still	Dealbh
+style	stoidhle
+title	tiotal
+Width	Leud
+words	faclan
+Zones	Raointean
+(none)	(chan eil gin)
+amount	uiread
+anyone	duine sam bith
+CHANGE	ATHARRAICH
+CHOOSE	TAGH
+Clouds	Neòil
+DELETE	SGUAB ÀS
+eraser	suathan
+export	às-phortaich
+FIXED!	CÀRAICHTE!
+follow	lean
+FREEZE	REÒTH
+FROZEN	REÒTA
+garden	gàrradh
+LAYOUT	CO-DHEALBHACHD
+Levels	Ìrean
+Linear	Loidhneach
+MOTION	GLUASAD
+nobody	gun duine
+Resume	Lean air
+ribbon	rioban
+Script	Sgriobt
+scroll	sgrolaich
+signal	comharra
+sketch	sgeidse
+SLICES	SLISEAGAN
+SMOOTH	RÈIDH
+Target	Targaid
+VALUES	LUACHAN
+(empty)	(falamh)
+(unset)	(gun suidheachadh)
+address	seòladh
+Browser	Brabhsair
+caption	fo-thiotal
+Ceiling	Mullach
+Command	Àithne
+Cue hue	Dath cue
+EFFECTS	ÈIFEACHDAN
+English	Beurla
+Haptics	Crith
+LESSONS	LEASANAN
+Message	Teachdaireachd
+midi in	MIDI a-steach
+nothing	dad
+OUTPUTS	ÀS-CHUIR
+Picture	Dealbh
+repeats	ath-chluich
+SCREENS	SGRÌNICHEAN
+SHOW ME	SEALL DHOMH
+Show on	Seall air
+standby	a' feitheamh
+Stretch	Sìn
+theatre	taigh-cluiche
+all to 0	uile gu 0
+backdrop	cùl-raon
+captions	fo-thiotalan
+CHANNELS	SEANAILEAN
+continue	lean air
+count up	cunnt suas
+DEFAULTS	BUN-ROGHAINNEAN
+Full Red	Dearg slàn
+Learn it	Ionnsaich e
+METADATA	MEATA-DÀTA
+none yet	gin fhathast
+notebook	leabhar-nòta
+offset X	claonadh X
+offset Y	claonadh Y
+on press	nuair a bhrùthar
+SECTIONS	EARRANNAN
+Stop all	Stad na h-uile
+STRAIGHT	DÌREACH
+subtitle	fo-thiotal
+subtract	thoir air falbh
+the desk	an deasg
+The name	An t-ainm
+THE SHOW	AN TAISBEANADH
+THIS CUE	AN CUE SEO
+TURN OFF	CUIR DHETH
+a comment	beachd
+add shape	cuir cumadh ris
+choose...	tagh...
+Full Blue	Gorm slàn
+FUNCTIONS	GNÌOMHAN
+generated	air a ghineadh
+Listen to	Èist ri
+logo size	meud logo
+MIDI File	Faidhle MIDI
+no output	gun às-chur
+no window	gun uinneag
+Pause all	Cuir uile na stad
+stop at 0	stad aig 0
+text mode	modh teacsa
+then stop	an uair sin stad
+(no notes)	(gun nòtaichean)
+brightness	soilleireachd
+cue number	àireamh cue
+Full Black	Dubh slàn
+Full Green	Uaine slàn
+Full White	Geal slàn
+Fullscreen	Làn-sgrìn
+look at it	seall air
+no effects	gun èifeachd
+Position X	Suidheachadh X
+Position Y	Suidheachadh Y
+Resume all	Lean leis na h-uile
+save still	sàbhail dealbh
+text added	teacsa air a chur ris
+Total time	Ùine iomlan
+WITH SOUND	LE FUAIM
+any channel	seanail sam bith
+clear frame	glan am frèam
+Esc cancels	Esc: sguir dheth
+nothing yet	dad fhathast
+Sensitivity	Mothalachd
+THE NETWORK	AN LÌONRA
+time of day	àm an latha
+Esc to close	Esc gus dùnadh
+EXPORTING...	ÀS-PHORTADH...
+loop forever	lùb gu bràth
+Pair a phone	Paidhrich fòn
+Pause at end	Stad aig deireadh
+Phone access	Inntrigeadh fòin
+(nothing yet)	(dad fhathast)
+EXAMPLE SHOWS	TAISBEANAIDHEAN EISIMPLEIR
+INSTALLING...	A' STÀLADH...
+Paired phones	Fònaichean paidhrichte
+THIS COMPUTER	AN COIMPIUTAIR SEO
+whole network	an lìonra gu lèir
+will not open	cha dh'fhosgail
+not configured	gun rèiteachadh
+on any channel	air seanail sam bith
+Pause at start	Stad aig toiseach
+source missing	tùs a dhìth
++ ADD AN EFFECT	+ CUIR ÈIFEACHD RIS
+Maximum quality	Càileachd as àirde
+Click to type it	Briog gus sgrìobhadh
+Cue has no audio	Chan eil fuaim aig cue
+LEARN THE BASICS	IONNSAICH NA BUNASAN
+REPORT A PROBLEM	AITHRIS AIR DUILGHEADAS
+(no media source)	(gun tùs meadhain)
+CLICK ANYWHERE...	BRIOG ÀITE SAM BITH...
+name or number...	ainm no àireamh...
+only this computer	an coimpiutair seo a-mhàin
+type a cue number	sgrìobh àireamh cue
+Click to edit cue notes	Briog gus nòtaichean cue a dheasachadh
+the file cannot be read	cha ghabh am faidhle a leughadh
+Keep a transcript (.srt)	Cùm tar-sgrìobhadh (.srt)
+Nothing here with this filter.	Chan eil dad an seo leis a' chriathrag seo.
+Nothing has arrived yet. Press something on the controller.	Cha tàinig dad fhathast. Brùth putan air an smachdair.
+Click to seek — drag to scrub	Briog gus leum — slaod gus gluasad tron chriomag
+name, from anywhere	ainm, à àite sam bith
+what is on air	na tha air an èadhar
+on air in playlist {n}	air an èadhar ann an liosta {n}
+the selected cue in playlist {n}	an cue taghte ann an liosta {n}
+how much of this effect	uiread na h-èifeachd seo
+The text this cue puts on screen	An teacsa a sheallas an cue seo air an sgrìn
+Which frame you draw on	Am frèam air an tarraing thu
+Choose startup mode:	Tagh modh tòiseachaidh:
+Run the show from a phone	Ruith an taisbeanadh bho fhòn
+Who can see it	Cò chì e
+what is on air in a playlist	na tha air an èadhar ann an liosta
+click or Esc to close	briog no Esc gus dùnadh
+Right-click turns them off.	Cuiridh briogadh deas dheth iad.
+Copy the show AND its media into one portable folder	Dèan lethbhreac dhen taisbeanadh AGUS de na meadhanan aige ann an aon phasgan so-ghiùlain
+The role, or leave it empty	An dreuchd, no fàg falamh e
+Clear the live PIP overlay now	Thoir air falbh an còmhdach PIP beò a-nis
+Set per-cue transition duration	Suidhich fad a' ghluasaid airson gach cue
+Changing this re-prepares the cue.	Ullaichidh seo an cue a-rithist ma dh'atharraicheas tu e.
+The OSC path, e.g. /cue/1/start	An t-slighe OSC, m.e. /cue/1/start
+any command, {value} is the number	àithne sam bith, 's e {value} an àireamh
+nothing to send - check the message	chan eil dad ri chur — thoir sùil air an teachdaireachd
+selected cue lane  |  TAKE to make it live	slighe a' chue thaghte — TAKE gus a chur air an èadhar
+JAM	SIONCRONAICH
+CLIP	CLIOP
+Fall	Tuiteam
+Rise	Èirigh
+Runs	Ruithidh
+KEY L	KEY C
+MULTI	IOMADH
+Reads	Leughaidh
+Shows	Seallaidh
+Pickup	Togail
+STEREO	STÈIRIO
+cue id	ID cue
+jam to	sioncronaich gu
+red at	dearg aig
+set by	suidhichte le
+tile h	leac à
+tile w	leac l
+Limiter	Cuingealaiche
+QR CODE	CÒD QR
+Read as	Leugh mar
+Runs on	Ruith air
+mask on	masg air
+rack it	cuir an sàs e
+red col	colbh dearg
+BYPASSED	SEACHAINTE
+FIXTURES	INNEALAN
+Hold for	Cùm airson
+Limiting	Cuingealachadh
+MIDI MAP	MAPA MIDI
+amber at	òmar aig
+any port	port sam bith
+bg alpha	alpha cùil
+onion on	craiceann uinneain air
+prog bar	bàr prog
++ section	+ earrann
++pause pt	+stad
+DASHBOARD	DEASCA
+EXIT  Esc	FÀG  Esc
+HDR input	inntrigeadh HDR
+MIDI note	nòta MIDI
+PNG matte	matte PNG
+SVG paths	slighean SVG
+TEST CARD	CAIRT DEUCHAINN
+a-fade in	a-fad a-steach
+amber col	colbh òmair
+chime red	clag dearg
+glitch up	glitch suas
+new paths	slighean ùra
+onion off	craiceann uinneain dheth
+wobble by	luasgain le
+BY FIXTURE	A RÈIR INNEAL
+BYPASS ALL	SEACHAIN NA H-UILE
+Black lift	Togail dubh
+EDGE BLEND	MEASGACHADH IOMALL
+On release	Aig leigeil às
+Passphrase	Facal-faire
+Saved with	Air a shàbhaladh le
+a-fade out	a-fad a-mach
+black lift	togail dubh
+by density	a rèir dlùths
+chime zero	clag neoni
+deck fader	fader deck
+end action	gnìomh deireannach
+fires cues	cuiridh e cues
+next xfade	ath xfade
+ADD FIXTURE	CUIR INNEAL RIS
+Add a light	Cuir solas ris
+CARD ON ALL	CAIRT AIR NA H-UILE
+EXPORT CARD	ÀS-MHALAIRT CAIRT
+LOW LATENCY	DÀIL ÌSEAL
+WEB MONITOR	SGRÙDAIR LÌN
+Web monitor	Sgrùdair lìn
+blend gamma	gamma measgachaidh
+chime amber	clag òmair
+gain (each)	buannachd (gach fear)
+glitch down	glitch sìos
+link aspect	ceangail co-mheas
+move points	gluais puingean
+pause begin	stad aig an toiseach
+phrase hold	cumail abairt
+plays synth	cluichidh synth
+undo stroke	neo-dhèan stràc
+CARD OFF ALL	CAIRT DHETH NA H-UILE
+CLASSIC VIEW	SEALLADH CLASAIGEACH
+LISTENING...	AG ÈISTEACHD...
+LISTENS: OFF	ÈISTEACHD: DHETH
+Last refused	An tè mu dheireadh a dhiùltadh
+Pair overlap	Tar-shealladh paidhir
+RACKED, WARM	DEISEIL, BLÀTH
+SCAN TO PAIR	SGANAIG GUS PAIDHREACHADH
+Space — play	Space — cluich
+TEST CARD ON	CAIRT DEUCHAINN AIR
+driver speed	luaths an draibhear
+glitch drift	gluasad glitch
+glitch reach	ruigsinn glitch
+last reading	an leughadh mu dheireadh
+pair overlap	tar-shealladh paidhir
+render width	leud reandaraidh
+LIVE CAPTIONS	FO-THIOTALAN BEÒ
+Live captions	Fo-thiotalan beò
+Phone control	Smachd fòn
+READY-MADE...	DEISEIL MU THRÀTH...
+Space — pause	Space — stad
+Speech models	Modailean cainnte
+VIDEO DIP: ON	VIDEO DIP: AIR
+render height	àirde reandaraidh
+MOTION CONTROL	SMACHD GLUASAID
+NDI source cue	cue tùs NDI
+OUTPUT EFFECTS	BUAIDHEAN ÀS-CHUR
+PHONE & TABLET	FÒN & TAILEAS
+SCALED TO FILL	SGÈILICHTE GUS LÌONADH
+SELECT: MOTION	TAGH: GLUASAD
+VIDEO DIP: OFF	VIDEO DIP: DHETH
+glitch through	glitch troimhe
+lock to screen	glas ris an sgrìn
+on the monitor	air an sgrùdair
+play a note...	cluich nòta...
+press a key...	brùth iuchair...
+restore at end	aisig aig an deireadh
+save animation	sàbhail beòthachadh
+% of the height	% den àirde
++  a first step	+  a' chiad cheum
++ CHOOSE A FEED	+ TAGH BIADHADH
+Double-GO guard	Dìon GO dùbailte
+Frames a second	Frèaman gach diog
+HOLDING OFF AIR	A' CUMAIL DHETH AN ÈADHAR
+Live stream cue	cue sruth beò
+PIP overlay cue	cue thar-chòmhdach PIP
+Projector gamma	Gamma proiseactair
+first available	a' chiad fhear ri fhaighinn
+nothing follows	chan eil dad a' leantainn
+restart on take	tòisich às ùr aig take
+the focused one	am fear le fòcas
+BACK TO BUG SWAT	AIR AIS GU BUG SWAT
+Fade-in duration	Fad a' fad a-steach
+PICK FROM SCREEN	TAGH BHON SGRÌN
+WHAT DECKBOY DID	NA RINN DECKBOY
+factory settings	roghainnean factaraidh
+no audio effects	gun bhuaidhean fuaime
+open the monitor	fosgail an sgrùdair
+over the picture	thairis air an dealbh
+Fade-out duration	Fad a' fad a-mach
+Key edge softness	Buige oir na h-iuchrach
+Toggle chroma key	Toglaich chroma key
+click this window	briog air an uinneag seo
+the system output	às-chur an t-siostaim
+(none playing now)	(chan eil dad a' cluich an-dràsta)
+FORGET MY DEFAULTS	DÌCHUIMHNICH MO BHUN-ROGHAINNEAN
+Hex, e.g. 90 3C 7F	Hex, m.e. 90 3C 7F
+put it on a button	cuir air putan e
+Composite scene cue	cue sealladh co-dhèanta
+Connections at once	Ceanglaichean aig an aon àm
+Passphrase (shared)	Facal-faire (co-roinnte)
+SAVE AS MY DEFAULTS	SÀBHAIL MAR MO BHUN-ROGHAINNEAN
+Trusted controllers	Uidheaman earbsach
+Where the ramp ends	Far a bheil an ramp a' crìochnachadh
+draw on the monitor	tarraing air an sgrùdair
+edit on the monitor	deasaich air an sgrùdair
+find a named colour	lorg dath air ainm
+Companion passphrase	Facal-faire Companion
+Home — skip to start	Home — leum gun toiseach
+How solid the ink is	Dè cho làidir 's a tha an inc
+Left — skip back 10s	Clì — leum air ais 10s
+MIDI AND OSC MONITOR	SGRÙDAIR MIDI IS OSC
+MIDI and OSC monitor	Sgrùdair MIDI is OSC
+Marks stacked BELOW.	Comharran air an càrnadh FODHA.
+New shows start from	Tòisichidh seallaidhean ùra bho
+Pitch, in semitones.	Àirde, ann am leth-thònan.
+Set browser URL/path	Suidhich URL/slighe a' bhrabhsair
+Typing needs EDIT on	Feumaidh sgrìobhadh EDIT air
+X — cycle end action	X — cuairtich gnìomh deireannach
+nothing assigned yet	chan eil dad air a shònrachadh fhathast
+nothing targeted yet	chan eil dad na thargaid fhathast
+the playlist's PATCH	PATCH na liosta-cluiche
+Left, centre or right	Clì, meadhan no deas
+PLAY BUG SWAT, a game	CLUICH BUG SWAT, geama
+PRESS AGAIN TO FORGET	BRÙTH A-RITHIST GUS DÌCHUIMHNEACHADH
+Pattern motion toggle	Toglaich gluasad pàtrain
+Sound when time is up	Fuaim nuair a bhios an ùine seachad
+none - click to learn	chan eil gin - briog gus ionnsachadh
+none: the one picture	chan eil gin: an aon dealbh
+turn phone control on	cuir smachd fòn air
+waiting for a picture	a' feitheamh ri dealbh
+(projector curve only)	(lùb proiseactair a-mhàin)
+Scene fade-in duration	Fad a' fad a-steach sealladh
+Start NEW from factory	Tòisich ÙR bhon fhactaraidh
+Tile height in pixels.	Àirde leac ann am piogsail.
+any window, any screen	uinneag sam bith, sgrìn sam bith
+circle, heart, star...	cearcall, cridhe, rionnag...
+click to open the grid	briog gus a' ghriod fhosgladh
+sACN universe, 1-63999	Uile-cruinne sACN, 1-63999
+Lower Third overlay cue	cue thar-chòmhdach Lower Third
+Master oscillator rate.	Reat a' phrìomh oscillator.
+Scene fade-out duration	Fad a' fad a-mach sealladh
+needs file-backed video	feumaidh e bhidio bho fhaidhle
+none: the whole picture	chan eil gin: an dealbh slàn
+recent and in this show	o chionn ghoirid is san taisbeanadh seo
+Clear in/out trim points	Glan puingean trim a-steach/a-mach
+Right — skip forward 10s	Deas — leum air adhart 10s
+none - click to set some	chan eil gin - briog gus feadhainn a shuidheachadh
+Esc cancels, arrows nudge	Esc a' sguir, saighdean a' putadh
+Fit/Fill/Stretch/Unscaled	Fit/Lìon/Sìn/Gun sgèile
+PIXEL FOR PIXEL, TOP-LEFT	PIOGSAIL AIR PIOGSAIL, BARR-CLÌ
+PROJECTOR - gamma matched	PROISEACTAR - gamma co-ionann
+Playback speed: 0.25–4.0×	Luaths cluiche: 0.25–4.0×
+This show's setup, no cues	Suidheachadh an taisbeanaidh seo, gun cues
+none - click to write some	chan eil gin - briog gus feadhainn a sgrìobhadh
+walks every output in turn	a' coiseachd gach às-chur mu seach
+MULTIVIEW carries this too.	Bheir MULTIVIEW seo cuideachd.
+Scene dwell time — 0 = hold	Ùine fuireach sealladh — 0 = cùm
+add a second output to pair	cuir ris dàrna às-chur gus paidhreachadh
+things that are oscillating	rudan a tha a' luasgadh
+Key tolerance (RGB distance)	Fulangas iuchrach (astar RGB)
+channel list is not readable	chan urrainn liosta nan seanail a leughadh
+no effects for this cue type	gun bhuaidhean airson an seòrsa cue seo
+1-16, as the desk counts them	1-16, mar a chunntas an deasg iad
+Art-Net port address, 0-32767	Seòladh port Art-Net, 0-32767
+Fade-in duration for this cue	Fad a' fad a-steach airson a' cue seo
+Toggle loop for selected cues	Toglaich lùb airson cues taghte
+Toggle the live input's audio	Toglaich fuaim an inntrigidh bheò
+[ / ] keys — fade-in duration	[ / ] iuchraichean — fad a' fad a-steach
+a camera moves the ~ controls	gluaisidh camara na smachdan ~
+Contrast multiplier (0.0-2.0x)	Iomadaiche iomsgaradh (0.0-2.0x)
+Fade-out duration for this cue	Fad a' fad a-mach airson a' cue seo
+HLG - live broadcast (BT.2100)	HLG - craoladh beò (BT.2100)
+L - loop this cue continuously	L - lùb an cue seo gun stad
+Sound when the clock turns red	Fuaim nuair a thionndaidheas an gleoc dearg
+Act now, without taking the cue	Dèan an-dràsta, gun an cue a ghabhail
+Delay before the continue fires	Dàil mus tèid an leantainn
+Edit the main Lower Third title	Deasaich prìomh thiotal an Lower Third
+LINEAR - a feather, not a blend	LINEAR - iteag, chan e measgachadh
+Shift+[ / ] — fade-out duration	Shift+[ / ] — fad a' fad a-mach
+false colour reads SDR pictures	leughaidh dath meallta dealbhan SDR
+learn it, or say how to read it	ionnsaich e, no innis mar a leughar e
+Brightness multiplier (0.0-2.0x)	Iomadaiche soilleireachd (0.0-2.0x)
+How many features fit on screen.	Co mheud feart a fhreagras air an sgrìn.
+Saturation multiplier (0.0-2.0x)	Iomadaiche sàthachaidh (0.0-2.0x)
+Send now, without taking the cue	Cuir an-dràsta, gun an cue a ghabhail
+Set Lower Third background alpha	Suidhich alpha cùl an Lower Third
+Sound when the clock turns amber	Fuaim nuair a thionndaidheas an gleoc òmar
+Use GEOMETRY for exact placement	Cleachd GEOMETRY airson suidheachadh mionaideach
+Vertical output offset in pixels	Gluasad dìreach an às-chuir ann am piogsail
+aimed here; the desk never moves	ag amas an seo; cha ghluais an deasg idir
+playlists into the named outputs	liostaichean-cluiche gu na às-chuir ainmichte
+7-segment, blocky, or a real font	7-roinn, blocach, no fìor chruth-clò
+Do it now, without taking the cue	Dèan e an-dràsta, gun an cue a ghabhail
+Fade-out duration before next cue	Fad a' fad a-mach ron ath cue
+Fixed repeat count — 0 = infinite	Àireamh ath-dhèanaimh — 0 = gun chrìoch
+Output rotation angle (-180..180)	Ceàrn cuairteachaidh an às-chuir (-180..180)
+Put this control on an oscillator	Cuir an smachd seo air oscillator
+window and recording outputs only	às-chuir uinneige is clàraidh a-mhàin
+Countdown, count up, or wall clock	Cunntas sìos, cunntas suas, no gleoc balla
+Cycle end action for selected cues	Cuairtich gnìomh deireannach airson cues taghte
+Digit colour once amber is reached	Dath nan àireamhan aon uair 's gun ruigear òmar
+Horizontal output offset in pixels	Gluasad còmhnard an às-chuir ann am piogsail
+In-point: cue starts playback here	Puing a-steach: tòisichidh an cue an seo
+LIVE - every assigned deck matches	BEÒ - tha gach deck sònraichte a' maidseadh
+Out-point: cue stops playback here	Puing a-mach: stadaidh an cue an seo
+Run it now, without taking the cue	Ruith e an-dràsta, gun an cue a ghabhail
+Set repeat count for selected cues	Suidhich àireamh ath-dhèanaimh airson cues taghte
+Set the NDI source name to receive	Suidhich ainm an tùis NDI ri fhaighinn
+a chain on a device, after the mix	sreath air inneal, às dèidh a' mheasgachaidh
+Attached overlays fire on TAKE only	Cuiridh thar-chòmhdaichean ceangailte air TAKE a-mhàin
+Cycle which slot drives scene audio	Cuairtich dè an slot a stiùireas fuaim an t-seallaidh
+Edit the secondary Lower Third line	Deasaich an dàrna loidhne den Lower Third
+Hue rotation (-180 to +180 degrees)	Cuairteachadh tuar (-180 gu +180 ceum)
+Programme with sound in any browser	Prògram le fuaim ann am brabhsair sam bith
+Rotation speed, degrees per second.	Luaths cuairteachaidh, ceuman gach diog.
+Set short cue label for search/goto	Suidhich leubail ghoirid cue airson lorg/goto
+Toggle cue audio track for this cue	Toglaich slighe fuaime a' cue seo
+Arm this cue as the one GO will fire	Armaich an cue seo mar am fear a chuireas GO
+How tall the logo is above the clock	Dè cho àrd 's a tha an suaicheantas os cionn a' ghleoc
+Linear, ease in, ease out or S-curve	Dìreach, socair a-steach, socair a-mach no lùb-S
+Per-cue transition duration override	Fad tar-chuir sònraichte gach cue
+Set capture source from the cue menu	Suidhich tùs glacaidh bhon chlàr cue
+Set playback speed for selected cues	Suidhich luaths cluiche airson cues taghte
+Toggle hold-at-end for selected cues	Toglaich cumail aig an deireadh airson cues taghte
+channels on your interfaces, by name	seanailean air na h-eadar-aghaidhean agad, air ainm
+nothing set - this cue sends nothing	chan eil dad suidhichte - chan eil an cue seo a' cur dad
+over budget - video will drop frames	thar a' bhuidseit - leigidh am bhidio às frèaman
+Fixed repeat count — 0 = loop forever	Àireamh ath-dhèanaimh — 0 = lùb gu bràth
+Keep counting past zero, or stop dead	Cùm a' cunntas seachad air neoni, no stad marbh
+LISTENS: the figure follows the sound	ÈISTIDH: leanaidh am figear an fhuaim
+Move the height on its own oscillator	Gluais an àirde air an oscillator aige fhèin
+Put the brush's size on an oscillator	Cuir meud a' bhruis air oscillator
+Toggle audio enable for selected cues	Toglaich fuaim airson cues taghte
+What NEW starts from, never this show	Na tha ÙR a' tòiseachadh bhuaithe, chan ann an taisbeanadh seo
+transcoding - plays clean until ready	ag ath-chòdachadh - cluichidh e glan gus am bi e deiseil
+All interfaces; trusted machines only.	Gach eadar-aghaidh; innealan earbsach a-mhàin.
+Delay between GO and this cue starting	Dàil eadar GO agus toiseach a' cue seo
+Its amount, or one of its knobs A to D	An t-uiread aige, no aon de na putanan A gu D
+Lower Third background opacity (0-255)	Trìd-shoilleireachd cùl an Lower Third (0-255)
+Which deck the cue it acts on lives on	Dè an deck air a bheil an cue air a bheil e ag obair
+FEEDS: pick a window, then one of these	BIADHADH: tagh uinneag, an uairsin aon dhiubh seo
+install Tailscale here and on the phone	stàlaich Tailscale an seo agus air an fhòn
+Digit colour while there is time in hand	Dath nan àireamhan fhad 's a tha ùine air fhàgail
+Put the brush's opacity on an oscillator	Cuir trìd-shoilleireachd a' bhruis air oscillator
+X — cycle end action: stop / next / loop	X — cuairtich gnìomh deireannach: stad / ath / lùb
+transparent: put its playlist on a layer	trìd-shoilleir: cuir an liosta-cluiche aige air breath
+Click to show or hide this cue's captions	Briog gus fo-thiotalan a' cue seo a shealltainn no fhalach
+How much it throws off; 0 is a clean burn	Dè na thilgeas e; 's e losgadh glan a th' ann an 0
+Phone control is in PHONE & TABLET, below	Tha smachd fòn ann am PHONE & TABLET, gu h-ìosal
+Apply fade-in to selected video/audio cues	Cuir fad a-steach air cues bhidio/fuaime taghte
+Bypass: this master leaves that deck alone	Seachain: fàgaidh am master seo an deck sin na aonar
+Seconds REMAINING when the clock turns red	Diogan AIR FHÀGAIL nuair a thionndaidheas an gleoc dearg
+generator is off - a START cue turns it on	tha an gineadair dheth - cuiridh cue START air e
+Apply fade-out to selected video/audio cues	Cuir fad a-mach air cues bhidio/fuaime taghte
+Keep the outside and cut the inside instead	Cùm an taobh a-muigh agus geàrr an taobh a-staigh
+Legacy target mode — switch type to convert	Modh targaid seann — atharraich seòrsa gus tionndadh
+Nothing here changes the show that is open.	Chan atharraich dad an seo an taisbeanadh a tha fosgailte.
+The cue number on the other desk, e.g. 12.5	Àireamh a' cue air an deasg eile, m.e. 12.5
+Toggle pause-at-beginning for selected cues	Toglaich stad aig an toiseach airson cues taghte
+Toggle transition-to-next for selected cues	Toglaich tar-chur gun ath fhear airson cues taghte
+Auto-advance duration — 0 = hold until taken	Fad fèin-adhartais — 0 = cùm gus an tèid a ghabhail
+Characters across. Fewer means bigger cells.	Caractaran tarsainn. Nas lugha, ceallan nas motha.
+Device output pair this cue's audio plays on	Paidhir às-chuir an inneil air an cluich fuaim a' cue seo
+E - freeze on last frame instead of stopping	E - reòth air an fhrèam mu dheireadh an àite stad
+How long the note takes to reach full level.	Dè cho fada 's a bheir an nòta gus a làn ìre a ruigsinn.
+LED panel height in pixels. Click to type it	Àirde pannal LED ann am piogsail. Briog gus a sgrìobhadh
+Load the cue and hold first frame when taken	Luchdaich an cue agus cùm a' chiad fhrèam nuair a ghabhar e
+Seconds REMAINING when the clock turns amber	Diogan AIR FHÀGAIL nuair a thionndaidheas an gleoc òmar
+acts on every deck; deck and cue are ignored	obraichidh e air gach deck; thèid deck is cue a leigeil seachad
+0-127; 127 addresses every device on the line	0-127; ruigidh 127 gach inneal air an loidhne
+GO shows the note; picture and sound carry on	Seallaidh GO an nòta; leanaidh dealbh is fuaim orra
+How fast it moves; no effect when it is still	Dè cho luath 's a ghluaiseas e; gun bhuaidh nuair a tha e na stad
+Fires when incoming timecode passes this point	Cuiridh e nuair a thèid timecode a-steach seachad air a' phuing seo
+Shown to the operator when GO reaches this cue	Air a shealltainn don ghnìomhaiche nuair a ruigeas GO an cue seo
+Source pixels, independent of output placement	Piogsail an tùis, neo-eisimeileach bho shuidheachadh an às-chuir
+Stereo balance, applied live (snaps to center)	Cothromachadh stèirio, beò (glasaidh e sa mheadhan)
+bypassed: nothing here is processed or limited	seachainte: chan eil dad an seo air a làimhseachadh no a chuingealachadh
+headphones, desk sounds and LTC stay out of it	fònaichean-cluais, fuaimean deasga is LTC a' fuireach a-mach às
+transparent outside the ink: put it on a layer	trìd-shoilleir taobh a-muigh na h-inc: cuir air breath e
+what is said, on screen, made on this computer	na thèid a ràdh, air an sgrìn, air a dhèanamh air a' choimpiutair seo
+Above 1 tunnels inward, below 1 blooms outward.	Os cionn 1 tunail a-steach, fo 1 a' fosgladh a-mach.
+Per-cue audio trim: -40 to +40 dB, applied live	Trim fuaime gach cue: -40 gu +40 dB, beò
+Show the message in red - the wrap up NOW state	Seall an teachdaireachd ann an dearg - an staid crìochnaich A-NIS
+The brush's width, as % of the picture's height	Leud a' bhruis, mar % de dh'àirde an deilbh
+What the stream carries: SDR, PQ (HDR10) or HLG	Na tha san t-sruth: SDR, PQ (HDR10) no HLG
+Whether the next shape or pen path adds or cuts	Co-dhiù a chuireas no a gheàrras an ath chruth no slighe peann
+a note or an address becomes that cue's trigger	thig nòta no seòladh gu bhith na inneal-tòiseachaidh aig an cue sin
+transparent outside the blobs: put it on a layer	trìd-shoilleir taobh a-muigh nam blobaichean: cuir air breath e
+Digit colour once red is reached, and in overtime	Dath nan àireamhan aon uair 's gun ruigear dearg, agus thar ùine
+Downmix this cue to mono (mono sources / mono PA)	Measgaich an cue seo sìos gu mono (tùsan mono / PA mono)
+Drag to scrub (shift = fine), click to type exact	Slaod gus sgrìobadh (shift = mìn), briog gus sgrìobhadh mionaideach
+Hand this to an oscillator so it moves on its own	Thoir seo do oscillator gus an gluais e leis fhèin
+Amber is closest to the 1976 single-phosphor look.	Tha òmar as fhaisge air coltas fosfair singilte 1976.
+Changing width also scales height (and vice versa)	Atharraichidh leud an àirde cuideachd (agus a chaochladh)
+Edit title/subtitle here or fire it live with TAKE	Deasaich tiotal/fo-thiotal an seo no cuir beò e le TAKE
+How long the levels take to arrive; zero is a snap	Dè cho fada 's a bheir na h-ìrean gus ruighinn; 's e leum a th' ann an neoni
+Set the self-contained PIP source for this overlay	Suidhich tùs PIP an thar-chòmhdaich seo
+Take the newest shape or pen path out of this mask	Thoir an cruth no slighe peann as ùire a-mach às a' mhasg seo
+Slots are self-contained sources in this first pass	'S e tùsan fèin-chumte a th' anns na slotaichean sa chiad turas seo
+Sway sideways. Depth 1 is half the frame either way	Luasgadh taobh ri taobh. Doimhneachd 1 = leth frèam gach taobh
+no fixtures patched - Settings > Network > FIXTURES	gun innealan sa phatch - Settings > Network > FIXTURES
+Add an output above, then send playlists to it here.	Cuir às-chur ris gu h-àrd, an uairsin cuir liostaichean-cluiche thuige an seo.
+An address sent to Deckboy's OSC port fires this cue	Cuiridh seòladh a chaidh gu port OSC Deckboy an cue seo
+Draw the diagnostic over the card, or just the text.	Tarraing an diagnosachadh thairis air a' chairt, no an teacsa a-mhàin.
+Hold on the last composite frame when the scene ends	Cùm air an fhrèam co-dhèanta mu dheireadh nuair a chrìochnaicheas an sealladh
+How long it takes; zero is a snap rather than a fade	Dè cho fada 's a bheir e; 's e leum a th' ann an neoni seach fad
+Set still/pattern/browser duration for selected cues	Suidhich fad still/pattern/browser airson cues taghte
+Start the LTC carrier, stop it, or jam it to a value	Tòisich an giùlanair LTC, stad e, no sioncronaich e ri luach
+Which cue on that deck; step off the end to clear it	Dè an cue air an deck sin; rach seachad air an deireadh gus fhalamhachadh
+Bob up and down. Depth 1 is half the frame either way	Bob suas is sìos. Doimhneachd 1 = leth frèam gach taobh
+Output width in pixels | click value to type exact px	Leud an às-chuir ann am piogsail | briog air an luach gus sgrìobhadh
+Set the stream URL (srt://, rtmp://, rtsp://, udp://)	Suidhich URL an t-sruth (srt://, rtmp://, rtsp://, udp://)
+All interfaces, but only this computer is trusted yet.	Gach eadar-aghaidh, ach chan eil earbsa ach sa choimpiutair seo fhathast.
+Fires at this time on this computer's clock, every day	Cuiridh e aig an àm seo air gleoc a' choimpiutair seo, gach latha
+Output height in pixels | click value to type exact px	Àirde an às-chuir ann am piogsail | briog air an luach gus sgrìobhadh
+Bar across the foot - readable further back than digits	Bàr tarsainn aig a' bhonn - furasta a leughadh nas fhaide air falbh na àireamhan
+Any font on this computer, Deckboy's own, or a font file	Cruth-clò sam bith air a' choimpiutair seo, fear Deckboy fhèin, no faidhle
+Every channel on every universe this session has touched	Gach seanail air gach uile-cruinne air an do bhean an seisean seo
+OUTPUT: drag a slice to move it, its corners to size it.	ÀS-CHUR: slaod sliseag gus a gluasad, na h-oiseanan aice gus meud.
+Choose a Lower Third from the overlay bin to fire on TAKE	Tagh Lower Third bhon bhiona thar-chòmhdaich gus a chur air TAKE
+Choose a PIP overlay from the overlay bin to fire on TAKE	Tagh thar-chòmhdach PIP bhon bhiona gus a chur air TAKE
+Choose the legacy cue token to show inside the PIP window	Tagh an seann token cue a chithear san uinneig PIP
+OUTPUT: drag a slice to move it, its corners to pin them.	ÀS-CHUR: slaod sliseag gus a gluasad, na h-oiseanan aice gus am prìneachadh.
+ASIO carries the show's sound, and these are not on it yet	Tha ASIO a' giùlan fuaim an taisbeanaidh, agus chan eil iad seo air fhathast
+F1-F10, F12 or the number pad fires this cue from anywhere	Cuiridh F1-F10, F12 no am pada àireamh an cue seo bho àite sam bith
+N=new  Enter/P=previous  O=open saved  E=examples  L=learn	N=ùr  Enter/P=roimhe  O=fosgail sàbhailte  E=eisimpleirean  L=ionnsaich
+Use transition when auto-advancing or goto-taking next cue	Cleachd tar-chur nuair a thèid air adhart leis fhèin no nuair a ghabhar an ath cue
+Hand this parameter to an oscillator so it moves on its own	Thoir am paramadair seo do oscillator gus an gluais e leis fhèin
+Audio fade-in: follow visual fade, none, or explicit seconds	Fad fuaime a-steach: lean fad an deilbh, gun, no diogan sònraichte
+How long the finished drawing stays before it is drawn again	Dè cho fada 's a dh'fhanas an dealbh deiseil mus tèid a tharraing a-rithist
+Audio fade-out: follow visual fade, none, or explicit seconds	Fad fuaime a-mach: lean fad an deilbh, gun, no diogan sònraichte
+How it comes on and goes off: none, fade, rise, slide or wipe	Mar a thig e air is a thèid e dheth: gun, fad, èirigh, sleamhnadh no sguabadh
+The 64-step wavetable, quantised to 6 bits like the hardware.	An clàr-tonn 64-ceum, air a chuantachadh gu 6 bit mar an uidheam.
+Add a library shape to this mask; its points are yours to move	Cuir cruth bhon leabharlann ris a' mhasg seo; 's leatsa na puingean aige
+Art-Net or sACN (E1.31): whichever the lighting rig listens to	Art-Net no sACN (E1.31): ge b' e dè ris a dh'èisteas an rig solais
+No slices: this output shows its one picture. + SLICE to start.	Gun sliseagan: seallaidh an às-chur seo an aon dealbh aige. + SLICE gus tòiseachadh.
+Vary tile size per cell, so the grid stops looking like a grid.	Atharraich meud nan leacan gach cealla, gus nach bi coltas griod air a' ghriod.
+Which output channel carries the signal. 'all' feeds every one.	Dè an seanail às-chuir a ghiùlaineas an siognail. Biathaidh 'all' gach fear.
+What is sent. Backslash-n, -r, -t and -0 become those characters	Na thèid a chur. Bidh Backslash-n, -r, -t is -0 nan caractaran sin
+Deckboy's own remote-protocol verbs, one per line; # is a comment	Gnìomhairean pròtacal Deckboy fhèin, aon gach loidhne; 's e beachd a th' ann an #
+Modulator speed as a ratio of the note, so the bend tracks pitch.	Luaths a' mhodalair mar cho-mheas den nòta, gus an lean an lùbadh an àirde.
+Open and close this edge on an oscillator -- a wipe that breathes	Fosgail is dùin an oir seo air oscillator -- sguabadh a tha ag anail
+Play this cue to the preview only; the outputs keep what they have	Cluich an cue seo don ro-shealladh a-mhàin; cumaidh na às-chuir na th' aca
+Put the pitch on an oscillator: Motion X sweeps it like a theremin	Cuir an àirde air oscillator: sguabaidh Motion X e mar theremin
+A disarmed cue stays in the list and does nothing; GO steps over it	Fanaidh cue dì-armaichte san liosta gun dad a dhèanamh; leumaidh GO thairis air
+Click a value to change it. A red address overlaps another fixture.	Briog air luach gus atharrachadh. Tha seòladh dearg a' dol thairis air inneal eile.
+Where the clock reads from this cue on; click the value to type one	Cò às a leughas an gleoc bhon cue seo; briog air an luach gus sgrìobhadh
+Add a dashboard button that fires this master by name, from anywhere	Cuir putan deasca ris a chuireas am master seo air ainm, bho àite sam bith
+New here? LEARN THE BASICS takes five minutes. We'll show you round.	Ùr an seo? Bheir IONNSAICH NA BUNAITEAN còig mionaidean. Seallaidh sinn dhut.
+An IPv4 address, or 255.255.255.255 to broadcast to the whole network	Seòladh IPv4, no 255.255.255.255 gus craoladh don lìonra air fad
+How much playing audio widens and brightens the pattern. 0 free-runs.	Dè cho mòr 's a leudaicheas is a shoillsicheas fuaim a' phàtran. Ruithidh 0 saor.
+INPUT: the programme. Drag a crop to move it, its corners to size it.	INNTRIGEADH: am prògram. Slaod bàrr gus a ghluasad, na h-oiseanan gus meud.
+LED panel width in pixels - what one tile really is. Click to type it	Leud pannal LED ann am piogsail - dè dha-rìribh a th' ann an leac. Briog gus a sgrìobhadh
+Which deck it acts on; step off the end for the one this cue lives on	Dè an deck air an obraich e; rach seachad air an deireadh airson an deck aig a' cue seo
+only one playlist - use the routing chip on the header to add another	aon liosta-cluiche a-mhàin - cleachd a' chip slighe sa cheann gus tè eile a chur ris
+Which cue this master fires on that deck; step off the end to clear it	Dè an cue a chuireas am master seo air an deck sin; rach seachad air an deireadh gus fhalamhachadh
+Choose a mask from this show's library, or start a new one from a shape	Tagh masg bho leabharlann an taisbeanaidh seo, no tòisich fear ùr bho chruth
+Draw on the programme monitor with the mouse or a pen (DRAW). Esc stops	Tarraing air sgrùdair a' phrògraim leis an luchag no peann (DRAW). Stadaidh Esc
+How long the move takes, each way. 0 is instant whatever the style says	Dè cho fada 's a bheir an gluasad, gach taobh. Tha 0 sa bhad ge b' e dè an stoidhle
+Stop that deck when the ramp lands - the usual take-it-down-and-stop-it	Stad an deck sin nuair a ruigeas an ramp - an gnàth isleachadh-is-stad
+Which of the file's sound tracks plays: a second language, a commentary	Dè an t-slighe fuaime san fhaidhle a chluicheas: dàrna cànan, aithris
+An oscillator on the colour: depth is how far round the wheel it travels	Oscillator air an dath: 's e an doimhneachd cho fada mun cuairt air a' chuibhle
+Rack this cue paused and off air so GO starts it with no decoder spin-up	Cuir an cue seo deiseil na stad is far an èadhair gus an tòisich GO e gun dàil
+Note, control change, program change, MIDI Show Control, or your own bytes	Nòta, control change, program change, MIDI Show Control, no na bytes agad fhèin
+Black behind the words. Zero leaves it over whatever the output already has	Dubh air cùl nam faclan. Fàgaidh neoni iad thairis air na th' aig an às-chur
+How far the modulator bends the pitch. 0-63, the hardware's own gain range.	Dè cho fada 's a lùbas am modalair an àirde. 0-63, raon buannachd an uidheim.
+the words this cue puts on screen  |  Shift+Enter: new line  |  Enter: apply	na faclan a chuireas an cue seo air an sgrìn  |  Shift+Enter: loidhne ùr  |  Enter: cuir an sàs
+OSC and UDP are fire and forget; TCP connects, so it runs off the show thread	Thèid OSC is UDP a chur 's a dhìochuimhneachadh; ceangailidh TCP, mar sin ruithidh e taobh a-muigh snàithlean an taisbeanaidh
+Put the level on an oscillator: Motion makes it a gate that opens as you move	Cuir an ìre air oscillator: nì Motion geata dheth a dh'fhosglas nuair a ghluaiseas tu
+Marks stacked ABOVE the characters, the way combining accents overflow a line.	Comharran air an càrnadh OS CIONN nan caractaran, mar shràcan a' dol thairis air loidhne.
+Save the mask as a greyscale PNG at the output's size: white keeps, black cuts	Sàbhail am masg mar PNG liath aig meud an às-chuir: cumaidh geal, gearraidh dubh
+Which chime. Cycling PLAYS it, so it can be chosen by ear rather than by name.	Dè an clag. Cluichidh atharrachadh e, gus an tagh thu leis a' chluais seach ainm.
+No rows. + ADD or LEARN makes one; MIDIMAP RESET brings the built-in rows back.	Gun sreathan. Nì + ADD no LEARN fear; bheir MIDIMAP RESET na sreathan bunaiteach air ais.
+Save the mask's paths as SVG, for Illustrator and anything else that reads them	Sàbhail slighean a' mhasg mar SVG, airson Illustrator is rud sam bith a leughas iad
+Which MIDI output; a named port that is missing is reported rather than swapped	Dè an às-chur MIDI; thèid aithris air port ainmichte a tha a dhìth an àite atharrachadh
+An oscillator on the level, running after GO until a later cue sets this fixture	Oscillator air an ìre, a' ruith às dèidh GO gus an suidhich cue nas fhaide air adhart an inneal seo
+Steps in third-octaves, because the ear works in ratios. 1kHz is the convention.	Ceuman ann an trian-ochdan, oir obraichidh a' chluas le co-mheasan. 'S e 1kHz an gnàths.
+Strikes drawn ACROSS the cell, damaging the character rather than decorating it.	Stràcan TARSAINN air a' chealla, a' milleadh a' charactair seach a sgeadachadh.
+Whether incoming MIDI notes play this synth or trigger cues as they always have.	Co-dhiù a chluicheas nòtaichean MIDI a-steach an synth seo no an cuir iad cues mar a b' àbhaist.
+A note number, or type LEARN and play it. Notes no cue claims still go to cue N+1	Àireamh nòta, no sgrìobh LEARN is cluich e. Thèid nòtaichean gun cue gu cue N+1
+A plain stereo pair. Click to open the matrix, starting from exactly this routing	Paidhir stèirio sìmplidh. Briog gus am matrix fhosgladh, bhon dearbh shlighe seo
+Folding is what turns an arbitrary pattern into something that reads as designed.	'S e am fillteadh a nì pàtran sam bith rudeigin a tha coltach ri dealbhadh.
+Channel=level, comma separated. Ranges too: 1=255, 10-14=64. Channels count from 1	Seanail=ìre, air an sgaradh le cromagan. Raointean cuideachd: 1=255, 10-14=64. Tha seanailean a' cunntas bho 1
+Moves every selected cue's trim by the same dB; typing a value sets them all to it	Gluaisidh e trim gach cue taghte leis an aon dB; suidhichidh luach sgrìobhte iad uile air
+Bends the carrier's PITCH rather than mixing with it. This is what makes FDS growl.	Lùbaidh e ÀIRDE a' ghiùlanair seach measgachadh leis. 'S e seo a nì dranndan FDS.
+Half way through LEARN THE BASICS. Press L and we pick up where you stopped, skapi.	Leth-slighe tro IONNSAICH NA BUNAITEAN. Brùth L is togaidh sinn suas far an do stad thu, skapi.
+Render as a character grid with a 16-colour indexed palette, rather than as pixels.	Reandaraich mar ghriod charactaran le pailead clàr-amaisichte de 16 dathan, seach piogsail.
+Which MIDI output this file plays to; step past the end for the first one available	Dè an às-chur MIDI don cluich am faidhle seo; rach seachad air an deireadh airson a' chiad fhear ri fhaighinn
+An IPv4 address, or 255.255.255.255 for the universe's multicast group (239.255.x.y)	Seòladh IPv4, no 255.255.255.255 airson buidheann multicast an uile-cruinne (239.255.x.y)
+Click a cell to walk it: off, full, -3, -6, -12. This row turns the matrix off again	Briog air cealla gus a chuairteachadh: dheth, làn, -3, -6, -12. Cuiridh an sreath seo am matrix dheth a-rithist
+How long each phrase stays before it moves. Zero hides them without losing the list.	Dè cho fada 's a dh'fhanas gach abairt mus gluais i. Falaichidh neoni iad gun an liosta a chall.
+How long it takes to fall away after the attack. Only audible when retrigger is set.	Dè cho fada 's a bheir e a dhol sìos às dèidh an ionnsaigh. Ri chluinntinn a-mhàin le ath-thòiseachadh air.
+Off, from start (next cue fires when this one starts) or from end (when it finishes)	Dheth, bhon toiseach (tòisichidh an ath cue nuair a thòisicheas am fear seo) no bhon deireadh (nuair a chrìochnaicheas e)
+Height of one line as a percent of the raster, so a card reads the same on any screen	Àirde aon loidhne mar cheudad den raster, gus an leughar cairt mar an ceudna air sgrìn sam bith
+Set slot source as media:/path, browser:url, window:name, camera:name, or syphon:name	Suidhich tùs slot mar media:/slighe, browser:url, window:ainm, camera:ainm, no syphon:ainm
+Short LFSR mode. The period is brief enough to read as pitched metal rather than hiss.	Modh LFSR goirid. Tha an ùine goirid gu leòr gus fuaim mar mheatailt gleusta seach siosarnaich.
+White, warm, red, amber, green, cyan, blue, magenta. ~ moves it round the colour wheel	Geal, blàth, dearg, òmar, uaine, saidhean, gorm, magenta. Gluaisidh ~ e mun cuairt air cuibhle nan dathan
+Re-strike the envelope this often. Hold sustains one note, which is what a drone wants.	Buail an cèis a-rithist cho tric seo. Cumaidh Hold aon nòta, nì a tha drone ag iarraidh.
+Diamond is the hard-edged Atari Video Music lattice; rings tunnel well with feedback zoom.	'S e Diamond cliath oir-chruaidh Atari Video Music; nì fàinneachan tunail math le zoom ais-bhiadhaidh.
+Rock or spin. Depth 1 is half a turn either way; a saw at depth 1 turns it all the way round	Luasgadh no snìomh. Doimhneachd 1 = leth thionndadh gach taobh; tionndaidhidh sàbh aig 1 e fad na slighe mun cuairt
+DECK playback level (live, not saved with the cue) - per-cue trim is gain in the AUDIO section	Ìre cluiche DECK (beò, gun shàbhaladh leis a' cue) - 's e buannachd ann an earrann AUDIO a th' ann an trim gach cue
+Still, fade in, typewriter, scroll up, crawl or pulse -- all driven by the cue's own transport	Na stad, fad a-steach, clò-sgrìobhadair, sgrolaich suas, snàigeadh no buille -- uile air an stiùireadh le còmhdhail a' cue fhèin
+Fields per rendered frame. 1 is one for one, 0.5 holds each field for two frames, 0 freezes it.	Raointean gach frèam. Tha 1 aon airson aon, cumaidh 0.5 gach raon airson dà fhrèam, reòthaidh 0 e.
+What this cue shows while it plays: waveform, scope, Lissajous, spectrum, meters or a name card	Na sheallas an cue seo fhad 's a tha e a' cluich: cruth-tonn, scope, Lissajous, speactram, meatairean no cairt-ainm
+0 picks tiles by brightness so the picture reads. 1 picks at random so the grid becomes texture.	Taghaidh 0 leacan a rèir soilleireachd gus an leughar an dealbh. Taghaidh 1 air thuaiream gus am bi an griod na inneach.
+How far it travels, in semitones. Up reads as arrival, down as departure, zero is a struck note.	Dè cho fada 's a shiubhaileas e, ann an leth-thònan. Suas mar ruighinn, sìos mar fhàgail, neoni mar nòta buailte.
+An IPv4 address. Names are not resolved: a DNS lookup is a blocking call and GO must not make one	Seòladh IPv4. Chan fhuasglar ainmean: 's e gairm bacaidh a th' ann an lorg DNS agus chan fhaod GO fear a dhèanamh
+Tile width in pixels. Must match the sheet's grid or the slices land across neighbouring sprites.	Leud leac ann am piogsail. Feumaidh e griod na duilleig a mhaidseadh, air neo laighidh na sliseagan tarsainn air sprites ri thaobh.
+Alternating mirrors by cell position, which reads as pattern where random flipping reads as noise.	Sgàthain mu seach a rèir àite na cealla, a leughas mar phàtran far an leughadh flipeadh air thuaiream mar fhuaim.
+0 welds them to their cell, which reads as engraved. Above it they re-roll, which reads as boiling.	Tàthaidh 0 iad ris a' chealla aca, a leughas mar ghràbhaladh. Os a chionn ath-roilichear iad, a leughas mar ghoil.
+MONO L plays the left input in both speakers: mic 1 on most interfaces. STEREO is for a line source.	Cluichidh MONO L an t-inntrigeadh clì anns gach glaodhaire: mic 1 air a' mhòr-chuid. Tha STEREO airson tùs loidhne.
+The whole gesture. This IS the cue's duration -- a sting is the one generated signal here that ends.	An gluasad slàn. 'S E seo fad a' cue -- 's e sting an aon siognail gineadh an seo a thig gu crìch.
+Click the value to send this fixture or leave it where the last cue put it. ~ makes the level breathe	Briog air an luach gus an inneal seo a chur no fhàgail far an do chuir an cue mu dheireadh e. Nì ~ anail air an ìre
+FDS is a wavetable bent by a modulator. 2A03 is the pulse/triangle/noise set most chiptune is made of.	'S e clàr-tonn a th' ann am FDS air a lùbadh le modalair. 'S e 2A03 an t-seata buille/triantan/fuaim às a bheil a' mhòr-chuid de chiptune.
+Scramble which glyph means which brightness. Same set, different handwriting. Seeded, so it stays put.	Measgaich dè an glyph a tha a' ciallachadh dè an soilleireachd. An aon seata, làmh-sgrìobhaidh eile. Le sìol, mar sin fuirichidh e.
+Pixel sort: runs of pixels sorted by brightness within a row, which is what makes datamosh look melted.	Seòrsachadh piogsail: ruith de phiogsail air an seòrsachadh a rèir soilleireachd taobh a-staigh sreath, a nì datamosh coltach ri leaghadh.
+How many cells the marks may climb. They thin out as they go, so a tall reach trails rather than doubles.	Co mheud ceallan as urrainn do na comharran dìreadh. Tanaichidh iad mar a thèid iad, mar sin slaodaidh ruigsinn àrd seach dùblachadh.
+cue act val  -  G take  S stop  F fade out (val = tenths of a second)  V volume  O opacity  J jump to row	cue gnìomh luach  -  G gabh  S stad  F fad a-mach (luach = deicheamhan diog)  V àirde  O trìd-shoilleireachd  J leum gu sreath
+Harmonic weight: a pure chime at zero, brass at full. This is the difference between a ping and a fanfare.	Cuideam co-sheirm: clag fìor aig neoni, umha aig làn. 'S e seo an diofar eadar ping is fanfare.
+Steps through the inputs this computer has. 'Settings input' follows the input chosen in Settings > Audio.	Ceumaichidh e tro na h-inntrigidhean air a' choimpiutair seo. Leanaidh 'Settings input' an t-inntrigeadh a chaidh a thaghadh ann an Settings > Audio.
+Embers to roaring. It still surges and settles at any setting -- a fire that does not move reads as a photo	Bho èibhlean gu buaireadh. Bidh e fhathast ag èirigh 's a' socrachadh aig ìre sam bith -- tha teine nach gluais coltach ri dealbh
+Reference pitch. 440 is modern standard, 432 the common alternative, and older instruments sat lower still.	Àirde iomraidh. 'S e 440 an ìre ùr-nodha, 432 an roghainn eile chumanta, agus bha seann ionnstramaidean nas ìsle fhathast.
+Where the sting starts. Under a voice it wants to stay out of the way; over a room it wants to cut through.	Far an tòisich an sting. Fo ghuth bu chòir dha fuireach a-mach às an rathad; thairis air seòmar bu chòir dha gearradh troimhe.
+Digital gain on the input, -40 to +40 dB. Set the interface's own preamp first; this is for the last few dB.	Buannachd didseatach air an inntrigeadh, -40 gu +40 dB. Suidhich preamp an eadar-aghaidh an toiseach; tha seo airson an beagan dB mu dheireadh.
+Pulse the size. On its own this moves width AND height together; give height its own ~ to squash and stretch	Buille air a' mheud. Leis fhèin gluaisidh seo leud IS àirde còmhla; thoir ~ fhèin don àirde gus brùthadh is sìneadh
+A card fills the frame; a Lower Third is a name and a role, low on a transparent frame, with an in and an out	Lìonaidh cairt am frèam; 's e ainm is dreuchd a th' ann an Lower Third, ìosal air frèam trìd-shoilleir, le teachd a-steach is a-mach
+Held keeps the last displacement rather than removing it -- the picture stays bent the way the driver left it.	Cumaidh Held an gluasad mu dheireadh seach a thoirt air falbh -- fanaidh an dealbh lùbte mar a dh'fhàg an draibhear e.
+12.5 and 25 are thin and reedy, 50 is hollow. 75 sounds identical to 25 -- it is here because trackers expose it.	Tha 12.5 is 25 caol is cuilceach, tha 50 falamh. Tha 75 dìreach mar 25 -- tha e an seo oir tha trackers ga shealltainn.
+Quantise the output like the hardware. The steps ARE the sound; smoothing them makes it a synth imitating a chip.	Cuantaich an às-chur mar an uidheam. 'S iad na ceuman an fhuaim; nì an lìomhadh synth a tha ag atharrais air chip.
+Moves every selected cue's trim by the same dB, keeping the differences between them; typing a value sets them all to it	Gluaisidh e trim gach cue taghte leis an aon dB, a' cumail an eadar-dhealachaidhean; suidhichidh luach sgrìobhte iad uile air
+Where the playlist's crosspoints send it (Settings > Audio). Click to open the matrix by name, starting from exactly that	Far an cuir puingean-tarsainn na liosta-cluiche e (Settings > Audio). Briog gus am matrix fhosgladh air ainm, bhon dearbh shlighe sin
+name values with  d = ...;  end with one expression, or three for red green blue  |  Shift+Enter: new line  |  Enter: apply	ainmich luachan le  d = ...;  crìochnaich le aon abairt, no trì airson dearg uaine gorm  |  Shift+Enter: loidhne ùr  |  Enter: cuir an sàs
+Put back what it started from once the ramp lands (after the stop): a deck left ready for its next cue, a swell that lets go	Cuir air ais na bha aig an toiseach aon uair 's gun ruigeas an ramp (às dèidh an stad): deck deiseil airson an ath cue, at a leigeas às
+Which speech model makes the captions: English, any language, or the slower, more accurate pair. Each is a one-time download	Dè am modail cainnte a nì na fo-thiotalan: Beurla, cànan sam bith, no am paidhir as slaodaiche ach nas mionaidiche. Thèid gach fear a luchdachadh sìos aon turas
+What the mask cuts: this cue wherever it plays, this playlist on the focused output, that output's whole picture, or its matte	Na ghearras am masg: an cue seo ge b' e càite an cluich e, an liosta-cluiche seo air an às-chur le fòcas, dealbh slàn an às-chuir sin, no am matte aige
+Play at the screen's rate when it is within 0.2% (59.94 on 60): every frame shown once, the sound up to 3.5 cents sharp or flat	Cluich aig reat na sgrìn nuair a tha e taobh a-staigh 0.2% (59.94 air 60): gach frèam aon turas, an fhuaim suas gu 3.5 sgillin geur no flat
+Quarter turns are exact and stay crisp. Spinning samples at an angle, which tears pixel art -- sometimes that is what you want.	Tha cairteal-tionndaidh mionaideach is fuirichidh iad geur. Bheir snìomh sampall aig ceàrn, a reubas ealain piogsail -- uaireannan 's e sin a tha thu ag iarraidh.
+Every take starts the puppetry the same way, so a rehearsed look repeats instead of depending on how long the app has been open.	Tòisichidh gach take an t-siubhal san aon dòigh, gus an tig coltas a chaidh ath-aithris air ais seach a bhith an urra ri cho fada 's a tha an aplacaid fosgailte.
+What aims each tilt: its own position, the picture's luma gradient so characters lean the way the image does, or the cell's hue.	Na stiùireas gach claonadh: an àite aige fhèin, caisead luma an deilbh gus an aom na caractaran mar an ìomhaigh, no tuar na cealla.
+Name a channel or a pair once. Playlists send to the name, so a different interface means changing the names here, not every cue.	Ainmich seanail no paidhir aon uair. Cuiridh liostaichean-cluiche chun an ainm, mar sin 's e atharrachadh nan ainmean an seo a th' ann an eadar-aghaidh eile, chan e gach cue.
+Click a crosspoint to walk it: off, 0, -3, -6, -12 dB. Drag it sideways for any level. A playlist with none plays to its own device.	Briog air puing-tarsainn gus a cuairteachadh: dheth, 0, -3, -6, -12 dB. Slaod i gu taobh airson ìre sam bith. Cluichidh liosta gun gin dhiubh gu a h-inneal fhèin.
+Sprite sets installed in data/sprites. Each folder there is a set; cycling picks one and wraps back to none. Right-click turns them off.	Seataichean sprite ann an data/sprites. 'S e seata a th' anns gach pasgan; taghaidh cuairteachadh fear agus tillidh e gu gun ghin. Cuiridh briog deas dheth iad.
+Internal resolution, 1 chunkiest to 5 finest. This is an aesthetic control as much as a speed one -- the 8-bit look comes from big pixels.	Dùmhlachd a-staigh, 1 as gairbhe gu 5 as mìne. 'S e smachd coltais a th' ann cho mòr ri smachd luaiths -- thig coltas 8-bit bho phiogsail mhòra.
+Picture takes colour from the image. Green, amber and cyan are terminal phosphors. Palette locks the text to the selected hardware palette.	Gabhaidh Picture dath bhon ìomhaigh. 'S e fosfairean teirmineal a th' ann an uaine, òmar is saidhean. Glasaidh Palette an teacsa ris a' phailead uidheim a chaidh a thaghadh.
+SUBTLE self-heals (H.264). CLASSIC is the real smear (MPEG-4). EXTREME is chunkier and smears constantly. Changing this re-prepares the cue.	Leighisidh SUBTLE e fhèin (H.264). 'S e CLASSIC an fhìor smal (MPEG-4). Tha EXTREME nas gairbhe is smalaichidh e fad na h-ùine. Ullaichidh atharrachadh seo an cue a-rithist.
+Sine for line-up, pink to ring out a PA, white to find rattles, sweep to hear where a room rings, identify to walk the outputs one at a time.	Sine airson co-thaobhadh, pinc gus PA a bhualadh, geal gus gliongartaich a lorg, sguabadh gus cluinntinn càite am bi seòmar a' seirm, identify gus coiseachd tro na às-chuir aon às dèidh aoin.
+Which effect, by its place in the stack of the cue that deck is playing when this fires. With nothing there, the fade says so and does nothing	Dè a' bhuaidh, a rèir a h-àite ann an cruach a' cue a tha an deck sin a' cluich nuair a thèid seo. Gun dad ann, canaidh am fad sin is cha dèan e dad
+Each frame blended into the next. This is the Hypno signature -- at 0 it is a pattern generator, above it the picture starts feeding on itself.	Gach frèam air a mheasgachadh dhan ath fhear. 'S e seo comharra Hypno -- aig 0 's e gineadair pàtrain a th' ann, os a chionn tòisichidh an dealbh ga bhiathadh fhèin.
+What is through the window on the hearth wall: a garden, rain, snow or the sea. A room with weather outside reads as somewhere rather than as a wall	Na tha tron uinneig air balla an teallaich: gàrradh, uisge, sneachd no a' mhuir. Leughaidh seòmar le aimsir a-muigh mar àite seach balla
+BY FIXTURE: the lights in the patch (Settings > Network > FIXTURES), by name. CHANNELS: channel=level by hand. A cue can carry both; channels go last	A RÈIR INNEAL: na solais sa phatch (Settings > Network > FIXTURES), air ainm. SEANAILEAN: seanail=ìre le làimh. Faodaidh cue an dà chuid a ghiùlan; thèid seanailean mu dheireadh
+Each character rocks as though it were a card being tilted. Every cell has its own phase, so the grid breathes instead of sliding about as one sheet.	Luaisgidh gach caractar mar chairt ga aomadh. Tha a ceum fhèin aig gach cealla, mar sin bidh anail aig a' ghriod seach sleamhnadh mar aon duilleag.
+Pen: click for corners, drag for curves, click the first point to close (P). Points: drag, click the outline to add one, Alt-click or Delete to remove	Peann: briog airson oiseanan, slaod airson lùban, briog air a' chiad phuing gus dùnadh (P). Puingean: slaod, briog air an iomall gus tè a chur ris, Alt-briog no Delete gus a toirt air falbh
+The chip's three channels. They differ in kind: triangle has no volume control on the hardware, and noise is a shift register rather than an oscillator.	Trì seanailean a' chip. Tha iad eadar-dhealaichte: chan eil smachd àirde aig triantan air an uidheam, agus 's e clàr-gluasaid a th' ann am fuaim seach oscillator.
+Curated sets of symbols and emoji -- stars, notes, flowers, arrows, weather, runes, faces. Picking one fills the custom glyphs below, which stays editable.	Seataichean taghte de shamhlaidhean is emoji -- rionnagan, nòtaichean, flùraichean, saighdean, aimsir, rùintean, aodainn. Lìonaidh taghadh fear na glyphs gnàthaichte gu h-ìosal, a ghabhas deasachadh fhathast.
+Play from the computer keyboard, Ableton layout: A W S E D F T G Y H U J, Z and X for octave. While this is ON those keys make notes instead of firing cues.	Cluich bhon mheur-chlàr, cruth Ableton: A W S E D F T G Y H U J, Z is X airson ochdad. Fhad 's a tha seo AIR nì na h-iuchraichean sin nòtaichean seach cues a chur.
+Deck opacity, deck volume, the master dimmer, the active cue's own brightness / contrast / saturation / hue, or a knob of one of its effects or audio effects	Trìd-shoilleireachd deck, àirde deck, am prìomh dimmer, soilleireachd / iomsgaradh / sàthachadh / tuar a' cue ghnìomhaich, no putan aon de na buaidhean no buaidhean fuaime aige
+Scanlines, phosphor bloom and RGB fringing. The bloom is the part that matters -- a phosphor spills sideways, which is why a CRT looks like it is emitting light.	Loidhnichean-sganaidh, blàth fosfair is iomall RGB. 'S e am blàth am pàirt as cudromaiche -- dòirtidh fosfar gu taobh, agus sin as coireach gu bheil CRT coltach ri solas a chur a-mach.
+Torn scanline bands and RGB separation. In text mode it also corrupts CELLS -- whole rows lock to one repeating character, the way a real text screen loses sync.	Bannan loidhne reubte is sgaradh RGB. Ann am modh teacsa millidh e CEALLAN cuideachd -- glasaidh sreathan slàna ri aon charactar ath-aithriseach, mar fhìor sgrìn teacsa a' call sioncronachaidh.
+Still holds the frame you are on. Flipbook plays the frames in turn. Replay draws the first frame stroke by stroke, the way it was drawn, then holds and starts again	Cumaidh Still am frèam far a bheil thu. Cluichidh Flipbook na frèaman mu seach. Tarraingidh Replay a' chiad fhrèam stràc air stràc, mar a chaidh a tharraing, an uairsin cumaidh is tòisichidh e a-rithist
+Start, Stop, Pause, Resume, Load (stand it by without firing), Arm, Disarm, or Devamp it (a loop plays out its pass and ends); or Stop all, Pause all, Resume all: every deck	Start, Stop, Pause, Resume, Load (cuir na sheasamh gun a chur), Arm, Disarm, no Devamp (cluichidh lùb an turas aice is crìochnaichidh i); no Stop all, Pause all, Resume all: gach deck
+Scope shows shape and clipping. Lissajous shows phase and polarity between the first two channels -- a diagonal the wrong way means one is inverted. Spectrum is third-octave bars.	Seallaidh Scope cumadh is gearradh. Seallaidh Lissajous ceum is pòlaireachd eadar a' chiad dà sheanail -- tha trastan air an dòigh cheàrr a' ciallachadh gu bheil fear tionndaidhte. 'S e bàraichean trian-ochdan a th' ann an Spectrum.
+0 picks the glyph the brightness asks for, 1 picks any glyph in the set. Turn it up to see the whole alphabet: ranked strictly by ink, a flat area picks one mark and the rest never appear.	Taghaidh 0 an glyph a tha an soilleireachd ag iarraidh, taghaidh 1 glyph sam bith san t-seata. Tionndaidh suas e gus an aibidil slàn fhaicinn: rangaichte a rèir inc, taghaidh raon còmhnard aon chomharra is cha nochd an còrr idir.
+Blocks and dithers read as density; the ASCII ramp reads as text; symbols read as wreckage. Cycling this clears a custom glyph string, since that would override it -- the preset row puts one back.	Leughaidh blocaichean is dithers mar dhùmhlachd; leughaidh an ramp ASCII mar theacsa; leughaidh samhlaidhean mar sprùilleach. Glanaidh cuairteachadh seo sreang glyph gnàthaichte, oir chuireadh i às dha -- cuiridh an sreath ro-shuidhichte fear air ais.
+Equal temperament buys free modulation at the cost of every interval being slightly wrong. Just and pythagorean are exactly in tune in one key. Bohlen-Pierce divides a twelfth, so it has no octaves.	Ceannaichidh gleusadh co-ionann atharrachadh-iuchrach saor aig cosgais gu bheil gach eadar-ama beagan ceàrr. Tha gleusadh dìreach is pythagorean gu tur ann an gleus ann an aon iuchair. Roinnidh Bohlen-Pierce an dàrna deug, mar sin chan eil ochdadan aige.
+OSC	OSC
+Twitch	Twitch
+Art-Net	Art-Net
+YouTube	YouTube
+PQ - HDR10	PQ - HDR10
+sACN (E1.31)	sACN (E1.31)
+DECKBOY  POCKET	DECKBOY  POCKET
+DECKLINK SDI / HDMI	DECKLINK SDI / HDMI
+AMWA NMOS  IS-04 / IS-05	AMWA NMOS  IS-04 / IS-05
+in	a-steach
+Arm	Armaich
+TAP	BUAIL
+bar	bàr
+out	a-mach
+Fade	Fad
+Gate	Geata
+Seam	Fuaigheal
+Tone	Tòna
+card	cairt
+does	nì
+fire	cuir
+freq	tricead
+knob	putan
+outs	às-chuir
+says	ag ràdh
+snap	leum
+span	raon
+wipe	sguab
+Crawl	Snàig
+Crush	Pronn
+Moire	Moiré
+Pulse	Buille
+Scrub	Sgrìob
+Swirl	Cuairteag
+Timer	Uaireadair
+WACKY	NEÒNACH
+chime	clag
+comic	comaig
+moves	gluasadan
+plays	cluichidh
+press	brùth
+sends	cuiridh
+slide	sleamhnaich
+Bottom	Bonn
+COLOUR	DATH
+DARKEN	DORCHAICH
+Disarm	Dì-armaich
+Master	Maighstir
+Reverb	Aisealadh
+Wobble	Crith
+credit	creideas
+ledger	leabhar-cunntais
+podium	àrd-ùrlar
+sticky	steigeach
+survey	sgrùdadh
+visual	lèirsinneach
+COMPARE	DÈAN COIMEAS
+Ease in	Socair a-steach
+Ghastly	Uabhasach
+LED MAP	MAPA LED
+LIGHTEN	SOILLSICH
+Push up	Put suas
+S-curve	Lùb-S
+Shatter	Spealg
+Suspend	Cuir dàil
+Tilt EQ	Claon EQ
+Wipe up	Sguab suas
+bracket	camag
+eq band	bann eq
+inherit	sealbhaich
+marquee	bratach-ruith
+pennant	bratach
+placard	clàr-taisbeanaidh
+routing	stiùireadh
+sparkle	lainnir
+stacked	air a chàrnadh
+visuals	seallaidhean
+Dissolve	Leaghadh
+END HOLD	CRÌOCH CÙM
+END LOOP	CRÌOCH LÙB
+END NEXT	CRÌOCH ATH
+END STOP	CRÌOCH STAD
+Ease out	Socair a-mach
+Low pass	Sìoladh ìosal
+Place it	Suidhich e
+SEQUENCE	SREATH
+Spectrum	Speactram
+TRIGGERS	INNEALAN-TÒISEACHAIDH
+Waveform	Cruth-tonn
+built in	togte a-staigh
+contrast	iomsgaradh
+diskette	diosga
+feedback	ais-bhiadhadh
+hairline	loidhne chaol
+listener	neach-èisteachd
+overtime	thar ùine
+protocol	pròtacal
+sideline	taobh-loidhne
+Bit depth	Doimhneachd bit
+Composite	Co-dhèanta
+High pass	Sìoladh àrd
+Name Card	Cairt-ainm
+Placement	Suidheachadh
+Push down	Put sìos
+Push left	Put clì
+Scroll up	Sgrolaich suas
+Wipe down	Sguab sìos
+Wipe left	Sguab clì
+auto next	fèin ath
+blueprint	gorm-dhealbh
+cartridge	cartas
+crossfade	tar-fhad
+crosshair	crois-chuimseachaidh
+dotmatrix	matrix dhotagan
+equalizer	co-ionannaiche
+even grid	griod cothromach
+hold last	cùm am fear mu dheireadh
+they have	tha aca
+this deck	an deck seo
+tolerance	fulangas
+Compressor	Teannachair
+Corner pin	Prìne oisein
+Crosshatch	Tar-loidhneachadh
+Fade+Pause	Fad+Stad
+Frame lock	Glas frèam
+HDR signal	Siognail HDR
+NDI Source	Tùs NDI
+Push right	Put deas
+Typewriter	Clò-sgrìobhadair
+Wipe right	Sguab deas
+hold {n} s	cùm {n} d
+knob 0-127	putan 0-127
+safe areas	raointean sàbhailte
+saturation	sàthachadh
+scoreboard	clàr-sgòr
+tile width	leud leac
+Auto-follow	Leantainn fèin-obrachail
+Bar opacity	Trìd-shoilleireachd bàir
+Browser Cue	Cue brabhsair
+Deck volume	Àirde deck
+Fade+Rewind	Fad+Ath-thoinneamh
+Output mask	Masg às-chuir
+Outputs Off	Às-chuir dheth
+Raster mode	Modh raster
+Toggle loop	Toglaich lùb
+Video Synth	Synth bhidio
+audio meter	meatair fuaime
+goto target	targaid goto
+on the desk	air an deasg
+tile height	àirde leac
+(no monitor)	(gun sgrùdair)
+Checkerboard	Bòrd-dàmais
+Cue contrast	Iomsgaradh cue
+Deck opacity	Trìd-shoilleireachd deck
+Dip to black	Tum gu dubh
+Dip to white	Tum gu geal
+Level Meters	Meatairean ìre
+Matte aspect	Co-mheas matte
+Refresh rate	Reat ùrachaidh
+clear driver	glan an draibhear
+rounded rect	ceart-cheàrnach cruinn
+Auto-continue	Leantainn fèin-obrachail
+Camera Source	Tùs camara
+Fade+LoadNext	Fad+Luchdaich ath
+J jump to row	J leum gu sreath
+Master dimmer	Prìomh dimmer
+Overlay image	Ìomhaigh thar-chòmhdaich
+Overlay still	Dealbh thar-chòmhdaich
+Recent shows:	Taisbeanaidhean o chionn ghoirid:
+Run the clock	Ruith an gleoc
+Window Source	Tùs uinneige
+one named cue	aon cue ainmichte
+starting xvfb	a' tòiseachadh xvfb
+Cue brightness	Soilleireachd cue
+Cue saturation	Sàthachadh cue
+DeckLink Input	Inntrigeadh DeckLink
+Default Camera	Camara bunaiteach
+Toggle fade in	Toglaich fad a-steach
+fill the frame	lìon am frèam
+tone cue added	cue tòna air a chur ris
+Do not continue	Na lean air adhart
+Overlay opacity	Trìd-shoilleireachd thar-chòmhdaich
+SDR material at	Stuth SDR aig
+Toggle fade out	Toglaich fad a-mach
+decoder spin-up	snìomh a' chòdaire
+endless encoder	còdair gun chrìoch
+press + release	brùth + leig às
+slide from left	sleamhnaich bho chlì
++ ONE AFTER THIS	+ AON ÀS DÈIDH SEO
+2 · WHAT IT RUNS	2 · NA RUITHEAS E
+An effect's knob	Putan buaidh
+Default App Feed	Biadhadh bunaiteach an aplacaid
+GO steps over it	Leumaidh GO thairis air
+Hardware display	Taisbeanadh uidheim
+ONE PER PLAYLIST	AON GACH LIOSTA
+Speed, like tape	Luaths, mar theip
+Toggle cue audio	Toglaich fuaim cue
+import an SVG...	ion-phortaich SVG...
+slide from right	sleamhnaich bho dheas
+source cue added	cue tùis air a chur ris
+starting browser	a' tòiseachadh brabhsair
+starting capture	a' tòiseachadh glacaidh
+the selected cue	an cue taghte
+- REMOVE THIS ONE	- THOIR AIR FALBH AM FEAR SEO
+1 · WHAT COMES IN	1 · NA THIG A-STEACH
+Pocket Test (day)	Deuchainn Pocket (latha)
+browser cue added	cue brabhsair air a chur ris
+or your own bytes	no na bytes agad fhèin
+this cue lives on	tha an cue seo a' fuireach air
+value to type one	luach airson fear a sgrìobhadh
+System audio (SDL)	Fuaim an t-siostaim (SDL)
+Transition to next	Tar-chur chun ath fhear
+When taken off air	Nuair a thèid a thoirt far an èadhair
+output already has	tha aig an às-chur mu thràth
+restart driver now	ath-thòisich an draibhear an-dràsta
+3 · WHAT IT RUNS ON	3 · CÀIT AN RUITH E
+Dark Detail (0-12%)	Mion-fhiosrachadh dorcha (0-12%)
+Frame Count (emoji)	Cunntair frèam (emoji)
+PLUGE (black level)	PLUGE (ìre dhubh)
+Pocket Test (night)	Deuchainn Pocket (oidhche)
+Pocket Test (storm)	Deuchainn Pocket (stoirm)
+Previous show file:	Faidhle an taisbeanaidh roimhe:
+Syphon/Spout Source	Tùs Syphon/Spout
+rise, slide or wipe	èirigh, sleamhnaich no sguab
+Dimmer + temperature	Dimmer + teòthachd
+Panel Map (animated)	Mapa phannalan (beòthaichte)
+Pocket Test (sunset)	Deuchainn Pocket (dol fodha na grèine)
+initializing webview	a' tòiseachadh webview
+Boresight (alignment)	Cuimseachadh (co-thaobhadh)
+Not watching a folder	Chan eil e a' coimhead air pasgan
+SMPTE 75% Colour Bars	Bàraichean dath SMPTE 75%
+line  |  Enter: apply	loidhne  |  Enter: cuir an sàs
+An audio effect's knob	Putan buaidh fuaime
+Multiburst (bandwidth)	Multiburst (leud-banna)
+(default system device)	(inneal bunaiteach an t-siostaim)
+Convergence (fine grid)	Co-chruinneachadh (griod mìn)
+Greyscale Steps (gamma)	Ceumannan liath (gamma)
+K — cycle cue color tag	K — cuairtich taga dath a' cue
+whatever the style says	ge b' e dè a chanas an stoidhle
+Uniformity (flat fields)	Co-ionannachd (raointean rèidh)
+runs off the show thread	a' ruith taobh a-muigh snàithlean an taisbeanaidh
+Open a .deckboy show file	Fosgail faidhle taisbeanaidh .deckboy
+Toggle hold on last frame	Toglaich cumail air an fhrèam mu dheireadh
+from exactly this routing	bhon dearbh shlighe seo
+~ makes the level breathe	nì ~ anail air an ìre
+CLEAR OVERLAY  [Backspace]	GLAN AN THAR-CHÒMHDACH  [Backspace]
+Stop puppeteering this cue	Sguir a' cluich leis a' cue seo
+Test Clock (sync + latency)	Gleoc deuchainn (sync + dàil)
+auto (reads the common two)	fèin (leughaidh e an dà chumanta)
+one big, the rest beside it	fear mòr, càch ri thaobh
+Panel Map (LED tile numbers)	Mapa phannalan (àireamhan leacan LED)
+Portal (blobs of deep space)	Portal (blobaichean fànais dhomhainn)
+Set cue ID for selected cues	Suidhich ID cue airson cues taghte
+Terrarium (living ecosystem)	Terrarium (eag-shiostam beò)
+Window 10% (peak brightness)	Uinneag 10% (soilleireachd as àirde)
+Window 50% (peak at mid APL)	Uinneag 50% (as àirde aig APL meadhanach)
+on the header to add another	air a' cheann gus fear eile a chur ris
+reads the same on any screen	a' leughadh mar an ceudna air sgrìn sam bith
+reported rather than swapped	air aithris seach air atharrachadh
+Frame Count (drops + latency)	Cunntair frèam (call + dàil)
+Terrarium Pico (1px per cell)	Terrarium Pico (1px gach cealla)
+Banding Ramps (real bit depth)	Rampaichean banding (fìor dhoimhneachd bit)
+Fireside (a hearth that burns)	Taobh an teine (teallach a' losgadh)
+Nothing to see here. Probably.	Chan eil dad ri fhaicinn an seo. Is dòcha.
+Test Bars (motion diagnostics)	Bàraichean deuchainn (diagnosachadh gluasaid)
+What fires this cue besides GO	Dè a chuireas an cue seo a bharrachd air GO
+on air in the focused playlist	beò anns an liosta le fòcas
+one big on top, the rest below	fear mòr gu h-àrd, càch fodha
+row turns the matrix off again	cuiridh an sreath am matrix dheth a-rithist
+two big on top, the rest below	dà mhòr gu h-àrd, càch fodha
+SOS. Kidding. The show is fine.	SOS. Fealla-dhà. Tha an taisbeanadh ceart.
+Test: move it on the controller	Deuchainn: gluais e air an uidheam-smachd
+walk the outputs one at a time.	coisich tro na às-chuir aon às dèidh aoin.
+Moire 1:1 (is anything scaling?)	Moiré 1:1 (a bheil dad ag atharrachadh meud?)
+Set short cue id for search/goto	Suidhich ID goirid cue airson lorg/goto
+Set goto target for selected cues	Suidhich targaid goto airson cues taghte
+ORDER - cues advance down the list	ORDER - thèid cues sìos an liosta
+depth 1 turns it all the way round	tionndaidhidh doimhneachd 1 e fad na slighe
+load a sprite sheet from a file...	luchdaich duilleag sprite bho fhaidhle...
+EDIT is on: typing changes the show	Tha EDIT air: atharraichidh sgrìobhadh an taisbeanadh
+0-63, the hardware's own gain range.	0-63, raon buannachd an uidheim fhèin.
+Pocket Test (test card + scene cycle)	Deuchainn Pocket (cairt deuchainn + cuairt sheallaidhean)
+all driven by the cue's own transport	uile air an stiùireadh le còmhdhail a' cue fhèin
+Set cue token to jump to when cue ends	Suidhich token cue airson leum thuige nuair a chrìochnaicheas an cue
+Jump the driver back to its first frame	Leum an draibhear air ais gu a' chiad fhrèam
+Play the out move now, then take it off	Cluich an gluasad a-mach an-dràsta, an uairsin thoir dheth e
+Clear the active Lower Third overlay now	Glan an thar-chòmhdach Lower Third gnìomhach an-dràsta
+Critters (pixel-exact scaling, animated)	Critters (sgèileadh piogsail-mionaideach, beòthaichte)
+the selected cue in the focused playlist	an cue taghte anns an liosta le fòcas
+that output's whole picture, or its matte	dealbh slàn an às-chuir sin, no am matte aige
+Lissajous, spectrum, meters or a name card	Lissajous, speactram, meatairean no cairt-ainm
+SHUFFLE - the next cue is picked at random	SHUFFLE - thèid an ath cue a thaghadh air thuaiream
+Ancient cypher, modern video desk. Respect.	Seann chòd-dìomhair, deasg bhidio ùr. Spèis.
+Ctrl+Shift+S - write the show to a NEW file	Ctrl+Shift+S - sgrìobh an taisbeanadh gu faidhle ÙR
+Ctrl+S - write back over the show that is open	Ctrl+S - sgrìobh thairis air an taisbeanadh fosgailte
+Read everything right to left. Yes, everything.	Leugh a h-uile càil bho dheas gu clì. Seadh, a h-uile càil.
+Greetings, primitive. Your "slideshow" amuses us.	Fàilte, a phrìomhadair. Tha an "taisbeanadh-shleamhnag" agad gar n-èibhinneachadh.
+What this cue does when it ends - click to change	Na nì an cue seo nuair a chrìochnaicheas e - briog gus atharrachadh
+LEARN: move a knob or press a key on the controller...	LEARN: gluais putan no brùth iuchair air an uidheam-smachd...
+Per-cue audio: enable, trim, pan, mono, fades, normalize	Fuaim gach cue: cuir air, trim, pan, mono, fadan, co-ionannachadh
+MIDI input is off: turn it on in MIDI CONTROL. OSC rows still answer.	Tha inntrigeadh MIDI dheth: cuir air e ann am MIDI CONTROL. Freagraidh sreathan OSC fhathast.
+MIX	MEASGACHADH
+gain	buannachd
+logo	suaicheantas
+rail	rèile
+index	clàr-amais
+trans	tar-chur
+arcade	arcàid
+plugin	plugan
+ticket	tiogaid
+TRACKER	LORGAIR
+capsule	capsal
+circuit	cuairt
+dossier	faidhle
+palette	pailead
+bulletin	iris-naidheachd
+cassette	cèiseag
+dateline	ceann-latha
+terminal	teirmineal
+programme	prògram
+Perspective	Sealladh
+Motion: Bug Swat	Gluasad: Bug Swat
+, — skip to previous cue	, — leum chun a' cue roimhe
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist	--- -- --  cha dèan e dad air an liosta sin  -  (M) liosta a' cheuma fhèin
+-18 dBFS is EBU alignment, -20 is SMPTE. Capped below 0: this feeds a live PA.	Tha -18 dBFS aig co-thaobhadh EBU, -20 aig SMPTE. Cuingealaichte fo 0: biathaidh seo PA beò.
+--- -- --  does nothing on that playlist  -  (M) the step's own playlist  -  EDIT is on: typing changes the show	--- -- --  cha dèan e dad air an liosta sin  -  (M) liosta a' cheuma fhèin  -  Tha EDIT air: atharraichidh sgrìobhadh an taisbeanadh
+Mic	Mic
+neon	neon
+sine	sine
+RTMPS	RTMPS
+TA-DA	TA-DA
+14-bit	14-bit
+Dimmer	Dimmer
+Binaural	Binaural
+confetti	confetti
+cue "{n}"	cue "{n}"
+Dimmer + RGB	Dimmer + RGB
+NDI® NETWORK	NDI® NETWORK
+Oscilloscope	Oscilloscope
+Syphon / Spout	Syphon / Spout
+29.97 fps (NTSC)	29.97 fps (NTSC)
+pan	pan
+pop	pop
+Port	Port
+deck	deck
+trim	trim
+PATCH	PATCH
+lower 3rd	lower 3rd
+Lower Third	Lower Third
+Bork bork BORK!	Bork bork BORK!
+25 fps (PAL/EBU)	25 fps (PAL/EBU)
+SELECT DECK 2	TAGH DECK 2
+Now click its tab, Deck 2. A new playlist is not the selected one until you click it.	A-nis briog air an taba aige, Deck 2. Chan eil liosta ùr air a taghadh gus am briog thu oirre.
+The lit tab is where SOURCE puts things. Skip this and the ink lands under the synth.	Is e an taba soillseach far an cuir TÙS rudan. Leum seo is thèid an inc fon synth.
+See that tab? Click it. Now you're on Deck 2. BOOM. Fundamentals.	A bheil thu a' faicinn an taba sin? Briog air. Tha thu air Deck 2 a-nis. BÙM. Bun-stèidh.
+Click its tab, Deck 2. The lit tab is the playlist SOURCE adds to.	Briog air an taba aige, Deck 2. Is e an taba soillseach an liosta dhan cuir TÙS.
+Skip this and the words go under the map. With the lizard.	Leum seo is thèid na faclan fon mhapa. Còmhla ris an dearc-luachrach.
+Nine years of live weather. Always click the tab.	Naoi bliadhna de shìde beò. Briog air an taba an-còmhnaidh.
+Click its tab, Deck 2. A new playlist waits until you choose it.	Briog air an taba aige, Deck 2. Fuirichidh liosta ùr gus an tagh thu i.
+The lit tab gets the next cue. Like choosing which slide goes in the projector.	Gheibh an taba soillseach an ath cue. Mar a bhith a' taghadh dè an sleamhnag a thèid dhan phroiseactar.
+Pick a deck. Any deck. ...Deck 2. Pick Deck 2.	Tagh paca. Paca sam bith. ...Deck 2. Tagh Deck 2.
+Timecode	Còd-ama
+PHASE	ÌRE
+MENU	CLÀR
+VOLUME	FUAIM
++ step	+ ceum
+< BACK	< AIR AIS
+ATEM switcher	Measgaichear ATEM
+ATEM tally	Tally ATEM
+AUDIO: DEFAULT	FUAIM: BUN-ROGHAINN
+Animated GIF	GIF beòthail
+Arrows	Saighdean
+CLICKER	CLICEAR
+Copyright	Còir-lethbhreac
+DEST...	CEANN-UIDHE...
+Datamosh - classic	Datamosh – clasaigeach
+Datamosh - extreme	Datamosh – fìor-chruaidh
+Datamosh - subtle	Datamosh – sèimh
+Deckboy is input	Is e Deckboy an cur-a-steach
+Device: None	Uidheam: chan eil gin
+Drag	Slaod
+Drop media here	Leig às meadhanan an-seo
+Enter Take  Space Play/Pause	Enter Take  Space Cluich/Stad greis
+FFmpeg / libav  (in-process)	FFmpeg / libav  (sa phròiseas)
+FPS: SOURCE	FPS: TÙS
+Fonts	Cruthan-clò
+Free software. You may use, study, share	Bathar-bog saor. Faodaidh tu a chleachdadh, a sgrùdadh,
+GO / BACK	GO / AIR AIS
+GO / BACK (clicker)	GO / AIR AIS (clicear)
+Key out: None - fill only	Key a-mach: chan eil gin – fill a-mhàin
+LTC in	LTC a-steach
+Licence	Ceadachas
+MATCH SOURCE	CO-IONANN RIS AN TÙS
+MMC Play / Stop / Goto -> transport	MMC Play / Stop / Goto -> còmhdhail
+MOSH: SUBTLE	MOSH: SÈIMH
+MSC Trigger -> cue by id	MSC Trigger -> cue a rèir id
+MTC in	MTC a-steach
+Mode: CALLER	Modh: CALLER
+NDI receiver	Glacadair NDI
+NDI trigger	Brosnachair NDI
+NO STEPS YET	GUN CHEUMAN FHATHAST
+No PTP lock, wide-model pacing - will not genlock to plant sources	Gun ghlas PTP, astar garbh – cha dèan e genlock ri tùsan an stiùidio
+ONCE  |  ORDER	AON TURAS  |  ÒRDUGH
+Optional	Roghainneil
+PNG sequence	Sreath PNG
+Platform	Ùrlar
+Press A to take cue	Brùth A gus an cue a ghabhail
+RATE: AUTO	RÈIT: FÈIN-OBRACHAIL
+S Stop   C Clear   Esc Panic	S Stad   C Falamhaich   Esc Clisgeadh
+SIZE: SOURCE	MEUD: TÙS
+SPOUT TEXTURE SHARE	CO-ROINNEADH INNEACHAIDH SPOUT
+Session	Seisean
+TSL tally out	Tally TSL a-mach
+Thanks	Taing
+Timecode chase	Lean an timecode
+Timecode run	Ruith an timecode
+Toolkit	Pasgan-innealan
+Trigger	Cuir gu dol
+WAV (audio only)	WAV (fuaim a-mhàin)
+Warranty	Barantas
+address...	seòladh...
+and modify it; derivatives stay GPL.	a cho-roinneadh is atharrachadh; fanaidh tùsan-sìol GPL.
+auto	fèin-obrachail
+clear the cell	falamhaich an cealla
+companion ping	ping Companion
+fire this row	cuir an sreath seo gu dol
+insert a row	cuir a-steach sreath
+live lane  |  I/O set trim  |  click or drag to seek	sreath bheò  |  I/O a' suidheachadh na bearraidh  |  briog no slaod gus lorg
+media in	meadhanan a-steach
+move the cursor	gluais an cùrsair
+mute / solo a column	mùch / solo colbh
+off -- edit on monitor	dheth -- deasaich air a' mhonatair
+off: no camera is open. Drag on the picture to draw a zone.	dheth: chan eil camara fosgailte. Slaod air an dealbh gus raon a tharraing.
+open the code editor	fosgail deasaiche a' chòd
+play / stop	cluich / stad
+stop, fade, vol, opacity	stad, crìonadh, fuaim, dorchachd
+the FFmpeg, SDL and FreeType projects,	dha na pròiseactan FFmpeg, SDL agus FreeType,
+Bitfocus Companion, and x42/libltc.	Bitfocus Companion, agus x42/libltc.
+Keys	Iuchraichean
+None. See LICENSE sections 15-16.	Chan eil gin. Faic LICENSE, earrannan 15-16.
+none compiled in	dad air a thrusadh
+Group	Buidheann
+Normal	Àbhaisteach
+Remote	Cèin
+lesson	leasan
+Bitrate	Reat bhìdean
+Latency	Dàil
+OUT {n}	A-MACH {n}
+Out {n}	A-mach {n}
+{n} row	{n} ràgh
+Key name	Ainm na h-iuchrach
+Keyframe	Prìomh-fhrèam
+Registry	Clàr-lann
+fade {n}	fad {n}
+{n} rows	{n} ràghan
+Node port	Port na nòid
+Stream ID	ID an t-srutha
+added {1}	chaidh {1} a chur ris
+start {n}	tòisich {n}
+still {n}	dealbh {n}
+FADE {n} s	FAD {n} s
+LAYER {n}%	SREATH {n}%
+Output {n}	Às-chur {n}
+PTP domain	Àrainn PTP
+Stream key	Iuchair an t-srutha
+[ASSIGNED]	[SANNTAICHTE]
+audio only	fuaim a-mhàin
+to Out {n}	gu A-mach {n}
+{n} of {n}	{n} à {n}
+Display {n}	Taisbeanair {n}
+active jobs	obraichean gnìomhach
+local clock	uaireadair ionadail
+not running	chan eil a' ruith
+click to set	briog gus a shuidheachadh
+full {n}x{n}	làn {n}x{n}
+running v{n}	a' ruith v{n}
+the other one	an tè eile
+DELIVERY H.{n}	LIBHRIGEADH H.{n}
+Output {n} mix	Measgachadh Às-chur {n}
+made by Deckboy	air a dhèanamh le Deckboy
+{1} plays to {2}	cluichidh {1} gu {2}
+the picture {1} plays	an dealbh a chluicheas {1}
+New media joins {1} by itself	Thèid meadhanan ùra a-steach do {1} leotha fhèin
+Press Win+P and choose Extend	Brùth Win+P is tagh Extend
+{n} patched - DMX cues set them by name	{n} ceangailte - suidhichidh cues DMX iad a-rèir ainm
+Set them to extend in your display settings	Suidhich iad gu Extend ann an roghainnean na sgrìn agad
+lesson: {1}. Esc leaves, and it picks up here next time	leasan: {1}. fàgaidh Esc, agus leanaidh e bhon seo an ath thuras
+Answers ATEM Software Control as a deck on TCP 9993 at {1}	Freagraidh e ATEM Software Control mar deck air TCP 9993 aig {1}
+In System Settings > Displays, use it as an extended display	Ann an Roghainnean an t-Siostaim > Sgrìnichean, cleachd i mar sgrìn leudaichte
+It ate the desk, skapi. You have {1} screens: the output's DISPLAY in MENU puts it on another.	Dh'ith e an deasg, skapi. Tha {1} sgrìnichean agad: cuiridh TAISBEANAIR an às-chuir sa CLÀR air tè eile e.
+It ate the desk, skapi. You have two screens: the output's DISPLAY in MENU puts it on the other one.	Dh'ith e an deasg, skapi. Tha dà sgrìn agad: cuiridh TAISBEANAIR an às-chuir sa CLÀR air an tè eile e.
+{1} screens, skapi. The desk stays on this one, the picture goes on {2}. Open MENU and make OUTPUT OFF say OUTPUT ON.	{1} sgrìnichean, skapi. Fanaidh an deasg air an tè seo, thèid an dealbh air {2}. Fosgail CLÀR agus dèan gun can ÀS-CHUR DHETH ÀS-CHUR AIR.
+Two screens, skapi. The desk stays on this one, the picture goes on the other: {1}. Open MENU and make OUTPUT OFF say OUTPUT ON.	Dà sgrìn, skapi. Fanaidh an deasg air an tè seo, thèid an dealbh air an tè eile: {1}. Fosgail CLÀR agus dèan gun can ÀS-CHUR DHETH ÀS-CHUR AIR.
+It ate the desk, skapi. Mirrored screens show the picture on both, so I put it in a little window, behind. {1}, and it gets a screen of its own.	Dh'ith e an deasg, skapi. Seallaidh sgrìnichean sgàthanaichte an dealbh air an dà chuid, mar sin chuir mi ann an uinneag bheag e, air a chùlaibh. {1}, agus gheibh e sgrìn dha fhèin.
+Your screens are mirrored, skapi: {1} shows what this one shows, so the picture will cover the desk on both. {2}, and I put the picture on its own screen. Or open MENU and make OUTPUT OFF say OUTPUT ON.	Tha na sgrìnichean agad sgàthanaichte, skapi: seallaidh {1} na tha an tè seo a' sealltainn, mar sin còmhdaichidh an dealbh an deasg air an dà chuid. {2}, agus cuiridh mi an dealbh air sgrìn dha fhèin. No fosgail CLÀR agus dèan gun can ÀS-CHUR DHETH ÀS-CHUR AIR.
