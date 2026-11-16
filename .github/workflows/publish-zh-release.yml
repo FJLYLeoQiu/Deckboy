@@ -1,0 +1,59 @@
+# Publishes the packages from an existing "Windows zh-Hans package" run to a
+# GitHub Release. The artifact is downloaded on the runner (server side), so
+# publishing never rebuilds and never pulls ~550 MB through a local machine.
+name: Publish Windows zh-Hans release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id that holds the deckboy-windows-zh-hans-packages artifact
+        required: true
+      tag:
+        description: Existing release tag to upload into
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Upload the packaged build to the release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the packaged build from the existing run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ inputs.run_id }}" \
+            --repo "${{ github.repository }}" \
+            --name deckboy-windows-zh-hans-packages \
+            --dir dl
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd dl/dist
+          sha256sum Deckboy-*.zip Deckboy-*-setup.exe > ../../SHA256SUMS.txt
+          cat ../../SHA256SUMS.txt
+
+      - name: The packages must carry the zh-Hans catalogue
+        run: |
+          set -euo pipefail
+          zip=$(ls dl/dist/Deckboy-[0-9]*.zip | head -1)
+          unzip -l "$zip" | grep 'data/lang/zh-Hans.tsv'
+          test -n "$(ls dl/dist/Deckboy-*-setup.exe)"
+
+      - name: Upload assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "${{ inputs.tag }}" --repo "${{ github.repository }}" >/dev/null
+          gh release upload "${{ inputs.tag }}" \
+            dl/dist/Deckboy-*.zip \
+            dl/dist/Deckboy-*-setup.exe \
+            SHA256SUMS.txt \
+            --clobber \
+            --repo "${{ github.repository }}"
