@@ -34,11 +34,14 @@ tree, so you never run both by hand.
 cmake --build build\windows --config Release
 powershell -File tools\package_windows.ps1 -RepoRoot .
 ```
-It copies `Deckboy.exe` and every DLL CMake placed beside it, `ffmpeg.exe` /
-`ffprobe.exe` (from `C:\ffmpeg\bin`, override with `-FfmpegDir`), the app-local
-MSVC runtime DLLs, and `data\`. It **strips** `last_project.txt` and
-`default.deckboy` — per-machine state that must never ship (a release once
-carried the packager's own webcam cue).
+It copies `Deckboy.exe` and every DLL CMake placed beside it, `deckboy-ppt-helper.exe`
+(required in the full Windows package, next to `Deckboy.exe`; packaging fails if it
+is missing), `ffmpeg.exe` / `ffprobe.exe` (from `C:\ffmpeg\bin`, override with
+`-FfmpegDir`), the app-local MSVC runtime DLLs, and `data\`. It **strips**
+`last_project.txt` and `default.deckboy` — per-machine state that must never ship
+(a release once carried the packager's own webcam cue). The standalone Mini zip
+does **not** include `deckboy-ppt-helper.exe`: Mini has no desk and does not drive
+native PowerPoint.
 
 **Build the installer** (needs [Inno Setup 6](https://jrsoftware.org/isdl.php)):
 ```

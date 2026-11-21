@@ -10,13 +10,15 @@
 
 **环境。** Windows + 桌面版 Microsoft PowerPoint。不会用 WPS、PowerPoint 网页版或 LibreOffice 走这条路径。其他系统会给出明确提示，仍可使用现有的「导入为静帧」（导出 PDF 再栅格化，会展平动画和切换）。
 
+**打包。** 完整 Windows 便携包和 Inno 安装包必须在 `Deckboy.exe` 同目录提供 `deckboy-ppt-helper.exe`（运行时只在该位置查找）。缺失则打包失败。**Deckboy Mini 不含此助手，也不提供原生 PowerPoint 放映控制。** 若助手缺失，Deckboy 会给出明确报错，不会尝试驱动 PowerPoint。宏保持禁用，也不会绕过受保护视图。
+
 **安全。** 打开前将 `AutomationSecurity` 设为禁止宏。不会启用、关闭或绕过受保护视图；若文件进入受保护视图，只报告并离开。只关闭本功能打开的文稿。助手进程不会结束 `POWERPNT.EXE`。仅当我们启动了 PowerPoint 且没有其他文稿打开时，才会调用 `Application.Quit`。
 
 **PowerPoint 里的声音和视频。** 它们在 PowerPoint 进程内播放，**不经过** Deckboy 混音器。节目/预听设备、总线音量、静音、录制和推流抽头都不能控制它们。这里没有使用受支持的公开接口把该音频纳入 Deckboy 总线。若观众看的是 PowerPoint 自己的独占全屏窗口，Deckboy 节目输出上的计时浮层**不会**出现在那个全屏窗口上。浮层能否盖住 PowerPoint 独占全屏、以及多屏位置，**尚未在实机上验证，不能保证**。
 
 **如何添加。** 控制台菜单：添加线索 →「PowerPoint 放映（原生，需 Windows 与桌面版 PowerPoint）」。现有的拖放 /「导入幻灯片」仍会展平为静帧，行为未改。
 
-**测试。** `deckboy-powerpoint-protocol-check` 在没有 Office 的情况下检查协议。助手的 `--self-test`（Windows）只测协议。没有 Office 的 runner 或本 Linux 环境**不等于**真实 PowerPoint 验证。
+**测试。** `deckboy-speech-timer-check`、`deckboy-preview-audio-check` 和 `deckboy-powerpoint-protocol-check` 分别覆盖计时、预听总线隔离和助手协议，均不需要 Office。助手的 `--self-test`（Windows）只测协议。没有 Office、HDMI 或蓝牙的 runner 或本 Linux 环境**不等于**真实 PowerPoint 或硬件验证。
 
 ## 2. 演讲计时
 
@@ -59,6 +61,8 @@
 
 - `deckboy-speech-timer-check`：默认值（展示目标为观众、提醒路由为控制端、10 分钟、三条提醒）、暂停不计时、复位与新演讲的区别、超时文本、一次性且不叠音、持久化、显示器消失时的位置限制。
 - `deckboy-preview-audio-check`：预听设备缺失时保持静音且不会解析成节目设备；节目与预听混音隔离；改变预听增益不影响节目样本；对同一线索 TAKE 会停预听；提醒路由默认控制端。
+- `deckboy-speech-timer-check`：计时开始/暂停/复位、超时与提醒。
+- `deckboy-preview-audio-check`：节目与预听总线隔离。
 - `deckboy-powerpoint-protocol-check`：助手协议编解码与文件名判断。
 
 **本环境未做、也不会声称已做：** 真实 Microsoft PowerPoint；计时浮层覆盖 PowerPoint 独占全屏；真实 HDMI 正式播出 + 蓝牙同时预听下一个素材；测量蓝牙延迟；在真实演出中确认带浮层的 NDI/录制；在物理 Windows 电脑上安装包冒烟。这些请在你这边做最终实机验证。

@@ -10,13 +10,15 @@ This is an unofficial extension of Deckboy on the `feature/powerpoint-native-pla
 
 **Environment.** Windows + desktop Microsoft PowerPoint. WPS, PowerPoint for the web, and LibreOffice are not used for this path. Other platforms show a clear message and can still use the existing “import as stills” (PDF flatten) path, which drops builds and transitions.
 
+**Packaging.** The full Windows portable zip and the Inno installer must ship `deckboy-ppt-helper.exe` in the same folder as `Deckboy.exe` (that is the only place the runtime looks). Packaging fails if the helper is missing. **Deckboy Mini does not include the helper and does not provide native PowerPoint Show control.** If the helper is absent, Deckboy shows a clear error and does not try to drive PowerPoint. Macros stay disabled; Protected View is not bypassed.
+
 **Safety.** `AutomationSecurity` is forced to disable macros. Protected View is not enabled, disabled, or bypassed. If the file opens in Protected View, Deckboy reports that and leaves it alone. Only the presentation this feature opened is closed. The helper never kills `POWERPNT.EXE`. `Application.Quit` is used only if PowerPoint was not already running and no other presentations remain.
 
 **PowerPoint audio / video.** Sound and video inside the PowerPoint process do **not** pass through Deckboy’s mixer. Programme / preview device routing, bus faders, mute, record and stream taps do not apply to them. There is no supported public API used here to redirect that audio into Deckboy’s buses. If the audience is watching PowerPoint’s own fullscreen window, a Deckboy speech-timer overlay on the Deckboy programme output will **not** appear on that PowerPoint window. Coverage of PowerPoint exclusive fullscreen and multi-screen placement has **not** been verified on real hardware and is not guaranteed.
 
 **How to add a cue.** Desk menu: *Add cue → PowerPoint Show (native, Windows + desktop PowerPoint)*. Existing drag-and-drop / “import slides” still flattens to stills and is unchanged.
 
-**Tests.** `deckboy-powerpoint-protocol-check` covers the helper protocol without Office. `--self-test` on the helper (Windows) exercises the protocol only. A runner or this Linux box without Office is **not** a real PowerPoint verification.
+**Tests.** `deckboy-speech-timer-check`, `deckboy-preview-audio-check`, and `deckboy-powerpoint-protocol-check` cover timer, preview-bus isolation, and the helper protocol without Office. `--self-test` on the helper (Windows) exercises the protocol only. A runner or this Linux box without Office, HDMI, or Bluetooth is **not** a real PowerPoint or hardware verification.
 
 ## 2. Speech timer
 
