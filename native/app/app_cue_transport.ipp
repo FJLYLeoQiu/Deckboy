@@ -144,6 +144,13 @@
       triggerToast("skip: playlist is empty");
       return;
     }
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+        deck.cues[deck.activeIndex].kind == CueKind::PowerPointShow &&
+        !pptOpenPath_.empty()) {
+      (void)pptPlayer_.nextBuild();
+      triggerToast("PowerPoint next build");
+      return;
+    }
     // THE CLICKER SPENDS THE BUILDS FIRST. A presenter set up this way expects
     // the same thing every other deck gives them: one press reveals the next
     // part of what they are saying, and only the press after the last part
@@ -188,6 +195,12 @@
     Deck& deck = project_.decks[deckIndex];
     if (deck.cues.empty()) {
       triggerToast("skip back: playlist is empty");
+      return;
+    }
+    if (deck.activeIndex >= 0 && deck.activeIndex < static_cast<int>(deck.cues.size()) &&
+        deck.cues[deck.activeIndex].kind == CueKind::PowerPointShow &&
+        !pptOpenPath_.empty()) {
+      (void)powerPointPrevBuild();
       return;
     }
     // Back through the builds before going back a slide, so the two directions
@@ -325,6 +338,11 @@
     MediaEngine* engine = focusedMediaEngine();
     DeckRuntime* runtime = focusedRuntime();
     const Cue* activeCue = activeCuePtr();
+    if (activeCue && activeCue->kind == CueKind::PowerPointShow) {
+      (void)endPowerPointShowIfOurs();
+      playUiSound(UiSoundEffect::Stop);
+      return;
+    }
     if (!engine) {
       return;
     }
@@ -5299,6 +5317,7 @@
     if (deck.selectedIndex < 0 || deck.selectedIndex >= static_cast<int>(deck.cues.size())) {
       return;
     }
+    stopCuePreviewIfTaking(deck.cues[deck.selectedIndex].id);
     // Taking anything cancels whatever this deck was about to take. The
     // operator has just made a decision; an older countdown must not survive
     // it and fire on top.
@@ -5403,6 +5422,11 @@
     // A FADE starts a ramp and is done; the ramp outlives the take.
     if (deck.cues[deck.selectedIndex].kind == CueKind::Fade) {
       (void)fireFadeCue(deckIndex, deck.selectedIndex);
+      scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
+      return;
+    }
+    if (deck.cues[deck.selectedIndex].kind == CueKind::PowerPointShow) {
+      (void)firePowerPointShowCue(deckIndex, deck.selectedIndex);
       scheduleContinueAfterStart(deckIndex, deck.selectedIndex);
       return;
     }

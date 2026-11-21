@@ -111,6 +111,9 @@
     if (handleTutorialClick(x, y)) {
       return;
     }
+    if (!settingsOpen_ && handleSpeechTimerControlClick(x, y)) {
+      return;
+    }
     if (showStartupDialog_) {
       bool hasSavedFile = startupProjectAvailable();
       if (pointInRect(x, y, startupNewBtn_)) {
