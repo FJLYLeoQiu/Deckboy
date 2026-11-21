@@ -160,6 +160,7 @@
       }
       std::cout << "\n";
     }
+    int inventoryFailures = 0;
     std::cout << "version: " << deckboy::core::version::kVersionTag << '\n';
     std::cout << "project-root: " << Paths::projectRoot() << '\n';
     std::cout << "font-sans: " << (fs::exists(Paths::fontPath(Paths::FontName::Sans)) ? "ok" : "missing") << '\n';
@@ -176,6 +177,21 @@
     std::cout << "inproc-decode: no (ffmpeg CLI only)\n";
 #endif
     std::cout << "ffprobe: " << (readAllText({"ffprobe", "-version"}).has_value() ? "ok" : "missing") << '\n';
+#ifdef _WIN32
+    {
+      // Native PowerPoint playback looks only next to Deckboy.exe. A full
+      // Windows package without this helper is incomplete.
+      const auto exe = Paths::executablePath();
+      const fs::path helper = exe.empty()
+        ? fs::path{}
+        : (exe.parent_path() / "deckboy-ppt-helper.exe");
+      const bool ok = !helper.empty() && fs::exists(helper);
+      std::cout << "powerpoint-helper: " << (ok ? "ok" : "MISSING") << '\n';
+      if (!ok) ++inventoryFailures;
+    }
+#else
+    std::cout << "powerpoint-helper: n/a (Windows only)\n";
+#endif
 #ifdef _WIN32
     // A window cue captured through Windows.Graphics.Capture comes through at
     // the window's real size whatever the display scaling is; through the older
@@ -434,7 +450,7 @@
       }
     }
 
-    return scriptFailures ? 1 : 0;
+    return (scriptFailures + inventoryFailures) ? 1 : 0;
   }
 
   // Exercises the real save/quit/prompt paths with isolated files. SDL's dummy

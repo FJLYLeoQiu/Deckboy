@@ -55,6 +55,8 @@ public:
   static std::string unsupportedMessageZh();
   static std::string missingOfficeMessageEn();
   static std::string missingOfficeMessageZh();
+  static std::string missingHelperMessageEn();
+  static std::string missingHelperMessageZh();
 
 private:
   PptStatus send(const PptCommand& cmd);

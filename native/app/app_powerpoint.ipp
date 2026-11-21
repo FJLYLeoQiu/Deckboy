@@ -41,6 +41,8 @@
     if (!st.ok) {
       const std::string msg = st.code == "no_powerpoint"
                                   ? deckboy::platform::PowerPointPlayer::missingOfficeMessageEn()
+                                  : st.code == "no_helper"
+                                  ? deckboy::platform::PowerPointPlayer::missingHelperMessageEn()
                                   : ("PowerPoint: " + (st.error.empty() ? st.code : st.error));
       triggerToast(msg, ToastKind::Warning, kToastReadableMs);
       playUiSound(UiSoundEffect::Error);

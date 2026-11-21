@@ -31,11 +31,10 @@ std::string helperPath() {
   auto dir = exe.parent_path();
   auto candidate = dir / "deckboy-ppt-helper.exe";
   std::error_code ec;
-  if (std::filesystem::exists(candidate, ec)) return candidate.string();
-  // Dev builds sometimes sit one directory up from the helper.
+  if (std::filesystem::exists(candidate, ec) && !ec) return candidate.string();
   candidate = dir / "deckboy-ppt-helper";
-  if (std::filesystem::exists(candidate, ec)) return candidate.string();
-  return (dir / "deckboy-ppt-helper.exe").string();
+  if (std::filesystem::exists(candidate, ec) && !ec) return candidate.string();
+  return {};
 }
 
 bool writeLine(int fd, const std::string& line) {
@@ -133,13 +132,28 @@ std::string PowerPointPlayer::missingOfficeMessageZh() {
          "仍可将幻灯片导入为静帧。";
 }
 
+std::string PowerPointPlayer::missingHelperMessageEn() {
+  return "deckboy-ppt-helper.exe was not found next to Deckboy.exe. "
+         "Native PowerPoint playback needs this helper from the full Windows "
+         "package (portable zip or installer), in the same folder as Deckboy.exe. "
+         "Deckboy Mini does not include it. Macros stay disabled; Protected View "
+         "is not bypassed.";
+}
+
+std::string PowerPointPlayer::missingHelperMessageZh() {
+  return "未在 Deckboy.exe 同目录找到 deckboy-ppt-helper.exe。"
+         "原生 PowerPoint 放映需要完整 Windows 安装包或便携包里、与 Deckboy.exe "
+         "放在同一文件夹的该助手。Deckboy Mini 不含此文件。"
+         "宏保持禁用，也不会绕过受保护视图。";
+}
+
 #ifdef _WIN32
 bool PowerPointPlayer::ensureHelper(std::string& error, std::string& code) {
   if (helper_ && helper_->process.running()) return true;
   shutdown();
   const std::string path = helperPath();
   if (path.empty()) {
-    error = "deckboy-ppt-helper.exe was not found next to Deckboy";
+    error = missingHelperMessageEn();
     code = "no_helper";
     return false;
   }
@@ -150,8 +164,8 @@ bool PowerPointPlayer::ensureHelper(std::string& error, std::string& code) {
   opts.stderrMode = StdioMode::Merge;
   opts.showWindow = false;
   if (!spawnProcess(helper_->process, {path}, opts) || !helper_->process.running()) {
-    error = "could not start deckboy-ppt-helper";
-    code = "no_helper";
+    error = "could not start deckboy-ppt-helper.exe (it is next to Deckboy, but it did not run)";
+    code = "helper_start";
     delete helper_;
     helper_ = nullptr;
     return false;
