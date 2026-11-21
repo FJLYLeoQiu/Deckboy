@@ -3559,3 +3559,4 @@ Play	试听
 Reminders (each can use a built-in or a local file):	提醒（每条可用内置声或本地文件）：
 file (none)	文件（未选）
 Custom reminder	自定义提醒
+deckboy-ppt-helper.exe was not found next to Deckboy.exe. Native PowerPoint playback needs this helper from the full Windows package (portable zip or installer), in the same folder as Deckboy.exe. Deckboy Mini does not include it. Macros stay disabled; Protected View is not bypassed.	未在 Deckboy.exe 同目录找到 deckboy-ppt-helper.exe。原生 PowerPoint 放映需要完整 Windows 安装包或便携包里、与 Deckboy.exe 放在同一文件夹的该助手。Deckboy Mini 不含此文件。宏保持禁用，也不会绕过受保护视图。

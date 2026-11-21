@@ -69,6 +69,41 @@ jobs:
           set -o pipefail
           cmake --build build --config Release 2>&1 | tee build.log
 
+      - name: Run feature unit checks and helper self-test
+        shell: pwsh
+        run: |
+          $root = ".\build\Release"
+          $checks = @(
+            "deckboy-speech-timer-check.exe",
+            "deckboy-preview-audio-check.exe",
+            "deckboy-powerpoint-protocol-check.exe"
+          )
+          New-Item -ItemType Directory -Force -Path feature-checks | Out-Null
+          foreach ($name in $checks) {
+            $exe = Join-Path $root $name
+            if (-not (Test-Path $exe)) { throw "$name was not built at $exe" }
+            Write-Host "running $name"
+            $out = Join-Path "feature-checks" ($name + ".txt")
+            $err = Join-Path "feature-checks" ($name + ".err.txt")
+            $p = Start-Process -FilePath $exe -Wait -NoNewWindow -PassThru `
+                   -RedirectStandardOutput $out -RedirectStandardError $err
+            Get-Content $out, $err -ErrorAction SilentlyContinue
+            if ($null -eq $p.ExitCode) { throw "$name produced no exit code" }
+            if ($p.ExitCode -ne 0) { throw "$name failed (exit $($p.ExitCode))" }
+            Write-Host "$name exit 0"
+          }
+          $helper = Join-Path $root "deckboy-ppt-helper.exe"
+          if (-not (Test-Path $helper)) { throw "deckboy-ppt-helper.exe was not built at $helper" }
+          $hout = "feature-checks\deckboy-ppt-helper-self-test.txt"
+          $herr = "feature-checks\deckboy-ppt-helper-self-test.err.txt"
+          $h = Start-Process -FilePath $helper -ArgumentList "--self-test" `
+                 -Wait -NoNewWindow -PassThru `
+                 -RedirectStandardOutput $hout -RedirectStandardError $herr
+          Get-Content $hout, $herr -ErrorAction SilentlyContinue
+          if ($null -eq $h.ExitCode) { throw "deckboy-ppt-helper --self-test produced no exit code" }
+          if ($h.ExitCode -ne 0) { throw "deckboy-ppt-helper --self-test failed (exit $($h.ExitCode))" }
+          Write-Host "deckboy-ppt-helper --self-test exit 0"
+
       - name: Self-check
         shell: pwsh
         run: |
@@ -79,6 +114,9 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "self-check failed ($($p.ExitCode))" }
           if (Select-String -Path self-check.txt -Pattern 'right-to-left hidden' -Quiet) {
             throw "A right-to-left language is hidden: SDL_ttf was built without HarfBuzz."
+          }
+          if (-not (Select-String -Path self-check.txt -Pattern 'powerpoint-helper: ok' -Quiet)) {
+            throw "self-check did not report powerpoint-helper: ok (helper must sit next to Deckboy.exe)"
           }
 
       - name: Smoke tests
@@ -134,6 +172,19 @@ jobs:
           $zh = Get-ChildItem dist\unpack -Recurse -Filter zh-Hans.tsv | Select-Object -First 1
           if (-not $zh) { throw "data/lang/zh-Hans.tsv missing from the package" }
           Write-Host ("zh-Hans.tsv: {0}  {1} bytes" -f $zh.FullName, $zh.Length)
+          $helper = Get-ChildItem $exe.DirectoryName -Filter deckboy-ppt-helper.exe | Select-Object -First 1
+          if (-not $helper) {
+            throw "deckboy-ppt-helper.exe missing from the portable zip (required next to Deckboy.exe)"
+          }
+          Write-Host ("ppt helper: {0}  {1} bytes" -f $helper.FullName, $helper.Length)
+          $helperTest = Start-Process -FilePath $helper.FullName -ArgumentList "--self-test" `
+                          -Wait -NoNewWindow -PassThru `
+                          -RedirectStandardOutput dist\packaged-helper-self-test.txt `
+                          -RedirectStandardError dist\packaged-helper-self-test.err.txt
+          Get-Content dist\packaged-helper-self-test.txt, dist\packaged-helper-self-test.err.txt -ErrorAction SilentlyContinue
+          if ($helperTest.ExitCode -ne 0) {
+            throw "packaged deckboy-ppt-helper.exe --self-test failed (exit $($helperTest.ExitCode))"
+          }
           $selfCheck = (Start-Process -FilePath $exe.FullName `
                           -ArgumentList "--self-check" `
                           -Wait -NoNewWindow -PassThru `
@@ -146,6 +197,19 @@ jobs:
           if ($selfCheck -ne 0 -or $smoke -ne 0) {
             throw "the packaged build did not run (self-check $selfCheck, smoke $smoke)"
           }
+          if (-not (Select-String -Path dist\packaged-self-check.txt -Pattern 'powerpoint-helper: ok' -Quiet)) {
+            throw "packaged self-check did not report powerpoint-helper: ok"
+          }
+          $miniZip = Get-ChildItem dist\Deckboy-Mini-*.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($miniZip) {
+            $miniRoot = "dist\unpack-mini"
+            Expand-Archive -Path $miniZip.FullName -DestinationPath $miniRoot -Force
+            $miniHelper = Get-ChildItem $miniRoot -Recurse -Filter deckboy-ppt-helper.exe -ErrorAction SilentlyContinue
+            if ($miniHelper) {
+              throw "Deckboy Mini zip must not include deckboy-ppt-helper.exe"
+            }
+            Write-Host "Mini zip correctly omits deckboy-ppt-helper.exe"
+          }
 
       - name: Upload Windows packages (private artifact, no release)
         uses: actions/upload-artifact@v4
@@ -155,7 +219,9 @@ jobs:
             dist/Deckboy-*.zip
             dist/Deckboy-*-setup.exe
             dist/packaged-self-check.txt
+            dist/packaged-helper-self-test.txt
             self-check.txt
+            feature-checks/*
             build.log
           if-no-files-found: error
           retention-days: 14

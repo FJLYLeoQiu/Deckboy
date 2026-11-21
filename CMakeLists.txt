@@ -665,6 +665,10 @@ if(WIN32)
     target_compile_options(deckboy-ppt-helper PRIVATE /W4)
     target_compile_definitions(deckboy-ppt-helper PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
   endif()
+  # Same folder as Deckboy.exe: the client only looks next to the desk binary.
+  set_target_properties(deckboy-ppt-helper PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:deckboy-native>")
+  add_dependencies(deckboy-native deckboy-ppt-helper)
 endif()
 
 # A build's own extras, when it has any (see native/core/private_extras.hpp).
