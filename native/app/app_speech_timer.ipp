@@ -501,7 +501,7 @@
       y += rowH;
     }
 
-    auto addBtn = [&](int x, const char* label, int action, int btnW = 0) {
+    auto addBtn = [&](int x, const std::string& label, int action, int btnW = 0) {
       const int w = btnW > 0 ? btnW : uiScaled(88);
       SDL_Rect r {x, y, w, rowH};
       Primitives::drawFramedPanel(controlRenderer_, r, pal.dark, pal.deep, pal.mid);
@@ -606,7 +606,7 @@
   }
 
   bool handleSpeechTimerButton(int action) {
-    const std::int64_t now = static_cast<std::int64_t>(SDL_GetTicks64());
+    const std::int64_t now = static_cast<std::int64_t>(SDL_GetTicks());
     SpeechTimerConfig cfg = speechTimer_.config();
     switch (action) {
       case kSpeechTimerActionOpen:

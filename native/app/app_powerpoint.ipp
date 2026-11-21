@@ -51,7 +51,7 @@
     triggerToast("PowerPoint show (external window, not in program/NDI): " + cue.name);
     playUiSound(UiSoundEffect::Take);
     if (speechTimer_.config().autoStartWithPowerPoint) {
-      speechTimer_.start(static_cast<std::int64_t>(SDL_GetTicks64()), nowIsoLocal());
+      speechTimer_.start(static_cast<std::int64_t>(SDL_GetTicks()), nowIsoLocal());
     }
     return true;
   }

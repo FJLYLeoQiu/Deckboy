@@ -5155,6 +5155,7 @@
       if (!pointInRect(mx, my, sb.rect)) continue;
       if (handleFixtureSettingsClick(sb.action)) continue;
       if (handleMidiMapSettingsClick(sb)) continue;
+      if (handlePreviewAudioSettingsClick(sb)) continue;
       if (sb.action == kSettingsActionEncoderConvertAll) { convertAllFlaggedCues(); continue; }
       if (sb.action == kSettingsActionEncoderPresetDelivery) { setEncoderPreset(EncoderPreset::DeliveryH264); continue; }
       if (sb.action == kSettingsActionEncoderPresetProxy)    { setEncoderPreset(EncoderPreset::Proxy); continue; }
@@ -5353,55 +5354,6 @@
                          ? std::string("monitor follows the focused playlist")
                          : ("monitoring " + deckLabel(monitoredDeckIndex())));
                      });
-        return;
-      } else if (sb.action == kSettingsActionPreviewAudioDevice) {
-        std::vector<std::pair<std::string, std::string>> choices;
-        choices.emplace_back("", "(no preview device)");
-        for (const auto& option : audioOutputDeviceDropdownChoices()) {
-          if (!option.first.empty()) {
-            choices.push_back(option);
-          }
-        }
-        openDropdown("settings.preview_device", sb.rect, choices,
-                     project_.previewAudioDeviceName,
-                     [this](const std::string& value) {
-                       project_.previewAudioDeviceName = value;
-                       previewMissingWarned_ = false;
-                       markProjectDirty();
-                       reconcilePreviewAudioDevice();
-                       triggerToast(value.empty()
-                         ? std::string("preview audio off (stays silent, no HDMI fallback)")
-                         : ("preview audio on " + value));
-                     });
-        return;
-      } else if (sb.action == kSettingsActionPreviewMute) {
-        project_.previewMuted = !project_.previewMuted;
-        applyPreviewAndProgramGains();
-        markProjectDirty();
-        triggerToast(project_.previewMuted ? "preview muted" : "preview unmuted");
-        return;
-      } else if (sb.action == kSettingsActionPreviewVolumeDec) {
-        project_.previewVolume = std::clamp(project_.previewVolume - 0.05f, 0.0f, 2.0f);
-        applyPreviewAndProgramGains();
-        markProjectDirty();
-        return;
-      } else if (sb.action == kSettingsActionPreviewVolumeInc) {
-        project_.previewVolume = std::clamp(project_.previewVolume + 0.05f, 0.0f, 2.0f);
-        applyPreviewAndProgramGains();
-        markProjectDirty();
-        return;
-      } else if (sb.action == kSettingsActionProgramBusVolumeDec) {
-        project_.programBusVolume = std::clamp(project_.programBusVolume - 0.05f, 0.0f, 2.0f);
-        applyPreviewAndProgramGains();
-        markProjectDirty();
-        return;
-      } else if (sb.action == kSettingsActionProgramBusVolumeInc) {
-        project_.programBusVolume = std::clamp(project_.programBusVolume + 0.05f, 0.0f, 2.0f);
-        applyPreviewAndProgramGains();
-        markProjectDirty();
-        return;
-      } else if (sb.action == kSettingsActionCuePreviewToggle) {
-        toggleCuePreview();
         return;
       } else if (sb.action == 201) {
         project_.uiSoundsEnabled = !project_.uiSoundsEnabled;

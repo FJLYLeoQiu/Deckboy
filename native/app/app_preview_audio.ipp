@@ -94,7 +94,9 @@
   }
 
   void applyPreviewAndProgramGains() {
-    const float program = std::clamp(project_.masterVolume * project_.programBusVolume, 0.0f, 2.0f);
+    const float program = std::clamp(
+        static_cast<float>(project_.masterVolume) * project_.programBusVolume,
+        0.0f, 2.0f);
     for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
       if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
         engine->setMasterGain(program);
@@ -173,4 +175,64 @@
   void toggleCuePreview() {
     if (cuePreviewActive_) stopCuePreview(true);
     else startCuePreviewOfSelected();
+  }
+
+  bool handlePreviewAudioSettingsClick(const SettingsButton& sb) {
+    if (sb.action == kSettingsActionPreviewAudioDevice) {
+      std::vector<std::pair<std::string, std::string>> choices;
+      choices.emplace_back("", "(no preview device)");
+      for (const auto& option : audioOutputDeviceDropdownChoices()) {
+        if (!option.first.empty()) {
+          choices.push_back(option);
+        }
+      }
+      openDropdown("settings.preview_device", sb.rect, choices,
+                   project_.previewAudioDeviceName,
+                   [this](const std::string& value) {
+                     project_.previewAudioDeviceName = value;
+                     previewMissingWarned_ = false;
+                     markProjectDirty();
+                     reconcilePreviewAudioDevice();
+                     triggerToast(value.empty()
+                       ? std::string("preview audio off (stays silent, no HDMI fallback)")
+                       : ("preview audio on " + value));
+                   });
+      return true;
+    }
+    if (sb.action == kSettingsActionPreviewMute) {
+      project_.previewMuted = !project_.previewMuted;
+      applyPreviewAndProgramGains();
+      markProjectDirty();
+      triggerToast(project_.previewMuted ? "preview muted" : "preview unmuted");
+      return true;
+    }
+    if (sb.action == kSettingsActionPreviewVolumeDec) {
+      project_.previewVolume = std::clamp(project_.previewVolume - 0.05f, 0.0f, 2.0f);
+      applyPreviewAndProgramGains();
+      markProjectDirty();
+      return true;
+    }
+    if (sb.action == kSettingsActionPreviewVolumeInc) {
+      project_.previewVolume = std::clamp(project_.previewVolume + 0.05f, 0.0f, 2.0f);
+      applyPreviewAndProgramGains();
+      markProjectDirty();
+      return true;
+    }
+    if (sb.action == kSettingsActionProgramBusVolumeDec) {
+      project_.programBusVolume = std::clamp(project_.programBusVolume - 0.05f, 0.0f, 2.0f);
+      applyPreviewAndProgramGains();
+      markProjectDirty();
+      return true;
+    }
+    if (sb.action == kSettingsActionProgramBusVolumeInc) {
+      project_.programBusVolume = std::clamp(project_.programBusVolume + 0.05f, 0.0f, 2.0f);
+      applyPreviewAndProgramGains();
+      markProjectDirty();
+      return true;
+    }
+    if (sb.action == kSettingsActionCuePreviewToggle) {
+      toggleCuePreview();
+      return true;
+    }
+    return false;
   }
