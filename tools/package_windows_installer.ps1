@@ -74,6 +74,11 @@ $StageArgs = @{
 if ($BuildDir) { $StageArgs.BuildDir = $BuildDir }
 & (Join-Path $PSScriptRoot "package_windows.ps1") @StageArgs
 
+$StagedHelper = Join-Path $RepoRoot ("dist\staging\Deckboy-$Version-windows-x64\deckboy-ppt-helper.exe")
+if (-not (Test-Path $StagedHelper)) {
+    throw "Inno Setup would package a tree without deckboy-ppt-helper.exe (required next to Deckboy.exe in the full installer)."
+}
+
 # 2. Sign the app binary BEFORE it is packaged, so the INSTALLED Deckboy.exe is
 #    signed too, not only the installer.
 $StagedExe = Join-Path $RepoRoot ("dist\staging\Deckboy-$Version-windows-x64\Deckboy.exe")

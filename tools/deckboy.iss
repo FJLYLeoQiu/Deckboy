@@ -80,8 +80,11 @@ Type: filesandordirs; Name: "{app}\data\ui\deckboy_ui_pack_v3\splash"
 Type: filesandordirs; Name: "{app}\data\models"
 
 [Files]
-; The entire staged tree — Deckboy.exe, DLLs, ffmpeg/ffprobe, MSVC runtime,
+; The entire staged tree — Deckboy.exe, deckboy-ppt-helper.exe (required next
+; to Deckboy.exe for native PowerPoint), DLLs, ffmpeg/ffprobe, MSVC runtime,
 ; data\, LICENSE. recursesubdirs pulls in data\ and its subfolders.
+; Deckboy Mini is also in the stage and is installed; the standalone Mini zip
+; does not include the PowerPoint helper.
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\art\windows\icons\deckboy_show.ico"; DestDir: "{app}"; Flags: ignoreversion
 

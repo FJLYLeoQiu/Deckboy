@@ -110,6 +110,17 @@ if (Test-Path $TerrariumExe) {
     Copy-Item $TerrariumExe -Destination $StageDir
 }
 
+# Native PowerPoint helper. Required in the full desk package, next to
+# Deckboy.exe — that is the only place the runtime looks for it. A zip
+# without it would still launch, but PowerPoint Show cues would fail.
+# Mini does not get a copy: it has no desk and does not drive PowerPoint.
+$PptHelper = Join-Path $BuildDir "deckboy-ppt-helper.exe"
+if (-not (Test-Path $PptHelper)) {
+    throw "deckboy-ppt-helper.exe not found at $PptHelper. The full Windows package must include this helper next to Deckboy.exe. Build the deckboy-ppt-helper target (it is a dependency of Deckboy on Windows)."
+}
+Copy-Item $PptHelper -Destination $StageDir
+Write-Host "  + deckboy-ppt-helper.exe (required for native PowerPoint; not copied into Mini)"
+
 # --- Copy ffmpeg / ffprobe --------------------------------------------------
 Copy-Item (Join-Path $FfmpegDir "ffmpeg.exe")  -Destination $StageDir
 Copy-Item (Join-Path $FfmpegDir "ffprobe.exe") -Destination $StageDir
@@ -320,6 +331,8 @@ Deckboy $Version (Windows x64)
 ==============================
 
 Unzip anywhere, double-click Deckboy.exe. No install required.
+Native PowerPoint playback needs deckboy-ppt-helper.exe in this same folder
+(this full package includes it; Deckboy Mini does not).
 
 The MSVC C++ runtime DLLs are bundled, so the target machine does NOT need
 the Visual C++ Redistributable.
@@ -402,6 +415,24 @@ if ($MiniProc.ExitCode -ne 0 -or $MiniVersion -ne $Version) {
     throw "The staged deckboy-mini.exe would not run or reports '$MiniVersion' (exit $($MiniProc.ExitCode)), not $Version."
 }
 Write-Host "  staged deckboy-mini reports v$MiniVersion"
+
+$StagedHelper = Join-Path $StageDir "deckboy-ppt-helper.exe"
+if (-not (Test-Path $StagedHelper)) {
+    throw "The staged tree has no deckboy-ppt-helper.exe next to Deckboy.exe."
+}
+$HelperOut = Join-Path $env:TEMP ("deckboy-ppt-helper-staged-" + [guid]::NewGuid() + ".txt")
+$HelperErr = Join-Path $env:TEMP ("deckboy-ppt-helper-staged-err-" + [guid]::NewGuid() + ".txt")
+$HelperProc = Start-Process -FilePath $StagedHelper -ArgumentList "--self-test" `
+                      -Wait -NoNewWindow -PassThru `
+                      -RedirectStandardOutput $HelperOut `
+                      -RedirectStandardError $HelperErr
+if (Test-Path $HelperOut) { Get-Content $HelperOut | Write-Host }
+if (Test-Path $HelperErr) { Get-Content $HelperErr | Write-Host }
+Remove-Item $HelperOut, $HelperErr -Force -ErrorAction SilentlyContinue
+if ($HelperProc.ExitCode -ne 0) {
+    throw "staged deckboy-ppt-helper.exe --self-test failed (exit $($HelperProc.ExitCode))."
+}
+Write-Host "  staged deckboy-ppt-helper --self-test ok"
 
 # --- The staged copy has to have libltc, and it has to WORK -----------------
 #
@@ -558,6 +589,11 @@ foreach ($Font in @("LiberationSans-Regular.ttf", "LICENSE-Liberation.txt", "Not
     Copy-Item (Join-Path $RepoRoot "data\fonts\$Font") -Destination (Join-Path $MiniStage "data\fonts")
 }
 Copy-Item (Join-Path $RepoRoot "LICENSE") -Destination $MiniStage
+# Mini is a single-deck player. It must not ship the PowerPoint helper.
+$MiniHelper = Join-Path $MiniStage "deckboy-ppt-helper.exe"
+if (Test-Path $MiniHelper) {
+    throw "Deckboy Mini must not include deckboy-ppt-helper.exe. Native PowerPoint playback is part of the full desk package only."
+}
 # Mini carries the libav DLLs too, so it carries their notice (audit F4: the
 # 0.99.417 Mini zip had four av*.dll and no FFmpeg notice).
 if (Get-ChildItem -Path $MiniStage -Filter "av*.dll" -ErrorAction SilentlyContinue) {
@@ -585,6 +621,10 @@ https://utopian-academy.github.io/Deckboy/manual.html#deckboy-mini
 Subtitle files beside a clip (clip.srt, clip.en.vtt) just work. Subtitles
 stored INSIDE a video file are read with ffmpeg: install it (for example
 winget install ffmpeg) or use the full Deckboy download, which includes it.
+
+Native PowerPoint Show playback is not part of Mini. That needs
+deckboy-ppt-helper.exe from the full Deckboy Windows zip or installer,
+sitting next to Deckboy.exe.
 "@ | Set-Content -Path (Join-Path $MiniStage "README.txt") -Encoding UTF8
 
 # The copy in the Mini folder has to run on its own and be this version.
