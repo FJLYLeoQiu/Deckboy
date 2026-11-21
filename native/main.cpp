@@ -79,6 +79,9 @@
 #include "deckboy_version.hpp"
 #include "core/paths.hpp"
 #include "core/subprocess.hpp"
+#include "core/speech_timer.hpp"
+#include "core/preview_audio.hpp"
+#include "platform/powerpoint_play.hpp"
 #include "core/palette.hpp"
 #include "core/expression_parser.hpp"
 #include "core/single_instance_guard.hpp"
@@ -244,6 +247,19 @@ namespace {
   using deckboy::platform::browser::BrowserStartPhase;
   using namespace deckboy::core::utils;
   using namespace deckboy::core::media;
+  using deckboy::core::SpeechTimer;
+  using deckboy::core::SpeechTimerConfig;
+  using deckboy::core::SpeechTimerSnapshot;
+  using deckboy::core::SpeechTimerPhase;
+  using deckboy::core::SpeechTimerDisplayTarget;
+  using deckboy::core::SpeechReminder;
+  using deckboy::core::SpeechReminderWhen;
+  using deckboy::core::SpeechReminderAudioRoute;
+  using deckboy::core::SpeechSoundKind;
+  using deckboy::core::IntRect;
+  using deckboy::core::PreviewAudioPolicy;
+  using deckboy::core::PreviewDeviceStatus;
+  using deckboy::platform::PowerPointPlayer;
 
 // ── Audio and network constants ─────────────────────────────────────────────
 constexpr SDL_AudioFormat kAudioFormat = SDL_AUDIO_S16;           // SDL audio format: signed 16-bit native endian
@@ -4270,6 +4286,7 @@ class App {
     showSplashOverlay_ = true;
     splashStartedAt_ = SDL_GetTicks();
     ensureUiAudioDevice();
+    loadSpeechTimerConfig();
     // Boot chiptune — rides the splash overlay; honors the bloops toggle.
     playStartupJingle();
     previewMediaEngine_ = std::make_unique<MediaEngine>(
@@ -4413,6 +4430,9 @@ class App {
       SDL_DestroyTexture(drawOnionTex_);
       drawOnionTex_ = nullptr;
     }
+    closeSpeechTimerFallbackWindow();
+    closePreviewAudioStream();
+    pptPlayer_.shutdown();
     if (previewMediaEngine_) {
       previewMediaEngine_->detachAudioDevice();
       previewMediaEngine_->stopAll();
@@ -5635,6 +5655,9 @@ class App {
 #include "app/app_creatures.ipp"
 #include "app/app_scopes.ipp"
 #include "app/app_live_captions.ipp"
+#include "app/app_speech_timer.ipp"
+#include "app/app_preview_audio.ipp"
+#include "app/app_powerpoint.ipp"
 #include "app/app_code_editor.ipp"
 #include "app/app_ui_widgets.ipp"
   // Render: settings modal dialog (all tabs)
@@ -7294,6 +7317,7 @@ class App {
       case CueKind::Script:
       case CueKind::Memo:
       case CueKind::MidiFile:
+      case CueKind::PowerPointShow:
         return false;
       case CueKind::Tone:
         return cue.tone.visualEnabled;   // a tone cue only has pixels if asked
@@ -9856,6 +9880,7 @@ class App {
       case CueKind::Audio:      return &uiCueIconAudio_;
       case CueKind::Mic:        return &uiCueIconAudio_;
       case CueKind::Timer:      return &uiCueIconPattern_;
+      case CueKind::PowerPointShow: return &uiCueIconPattern_;
       case CueKind::WindowSource:
       case CueKind::Camera:
       case CueKind::Syphon:
@@ -10344,6 +10369,13 @@ class App {
   // 723-725: the update checker. Next free id is 726.
   static constexpr int kSettingsActionMonitorDevice = 794;
   static constexpr int kSettingsActionMonitorDeck = 795;
+  static constexpr int kSettingsActionPreviewAudioDevice = 796;
+  static constexpr int kSettingsActionPreviewMute = 797;
+  static constexpr int kSettingsActionPreviewVolumeDec = 798;
+  static constexpr int kSettingsActionPreviewVolumeInc = 799;
+  static constexpr int kSettingsActionProgramBusVolumeDec = 800;
+  static constexpr int kSettingsActionProgramBusVolumeInc = 801;
+  static constexpr int kSettingsActionCuePreviewToggle = 802;
   static constexpr int kSettingsActionUpdateCheckToggle = 723;
   static constexpr int kSettingsActionUpdateCheckNow = 724;
   static constexpr int kSettingsActionUpdateDownload = 725;
@@ -10454,6 +10486,27 @@ class App {
   TTF_Font* fontPixelTitle_ = nullptr;  // big pixel headline (startup prompt)
   TTF_Font* fontPixelSmall_ = nullptr;  // smaller pixel font for UI labels
   SDL_AudioStream* uiAudioStream_ = nullptr;
+  SpeechTimer speechTimer_;
+  bool speechTimerPanelOpen_ = false;
+  bool speechTimerDragging_ = false;
+  bool speechTimerResizing_ = false;
+  float speechTimerDragOffX_ = 0.0f;
+  float speechTimerDragOffY_ = 0.0f;
+  SDL_Rect speechTimerLastOverlayPx_ {};
+  int speechTimerLastDestW_ = 0;
+  int speechTimerLastDestH_ = 0;
+  SDL_Rect speechTimerResizeBox_ {};
+  SDL_Window* speechTimerFallbackWindow_ = nullptr;
+  SDL_Renderer* speechTimerFallbackRenderer_ = nullptr;
+  struct SpeechTimerBtn { SDL_Rect rect {}; int action = 0; };
+  std::vector<SpeechTimerBtn> speechTimerBtns_;
+  PowerPointPlayer pptPlayer_;
+  std::string pptOpenPath_;
+  SDL_AudioStream* previewAudioStream_ = nullptr;
+  std::string previewAudioDeviceInUse_;
+  std::string cuePreviewCueId_;
+  bool cuePreviewActive_ = false;
+  bool previewMissingWarned_ = false;
   // While the boot jingle plays, ordinary bloops are dropped — queueing one
   // would SDL_ClearAudioStream the jingle mid-phrase.
   Uint64 uiJingleUntilMs_ = 0;
