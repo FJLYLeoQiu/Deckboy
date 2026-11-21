@@ -298,6 +298,10 @@ void writeProjectScalars(std::ostream& output, const Project& project) {
          << '\t' << deckboy::motion::zonesToText(project.motion.zones) << '\n';
   output << "monitor_device\t" << escapeField(project.monitorDeviceName) << '\n';
   output << "monitor_deck\t" << project.monitorDeckIndex << '\n';
+  output << "preview_audio_device\t" << escapeField(project.previewAudioDeviceName) << '\n';
+  output << "preview_volume\t" << project.previewVolume << '\n';
+  output << "preview_muted\t" << (project.previewMuted ? 1 : 0) << '\n';
+  output << "program_bus_volume\t" << project.programBusVolume << '\n';
   for (const NamedAudioOutput& named : project.namedAudioOutputs) {
     output << "audio_output\t" << escapeField(named.name) << '\t' << escapeField(named.deviceName) << '\t'
            << named.firstChannel << '\t' << named.width << '\n';
@@ -1363,6 +1367,14 @@ bool applyProjectScalarLine(Project& project, const std::vector<std::string>& fi
     project.monitorDeviceName = safeString(fields, 1);
   } else if (fields[0] == "monitor_deck") {
     project.monitorDeckIndex = safeInt(fields, 1, -1);
+  } else if (fields[0] == "preview_audio_device") {
+    project.previewAudioDeviceName = safeString(fields, 1);
+  } else if (fields[0] == "preview_volume") {
+    project.previewVolume = static_cast<float>(safeDouble(fields, 1, 1.0));
+  } else if (fields[0] == "preview_muted") {
+    project.previewMuted = safeInt(fields, 1, 0) != 0;
+  } else if (fields[0] == "program_bus_volume") {
+    project.programBusVolume = static_cast<float>(safeDouble(fields, 1, 1.0));
   } else if (fields[0] == "audio_output") {
     NamedAudioOutput named;
     named.name = cleanAudioOutputName(safeString(fields, 1));
@@ -2277,6 +2289,7 @@ Project loadProject(const fs::path& projectFile,
         kind == "dmx" ? CueKind::Dmx :
         kind == "text" ? CueKind::Text :
         kind == "midifile" ? CueKind::MidiFile :
+        (kind == "powerpoint_show" || kind == "powerpoint") ? CueKind::PowerPointShow :
         CueKind::Video;
       // Repair shows written while the round trip was broken. cueKindToken was
       // missing SEVEN kinds, so each was saved as "video" while keeping its

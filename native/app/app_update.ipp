@@ -106,6 +106,9 @@
           break;
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
           // SDL3 promotes window events to top-level event types.
+          if (closeSpeechTimerFallbackIfEvent(event)) {
+            break;
+          }
           Uint32 closingWindowId = event.window.windowID;
           if (closingWindowId == SDL_GetWindowID(controlWindow_)) {
             // Closing the main window should exit immediately (no hidden confirm trap).
@@ -205,9 +208,22 @@
             handleScreensMouseDown(static_cast<int>(event.button.x), static_cast<int>(event.button.y));
           } else {
             handleTutorialOutputClick(event.button.windowID);
+            if (auto outputIndex = outputIndexForWindowId(event.button.windowID); outputIndex) {
+              const int x = static_cast<int>(event.button.x);
+              const int y = static_cast<int>(event.button.y);
+              if (event.button.button == SDL_BUTTON_LEFT &&
+                  speechTimerOverlayHit(*outputIndex, x, y)) {
+                int rw = 0, rh = 0;
+                if (SDL_Window* w = SDL_GetWindowFromID(event.button.windowID)) {
+                  SDL_GetWindowSize(w, &rw, &rh);
+                }
+                beginSpeechTimerOverlayDrag(x, y, rw, rh);
+              }
+            }
           }
           break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
+          endSpeechTimerOverlayDrag();
           endScreensDrag();   // a drag in the Screens window ends wherever it is let go
           if (event.button.windowID == SDL_GetWindowID(controlWindow_)) {
               notePress(false, static_cast<int>(event.button.x), static_cast<int>(event.button.y));
@@ -263,6 +279,13 @@
             handleMouseMotion(static_cast<int>(event.motion.x), static_cast<int>(event.motion.y));
           } else if (screensWindow_ && event.motion.windowID == SDL_GetWindowID(screensWindow_)) {
             handleScreensMouseMotion(static_cast<int>(event.motion.x), static_cast<int>(event.motion.y));
+          } else if (speechTimerDragging_ || speechTimerResizing_) {
+            int rw = 0, rh = 0;
+            if (SDL_Window* w = SDL_GetWindowFromID(event.motion.windowID)) {
+              SDL_GetWindowSize(w, &rw, &rh);
+            }
+            moveSpeechTimerOverlayDrag(static_cast<int>(event.motion.x),
+                                       static_cast<int>(event.motion.y), rw, rh);
           }
           break;
         case SDL_EVENT_KEY_DOWN:
@@ -433,7 +456,8 @@
     // remote MASTERVOL, project load, undo — can miss it.
     for (int deckIndex = 0; deckIndex < static_cast<int>(project_.decks.size()); ++deckIndex) {
       if (MediaEngine* engine = mediaEngineForDeck(deckIndex)) {
-        engine->setMasterGain(static_cast<float>(project_.masterVolume));
+        engine->setMasterGain(static_cast<float>(
+            std::clamp(project_.masterVolume * project_.programBusVolume, 0.0, 2.0)));
         engine->setAudioDelayMs(project_.audioDelayMs);
         // The rate, published the same way and for the same reason: it is a
         // project setting the engine has to act on, and this is the one tick
@@ -678,6 +702,11 @@
     if (audioDeviceRecheckAtMs_ != 0 && now >= audioDeviceRecheckAtMs_) {
       audioDeviceRecheckAtMs_ = 0;
       reconcileDeckAudioDevices();
+      reconcilePreviewAudioDevice();
+    }
+    tickSpeechTimer(static_cast<std::int64_t>(now));
+    if (previewMediaEngine_ && cuePreviewActive_) {
+      previewMediaEngine_->update();
     }
     // A finished update check, announced on the main thread rather than from
     // the worker that did it.
@@ -703,6 +732,7 @@
     if (now - lastAudioDevicePollMs_ >= 2000) {
       lastAudioDevicePollMs_ = now;
       reconcileDeckAudioDevices();
+      reconcilePreviewAudioDevice();
     }
     // The same for a control surface that comes back. Slower, because MIDI
     // refuses an absent port outright rather than sitting on a wrong one, so
