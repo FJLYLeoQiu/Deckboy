@@ -303,6 +303,7 @@ std::string cueKindLabel(CueKind kind) {
     case CueKind::Dmx:            return "DMX";
     case CueKind::Text:           return "Text";
     case CueKind::MidiFile:       return "MIDI File";
+    case CueKind::PowerPointShow: return "PowerPoint Show";
   }
   return "Video";
 }
@@ -348,6 +349,7 @@ std::string cueKindToken(CueKind kind) {
     case CueKind::Dmx:          return "dmx";
     case CueKind::Text:         return "text";
     case CueKind::MidiFile:     return "midifile";
+    case CueKind::PowerPointShow: return "powerpoint_show";
     case CueKind::Video:
     default:                    return "video";
   }

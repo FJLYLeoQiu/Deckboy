@@ -104,9 +104,11 @@ enum class CueKind {
   Memo,          // does NOTHING when GO reaches it but put its notes in front of
                  // the operator: "stand by sound", "wait for the speech to end".
                  // A note that lives in the running order rather than beside it
-  Mic            // a LIVE INPUT played through the deck: a microphone or a line
+  Mic,           // a LIVE INPUT played through the deck: a microphone or a line
                  // in, with the deck's fades, routing and the cue's audio chain.
                  // path = "mic://<device>", empty = the input chosen in Settings
+  PowerPointShow // native desktop PowerPoint slideshow (Windows helper).
+                 // External window; not composited into programme / NDI / record.
 };
 
 // Which part of the input a Mic cue plays. Most interfaces put mic 1 on the
@@ -2964,6 +2966,15 @@ struct Project {
   // -1 = follow the focused playlist, which is what an operator flicking
   // through a show wants. Otherwise the playlist is pinned.
   int monitorDeckIndex = -1;
+  // Preview / cue-listen bus. Empty name = preview is off (silent).
+  // A name that is missing at runtime is reported and stays muted; it is
+  // never silently replaced by the system default or the program device.
+  std::string previewAudioDeviceName;
+  float previewVolume = 1.0f;
+  bool previewMuted = false;
+  // Extra fader on programme engines only (multiplies masterVolume).
+  // Default 1.0 keeps every older show unchanged.
+  float programBusVolume = 1.0f;
   std::vector<OutputLimiterSetting> outputLimiters;   // see OutputLimiterSetting
   std::vector<NamedAudioOutput> namedAudioOutputs;    // OUTPUTS: see NamedAudioOutput
   bool creaturesEnabled = true;
