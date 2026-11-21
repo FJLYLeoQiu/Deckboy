@@ -3247,6 +3247,11 @@
       [this]() { pushUndoSnapshot(); addMemoCue(); }
     });
     contextItems_.push_back({
+      "  PowerPoint Show (native, Windows + desktop PowerPoint)",
+      {0, 0, 0, 0},
+      [this]() { pushUndoSnapshot(); addPowerPointShowFromDialog(); }
+    });
+    contextItems_.push_back({
       "  Target Cue (acts on another cue)",
       {0, 0, 0, 0},
       [this]() { addTargetCue(); }
