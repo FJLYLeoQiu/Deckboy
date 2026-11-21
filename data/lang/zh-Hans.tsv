@@ -3524,3 +3524,38 @@ auto fade: on	自动淡变：已开启
 auto fade: off	自动淡变：已关闭
 Layout	布局
 Slices	切片
+
+# Unofficial extension: speech timer, PowerPoint show, preview audio
+SPEECH TIMER	演讲计时
+START	开始
+PAUSE	暂停
+NEW SPEECH	新的演讲
+Display: Audience window (default)	展示：观众窗口（默认）
+Display: Speaker window	展示：演讲者窗口
+Unlock layout	解锁布局
+Lock layout	锁定布局
+Reset position	复位位置
+Reminder audio: Control (default)	提醒声音：控制端（默认）
+Reminder audio: Audience (caution)	提醒声音：观众端（请谨慎）
+Reminders muted	提醒已静音
+Mute reminders	静音提醒
+Export CSV	导出 CSV
+Audition built-in reminder sounds:	试听内置提醒声：
+Cue preview selected	预听选中线索
+Stop cue preview	停止预听
+Cue preview selected item	预听选中的条目
+STOP PREVIEW	停止预听
+LISTEN SELECTED	预听选中
+Preview audio device	预听音频设备
+Program bus volume	节目总线音量
+Preview volume	预听音量
+(no preview device — silent, will not use HDMI)	（无预听设备 — 保持静音，不会改用 HDMI）
+PowerPoint Show (native, Windows + desktop PowerPoint)	PowerPoint 放映（原生，需 Windows 与桌面版 PowerPoint）
+PowerPoint Show	PowerPoint 放映
+Add reminder	添加提醒
+Edit	编辑
+File	文件
+Play	试听
+Reminders (each can use a built-in or a local file):	提醒（每条可用内置声或本地文件）：
+file (none)	文件（未选）
+Custom reminder	自定义提醒

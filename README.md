@@ -2,6 +2,8 @@
 
 [English](README.md) · [简体中文](README.zh-Hans.md) · [中文使用说明](docs/zh-Hans/使用说明.md)
 
+Unofficial feature-branch docs: [Native PowerPoint, speech timer, and dual-bus audio](docs/POWERPOINT_SPEECH_TIMER_AND_AUDIO.md).
+
 > **Unofficial Simplified Chinese localization** of [Utopian-Academy/Deckboy](https://github.com/Utopian-Academy/Deckboy) 0.99.427 (`5da84439b112bca9461d20b71f0e46e4e4b733aa`). Not an official release. Same GNU GPL v3 license; original authors retain copyright. See [NOTICE.md](NOTICE.md).
 
 <div align="center">

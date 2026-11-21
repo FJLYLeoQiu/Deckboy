@@ -587,6 +587,8 @@ add_executable(deckboy-native
   native/main.cpp
   native/core/paths.cpp
   native/core/i18n.cpp
+  native/core/speech_timer.cpp
+  native/core/preview_audio.cpp
   native/core/utils.cpp
   native/core/subprocess.cpp
   native/core/media_probe.cpp
@@ -596,6 +598,8 @@ add_executable(deckboy-native
   native/engine/media_engine.cpp
   native/platform/browser.cpp
   native/platform/pdf_import.cpp
+  native/platform/powerpoint_protocol.cpp
+  native/platform/powerpoint_play.cpp
   native/platform/capture_backend.cpp
   native/platform/audio_plugin.cpp
   native/platform/integration_backend.cpp
@@ -649,6 +653,19 @@ add_executable(deckboy-native
 )
 
 set_target_properties(deckboy-native PROPERTIES OUTPUT_NAME "Deckboy")
+
+# Windows helper: late-bound PowerPoint COM on a dedicated STA process.
+# Built only on WIN32; typelibs are not required (the CI runner has no Office).
+if(WIN32)
+  add_executable(deckboy-ppt-helper native/platform/win/deckboy_ppt_helper.cpp
+                                    native/platform/powerpoint_protocol.cpp)
+  target_include_directories(deckboy-ppt-helper PRIVATE native)
+  target_link_libraries(deckboy-ppt-helper PRIVATE ole32 oleaut32 uuid)
+  if(MSVC)
+    target_compile_options(deckboy-ppt-helper PRIVATE /W4)
+    target_compile_definitions(deckboy-ppt-helper PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
+  endif()
+endif()
 
 # A build's own extras, when it has any (see native/core/private_extras.hpp).
 # The folder is not in the public repository; without it nothing changes. It
@@ -1278,6 +1295,36 @@ if(BUILD_TESTING)
     target_compile_options(deckboy-i18n-check PRIVATE -Wall -Wextra -Wshadow -Werror)
   endif()
   add_test(NAME i18n COMMAND deckboy-i18n-check)
+  # Speech countdown: start/pause/reset, overtime, one-shot reminders, display clamp.
+  add_executable(deckboy-speech-timer-check tools/speech_timer_check.cpp native/core/speech_timer.cpp native/core/preview_audio.cpp)
+  target_include_directories(deckboy-speech-timer-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-speech-timer-check PRIVATE /W4 /WX)
+  else()
+    target_compile_options(deckboy-speech-timer-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME speech_timer COMMAND deckboy-speech-timer-check)
+  add_executable(deckboy-preview-audio-check tools/preview_audio_check.cpp native/core/preview_audio.cpp)
+  target_include_directories(deckboy-preview-audio-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-preview-audio-check PRIVATE /W4 /WX)
+    target_compile_definitions(deckboy-preview-audio-check PRIVATE _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(deckboy-preview-audio-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME preview_audio COMMAND deckboy-preview-audio-check)
+  # PowerPoint helper line protocol. No Office required.
+  add_executable(deckboy-powerpoint-protocol-check
+    tools/powerpoint_protocol_check.cpp
+    native/platform/powerpoint_protocol.cpp)
+  target_include_directories(deckboy-powerpoint-protocol-check PRIVATE native)
+  if(MSVC)
+    target_compile_options(deckboy-powerpoint-protocol-check PRIVATE /W4 /WX)
+    target_compile_definitions(deckboy-powerpoint-protocol-check PRIVATE _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(deckboy-powerpoint-protocol-check PRIVATE -Wall -Wextra -Wshadow -Werror)
+  endif()
+  add_test(NAME powerpoint_protocol COMMAND deckboy-powerpoint-protocol-check)
   # The MIDI map: matching, knobs, encoders, holds, pickup, OSC, the saved form.
   add_executable(deckboy-midi-map-check tools/midi_map_check.cpp)
   target_include_directories(deckboy-midi-map-check PRIVATE native)

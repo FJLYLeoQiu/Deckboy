@@ -291,6 +291,12 @@ Copyright © 2026 Deckboy Contributors。全文见 [LICENSE](LICENSE)。
 
 NDI® 是 Vizrt NDI AB 的注册商标。
 
+## 非官方功能扩展（本仓库功能分支）
+
+同一 feature 分支还提供：**原生 PowerPoint 放映**（Windows + 桌面版 PowerPoint，外部窗口，不是节目/NDI 合成）、**演讲计时**（展示默认在观众/节目窗口，可改到演讲者窗口；设置与展示分离）、以及**节目与预听双音频总线**（可同时正式播放当前素材并在另一设备预听下一个，预听设备失效时静音且不会回退到 HDMI）。
+
+说明、限制与未做的实机验证见 [PowerPoint演讲计时与音频路由.md](docs/zh-Hans/PowerPoint演讲计时与音频路由.md)（英文：[POWERPOINT_SPEECH_TIMER_AND_AUDIO.md](docs/POWERPOINT_SPEECH_TIMER_AND_AUDIO.md)）。
+
 本简体中文文档与界面翻译不改变原项目的许可证与作者信息。
 
 ---
