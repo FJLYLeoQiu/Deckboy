@@ -5973,6 +5973,7 @@
       applyOutputMask(outputIndex, compositionOutputIndex, *runtime, renderW, renderH, keyFillMode);
     }
     drawLiveCaptions(outputIndex, runtime->outputRenderer, renderW, renderH);
+    drawSpeechTimerOverlay(outputIndex, runtime->outputRenderer, renderW, renderH, viewType);
     drawTutorialDeskEatenCaption(outputIndex, runtime->outputRenderer, renderW, renderH);
     if (output.outputTestCardEnabled && !testCardOnly) {
       for (int recording : hdrRecordingsOfThis) {

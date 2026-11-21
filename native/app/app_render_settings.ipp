@@ -1749,6 +1749,70 @@
           settingsBtns_.push_back({monDeckBtn, kSettingsActionMonitorDeck,
                                    "Which playlist you hear on the monitor"});
         }
+
+        // Programme vs preview (cue-listen) buses. Preview never falls back
+        // to the programme / default device.
+        drawTextSafe(controlRenderer_, fontSmall_,
+                     settingsRow(audioX, audioW, rowY, sTallH,
+                                 "Cue preview bus", sGap),
+                     "Program and preview are separate devices and volumes", pal.fg);
+        {
+          char buf[64];
+          std::snprintf(buf, sizeof(buf), "Program bus volume  %.2f",
+                        project_.programBusVolume);
+          SDL_Rect lab = settingsRow(audioX, audioW, rowY, sTallH, buf, sGap);
+          (void)lab;
+          SDL_Rect dec {audioX + audioW - uiScaled(120), rowY - sTallH - sGap, uiScaled(54), sTallH};
+          SDL_Rect inc {audioX + audioW - uiScaled(58), rowY - sTallH - sGap, uiScaled(54), sTallH};
+          // settingsRow already advanced rowY; place buttons on the previous row.
+          dec.y = lab.y; inc.y = lab.y; dec.h = lab.h; inc.h = lab.h;
+          Primitives::drawFramedPanel(controlRenderer_, dec, pal.dark, pal.deep, pal.mid);
+          Primitives::drawFramedPanel(controlRenderer_, inc, pal.dark, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, dec, "-", pal.light);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, inc, "+", pal.light);
+          settingsBtns_.push_back({dec, kSettingsActionProgramBusVolumeDec, "program_bus_vol_dec"});
+          settingsBtns_.push_back({inc, kSettingsActionProgramBusVolumeInc, "program_bus_vol_inc"});
+        }
+        {
+          const std::string prevName = project_.previewAudioDeviceName.empty()
+            ? std::string("(no preview device — silent, will not use HDMI)")
+            : project_.previewAudioDeviceName;
+          SDL_Rect prevBtn = settingsRow(audioX, audioW, rowY, sTallH,
+                                         "Preview audio device", sGap);
+          drawUIDropdownValue(prevBtn, prevName, "settings.preview_device");
+          settingsBtns_.push_back({prevBtn, kSettingsActionPreviewAudioDevice,
+                                   "Device for listening to the next cue. If it is missing, preview is muted — it will not fall back to the program device."});
+        }
+        {
+          char buf[64];
+          std::snprintf(buf, sizeof(buf), "Preview volume  %.2f%s",
+                        project_.previewVolume,
+                        project_.previewMuted ? "  (muted)" : "");
+          SDL_Rect lab = settingsRow(audioX, audioW, rowY, sTallH, buf, sGap);
+          SDL_Rect dec {audioX + audioW - uiScaled(186), lab.y, uiScaled(54), lab.h};
+          SDL_Rect inc {audioX + audioW - uiScaled(124), lab.y, uiScaled(54), lab.h};
+          SDL_Rect mute {audioX + audioW - uiScaled(62), lab.y, uiScaled(58), lab.h};
+          Primitives::drawFramedPanel(controlRenderer_, dec, pal.dark, pal.deep, pal.mid);
+          Primitives::drawFramedPanel(controlRenderer_, inc, pal.dark, pal.deep, pal.mid);
+          Primitives::drawFramedPanel(controlRenderer_, mute, pal.dark, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, dec, "-", pal.light);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, inc, "+", pal.light);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, mute,
+                               project_.previewMuted ? "UNMUTE" : "MUTE", pal.light);
+          settingsBtns_.push_back({dec, kSettingsActionPreviewVolumeDec, "preview_vol_dec"});
+          settingsBtns_.push_back({inc, kSettingsActionPreviewVolumeInc, "preview_vol_inc"});
+          settingsBtns_.push_back({mute, kSettingsActionPreviewMute, "preview_mute"});
+        }
+        {
+          SDL_Rect go = settingsRow(audioX, audioW, rowY, sTallH,
+                                    cuePreviewActive_ ? "Stop cue preview" : "Cue preview selected item",
+                                    sGap);
+          Primitives::drawFramedPanel(controlRenderer_, go, pal.dark, pal.deep, pal.mid);
+          drawCenteredTextSafe(controlRenderer_, fontSmall_, go,
+                               cuePreviewActive_ ? "STOP PREVIEW" : "LISTEN SELECTED", pal.light);
+          settingsBtns_.push_back({go, kSettingsActionCuePreviewToggle,
+                                   "Play the selected cue on the preview device only. Program, record and stream keep the on-air item."});
+        }
       }
 
       {
@@ -5289,6 +5353,55 @@
                          ? std::string("monitor follows the focused playlist")
                          : ("monitoring " + deckLabel(monitoredDeckIndex())));
                      });
+        return;
+      } else if (sb.action == kSettingsActionPreviewAudioDevice) {
+        std::vector<std::pair<std::string, std::string>> choices;
+        choices.emplace_back("", "(no preview device)");
+        for (const auto& option : audioOutputDeviceDropdownChoices()) {
+          if (!option.first.empty()) {
+            choices.push_back(option);
+          }
+        }
+        openDropdown("settings.preview_device", sb.rect, choices,
+                     project_.previewAudioDeviceName,
+                     [this](const std::string& value) {
+                       project_.previewAudioDeviceName = value;
+                       previewMissingWarned_ = false;
+                       markProjectDirty();
+                       reconcilePreviewAudioDevice();
+                       triggerToast(value.empty()
+                         ? std::string("preview audio off (stays silent, no HDMI fallback)")
+                         : ("preview audio on " + value));
+                     });
+        return;
+      } else if (sb.action == kSettingsActionPreviewMute) {
+        project_.previewMuted = !project_.previewMuted;
+        applyPreviewAndProgramGains();
+        markProjectDirty();
+        triggerToast(project_.previewMuted ? "preview muted" : "preview unmuted");
+        return;
+      } else if (sb.action == kSettingsActionPreviewVolumeDec) {
+        project_.previewVolume = std::clamp(project_.previewVolume - 0.05f, 0.0f, 2.0f);
+        applyPreviewAndProgramGains();
+        markProjectDirty();
+        return;
+      } else if (sb.action == kSettingsActionPreviewVolumeInc) {
+        project_.previewVolume = std::clamp(project_.previewVolume + 0.05f, 0.0f, 2.0f);
+        applyPreviewAndProgramGains();
+        markProjectDirty();
+        return;
+      } else if (sb.action == kSettingsActionProgramBusVolumeDec) {
+        project_.programBusVolume = std::clamp(project_.programBusVolume - 0.05f, 0.0f, 2.0f);
+        applyPreviewAndProgramGains();
+        markProjectDirty();
+        return;
+      } else if (sb.action == kSettingsActionProgramBusVolumeInc) {
+        project_.programBusVolume = std::clamp(project_.programBusVolume + 0.05f, 0.0f, 2.0f);
+        applyPreviewAndProgramGains();
+        markProjectDirty();
+        return;
+      } else if (sb.action == kSettingsActionCuePreviewToggle) {
+        toggleCuePreview();
         return;
       } else if (sb.action == 201) {
         project_.uiSoundsEnabled = !project_.uiSoundsEnabled;

@@ -1402,6 +1402,7 @@
     renderDependencyPrompt();
     // Popups rendered last (on top)
     renderContextMenu();
+    renderSpeechTimerControlPanel(width, height);
     renderSettingsModal();
     // Over Settings, where INSTALL & RESTART is pressed, and under the busy
     // critters so its animal walks on it.
