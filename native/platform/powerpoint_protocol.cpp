@@ -71,7 +71,16 @@ bool parseString(const std::string& s, std::size_t& i, std::string& out) {
           else if (h >= 'A' && h <= 'F') code += 10 + h - 'A';
           else return false;
         }
-        out += static_cast<char>(code < 0x80 ? code : '?');
+        if (code < 0x80) {
+          out += static_cast<char>(code);
+        } else if (code < 0x800) {
+          out += static_cast<char>(0xC0 | ((code >> 6) & 0x1F));
+          out += static_cast<char>(0x80 | (code & 0x3F));
+        } else {
+          out += static_cast<char>(0xE0 | ((code >> 12) & 0x0F));
+          out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+          out += static_cast<char>(0x80 | (code & 0x3F));
+        }
         break;
       }
       default: out += e; break;

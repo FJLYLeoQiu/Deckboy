@@ -5334,10 +5334,10 @@
     const fs::path showFolder = currentProjectFile_.empty()
       ? (Paths::stateDir() / "_converted")
       : (currentProjectFile_.parent_path() /
-         (currentProjectFile_.stem().string() + "_media"));
+         (deckboy::u8string(currentProjectFile_.stem()) + "_media"));
     const fs::path pagesDir = showFolder /
-                              (document.stem().string() + "_pages");
-    const std::string title = document.stem().string();
+                              (deckboy::u8string(document.stem()) + "_pages");
+    const std::string title = deckboy::u8string(document.stem());
     // STAYS UP FOR THE WHOLE JOB. A hundred-slide deck takes half a minute to
     // convert and render, and the ordinary toast is gone in a second -- so the
     // operator got one flash and then a window that looked like it had ignored
@@ -5345,7 +5345,7 @@
     // always the current one.
     // Every stage goes in the show log, so an import that fails on a machine
     // nobody can reach says afterwards where it stopped.
-    showLog("SLIDES", "import \"" + document.string() + "\"" +
+    showLog("SLIDES", "import \"" + deckboy::u8string(document) + "\"" +
                         (needsConversion ? " (converting to PDF first)" : ""));
     ++slideRenderJobs_;
     slideRenderTitle_ = title;
@@ -5597,7 +5597,8 @@
     // Or a .pptx sitting beside the PDF under the same name.
     const fs::path stem = deckPath.parent_path() / deckPath.stem();
     for (const char* candidate : {".pptx", ".PPTX"}) {
-      const fs::path office(stem.string() + candidate);
+      fs::path office = stem;
+      office.concat(candidate);
       if (!fs::is_regular_file(office, ec)) continue;
       return deckboy::platform::slideTransitionsFromPptx(office, pageCount);
     }
@@ -5612,10 +5613,10 @@
     }
     const fs::path stem = deckPath.parent_path() / deckPath.stem();
     const std::vector<fs::path> candidates {
-      fs::path(stem.string() + ".pdfpc"),
-      fs::path(stem.string() + ".notes.txt"),
-      fs::path(stem.string() + ".notes.md"),
-      fs::path(stem.string() + ".notes"),
+      fs::path(stem).concat(".pdfpc"),
+      fs::path(stem).concat(".notes.txt"),
+      fs::path(stem).concat(".notes.md"),
+      fs::path(stem).concat(".notes"),
     };
     // (see slideTransitionsForDocument below, which looks in the same places)
     // THE DECK'S OWN POWERPOINT, FIRST. A .pptx is a ZIP with the notes as
@@ -5624,7 +5625,8 @@
     // produces, since Slides exports both -- the notes come across with no
     // sidecar to write and nothing for anybody to remember.
     for (const char* ext : {".pptx", ".PPTX"}) {
-      const fs::path office(stem.string() + ext);
+      fs::path office = stem;
+      office.concat(ext);
       std::error_code ec;
       if (!fs::exists(office, ec) || !fs::is_regular_file(office, ec)) continue;
       std::vector<std::string> fromOffice =
@@ -5928,7 +5930,7 @@
         // folder has been renamed, a path that arrived with its quoting
         // mangled -- looked exactly like an app that had ignored the drop.
         // It cost an hour to diagnose here; on a show day it is worse.
-        triggerToast(deckboy::u8path(cleaned).filename().string() +
+        triggerToast(deckboy::u8string(deckboy::u8path(cleaned).filename()) +
                        ": not found (has the drive gone away?)",
                      ToastKind::Warning, kToastReadableMs);
         continue;
@@ -5967,7 +5969,7 @@
           std::vector<std::string> asStrings;
           asStrings.reserve(found.size());
           for (const fs::path& f : found) {
-            asStrings.push_back(f.string());
+            asStrings.push_back(deckboy::u8string(f));
           }
           std::lock_guard<std::mutex> lock(sdlDialogMutex_);
           sdlDialogActions_.emplace_back(

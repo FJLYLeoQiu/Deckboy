@@ -6782,13 +6782,13 @@
       return 1;
     }
     const fs::path out = fs::absolute(outDir.empty()
-      ? (fs::temp_directory_path() / "deckboy-pdf-probe") : fs::path(outDir));
+      ? (fs::temp_directory_path() / "deckboy-pdf-probe") : deckboy::u8path(outDir));
 
     // A PRESENTATION GOES THROUGH ITS CONVERTER FIRST, and the probe reports
     // which one -- because "it did not import" has three different causes
     // (no converter, the converter refused the file, the render failed) that
     // look identical from the outside, and a toast cannot be read by a script.
-    fs::path source = file;
+    fs::path source = deckboy::u8path(file);
     if (deckboy::platform::isPresentationDocumentPath(source)) {
       std::string why;
       if (!deckboy::platform::presentationConvertAvailable(why)) {

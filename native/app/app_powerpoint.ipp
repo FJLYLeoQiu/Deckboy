@@ -14,7 +14,8 @@
       return false;
     }
     std::error_code ec;
-    if (cue.path.empty() || !fs::exists(fs::path(cue.path), ec)) {
+    const fs::path cuePath = deckboy::u8path(cue.path);
+    if (cue.path.empty() || !fs::exists(cuePath, ec)) {
       triggerToast("PowerPoint file is missing: " + cue.name, ToastKind::Warning, kToastReadableMs);
       playUiSound(UiSoundEffect::Error);
       return false;
@@ -79,14 +80,14 @@
       triggerToast("PowerPoint file not found", ToastKind::Warning, kToastReadableMs);
       return;
     }
-    if (!deckboy::platform::isPptFilename(document.string())) {
+    if (!deckboy::platform::isPptFilename(deckboy::u8string(document))) {
       triggerToast("Not a .ppt / .pptx / .pps / .ppsx file", ToastKind::Warning, kToastReadableMs);
       return;
     }
     Cue cue;
     cue.kind = CueKind::PowerPointShow;
-    cue.path = document.string();
-    cue.name = document.stem().string();
+    cue.path = deckboy::u8string(document);
+    cue.name = deckboy::u8string(document.stem());
     cue.formatName = "powerpoint";
     cue.color = {80, 90, 150, 255};
     Deck& deck = focusedDeckMutable();
@@ -112,6 +113,6 @@
       {"All files", "*"},
     };
     showOpenFileDialog(kFilters, true, [this](const std::vector<std::string>& paths) {
-      for (const auto& p : paths) addPowerPointShowFromPath(fs::path(p));
+      for (const auto& p : paths) addPowerPointShowFromPath(deckboy::u8path(p));
     });
   }

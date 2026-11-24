@@ -13910,7 +13910,7 @@ int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& o
     if (ops.empty()) return missing("<file.pptx> [slide count]");
     const int count = ops.size() > 1 ? std::atoi(ops[1].c_str()) : 0;
     const auto notes = deckboy::platform::slideNotesFromPptx(
-      dbfs::path(ops[0]),
+      deckboy::u8path(ops[0]),
       static_cast<std::size_t>(count > 0 ? count : 200));
     int withNotes = 0;
     for (std::size_t i = 0; i < notes.size(); ++i) {
@@ -13927,7 +13927,7 @@ int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& o
     // operator asks about an imported deck is "did it bring ITS deck across",
     // and notes are only half of that.
     const auto moves = deckboy::platform::slideTransitionsFromPptx(
-      dbfs::path(ops[0]),
+      deckboy::u8path(ops[0]),
       static_cast<std::size_t>(count > 0 ? count : 200));
     int withMoves = 0;
     for (std::size_t i = 0; i < moves.size(); ++i) {
@@ -13970,7 +13970,7 @@ int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& o
     // during the render rather than jumping at the end -- a 62-page deck takes
     // long enough that the difference is the whole point of having a bar.
     const auto r = deckboy::platform::rasterisePdfInProcess(
-        ops[0], ops[1], width > 0 ? width : 3840, [](int index, int count) {
+        deckboy::u8path(ops[0]), deckboy::u8path(ops[1]), width > 0 ? width : 3840, [](int index, int count) {
           std::cout << "PROGRESS " << index << " " << count << std::endl;
         });
     if (!r.error.empty()) {
@@ -13979,7 +13979,7 @@ int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& o
     }
     const int total = static_cast<int>(r.pagePaths.size());
     for (int i = 0; i < total; ++i) {
-      std::cout << "PAGE " << (i + 1) << " " << total << " " << r.pagePaths[i] << std::endl;
+      std::cout << "PAGE " << (i + 1) << " " << total << " " << deckboy::u8string(r.pagePaths[i]) << std::endl;
     }
     std::cout.flush();
     return 0;
@@ -14356,7 +14356,7 @@ int runDeckboyMain(int argc, char** argv) {
     }
     // Bare path: a show opens as the project, anything else is imported. This
     // is the shape the .deckboy file association hands us.
-    fs::path candidate(arg);
+    fs::path candidate = deckboy::u8path(arg);
     if (startupProjectArg.empty() && candidate.extension() == ".deckboy") {
       startupProjectArg = candidate;
     } else {

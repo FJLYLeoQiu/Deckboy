@@ -332,9 +332,9 @@ bool convertWithPowerPoint(const fs::path& source, const fs::path& outputDir,
   std::string output;
   bool timedOut = false;
   runQuietly({"powershell", "-NoProfile", "-NonInteractive",
-              "-ExecutionPolicy", "Bypass", "-File", script.string(),
-              "-Source", sourceNative.string(),
-              "-Target", targetNative.string()}, output, kConvertTimeoutMs, &timedOut);
+              "-ExecutionPolicy", "Bypass", "-File", deckboy::u8string(script),
+              "-Source", deckboy::u8string(sourceNative),
+              "-Target", deckboy::u8string(targetNative)}, output, kConvertTimeoutMs, &timedOut);
   fs::remove(script, ec);
   if (timedOut) {
     error = std::string("PowerPoint ") + kConvertTimeoutAdvice;
@@ -360,8 +360,14 @@ bool havePowerPoint() {
               "(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\"
               "CurrentVersion\\App Paths\\POWERPNT.EXE' "
               "-ErrorAction SilentlyContinue).'(default)'"}, output);
-  return output.find("POWERPNT") != std::string::npos ||
-         output.find("powerpnt") != std::string::npos;
+  if (output.find("POWERPNT") != std::string::npos ||
+      output.find("powerpnt") != std::string::npos) {
+    return true;
+  }
+  output.clear();
+  runQuietly({"powershell", "-NoProfile", "-NonInteractive", "-Command",
+              "if ([Type]::GetTypeFromProgID('PowerPoint.Application')) { Write-Output 'HAVE_PPT' }"}, output);
+  return output.find("HAVE_PPT") != std::string::npos;
 }
 
 }  // namespace
@@ -772,8 +778,8 @@ PdfRasterResult rasterisePdf(const fs::path& pdfPath, const fs::path& outputDir,
 
   ChildProcess child;
   const std::vector<std::string> args {
-      self.string(), "--pdf-render", pdfPath.string(), outputDir.string(),
-      std::to_string(targetWidthPixels)};
+      deckboy::u8string(self), "--pdf-render", deckboy::u8string(pdfPath),
+      deckboy::u8string(outputDir), std::to_string(targetWidthPixels)};
   if (!spawnProcess(child, args, SpawnOptions::pipedStdout())) {
     result.error = "could not start the PDF renderer";
     return result;
@@ -842,7 +848,7 @@ PdfRasterResult rasterisePdf(const fs::path& pdfPath, const fs::path& outputDir,
         const int count = std::atoi(sp + 1);
         const char* sp2 = std::strchr(sp + 1, ' ');
         if (!sp2) continue;
-        result.pagePaths.emplace_back(sp2 + 1);
+        result.pagePaths.emplace_back(deckboy::u8path(sp2 + 1));
         if (count > 0) pageCount = count;
         (void)index;
       }

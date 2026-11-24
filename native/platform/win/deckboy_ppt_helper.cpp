@@ -260,12 +260,47 @@ static PptStatus doOpen(PptSession& ses, const PptCommand& cmd) {
   ses.openedPath = cmd.open.path;
 
   // If Protected View caught it, do not call Edit/Enable. Report and close.
+  // Note: Only report protected_view if an item in ProtectedViewWindows actually corresponds
+  // to THIS presentation. WPS Office and other third-party suites or preexisting background
+  // sessions can report a non-zero count of dummy/unrelated windows (e.g. SourceName='default').
   IDispatch* pvWindows = nullptr;
   if (SUCCEEDED(getDispatch(ses.app, L"ProtectedViewWindows", &pvWindows)) && pvWindows) {
     long count = 0;
     getLong(pvWindows, L"Count", &count);
+    bool matchFound = false;
+    std::wstring targetName = utf8ToWide(cmd.open.path);
+    auto pos = targetName.find_last_of(L"\\/");
+    if (pos != std::wstring::npos) {
+      targetName = targetName.substr(pos + 1);
+    }
+    for (long i = 1; i <= count; ++i) {
+      VARIANT idx;
+      VariantInit(&idx);
+      idx.vt = VT_I4;
+      idx.lVal = i;
+      DISPPARAMS dp {&idx, nullptr, 1, 0};
+      VARIANT item;
+      VariantInit(&item);
+      if (SUCCEEDED(invokeNamed(pvWindows, L"Item", DISPATCH_METHOD, &dp, &item)) &&
+          item.vt == VT_DISPATCH && item.pdispVal) {
+        IDispatch* pvItem = item.pdispVal;
+        VARIANT nameVal;
+        VariantInit(&nameVal);
+        DISPPARAMS noParams {};
+        if (SUCCEEDED(invokeNamed(pvItem, L"SourceName", DISPATCH_PROPERTYGET, &noParams, &nameVal)) &&
+            nameVal.vt == VT_BSTR && nameVal.bstrVal) {
+          if (_wcsicmp(nameVal.bstrVal, targetName.c_str()) == 0) {
+            matchFound = true;
+          }
+        }
+        VariantClear(&nameVal);
+        pvItem->Release();
+      }
+      VariantClear(&item);
+      if (matchFound) break;
+    }
     pvWindows->Release();
-    if (count > 0) {
+    if (matchFound) {
       // Opening a blocked file may have added a Protected View window and
       // not a real Presentation. Leave Protected View untouched.
       ses.releasePres();
@@ -306,6 +341,36 @@ static PptStatus doOpen(PptSession& ses, const PptCommand& cmd) {
     ses.show->AddRef();
   }
   VariantClear(&runResult);
+
+  // In WPS Office and some environments, SlideShowSettings.Run() returns VT_EMPTY (void)
+  // rather than returning the SlideShowWindow dispatch directly. Retrieve it via the
+  // presentation's SlideShowWindow property or the Application's SlideShowWindows collection.
+  if (!ses.show && ses.pres) {
+    (void)getDispatch(ses.pres, L"SlideShowWindow", &ses.show);
+  }
+  if (!ses.show && ses.app) {
+    IDispatch* windows = nullptr;
+    if (SUCCEEDED(getDispatch(ses.app, L"SlideShowWindows", &windows)) && windows) {
+      long winCount = 0;
+      getLong(windows, L"Count", &winCount);
+      if (winCount > 0) {
+        VARIANT idx;
+        VariantInit(&idx);
+        idx.vt = VT_I4;
+        idx.lVal = 1;
+        DISPPARAMS dp {&idx, nullptr, 1, 0};
+        VARIANT item;
+        VariantInit(&item);
+        if (SUCCEEDED(invokeNamed(windows, L"Item", DISPATCH_METHOD, &dp, &item)) &&
+            item.vt == VT_DISPATCH && item.pdispVal) {
+          ses.show = item.pdispVal;
+          ses.show->AddRef();
+        }
+        VariantClear(&item);
+      }
+      windows->Release();
+    }
+  }
 
   if (ses.show && (cmd.open.width > 0 || cmd.open.height > 0)) {
     HDC hdc = GetDC(nullptr);

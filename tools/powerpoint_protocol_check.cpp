@@ -43,6 +43,18 @@ int main() {
   expect(back.open.startSlide == 3 && back.open.width == 1920, "open numeric fields");
   expect(back.open.windowed, "windowed true");
 
+  PptCommand openUnicode;
+  openUnicode.type = PptCommandType::Open;
+  openUnicode.open.path = "D:\\资料\\重大项目.pptx";
+  const std::string lineU = encodePptCommand(openUnicode);
+  PptCommand backU;
+  expect(decodePptCommand(lineU, backU, &err), "decode unicode open");
+  expect(backU.open.path == openUnicode.open.path, "unicode path round-trips");
+
+  PptCommand backEscaped;
+  expect(decodePptCommand("{\"cmd\":\"open\",\"path\":\"\\u6f14\\u793a.pptx\"}", backEscaped, &err), "decode \\u escaped unicode");
+  expect(!backEscaped.open.path.empty() && backEscaped.open.path != "??.pptx", "\\u escapes decoded as utf8 rather than ?");
+
   PptCommand go;
   go.type = PptCommandType::Goto;
   go.slide = 12;
