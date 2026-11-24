@@ -59,6 +59,10 @@ inline dbfs::path u8path(const std::string& u8str) {
   return u8path(std::string_view(u8str));
 }
 
+inline dbfs::path u8path(const char* u8str) {
+  return u8str ? u8path(std::string_view(u8str)) : dbfs::path();
+}
+
 /// Converts a dbfs::path to a UTF-8 encoded std::string portably.
 inline std::string u8string(const dbfs::path& p) {
 #if defined(_WIN32)
