@@ -13979,7 +13979,7 @@ int runDeckboyCliMode(const std::string& mode, const std::vector<std::string>& o
     }
     const int total = static_cast<int>(r.pagePaths.size());
     for (int i = 0; i < total; ++i) {
-      std::cout << "PAGE " << (i + 1) << " " << total << " " << deckboy::u8string(r.pagePaths[i]) << std::endl;
+      std::cout << "PAGE " << (i + 1) << " " << total << " " << r.pagePaths[i] << std::endl;
     }
     std::cout.flush();
     return 0;

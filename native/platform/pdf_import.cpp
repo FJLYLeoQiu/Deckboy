@@ -695,7 +695,7 @@ PdfRasterResult rasterisePdfInProcess(const fs::path& pdfPath, const fs::path& o
         winrt::Windows::Storage::FileAccessMode::ReadWrite).get();
       page.RenderToStreamAsync(stream, options).get();
       stream.Close();
-      result.pagePaths.push_back((outputDir / name).string());
+      result.pagePaths.push_back(deckboy::u8string(outputDir / name));
 
       // First page of the first pass: find out what the machine actually did.
       if (attempt == 0 && i == 0) {
@@ -848,7 +848,7 @@ PdfRasterResult rasterisePdf(const fs::path& pdfPath, const fs::path& outputDir,
         const int count = std::atoi(sp + 1);
         const char* sp2 = std::strchr(sp + 1, ' ');
         if (!sp2) continue;
-        result.pagePaths.emplace_back(deckboy::u8path(std::string_view(sp2 + 1)));
+        result.pagePaths.emplace_back(sp2 + 1);
         if (count > 0) pageCount = count;
         (void)index;
       }
