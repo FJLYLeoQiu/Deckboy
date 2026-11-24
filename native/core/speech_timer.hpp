@@ -56,6 +56,11 @@ enum class SpeechTimerDisplayTarget {
   Speaker = 1,
 };
 
+enum class SpeechTimerOrientation {
+  Vertical = 0,
+  Horizontal = 1,
+};
+
 struct IntRect {
   int x = 0;
   int y = 0;
@@ -103,6 +108,7 @@ struct SpeechTimerConfig {
   bool layoutLocked = false;
   bool alwaysOnTop = false;   // fallback window only; a composited overlay is already in the frame
   bool windowVisible = true;
+  SpeechTimerOrientation orientation = SpeechTimerOrientation::Vertical;
 
   // Audio is intentionally separate from displayTarget. An audience visual
   // does NOT automatically put reminder sounds on the programme / stream /

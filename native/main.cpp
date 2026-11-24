@@ -10369,13 +10369,13 @@ class App {
   // 723-725: the update checker. Next free id is 726.
   static constexpr int kSettingsActionMonitorDevice = 794;
   static constexpr int kSettingsActionMonitorDeck = 795;
-  static constexpr int kSettingsActionPreviewAudioDevice = 796;
-  static constexpr int kSettingsActionPreviewMute = 797;
-  static constexpr int kSettingsActionPreviewVolumeDec = 798;
-  static constexpr int kSettingsActionPreviewVolumeInc = 799;
-  static constexpr int kSettingsActionProgramBusVolumeDec = 800;
-  static constexpr int kSettingsActionProgramBusVolumeInc = 801;
-  static constexpr int kSettingsActionCuePreviewToggle = 802;
+  static constexpr int kSettingsActionPreviewAudioDevice = 832;
+  static constexpr int kSettingsActionPreviewMute = 833;
+  static constexpr int kSettingsActionPreviewVolumeDec = 834;
+  static constexpr int kSettingsActionPreviewVolumeInc = 835;
+  static constexpr int kSettingsActionProgramBusVolumeDec = 836;
+  static constexpr int kSettingsActionProgramBusVolumeInc = 837;
+  static constexpr int kSettingsActionCuePreviewToggle = 838;
   static constexpr int kSettingsActionUpdateCheckToggle = 723;
   static constexpr int kSettingsActionUpdateCheckNow = 724;
   static constexpr int kSettingsActionUpdateDownload = 725;

@@ -47,6 +47,9 @@ int main() {
     expect(cfg.durationSeconds == 600, "default duration is 10 minutes");
     expect(cfg.displayTarget == SpeechTimerDisplayTarget::Audience,
            "display target defaults to audience, not speaker");
+    expect(cfg.windowVisible, "default windowVisible is true");
+    expect(cfg.orientation == deckboy::core::SpeechTimerOrientation::Vertical,
+           "default orientation is vertical");
     expect(cfg.reminderAudioRoute == SpeechReminderAudioRoute::Control,
            "reminder audio defaults to the control path, not the audience bus");
     expect(cfg.reminders.size() == 3, "three default reminders");
@@ -168,6 +171,8 @@ int main() {
     cfg.overlayX = 0.1f;
     cfg.muteReminders = true;
     cfg.reminderAudioDeviceName = "Speakers";
+    cfg.windowVisible = false;
+    cfg.orientation = deckboy::core::SpeechTimerOrientation::Horizontal;
     t.setConfig(cfg);
     const std::string text = t.saveConfigText();
     SpeechTimer u;
@@ -178,6 +183,9 @@ int main() {
     expect(u.config().durationSeconds == 900, "duration persisted");
     expect(u.config().muteReminders, "mute persisted");
     expect(u.config().reminderAudioDeviceName == "Speakers", "audio device persisted");
+    expect(!u.config().windowVisible, "windowVisible persisted");
+    expect(u.config().orientation == deckboy::core::SpeechTimerOrientation::Horizontal,
+           "orientation persisted");
     expect(u.config().reminders.size() == 3, "reminders persisted");
   }
 

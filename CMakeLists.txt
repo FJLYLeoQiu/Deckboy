@@ -52,6 +52,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 function(deckboy_target_link_frameworks target)
   if(NOT APPLE)
     return()
@@ -662,7 +666,7 @@ if(WIN32)
   target_include_directories(deckboy-ppt-helper PRIVATE native)
   target_link_libraries(deckboy-ppt-helper PRIVATE ole32 oleaut32 uuid)
   if(MSVC)
-    target_compile_options(deckboy-ppt-helper PRIVATE /W4)
+    target_compile_options(deckboy-ppt-helper PRIVATE /W4 /utf-8)
     target_compile_definitions(deckboy-ppt-helper PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
   endif()
   # Same folder as Deckboy.exe: the client only looks next to the desk binary.
@@ -1149,7 +1153,7 @@ target_compile_definitions(deckboy-native PRIVATE
 )
 
 if(MSVC)
-  target_compile_options(deckboy-native PRIVATE /bigobj)
+  target_compile_options(deckboy-native PRIVATE /bigobj /utf-8)
   # Two warnings promoted out of level 4, where nobody was ever going to see
   # them, because both have already cost real time here:
   #

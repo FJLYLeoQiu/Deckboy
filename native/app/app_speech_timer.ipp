@@ -25,6 +25,8 @@
   static constexpr int kSpeechTimerActionHeightInc = 9119;
   static constexpr int kSpeechTimerActionAudition0 = 9120; // +0..5 builtin
   static constexpr int kSpeechTimerActionAddReminder = 9130;
+  static constexpr int kSpeechTimerActionVisibility = 9131;
+  static constexpr int kSpeechTimerActionOrientation = 9132;
   static constexpr int kSpeechTimerActionRemFileBase = 9200;     // +index
   static constexpr int kSpeechTimerActionRemAuditionBase = 9220; // +index
   static constexpr int kSpeechTimerActionRemKindBase = 9240;     // +index
@@ -306,16 +308,38 @@
     TTF_Font* timeFont = fontLarge_ ? fontLarge_ : fontBase_;
     TTF_Font* labelFont = fontSmall_ ? fontSmall_ : fontBase_;
     const int pad = std::max(6, h / 12);
-    drawTextSafe(renderer, timeFont,
-                 SDL_Rect{box.x + pad, box.y + pad, box.w - pad * 2, std::max(16, h * 5 / 10)},
-                 snap.timeText, fg);
-    drawTextSafe(renderer, labelFont,
-                 SDL_Rect{box.x + pad, box.y + h * 5 / 10, box.w - pad * 2, std::max(14, h * 2 / 10)},
-                 stateWord, accent);
-    if (!snap.reminderText.empty()) {
+    if (cfg.orientation == SpeechTimerOrientation::Horizontal) {
+      const int leftW = std::max(16, (box.w - pad * 3) * 55 / 100);
+      const int rightW = std::max(16, (box.w - pad * 3) - leftW);
+      drawTextSafe(renderer, timeFont,
+                   SDL_Rect{box.x + pad, box.y + pad, leftW, box.h - pad * 2},
+                   snap.timeText, fg);
+      const int rightX = box.x + pad + leftW + pad;
+      if (!snap.reminderText.empty()) {
+        const int subH = (box.h - pad * 2) / 2;
+        drawTextSafe(renderer, labelFont,
+                     SDL_Rect{rightX, box.y + pad, rightW, subH},
+                     stateWord, accent);
+        drawTextSafe(renderer, labelFont,
+                     SDL_Rect{rightX, box.y + pad + subH, rightW, subH},
+                     snap.reminderText, fg);
+      } else {
+        drawTextSafe(renderer, labelFont,
+                     SDL_Rect{rightX, box.y + pad, rightW, box.h - pad * 2},
+                     stateWord, accent);
+      }
+    } else {
+      drawTextSafe(renderer, timeFont,
+                   SDL_Rect{box.x + pad, box.y + pad, box.w - pad * 2, std::max(16, h * 5 / 10)},
+                   snap.timeText, fg);
       drawTextSafe(renderer, labelFont,
-                   SDL_Rect{box.x + pad, box.y + h * 72 / 100, box.w - pad * 2, std::max(14, h * 22 / 100)},
-                   snap.reminderText, fg);
+                   SDL_Rect{box.x + pad, box.y + h * 5 / 10, box.w - pad * 2, std::max(14, h * 2 / 10)},
+                   stateWord, accent);
+      if (!snap.reminderText.empty()) {
+        drawTextSafe(renderer, labelFont,
+                     SDL_Rect{box.x + pad, box.y + h * 72 / 100, box.w - pad * 2, std::max(14, h * 22 / 100)},
+                     snap.reminderText, fg);
+      }
     }
     // No settings, no file paths, no buttons on the audience/speaker display.
   }
@@ -529,6 +553,13 @@
                              : "Display: Audience window (default)";
     addBtn(panel.x + pad, target, kSpeechTimerActionTarget, panel.w - pad * 2);
     y += rowH + uiScaled(6);
+    const std::string visLabel = cfg.windowVisible ? "Display: Visible" : "Display: Hidden";
+    addBtn(panel.x + pad, visLabel, kSpeechTimerActionVisibility, uiScaled(140));
+    const std::string oriLabel = cfg.orientation == SpeechTimerOrientation::Horizontal
+                                   ? "Layout: Horizontal"
+                                   : "Layout: Vertical";
+    addBtn(panel.x + pad + uiScaled(148), oriLabel, kSpeechTimerActionOrientation, uiScaled(140));
+    y += rowH + uiScaled(6);
     drawTextSafe(controlRenderer_, fontSmall_,
                  SDL_Rect{panel.x + pad, y, panel.w - pad * 2, rowH * 2},
                  "Settings stay on this desk. The countdown on the chosen "
@@ -644,6 +675,22 @@
         triggerToast(cfg.displayTarget == SpeechTimerDisplayTarget::Audience
                          ? "speech timer display: audience window (programme)"
                          : "speech timer display: speaker window (presenter)");
+        return true;
+      case kSpeechTimerActionVisibility:
+        cfg.windowVisible = !cfg.windowVisible;
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        triggerToast(cfg.windowVisible ? "speech timer: visible" : "speech timer: hidden");
+        return true;
+      case kSpeechTimerActionOrientation:
+        cfg.orientation = (cfg.orientation == SpeechTimerOrientation::Horizontal)
+                              ? SpeechTimerOrientation::Vertical
+                              : SpeechTimerOrientation::Horizontal;
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        triggerToast(cfg.orientation == SpeechTimerOrientation::Horizontal
+                         ? "speech timer layout: horizontal"
+                         : "speech timer layout: vertical");
         return true;
       case kSpeechTimerActionLock:
         cfg.layoutLocked = !cfg.layoutLocked;

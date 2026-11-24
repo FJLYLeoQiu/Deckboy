@@ -393,6 +393,9 @@ std::string SpeechTimer::saveConfigText() const {
   out << "layout_locked " << (config_.layoutLocked ? 1 : 0) << "\n";
   out << "always_on_top " << (config_.alwaysOnTop ? 1 : 0) << "\n";
   out << "window_visible " << (config_.windowVisible ? 1 : 0) << "\n";
+  out << "orientation "
+      << (config_.orientation == SpeechTimerOrientation::Horizontal ? "horizontal"
+                                                                    : "vertical") << "\n";
   out << "mute " << (config_.muteReminders ? 1 : 0) << "\n";
   out << "reminder_audio_route "
       << PreviewAudioPolicy::reminderRouteToken(config_.reminderAudioRoute) << "\n";
@@ -446,6 +449,11 @@ bool SpeechTimer::loadConfigText(const std::string& text, std::string* error) {
       int v = 0; ls >> v; cfg.alwaysOnTop = v != 0;
     } else if (key == "window_visible") {
       int v = 1; ls >> v; cfg.windowVisible = v != 0;
+    } else if (key == "orientation") {
+      std::string v;
+      ls >> v;
+      cfg.orientation = (v == "horizontal") ? SpeechTimerOrientation::Horizontal
+                                            : SpeechTimerOrientation::Vertical;
     } else if (key == "mute") {
       int v = 0; ls >> v; cfg.muteReminders = v != 0;
     } else if (key == "reminder_audio_route") {

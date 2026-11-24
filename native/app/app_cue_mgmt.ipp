@@ -1798,7 +1798,7 @@
     // Logged, so "the drop did nothing" can be told apart from "the drop
     // never arrived": with no DROP line the window was never handed the files.
     showLog("DROP", std::to_string(paths.size()) + " file(s), first \"" +
-            fs::path(paths.front()).filename().string() + "\"");
+            deckboy::u8path(paths.front()).filename().string() + "\"");
     handleDroppedFiles(paths, dropBatchAt_);
     dropBatchAt_.reset();
   }
@@ -1811,7 +1811,7 @@
     // Finder delivers document-open requests through SDL's drop events too.
     // Use the same live-show guard and undo path as the OPEN picker.
     if (paths.size() == 1) {
-      const fs::path dropped(paths.front());
+      const fs::path dropped(deckboy::u8path(paths.front()));
       std::string extension = dropped.extension().string();
       std::transform(extension.begin(), extension.end(), extension.begin(),
                      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -2093,7 +2093,7 @@
                        [this](std::vector<std::string> files) {
                          if (!files.empty()) {
                            pushUndoSnapshotForShowReplace();
-                           openProjectFromPath(normalizeProjectPath(fs::path(files[0])));
+                           openProjectFromPath(normalizeProjectPath(deckboy::u8path(files[0])));
                          }
                        });
   }
@@ -5917,14 +5917,18 @@
     std::vector<fs::path> files;
     for (const auto& raw : rawPaths) {
       std::error_code ec;
-      fs::path path = fs::absolute(trim(raw), ec);
+      std::string cleaned = trim(raw);
+      if (cleaned.size() >= 2 && cleaned.front() == '"' && cleaned.back() == '"') {
+        cleaned = cleaned.substr(1, cleaned.size() - 2);
+      }
+      fs::path path = fs::absolute(deckboy::u8path(cleaned), ec);
       if (ec || !fs::exists(path, ec)) {
         // SAY SO. This skipped silently, so importing something that is not
         // there -- media on a drive that has been unplugged, a file whose
         // folder has been renamed, a path that arrived with its quoting
         // mangled -- looked exactly like an app that had ignored the drop.
         // It cost an hour to diagnose here; on a show day it is worse.
-        triggerToast(fs::path(trim(raw)).filename().string() +
+        triggerToast(deckboy::u8path(cleaned).filename().string() +
                        ": not found (has the drive gone away?)",
                      ToastKind::Warning, kToastReadableMs);
         continue;
