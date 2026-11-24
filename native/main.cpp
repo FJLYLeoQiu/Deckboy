@@ -252,6 +252,7 @@ namespace {
   using deckboy::core::SpeechTimerSnapshot;
   using deckboy::core::SpeechTimerPhase;
   using deckboy::core::SpeechTimerDisplayTarget;
+  using deckboy::core::SpeechTimerOrientation;
   using deckboy::core::SpeechReminder;
   using deckboy::core::SpeechReminderWhen;
   using deckboy::core::SpeechReminderAudioRoute;
