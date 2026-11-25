@@ -352,6 +352,160 @@ bool convertWithPowerPoint(const fs::path& source, const fs::path& outputDir,
   return true;
 }
 
+std::string base64EncodeBytes(const std::string& input) {
+  static constexpr char kTable[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string out;
+  out.reserve(((input.size() + 2) / 3) * 4);
+  std::size_t i = 0;
+  while (i + 2 < input.size()) {
+    const unsigned int n = (static_cast<unsigned char>(input[i]) << 16) |
+                           (static_cast<unsigned char>(input[i + 1]) << 8) |
+                           static_cast<unsigned char>(input[i + 2]);
+    out.push_back(kTable[(n >> 18) & 63]);
+    out.push_back(kTable[(n >> 12) & 63]);
+    out.push_back(kTable[(n >> 6) & 63]);
+    out.push_back(kTable[n & 63]);
+    i += 3;
+  }
+  if (i < input.size()) {
+    const unsigned int a = static_cast<unsigned char>(input[i]);
+    const unsigned int b = (i + 1 < input.size()) ? static_cast<unsigned char>(input[i + 1]) : 0u;
+    const unsigned int n = (a << 16) | (b << 8);
+    out.push_back(kTable[(n >> 18) & 63]);
+    out.push_back(kTable[(n >> 12) & 63]);
+    out.push_back((i + 1 < input.size()) ? kTable[(n >> 6) & 63] : '=');
+    out.push_back('=');
+  }
+  return out;
+}
+
+bool isPowerPointNativeExt(const fs::path& source) {
+  const std::string ext = lowerExtension(source);
+  return ext == ".pptx" || ext == ".ppt" || ext == ".ppsx" || ext == ".pps" ||
+         ext == ".pptm" || ext == ".ppsm";
+}
+
+// Export slides directly via PowerPoint COM `Slide.Export(..., "PNG", w, h)`
+// at full targetWidthPixels (e.g. 3840px wide), skipping the intermediate PDF
+// and Windows.Data.Pdf rasterisation pass while keeping lossless PNG quality.
+bool exportPowerPointImagesDirect(const fs::path& source,
+                                  const fs::path& outputDir,
+                                  int targetWidthPixels,
+                                  std::vector<std::string>& outPages,
+                                  std::string& error) {
+  outPages.clear();
+  std::error_code ec;
+  fs::create_directories(outputDir, ec);
+  if (ec) {
+    error = "could not create slide output directory";
+    return false;
+  }
+  // Remove stale page*.png files from any previous run in this directory.
+  for (const auto& entry : fs::directory_iterator(outputDir, ec)) {
+    if (!entry.is_regular_file()) continue;
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("page", 0) == 0 && lowerExtension(entry.path()) == ".png") {
+      fs::remove(entry.path(), ec);
+    }
+  }
+
+  fs::path sourceNative = source;
+  fs::path dirNative = outputDir;
+  sourceNative.make_preferred();
+  dirNative.make_preferred();
+
+  const std::string srcB64 = base64EncodeBytes(deckboy::u8string(sourceNative));
+  const std::string dirB64 = base64EncodeBytes(deckboy::u8string(dirNative));
+  const int targetW = std::max(320, targetWidthPixels);
+
+  const fs::path script = outputDir / "_export_png.ps1";
+  {
+    std::ofstream out(script, std::ios::binary);
+    if (!out) {
+      error = "could not write the export script";
+      return false;
+    }
+    // UTF-8 BOM so PowerShell reads the script cleanly regardless of system locale.
+    out << "\xEF\xBB\xBF"
+        << "$ErrorActionPreference='Stop'\n"
+        << "$Source = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" << srcB64 << "'))\n"
+        << "$OutDir = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" << dirB64 << "'))\n"
+        << "$TargetW = " << targetW << "\n"
+        << "$app=$null; $pres=$null\n"
+        << "try {\n"
+        << "  $app = New-Object -ComObject PowerPoint.Application\n"
+        << "  $pres = $app.Presentations.Open($Source, -1, 0, 0)\n"
+        << "  $sw = [double]$pres.PageSetup.SlideWidth\n"
+        << "  $sh = [double]$pres.PageSetup.SlideHeight\n"
+        << "  if ($sw -le 0) { $sw = 960.0 }\n"
+        << "  if ($sh -le 0) { $sh = 540.0 }\n"
+        << "  $scaleH = [int][Math]::Max(1, [Math]::Round($TargetW * ($sh / $sw)))\n"
+        << "  $slides = $pres.Slides\n"
+        << "  $total = [int]$slides.Count\n"
+        << "  $exported = 0\n"
+        << "  for ($i = 1; $i -le $total; $i++) {\n"
+        << "    $slide = $slides.Item($i)\n"
+        << "    if ($slide.SlideShowTransition.Hidden -eq -1) { continue }\n"
+        << "    $exported++\n"
+        << "    $name = ('page{0:D4}.png' -f $exported)\n"
+        << "    $dest = [System.IO.Path]::Combine($OutDir, $name)\n"
+        << "    $slide.Export($dest, 'PNG', $TargetW, $scaleH)\n"
+        << "  }\n"
+        << "  if ($exported -eq 0 -and $total -gt 0) {\n"
+        << "    for ($i = 1; $i -le $total; $i++) {\n"
+        << "      $slide = $slides.Item($i)\n"
+        << "      $exported++\n"
+        << "      $name = ('page{0:D4}.png' -f $exported)\n"
+        << "      $dest = [System.IO.Path]::Combine($OutDir, $name)\n"
+        << "      $slide.Export($dest, 'PNG', $TargetW, $scaleH)\n"
+        << "    }\n"
+        << "  }\n"
+        << "  Write-Output ('DECKBOY-EXPORTED ' + $exported)\n"
+        << "} catch {\n"
+        << "  Write-Output (\"DECKBOY-ERROR: \" + $_.Exception.Message)\n"
+        << "  exit 1\n"
+        << "} finally {\n"
+        << "  if ($pres) { try { $pres.Close() } catch {} }\n"
+        << "  if ($app) { try { $app.Quit() } catch {} }\n"
+        << "}\n";
+  }
+
+  std::string output;
+  bool timedOut = false;
+  runQuietly({"powershell", "-NoProfile", "-NonInteractive",
+              "-ExecutionPolicy", "Bypass", "-File", deckboy::u8string(script)},
+             output, kConvertTimeoutMs, &timedOut);
+  fs::remove(script, ec);
+  if (timedOut) {
+    error = std::string("PowerPoint ") + kConvertTimeoutAdvice;
+    return false;
+  }
+
+  std::vector<fs::path> found;
+  for (const auto& entry : fs::directory_iterator(outputDir, ec)) {
+    if (!entry.is_regular_file()) continue;
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("page", 0) == 0 && lowerExtension(entry.path()) == ".png") {
+      found.push_back(entry.path());
+    }
+  }
+  std::sort(found.begin(), found.end(), [](const fs::path& a, const fs::path& b) {
+    return a.filename().string() < b.filename().string();
+  });
+  for (const auto& p : found) {
+    outPages.push_back(deckboy::u8string(p));
+  }
+  if (outPages.empty()) {
+    const std::string said = toolMessage(output);
+    error = said.empty()
+      ? std::string("PowerPoint could not export slides as PNG")
+      : ("PowerPoint: " + said);
+    return false;
+  }
+  return true;
+}
+
 // The registered path for the executable, which is how Windows itself finds
 // it; a hard-coded Office16 path goes stale with every version.
 bool havePowerPoint() {
@@ -491,6 +645,45 @@ bool presentationConvertAvailable(std::string& whyNot) {
            "or export the deck as a PDF yourself";
 #endif
   return false;
+}
+
+PresentationImageExport exportPresentationToImages(
+    const fs::path& source,
+    const fs::path& outputDir,
+    int targetWidthPixels,
+    const std::function<void(int, int)>& onProgress) {
+  PresentationImageExport result;
+  std::error_code ec;
+  if (!fs::exists(source, ec)) {
+    result.error = "cannot read the file: if it lives in OneDrive or iCloud, "
+                   "open it once so it downloads, then import it";
+    return result;
+  }
+#ifdef _WIN32
+  if (isPowerPointNativeExt(source) && havePowerPoint()) {
+    if (onProgress) onProgress(0, 0);
+    std::string error;
+    if (exportPowerPointImagesDirect(source, outputDir, targetWidthPixels,
+                                     result.pagePaths, error)) {
+      result.converter = "PowerPoint";
+      if (onProgress) {
+        const int total = static_cast<int>(result.pagePaths.size());
+        onProgress(total, total);
+      }
+      return result;
+    }
+    // Fall back to the PDF path if direct Slide.Export failed on this deck/host.
+    result.fallbackToPdf = true;
+    result.error = error;
+    return result;
+  }
+#else
+  (void)outputDir;
+  (void)targetWidthPixels;
+  (void)onProgress;
+#endif
+  result.fallbackToPdf = true;
+  return result;
 }
 
 PresentationConversion convertPresentationToPdf(const fs::path& source,

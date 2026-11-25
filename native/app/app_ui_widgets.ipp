@@ -443,12 +443,12 @@
     static const char* kOrder[] = {"MIX", "LIGHTEN", "DARKEN", "CONTRAST", "COMPARE", "COLOUR", "KEY",
                                    "CHANNEL", "WACKY"};
     for (const char* group : kOrder) {
-      contextItems_.push_back({group, {0, 0, 0, 0}, nullptr});
+      contextItems_.push_back({deckboy::core::i18n::translate(group), {0, 0, 0, 0}, nullptr});
       for (const std::string& mode : vjBlendModes()) {
         if (std::string(blendModeGroup(mode)) != group) continue;
         const bool on = mode == current;
         contextItems_.push_back({
-          std::string(on ? "  > " : "    ") + mode,
+          std::string(on ? "  > " : "    ") + deckboy::core::i18n::translate(mode),
           on ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
           [this, deckIdx, outputIndex, mode]() {
             setLayerBlend(deckIdx, outputIndex, mode);
@@ -469,7 +469,8 @@
     contextMenuAnchor_ = SDL_Point {mx, my};
     contextItems_.clear();
 
-    contextItems_.push_back({deckLabel(deckIdx) + " goes to:", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({deckboy::core::i18n::format("{1} goes to:", {deckLabel(deckIdx)}),
+                             {0, 0, 0, 0}, nullptr});
 
     // ── EVERY OUTPUT, ITS WHOLE STACK, AND A SLOT BETWEEN EACH ──────────
     //
@@ -492,10 +493,14 @@
         const int occupantDeck = (slot == 0) ? output.hostDeckIndex
                                              : output.layerDecks[slot - 1].deckIndex;
         const bool isThisPlaylist = occupantDeck == deckIdx;
-        const std::string role = (slot == 0) ? "base" : "over " + layerLetter(slot);
+        const std::string role = (slot == 0)
+            ? deckboy::core::i18n::translate("base")
+            : deckboy::core::i18n::format("over {1}", {layerLetter(slot)});
+        const std::string selfTag = isThisPlaylist
+            ? ("   " + deckboy::core::i18n::translate("<- this one"))
+            : std::string();
         contextItems_.push_back({
-          std::string("    ") + role + " - " + deckLabel(occupantDeck) +
-            (isThisPlaylist ? "   <- this one" : ""),
+          std::string("    ") + role + " - " + deckLabel(occupantDeck) + selfTag,
           isThisPlaylist ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
           nullptr});
         // A slot to go ABOVE this one, unless this playlist is already there
@@ -505,7 +510,7 @@
         if (!wouldBeANoOp) {
           const int targetLayer = slot + 1;
           contextItems_.push_back({
-            "        put it here, over " + deckLabel(occupantDeck),
+            std::string("        ") + deckboy::core::i18n::format("put it here, over {1}", {deckLabel(occupantDeck)}),
             SDL_Color {40, 90, 130, 255},
             [this, deckIdx, outputIndex, targetLayer]() {
               if (assignmentIndexForDeckOutput(deckIdx, outputIndex)) {
@@ -520,7 +525,7 @@
       // an insertion, and an output must always have one.
       if (!here || *here != 0) {
         contextItems_.push_back({
-          "        make it the base",
+          std::string("        ") + deckboy::core::i18n::translate("make it the base"),
           SDL_Color {40, 90, 130, 255},
           [this, deckIdx, outputIndex]() {
             if (!assignmentIndexForDeckOutput(deckIdx, outputIndex)) {
@@ -535,8 +540,9 @@
       if (here && *here > 0 &&
           *here - 1 < static_cast<int>(output.layerDecks.size())) {
         const std::string& mode = output.layerDecks[*here - 1].blendMode;
+        const std::string modeName = deckboy::core::i18n::translate(mode.empty() ? std::string("dissolve") : mode);
         contextItems_.push_back({
-          "        blend: " + (mode.empty() ? std::string("dissolve") : mode) + "  ...",
+          std::string("        ") + deckboy::core::i18n::format("blend: {1}  ...", {modeName}),
           SDL_Color {120, 70, 150, 255},
           [this, deckIdx, outputIndex]() {
             openLayerBlendMenu(deckIdx, outputIndex, contextMenuAnchor_.x, contextMenuAnchor_.y);
@@ -544,7 +550,7 @@
       }
       if (here) {
         contextItems_.push_back({
-          "        take it off this output",
+          std::string("        ") + deckboy::core::i18n::translate("take it off this output"),
           SDL_Color {130, 50, 40, 255},
           [this, deckIdx, outputIndex]() {
             unassignDeckFromOutput(deckIdx, outputIndex);
@@ -562,12 +568,12 @@
     //
     // Two separate switches, because they are two separate questions: does
     // the room hear this, and do YOU hear this.
-    contextItems_.push_back({"SOUND", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({deckboy::core::i18n::translate("SOUND"), {0, 0, 0, 0}, nullptr});
     {
       const bool inRoom = project_.decks[deckIdx].audioToProgram;
       contextItems_.push_back({
-        std::string(inRoom ? "  [x] " : "  [ ] ") + "in the room" +
-          (inRoom ? "" : "   (silent on its own device)"),
+        std::string(inRoom ? "  [x] " : "  [ ] ") + deckboy::core::i18n::translate("in the room") +
+          (inRoom ? std::string() : ("   " + deckboy::core::i18n::translate("(silent on its own device)"))),
         inRoom ? SDL_Color {40, 130, 90, 255} : SDL_Color {130, 50, 40, 255},
         [this, deckIdx]() {
           if (deckIdx < static_cast<int>(project_.decks.size())) {
@@ -575,9 +581,9 @@
             d.audioToProgram = !d.audioToProgram;
             applyAudioMonitorSelection();
             markProjectDirty();
-            triggerToast(deckLabel(deckIdx) +
-                         (d.audioToProgram ? " is in the room"
-                                           : " is out of the room"));
+            triggerToast(deckboy::core::i18n::format(
+                d.audioToProgram ? "{1} is in the room" : "{1} is out of the room",
+                {deckLabel(deckIdx)}));
           }
         }});
 
@@ -585,14 +591,15 @@
       // say so rather than offering a switch that cannot do anything.
       if (project_.monitorDeviceName.empty()) {
         contextItems_.push_back({
-          "      no monitor device set (Settings > Audio)", {0, 0, 0, 0}, nullptr});
+          std::string("      ") + deckboy::core::i18n::translate("no monitor device set (Settings > Audio)"),
+          {0, 0, 0, 0}, nullptr});
       } else {
         const bool pinnedHere = project_.monitorDeckIndex == deckIdx;
         const bool audible = monitoredDeckIndex() == deckIdx;
         contextItems_.push_back({
-          std::string(audible ? "  [x] " : "  [ ] ") + "on the monitor" +
-            (pinnedHere ? "   (pinned)"
-                        : audible ? "   (follows focus)" : ""),
+          std::string(audible ? "  [x] " : "  [ ] ") + deckboy::core::i18n::translate("on the monitor") +
+            (pinnedHere ? ("   " + deckboy::core::i18n::translate("(pinned)"))
+                        : audible ? ("   " + deckboy::core::i18n::translate("(follows focus)")) : std::string()),
           audible ? SDL_Color {40, 130, 90, 255} : SDL_Color {0, 0, 0, 0},
           [this, deckIdx]() {
             // Clicking the one you are already pinned to releases the pin
@@ -603,15 +610,15 @@
             applyAudioMonitorSelection();
             markProjectDirty();
             triggerToast(project_.monitorDeckIndex < 0
-                           ? std::string("monitor follows the focused playlist")
-                           : ("monitoring " + deckLabel(deckIdx)));
+                           ? deckboy::core::i18n::translate("monitor follows the focused playlist")
+                           : deckboy::core::i18n::format("monitoring {1}", {deckLabel(deckIdx)}));
           }});
       }
     }
 
-    contextItems_.push_back({"PLAYLISTS", {0, 0, 0, 0}, nullptr});
+    contextItems_.push_back({deckboy::core::i18n::translate("PLAYLISTS"), {0, 0, 0, 0}, nullptr});
     contextItems_.push_back({
-      "  + add a playlist", SDL_Color {40, 90, 130, 255},
+      std::string("  + ") + deckboy::core::i18n::translate("add a playlist"), SDL_Color {40, 90, 130, 255},
       [this]() { addDeck(); }});
     // REMOVING IS OFFERED HERE TOO, because this is the menu about playlists
     // and a feature you can only ever add to is a feature that accumulates.
@@ -619,11 +626,12 @@
     // entry that always refuses is a dead control.
     if (project_.decks.size() > 1) {
       contextItems_.push_back({
-        "  - remove " + deckLabel(deckIdx), SDL_Color {130, 50, 40, 255},
+        std::string("  - ") + deckboy::core::i18n::format("remove {1}", {deckLabel(deckIdx)}),
+        SDL_Color {130, 50, 40, 255},
         [this, deckIdx]() { removeDeck(deckIdx); }});
     }
     contextItems_.push_back({
-      "  + add an output", SDL_Color {40, 90, 130, 255},
+      std::string("  + ") + deckboy::core::i18n::translate("add an output"), SDL_Color {40, 90, 130, 255},
       [this]() { addOutput(project_.focusedDeckIndex); }});
 
     layoutContextMenu(mx, my);
@@ -662,9 +670,10 @@
     }
     if (list.empty()) {
       // THE STATE MOST WORTH NOTICING, said plainly rather than as "--".
-      return "no output";
+      return deckboy::core::i18n::translate("no output");
     }
-    return (list.find(',') == std::string::npos ? "to Out " : "to Outs ") + list;
+    return deckboy::core::i18n::format(
+        list.find(',') == std::string::npos ? "to Out {1}" : "to Outs {1}", {list});
   }
 
   // The same thing for one output, for a tile or a row that already knows
@@ -672,12 +681,12 @@
   std::string layerRoleLabel(int deckIndex, int outputIndex) const {
     const auto layer = assignmentIndexForDeckOutput(deckIndex, outputIndex);
     if (!layer) {
-      return "not on this output";
+      return deckboy::core::i18n::translate("not on this output");
     }
     if (*layer == 0) {
-      return "base layer";
+      return deckboy::core::i18n::translate("base layer");
     }
-    return "over, layer " + std::to_string(*layer);
+    return deckboy::core::i18n::format("over, layer {1}", {std::to_string(*layer)});
   }
 
   void openContextMenu(int deckIdx, int cueIdx, int mx, int my) {

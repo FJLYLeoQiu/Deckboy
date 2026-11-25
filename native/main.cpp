@@ -253,6 +253,8 @@ namespace {
   using deckboy::core::SpeechTimerPhase;
   using deckboy::core::SpeechTimerDisplayTarget;
   using deckboy::core::SpeechTimerOrientation;
+  using deckboy::core::SpeechTimerTimePosition;
+  using deckboy::core::SpeechTimerColor;
   using deckboy::core::SpeechReminder;
   using deckboy::core::SpeechReminderWhen;
   using deckboy::core::SpeechReminderAudioRoute;
@@ -10501,6 +10503,8 @@ class App {
   SDL_Renderer* speechTimerFallbackRenderer_ = nullptr;
   struct SpeechTimerBtn { SDL_Rect rect {}; int action = 0; };
   std::vector<SpeechTimerBtn> speechTimerBtns_;
+  SDL_Rect speechTimerToggleRect_ {};
+  bool lastTakeWasAll_ = false;
   PowerPointPlayer pptPlayer_;
   std::string pptOpenPath_;
   SDL_AudioStream* previewAudioStream_ = nullptr;

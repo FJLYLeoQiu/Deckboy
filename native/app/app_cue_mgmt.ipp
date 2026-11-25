@@ -5370,33 +5370,54 @@
       // is the expensive half.
       fs::path source = document;
       std::string converter;
-      if (needsConversion) {
-        auto converted =
-          deckboy::platform::convertPresentationToPdf(document, pagesDir);
-        if (!converted.ok()) {
-          std::lock_guard<std::mutex> lock(sdlDialogMutex_);
-          sdlDialogActions_.emplace_back([this, converted, title]() {
-            slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
-            showLog("SLIDES", title + ": conversion failed: " + converted.error);
-            triggerToast(title + ": " + converted.error, ToastKind::Warning, kToastReadableMs);
-          });
-          return;
-        }
-        source = converted.pdfPath;
-        converter = converted.converter;
-      }
-      // 3840 wide, whatever shape the page is. A slide is mostly type, type is
-      // the first thing to fall apart scaled up to a 4K output, and once the
-      // page is a PNG the detail cannot be recovered -- so it renders for the
-      // largest output this app supports rather than the one currently armed.
-      // Straight into the atomics the card reads. Called once per page from
-      // the render thread, which is why they are atomic and why nothing here
-      // touches the renderer.
       auto onProgress = [this](int page, int total) {
         slideRenderTotal_.store(total, std::memory_order_relaxed);
         slideRenderPage_.store(page, std::memory_order_relaxed);
       };
-      auto result = deckboy::platform::rasterisePdf(source, pagesDir, 3840, onProgress);
+      deckboy::platform::PdfRasterResult result;
+      bool usedDirectImages = false;
+      if (needsConversion) {
+        auto direct = deckboy::platform::exportPresentationToImages(
+          document, pagesDir, 3840, onProgress);
+        if (direct.ok()) {
+          result.pagePaths = std::move(direct.pagePaths);
+          converter = direct.converter;
+          usedDirectImages = true;
+        } else if (!direct.fallbackToPdf) {
+          std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+          sdlDialogActions_.emplace_back([this, direct, title]() {
+            slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+            showLog("SLIDES", title + ": conversion failed: " + direct.error);
+            triggerToast(title + ": " + direct.error, ToastKind::Warning, kToastReadableMs);
+          });
+          return;
+        }
+      }
+      if (!usedDirectImages) {
+        if (needsConversion) {
+          auto converted =
+            deckboy::platform::convertPresentationToPdf(document, pagesDir);
+          if (!converted.ok()) {
+            std::lock_guard<std::mutex> lock(sdlDialogMutex_);
+            sdlDialogActions_.emplace_back([this, converted, title]() {
+              slideRenderJobs_ = std::max(0, slideRenderJobs_ - 1);
+              showLog("SLIDES", title + ": conversion failed: " + converted.error);
+              triggerToast(title + ": " + converted.error, ToastKind::Warning, kToastReadableMs);
+            });
+            return;
+          }
+          source = converted.pdfPath;
+          converter = converted.converter;
+        }
+        // 3840 wide, whatever shape the page is. A slide is mostly type, type is
+        // the first thing to fall apart scaled up to a 4K output, and once the
+        // page is a PNG the detail cannot be recovered -- so it renders for the
+        // largest output this app supports rather than the one currently armed.
+        // Straight into the atomics the card reads. Called once per page from
+        // the render thread, which is why they are atomic and why nothing here
+        // touches the renderer.
+        result = deckboy::platform::rasterisePdf(source, pagesDir, 3840, onProgress);
+      }
       // Read on this thread, beside the render, so the main thread never
       // touches the disk for it.
       // Against the DOCUMENT THE OPERATOR CHOSE, not against `source` -- which

@@ -61,6 +61,20 @@ enum class SpeechTimerOrientation {
   Horizontal = 1,
 };
 
+enum class SpeechTimerTimePosition {
+  Top = 0,
+  Bottom = 1,
+  Left = 2,
+  Right = 3,
+};
+
+struct SpeechTimerColor {
+  std::uint8_t r = 255;
+  std::uint8_t g = 255;
+  std::uint8_t b = 255;
+  std::uint8_t a = 255;
+};
+
 struct IntRect {
   int x = 0;
   int y = 0;
@@ -105,10 +119,21 @@ struct SpeechTimerConfig {
   int windowH = 200;
 
   int fontSize = 0;           // 0 = auto from overlay/window height
+  int timeFontScale = 100;    // percentage (50..250)
+  int labelFontScale = 100;   // percentage (50..250)
   bool layoutLocked = false;
   bool alwaysOnTop = false;   // fallback window only; a composited overlay is already in the frame
   bool windowVisible = true;
   SpeechTimerOrientation orientation = SpeechTimerOrientation::Vertical;
+  SpeechTimerTimePosition timePosition = SpeechTimerTimePosition::Top;
+  SpeechTimerColor bgColor {12, 18, 28, 210};
+  SpeechTimerColor timeColor {236, 240, 244, 255};
+  SpeechTimerColor accentColor {180, 200, 220, 255};
+  SpeechTimerColor overtimeBgColor {48, 8, 8, 220};
+  SpeechTimerColor overtimeTimeColor {255, 230, 230, 255};
+  SpeechTimerColor overtimeAccentColor {255, 210, 80, 255};
+  std::string overtimeLabel;
+  std::string timeUpLabel;
 
   // Audio is intentionally separate from displayTarget. An audience visual
   // does NOT automatically put reminder sounds on the programme / stream /

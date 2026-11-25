@@ -3568,3 +3568,50 @@ speech timer: visible	演讲计时：显示
 speech timer: hidden	演讲计时：隐藏
 speech timer layout: horizontal	演讲计时排版：横排
 speech timer layout: vertical	演讲计时排版：竖排
+OVERTIME {1}	已超时 {1}
+Overtime {1}	已超时 {1}
+NEAR END	即将结束
+Ready	就绪
+Running	计时中
+Overtime	已超时
+Overtime paused	超时已暂停
+Time is up	时间到
+2 minutes left	还剩 2 分钟
+1 minute left	还剩 1 分钟
+Duration {1} min	时长 {1} 分钟
+Time: Top	时间位置: 顶部
+Time: Bottom	时间位置: 底部
+Time: Left	时间位置: 左侧
+Time: Right	时间位置: 右侧
+Time font {1}%	时间字号 {1}%
+Label font {1}%	状态字号 {1}%
+Time color	时间颜色
+Status color	状态颜色
+Overtime color	超时颜色
+Bg color	背景颜色
+Reset	重置样式
+Size {1} x {2} px (type or - / +)	尺寸 {1} x {2} 像素 (输入或 - / +)
+{1} goes to:	{1} 输出到:
+base	底层
+over {1}	叠加 {1}
+<- this one	<- 当前卡座
+put it here, over {1}	放在此处，位于 {1} 之上
+make it the base	设为底层
+blend: {1}  ...	混合模式: {1}  ...
+take it off this output	从此输出移除
+SOUND	音频路由
+in the room	输出到现场 (主输出)
+(silent on its own device)	(当前设备静音)
+no monitor device set (Settings > Audio)	未设置监听设备 (设置 > 音频)
+(pinned)	(已固定)
+(follows focus)	(跟随焦点)
+PLAYLISTS	播放列表
+add a playlist	添加播放列表
+remove {1}	移除 {1}
+add an output	添加输出
+to Out {1}	输出到 {1}
+to Outs {1}	输出到 {1}
+not on this output	未分配到此输出
+base layer	底层
+over, layer {1}	叠加层 {1}
+dissolve	叠化

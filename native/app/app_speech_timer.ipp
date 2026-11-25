@@ -27,6 +27,16 @@
   static constexpr int kSpeechTimerActionAddReminder = 9130;
   static constexpr int kSpeechTimerActionVisibility = 9131;
   static constexpr int kSpeechTimerActionOrientation = 9132;
+  static constexpr int kSpeechTimerActionTimePos = 9133;
+  static constexpr int kSpeechTimerActionTimeFontDec = 9134;
+  static constexpr int kSpeechTimerActionTimeFontInc = 9135;
+  static constexpr int kSpeechTimerActionLabelFontDec = 9136;
+  static constexpr int kSpeechTimerActionLabelFontInc = 9137;
+  static constexpr int kSpeechTimerActionTimeColorEdit = 9138;
+  static constexpr int kSpeechTimerActionAccentColorEdit = 9139;
+  static constexpr int kSpeechTimerActionBgColorEdit = 9140;
+  static constexpr int kSpeechTimerActionOvertimeColorEdit = 9141;
+  static constexpr int kSpeechTimerActionResetStyle = 9142;
   static constexpr int kSpeechTimerActionRemFileBase = 9200;     // +index
   static constexpr int kSpeechTimerActionRemAuditionBase = 9220; // +index
   static constexpr int kSpeechTimerActionRemKindBase = 9240;     // +index
@@ -262,6 +272,66 @@
     });
   }
 
+  static SDL_Color toSdlColor(const SpeechTimerColor& c) {
+    return SDL_Color{c.r, c.g, c.b, c.a};
+  }
+
+  static std::string formatSpeechTimerHexColor(const SpeechTimerColor& c) {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "#%02X%02X%02X", c.r, c.g, c.b);
+    return buf;
+  }
+
+  static bool parseSpeechTimerHexColor(const std::string& text, SpeechTimerColor& out) {
+    std::string s = trim(text);
+    if (!s.empty() && s[0] == '#') s.erase(s.begin());
+    if (s.size() == 6) {
+      unsigned int rgb = 0;
+      std::istringstream iss(s);
+      if ((iss >> std::hex >> rgb) && iss.eof()) {
+        out.r = static_cast<std::uint8_t>((rgb >> 16) & 0xFF);
+        out.g = static_cast<std::uint8_t>((rgb >> 8) & 0xFF);
+        out.b = static_cast<std::uint8_t>(rgb & 0xFF);
+        return true;
+      }
+    }
+    int r = 0, g = 0, b = 0;
+    for (char& ch : s) {
+      if (ch == ',' || ch == ';') ch = ' ';
+    }
+    std::istringstream nums(s);
+    if ((nums >> r >> g >> b) && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+      out.r = static_cast<std::uint8_t>(r);
+      out.g = static_cast<std::uint8_t>(g);
+      out.b = static_cast<std::uint8_t>(b);
+      return true;
+    }
+    return false;
+  }
+
+  TTF_Font* speechTimerScaledFont(TTF_Font* base, int scalePct) const {
+    if (!base) return nullptr;
+    const int clamped = std::clamp(scalePct, 50, 250);
+    if (clamped == 100) return base;
+    const auto it = fontLadders_.find(base);
+    const int basePx = (it != fontLadders_.end() && it->second.baseSize > 0)
+                           ? it->second.baseSize
+                           : std::max(12, TTF_GetFontHeight(base));
+    const int targetPx = std::clamp((basePx * clamped) / 100, 10, 160);
+    TTF_Font* sized = fontAtSize(base, targetPx);
+    return sized ? sized : base;
+  }
+
+  static const char* speechTimerPositionLabel(SpeechTimerTimePosition pos) {
+    switch (pos) {
+      case SpeechTimerTimePosition::Bottom: return "Time: Bottom";
+      case SpeechTimerTimePosition::Left:   return "Time: Left";
+      case SpeechTimerTimePosition::Right:  return "Time: Right";
+      case SpeechTimerTimePosition::Top:
+      default:                              return "Time: Top";
+    }
+  }
+
   void drawSpeechTimerOverlay(int /*outputIndex*/, SDL_Renderer* renderer,
                               int renderW, int renderH, const std::string& viewType) {
     if (!speechTimer_.config().windowVisible) return;
@@ -283,63 +353,92 @@
     speechTimerLastOverlayPx_ = SDL_Rect{x, y, w, h};
 
     const auto snap = speechTimer_.snapshot();
-    SDL_Color bg {12, 18, 28, 210};
-    SDL_Color fg {236, 240, 244, 255};
-    SDL_Color accent {180, 200, 220, 255};
-    std::string stateWord = snap.stateText;
+    SDL_Color bg = toSdlColor(cfg.bgColor);
+    SDL_Color fg = toSdlColor(cfg.timeColor);
+    SDL_Color accent = toSdlColor(cfg.accentColor);
+    std::string stateWord = snap.overtime
+        ? deckboy::core::i18n::format("Overtime {1}", {SpeechTimer::formatTime(snap.overtimeSeconds, false)})
+        : deckboy::core::i18n::translate(snap.stateText);
     if (snap.phase == SpeechTimerPhase::Overtime ||
         snap.phase == SpeechTimerPhase::OvertimePaused) {
-      bg = {48, 8, 8, 220};
-      fg = {255, 230, 230, 255};
-      accent = {255, 210, 80, 255};
-      stateWord = snap.overtime ? ("OVERTIME " + snap.timeText) : stateWord;
+      bg = toSdlColor(cfg.overtimeBgColor);
+      fg = toSdlColor(cfg.overtimeTimeColor);
+      accent = toSdlColor(cfg.overtimeAccentColor);
+      if (snap.overtime) {
+        stateWord = cfg.overtimeLabel.empty()
+            ? deckboy::core::i18n::format("OVERTIME {1}", {snap.timeText})
+            : (cfg.overtimeLabel + " " + snap.timeText);
+      }
     } else if (snap.remainingSeconds <= 60.0 && snap.running && !snap.overtime) {
-      bg = {48, 28, 4, 220};
-      fg = {255, 244, 220, 255};
+      bg = {48, 28, 4, cfg.bgColor.a};
+      fg = toSdlColor(cfg.timeColor);
       accent = {255, 200, 80, 255};
-      stateWord = "NEAR END";
+      stateWord = deckboy::core::i18n::translate("NEAR END");
     } else if (snap.paused) {
-      bg = {24, 24, 16, 220};
+      bg = {24, 24, 16, cfg.bgColor.a};
       accent = {240, 220, 120, 255};
+    }
+
+    std::string reminderWord;
+    if (!snap.reminderText.empty()) {
+      if (snap.reminderText == "Time is up" && !cfg.timeUpLabel.empty()) {
+        reminderWord = cfg.timeUpLabel;
+      } else {
+        reminderWord = deckboy::core::i18n::translate(snap.reminderText);
+      }
     }
 
     SDL_Rect box {x, y, w, h};
     Primitives::drawFramedPanel(renderer, box, bg, pal.deep, accent);
-    TTF_Font* timeFont = fontLarge_ ? fontLarge_ : fontBase_;
-    TTF_Font* labelFont = fontSmall_ ? fontSmall_ : fontBase_;
+    TTF_Font* timeFont = speechTimerScaledFont(fontLarge_ ? fontLarge_ : fontBase_, cfg.timeFontScale);
+    TTF_Font* labelFont = speechTimerScaledFont(fontSmall_ ? fontSmall_ : fontBase_, cfg.labelFontScale);
     const int pad = std::max(6, h / 12);
-    if (cfg.orientation == SpeechTimerOrientation::Horizontal) {
-      const int leftW = std::max(16, (box.w - pad * 3) * 55 / 100);
-      const int rightW = std::max(16, (box.w - pad * 3) - leftW);
-      drawTextSafe(renderer, timeFont,
-                   SDL_Rect{box.x + pad, box.y + pad, leftW, box.h - pad * 2},
-                   snap.timeText, fg);
-      const int rightX = box.x + pad + leftW + pad;
-      if (!snap.reminderText.empty()) {
-        const int subH = (box.h - pad * 2) / 2;
+
+    auto drawInfoBlock = [&](const SDL_Rect& infoRect) {
+      if (!reminderWord.empty()) {
+        const int subH = std::max(12, infoRect.h / 2);
         drawTextSafe(renderer, labelFont,
-                     SDL_Rect{rightX, box.y + pad, rightW, subH},
+                     SDL_Rect{infoRect.x, infoRect.y, infoRect.w, subH},
                      stateWord, accent);
         drawTextSafe(renderer, labelFont,
-                     SDL_Rect{rightX, box.y + pad + subH, rightW, subH},
-                     snap.reminderText, fg);
+                     SDL_Rect{infoRect.x, infoRect.y + subH, infoRect.w, infoRect.h - subH},
+                     reminderWord, fg);
       } else {
-        drawTextSafe(renderer, labelFont,
-                     SDL_Rect{rightX, box.y + pad, rightW, box.h - pad * 2},
-                     stateWord, accent);
+        drawTextSafe(renderer, labelFont, infoRect, stateWord, accent);
       }
-    } else {
+    };
+
+    if (cfg.timePosition == SpeechTimerTimePosition::Left ||
+        cfg.timePosition == SpeechTimerTimePosition::Right) {
+      const int availW = std::max(32, box.w - pad * 3);
+      const int timeW = std::max(16, availW * 55 / 100);
+      const int infoW = std::max(16, availW - timeW);
+      const int timeX = (cfg.timePosition == SpeechTimerTimePosition::Left)
+                            ? (box.x + pad)
+                            : (box.x + pad + infoW + pad);
+      const int infoX = (cfg.timePosition == SpeechTimerTimePosition::Left)
+                            ? (box.x + pad + timeW + pad)
+                            : (box.x + pad);
       drawTextSafe(renderer, timeFont,
-                   SDL_Rect{box.x + pad, box.y + pad, box.w - pad * 2, std::max(16, h * 5 / 10)},
+                   SDL_Rect{timeX, box.y + pad, timeW, std::max(16, box.h - pad * 2)},
                    snap.timeText, fg);
-      drawTextSafe(renderer, labelFont,
-                   SDL_Rect{box.x + pad, box.y + h * 5 / 10, box.w - pad * 2, std::max(14, h * 2 / 10)},
-                   stateWord, accent);
-      if (!snap.reminderText.empty()) {
-        drawTextSafe(renderer, labelFont,
-                     SDL_Rect{box.x + pad, box.y + h * 72 / 100, box.w - pad * 2, std::max(14, h * 22 / 100)},
-                     snap.reminderText, fg);
-      }
+      drawInfoBlock(SDL_Rect{infoX, box.y + pad, infoW, std::max(16, box.h - pad * 2)});
+    } else if (cfg.timePosition == SpeechTimerTimePosition::Bottom) {
+      const int availH = std::max(28, box.h - pad * 2);
+      const int infoH = std::max(14, availH * 48 / 100);
+      const int timeH = std::max(16, availH - infoH);
+      drawInfoBlock(SDL_Rect{box.x + pad, box.y + pad, std::max(16, box.w - pad * 2), infoH});
+      drawTextSafe(renderer, timeFont,
+                   SDL_Rect{box.x + pad, box.y + pad + infoH, std::max(16, box.w - pad * 2), timeH},
+                   snap.timeText, fg);
+    } else {
+      const int availH = std::max(28, box.h - pad * 2);
+      const int timeH = std::max(16, availH * 50 / 100);
+      const int infoH = std::max(14, availH - timeH);
+      drawTextSafe(renderer, timeFont,
+                   SDL_Rect{box.x + pad, box.y + pad, std::max(16, box.w - pad * 2), timeH},
+                   snap.timeText, fg);
+      drawInfoBlock(SDL_Rect{box.x + pad, box.y + pad + timeH, std::max(16, box.w - pad * 2), infoH});
     }
     // No settings, no file paths, no buttons on the audience/speaker display.
   }
@@ -492,31 +591,39 @@
 
   void renderSpeechTimerControlPanel(int width, int height) {
     speechTimerBtns_.clear();
-    // Always-visible toggle on the desk (never on the audience display).
+    // Placed in the top toolbar's right-anchored group (to the left of
+    // fullscreen/blackout) so it never overlaps those buttons.
     const int bw = uiScaled(148);
     const int bh = uiScaled(28);
-    SDL_Rect toggle {width - bw - uiScaled(12), uiScaled(8), bw, bh};
-    if (toggle.y + bh > height) toggle.y = uiScaled(8);
+    SDL_Rect toggle = speechTimerToggleRect_.w > 0
+        ? speechTimerToggleRect_
+        : SDL_Rect{width - bw - uiScaled(12), uiScaled(8), bw, bh};
+    if (toggle.y + toggle.h > height) toggle.y = uiScaled(8);
+    TTF_Font* btnFont = fontPixelSmall_ ? fontPixelSmall_ : fontSmall_;
     Primitives::drawFramedPanel(controlRenderer_, toggle,
-                                speechTimerPanelOpen_ ? pal.dark : pal.mid,
-                                pal.deep, pal.light);
-    drawCenteredTextSafe(controlRenderer_, fontSmall_, toggle, "SPEECH TIMER",
-                         speechTimerPanelOpen_ ? pal.light : pal.deep);
+                                speechTimerPanelOpen_ ? pal.dark : pal.tile,
+                                pal.deep, pal.mid);
+    drawCenteredTextSafe(controlRenderer_, btnFont, toggle, "SPEECH TIMER",
+                         speechTimerPanelOpen_ ? pal.light : pal.fg);
     speechTimerBtns_.push_back({toggle, kSpeechTimerActionOpen});
     if (!speechTimerPanelOpen_) return;
 
     const int pw = std::min(width - uiScaled(24), uiScaled(560));
-    const int ph = std::min(height - toggle.y - bh - uiScaled(16), uiScaled(620));
-    SDL_Rect panel {width - pw - uiScaled(12), toggle.y + bh + uiScaled(8), pw, ph};
+    const int ph = std::min(height - toggle.y - toggle.h - uiScaled(16), uiScaled(740));
+    const int px = std::clamp(toggle.x + toggle.w - pw, uiScaled(12), std::max(uiScaled(12), width - pw - uiScaled(12)));
+    SDL_Rect panel {px, toggle.y + toggle.h + uiScaled(8), pw, ph};
     Primitives::drawFramedPanel(controlRenderer_, panel, pal.shellInner, pal.deep, pal.shellOuter);
     const auto snap = speechTimer_.snapshot();
     const auto& cfg = speechTimer_.config();
     int y = panel.y + uiScaled(10);
     const int pad = uiScaled(12);
     const int rowH = uiScaled(28);
+    const std::string panelState = snap.overtime
+        ? deckboy::core::i18n::format("Overtime {1}", {SpeechTimer::formatTime(snap.overtimeSeconds, false)})
+        : deckboy::core::i18n::translate(snap.stateText);
     drawTextSafe(controlRenderer_, fontBase_,
                  SDL_Rect{panel.x + pad, y, panel.w - pad * 2, uiScaled(32)},
-                 snap.timeText + "  " + snap.stateText, pal.fg);
+                 snap.timeText + "  " + panelState, pal.fg);
     y += uiScaled(36);
     if (!snap.reminderText.empty()) {
       drawTextSafe(controlRenderer_, fontSmall_,
@@ -543,7 +650,8 @@
 
     drawTextSafe(controlRenderer_, fontSmall_,
                  SDL_Rect{panel.x + pad, y, uiScaled(180), rowH},
-                 "Duration " + std::to_string(cfg.durationSeconds / 60) + " min", pal.fg);
+                 deckboy::core::i18n::format("Duration {1} min", {std::to_string(cfg.durationSeconds / 60)}),
+                 pal.fg);
     addBtn(panel.x + panel.w - pad - uiScaled(132), "-", kSpeechTimerActionDurDec, uiScaled(60));
     addBtn(panel.x + panel.w - pad - uiScaled(64), "+", kSpeechTimerActionDurInc, uiScaled(60));
     y += rowH + uiScaled(6);
@@ -555,11 +663,34 @@
     y += rowH + uiScaled(6);
     const std::string visLabel = cfg.windowVisible ? "Display: Visible" : "Display: Hidden";
     addBtn(panel.x + pad, visLabel, kSpeechTimerActionVisibility, uiScaled(140));
-    const std::string oriLabel = cfg.orientation == SpeechTimerOrientation::Horizontal
-                                   ? "Layout: Horizontal"
-                                   : "Layout: Vertical";
-    addBtn(panel.x + pad + uiScaled(148), oriLabel, kSpeechTimerActionOrientation, uiScaled(140));
+    addBtn(panel.x + pad + uiScaled(148), speechTimerPositionLabel(cfg.timePosition),
+           kSpeechTimerActionTimePos, uiScaled(140));
+    addBtn(panel.x + pad + uiScaled(296),
+           cfg.orientation == SpeechTimerOrientation::Horizontal ? "Layout: Horizontal" : "Layout: Vertical",
+           kSpeechTimerActionOrientation, uiScaled(140));
     y += rowH + uiScaled(6);
+
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect{panel.x + pad, y, uiScaled(136), rowH},
+                 deckboy::core::i18n::format("Time font {1}%", {std::to_string(cfg.timeFontScale)}),
+                 pal.fg);
+    addBtn(panel.x + pad + uiScaled(140), "A-", kSpeechTimerActionTimeFontDec, uiScaled(44));
+    addBtn(panel.x + pad + uiScaled(188), "A+", kSpeechTimerActionTimeFontInc, uiScaled(44));
+    drawTextSafe(controlRenderer_, fontSmall_,
+                 SDL_Rect{panel.x + pad + uiScaled(244), y, uiScaled(136), rowH},
+                 deckboy::core::i18n::format("Label font {1}%", {std::to_string(cfg.labelFontScale)}),
+                 pal.fg);
+    addBtn(panel.x + pad + uiScaled(384), "A-", kSpeechTimerActionLabelFontDec, uiScaled(44));
+    addBtn(panel.x + pad + uiScaled(432), "A+", kSpeechTimerActionLabelFontInc, uiScaled(44));
+    y += rowH + uiScaled(6);
+
+    addBtn(panel.x + pad, "Time color", kSpeechTimerActionTimeColorEdit, uiScaled(116));
+    addBtn(panel.x + pad + uiScaled(122), "Status color", kSpeechTimerActionAccentColorEdit, uiScaled(116));
+    addBtn(panel.x + pad + uiScaled(244), "Overtime color", kSpeechTimerActionOvertimeColorEdit, uiScaled(124));
+    addBtn(panel.x + pad + uiScaled(374), "Bg color", kSpeechTimerActionBgColorEdit, uiScaled(88));
+    addBtn(panel.x + pad + uiScaled(468), "Reset", kSpeechTimerActionResetStyle, uiScaled(64));
+    y += rowH + uiScaled(6);
+
     drawTextSafe(controlRenderer_, fontSmall_,
                  SDL_Rect{panel.x + pad, y, panel.w - pad * 2, rowH * 2},
                  "Settings stay on this desk. The countdown on the chosen "
@@ -574,8 +705,9 @@
 
     int sizeW = 0, sizeH = 0;
     currentSpeechTimerPixelSize(sizeW, sizeH);
-    const std::string sizeLabel = "Size " + std::to_string(sizeW) + " x " +
-                                  std::to_string(sizeH) + " px (type or - / +)";
+    const std::string sizeLabel = deckboy::core::i18n::format(
+        "Size {1} x {2} px (type or - / +)",
+        {std::to_string(sizeW), std::to_string(sizeH)});
     drawTextSafe(controlRenderer_, fontSmall_,
                  SDL_Rect{panel.x + pad, y, uiScaled(260), rowH}, sizeLabel, pal.fg);
     addBtn(panel.x + pad + uiScaled(266), "Edit", kSpeechTimerActionSizeEdit, uiScaled(56));
@@ -686,12 +818,118 @@
         cfg.orientation = (cfg.orientation == SpeechTimerOrientation::Horizontal)
                               ? SpeechTimerOrientation::Vertical
                               : SpeechTimerOrientation::Horizontal;
+        cfg.timePosition = (cfg.orientation == SpeechTimerOrientation::Horizontal)
+                               ? SpeechTimerTimePosition::Left
+                               : SpeechTimerTimePosition::Top;
         speechTimer_.setConfig(cfg);
         saveSpeechTimerConfig();
         triggerToast(cfg.orientation == SpeechTimerOrientation::Horizontal
                          ? "speech timer layout: horizontal"
                          : "speech timer layout: vertical");
         return true;
+      case kSpeechTimerActionTimePos: {
+        const int nextPos = (static_cast<int>(cfg.timePosition) + 1) % 4;
+        cfg.timePosition = static_cast<SpeechTimerTimePosition>(nextPos);
+        cfg.orientation = (cfg.timePosition == SpeechTimerTimePosition::Left ||
+                           cfg.timePosition == SpeechTimerTimePosition::Right)
+                              ? SpeechTimerOrientation::Horizontal
+                              : SpeechTimerOrientation::Vertical;
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        triggerToast(speechTimerPositionLabel(cfg.timePosition));
+        return true;
+      }
+      case kSpeechTimerActionTimeFontDec:
+        cfg.timeFontScale = std::clamp(cfg.timeFontScale - 15, 50, 250);
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        return true;
+      case kSpeechTimerActionTimeFontInc:
+        cfg.timeFontScale = std::clamp(cfg.timeFontScale + 15, 50, 250);
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        return true;
+      case kSpeechTimerActionLabelFontDec:
+        cfg.labelFontScale = std::clamp(cfg.labelFontScale - 15, 50, 250);
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        return true;
+      case kSpeechTimerActionLabelFontInc:
+        cfg.labelFontScale = std::clamp(cfg.labelFontScale + 15, 50, 250);
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        return true;
+      case kSpeechTimerActionTimeColorEdit:
+        openInlineTextEditor("speech_timer.time_color", "Time color",
+                             "Hex (#RRGGBB) or R G B:",
+                             formatSpeechTimerHexColor(cfg.timeColor),
+                             [this](const std::string& value) {
+                               SpeechTimerConfig next = speechTimer_.config();
+                               if (!parseSpeechTimerHexColor(value, next.timeColor)) {
+                                 triggerToast("enter #RRGGBB or R G B", ToastKind::Warning, kToastReadableMs);
+                                 return;
+                               }
+                               speechTimer_.setConfig(next);
+                               saveSpeechTimerConfig();
+                             });
+        return true;
+      case kSpeechTimerActionAccentColorEdit:
+        openInlineTextEditor("speech_timer.accent_color", "Status color",
+                             "Hex (#RRGGBB) or R G B:",
+                             formatSpeechTimerHexColor(cfg.accentColor),
+                             [this](const std::string& value) {
+                               SpeechTimerConfig next = speechTimer_.config();
+                               if (!parseSpeechTimerHexColor(value, next.accentColor)) {
+                                 triggerToast("enter #RRGGBB or R G B", ToastKind::Warning, kToastReadableMs);
+                                 return;
+                               }
+                               speechTimer_.setConfig(next);
+                               saveSpeechTimerConfig();
+                             });
+        return true;
+      case kSpeechTimerActionOvertimeColorEdit:
+        openInlineTextEditor("speech_timer.overtime_color", "Overtime color",
+                             "Hex (#RRGGBB) or R G B:",
+                             formatSpeechTimerHexColor(cfg.overtimeAccentColor),
+                             [this](const std::string& value) {
+                               SpeechTimerConfig next = speechTimer_.config();
+                               if (!parseSpeechTimerHexColor(value, next.overtimeAccentColor)) {
+                                 triggerToast("enter #RRGGBB or R G B", ToastKind::Warning, kToastReadableMs);
+                                 return;
+                               }
+                               speechTimer_.setConfig(next);
+                               saveSpeechTimerConfig();
+                             });
+        return true;
+      case kSpeechTimerActionBgColorEdit:
+        openInlineTextEditor("speech_timer.bg_color", "Background color",
+                             "Hex (#RRGGBB) or R G B:",
+                             formatSpeechTimerHexColor(cfg.bgColor),
+                             [this](const std::string& value) {
+                               SpeechTimerConfig next = speechTimer_.config();
+                               if (!parseSpeechTimerHexColor(value, next.bgColor)) {
+                                 triggerToast("enter #RRGGBB or R G B", ToastKind::Warning, kToastReadableMs);
+                                 return;
+                               }
+                               speechTimer_.setConfig(next);
+                               saveSpeechTimerConfig();
+                             });
+        return true;
+      case kSpeechTimerActionResetStyle: {
+        const auto d = SpeechTimer::defaultConfig();
+        cfg.timeFontScale = d.timeFontScale;
+        cfg.labelFontScale = d.labelFontScale;
+        cfg.bgColor = d.bgColor;
+        cfg.timeColor = d.timeColor;
+        cfg.accentColor = d.accentColor;
+        cfg.overtimeBgColor = d.overtimeBgColor;
+        cfg.overtimeTimeColor = d.overtimeTimeColor;
+        cfg.overtimeAccentColor = d.overtimeAccentColor;
+        speechTimer_.setConfig(cfg);
+        saveSpeechTimerConfig();
+        triggerToast("speech timer style reset");
+        return true;
+      }
       case kSpeechTimerActionLock:
         cfg.layoutLocked = !cfg.layoutLocked;
         speechTimer_.setConfig(cfg);

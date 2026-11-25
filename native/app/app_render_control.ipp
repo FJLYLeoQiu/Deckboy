@@ -833,6 +833,8 @@
       settingsGearRect_  = SDL_Rect {}; // settings moved to bottom bar
       blackoutBtnRect_   = {rx - kIconBtnW, ty, kIconBtnW, kTBtnH}; rx -= kIconBtnW + kTBtnGap;
       fullscreenBtnRect_ = {rx - kIconBtnW, ty, kIconBtnW, kTBtnH}; rx -= kIconBtnW + kTGrpGap;
+      const int timerBtnW = autoW("SPEECH TIMER", 112);
+      speechTimerToggleRect_ = {rx - timerBtnW, ty, timerBtnW, kTBtnH}; rx -= timerBtnW + kTGrpGap;
       // Blackout — icon only, with pulsing glow when active
       {
         bool blkOn = masterDimmerTarget_ < 0.5;

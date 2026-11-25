@@ -319,6 +319,12 @@
   }
 
   void stopTransport() {
+    if (lastTakeWasAll_) {
+      lastTakeWasAll_ = false;
+      allStop();
+      playUiSound(UiSoundEffect::Stop);
+      return;
+    }
     showLog("STOP", showLogCueRef(project_.focusedDeckIndex, focusedDeck().activeIndex));
     // STOP is a decision. Anything this deck was about to take -- a pre-wait
     // counting down, a continue waiting -- dies with it, or it fires seconds
@@ -5311,6 +5317,7 @@
 
   void takeSelected(bool autoplay, bool useTransition = true, bool suppressIncomingFadeIn = false,
                     bool honourPreWait = true) {
+    lastTakeWasAll_ = false;
     Deck& deck = focusedDeckMutable();
     int deckIndex = std::clamp(project_.focusedDeckIndex, 0, static_cast<int>(project_.decks.size()) - 1);
     MediaEngine* engine = focusedMediaEngine();
@@ -5633,6 +5640,7 @@
       takeSelected(autoplay);
     }
     project_.focusedDeckIndex = savedFocus;
+    lastTakeWasAll_ = true;
     triggerToast("all decks fired");
   }
 
@@ -5654,6 +5662,7 @@
       }
     }
     project_.focusedDeckIndex = savedFocus;
+    lastTakeWasAll_ = true;
     triggerToast("all decks go");
   }
 
@@ -5665,6 +5674,7 @@
   // 0.99.422). Now nothing waits to restart a deck, and each deck that has
   // something on stops exactly the way its own STOP stops it, as STOPALL does.
   void allStop() {
+    lastTakeWasAll_ = false;
     stopAllSequences();
     trackerStop();
     for (int d = 0; d < static_cast<int>(project_.decks.size()); ++d) {

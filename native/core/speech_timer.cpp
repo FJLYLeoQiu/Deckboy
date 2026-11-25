@@ -390,12 +390,35 @@ std::string SpeechTimer::saveConfigText() const {
   out << "window " << config_.windowX << ' ' << config_.windowY << ' '
       << config_.windowW << ' ' << config_.windowH << "\n";
   out << "font " << config_.fontSize << "\n";
+  out << "time_font_scale " << config_.timeFontScale << "\n";
+  out << "label_font_scale " << config_.labelFontScale << "\n";
   out << "layout_locked " << (config_.layoutLocked ? 1 : 0) << "\n";
   out << "always_on_top " << (config_.alwaysOnTop ? 1 : 0) << "\n";
   out << "window_visible " << (config_.windowVisible ? 1 : 0) << "\n";
   out << "orientation "
       << (config_.orientation == SpeechTimerOrientation::Horizontal ? "horizontal"
                                                                     : "vertical") << "\n";
+  const char* posToken = "top";
+  if (config_.timePosition == SpeechTimerTimePosition::Bottom) posToken = "bottom";
+  else if (config_.timePosition == SpeechTimerTimePosition::Left) posToken = "left";
+  else if (config_.timePosition == SpeechTimerTimePosition::Right) posToken = "right";
+  out << "time_position " << posToken << "\n";
+  auto writeColor = [&](const char* k, const SpeechTimerColor& c) {
+    out << k << ' ' << static_cast<int>(c.r) << ' ' << static_cast<int>(c.g) << ' '
+        << static_cast<int>(c.b) << ' ' << static_cast<int>(c.a) << "\n";
+  };
+  writeColor("bg_color", config_.bgColor);
+  writeColor("time_color", config_.timeColor);
+  writeColor("accent_color", config_.accentColor);
+  writeColor("overtime_bg_color", config_.overtimeBgColor);
+  writeColor("overtime_time_color", config_.overtimeTimeColor);
+  writeColor("overtime_accent_color", config_.overtimeAccentColor);
+  if (!config_.overtimeLabel.empty()) {
+    out << "overtime_label {" << config_.overtimeLabel << "}\n";
+  }
+  if (!config_.timeUpLabel.empty()) {
+    out << "time_up_label {" << config_.timeUpLabel << "}\n";
+  }
   out << "mute " << (config_.muteReminders ? 1 : 0) << "\n";
   out << "reminder_audio_route "
       << PreviewAudioPolicy::reminderRouteToken(config_.reminderAudioRoute) << "\n";
@@ -420,6 +443,17 @@ std::string SpeechTimer::saveConfigText() const {
 bool SpeechTimer::loadConfigText(const std::string& text, std::string* error) {
   SpeechTimerConfig cfg = defaultConfig();
   cfg.reminders.clear();
+  bool hasExplicitTimePos = false;
+  auto readColor = [](std::istringstream& s, SpeechTimerColor& c) {
+    int r = c.r, g = c.g, b = c.b, a = c.a;
+    if (s >> r >> g >> b) {
+      if (!(s >> a)) a = 255;
+      c.r = static_cast<std::uint8_t>(std::clamp(r, 0, 255));
+      c.g = static_cast<std::uint8_t>(std::clamp(g, 0, 255));
+      c.b = static_cast<std::uint8_t>(std::clamp(b, 0, 255));
+      c.a = static_cast<std::uint8_t>(std::clamp(a, 0, 255));
+    }
+  };
   std::istringstream in(text);
   std::string line;
   int lineNo = 0;
@@ -443,6 +477,12 @@ bool SpeechTimer::loadConfigText(const std::string& text, std::string* error) {
       ls >> cfg.windowX >> cfg.windowY >> cfg.windowW >> cfg.windowH;
     } else if (key == "font") {
       ls >> cfg.fontSize;
+    } else if (key == "time_font_scale") {
+      ls >> cfg.timeFontScale;
+      cfg.timeFontScale = std::clamp(cfg.timeFontScale, 50, 250);
+    } else if (key == "label_font_scale") {
+      ls >> cfg.labelFontScale;
+      cfg.labelFontScale = std::clamp(cfg.labelFontScale, 50, 250);
     } else if (key == "layout_locked") {
       int v = 0; ls >> v; cfg.layoutLocked = v != 0;
     } else if (key == "always_on_top") {
@@ -454,6 +494,52 @@ bool SpeechTimer::loadConfigText(const std::string& text, std::string* error) {
       ls >> v;
       cfg.orientation = (v == "horizontal") ? SpeechTimerOrientation::Horizontal
                                             : SpeechTimerOrientation::Vertical;
+      if (!hasExplicitTimePos) {
+        cfg.timePosition = (cfg.orientation == SpeechTimerOrientation::Horizontal)
+                               ? SpeechTimerTimePosition::Left
+                               : SpeechTimerTimePosition::Top;
+      }
+    } else if (key == "time_position") {
+      std::string v;
+      ls >> v;
+      hasExplicitTimePos = true;
+      if (v == "bottom") {
+        cfg.timePosition = SpeechTimerTimePosition::Bottom;
+        cfg.orientation = SpeechTimerOrientation::Vertical;
+      } else if (v == "left") {
+        cfg.timePosition = SpeechTimerTimePosition::Left;
+        cfg.orientation = SpeechTimerOrientation::Horizontal;
+      } else if (v == "right") {
+        cfg.timePosition = SpeechTimerTimePosition::Right;
+        cfg.orientation = SpeechTimerOrientation::Horizontal;
+      } else {
+        cfg.timePosition = SpeechTimerTimePosition::Top;
+        cfg.orientation = SpeechTimerOrientation::Vertical;
+      }
+    } else if (key == "bg_color") {
+      readColor(ls, cfg.bgColor);
+    } else if (key == "time_color") {
+      readColor(ls, cfg.timeColor);
+    } else if (key == "accent_color") {
+      readColor(ls, cfg.accentColor);
+    } else if (key == "overtime_bg_color") {
+      readColor(ls, cfg.overtimeBgColor);
+    } else if (key == "overtime_time_color") {
+      readColor(ls, cfg.overtimeTimeColor);
+    } else if (key == "overtime_accent_color") {
+      readColor(ls, cfg.overtimeAccentColor);
+    } else if (key == "overtime_label") {
+      const auto brace = line.find('{');
+      const auto braceEnd = line.find('}', brace == std::string::npos ? 0 : brace);
+      if (brace != std::string::npos && braceEnd != std::string::npos && braceEnd > brace) {
+        cfg.overtimeLabel = line.substr(brace + 1, braceEnd - brace - 1);
+      }
+    } else if (key == "time_up_label") {
+      const auto brace = line.find('{');
+      const auto braceEnd = line.find('}', brace == std::string::npos ? 0 : brace);
+      if (brace != std::string::npos && braceEnd != std::string::npos && braceEnd > brace) {
+        cfg.timeUpLabel = line.substr(brace + 1, braceEnd - brace - 1);
+      }
     } else if (key == "mute") {
       int v = 0; ls >> v; cfg.muteReminders = v != 0;
     } else if (key == "reminder_audio_route") {

@@ -92,6 +92,23 @@ struct PdfRasterResult {
   bool ok() const { return error.empty() && !pagePaths.empty(); }
 };
 
+struct PresentationImageExport {
+  std::vector<std::string> pagePaths;   // in page order
+  std::string converter;                // human-readable name of what did it
+  std::string error;                    // empty on success
+  bool fallbackToPdf = false;           // true if this format/platform should use PDF route
+  bool ok() const { return error.empty() && !pagePaths.empty(); }
+};
+
+// Fast path (Windows + PowerPoint COM): export slides directly to lossless PNG
+// at `targetWidthPixels` wide without generating an intermediate PDF.
+// Sets `fallbackToPdf = true` on platforms/formats that should use the PDF route.
+PresentationImageExport exportPresentationToImages(
+  const dbfs::path& source,
+  const dbfs::path& outputDir,
+  int targetWidthPixels,
+  const std::function<void(int, int)>& onProgress);
+
 // Render every page of `pdfPath` into `outputDir` as PNG, each page scaled to
 // `targetWidthPixels` wide with its aspect kept, and return the files in order.
 //
