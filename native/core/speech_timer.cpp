@@ -505,16 +505,12 @@ bool SpeechTimer::loadConfigText(const std::string& text, std::string* error) {
       hasExplicitTimePos = true;
       if (v == "bottom") {
         cfg.timePosition = SpeechTimerTimePosition::Bottom;
-        cfg.orientation = SpeechTimerOrientation::Vertical;
       } else if (v == "left") {
         cfg.timePosition = SpeechTimerTimePosition::Left;
-        cfg.orientation = SpeechTimerOrientation::Horizontal;
       } else if (v == "right") {
         cfg.timePosition = SpeechTimerTimePosition::Right;
-        cfg.orientation = SpeechTimerOrientation::Horizontal;
       } else {
         cfg.timePosition = SpeechTimerTimePosition::Top;
-        cfg.orientation = SpeechTimerOrientation::Vertical;
       }
     } else if (key == "bg_color") {
       readColor(ls, cfg.bgColor);
